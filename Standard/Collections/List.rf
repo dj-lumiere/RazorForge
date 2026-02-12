@@ -1,0 +1,270 @@
+# RazorForge List<T> - Dynamic growable array
+# Entity type with heap allocation
+# Grows by doubling capacity for O(1) amortized add_last
+
+module Collections
+
+entity List<T> {
+    private data: Snatched<T>       # Pointer to heap-allocated array
+    private count: U64              # Current number of elements
+    private capacity: U64           # Total allocated capacity
+}
+
+# Constructors
+
+routine List<T>.__create__() -> List<T> {
+    return List<T>(
+        data: snatched_none<T>(),
+        count: 0u64,
+        capacity: 0u64
+    )
+}
+
+routine List<T>.__create__(capacity: U64) -> List<T> {
+    let byte_size = capacity * data_size<T>()
+    let ptr = heap_alloc(byte_size.to_uaddr())
+    return List<T>(
+        data: Snatched<T>(address: ptr),
+        count: 0u64,
+        capacity: capacity
+    )
+}
+
+# Destructor
+routine List<T>.__destroy__() {
+    if not me.data.is_none() {
+        heap_free(me.data.address)
+    }
+}
+
+# Core operations
+
+routine List<T>.count() -> U64 {
+    return me.count
+}
+
+routine List<T>.capacity() -> U64 {
+    return me.capacity
+}
+
+routine List<T>.is_empty() -> Bool {
+    return me.count == 0u64
+}
+
+routine List<T>.add_last(value: T) {
+    if me.count >= me.capacity {
+        let new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
+        me.reserve(new_capacity)
+    }
+
+    let byte_offset = me.count * data_size<T>()
+    me.data.offset(byte_offset).write(value)
+    me.count = me.count + 1u64
+}
+
+routine List<T>.remove_last!() -> T {
+    if me.is_empty() {
+        absent
+    }
+
+    me.count = me.count - 1u64
+    let byte_offset = me.count * data_size<T>()
+    return me.data.offset(byte_offset).read()
+}
+
+routine List<T>.add_first(value: T) {
+    me.add_at!(0u64, value)
+}
+
+routine List<T>.add_at!(index: U64, value: T) {
+    if index > me.count {
+        throw IndexOutOfBoundsError(index: index.to_uaddr(), count: me.count.to_uaddr())
+    }
+
+    if me.count >= me.capacity {
+        let new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
+        me.reserve(new_capacity)
+    }
+
+    # Shift elements right
+    var i = me.count
+    loop {
+        if i <= index {
+            break
+        }
+        let src_offset = (i - 1u64) * data_size<T>()
+        let dst_offset = i * data_size<T>()
+        let val = me.data.offset(src_offset).read()
+        me.data.offset(dst_offset).write(val)
+        i = i - 1u64
+    }
+
+    let byte_offset = index * data_size<T>()
+    me.data.offset(byte_offset).write(value)
+    me.count = me.count + 1u64
+}
+
+routine List<T>.remove_first!() -> T {
+    return me.remove_at!(0u64)
+}
+
+routine List<T>.remove_at!(index: U64) -> T {
+    if index >= me.count {
+        throw IndexOutOfBoundsError(index: index.to_uaddr(), count: me.count.to_uaddr())
+    }
+
+    let byte_offset = index * data_size<T>()
+    let value = me.data.offset(byte_offset).read()
+
+    # Shift elements left
+    var i = index
+    loop {
+        if i >= me.count - 1u64 {
+            break
+        }
+        let src_offset = (i + 1u64) * data_size<T>()
+        let dst_offset = i * data_size<T>()
+        let val = me.data.offset(src_offset).read()
+        me.data.offset(dst_offset).write(val)
+        i = i + 1u64
+    }
+
+    me.count = me.count - 1u64
+    return value
+}
+
+# ============================================================================
+# Indexing with Integral (forward index)
+# ============================================================================
+
+routine List<T>.__getitem__!<I>(index: I) -> T
+requires I follows Integral {
+    let idx = index.to_u64()
+    if idx >= me.count {
+        throw IndexOutOfBoundsError(index: idx.to_uaddr(), count: me.count.to_uaddr())
+    }
+    let byte_offset = idx * data_size<T>()
+    return me.data.offset(byte_offset).read()
+}
+
+routine List<T>.__setitem__!<I>(index: I, value: T)
+requires I follows Integral {
+    let idx = index.to_u64()
+    if idx >= me.count {
+        throw IndexOutOfBoundsError(index: idx.to_uaddr(), count: me.count.to_uaddr())
+    }
+    let byte_offset = idx * data_size<T>()
+    me.data.offset(byte_offset).write(value)
+}
+
+# ============================================================================
+# Indexing with BackIndex (backward index using ^)
+# ============================================================================
+
+routine List<T>.__getitem__!<I>(index: BackIndex<I>) -> T
+requires I follows Integral {
+    let idx = index.resolve(me.count)
+    let byte_offset = idx * data_size<T>()
+    return me.data.offset(byte_offset).read()
+}
+
+routine List<T>.__setitem__!<I>(index: BackIndex<I>, value: T)
+requires I follows Integral {
+    let idx = index.resolve(me.count)
+    let byte_offset = idx * data_size<T>()
+    me.data.offset(byte_offset).write(value)
+}
+
+# ============================================================================
+# Indexing with Range<Integral> (forward range slicing)
+# ============================================================================
+
+routine List<T>.__getitem__!<I>(range: Range<I>) -> List<T>
+requires I follows Integral {
+    let start = range.resolve_start(me.count)
+    let end = range.resolve_end(me.count)
+    let step = range.get_step()
+
+    let result = List<T>()
+
+    if range.ascending {
+        var i = start
+        loop {
+            if i > end {
+                break
+            }
+            let byte_offset = i * data_size<T>()
+            result.add_last(me.data.offset(byte_offset).read())
+            i = i + step
+        }
+    } else {
+        var i = start
+        loop {
+            let byte_offset = i * data_size<T>()
+            result.add_last(me.data.offset(byte_offset).read())
+            if i <= end or i < step {
+                break
+            }
+            i = i - step
+        }
+    }
+
+    return result
+}
+
+# ============================================================================
+# Indexing with Range<BackIndex> (backward range slicing)
+# ============================================================================
+
+routine List<T>.__getitem__!<I>(range: Range<BackIndex<I>>) -> List<T>
+requires I follows Integral {
+    let start = range.resolve_start(me.count)
+    let end = range.resolve_end(me.count)
+    let step = range.get_step()
+
+    let result = List<T>()
+
+    if range.ascending {
+        var i = start
+        loop {
+            if i > end {
+                break
+            }
+            let byte_offset = i * data_size<T>()
+            result.add_last(me.data.offset(byte_offset).read())
+            i = i + step
+        }
+    } else {
+        var i = start
+        loop {
+            let byte_offset = i * data_size<T>()
+            result.add_last(me.data.offset(byte_offset).read())
+            if i <= end or i < step {
+                break
+            }
+            i = i - step
+        }
+    }
+
+    return result
+}
+
+routine List<T>.reserve(new_capacity: U64) {
+    if new_capacity > me.capacity {
+        let new_byte_size = new_capacity * data_size<T>()
+
+        if me.data.is_none() {
+            let ptr = heap_alloc(new_byte_size.to_uaddr())
+            me.data = Snatched<T>(address: ptr)
+        } else {
+            let ptr = heap_realloc(me.data.address, new_byte_size.to_uaddr())
+            me.data = Snatched<T>(address: ptr)
+        }
+
+        me.capacity = new_capacity
+    }
+}
+
+routine List<T>.clear() {
+    me.count = 0u64
+}
