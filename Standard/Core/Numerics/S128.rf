@@ -1,0 +1,353 @@
+# RazorForge S128 (signed 128-bit integer) native type implementation
+# Maps directly to LLVM i128 type using compiler intrinsics
+module Core
+# Core S128 type definition - maps to LLVM i128
+@llvm("i128")
+record S128 obeys SignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for S128 limits
+preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728_s128
+preset S128_MAX: S128 = 170_141_183_460_469_231_731_687_303_715_884_105_727_s128
+preset S128_ZERO: S128 = 0_s128
+preset S128_ONE: S128 = 1_s128
+
+# ============================================================================
+# Checked Creators (crash on overflow)
+# ============================================================================
+
+# From S8 - always fits, no check needed
+routine S128.$create!(from: S8) -> S128
+  return sext[S8, S128](from)
+
+# From S16 - always fits, no check needed
+routine S128.$create!(from: S16) -> S128
+  return sext[S16, S128](from)
+
+# From S32 - always fits, no check needed
+routine S128.$create!(from: S32) -> S128
+  return sext[S32, S128](from)
+
+# From S64 - always fits, no check needed
+routine S128.$create!(from: S64) -> S128
+  return sext[S64, S128](from)
+
+# From S128 - identity conversion
+routine S128.$create!(from: S128) -> S128
+  return from
+
+# From U8 - always fits, no check needed
+routine S128.$create!(from: U8) -> S128
+  return zext[U8, S128](from)
+
+# From U16 - always fits, no check needed
+routine S128.$create!(from: U16) -> S128
+  return zext[U16, S128](from)
+
+# From U32 - always fits, no check needed
+routine S128.$create!(from: U32) -> S128
+  return zext[U32, S128](from)
+
+# From U64 - always fits, no check needed
+routine S128.$create!(from: U64) -> S128
+  return zext[U64, S128](from)
+
+# From U128 - crashes if value > S128_MAX (bit 127 set)
+routine S128.$create!(from: U128) -> S128
+  if from > 170141183460469231731687303715884105727_u128
+    throw IntegerOverflowError(f"Cannot convert {from} to S128: value out of range [{S128_MIN}, {S128_MAX}]")
+  return bitcast[U128, S128](from)
+
+# From floating point - truncates fractional part and crashes if overflow
+routine S128.$create!(from: F16) -> S128
+  return from.S64!().S128()
+
+routine S128.$create!(from: F32) -> S128
+  return from.S64!().S128()
+
+routine S128.$create!(from: F64) -> S128
+  return from.S64!().S128()
+
+routine S128.$create!(from: F128) -> S128
+  return from.S64!().S128()
+
+# From decimal - truncates fractional part and crashes if overflow
+routine S128.$create!(from: D32) -> S128
+  return from.S64!().S128()
+
+routine S128.$create!(from: D64) -> S128
+  return from.S64!().S128()
+
+routine S128.$create!(from: D128) -> S128
+  return from.S64!().S128()
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+routine S128.$add!(you: S128) -> S128
+  return add[S128](me, you)
+
+routine S128.$sub!(you: S128) -> S128
+  return sub[S128](me, you)
+
+routine S128.$mul!(you: S128) -> S128
+  return mul[S128](me, you)
+
+routine S128.$floordiv!(you: S128) -> S128
+  if you == 0
+    throw DivisionByZeroError()
+  return sdiv[S128](me, you)
+
+routine S128.$mod!(you: S128) -> S128
+  return srem[S128](me, you)
+
+routine S128.$neg!() -> S128
+  return sub[S128](0, me)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+routine S128.$add_wrap(you: S128) -> S128
+  return add[S128](me, you)
+
+routine S128.$sub_wrap(you: S128) -> S128
+  return sub[S128](me, you)
+
+routine S128.$mul_wrap(you: S128) -> S128
+  return mul[S128](me, you)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+routine S128.$add_clamp(you: S128) -> S128
+  return sadd_sat[S128](me, you)
+
+routine S128.$sub_clamp(you: S128) -> S128
+  return ssub_sat[S128](me, you)
+
+routine S128.$mul_clamp(you: S128) -> S128
+  # Can't widen to 256-bit, use division-based overflow check
+  if icmp_eq[S128](me, 0_s128) or icmp_eq[S128](you, 0_s128)
+    return 0_s128
+  var result = mul[S128](me, you)
+  if icmp_ne[S128](sdiv[S128](result, me), you)
+    # Overflow: clamp to MAX or MIN based on result sign
+    var same_sign = icmp_eq[Bool](icmp_sgt[S128](me, 0_s128), icmp_sgt[S128](you, 0_s128))
+    if same_sign
+      return S128_MAX
+    return S128_MIN
+  return result
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+# Power operator (**) - can overflow
+routine S128.$pow!(exp: S128) -> S128
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul[S128](result, base)
+    base = mul[S128](base, base)
+    e = e >> 1
+  return result
+
+# Wrapping power (**%)
+routine S128.$pow_wrap!(exp: S128) -> S128
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = mul[S128](result, base)
+    base = mul[S128](base, base)
+    e = e >> 1
+  return result
+
+# Clamping power (**^)
+routine S128.$pow_clamp!(exp: S128) -> S128
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
+    e = e >> 1
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+routine S128.$bitand(you: S128) -> S128
+  return bit_and[S128](me, you)
+
+routine S128.$bitor(you: S128) -> S128
+  return bit_or[S128](me, you)
+
+routine S128.$bitxor(you: S128) -> S128
+  return xor[S128](me, you)
+
+routine S128.$bitnot() -> S128
+  return xor[S128](me, -1)
+
+# ============================================================================
+# Shift Operations (<<, <<?>, >>, <<<, >>>)
+# ============================================================================
+
+# Arithmetic left shift (<<) - sign preserving
+routine S128.$ashl(bits: U32) -> S128
+  return shl[S128](me, bits)
+
+# Arithmetic right shift (>>) - preserves sign, always safe
+routine S128.$ashr(bits: U32) -> S128
+  return ashr[S128](me, bits)
+
+# Logical left shift (<<<) - same as << but explicit
+routine S128.$lshl(bits: U32) -> S128
+  return shl[S128](me, bits)
+
+# Logical right shift (>>>) - fills with zeros, ignores sign
+routine S128.$lshr(bits: U32) -> S128
+  return lshr[S128](me, bits)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+routine S128.$eq(you: S128) -> Bool
+  return icmp_eq[S128](me, you)
+
+routine S128.$cmp(you: S128) -> ComparisonSign
+  if icmp_slt[S128](me, you)
+    return ME_SMALL
+  if icmp_sgt[S128](me, you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+routine S128.abs() -> S128
+  return abs[S128](me)
+
+routine S128.min(you: S128) -> S128
+  return if me <= you then me else you
+
+routine S128.max(you: S128) -> S128
+  return if me >= you then me else you
+
+routine S128.clamp(min_val: S128, max_val: S128) -> S128
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+routine S128.count_ones() -> S128
+  return ctpop[S128](me)
+
+routine S128.count_zeros() -> S128
+  return 128_s128 - me.count_ones()
+
+routine S128.leading_zeros() -> S128
+  return ctlz[S128](me)
+
+routine S128.trailing_zeros() -> S128
+  return cttz[S128](me)
+
+routine S128.leading_ones() -> S128
+  return me.$bitnot().leading_zeros()
+
+routine S128.trailing_ones() -> S128
+  return me.$bitnot().trailing_zeros()
+
+routine S128.reverse_bits() -> S128
+  return bitreverse[S128](me)
+
+routine S128.swap_bytes() -> S128
+  return bswap[S128](me)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+routine S128.is_positive() -> Bool
+  return me > 0_s128
+
+routine S128.is_negative() -> Bool
+  return me < 0_s128
+
+routine S128.is_zero() -> Bool
+  return me == 0_s128
+
+routine S128.is_even() -> Bool
+  var result = bit_and[S128](me, 1_s128)
+  return icmp_eq[S128](result, 0_s128)
+
+routine S128.is_odd() -> Bool
+  return not me.is_even()
+
+routine S128.signum() -> S128
+  return when
+    me > 0_s128 => 1_s128
+    me < 0_s128 => -1_s128
+    else => 0_s128
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine S128.$represent() -> Text
+  if me == 0s128
+    return "0"
+  if me > 0s128
+    return U128(me).$represent()
+  return "-" + U128(0u128 - U128(me)).$represent()
+
+routine S128.$diagnose() -> Text
+  return "S128(" + me.$represent() + ")"
+
+routine S128.$create!(from_text: Text) -> S128
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "S128")
+  var start = 0u64
+  var negative = false
+  var first = from_text[0u64]
+  if first == Letter(0x002Du32)
+    negative = true
+    start = 1u64
+  elseif first == Letter(0x002Bu32)
+    start = 1u64
+  if start >= from_text.count()
+    throw InvalidValueError(input: from_text, target: "S128")
+  var result = 0u128
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u128 + U128(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "S128")
+    i = i + 1u64
+  if negative
+    return S128(0u128 - result)
+  return S128(result)
