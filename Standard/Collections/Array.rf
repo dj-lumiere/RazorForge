@@ -1,0 +1,170 @@
+# RazorForge Array[T, N] - Fixed-size inline array with value semantics
+# Record type - N elements of T stored inline, copied on assignment
+#
+# Usage:
+#   var coords: Array[F64, 3] = [1.0, 2.0, 3.0]
+#   var x = coords[0]          # Read element
+#   coords[0] = 5.0            # Modify element in-place
+#   var copy = coords          # Full copy (value semantics)
+
+module Collections
+
+import BuilderService
+
+### Defines the record `Array`.
+### :typeparam T: The value used for `T`.
+### :typeparam N: The value used for `N`.
+@llvm("[{N} x {T}]")
+record Array[T, N]
+needs T is RecordType
+needs N is U64
+  # N elements of T stored inline by compiler - no explicit member variables needed
+  pass
+
+# ============================================================================
+# Indexing with Integral (forward index)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
+### :throws: May throw {IndexOutOfBoundsError}.
+routine Array[T, N].$getitem![I](index: I) -> T
+needs I obeys Integral
+  var idx = index.U64!()
+  if idx >= N
+    throw IndexOutOfBoundsError(index: idx, count: me.count())
+  return element_at[Array[T, N], T](me, idx)
+
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :param value: The value to use.
+### :throws: May throw {IndexOutOfBoundsError}.
+routine Array[T, N].$setitem![I](index: I, value: T)
+needs I obeys Integral
+  var idx = index.U64!()
+  if idx >= N
+    throw IndexOutOfBoundsError(index: idx, count: me.count())
+  me = set_element_at[Array[T, N], T](me, idx, value)
+
+# ============================================================================
+# Indexing with BackIndex (backward index using ^)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
+routine Array[T, N].$getitem![I](index: BackIndex[I]) -> T
+needs I obeys Integral
+  var idx = index.resolve(N)
+  return me[idx]
+
+# ============================================================================
+# Query Operations
+# ============================================================================
+
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
+routine Array[T, N].count() -> U64
+  return N
+
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
+routine Array[T, N].is_empty() -> Bool
+  return N == 0u64
+
+### Returns the result of `first`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
+routine Array[T, N].first!() -> T
+  if N == 0u64
+    absent
+  return element_at[Array[T, N], T](me, 0u64)
+
+### Returns the result of `last`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
+routine Array[T, N].last!() -> T
+  if N == 0u64
+    absent
+  return element_at[Array[T, N], T](me, N - 1u64)
+
+### Returns whether this value contains `value`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Array[T, N].$contains(value: T) -> Bool
+  for i in 0u64 til N
+    if me[i] == value
+      return true
+  return false
+
+### Returns the result of `index of`.
+### :param value: The value to use.
+### :returns: The resulting `U64` value.
+### :absent: Returns absent when the requested value is unavailable.
+routine Array[T, N].index_of!(value: T) -> U64
+  for i in 0u64 til N
+    if me[i] == value
+      return i
+  absent
+
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+### Returns the result of `iter`.
+### :returns: The resulting `ArrayIterator[T, N]` value.
+routine Array[T, N].$iter() -> ArrayIterator[T, N]
+  return ArrayIterator[T, N](list: me, index: 0u64)
+
+### Defines the record `ArrayIterator`.
+### :typeparam T: The value used for `T`.
+### :typeparam N: The value used for `N`.
+record ArrayIterator[T, N]
+  ### Stores the list member value.
+  list: Array[T, N]
+  ### Stores the index member value.
+  index: U64
+
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
+routine ArrayIterator[T, N].$next!() -> T
+  if me.index >= N
+    absent
+  var value = me.list[me.index]
+  me.index = me.index + 1u64
+  return value
+
+# ============================================================================
+# Display
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+routine Array[T, N].$represent() -> Text
+  var result = "Array["
+  for i in 0u64 til N
+    if i > 0u64
+      result = result + ", "
+    result = result + me[i].$represent()
+  result = result + "]"
+  return result
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+routine Array[T, N].$diagnose() -> Text
+  var result = me.type_name() + "(count: " + N.$represent() + ", ["
+  for i in 0u64 til N
+    if i > 0u64
+      result = result + ", "
+    result = result + me[i].$represent()
+  result = result + "])"
+  return result
+
+routine Array[T, N].$eq(you: Array[T, N]) -> Bool
+  for i in 0u64 til N
+    if me[i] != you[i]
+      return false
+  return true
