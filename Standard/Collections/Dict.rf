@@ -1,6 +1,7 @@
 module Core
 
 import BuilderService
+import Core.SecureHashKey
 
 preset DICT_INITIAL_CAPACITY: U64 = 16u64
 preset DICT_INITIAL_ENTRIES: U64 = 16u64
@@ -10,27 +11,17 @@ preset CTRL_H2_MASK: U8 = 127_u8
 preset ENTRY_DEAD: U8 = 0_u8
 preset ENTRY_LIVE: U8 = 1_u8
 
-### An insertion-ordered key-value dictionary backed by an open-addressed hash table.
+### A hash-flooding-resistant insertion-ordered key-value dictionary.
 ###
-### `Dict[K, V]` maps each unique key to exactly one value. Inserting a key that
-### already exists replaces its value in place without changing its position in
-### iteration order. Lookup, insertion, and removal all run in O(1) average time.
-### Iteration visits live entries in the order they were first inserted, and is
-### stable across lookups, updates, and rehashes. Removing a key and re-adding it
-### places the entry at the new end of the iteration order.
-###
-### The table uses Python-style "compact dict" layout: a probe array of indices
-### into a dense, append-only entries array. The probe array carries the
-### SwissTable-style H1/H2 control bytes; the entries array carries the keys,
-### values, and a per-entry live byte so removed entries can be skipped without
-### shifting later entries.
+### `Dict[K, V]` works like {Dict[K, V]} (insertion-ordered iteration, O(1) average
+### operations) but uses SipHash-2-4 keyed with a per-instance secret to make the probe
+### sequence unpredictable to external attackers. Iteration order follows insertion order;
+### the secure key only affects the probe-array layout, not the entries array.
 ###
 ### **When to use**
-### - You need O(1) average key lookup, insertion, or removal.
-### - You need to associate values with arbitrary keys.
-### - You want iteration to follow the order keys were first added.
-### - Use {SortedDict[K, V]} instead when you need entries in key order.
-### - Use {SecureDict[K, V]} instead when keys come from untrusted input.
+### - You are storing data derived from untrusted input (e.g. HTTP headers, user IDs, file names).
+### - You need the same insert/lookup/remove interface as {Dict[K, V]} with a security guarantee.
+### - Use {FastDict[K, V]} instead when the key space is fully trusted and throughput matters more.
 ###
 ### **Complexity**
 ### | Operation | Average | Worst case |
@@ -38,33 +29,35 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### | `add` | O(1) | O(n) (rehash) |
 ### | `remove` | O(1) | O(n) |
 ### | `$contains` / `get_or_default` | O(1) | O(n) |
-### | `keys()` / `values()` / `entries()` | O(n) | O(n) |
 ### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
 ### :typeparam K: The key type. Must obey {Hashable} and {Equatable}.
 ### :typeparam V: The value type associated with each key.
-### :see: {Set[K]} for key-only storage with the same hash table design.
-### :see: {SortedDict[K, V]} for sorted key-value storage.
-### :see: {SecureDict[K, V]} for hash-flooding-resistant key-value storage.
+### :see: {FastDict[K, V]} for an unkeyed faster variant when keys are fully trusted.
+### :see: {Set[T]} for the set counterpart.
 entity Dict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Hashable, Equatable
-  secret ctrl: Hijacked[U8]         # 1 byte/probe slot: 128=empty, 254=deleted, 0-127=H2
-  secret indices: Hijacked[U64]     # probe slot -> entry index
-  secret keys: Hijacked[K]          # dense entries array, insertion-ordered
-  secret vals: Hijacked[V]          # dense entries array, insertion-ordered
-  secret entry_live: Hijacked[U8]   # 1 byte/entry: 1=live, 0=tombstoned
-  secret count: U64                 # live entry count
-  secret deleted: U64               # ctrl tombstone count (probe-space pressure)
-  secret entries_used: U64          # high-water mark in entries (live + tombstoned)
-  secret capacity: U64              # probe table length, always a power of two
-  secret entries_cap: U64           # entries array length, always a power of two
+  secret ctrl: Hijacked[U8]
+  secret indices: Hijacked[U64]
+  secret keys: Hijacked[K]
+  secret vals: Hijacked[V]
+  secret entry_live: Hijacked[U8]
+  secret count: U64
+  secret deleted: U64
+  secret entries_used: U64
+  secret capacity: U64
+  secret entries_cap: U64
+  secret k0: U64
+  secret k1: U64
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-### Creates an empty dictionary using the default initial table size.
 routine Dict[K, V].$create() -> Dict[K, V]
+  return Dict[K, V](key: SecureHashKey.random())
+
+routine Dict[K, V].$create(key: SecureHashKey) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   var ecap = DICT_INITIAL_ENTRIES
   var dict = Dict[K, V](
@@ -77,7 +70,9 @@ routine Dict[K, V].$create() -> Dict[K, V]
     deleted: 0u64,
     entries_used: 0u64,
     capacity: cap,
-    entries_cap: ecap
+    entries_cap: ecap,
+    k0: key.k0,
+    k1: key.k1
   )
   danger!
     dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
@@ -88,10 +83,7 @@ routine Dict[K, V].$create() -> Dict[K, V]
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return dict
 
-### Creates an empty dictionary pre-sized to hold at least `capacity` live entries without rehashing.
-### Both the probe table and the entries array are rounded up to the next power-of-two.
-### :param capacity: Minimum number of live entries to accommodate before the first rehash.
-routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
+routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -108,7 +100,9 @@ routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
     deleted: 0u64,
     entries_used: 0u64,
     capacity: cap,
-    entries_cap: ecap
+    entries_cap: ecap,
+    k0: key.k0,
+    k1: key.k1
   )
   danger!
     dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
@@ -119,7 +113,6 @@ routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return dict
 
-### Releases the raw probe, index, key, value, and entry-liveness buffers owned by this dictionary.
 routine Dict[K, V].$destroy()
   danger!
     if not me.ctrl.is_none()
@@ -138,60 +131,37 @@ routine Dict[K, V].$destroy()
 # Internal Helpers
 # ============================================================================
 
-### Extracts the 7-bit control-byte fingerprint from a raw hash value.
-### :param hash: The raw hash output from `$hash`.
-### :returns: The low 7 bits of `hash`, used to filter candidate probe slots before a full key comparison.
 @readonly
 routine Dict[K, V].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
-### Derives the primary probe slot index from a raw hash value.
-### :param hash: The raw hash output from `$hash`.
-### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
 @readonly
 routine Dict[K, V].h1(hash: U64) -> U64
   return hash >> 7u32
 
-### Returns the entry index referenced by probe slot `slot`.
-### Assumes the caller has already confirmed the slot is occupied.
-### :param slot: The probe slot index.
-### :returns: The entry index stored in that probe slot.
 @readonly
 routine Dict[K, V].read_index(slot: U64) -> U64
   danger!
     return me.indices.offset(U64.data_size() * slot).extract()
 
-### Returns the key stored at entry index `ei` without checking whether the entry is live.
-### :param ei: The entry index to read from.
-### :returns: The key at that entry.
 @readonly
 routine Dict[K, V].read_key_at(ei: U64) -> K
   danger!
     return me.keys.offset(K.data_size() * ei).extract()
 
-### Returns the value stored at entry index `ei` without checking whether the entry is live.
-### :param ei: The entry index to read from.
-### :returns: The value at that entry.
 @readonly
 routine Dict[K, V].read_val_at(ei: U64) -> V
   danger!
     return me.vals.offset(V.data_size() * ei).extract()
 
-### Overwrites the value at entry index `ei`.
-### :param ei: The entry index to write to.
-### :param val: The new value to store.
 routine Dict[K, V].write_val_at(ei: U64, val: V)
   danger!
     me.vals.offset(V.data_size() * ei).inject(val)
   return
 
-### Searches for `key` by linear probing from its primary slot.
-### Control-byte fingerprints are checked before the index dereference + key equality.
-### :param key: The key to find.
-### :returns: The probe slot index of `key` if found, or `capacity` if the key is absent.
 @readonly
 routine Dict[K, V].find_slot(key: K) -> U64
-  var h = key.$hash()
+  var h = key.$hash(k0: me.k0, k1: me.k1)
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
@@ -207,10 +177,6 @@ routine Dict[K, V].find_slot(key: K) -> U64
       i = (i +% 1u64) & mask
   return me.capacity
 
-### Writes `entry_index` into the first empty or deleted probe slot reached from the probe position of `h`.
-### Assumes the caller has already checked for duplicates and will update `count` separately.
-### :param h: The raw hash output for the key at `entry_index`.
-### :param entry_index: The index into the entries array to record.
 routine Dict[K, V].insert_index_raw(h: U64, entry_index: U64)
   var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
@@ -230,10 +196,6 @@ routine Dict[K, V].insert_index_raw(h: U64, entry_index: U64)
       i = (i +% 1u64) & mask
   return
 
-### Returns true when probe-table or entries-array pressure crosses the rehash threshold.
-### The probe table rehashes at 87.5% combined live+tombstone load; the entries array compacts
-### when it has no room for a new append.
-### :returns: `true` if a rehash should happen before the next insertion.
 @readonly
 routine Dict[K, V].should_rehash() -> Bool
   if (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
@@ -242,9 +204,6 @@ routine Dict[K, V].should_rehash() -> Bool
     return true
   return false
 
-### Rebuilds the probe table and compacts the entries array, preserving insertion order.
-### The probe table doubles when its load is the trigger; the entries array doubles when
-### compacting alone would leave less than half its slots free. Tombstones are discarded.
 @migratable
 routine Dict[K, V].rehash()
   var old_cap = me.capacity
@@ -290,7 +249,7 @@ routine Dict[K, V].rehash()
         me.vals.offset(V.data_size() * new_ei).inject(v)
         me.entry_live.offset(new_ei).inject(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
-        me.insert_index_raw(h: k.$hash(), entry_index: new_ei)
+        me.insert_index_raw(h: k.$hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
@@ -311,22 +270,14 @@ routine Dict[K, V].rehash()
 # Core Operations
 # ============================================================================
 
-### Returns the number of live key-value entries currently stored.
-### :returns: The live entry count.
 @readonly
 routine Dict[K, V].count() -> U64
   return me.count
 
-### Returns true if this dictionary contains no live entries.
-### :returns: `true` when `count()` is zero.
 @readonly
 routine Dict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
-### Removes every entry while preserving the current probe and entries capacities.
-### Resets the probe control array to all-empty in one pass and rewinds the entries
-### high-water mark; per-entry live bytes are implicitly invalidated.
-@migratable
 routine Dict[K, V].clear()
   danger!
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
@@ -335,19 +286,10 @@ routine Dict[K, V].clear()
   me.entries_used = 0u64
   return
 
-### Returns true if `key` is present in the dictionary.
-### :param key: The key to look up.
-### :returns: `true` if the key exists.
 @readonly
 routine Dict[K, V].$contains(key: K) -> Bool
   return me.find_slot(key) < me.capacity
 
-### Inserts `key` with `value`, or updates the existing entry's value when `key` is already present.
-### Updates leave the entry's position in iteration order unchanged.
-### :param key: The key to insert or update.
-### :param value: The value to associate with `key`.
-### :returns: `true` if a new entry was inserted; `false` if an existing entry was updated.
-@migratable
 routine Dict[K, V].add(key: K, value: V) -> Bool
   if me.should_rehash()
     me.rehash()
@@ -362,15 +304,10 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
     me.vals.offset(V.data_size() * ei).inject(value)
     me.entry_live.offset(ei).inject(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
-  me.insert_index_raw(h: key.$hash(), entry_index: ei)
+  me.insert_index_raw(h: key.$hash(k0: me.k0, k1: me.k1), entry_index: ei)
   me.count = me.count +% 1u64
   return true
 
-### Removes the entry associated with `key`, if present.
-### The entry's slot in the entries array becomes a tombstone and is reclaimed on the next rehash.
-### :param key: The key to remove.
-### :returns: `true` if the key was found and removed; `false` if not present.
-@migratable
 routine Dict[K, V].remove(key: K) -> Bool
   var slot = me.find_slot(key)
   if slot >= me.capacity
@@ -383,10 +320,6 @@ routine Dict[K, V].remove(key: K) -> Bool
   me.deleted = me.deleted +% 1u64
   return true
 
-### Returns the value associated with `key`, or `default_value` when the key is absent.
-### :param key: The key to look up.
-### :param default_value: The fallback value returned when `key` is not present.
-### :returns: The mapped value if found, otherwise `default_value`.
 @readonly
 routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
   var slot = me.find_slot(key)
@@ -398,10 +331,6 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # Indexing
 # ============================================================================
 
-### Returns the value associated with `key`.
-### :param key: The key to look up.
-### :returns: The value mapped to `key`.
-### :absent: The key is not present in the dictionary.
 @readonly
 routine Dict[K, V].$getitem!(key: K) -> V
   var slot = me.find_slot(key)
@@ -409,11 +338,6 @@ routine Dict[K, V].$getitem!(key: K) -> V
     absent
   return me.read_val_at(me.read_index(slot))
 
-### Updates the value associated with `key`.
-### Leaves the entry's position in iteration order unchanged.
-### :param key: The key to update.
-### :param value: The replacement value.
-### :absent: The key is not present in the dictionary.
 routine Dict[K, V].$setitem!(key: K, value: V)
   if key notin me
     absent
@@ -470,8 +394,6 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 # Iteration
 # ============================================================================
 
-### Returns an iterator over all live entries in insertion order.
-### Order is stable across lookups and value updates; removing and re-adding a key places the entry at the new end.
 @readonly
 routine Dict[K, V].$iter() -> DictIterator[K, V]
   danger!
@@ -484,24 +406,13 @@ routine Dict[K, V].$iter() -> DictIterator[K, V]
     )
 
 ### Iterator that walks the dense entries array of a {Dict[K, V]} in insertion order.
-### Tombstoned (removed) entries are silently skipped.
-### :typeparam K: The key type yielded by each entry.
-### :typeparam V: The value type yielded by each entry.
 entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
-  ### Raw pointer into the source dict's key entries array.
   secret keys: Hijacked[K]
-  ### Raw pointer into the source dict's value entries array.
   secret vals: Hijacked[V]
-  ### Raw pointer into the source dict's per-entry live byte array.
   secret entry_live: Hijacked[U8]
-  ### Entries-array high-water mark captured at iterator creation.
   secret entries_used: U64
-  ### Current entry index; advances on each call to `$next!`.
   secret pos: U64
 
-### Advances to the next live entry and returns it.
-### :returns: The next live {DictEntry[K, V]} in insertion order.
-### :absent: No live entries remain.
 routine DictIterator[K, V].$next!() -> DictEntry[K, V]
   danger!
     while me.pos < me.entries_used
@@ -517,8 +428,6 @@ routine DictIterator[K, V].$next!() -> DictEntry[K, V]
 # Display
 # ============================================================================
 
-### Returns a compact text representation of the dictionary contents.
-### Entries are rendered as `key: value` pairs in insertion order.
 @readonly
 routine Dict[K, V].$represent() -> Text
   if me.is_empty()
@@ -533,7 +442,6 @@ routine Dict[K, V].$represent() -> Text
   result = result + "}"
   return result
 
-### Returns a diagnostic form that includes the runtime type name and live entry count.
 @readonly
 routine Dict[K, V].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
@@ -550,11 +458,6 @@ routine Dict[K, V].$diagnose() -> Text
 # Comparison
 # ============================================================================
 
-### Returns true if both dictionaries contain exactly the same keys with the same associated values.
-### Comparison is order-independent: two dictionaries with the same key/value pairs are equal
-### regardless of the insertion order they were built in.
-### :param other: The other dictionary to compare against.
-### :returns: `true` if both have the same count and every key-value pair is equal.
 @readonly
 routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
   if me.count != other.count
