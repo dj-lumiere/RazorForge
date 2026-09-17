@@ -1,0 +1,1102 @@
+module Core
+
+import Collections
+# Core B32 type definition - maps to LLVM float
+
+### Represents a 32-bit IEEE 754 binary floating-point value.
+### `B32` is the standard single-precision float: compact, fast, and suitable
+### for graphics, simulation, and general-purpose numeric code where 24 bits of
+### significand precision are acceptable.
+@llvm("float")
+record B32 obeys Numeric, Ordered, Assignable, Copyable, Splittable
+  pass
+
+# IEEE 754 single precision constants
+preset B32_EPSILON: B32 = 1.1920929e-7_b32
+preset B32_MIN: B32 = -3.4028235e+38_b32
+preset B32_MAX: B32 = 3.4028235e+38_b32
+preset B32_MIN_POSITIVE: B32 = 1.1754944e-38_b32
+preset B32_ZERO: B32 = 0.0_b32
+preset B32_ONE: B32 = 1.0_b32
+preset B32_INFINITY: B32 = inf_b32
+preset B32_NAN: B32 = nan_b32
+
+# Mathematical constants
+preset B32_PI: B32 = 3.1415927_b32
+preset B32_E: B32 = 2.7182817_b32
+preset B32_SQRT_2: B32 = 1.4142135_b32
+preset B32_LN_2: B32 = 0.6931472_b32
+preset B32_LN_10: B32 = 2.3025851_b32
+
+### Converts an `S8` into single-precision floating-point form.
+### :param from: The signed 8-bit integer to convert.
+### :returns: The corresponding `B32` value.
+@inline
+routine B32(from: S8) -> B32
+  return LLVM::signed_to_float[S8, B32](from)
+
+### Converts an `S16` into single-precision floating-point form.
+### :param from: The signed 16-bit integer to convert.
+### :returns: The corresponding `B32` value.
+@inline
+routine B32(from: S16) -> B32
+  return LLVM::signed_to_float[S16, B32](from)
+
+### Converts an `S32` into single-precision floating-point form.
+### :param from: The signed 32-bit integer to convert.
+### :returns: The closest representable `B32` value.
+@inline
+routine B32(from: S32) -> B32
+  return LLVM::signed_to_float[S32, B32](from)
+
+### Converts an `S64` into single-precision floating-point form.
+### Precision may be rounded when the integer cannot be represented exactly.
+### :param from: The signed 64-bit integer to convert.
+### :returns: The closest representable `B32` value.
+@inline
+routine B32(from: S64) -> B32
+  return LLVM::signed_to_float[S64, B32](from)
+
+### Converts an `S128` into single-precision floating-point form.
+### :param from: The signed 128-bit integer to convert.
+### :returns: The closest representable `B32` value under the target rounding rules.
+@inline
+routine B32(from: S128) -> B32
+  return LLVM::signed_to_float[S128, B32](from)
+
+### Converts a `U8` into single-precision floating-point form.
+### :param from: The unsigned 8-bit integer to convert.
+### :returns: The corresponding `B32` value.
+@inline
+routine B32(from: U8) -> B32
+  return LLVM::unsigned_to_float[U8, B32](from)
+
+### Converts a `U16` into single-precision floating-point form.
+### :param from: The unsigned 16-bit integer to convert.
+### :returns: The corresponding `B32` value.
+@inline
+routine B32(from: U16) -> B32
+  return LLVM::unsigned_to_float[U16, B32](from)
+
+### Converts a `U32` into single-precision floating-point form.
+### :param from: The unsigned 32-bit integer to convert.
+### :returns: The closest representable `B32` value.
+@inline
+routine B32(from: U32) -> B32
+  return LLVM::unsigned_to_float[U32, B32](from)
+
+### Converts a `U64` into single-precision floating-point form.
+### :param from: The unsigned 64-bit integer to convert.
+### :returns: The closest representable `B32` value.
+@inline
+routine B32(from: U64) -> B32
+  return LLVM::unsigned_to_float[U64, B32](from)
+
+### Converts a `U128` into single-precision floating-point form. Failable: throws when the
+### value exceeds the B32 range (overflow to +inf) — handle with `B32!`/`when`/`try_`.
+### :param from: The unsigned 128-bit integer to convert.
+### :returns: The closest representable `B32` value (finite).
+### :throws: {NumericOverflowError} if the value is out of the B32 range.
+routine B32!(from: U128) -> B32
+  return LLVM::unsigned_to_float[U128, B32](from).finite()
+
+### Converts an `S256` to `B32`. Failable: throws if the value exceeds the B32 range.
+### :param from: The signed 256-bit integer to convert.
+### :returns: The closest representable `B32` value (finite).
+### :throws: {NumericOverflowError} if the value is out of the B32 range.
+routine B32!(from: S256) -> B32
+  return LLVM::signed_to_float[S256, B32](from).finite()
+
+### Converts a `U256` to `B32`. Failable: throws if the value exceeds the B32 range.
+### :param from: The unsigned 256-bit integer to convert.
+### :returns: The closest representable `B32` value (finite).
+### :throws: {NumericOverflowError} if the value is out of the B32 range.
+routine B32!(from: U256) -> B32
+  return LLVM::unsigned_to_float[U256, B32](from).finite()
+
+### Widens a half-precision float to single precision.
+### :param from: The `B16` value to widen.
+### :returns: An `B32` carrying the same numeric value when representable.
+@inline
+routine B32(from: B16) -> B32
+  return LLVM::float_extend[B16, B32](from)
+
+### Returns an existing `B32` unchanged.
+### :param from: The single-precision value to forward.
+### :returns: `from`.
+@inline
+routine B32(from: B32) -> B32
+  return from
+
+### Narrows a double-precision float to single precision.
+### :param from: The `B64` value to convert.
+### :returns: The nearest representable `B32` value.
+@inline
+routine B32(from: B64) -> B32
+  return LLVM::float_narrow[B64, B32](from)
+
+### (`B32(from: B128)` is provided by the quadruple-precision engine — `B128.rf` — which owns
+### the bit-surgery narrowing; a forwarding stub here would recurse into itself.)
+
+### Converts a decimal32 value to single-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `B32` value.
+routine B32(from: D32) -> B32
+  return B32(from: B64(from))
+
+### Converts a decimal64 value to single-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `B32` value.
+routine B32(from: D64) -> B32
+  return B32(from: B64(from))
+
+### Converts a decimal128 value to single-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `B32` value.
+routine B32(from: D128) -> B32
+  return B32(from: B64(from))
+
+# ============================================================================
+# Arithmetic Operations (IEEE 754 semantics)
+# ============================================================================
+
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors B64/Decimal):
+# ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
+# keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
+
+### Returns `me + you`. Checked: crashes if the IEEE result is non-finite. Use `add_unchecked` for
+### raw IEEE.
+### :param you: The addend.
+### :returns: The single-precision sum (always finite).
+routine B32.add!(you: B32) -> B32
+  var r = LLVM::float_add[B32](a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me - you`. Checked: crashes if the IEEE result is non-finite. Use `sub_unchecked` for
+### raw IEEE.
+### :param you: The value to subtract.
+### :returns: The single-precision difference (always finite).
+routine B32.sub!(you: B32) -> B32
+  var r = LLVM::float_sub[B32](a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me + you`, promoting the real `me` to complex (imaginary part 0). Only `+`/`-` allow
+### real↔complex mixing; the component width must match (B32 pairs with C64).
+### :param you: The complex addend.
+### :returns: The complex sum.
+routine B32.add(you: C64) -> C64
+  return C64(from: me).add(you)
+
+### Returns `me - you`, promoting the real `me` to complex (imaginary part 0).
+### :param you: The complex value to subtract.
+### :returns: The complex difference.
+routine B32.sub(you: C64) -> C64
+  return C64(from: me).sub(you)
+
+### Returns `me * you`. Checked: crashes if the IEEE result is non-finite. Use `mul_unchecked` for
+### raw IEEE.
+### :param you: The multiplier.
+### :returns: The single-precision product (always finite).
+routine B32.mul!(you: B32) -> B32
+  var r = LLVM::float_mul[B32](a: me, b: you)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
+### overflow.
+### Use `truediv_unchecked` for raw IEEE 754, or `(a / b).finite()` for recoverable handling.
+### :param you: The divisor.
+### :returns: The single-precision quotient (always finite).
+routine B32.truediv!(you: B32) -> B32
+  var r = LLVM::float_div[B32](a: me, b: you)
+  if r.is_finite()
+    return r
+  if you.is_zero() and not me.is_zero()
+    throw DivisionByZeroError()
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite()`.
+### :returns: `me`, when finite.
+### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
+routine B32.finite!() -> B32
+  if not me.is_finite()
+    throw NumericOverflowError(description: f"B32 value is non-finite: {me}")
+  return me
+
+### Returns the negated value.
+### :returns: The resulting `B32` value.
+routine B32.neg() -> B32
+  return LLVM::float_neg[B32](me)
+
+# Unchecked variants — raw IEEE 754 propagation (the float analog of integer `+%`/`+^`). Plain
+# (NOT `dangerous`): inf/NaN are valid IEEE values, the `_unchecked` spelling is the marker.
+
+### Returns `me / you` with raw IEEE 754 semantics: `x/0` -> ±infinity, `0/0` -> NaN. No crash.
+routine B32.truediv_unchecked(you: B32) -> B32
+  return LLVM::float_div[B32](a: me, b: you)
+
+### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine B32.add_unchecked(you: B32) -> B32
+  return LLVM::float_add[B32](a: me, b: you)
+
+### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine B32.sub_unchecked(you: B32) -> B32
+  return LLVM::float_sub[B32](a: me, b: you)
+
+### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+routine B32.mul_unchecked(you: B32) -> B32
+  return LLVM::float_mul[B32](a: me, b: you)
+
+# ============================================================================
+# Comparison Operations (ordered - false if NaN)
+# ============================================================================
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+routine B32.eq(you: B32) -> Bool
+  return LLVM::float_eq[B32](a: me, b: you)
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+routine B32.cmp(you: B32) -> ComparisonSign
+  if LLVM::float_lt[B32](a: me, b: you)
+    return ME_SMALL
+  if LLVM::float_gt[B32](a: me, b: you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations using intrinsics
+# ============================================================================
+
+### Returns the square root of this value in single precision.
+### :returns: The intrinsic square-root result for `me`.
+routine B32.sqrt!() -> B32
+  var rr = me.sqrt_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Square root with raw IEEE 754 propagation (`sqrt(<0)` -> NaN). Thin wrapper over LLVM `sqrt`.
+routine B32.sqrt_unchecked() -> B32
+  return LLVM::sqrt[B32](me)
+
+### Returns the absolute value.
+### :returns: The resulting `B32` value.
+routine B32.abs() -> B32
+  return LLVM::float_abs[B32](me)
+
+### Rounds this value toward negative infinity.
+### :returns: The greatest integral-valued `B32` not larger than `me`.
+routine B32.floor() -> B32
+  return LLVM::floor[B32](me)
+
+### Rounds this value toward positive infinity.
+### :returns: The smallest integral-valued `B32` not smaller than `me`.
+routine B32.ceil() -> B32
+  return LLVM::ceil[B32](me)
+
+### Rounds this value to the nearest integral-valued `B32`.
+### :returns: The rounded result in single precision.
+routine B32.round() -> B32
+  return LLVM::round[B32](me)
+
+### Discards the fractional part of this value toward zero.
+### :returns: The truncated result in single precision.
+routine B32.int_truncate() -> B32
+  return LLVM::float_truncate[B32](me)
+
+### Returns the sine of this value, interpreting it as radians.
+### :returns: The single-precision sine result.
+routine B32.sin() -> B32
+  return LLVM::sin[B32](me)
+
+### Returns the cosine of this value, interpreting it as radians.
+### :returns: The single-precision cosine result.
+routine B32.cos() -> B32
+  return LLVM::cos[B32](me)
+
+### Returns `e` raised to this value.
+### :returns: The single-precision exponential result.
+routine B32.exp!() -> B32
+  var rr = me.exp_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Natural exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps LLVM `exp`.
+routine B32.exp_unchecked() -> B32
+  return LLVM::exp[B32](me)
+
+### Returns the natural logarithm of this value.
+### :returns: The single-precision natural-log result.
+routine B32.log!() -> B32
+  var rr = me.log_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Natural log, raw IEEE (`log(0)` -> -inf, `log(<0)` -> NaN). Thin wrapper over LLVM `log`.
+routine B32.log_unchecked() -> B32
+  return LLVM::log[B32](me)
+
+### Returns the base-10 logarithm of this value.
+### :returns: The single-precision common-log result.
+routine B32.log10!() -> B32
+  var rr = me.log10_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Base-10 logarithm with raw IEEE 754 propagation. Thin wrapper over LLVM `log10`.
+routine B32.log10_unchecked() -> B32
+  return LLVM::log10[B32](me)
+
+### `me` raised to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain). Wraps LLVM
+### `pow`.
+routine B32.pow_unchecked(exp: B32) -> B32
+  return LLVM::pow[B32](me, exp)
+
+### Raises this value to `exp` (IEEE semantics: overflow/domain errors yield inf/NaN).
+### :param exp: The exponent applied to `me`.
+### :returns: `me` raised to `exp` in single precision.
+routine B32.pow!(exp: B32) -> B32
+  var rr = me.pow_unchecked(exp: exp)
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns this value with its sign bit replaced by the sign of `sign`.
+### :param sign: The value supplying the sign bit.
+### :returns: A value with the magnitude of `me` and the sign of `sign`.
+routine B32.copysign(sign: B32) -> B32
+  return LLVM::copysign[B32](me, sign)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: The lower of the two values under the ordered comparison rules.
+routine B32.min(you: B32) -> B32
+  return if me <= you then me else you
+
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: The greater of the two values under the ordered comparison rules.
+routine B32.max(you: B32) -> B32
+  return if me >= you then me else you
+
+### Restricts this value to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound to enforce.
+### :param max_val: The upper bound to enforce.
+### :returns: `me` if already in range, otherwise the nearest bound.
+@positional
+routine B32.clamp(min_val: B32, max_val: B32) -> B32
+  return me.min(max_val).max(min_val)
+
+### Returns `true` if this value is strictly positive (greater than zero).
+### :returns: `true` if `me > 0.0`.
+routine B32.is_positive() -> Bool
+  return me > 0.0_b32
+
+### Returns `true` if this value is strictly negative (less than zero).
+### :returns: `true` if `me < 0.0`.
+routine B32.is_negative() -> Bool
+  return me < 0.0_b32
+
+### Returns `true` if this value compares equal to zero.
+### :returns: `true` if `me == 0.0`.
+routine B32.is_zero() -> Bool
+  return me == 0.0_b32
+
+### Returns `true` when this value encodes an IEEE 754 NaN.
+### :returns: Whether the bit pattern represents a not-a-number payload.
+routine B32.is_nan() -> Bool
+  var bits = me.to_bits()
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
+  return exponent == 0x7F800000_u32 and mantissa != 0_u32
+
+### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
+routine B32.is_signaling() -> Bool
+  return me.is_nan() and LLVM::bit_and(a: me.to_bits(), b: 0x00400000_u32) == 0_u32
+
+### Returns `true` when this value encodes positive or negative infinity.
+### :returns: Whether the bit pattern represents an infinity.
+routine B32.is_infinite() -> Bool
+  var bits = me.to_bits()
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
+  return exponent == 0x7F800000_u32 and mantissa == 0_u32
+
+### Returns `true` when this value is neither NaN nor infinity.
+### :returns: Whether the value is finite.
+routine B32.is_finite() -> Bool
+  return not me.is_nan() and not me.is_infinite()
+
+### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
+### :returns: A unit-sign value describing the sign of `me`.
+routine B32.signum() -> B32
+  return when
+    me > 0.0_b32 => 1.0_b32
+    me < 0.0_b32 => -1.0_b32
+    else => 0.0_b32
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+### Reinterprets this float as its raw IEEE 754 bit pattern.
+### :returns: The underlying `U32` encoding of this value.
+routine B32.to_bits() -> U32
+  return LLVM::reinterpret_bits[B32, U32](me)
+
+### Reinterprets a raw IEEE 754 bit pattern as an `B32`.
+### :param bits: The exact single-precision encoding to decode.
+### :returns: The `B32` value with that bit pattern.
+common routine B32.from_bits(bits: U32) -> B32
+  return LLVM::reinterpret_bits[U32, B32](bits)
+
+### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+common routine B32.signaling_nan() -> B32
+  return B32.from_bits(bits: 0x7F800001_u32)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@override
+routine B32.represent() -> Text
+  if me.is_signaling()
+    return "snan"
+  return me.to_text(sig_digits: 7u64)
+
+### Renders this value to `sig_digits` significant decimal digits with C `%g`
+### layout (pure-RF exact-rational conversion; widens to B64 exactly first).
+### :param sig_digits: The number of significant decimal digits (>= 1).
+### :returns: The resulting `Text` value.
+routine B32.to_text(sig_digits: U64) -> Text
+  return format_binary(value: B64(from: me), sig: sig_digits)
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@override
+routine B32.diagnose() -> Text
+  return "B32(" + me.represent() + ")"
+
+### Implements the wired routine behavior for this value.
+### :param from_text: The `from_text` value.
+### :returns: The resulting `B32` value.
+### :throws: May throw {InvalidValueError}.
+routine B32!(from_text: Text) -> B32
+  var pc = parse_float_components(from_text: from_text, target: "B32")
+  if pc.kind == 3_s32
+    throw InvalidValueError(input: from_text, target: "B32")
+  if pc.kind == 1_s32
+    return B32_NAN
+  if pc.kind == 2_s32
+    if pc.is_neg
+      return -B32_INFINITY
+    return B32_INFINITY
+  return b32_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+# ============================================================================
+# Byte Representation
+# ============================================================================
+
+### Returns the raw bytes of this value in little-endian order.
+### :returns: The resulting `Array[Byte, 4]` value.
+routine B32.to_bytes_le() -> Array[Byte, 4]
+  var raw = LLVM::reinterpret_bits[B32, U32](me)
+  var result = Array[Byte, 4]()
+  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U32, U8](raw))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)))
+  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)))
+  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)))
+  return result
+
+### Returns the raw bytes of this value in big-endian order.
+### :returns: The resulting `Array[Byte, 4]` value.
+routine B32.to_bytes_be() -> Array[Byte, 4]
+  var raw = LLVM::byte_swap(LLVM::reinterpret_bits[B32, U32](me))
+  var result = Array[Byte, 4]()
+  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U32, U8](raw))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)))
+  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)))
+  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)))
+  return result
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+routine B32.hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[B32, U32](me)), k0: k0, k1: k1)
+
+# ============================================================================
+# Full libm parity (rf_b32_* runtime, TLFloat/libm-backed). Basic ops above use
+# LLVM intrinsics; the extended surface binds the single-precision runtime.
+# ============================================================================
+### C libm extern: tangent (radians).
+routine C::rf_b32_tan(value: B32) -> B32
+### C libm extern: arc sine.
+routine C::rf_b32_asin(value: B32) -> B32
+### C libm extern: arc cosine.
+routine C::rf_b32_acos(value: B32) -> B32
+### C libm extern: arc tangent.
+routine C::rf_b32_atan(value: B32) -> B32
+### C libm extern: two-argument arc tangent atan2(y, x).
+routine C::rf_b32_atan2(y: B32, x: B32) -> B32
+### C libm extern: hyperbolic sine.
+routine C::rf_b32_sinh(value: B32) -> B32
+### C libm extern: hyperbolic cosine.
+routine C::rf_b32_cosh(value: B32) -> B32
+### C libm extern: hyperbolic tangent.
+routine C::rf_b32_tanh(value: B32) -> B32
+### C libm extern: inverse hyperbolic sine.
+routine C::rf_b32_asinh(value: B32) -> B32
+### C libm extern: inverse hyperbolic cosine.
+routine C::rf_b32_acosh(value: B32) -> B32
+### C libm extern: inverse hyperbolic tangent.
+routine C::rf_b32_atanh(value: B32) -> B32
+### C libm extern: cube root.
+routine C::rf_b32_cbrt(value: B32) -> B32
+### C libm extern: base-2 exponential 2^x.
+routine C::rf_b32_exp2(value: B32) -> B32
+### C libm extern: exp(x) - 1, accurate near zero.
+routine C::rf_b32_expm1(value: B32) -> B32
+### C libm extern: log(1 + x), accurate near zero.
+routine C::rf_b32_log1p(value: B32) -> B32
+### C libm extern: base-2 logarithm.
+routine C::rf_b32_log2(value: B32) -> B32
+### C libm extern: hypotenuse sqrt(x^2 + y^2) without overflow.
+routine C::rf_b32_hypot(x: B32, y: B32) -> B32
+### C libm extern: fused multiply-add x*y + z with a single rounding.
+routine C::rf_b32_fma(x: B32, y: B32, z: B32) -> B32
+### C libm extern: floating-point remainder (C fmod).
+routine C::rf_b32_fmod(x: B32, y: B32) -> B32
+### C libm extern: IEEE remainder (C remainder).
+routine C::rf_b32_remainder(x: B32, y: B32) -> B32
+### C libm extern: positive difference max(x - y, 0) (C fdim).
+routine C::rf_b32_fdim(x: B32, y: B32) -> B32
+### C libm extern: larger of x and y (C fmax).
+routine C::rf_b32_fmax(x: B32, y: B32) -> B32
+### C libm extern: smaller of x and y (C fmin).
+routine C::rf_b32_fmin(x: B32, y: B32) -> B32
+### C libm extern: base-10 exponential 10^x.
+routine C::rf_b32_exp10(value: B32) -> B32
+### C libm extern: sin(pi*x).
+routine C::rf_b32_sinpi(value: B32) -> B32
+### C libm extern: cos(pi*x).
+routine C::rf_b32_cospi(value: B32) -> B32
+### C libm extern: tan(pi*x).
+routine C::rf_b32_tanpi(value: B32) -> B32
+### C libm extern: next representable value after x toward y.
+routine C::rf_b32_nextafter(x: B32, y: B32) -> B32
+### C libm extern: x * 2^n (C scalbn).
+routine C::rf_b32_scalbn(value: B32, n: S64) -> B32
+### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
+routine C::rf_b32_ilogb(value: B32) -> S64
+### C libm extern: round to nearest integer in the current rounding mode (C rint).
+routine C::rf_b32_rint(value: B32) -> B32
+### C libm extern: error function.
+routine C::rf_b32_erf(value: B32) -> B32
+### C libm extern: complementary error function.
+routine C::rf_b32_erfc(value: B32) -> B32
+### C libm extern: gamma function.
+routine C::rf_b32_tgamma(value: B32) -> B32
+### C libm extern: natural log of the absolute value of gamma.
+routine C::rf_b32_lgamma(value: B32) -> B32
+
+### Tangent (radians).
+routine B32.tan() -> B32
+  return LLVM::tan[B32](value: me)
+
+### Arc sine.
+routine B32.asin!() -> B32
+  var rr = me.asin_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_b32_asin`.
+routine B32.asin_unchecked() -> B32
+  return LLVM::asin[B32](value: me)
+
+### Arc cosine.
+routine B32.acos!() -> B32
+  var rr = me.acos_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_b32_acos`.
+routine B32.acos_unchecked() -> B32
+  return LLVM::acos[B32](value: me)
+
+### Arc tangent.
+routine B32.atan() -> B32
+  return LLVM::atan[B32](value: me)
+
+### Two-argument arc tangent atan2(y, x).
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+routine atan2(y: B32, x: B32) -> B32
+  return LLVM::atan2[B32](a: y, b: x)
+
+### Hyperbolic sine.
+routine B32.sinh!() -> B32
+  var rr = me.sinh_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±inf). Wraps `rf_b32_sinh`.
+routine B32.sinh_unchecked() -> B32
+  return LLVM::sinh[B32](value: me)
+
+### Hyperbolic cosine.
+routine B32.cosh!() -> B32
+  var rr = me.cosh_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_b32_cosh`.
+routine B32.cosh_unchecked() -> B32
+  return LLVM::cosh[B32](value: me)
+
+### Hyperbolic tangent.
+routine B32.tanh() -> B32
+  return LLVM::tanh[B32](value: me)
+
+### Inverse hyperbolic sine.
+routine B32.asinh() -> B32
+  return C::rf_b32_asinh(value: me)
+
+### Inverse hyperbolic cosine.
+routine B32.acosh!() -> B32
+  var rr = me.acosh_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Inverse hyperbolic cosine, raw IEEE 754 propagation (`me < 1` -> NaN). Wraps `rf_b32_acosh`.
+routine B32.acosh_unchecked() -> B32
+  return C::rf_b32_acosh(value: me)
+
+### Inverse hyperbolic tangent.
+routine B32.atanh!() -> B32
+  var rr = me.atanh_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Inverse hyperbolic tangent, raw IEEE (`±1` -> ±inf, `|me| > 1` -> NaN). Wraps `rf_b32_atanh`.
+routine B32.atanh_unchecked() -> B32
+  return C::rf_b32_atanh(value: me)
+
+### Cube root.
+routine B32.cbrt() -> B32
+  return C::rf_b32_cbrt(value: me)
+
+### Base-2 exponential.
+routine B32.exp2!() -> B32
+  var rr = me.exp2_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Base-2 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_b32_exp2`.
+routine B32.exp2_unchecked() -> B32
+  return LLVM::exp2[B32](value: me)
+
+### exp(me) - 1, accurate near zero.
+routine B32.expm1!() -> B32
+  var rr = me.expm1_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### exp(me) - 1 with raw IEEE 754 propagation. Thin wrapper over `rf_b32_expm1`.
+routine B32.expm1_unchecked() -> B32
+  return C::rf_b32_expm1(value: me)
+
+### log(1 + me), accurate near zero.
+routine B32.log1p!() -> B32
+  var rr = me.log1p_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### log(1 + me) with raw IEEE 754 propagation. Thin wrapper over `rf_b32_log1p`.
+routine B32.log1p_unchecked() -> B32
+  return C::rf_b32_log1p(value: me)
+
+### Base-2 logarithm.
+routine B32.log2!() -> B32
+  var rr = me.log2_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Base-2 logarithm with raw IEEE 754 propagation. Thin wrapper over `rf_b32_log2`.
+routine B32.log2_unchecked() -> B32
+  return LLVM::log2[B32](value: me)
+
+### Base-10 exponential 10**me.
+routine B32.exp10!() -> B32
+  var rr = me.exp10_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Base-10 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_b32_exp10`.
+routine B32.exp10_unchecked() -> B32
+  return C::rf_b32_exp10(value: me)
+
+### Hypotenuse sqrt(x^2 + y^2) without overflow.
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot!(x: B32, y: B32) -> B32
+  var rr = hypot_unchecked(x: x, y: y)
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Thin wrapper over `rf_b32_hypot`.
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot_unchecked(x: B32, y: B32) -> B32
+  return C::rf_b32_hypot(x: x, y: y)
+
+### 3D hypotenuse sqrt(x^2 + y^2 + z^2) without overflow. Checked: crashes on overflow.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+routine hypot!(x: B32, y: B32, z: B32) -> B32
+  var rr = hypot_unchecked(x: x, y: y, z: z)
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### 3D hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Composed as
+### `hypot(hypot(x, y), z)` — overflow-safe, libm has no 3-arg hypot.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+routine hypot_unchecked(x: B32, y: B32, z: B32) -> B32
+  return hypot_unchecked(x: hypot_unchecked(x: x, y: y), y: z)
+
+### Fused multiply-add me*b + c with a single rounding.
+routine B32.fma!(b: B32, c: B32) -> B32
+  var rr = me.fma_unchecked(b: b, c: c)
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Fused multiply-add me*b + c with raw IEEE 754 propagation. Thin wrapper over `rf_b32_fma`.
+routine B32.fma_unchecked(b: B32, c: B32) -> B32
+  return LLVM::fma[B32](a: me, b: b, c: c)
+
+### Floating-point remainder of me/you (C fmod).
+routine B32.fmod(you: B32) -> B32
+  return LLVM::float_rem[B32](a: me, b: you)
+
+### IEEE remainder of me/you (C remainder).
+routine B32.remainder(you: B32) -> B32
+  return C::rf_b32_remainder(x: me, y: you)
+
+### Positive difference max(me - you, 0) (C fdim).
+routine B32.fdim(you: B32) -> B32
+  return C::rf_b32_fdim(x: me, y: you)
+
+### Larger of me and you (C fmax).
+routine B32.fmax(you: B32) -> B32
+  return LLVM::maxnum[B32](a: me, b: you)
+
+### Smaller of me and you (C fmin).
+routine B32.fmin(you: B32) -> B32
+  return LLVM::minnum[B32](a: me, b: you)
+
+### sin(pi*me).
+routine B32.sinpi() -> B32
+  return C::rf_b32_sinpi(value: me)
+
+### cos(pi*me).
+routine B32.cospi() -> B32
+  return C::rf_b32_cospi(value: me)
+
+### tan(pi*me).
+routine B32.tanpi() -> B32
+  return C::rf_b32_tanpi(value: me)
+
+### Next representable value after me toward you.
+routine B32.nextafter(you: B32) -> B32
+  return C::rf_b32_nextafter(x: me, y: you)
+
+### me * 2^n (C scalbn).
+routine B32.scalbn(n: S64) -> B32
+  return C::rf_b32_scalbn(value: me, n: n)
+
+### Alias of scalbn (C ldexp).
+routine B32.ldexp(n: S64) -> B32
+  return C::rf_b32_scalbn(value: me, n: n)
+
+### Rounds to nearest integer in the current rounding mode (C rint).
+routine B32.rint() -> B32
+  return LLVM::rint[B32](value: me)
+
+### Error function.
+routine B32.erf() -> B32
+  return C::rf_b32_erf(value: me)
+
+### Complementary error function.
+routine B32.erfc() -> B32
+  return C::rf_b32_erfc(value: me)
+
+### Gamma function.
+routine B32.tgamma!() -> B32
+  var rr = me.tgamma_unchecked()
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±inf or NaN). Wraps
+### `rf_b32_tgamma`.
+routine B32.tgamma_unchecked() -> B32
+  return C::rf_b32_tgamma(value: me)
+
+### Natural log of |gamma(me)|.
+routine B32.lgamma() -> B32
+  return C::rf_b32_lgamma(value: me)
+
+### Truncates toward zero (C trunc; alias of int_truncate).
+routine B32.trunc() -> B32
+  return LLVM::float_truncate[B32](me)
+
+### Fractional part me - trunc(me).
+routine B32.frac() -> B32
+  return me - LLVM::float_truncate[B32](me)
+
+### Integer and fractional parts (C modf); both carry me's sign.
+routine B32.modf() -> (B32, B32)
+  var ip = LLVM::float_truncate[B32](me)
+  return (ip, me - ip)
+
+### Fraction in [0.5,1) and power-of-two exponent (C frexp).
+routine B32.frexp() -> (B32, S64)
+  if me.is_zero() or me.is_infinite() or me.is_nan()
+    return (me, 0_s64)
+  var e = LLVM::add(a: C::rf_b32_ilogb(value: me), b: 1_s64)
+  return (C::rf_b32_scalbn(value: me, n: LLVM::sub(a: 0_s64, b: e)), e)
+
+### True if the sign bit is set (C signbit).
+routine B32.signbit() -> Bool
+  return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: 0x80000000_u32), b: 0_u32)
+
+### True for a subnormal (denormalized, nonzero) value.
+routine B32.is_subnormal() -> Bool
+  var bits = me.to_bits()
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
+  return exponent == 0_u32 and mantissa != 0_u32
+
+### True for a finite, normal value (nonzero and not subnormal).
+routine B32.is_normal() -> Bool
+  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
+### C fpclassify: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
+routine B32.fpclassify() -> FpClass
+  if me.is_signaling()
+    return SIGNALING_NAN
+  if me.is_nan()
+    return NAN
+  if me.is_infinite()
+    return INFINITE
+  if me.is_zero()
+    return ZERO
+  if me.is_subnormal()
+    return SUBNORMAL
+  return NORMAL
+
+# ============================================================================
+# IEEE 754 Tier 1 — total ordering predicates
+# ============================================================================
+
+### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
+### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
+routine b32_order_key(bits: U32) -> U32
+  if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: 0x80000000_u32), b: 0_u32)
+    return LLVM::bit_xor(a: bits, b: 0xFFFFFFFF_u32)
+  return LLVM::bit_or(a: bits, b: 0x80000000_u32)
+
+### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
+### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
+### :param you: The value to compare against.
+### :returns: Whether `me` precedes or equals `you` in the total order.
+routine B32.total_order(you: B32) -> Bool
+  return b32_order_key(bits: me.to_bits()) <= b32_order_key(bits: you.to_bits())
+
+### IEEE 754 totalOrderMag: `total_order` applied to the magnitudes (sign bit cleared).
+### :param you: The value whose magnitude to compare against.
+### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
+routine B32.total_order_mag(you: B32) -> Bool
+  return LLVM::bit_and(a: me.to_bits(), b: 0x7FFFFFFF_u32) <= LLVM::bit_and(a: you.to_bits(), b: 0x7FFFFFFF_u32)
+
+# ============================================================================
+# IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding
+# ============================================================================
+
+### IEEE 754 nextUp: the least value greater than `me`. Propagating; never crashes.
+### :returns: The next representable value toward +infinity.
+routine B32.next_up() -> B32
+  return me.nextafter(you: B32_INFINITY)
+
+### IEEE 754 nextDown: the greatest value less than `me`. Never crashes.
+### :returns: The next representable value toward -infinity.
+routine B32.next_down() -> B32
+  return me.nextafter(you: -B32_INFINITY)
+
+### IEEE 754 logb: the unbiased exponent of `me` as a floating value (logb(0)=-inf,
+### logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
+### :returns: The radix-2 exponent of `me`.
+routine B32.logb() -> B32
+  if me.is_nan()
+    return me
+  if me.is_infinite()
+    return B32_INFINITY
+  if me.is_zero()
+    return -B32_INFINITY
+  return B32(from: C::rf_b32_ilogb(value: me))
+
+### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
+### :param n: The power-of-two exponent to apply.
+### :returns: `me` scaled by `2^n`.
+routine B32.scaleb!(n: S64) -> B32
+  var r = me.scalbn(n: n)
+  if r.is_finite() or not me.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
+### :param n: The power-of-two exponent to apply.
+### :returns: `me` scaled by `2^n`.
+routine B32.scaleb_unchecked(n: S64) -> B32
+  return me.scalbn(n: n)
+
+### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, ignoring NaN.
+routine B32.min_num(you: B32) -> B32
+  return me.fmin(you: you)
+
+### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, ignoring NaN.
+routine B32.max_num(you: B32) -> B32
+  return me.fmax(you: you)
+
+### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, NaN if either is NaN.
+routine B32.minimum(you: B32) -> B32
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then me else you
+    return me
+  return if me < you then me else you
+
+### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, NaN if either is NaN.
+routine B32.maximum(you: B32) -> B32
+  if me.is_nan()
+    return me
+  if you.is_nan()
+    return you
+  if me == you
+    if me.is_zero()
+      return if me.signbit() then you else me
+    return me
+  return if me > you then me else you
+
+### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero.
+### :returns: `me` rounded to an integral value with ties away from zero.
+routine B32.round_ties_away() -> B32
+  if not me.is_finite()
+    return me
+  var a = me.abs()
+  var t = a.trunc()
+  var rounded = if a - t >= 0.5_b32 then t + 1.0_b32 else t
+  return rounded.copysign(sign: me)
