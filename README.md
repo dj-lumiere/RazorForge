@@ -34,6 +34,9 @@ The language reference lives in the [wiki](https://github.com/dalmurii/disl/wiki
 [Introduction](https://github.com/dalmurii/disl/wiki/Introduction) and
 [Quick Start](https://github.com/dalmurii/disl/wiki/Quick-Start).
 
+If you're an AI assistant writing Disl, read [DISL-FOR-AI.md](DISL-FOR-AI.md) first: it's a one-page summary of the
+rules that are easy to get wrong.
+
 ## Building
 
 You need the [.NET 10 SDK](https://dotnet.microsoft.com/) and clang 21 or newer on `PATH`.
@@ -42,7 +45,7 @@ You need the [.NET 10 SDK](https://dotnet.microsoft.com/) and clang 21 or newer 
 dotnet run --project DISL -- run tests/hello.disl          # build and run a program
 dotnet run --project DISL -- build prog.disl -o prog       # build an executable
 dotnet run --project DISL -- build prog.disl --emit-llvm   # write LLVM IR instead
-dotnet run --project DISL -- test tests                    # run the golden tests
+dotnet run --project DISL -- test tests playground         # run the golden tests
 ```
 
 `build` and `run` also take `--target <arch-os-abi>` and `-O`. All files on one command line form one compilation
@@ -55,3 +58,5 @@ Each test in `tests/` is `<name>.disl` with one of:
 - `<name>.expected`: the program's stdout
 - `<name>.exit`: its exit code (default 0)
 - `<name>.error`: text the compile error must contain
+
+The programs in `playground/` carry `<name>.expected` files too, so they run as tests alongside `tests/`.
