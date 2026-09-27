@@ -114,9 +114,15 @@ secret routine b128fx_exp_small(w: B128Fx) -> (Bool, B128Fx)
 ### 3 units, one more for z's own truncation to 2^-126 (the sum's slope is below 1), against a value of at
 ### least 0.24.
 secret routine b128_lgamma2_q(z: B128) -> B128Fx
+  if z.is_zero()
+    return b128_lgamma2_q_fx(zf: B128Fx(neg: false, m: 0_u128, e: 0_s64, rel: 0.0))
+  return b128_lgamma2_q_fx(zf: b128fx_of(x: z))
+
+### b128_lgamma2_q for a B128Fx z (|z| <= 1/2, m = 0 for z = 0): z's own error moves the sum by at most
+### |z| z.rel (the sum's slope is below 1).
+secret routine b128_lgamma2_q_fx(zf: B128Fx) -> B128Fx
   var zs = 0_s128
-  if not z.is_zero()
-    var zf = b128fx_of(x: z)
+  if zf.m != 0_u128
     var sh = 0_s64 -% (zf.e +% 126_s64)
     var mag = 0_u128
     if sh < 128_s64
@@ -129,7 +135,10 @@ secret routine b128_lgamma2_q(z: B128) -> B128Fx
   while j > 0_u64
     j = j -% 1_u64
     acc = B128_LGAMMA2_Q[j] +% b128erf_smul(a: zs, b: acc)
-  return b128fx_norm(neg: false, mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](acc)), scale: -126_s64, abserr: 4.0)
+  var extra = 0.0
+  if zf.m != 0_u128 and zf.rel > 0.0
+    extra = zf.rel *! b128fx_b64(v: zf) *! 0x1p126 *! 1.001
+  return b128fx_norm(neg: false, mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](acc)), scale: -126_s64, abserr: 4.0 +! extra)
 
 ### The Stirling sum sum e_k u^(2k-1) (e_k = B_2k / (2k (2k - 1) 24^(2k - 1)), 20 terms, u = 24/x <= 1, the
 ### rest below the first omitted term, 2^-134) as a signed value in units of 2^-126 and its error bound
