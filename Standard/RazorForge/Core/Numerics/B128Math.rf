@@ -11,6 +11,10 @@ module Core
 # correctly rounded as far as measured: all 18 match MPFR on 20000 inputs each. The cores are
 # WIDTH-GENERIC member routines on UnpackedFloat[N, N2] (D64/D128 use them too). Constants and
 # coefficients come from B128Const.rf (W-dispatched for W=128, 192 and 320).
+# log2/log10 (CoreMath/B128Log.rf) and log1p, sinh, cosh, tanh, asinh, acosh, atanh, tan, sinpi, cospi,
+# tanpi, pow (B128Fast.rf), erf, erfc (B128Erf.rf), lgamma, tgamma of positive x (B128Gamma.rf)
+# first try a fast path built from the CORE-MATH fast phases with proven error bounds, and reach the W=192
+# engine only when that band does not settle the result.
 # ============================================================================
 
 # ============================================================================
@@ -796,6 +800,9 @@ routine B128.log1p_unchecked() -> B128
     return B128.from_bits(bits: b128_qnan())
   if me.is_infinite()
     return me
+  var (fast, v) = b128_log1p_cr(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 9_u64, k: 135_s64)
 
 ### `ln(1+me)` raw IEEE, explicit atanh/exp-series term count `n`.
@@ -824,6 +831,11 @@ routine B128.log2!() -> B128
 
 ### `log2(me)` with raw IEEE (computed as ln(me) * (1/ln2)). No crash.
 routine B128.log2_unchecked() -> B128
+  var (ok, hi, lo) = b128_log_scaled_ok(x: me)
+  if ok
+    var (fast, v) = b128_log_scaled(hi: hi, lo: lo, c1: 0xB8AA3B295C17F0BB_u64, c0: 0xBE87FED0691D3E89_u64, p: 127_u32)
+    if fast
+      return v
   if me.is_nan()
     return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -857,6 +869,11 @@ routine B128.log10!() -> B128
 
 ### `log10(me)` with raw IEEE (computed as ln(me) * (1/ln10)). No crash.
 routine B128.log10_unchecked() -> B128
+  var (ok, hi, lo) = b128_log_scaled_ok(x: me)
+  if ok
+    var (fast, v) = b128_log_scaled(hi: hi, lo: lo, c1: 0xDE5BD8A937287195_u64, c0: 0x355BAAAFAD33DC32_u64, p: 129_u32)
+    if fast
+      return v
   if me.is_nan()
     return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero()
@@ -909,6 +926,12 @@ routine B128.pow!(you: B128) -> B128
 ### `me^you` with raw IEEE (full C99 pow special-case ladder). No crash.
 ### Core path is W=192 `exp(you * ln|me|)`; the sign of an odd-integer exponent is reapplied.
 routine B128.pow_unchecked(you: B128) -> B128
+  var (fast, v) = b128_pow_fast(x: me, y: you)
+  if fast
+    return v
+  var (exact, w) = b128_pow_exact(x: me, y: you)
+  if exact
+    return w
   return me.pow_unchecked_p(you: you, logn: 23_s64, expn: 20_s64, fast: false)
 
 ### Precision-parameterized pow. `fast: true` runs the general `exp(you * ln|me|)` core at
@@ -1052,6 +1075,9 @@ routine B128.sinh!() -> B128
 
 ### `sinh(me)` with raw IEEE (large |me| -> signed inf). No crash.
 routine B128.sinh_unchecked() -> B128
+  var (fast, v) = b128_sinh_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 1_u64, k: 135_s64)
 
 ### `sinh(me)` raw IEEE, with the inner expm1-series term count `n`.
@@ -1069,6 +1095,9 @@ routine B128.cosh!() -> B128
 
 ### `cosh(me)` with raw IEEE (large |me| -> +inf). No crash.
 routine B128.cosh_unchecked() -> B128
+  var (fast, v) = b128_cosh_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 2_u64, k: 135_s64)
 
 ### `cosh(me)` raw IEEE, with the inner exp-series term count `n`.
@@ -1077,6 +1106,9 @@ routine B128.cosh_unchecked_n(n: S64) -> B128
 
 ### Returns `tanh(me)`.
 routine B128.tanh() -> B128
+  var (fast, v) = b128_tanh_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 3_u64, k: 135_s64)
 
 ### `tanh(me)` with the inner expm1-series term count `n`.
@@ -1094,6 +1126,9 @@ routine B128.atanh!() -> B128
 
 ### `atanh(me)` with raw IEEE (|me|=1 -> signed inf, |me|>1 -> qNaN). No crash.
 routine B128.atanh_unchecked() -> B128
+  var (fast, v) = b128_atanh_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 6_u64, k: 135_s64)
 
 ### `atanh(me)` raw IEEE, with the inner log1p-series term count `n`.
@@ -1109,6 +1144,9 @@ routine B128.asinh() -> B128
   # exact-zero (and signed-zero) result here.
   if me.is_zero()
     return me
+  var (fast, v) = b128_asinh_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 4_u64, k: 135_s64)
 
 ### Returns `acosh(me)` (computed on the W=192 engine).
@@ -1124,6 +1162,9 @@ routine B128.acosh!() -> B128
 routine B128.acosh_unchecked() -> B128
   if me.is_nan()
     return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  var (fast, v) = b128_acosh_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 5_u64, k: 135_s64)
 
 # ============================================================================
@@ -1369,6 +1410,9 @@ routine B128.tan() -> B128
     return B128.from_bits(bits: b128_qnan())
   if me.is_zero()
     return me
+  var (fast, v) = b128_tan_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 0_u64, k: 135_s64)
 
 ### `tan(me)` with the tan-series explicit degree `n`.
@@ -1466,6 +1510,9 @@ routine B128.sinpi() -> B128
     return B128.from_bits(bits: b128_qnan())
   if me.to_uf192().isint()
     return UnpackedFloat[3, 6].zero(sign: me.is_negative()).to_b128()
+  var (fast, v) = b128_trigpi_fast(y: me, which: 0_u64)
+  if fast
+    return v
   return b128_pi_fallback(a: me, which: 0_u64, k: 135_s64)
 
 ### Returns `cos(pi*me)`: cos(pi*(n + 1/2)) is +0. Evaluated on the W=192 engine after an exact reduction to
@@ -1478,6 +1525,9 @@ routine B128.cospi() -> B128
   var twice = me.to_uf192().ldexp(e: 1_s64)
   if twice.isint() and not me.to_uf192().isint()
     return UnpackedFloat[3, 6].zero(sign: false).to_b128()
+  var (fast, v) = b128_trigpi_fast(y: me, which: 1_u64)
+  if fast
+    return v
   return b128_pi_fallback(a: me, which: 1_u64, k: 135_s64)
 
 ### Returns `tan(pi*me)`. At an integer n it is +0 for a positive even n and -0 for a positive odd one (IEEE
@@ -1490,6 +1540,9 @@ routine B128.tanpi() -> B128
     return B128.from_bits(bits: b128_qnan())
   if me.to_uf192().isint()
     return UnpackedFloat[3, 6].zero(sign: me.is_negative() != b128_integer_is_odd(a: me)).to_b128()
+  var (fast, v) = b128_trigpi_fast(y: me, which: 2_u64)
+  if fast
+    return v
   return b128_pi_fallback(a: me, which: 2_u64, k: 135_s64)
 
 # ============================================================================
@@ -1555,6 +1608,9 @@ routine B128.erf() -> B128
   if me.is_infinite()
     var s = if me.is_negative() then -1_s64 else 1_s64
     return UnpackedFloat[3, 6].from_s64(src: s).to_b128()
+  var (fast, v) = b128_erf_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 10_u64, k: 135_s64)
 
 ### Returns the complementary error function `erfc(me)`.
@@ -1565,6 +1621,9 @@ routine B128.erfc() -> B128
     var s = if me.is_negative() then 2_s64 else 0_s64
     return UnpackedFloat[3, 6].from_s64(src: s).to_b128()
   # 1 - erf(z) below |z| = 3.1 cancels up to 15 bits, so the W=192 erfc is only within about 2^-140
+  var (fast, v) = b128_erfc_fast(x: me)
+  if fast
+    return v
   return b128_fallback(a: me, which: 11_u64, k: 128_s64)
 
 ### Precision-reduced erf for sub-113-bit targets (D64 ~54 bits): identical branch structure to
@@ -1740,6 +1799,9 @@ routine B128.tgamma!() -> B128
 ### `tgamma(me)` with raw IEEE (poles at 0/negative integers -> inf/qNaN). No crash.
 ### Core path is `exp(lgamma_core)` with the lgamma sign reapplied.
 routine B128.tgamma_unchecked() -> B128
+  var (fast, v) = b128_tgamma_fast(x: me)
+  if fast
+    return v
   if me.is_nan()
     return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
@@ -1759,6 +1821,9 @@ routine B128.tgamma_unchecked() -> B128
 
 ### Returns the log-gamma function `lgamma(me)` (= ln|gamma(me)|).
 routine B128.lgamma() -> B128
+  var (fast, v) = b128_lgamma_fast(x: me)
+  if fast
+    return v
   if me.is_nan()
     return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero() or me.is_infinite()

@@ -47,6 +47,7 @@ public abstract class AstRewriter
             ExpressionStatement s => VisitExpressionStatement(s: s),
             AssignmentStatement s => VisitAssignment(s: s),
             DeclarationStatement s => VisitDeclarationStatement(s: s),
+            DestructuringStatement s => VisitDestructuring(s: s),
             _ => stmt // AbsentStatement / PassStatement / Break / Continue / others: leaf, unchanged.
         };
     }
@@ -326,6 +327,20 @@ public abstract class AstRewriter
         return ReferenceEquals(objA: e, objB: init)
             ? s
             : s with { Declaration = vd with { Initializer = e } };
+    }
+
+    /// <summary>
+    /// Rewrites a <see cref="DestructuringStatement"/> (<c>var (a, b) = init</c>) by visiting its initializer.
+    /// The binding pattern is left as is.
+    /// </summary>
+    /// <param name="s">The destructuring statement to rewrite.</param>
+    /// <returns>The rewritten statement, or the original reference if nothing changed.</returns>
+    protected virtual Statement VisitDestructuring(DestructuringStatement s)
+    {
+        Expression e = VisitExpression(expr: s.Initializer);
+        return ReferenceEquals(objA: e, objB: s.Initializer)
+            ? s
+            : s with { Initializer = e };
     }
 
     // ---------------- Expressions ----------------

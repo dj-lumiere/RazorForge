@@ -141,15 +141,19 @@ cosh, cospi, erf, erfc, exp, exp10, exp2, expm1, hypot, lgamma, log, log10, log1
 sinpi, tan, tanh, tanpi, tgamma), and by the `B128` routines acos, asin, atan, atan2, cbrt, cos, exp,
 exp10, exp2, expm1, hypot, log, sin and sqrt (the binary128 functions CORE-MATH provides). Each routine
 is a port of the CORE-MATH C implementation for that format (round-to-nearest path only) and returns the
-correctly rounded result. Every port file names its
-upstream source file and repeats that file's copyright line, and `LICENSE-CORE-MATH` sits next to them.
+correctly rounded result. Every port file names its upstream source file, repeats that file's copyright
+line and points to this notice for the license. The B128 and D128 fast paths in `B128Fast`, `B128Erf`,
+`B128Gamma` and `D128Fast` build on the unrounded intermediate values of these ports.
 
 - Project: **CORE-MATH** — https://core-math.gitlabpages.inria.fr/
 - Copyright © 2021-2026 Alexei Sibidanov, Paul Zimmermann, Tom Hubrecht, Maxence Ponsardin,
   Cyprien Peignier, INRIA, and CERN (per-file lines in the ports).
-- License: **MIT License**.
+- License: **MIT License** (verbatim upstream text below).
 
 ```
+The CORE-MATH code is distributed under the following license
+(MIT license, https://spdx.org/licenses/MIT).
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights

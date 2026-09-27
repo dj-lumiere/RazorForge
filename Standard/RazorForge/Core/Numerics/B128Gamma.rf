@@ -1,0 +1,415 @@
+module Core
+
+# ============================================================================
+# lgamma and tgamma of a positive B128 without the W=192 engine
+# ============================================================================
+# Below 24, x = 2 + z + n with |z| <= 1/2: lgamma(2 + z) = z Q(z) from its series in zeta values, and the
+# factors x - 1 .. x - n (or the divisions x, x (1 + x) below 3/2) are exact, so lgamma adds ln of their
+# product and tgamma multiplies e^(z Q) by it. From 24 on, Stirling's series with the sum in u = 24/x;
+# for tgamma the exponent (x - 1/2) ln x - x + ln(2 pi)/2 + sum reaches 11356, so it is formed in fixed
+# point from the whole 192-bit CORE-MATH logarithm, as in pow. Each result keeps a proven error bound
+# (B128Fx) and is kept only when its band rounds to one B128. Negative x, and the points x = 1 and 2,
+# stay with the W=192 engine.
+
+# lgamma(2 + z) = z sum_j q_j z^j: q_0 = 1 - gamma, q_(k-1) = (-1)^k (zeta(k) - 1) / k, in units of 2^-126.
+secret preset B128_LGAMMA2_Q: Array[S128, 65] = [
+  35966513561100399277008669323188456746_s128, 27432461346882655408121638170829697944_s128,
+  -5729700104988466080322233371640029165_s128, 1750821551238231045206172056408442559_s128,
+  -628293196263138891308478819063350145_s128, 245897424238537555184557536156069445_s128,
+  -101468281057148422485433160269197147_s128, 43357888056758071625428435110539879_s128,
+  -18983907349063573219702001361821514_s128, 8460909464365824653140287383686386_s128,
+  -3821901543525591827892004482113894_s128, 1744560725564132795527591227063185_s128,
+  -803022853207694217834941614745275_s128, 372172506558381992619368301070845_s128,
+  -173477290841498655015199707063069_s128, 81254428179310004399070307606024_s128,
+  -38217701306875462281055416258494_s128, 18041077603409759583832080569194_s128,
+  -8543830786547476202454002527620_s128, 4057705735486844176202350172961_s128,
+  -1932046257224136371985827475511_s128, 922051152973644036918674875019_s128,
+  -440961289039294579371922619451_s128, 211287663106597344136991370414_s128,
+  -101416067185023863016178334229_s128, 48757080267290337979489325333_s128,
+  -23475424473064275607379298484_s128, 11318441781483234006962331939_s128,
+  -5464053961080354581899078952_s128, 2640952525684708739969865411_s128,
+  -1277878032356881234162094190_s128, 618971454448024757812408362_s128,
+  -300107139954196424784981909_s128, 145640154660210583763658651_s128,
+  -70739479399483849469439158_s128, 34387239057863786027167271_s128,
+  -16728924556047572002299370_s128, 8144344020999814601162638_s128,
+  -3967757074430631799819032_s128, 1934281486317170999196610_s128,
+  -943551916100303883152713_s128, 460543187888429581025625_s128,
+  -224916437583178109607376_s128, 109902349201021973515823_s128,
+  -53730037067215973767726_s128, 26280996287241527631790_s128,
+  -12860913042698018178784_s128, 6296488666044882460345_s128,
+  -3083994445047501608774_s128, 1511157276888278900922_s128,
+  -740763370636412352798_s128, 363258960473946196494_s128,
+  -178202508870342714443_s128, 87451231191344498871_s128,
+  -42930604398590457457_s128, 21081993229999324090_s128,
+  -10356066849348934483_s128, 5088756986162310864_s128,
+  -2501253433825369733_s128, 1229782938280750115_s128,
+  -604811281116197323_s128, 297528130224718217_s128,
+  -146402730744906377_s128, 72057594038315050_s128,
+  -35474507834183883_s128
+]
+
+# B_2k / (2k (2k - 1) 24^(2k - 1)) for k = 1 .. 20 in units of 2^-126: the Stirling sum is sum e_k u^(2k-1)
+# with u = 24/x.
+secret preset B128_STIRLING_E: Array[S128, 20] = [
+  295383999063314638423068235617854350_s128, -17093981427275152686520152524181_s128,
+  8479157454005532086567535974_s128, -11040569601569703237718146_s128,
+  27105775536962655255341_s128, -107200611813422589179_s128,
+  622169493912320563_s128, -4979410364455887_s128,
+  52553538307720_s128, -707196209446_s128,
+  11817918481_s128, -240104703_s128,
+  5828509_s128, -166605_s128,
+  5539_s128, -212_s128,
+  9_s128, 0_s128,
+  0_s128, 0_s128
+]
+
+# ln(2 pi) / 2 in units of 2^-148 (hi, lo words).
+secret preset B128_HALF_LN_2PI_HI: U128 = 0x000000000000000000000000000EB3F8_u128
+secret preset B128_HALF_LN_2PI_LO: U128 = 0xE4325F5A53494BC900144192023CFB09_u128
+
+
+### ln(x) for a positive normal B128 x as a B128Fx: the CORE-MATH fixed-point value (12 units of 2^-148),
+### or log1p(x - 1) within 2^-21 of 1 (x - 1 is exact there).
+secret routine b128_ln_fx(x: B128) -> (Bool, B128Fx)
+  var (ok, hi, lo) = b128_log_scaled_ok(x: x)
+  if ok
+    var (lneg, mag) = b128_fs_magnitude(fs: b128_log_fs(hi: hi, lo: lo))
+    if mag == 0_u256
+      return (false, b128fx_one())
+    return (true, b128fx_norm(neg: lneg, mag: mag, scale: -148_s64, abserr: 12.0))
+  var u = x.to_bits()
+  if u < (0x0001_u128 << 112_u32) or u >= (0x7FFF_u128 << 112_u32)
+    return (false, b128fx_one())
+  var d = x -! B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
+  if d.is_zero()
+    return (false, b128fx_one())
+  return b128fx_log1p(t: b128fx_of(x: d))
+
+### e^w for a B128Fx w with |w| < 1, or false: w splits into its B128 truncation wb and the rest wl
+### (|wl| < 2^-111 |w|), e^w = e^wb (1 + wl) with wl^2/2 below 2^-200 dropped, and below 2^-100 simply
+### e^w = 1 + w (w^2/2 below 2^-200 of it).
+secret routine b128fx_exp_small(w: B128Fx) -> (Bool, B128Fx)
+  if w.e < -228_s64
+    var (ok0, r0) = b128fx_add(a: b128fx_one(), b: w)
+    return (ok0, B128Fx(neg: false, m: r0.m, e: r0.e, rel: r0.rel +! 0x1p-199))
+  var (okb, wb) = b128fx_to_b128(v: w)
+  if not okb
+    return (false, w)
+  var (oke, ez) = b128_exp_fx(x: wb)
+  if not oke
+    return (false, w)
+  var (okl, wl) = b128fx_add(a: w, b: b128fx_neg(v: b128fx_of(x: wb)))
+  if not okl
+    # w is exactly wb, up to its own error
+    return (true, B128Fx(neg: false, m: ez.m, e: ez.e, rel: ez.rel +! w.rel *! 1.001))
+  var (oko, onep) = b128fx_add(a: b128fx_one(), b: wl)
+  if not oko
+    return (false, w)
+  var r = b128fx_mul(a: ez, b: onep)
+  return (true, B128Fx(neg: false, m: r.m, e: r.e, rel: r.rel +! 0x1p-190))
+
+### lgamma(2 + z) / z for an exact B128 z with |z| <= 1/2, as a B128Fx: the series sum q_j z^j (q_0 =
+### 1 - gamma, then (-1)^k (zeta(k) - 1) / k), 65 terms (the rest below 2^-137), in units of 2^-126 by
+### Horner. Each step adds at most 1.5 units and |z| <= 1/2 halves the earlier ones, so the sum is within
+### 3 units, one more for z's own truncation to 2^-126 (the sum's slope is below 1), against a value of at
+### least 0.24.
+secret routine b128_lgamma2_q(z: B128) -> B128Fx
+  var zs = 0_s128
+  if not z.is_zero()
+    var zf = b128fx_of(x: z)
+    var sh = 0_s64 -% (zf.e +% 126_s64)
+    var mag = 0_u128
+    if sh < 128_s64
+      mag = zf.m >>> b128_trig_sh(n: sh)
+    zs = LLVM::reinterpret_bits[U128, S128](mag)
+    if zf.neg
+      zs = 0_s128 -% zs
+  var acc = B128_LGAMMA2_Q[64]
+  var j = 64_u64
+  while j > 0_u64
+    j = j -% 1_u64
+    acc = B128_LGAMMA2_Q[j] +% b128erf_smul(a: zs, b: acc)
+  return b128fx_norm(neg: false, mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](acc)), scale: -126_s64, abserr: 4.0)
+
+### The Stirling sum sum e_k u^(2k-1) (e_k = B_2k / (2k (2k - 1) 24^(2k - 1)), 20 terms, u = 24/x <= 1, the
+### rest below the first omitted term, 2^-134) as a signed value in units of 2^-126 and its error bound
+### in those units: each Horner step adds at most 1.5 units and u^2 <= 1 keeps the earlier ones, so 32
+### units in all, plus the error of u (it moves the sum by less than its own size, below 1/12, times u's
+### relative error).
+secret routine b128_stirling_sum(x: B128) -> (Bool, S128)
+  var (oku, u) = b128fx_div(a: B128Fx(neg: false, m: 3_u128 << 126_u32, e: -123_s64, rel: 0.0), b: b128fx_of(x: x))
+  if not oku
+    return (false, 0_s128)
+  var sh = 0_s64 -% (u.e +% 126_s64)
+  if sh < 0_s64
+    return (false, 0_s128)
+  var um = 0_u128
+  if sh < 128_s64
+    um = u.m >>> b128_trig_sh(n: sh)
+  var us = LLVM::reinterpret_bits[U128, S128](um)
+  var u2 = b128erf_smul(a: us, b: us)
+  var acc = B128_STIRLING_E[19]
+  var k = 19_u64
+  while k > 0_u64
+    k = k -% 1_u64
+    acc = B128_STIRLING_E[k] +% b128erf_smul(a: u2, b: acc)
+  return (true, b128erf_smul(a: us, b: acc))
+
+### lgamma(x) for 24 <= x < 2^20 as a signed fixed-point value in units of 2^-148 (S256) and its error
+### bound in those units: (x - 1/2) ln x - x + ln(2 pi)/2 + the Stirling sum. The product (x - 1/2) ln x is
+### formed from the whole 192-bit CORE-MATH logarithm (x - 1/2 is exact), only its lowest 64 bits dropped
+### (as in pow), so it is within (x - 1/2) 12 units plus the truncations.
+secret routine b128_lgamma_fixed(x: B128) -> (Bool, S256, B64)
+  var (ok, hi, lo) = b128_log_scaled_ok(x: x)
+  var (oks, s) = b128_stirling_sum(x: x)
+  if not ok or not oks
+    return (false, 0_s256, 0.0)
+  var (lneg, mag) = b128_fs_magnitude(fs: b128_log_fs(hi: hi, lo: lo))
+  var yf = b128fx_of(x: x -! B128.from_bits(bits: 0x3FFE_u128 << 112_u32))
+  var mh = LLVM::int_truncate[U256, U128](mag >>> 64_u32)
+  var ml = LLVM::int_truncate[U256, U128](mag & 0xFFFFFFFFFFFFFFFF_u256)
+  var p1 = b128_trig_wmul(x: yf.m, y: mh)
+  var p2 = b128_trig_wmul(x: yf.m, y: ml)
+  var pw = ((LLVM::zero_extend[U128, U256](p1.item0) << 128_u32) | LLVM::zero_extend[U128, U256](p1.item1)) +% ((LLVM::zero_extend[U128, U256](p2.item0) << 64_u32) | LLVM::zero_extend[U128, U256](p2.item1 >>> 64_u32))
+  # (x - 1/2) ln x = pw * 2^(ye - 84), to 2^-148: shift by ye + 64 (negative for x < 2^20)
+  var shr = 0_s64 -% (yf.e +% 64_s64)
+  if shr <= 0_s64
+    return (false, 0_s256, 0.0)
+  var a = LLVM::reinterpret_bits[U256, S256](pw >>> b128_trig_sh(n: shr))
+  var xf = b128fx_of(x: x)
+  var shl = xf.e +% 148_s64
+  if shl < 0_s64
+    return (false, 0_s256, 0.0)
+  var xs = LLVM::reinterpret_bits[U256, S256](LLVM::zero_extend[U128, U256](xf.m) << b128_trig_sh(n: shl))
+  var c = LLVM::reinterpret_bits[U256, S256]((LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_HI) << 128_u32) | LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_LO))
+  var ss = LLVM::sign_extend[S128, S256](s) << 22_u32
+  var z = a -% xs +% c +% ss
+  # (x - 1/2) 12 units of ln x, the product's truncations (2 units of pw, below one unit here) and the shift,
+  # the constant's rounding, and 33 units of 2^-126 for the Stirling sum
+  var err = 12.0 *! b128fx_b64(v: yf) +! 4.0 +! 33.0 *! 0x1p22
+  return (true, z, err)
+
+# Thresholds as B128 bit patterns: 1/2, 3/2, 5/2, 24, 2^20 and 1756 (beyond it tgamma overflows).
+secret preset B128_GAMMA_HALF: U128 = 0x3FFE0000000000000000000000000000_u128
+secret preset B128_GAMMA_3HALF: U128 = 0x3FFF8000000000000000000000000000_u128
+secret preset B128_GAMMA_5HALF: U128 = 0x40004000000000000000000000000000_u128
+secret preset B128_GAMMA_24: U128 = 0x40038000000000000000000000000000_u128
+secret preset B128_GAMMA_2P20: U128 = 0x40130000000000000000000000000000_u128
+secret preset B128_GAMMA_MAX: U128 = 0x4009B700000000000000000000000000_u128
+
+### For 5/2 <= x < 24: z = x - m with m = round(x) (|z| <= 1/2, exact) and the product (x - 1)(x - 2) ...
+### (x - m + 2), so that Gamma(x) = Gamma(2 + z) P. x is exact in units of 2^-112 there, so every factor
+### is an exact integer in those units and each product keeps its top 128 bits (2^-127 each).
+secret routine b128_gamma_shift(x: B128) -> (B128, B128Fx)
+  var xf = b128fx_of(x: x)
+  var xx = xf.m >>> b128_trig_sh(n: 0_s64 -% xf.e -% 112_s64)
+  var m = (xx +% (1_u128 << 111_u32)) >>> 112_u32
+  # z = x - m in units of 2^-112, back to an exact B128
+  var zz = LLVM::reinterpret_bits[U128, S128](xx) -% LLVM::reinterpret_bits[U128, S128](m << 112_u32)
+  var z = B128.from_bits(bits: 0_u128)
+  if zz != 0_s128
+    var zneg = zz < 0_s128
+    var zmag = LLVM::reinterpret_bits[S128, U128](zz)
+    if zneg
+      zmag = 0_u128 -% zmag
+    var lead = 127_s64 -% b128_trig_clz128(x: zmag)
+    var sig = zmag << b128_trig_sh(n: 112_s64 -% lead)
+    var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead -% 112_s64 +% 16383_s64)) << 112_u32) | (sig -% (1_u128 << 112_u32))
+    if zneg
+      bits = bits | (1_u128 << 127_u32)
+    z = B128.from_bits(bits: bits)
+  var pm = 1_u128 << 127_u32
+  var pe = -127_s64
+  var k = 1_u128
+  while k +% 2_u128 <= m
+    var pr = b128_trig_wmul(x: pm, y: xx -% (k << 112_u32))
+    var lz = b128_trig_clz128(x: pr.item0)
+    pm = (pr.item0 << b128_trig_sh(n: lz)) | (pr.item1 >>> b128_trig_sh(n: 128_s64 -% lz))
+    pe = pe -% 112_s64 +% 128_s64 -% lz
+    k = k +% 1_u128
+  var n = LLVM::int_truncate[U128, S64](m) -% 2_s64
+  return (z, B128Fx(neg: false, m: pm, e: pe, rel: B64(from: n) *! 0x1p-127))
+
+### lgamma(x) for a positive finite x as a B128Fx, or false (also for x <= 0, and at 1 and 2, where the
+### value is exactly 0).
+secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
+  var u = x.to_bits()
+  if (u >>> 127_u32) != 0_u128 or u == 0_u128 or u >= (0x7FFF_u128 << 112_u32)
+    return (false, b128fx_one())
+  var one = B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
+  if u == (0x3FFF_u128 << 112_u32) or u == (0x4000_u128 << 112_u32)
+    return (false, b128fx_one())
+  var r = b128fx_one()
+  if u < B128_GAMMA_HALF
+    # lgamma(x) = lgamma(2 + x) - ln x - ln(1 + x)
+    var g = b128fx_mul(a: b128fx_of(x: x), b: b128_lgamma2_q(z: x))
+    var (ok1, lx) = b128_ln_fx(x: x)
+    var (ok2, l1) = b128fx_log1p(t: b128fx_of(x: x))
+    if not ok1 or not ok2
+      return (false, b128fx_one())
+    var (ok3, t) = b128fx_add(a: b128fx_neg(v: lx), b: b128fx_neg(v: l1))
+    var (ok4, s) = b128fx_add(a: g, b: t)
+    if not ok3 or not ok4
+      return (false, b128fx_one())
+    r = s
+  elseif u < B128_GAMMA_3HALF
+    # lgamma(x) = lgamma(2 + z) - ln(1 + z), z = x - 1
+    var z = x -! one
+    if z.is_zero()
+      return (false, b128fx_one())
+    var g = b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z))
+    var (ok1, l1) = b128fx_log1p(t: b128fx_of(x: z))
+    if not ok1
+      return (false, b128fx_one())
+    var (ok2, s) = b128fx_add(a: g, b: b128fx_neg(v: l1))
+    if not ok2
+      return (false, b128fx_one())
+    r = s
+  elseif u < B128_GAMMA_5HALF
+    var z = x -! (one +! one)
+    if z.is_zero()
+      return (false, b128fx_one())
+    r = b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z))
+  elseif u < B128_GAMMA_24
+    var (z, p) = b128_gamma_shift(x: x)
+    var (ok0, pm1) = b128fx_add(a: p, b: b128fx_neg(v: b128fx_one()))
+    if not ok0
+      return (false, b128fx_one())
+    var (ok1, lp) = b128fx_log1p(t: pm1)
+    if not ok1
+      return (false, b128fx_one())
+    if z.is_zero()
+      r = lp
+    else
+      var (ok2, s) = b128fx_add(a: lp, b: b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z)))
+      if not ok2
+        return (false, b128fx_one())
+      r = s
+  elseif u < B128_GAMMA_2P20
+    var (okf, zf, err) = b128_lgamma_fixed(x: x)
+    if not okf or zf <= 0_s256
+      return (false, b128fx_one())
+    r = b128fx_norm(neg: false, mag: LLVM::reinterpret_bits[S256, U256](zf), scale: -148_s64, abserr: err)
+  else
+    # (x - 1/2) ln x - x + ln(2 pi)/2 + the Stirling sum, all positive-dominated from here
+    var (okl, lx) = b128_ln_fx(x: x)
+    var (oks, s) = b128_stirling_sum(x: x)
+    if not okl or not oks
+      return (false, b128fx_one())
+    var a = b128fx_mul(a: b128fx_of(x: x -! B128.from_bits(bits: 0x3FFE_u128 << 112_u32)), b: lx)
+    var (ok1, b) = b128fx_add(a: a, b: b128fx_neg(v: b128fx_of(x: x)))
+    var c = b128fx_norm(neg: false, mag: (LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_HI) << 128_u32) | LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_LO), scale: -148_s64, abserr: 1.0)
+    var (ok2, d) = b128fx_add(a: b, b: c)
+    if not ok1 or not ok2
+      return (false, b128fx_one())
+    r = d
+    if s != 0_s128
+      var sneg = s < 0_s128
+      var smag = LLVM::reinterpret_bits[S128, U128](s)
+      if sneg
+        smag = 0_u128 -% smag
+      var (ok3, e) = b128fx_add(a: d, b: b128fx_norm(neg: sneg, mag: LLVM::zero_extend[U128, U256](smag), scale: -126_s64, abserr: 33.0))
+      if not ok3
+        return (false, b128fx_one())
+      r = e
+  return (true, r)
+
+### lgamma(x) as a B128, or false when the band does not settle it: +0 at 1 and 2, the rest from
+### b128_lgamma_fx.
+secret routine b128_lgamma_fast(x: B128) -> (Bool, B128)
+  var u = x.to_bits()
+  # lgamma(1) = lgamma(2) = +0 exactly
+  if u == (0x3FFF_u128 << 112_u32) or u == (0x4000_u128 << 112_u32)
+    return (true, B128.from_bits(bits: 0_u128))
+  var (ok, r) = b128_lgamma_fx(x: x)
+  if not ok
+    return (false, x)
+  return b128fx_round(v: r)
+
+### tgamma(x) for a positive finite x as a B128Fx, or false (also for x <= 0 or at overflow, which the
+### caller's engine settles).
+secret routine b128_tgamma_fx(x: B128) -> (Bool, B128Fx)
+  var u = x.to_bits()
+  if (u >>> 127_u32) != 0_u128 or u == 0_u128 or u >= B128_GAMMA_MAX
+    return (false, b128fx_one())
+  var one = B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
+  if u >= B128_GAMMA_24
+    var (okf, zf, err) = b128_lgamma_fixed(x: x)
+    if not okf or zf <= 0_s256
+      return (false, b128fx_one())
+    # e^z with z split into its B128 truncation and the rest, as in pow
+    var zm = LLVM::reinterpret_bits[S256, U256](zf)
+    var lead = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(zm))
+    var sh = b128_trig_sh(n: lead -% 112_s64)
+    var zsig = LLVM::int_truncate[U256, U128](zm >>> sh)
+    var rest = zm & ((1_u256 << sh) -% 1_u256)
+    var biased = lead -% 148_s64 +% 16383_s64
+    var zb = B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112_u32) | (zsig -% (1_u128 << 112_u32)))
+    var (oke, ez) = b128_exp_fx(x: zb)
+    if not oke
+      return (false, b128fx_one())
+    var r = B128Fx(neg: false, m: ez.m, e: ez.e, rel: ez.rel +! err *! 1.001 *! 0x1p-148)
+    if rest != 0_u256
+      var (oko, onep) = b128fx_add(a: b128fx_one(), b: b128fx_norm(neg: false, mag: rest, scale: -148_s64, abserr: err))
+      if not oko
+        return (false, b128fx_one())
+      var rr = b128fx_mul(a: ez, b: onep)
+      r = B128Fx(neg: false, m: rr.m, e: rr.e, rel: rr.rel +! 0x1p-190)
+    return (true, r)
+  var z = x
+  var den = b128fx_one()
+  var num = b128fx_one()
+  if u < B128_GAMMA_HALF
+    # Gamma(x) = Gamma(2 + x) / (x (1 + x))
+    var (ok1, xp1) = b128fx_add(a: b128fx_one(), b: b128fx_of(x: x))
+    if not ok1
+      return (false, b128fx_one())
+    den = b128fx_mul(a: b128fx_of(x: x), b: xp1)
+  elseif u < B128_GAMMA_3HALF
+    z = x -! one
+    den = b128fx_of(x: x)
+  elseif u < B128_GAMMA_5HALF
+    z = x -! (one +! one)
+  else
+    var (zz, p) = b128_gamma_shift(x: x)
+    z = zz
+    num = p
+  var g = b128fx_one()
+  if not z.is_zero()
+    var (okg, eg) = b128fx_exp_small(w: b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z)))
+    if not okg
+      return (false, b128fx_one())
+    g = eg
+  var (okd, q) = b128fx_div(a: b128fx_mul(a: g, b: num), b: den)
+  if not okd
+    return (false, b128fx_one())
+  return (true, q)
+
+
+### (n - 1)! for a B128 x that is an integer n in [1, 57] (so the product fits in 256 bits), or false.
+secret routine b128_gamma_int(x: B128) -> (Bool, U256)
+  var u = x.to_bits()
+  if (u >>> 127_u32) != 0_u128 or u < (0x3FFF_u128 << 112_u32) or u >= 0x4004D000000000000000000000000000_u128
+    return (false, 0_u256)
+  var xf0 = b128fx_of(x: x)
+  var sh0 = 0_s64 -% xf0.e
+  if (xf0.m & ((1_u128 << b128_trig_sh(n: sh0)) -% 1_u128)) != 0_u128
+    return (false, 0_u256)
+  var n = xf0.m >>> b128_trig_sh(n: sh0)
+  var f = 1_u256
+  var j = 2_u128
+  while j < n
+    f = f *% LLVM::zero_extend[U128, U256](j)
+    j = j +% 1_u128
+  return (true, f)
+
+### tgamma(x) as a B128, or false when the band does not settle it: an integer up to 57 exactly (38! sits
+### exactly on a rounding midpoint), the rest from b128_tgamma_fx.
+secret routine b128_tgamma_fast(x: B128) -> (Bool, B128)
+  var (isn, f) = b128_gamma_int(x: x)
+  if isn
+    return b128_round_exact(neg: false, mag: f, scale: 0_s64)
+  var (ok, r) = b128_tgamma_fx(x: x)
+  if not ok
+    return (false, x)
+  return b128fx_round(v: r)

@@ -5,7 +5,7 @@ module Core
 # ============================================================================
 # Ported from CORE-MATH, src/binary128/log/logq.c (https://core-math.gitlabpages.inria.fr/).
 # Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
-# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# Distributed under the MIT license: see THIRD-PARTY-NOTICES.md at the repository root. RazorForge has no dynamic
 # rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
 # exception flags, errno and directed-rounding branches are dropped). The computation works on 64-bit and
 # 128-bit integer words, like the original, and never uses the software B128 arithmetic. The multi-word
@@ -33,12 +33,46 @@ routine B128.log_unchecked() -> B128
   if 0x3FFEFFFFF0000040_u64 <= hi and hi <= 0x3FFF000008000020_u64
     # too close to 1: specific treatment
     return b128_log_nearone(x: u)
+  var fs = b128_log_fs(hi: hi, lo: lo)
+  var res = 0_u128
+  var msk = b128_wide_sar(x: fs.item2, s: 63)
+  var f0 = fs.item0 ^ msk
+  var f1 = fs.item1 ^ msk
+  var f2 = fs.item2 ^ msk
+  var nz = 0_u64
+  if f2 != 0
+    nz = f2.leading_zeros()
+  else
+    nz = f1.leading_zeros() +% 64
+  var ns = nz -% 15
+  var tm = 0xFFFFFFFFFFFFFFFF_u64 >>> b128_wide_s(n: ns & 63)
+  var rnd = (f0 >>> b128_wide_s(n: (63 -% ns) & 63)) & 1
+  var el = (0x4029_u64 -% nz) | (msk << 15)
+  if (((f0 +% (1_u64 << b128_wide_s(n: (63 -% ns) & 63))) +% 12) & tm) <= 24
+    # rounding test failed: decide the rounding exactly
+    var ls = nz -% 14
+    var rs = (64 -% ls) & 63
+    var rh = (f2 << b128_wide_s(n: ls & 63)) | (f1 >>> b128_wide_s(n: rs))
+    var rl = (f1 << b128_wide_s(n: ls & 63)) | (f0 >>> b128_wide_s(n: rs))
+    res = b128_wide_u128(hi: rh, lo: rl) +% LLVM::zero_extend[U64, U128]((f0 >>> b128_wide_s(n: (63 -% ls) & 63)) & 1)
+    var rf = b128_log_refine(el: el, m: res, x: u)
+    rnd = rf.item0
+    res = rf.item1
+  else
+    var rs = (64 -% ns) & 63
+    res = b128_wide_u128(hi: (f2 << b128_wide_s(n: ns & 63)) | (f1 >>> b128_wide_s(n: rs)), lo: (f1 << b128_wide_s(n: ns & 63)) | (f0 >>> b128_wide_s(n: rs)))
+  return B128.from_bits(bits: res +% b128_wide_u128(hi: el << 48, lo: rnd))
+
+### ln(x) as a signed 192-bit fixed-point value fs (words w0 low .. w2 high, two's complement) with
+### ln(x) = fs * 2^-148 to within 12 units, for a positive finite normal or subnormal B128 whose high word is
+### hi and low word lo, outside the range next to 1 that B128.log_unchecked treats separately. This is the
+### value the logarithm rounds; log2 and log10 scale it before rounding.
+secret routine b128_log_fs(hi: U64, lo: U64) -> (U64, U64, U64)
+  var u = b128_wide_u128(hi: hi, lo: lo)
   var mh = hi
   var ml = lo
   var e = hi & 0xFFFF000000000000_u64
   if e == 0
-    if u == 0
-      return B128.from_bits(bits: b128_wide_u128(hi: 0xFFFF000000000000_u64, lo: 0_u64))
     var nz = 0_u64
     if hi != 0
       nz = hi.leading_zeros()
@@ -76,33 +110,73 @@ routine B128.log_unchecked() -> B128
   f = b128_wide_u128(hi: B128_LOG_C[1], lo: B128_LOG_C[0]) -% b128_wide_mhUU(a: m, b: f)
   var res = b128_wide_mhUU(a: m, b: f)
   fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: b128_wide_lo(x: res), b1: b128_wide_hi(x: res), b2: 0_u64)
-  var msk = b128_wide_sar(x: fs.item2, s: 63)
-  var f0 = fs.item0 ^ msk
-  var f1 = fs.item1 ^ msk
-  var f2 = fs.item2 ^ msk
-  var nz = 0_u64
-  if f2 != 0
-    nz = f2.leading_zeros()
-  else
-    nz = f1.leading_zeros() +% 64
-  var ns = nz -% 15
-  var tm = 0xFFFFFFFFFFFFFFFF_u64 >>> b128_wide_s(n: ns & 63)
-  var rnd = (f0 >>> b128_wide_s(n: (63 -% ns) & 63)) & 1
-  var el = (0x4029_u64 -% nz) | (msk << 15)
-  if (((f0 +% (1_u64 << b128_wide_s(n: (63 -% ns) & 63))) +% 12) & tm) <= 24
-    # rounding test failed: decide the rounding exactly
-    var ls = nz -% 14
-    var rs = (64 -% ls) & 63
-    var rh = (f2 << b128_wide_s(n: ls & 63)) | (f1 >>> b128_wide_s(n: rs))
-    var rl = (f1 << b128_wide_s(n: ls & 63)) | (f0 >>> b128_wide_s(n: rs))
-    res = b128_wide_u128(hi: rh, lo: rl) +% LLVM::zero_extend[U64, U128]((f0 >>> b128_wide_s(n: (63 -% ls) & 63)) & 1)
-    var rf = b128_log_refine(el: el, m: res, x: u)
-    rnd = rf.item0
-    res = rf.item1
-  else
-    var rs = (64 -% ns) & 63
-    res = b128_wide_u128(hi: (f2 << b128_wide_s(n: ns & 63)) | (f1 >>> b128_wide_s(n: rs)), lo: (f1 << b128_wide_s(n: ns & 63)) | (f0 >>> b128_wide_s(n: rs)))
-  return B128.from_bits(bits: res +% b128_wide_u128(hi: el << 48, lo: rnd))
+  return fs
+
+### The B128 nearest to (-1)^neg * mag * 2^scale, when every value within err of mag rounds to it (mag and
+### err are in units of 2^scale). mag must carry at least 120 significant bits so the 113-bit significand
+### and the rounding position are inside it, and err must stay below a quarter of the rounding position's
+### unit: then the band cannot reach a rounding boundary (the half-way point between two B128 values) other
+### than the one next to mag, even where it dips below the binade mag starts (whose lower neighbours are
+### spaced half as far apart). False when it reaches that boundary, and for results outside the normal
+### B128 range.
+secret routine b128_round_fixed(neg: Bool, mag: U256, scale: S64, err: U256) -> (Bool, B128)
+  var zero = B128.from_bits(bits: 0_u128)
+  if mag == 0_u256
+    return (false, zero)
+  var lead = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(mag))
+  if lead < 120_s64
+    return (false, zero)
+  var sh = LLVM::int_truncate[S64, U32](lead -% 112_s64)
+  var one = 1_u256
+  var span = one << sh
+  var r = mag & (span -% one)
+  var half = span >>> 1_u32
+  if err >= (span >>> 2_u32)
+    return (false, zero)
+  if (r > half and r -% half <= err) or (r <= half and half -% r <= err)
+    return (false, zero)
+  var biased = lead +% scale +% 16383_s64
+  if biased < 1_s64 or biased > 32766_s64
+    return (false, zero)
+  var m = LLVM::int_truncate[U256, U128](mag >>> sh)
+  var rnd = if r > half then 1_u128 else 0_u128
+  var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112) +% (m -% (1_u128 << 112)) +% rnd
+  if neg
+    bits = bits | (1_u128 << 127)
+  return (true, B128.from_bits(bits: bits))
+
+### |fs| as a U256 and whether fs is negative, for a signed 192-bit fs from b128_log_fs.
+secret routine b128_fs_magnitude(fs: (U64, U64, U64)) -> (Bool, U256)
+  var v = LLVM::zero_extend[U64, U256](fs.item0) | (LLVM::zero_extend[U64, U256](fs.item1) << 64_u32) | (LLVM::zero_extend[U64, U256](fs.item2) << 128_u32)
+  if (fs.item2 >>> 63) == 0_u64
+    return (false, v)
+  var m192 = (1_u256 << 192_u32) -% 1_u256
+  return (true, ((v ^ m192) +% 1_u256) & m192)
+
+### log_b(x) for a positive finite B128 outside the range next to 1, from the fixed-point ln(x) times a
+### constant c = 2^p / ln(b) rounded to an integer with its top bit at 2^127 (so its rounding is at most
+### 2^-128 relative; split c1 * 2^64 + c0): |fs| * c / 2^p in units of 2^-148. The error is the 12 units of fs
+### times c / 2^p (at most 1.45), 2 for the two truncations, and the constant's rounding (below
+### v / 2^128 units for the result v): 22 + v / 2^127 in all.
+secret routine b128_log_scaled(hi: U64, lo: U64, c1: U64, c0: U64, p: U32) -> (Bool, B128)
+  var fs = b128_log_fs(hi: hi, lo: lo)
+  var (neg, mag) = b128_fs_magnitude(fs: fs)
+  var t = (mag *% LLVM::zero_extend[U64, U256](c1)) >>> (p -% 64_u32)
+  var q = (mag *% LLVM::zero_extend[U64, U256](c0)) >>> p
+  var v = t +% q
+  return b128_round_fixed(neg: neg, mag: v, scale: -148_s64, err: 22_u256 +% (v >>> 127_u32))
+
+### The high and low words of a positive finite B128 that b128_log_scaled can take (normal, not next to 1),
+### or false.
+secret routine b128_log_scaled_ok(x: B128) -> (Bool, U64, U64)
+  var u = x.to_bits()
+  var hi = b128_wide_hi(x: u)
+  var lo = b128_wide_lo(x: u)
+  if hi >= 0x7FFF000000000000_u64 or hi < 0x0001000000000000_u64
+    return (false, hi, lo)
+  if 0x3FFEFFFFF0000040_u64 <= hi and hi <= 0x3FFF000008000020_u64
+    return (false, hi, lo)
+  return (true, hi, lo)
 
 ### Crude approximation of log2 of the high significand word x (fixed point), selecting the table indices.
 secret routine b128_log_log2(x: U64) -> U64
