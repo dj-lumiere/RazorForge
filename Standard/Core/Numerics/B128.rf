@@ -839,6 +839,7 @@ routine b128_mul_bits(a: U128, b: U128) -> U128
     topadj = 225_s64
     shu = 113_u128
   var biased = LLVM::add(a: LLVM::add(a: LLVM::sub(a: exp, b: 224_s64), b: topadj), b: 16383_s64)
+  var biased0 = biased
   var sig = b128_u256_to128(b128_u256_shr(v: prod, n: shu))
   var rem = LLVM::bit_and(a: prod, b: b128_u256_lowmask(shu))
   var half = b128_u256_bit(LLVM::sub(a: shu, b: 1_u128))
@@ -853,8 +854,57 @@ routine b128_mul_bits(a: U128, b: U128) -> U128
   if biased >= 32767_s64
     return b128_inf(sign: sign)
   if biased <= 0_s64
-    return b128_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub(a: 1_s64, b: biased))
+    # one rounding at the subnormal position from the exact product (rounding to 113 bits first and then
+    # shifting rounded twice); a result the 113-bit rounding carried to the smallest normal needs none
+    return b128_round_subnormal(sign: sign, v: prod, sh: LLVM::int_truncate[U128, S64](shu) +% 1_s64 -% biased0, sticky: false)
   return b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig)
+
+### One Knuth (Algorithm D) quotient digit for a two-limb normalized divisor v = (v1:v0) (v1's top bit set): the
+### digit of (r:x) / v, where r < v is the running remainder and x the next dividend limb, and the new remainder.
+### qhat comes from (r1:r0) / v1 by the multiply-only 2-by-1 division, is corrected against v0 (D3), and the
+### product is subtracted with one add-back when qhat was still one too big (D4-D6).
+@inline
+secret routine b128_knuth_digit(r: U128, x: U64, v: U128, vrec: U64) -> (U64, U128)
+  var v1 = LLVM::int_truncate[U128, U64](v >>> 64_u32)
+  var v0 = LLVM::int_truncate[U128, U64](v)
+  var r1 = LLVM::int_truncate[U128, U64](r >>> 64_u32)
+  var r0 = LLVM::int_truncate[U128, U64](r)
+  var qhat = U64_MAX
+  var rhat = r0 +% v1
+  var rhat_ok = rhat >= r0
+  if r1 != v1
+    var dr = div2by1(u1: r1, u0: r0, d: v1, v: vrec)
+    qhat = dr.q
+    rhat = dr.r
+    rhat_ok = true
+  while rhat_ok and LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v0) > ((LLVM::zero_extend[U64, U128](rhat) << 64_u32) | LLVM::zero_extend[U64, U128](x))
+    qhat = qhat -% 1_u64
+    var rnew = rhat +% v1
+    rhat_ok = rnew >= rhat
+    rhat = rnew
+  # (r:x) - qhat v over three limbs: the low limb, then the upper two as a U128
+  var p = LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v0)
+  var p0 = LLVM::int_truncate[U128, U64](p)
+  var ph = LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v1) +% (p >>> 64_u32)
+  var t0 = x -% p0
+  var need = ph
+  if x < p0
+    need = ph +% 1_u128
+  var t = ((r -% need) << 64_u32) | LLVM::zero_extend[U64, U128](t0)
+  if r < need
+    # qhat was one too big: add the divisor back (the true remainder lies in [0, v))
+    return (qhat -% 1_u64, t +% v)
+  return (qhat, t)
+
+### floor(a 2^115 / b) and whether the division is inexact, for a and b in [2^112, 2^113), by Knuth's Algorithm D
+### on 64-bit limbs: b normalized to v = b 2^15 (top bit set) and a 2^115 to a 2^130, whose top two limbs a 2^2 are
+### already below v, so the quotient is the two digits of (a 2^2 : 0 : 0) / v.
+secret routine b128_div_mant(a: U128, b: U128) -> (U128, Bool)
+  var v = b << 15_u32
+  var vrec = reciprocal_word(LLVM::int_truncate[U128, U64](v >>> 64_u32))
+  var (q1, r1) = b128_knuth_digit(r: a << 2_u32, x: 0_u64, v: v, vrec: vrec)
+  var (q0, r0) = b128_knuth_digit(r: r1, x: 0_u64, v: v, vrec: vrec)
+  return ((LLVM::zero_extend[U64, U128](q1) << 64_u32) | LLVM::zero_extend[U64, U128](q0), r0 != 0_u128)
 
 ### Software binary128 division over raw encodings (U256 numerator).
 routine b128_div_bits(a: U128, b: U128) -> U128
@@ -903,20 +953,15 @@ routine b128_div_bits(a: U128, b: U128) -> U128
   else
     mb = LLVM::bit_or(a: mb, b: b128_implicit())
     eb_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](eb), b: 16383_s64)
-  var numerator = b128_u256_shl(v: b128_u256(ma), n: 115_u128)
-  var divisor = b128_u256(mb)
-  # Knuth divide (mb is a normalized >=113-bit mantissa, never zero): returns quotient
-  # AND remainder in one call, replacing the slow inline `udiv i256` plus a mul-back.
-  var dr = udivrem256(num: numerator, den: divisor)
-  var q256 = dr.q
-  var r256 = dr.r
-  var q = b128_u256_to128(q256)
+  var (q, inexact) = b128_div_mant(a: ma, b: mb)
   var topadj = 114_s64
   var shu = 2_u128
   if LLVM::int_ne(a: LLVM::bit_and(a: q, b: LLVM::shift_left(value: 1_u128, bits: 115_u128)), b: 0_u128)
     topadj = 115_s64
     shu = 3_u128
   var biased = LLVM::add(a: LLVM::add(a: LLVM::sub(a: LLVM::sub(a: ea_unb, b: eb_unb), b: 115_s64), b: topadj), b: 16383_s64)
+  if biased <= 0_s64
+    return b128_round_subnormal(sign: sign, v: LLVM::zero_extend[U128, U256](q), sh: LLVM::int_truncate[U128, S64](shu) +% 1_s64 -% biased, sticky: inexact)
   var sig = LLVM::shift_right_unsigned(q, shu)
   var mask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: shu), b: 1_u128)
   var rem_low = LLVM::bit_and(a: q, b: mask)
@@ -924,7 +969,7 @@ routine b128_div_bits(a: U128, b: U128) -> U128
   if LLVM::unsigned_gt(a: rem_low, b: half)
     sig = LLVM::add(a: sig, b: 1_u128)
   elseif LLVM::int_eq(a: rem_low, b: half)
-    if LLVM::int_ne(a: r256, b: b128_u256(0_u128)) or LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
+    if inexact or LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
       sig = LLVM::add(a: sig, b: 1_u128)
   var round_carry = LLVM::shift_left(value: 1_u128, bits: 113_u128)
   if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: round_carry), b: 0_u128)
@@ -935,6 +980,23 @@ routine b128_div_bits(a: U128, b: U128) -> U128
   if biased <= 0_s64
     return b128_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub(a: 1_s64, b: biased))
   return b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig)
+
+### A subnormal (or zero, or the smallest normal) result v 2^-sh of the minimum exponent's unit, rounded once to
+### nearest even: `sticky` says the true value lies above v by less than one of v's units.
+routine b128_round_subnormal(sign: U64, v: U256, sh: S64, sticky: Bool) -> U128
+  var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+  var k = sh
+  if k > 240_s64
+    k = 240_s64
+  var ku = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](k))
+  var d = b128_u256_to128(b128_u256_shr(v: v, n: ku))
+  var rem = LLVM::bit_and(a: v, b: b128_u256_lowmask(ku))
+  var half = b128_u256_bit(LLVM::sub(a: ku, b: 1_u128))
+  if LLVM::unsigned_gt(a: rem, b: half) or (rem == half and (sticky or (d & 1_u128) != 0_u128))
+    d = d +% 1_u128
+  if LLVM::int_ne(a: LLVM::bit_and(a: d, b: b128_implicit()), b: 0_u128)
+    return sign_bit | (1_u128 << 112_u128) | (d & b128_mant_mask())
+  return sign_bit | d
 
 ### Denormalizes a normalized significand into the subnormal range by shifting right
 ### `under` places with round-to-nearest-even, then packs the result.
