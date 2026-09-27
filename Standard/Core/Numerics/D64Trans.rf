@@ -399,6 +399,111 @@ secret routine b64_exponent(x: B64) -> S64
   var be = LLVM::reinterpret_bits[U64, S64]((x.to_bits() >>> 52) & 0x7FF_u64)
   return if be == 0_s64 then -2000_s64 else be -% 1023_s64
 
+### log1p(t) for a finite B128 t from the correctly rounded B128 log, and k with the result within 2^-k
+### relative of log1p(t) (k = 0 when this route cannot bound it: t below -0.5 or overflow). With u = 1 + t
+### rounded: for u in [0.5, 2], u - 1 is exact and log(u) * t / (u - 1) is within 3.5 * 2^-113 relative of
+### log1p(t) (Goldberg: the correction factor undoes u's rounding); above 2, u's rounding moves log u by
+### 2^-113 absolute, under 2^-112 relative since log u > 0.69. A t below 2^-113 in magnitude is its own
+### log1p to within t / 2 < 2^-113 relative.
+secret routine b128_log1p_fast(t: B128) -> (B128, S64)
+  var one = 1.0_b128
+  var u = one +! t
+  if u.is_infinite() or u.is_nan()
+    return (u, 0_s64)
+  var d = u -! one
+  if d.is_zero()
+    return (t, 110_s64)
+  if u < 0.5_b128
+    return (u, 0_s64)
+  if u <= 2.0_b128
+    return (u.log_unchecked() *! (t /! d), 110_s64)
+  return (u.log_unchecked(), 110_s64)
+
+### log1p of a finite D64 through b128_log1p_fast. x's rounding to B128 (2^-113 relative) moves log1p(x)
+### by at most 1.5 * 2^-113 relative (the condition number x / ((1 + x) log1p x) is at most 1.44 for
+### x >= -0.5), so the value is within 5 * 2^-113 < 2^-110.6 of log1p(x).
+secret routine d64_log1p_fast(x: D64) -> (Bool, D64)
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u64
+    return (false, x)
+  var (r, k) = b128_log1p_fast(t: d64_to_b128(x: x))
+  if k == 0_s64
+    return (false, x)
+  return d64_round_within(r: r, k: 109_s64)
+
+### atanh of a finite D64 with |x| < 1 as sign(x) * log1p(2|x| / (1 - |x|)) / 2. The quotient t is within
+### 2 * 2^-113 relative (1 - |x| is exact from |x| = 0.5 on), log1p adds 3.5 * 2^-113 and passes t's error
+### through with a factor below 1 (t >= 0). x's rounding to B128 moves atanh(x) by 2^-113 times its
+### condition number x / ((1 - x^2) atanh x), which is below 2^(-e) for 1 - |x| >= 2^e, so the result is
+### within (5.5 + 2^-e) * 2^-113 relative.
+secret routine d64_atanh_fast(x: D64) -> (Bool, D64)
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u64
+    return (false, x)
+  var a = d64_to_b128(x: x).abs()
+  var one = 1.0_b128
+  if a >= one
+    return (false, x)
+  var om = one -! a
+  var (r, k) = b128_log1p_fast(t: (a +! a) /! om)
+  if k == 0_s64
+    return (false, x)
+  var e = b128_exponent(x: om)
+  if e > 0_s64
+    e = 0_s64
+  k = 108_s64 +% e
+  if k < 60_s64
+    return (false, x)
+  r = r *! 0.5_b128
+  if p.sign
+    r = r.neg()
+  return d64_round_within(r: r, k: k)
+
+### asinh of a finite D64 as sign(x) * log1p(|x| + x^2 / (1 + sqrt(1 + x^2))), which has no cancellation
+### for any x. Every step adds or multiplies positive values, so w is within 6 * 2^-113 relative, log1p
+### adds 3.5 * 2^-113 and passes w's error through with a factor below 1, and x's rounding to B128 adds
+### 2^-113 (the condition number of asinh is below 1): the result is within 10.5 * 2^-113 < 2^-109.6.
+secret routine d64_asinh_fast(x: D64) -> (Bool, D64)
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u64
+    return (false, x)
+  var a = d64_to_b128(x: x).abs()
+  var one = 1.0_b128
+  var a2 = a *! a
+  var w = a +! a2 /! (one +! (a2 +! one).sqrt_unchecked())
+  var (r, k) = b128_log1p_fast(t: w)
+  if k == 0_s64
+    return (false, x)
+  if p.sign
+    r = r.neg()
+  return d64_round_within(r: r, k: 108_s64)
+
+### acosh of a finite D64 x >= 1 as log1p(d + sqrt(d (x + 1))) with d = x - 1, which has no cancellation
+### near 1 (d is exact up to x = 2). The value is within 8 * 2^-113 relative before x's rounding to B128,
+### which moves acosh(x) by 2^-113 times its condition number x / (sqrt(x^2 - 1) acosh x), about 1 / (2d)
+### near 1 and below 1 from 2 on: at most 2^(-e) for d >= 2^e, so the result is within (8 + 2^-e) * 2^-113.
+secret routine d64_acosh_fast(x: D64) -> (Bool, D64)
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u64 or p.sign
+    return (false, x)
+  var xb = d64_to_b128(x: x)
+  var one = 1.0_b128
+  var d = xb -! one
+  if d.is_zero()
+    return (true, D64.from_components(sign: false, coeff: 0_u64, exp: 0_s64))
+  if d < 0.0_b128
+    return (false, x)
+  var (r, k) = b128_log1p_fast(t: d +! (d *! (xb +! one)).sqrt_unchecked())
+  if k == 0_s64
+    return (false, x)
+  var e = b128_exponent(x: d)
+  if e > 0_s64
+    e = 0_s64
+  k = 108_s64 +% e
+  if k < 60_s64
+    return (false, x)
+  return d64_round_within(r: r, k: k)
+
 ### log(x) * scale for a positive finite D64 x (the correctly rounded B128 log times a constant). Each of
 ### the roundings of x, the log, the constant and the product adds 2^-113 relative, and x's rounding moves
 ### the log by 2^-113 absolute, 2^-113 / |log x| relative, which grows as x nears 1.
@@ -632,6 +737,9 @@ routine D64.log1p!() -> D64
 ### `ln(1 + me)`, raw IEEE: NaN for me<-1, -inf for me=-1. Never crashes.
 ### :returns: `ln(1 + me)`, possibly non-finite.
 routine D64.log1p_unchecked() -> D64
+  var (ok, r) = d64_log1p_fast(x: me)
+  if ok
+    return r
   return b128_to_d64(x: d64_to_b128(x: me).log1p_unchecked_n(n: 15_s64))
 
 ### Base-2 log log2(me) via DD. Crashes on a non-finite result (me<=0).
@@ -882,6 +990,9 @@ routine D64.tanh() -> D64
 ### Inverse hyperbolic sine asinh(me) via DD (defined for all reals). Never crashes.
 ### :returns: The inverse hyperbolic sine of `me`.
 routine D64.asinh() -> D64
+  var (ok, r) = d64_asinh_fast(x: me)
+  if ok
+    return r
   return b128_to_d64(x: d64_to_b128(x: me).asinh())
 
 ### Inverse hyperbolic cosine acosh(me) via DD. Crashes if non-finite (me<1).
@@ -902,6 +1013,9 @@ routine D64.acosh_unchecked() -> D64
   # of NaN), so guard the domain here to preserve IEEE (acosh NaN for me<1).
   if me.cmp(you: D64(from: 1_s64)) == ME_SMALL
     return D64.quiet_nan()
+  var (ok, r) = d64_acosh_fast(x: me)
+  if ok
+    return r
   return b128_to_d64(x: d64_to_b128(x: me).acosh_unchecked())
 
 ### Inverse hyperbolic tangent atanh(me) via DD. Crashes if non-finite (|me|>=1).
@@ -918,6 +1032,9 @@ routine D64.atanh!() -> D64
 ### atanh(me), raw IEEE: NaN for |me|>1, ±inf for |me|=1. Never crashes.
 ### :returns: The inverse hyperbolic tangent of `me`, possibly non-finite.
 routine D64.atanh_unchecked() -> D64
+  var (ok, r) = d64_atanh_fast(x: me)
+  if ok
+    return r
   return b128_to_d64(x: d64_to_b128(x: me).atanh_unchecked_n(n: 14_s64))
 
 ### Error function erf(me) via DD. Never crashes (saturates to ±1).
