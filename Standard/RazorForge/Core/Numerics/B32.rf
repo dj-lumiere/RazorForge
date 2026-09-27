@@ -763,9 +763,34 @@ routine B32.fma!(b: B32, c: B32) -> B32
 routine B32.fma_unchecked(b: B32, c: B32) -> B32
   return LLVM::fma[B32](a: me, b: b, c: c)
 
-### Floating-point remainder of me/you (C fmod).
+### Floating-point remainder of me/you (C fmod), exact. Taken in B64 without a division instruction's remainder:
+### |me| is reduced by |you| 2^k (k keeping the quotient below 2^29) with q = trunc(|me| / (|you| 2^k)), whose
+### product with the divisor has at most 53 bits and so is exact, as is the difference (a multiple of the
+### divisor's B32 grid below twice it); q off by one from the division's rounding is corrected, and each round
+### takes up to 28 bits of exponent difference. (LLVM narrows a widened frem back to the C runtime's fmodf,
+### several times slower than this.) Special cases take the frem.
 routine B32.fmod(you: B32) -> B32
-  return LLVM::float_rem[B32](a: me, b: you)
+  var x = B64(from: me)
+  var y = B64(from: you)
+  if x.is_nan() or y.is_nan() or x.is_infinite() or y.is_zero()
+    return LLVM::float_rem[B32](a: me, b: you)
+  var ax = x.abs()
+  var ay = y.abs()
+  if y.is_infinite() or ax < ay
+    return me
+  while ax >= ay
+    var yk = ay
+    var k = b64_exponent(x: ax) -% b64_exponent(x: ay) -% 28_s64
+    if k > 0_s64
+      yk = ay *! B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](k +% 1023_s64) << 52)
+    var q = LLVM::float_truncate[B64](ax /! yk)
+    var r = ax -! q *! yk
+    if r < 0.0
+      r = r +! yk
+    elseif r >= yk
+      r = r -! yk
+    ax = r
+  return B32(from: ax.copysign(sign: x))
 
 ### IEEE remainder of me/you (C remainder).
 routine B32.remainder(you: B32) -> B32
