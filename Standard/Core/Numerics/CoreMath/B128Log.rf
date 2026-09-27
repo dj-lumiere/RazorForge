@@ -123,10 +123,38 @@ secret routine b128_round_fixed(neg: Bool, mag: U256, scale: S64, err: U256) -> 
   var zero = B128.from_bits(bits: 0_u128)
   if mag == 0_u256
     return (false, zero)
-  var lead = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(mag))
+  var mhi = LLVM::int_truncate[U256, U128](mag >>> 128_u32)
+  var mlo = LLVM::int_truncate[U256, U128](mag)
+  var lead = 127_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(mlo))
+  if mhi != 0_u128
+    lead = 255_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(mhi))
   if lead < 120_s64
     return (false, zero)
-  var sh = LLVM::int_truncate[S64, U32](lead -% 112_s64)
+  var shs = lead -% 112_s64
+  if shs < 64_s64 and (err >>> 64_u32) == 0_u256
+    # the usual case (a result far from the range ends): the rounded-off bits are below 2^64, so the test and
+    # the significand take U128 and U64 arithmetic instead of 256-bit shifts
+    var sh64 = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](shs))
+    var e64 = LLVM::int_truncate[U256, U64](err)
+    var span64 = 1_u64 << LLVM::reinterpret_bits[S64, U64](shs)
+    var r64 = LLVM::int_truncate[U128, U64](mlo) & (span64 -% 1_u64)
+    var half64 = span64 >>> 1_u32
+    if e64 >= (span64 >>> 2_u32)
+      return (false, zero)
+    if (r64 > half64 and r64 -% half64 <= e64) or (r64 <= half64 and half64 -% r64 <= e64)
+      return (false, zero)
+    var biased64 = lead +% scale +% 16383_s64
+    if biased64 < 1_s64 or biased64 > 32766_s64
+      return (false, zero)
+    var m64 = (mhi << (128_u128 -% sh64)) | (mlo >>> sh64)
+    if sh64 == 0_u128
+      m64 = mlo
+    var rnd64 = if r64 > half64 then 1_u128 else 0_u128
+    var bits64 = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased64)) << 112) +% ((m64 & ((1_u128 << 113) -% 1_u128)) -% (1_u128 << 112)) +% rnd64
+    if neg
+      bits64 = bits64 | (1_u128 << 127)
+    return (true, B128.from_bits(bits: bits64))
+  var sh = LLVM::int_truncate[S64, U32](shs)
   var one = 1_u256
   var span = one << sh
   var r = mag & (span -% one)
