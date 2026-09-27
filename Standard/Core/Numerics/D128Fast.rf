@@ -1096,8 +1096,9 @@ secret routine d128_acos_edge_fx(p: D128Parts) -> (Bool, B128Fx)
     return (false, w)
   return (true, B128Fx(neg: false, m: a.m, e: a.e +% 1_s64, rel: a.rel))
 
-### atan(v) for a B128Fx v with 0 < |v| <= 1: r0 = the B128 atan of v's truncation, one step
-### (v - tan r0) / (1 + v tan r0), the tangent of the remaining angle (so the next term is cubic in it).
+### atan(v) for a nonzero B128Fx v below 10^34 in magnitude: r0 = the B128 atan of v's truncation, one step
+### (v - tan r0) / (1 + v tan r0) = (v cos r0 - sin r0) / (cos r0 + v sin r0), the tangent of the remaining angle
+### (so the next term is cubic in it).
 secret routine d128_atan_of_fx(v: B128Fx) -> (Bool, B128Fx)
   var (okb, vb) = b128fx_to_b128(v: v)
   if not okb
@@ -1106,17 +1107,15 @@ secret routine d128_atan_of_fx(v: B128Fx) -> (Bool, B128Fx)
   var (okt, sn, cs) = b128_sincos_fx(xb: r0, acc: false)
   if not okt
     return (false, v)
-  var (okq, t) = b128fx_div(a: sn, b: cs)
-  if not okq
-    return (false, v)
   var rf = b128fx_of(x: r0)
-  var (okn, num) = b128fx_add(a: v, b: b128fx_neg(v: t))
-  if not okn
-    # v and tan r0 agree exactly: their own errors bound the step
-    return (true, d128_widen(v: rf, r: (v.rel +! t.rel) *! 1.01 *! b128fx_ratio(a: v, b: rf)))
-  var (okd, den) = b128fx_add(a: b128fx_one(), b: b128fx_mul(a: v, b: t))
+  # atan v = r0 + atan((v - tan r0) / (1 + v tan r0)), tan r0 = sn / cs cleared from the fraction: one division
+  var (okd, den) = b128fx_add(a: cs, b: b128fx_mul(a: v, b: sn))
   if not okd
     return (false, v)
+  var (okn, num) = b128fx_add(a: b128fx_mul(a: v, b: cs), b: b128fx_neg(v: sn))
+  if not okn
+    # v cs and sn agree exactly: their own errors bound the step
+    return (true, d128_widen(v: rf, r: (v.rel +! sn.rel +! cs.rel) *! 1.01 *! b128fx_b64(v: sn).abs() /! (b128fx_b64(v: den).abs() *! b128fx_b64(v: rf).abs())))
   var (okx, dl) = b128fx_div(a: num, b: den)
   if not okx
     return (false, v)
@@ -1156,7 +1155,8 @@ secret routine d128_arctrig_fast(x: D128, which: U64) -> (Bool, D128)
   var halfbits = 0x3FFE0000000000000000000000000000_u128
   var r = full
   if which == 2_u64
-    if digits10_u128(c: p.coeff) +% p.exp <= 0_s64 or (p.exp == 0_s64 and p.coeff == 1_u128)
+    # directly up to 10^34 (the Newton step needs no reciprocal), past that as pi/2 - atan(1/x)
+    if digits10_u128(c: p.coeff) +% p.exp <= 34_s64
       var (oka, a) = d128_atan_of_fx(v: full)
       if not oka
         return (false, x)
