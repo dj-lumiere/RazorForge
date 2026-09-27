@@ -1159,8 +1159,8 @@ secret routine b128_log_near1(x: B128, ten: Bool) -> (Bool, B128)
 ### x^y for finite nonzero x and y, or false (also for the cases the caller's ladder settles: x = +-1, a
 ### negative x with a non-integer y, results outside the normal range, and x within 2^-21 of 1). The value
 ### is e^z with z = y ln|x|: ln|x| is the CORE-MATH fixed-point value mag * 2^-148 (12 units), and z is formed
-### from the whole of it, y's 128-bit significand times the 192-bit mag with only the lowest 64 bits dropped
-### (2 units of the product), then split into zb, its first 113 bits (a B128), and the rest zl. e^z =
+### from the whole of it, y's 128-bit significand times mag exactly (in 128-bit words, no 256-bit shifts), then
+### split into zb, its first 113 bits (a B128), and the rest zl (as a B64, within 2^-52 of it). e^z =
 ### e^zb (1 + zl) drops zl^2/2 (|zl| < 2^-98 wherever the result is finite, so below 2^-190). The error of
 ### z, |y| 12 * 2^-148 plus the truncation, is absolute, so it is also the relative error it causes in e^z.
 secret routine b128_pow_fast(x: B128, y: B128) -> (Bool, B128)
@@ -1215,29 +1215,35 @@ secret routine b128_pow_try(x: B128, y: B128, acc: Bool) -> (Bool, B128)
     lerr = nerr
   if mag == 0_u256
     return (false, x)
-  var llz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(mag))
-  mag = mag << b128_trig_sh(n: llz)
-  lsc = lsc -% llz
-  lerr = lerr *! b128fx_p2(k: llz)
   var yf = b128fx_of(x: y)
-  # z = y ln|x| = pw * 2^scale (the product's lower half dropped): |y| lerr 2^lsc + 2 units, in pw's units
-  # lerr (my / 2^128) + 2
-  var pw = u256_mulhi(a: LLVM::zero_extend[U128, U256](yf.m) << 128_u32, b: mag)
-  var scale = yf.e +% lsc +% 128_s64
-  var abserr = lerr *! b128fx_top(m: yf.m) *! 0x1p-64 +! 2.0
+  # z = y ln|x| = P * 2^scale, P = y's 128-bit significand times mag exactly (384 bits: low, mid, high words),
+  # within |y| lerr 2^lsc, lerr (y.m / 2^64) of P's units
+  var mh = LLVM::int_truncate[U256, U128](mag >>> 128_u32)
+  var (ahi, alo) = b128_trig_wmul(x: yf.m, y: LLVM::int_truncate[U256, U128](mag))
+  var (bhi, blo) = b128_trig_wmul(x: yf.m, y: mh)
+  var pmid = ahi +% blo
+  var phigh = bhi
+  if pmid < ahi
+    phigh = phigh +% 1_u128
+  var pp = (alo, pmid, phigh)
+  var scale = yf.e +% lsc
+  var abserr = lerr *! b128fx_top(m: yf.m) *! 0x1p64 +! 1.0
   var zneg = yf.neg != lneg
-  var lead = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(pw))
-  if lead < 160_s64 or scale < -900_s64
+  var lead = 383_s64 -% b128_trig_lz384(x: pp)
+  if lead < 200_s64 or scale < -1200_s64
     return (false, x)
+  # P shifted up so its lead bit is bit 383: the top word holds z's 113 bits and 15 of the rest
+  var q = b128_trig_shl384(x: pp, shift: 383_s64 -% lead)
   # past the B128 exponential: overflow, or below half the smallest subnormal
-  var zv = b128fx_top(m: LLVM::int_truncate[U256, U128](pw >>> b128_trig_sh(n: lead -% 127_s64))) *! b128fx_p2(k: lead +% scale -% 63_s64)
+  var zv = b128fx_top(m: q.item2) *! b128fx_p2(k: lead +% scale -% 63_s64)
   if not zneg and zv > 11357.0
     return (true, B128.from_bits(bits: (0x7FFF_u128 << 112_u32) | (b128_sign_bit(neg: neg))))
   if zneg and zv > 11434.0
     return (true, B128.from_bits(bits: b128_sign_bit(neg: neg)))
-  var sh = b128_trig_sh(n: lead -% 112_s64)
-  var zsig = LLVM::int_truncate[U256, U128](pw >>> sh)
-  var rest = pw & ((1_u256 << sh) -% 1_u256)
+  var zsig = q.item2 >>> 15_u32
+  # the rest of z below zb, from P's next 143 bits (the dropped words are under 2^-270 of z)
+  var rest_hi = q.item2 & 0x7FFF_u128
+  var rest_lo = q.item1
   var biased = lead +% scale +% 16383_s64
   if biased < 1_s64 or biased > 32766_s64
     return (false, x)
@@ -1247,14 +1253,21 @@ secret routine b128_pow_try(x: B128, y: B128, acc: Bool) -> (Bool, B128)
   var (oke, ez) = b128_exp_fx(x: B128.from_bits(bits: zbits), acc: acc)
   if not oke
     return (false, x)
-  var r = B128Fx(neg: false, m: ez.m, e: ez.e, rel: ez.rel +! abserr *! 1.001 *! b128fx_p2(k: scale))
-  if rest != 0_u256
-    var zl = b128fx_norm(neg: zneg, mag: rest, scale: scale, abserr: abserr)
-    var (oko, onep) = b128fx_add(a: b128fx_one(), b: zl)
-    if not oko
-      return (false, x)
-    var rr = b128fx_mul(a: ez, b: onep)
-    r = B128Fx(neg: false, m: rr.m, e: rr.e, rel: rr.rel +! 0x1p-190)
+  # z's own error (absolute, so relative in e^z) and the B64 rest's rounding
+  var zerr = abserr *! 1.001 *! b128fx_p2(k: scale) +! 0x1p-150
+  var r = B128Fx(neg: false, m: ez.m, e: ez.e, rel: ez.rel +! zerr)
+  if rest_hi != 0_u128 or rest_lo != 0_u128
+    # zl = rest 2^(scale + lead - 255), below 2^-98; as a B64 (within 2^-52 of it, far under 2^-150)
+    var zl = b128fx_wide_b64(hi: rest_hi, lo: rest_lo) *! b128fx_p2(k: scale +% lead -% 255_s64)
+    if zneg
+      zl = -zl
+    # below 2^-160 (possible only for a tiny z) the factor is inside the 2^-150 already taken
+    if zl.abs() >= 0x1p-160
+      var (oko, onep) = b128fx_add(a: b128fx_one(), b: b128fx_of_b64(v: zl, rel: 0.0))
+      if not oko
+        return (false, x)
+      var rr = b128fx_mul(a: ez, b: onep)
+      r = B128Fx(neg: false, m: rr.m, e: rr.e, rel: rr.rel +! zerr)
   return b128fx_round(v: B128Fx(neg: neg, m: r.m, e: r.e, rel: r.rel))
 
 ### The B128 nearest to (-1)^neg * mag * 2^scale (ties to even) for an exact nonzero mag, or false outside

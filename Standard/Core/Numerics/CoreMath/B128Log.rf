@@ -186,12 +186,20 @@ secret routine b128_fs_magnitude(fs: (U64, U64, U64)) -> (Bool, U256)
 ### 2^-128 relative; split c1 * 2^64 + c0): |fs| * c / 2^p in units of 2^-148. The error is the 12 units of fs
 ### times c / 2^p (at most 1.45), 2 for the two truncations, and the constant's rounding (below
 ### v / 2^128 units for the result v): 22 + v / 2^127 in all.
+@inline
 secret routine b128_log_scaled(hi: U64, lo: U64, c1: U64, c0: U64, p: U32) -> (Bool, B128)
   var fs = b128_log_fs(hi: hi, lo: lo)
   var (neg, mag) = b128_fs_magnitude(fs: fs)
-  var t = (mag *% LLVM::zero_extend[U64, U256](c1)) >>> (p -% 64_u32)
-  var q = (mag *% LLVM::zero_extend[U64, U256](c0)) >>> p
-  var v = t +% q
+  # mag (below 2^192) times c = c1 2^64 + c0 exactly, as 128-bit words (not two 256-bit multiplications),
+  # then shifted down by p (a constant at each call, 127 or 129)
+  var (ahi, alo) = b128_trig_wmul(x: LLVM::int_truncate[U256, U128](mag), y: (LLVM::zero_extend[U64, U128](c1) << 64_u32) | LLVM::zero_extend[U64, U128](c0))
+  var (bhi, blo) = b128_trig_wmul(x: LLVM::int_truncate[U256, U128](mag >>> 128_u32), y: (LLVM::zero_extend[U64, U128](c1) << 64_u32) | LLVM::zero_extend[U64, U128](c0))
+  var pmid = ahi +% blo
+  var phigh = bhi
+  if pmid < ahi
+    phigh = phigh +% 1_u128
+  var sh = b128_trig_shr384(x: (alo, pmid, phigh), shift: LLVM::zero_extend[U32, S64](p))
+  var v = (LLVM::zero_extend[U128, U256](sh.item1) << 128_u32) | LLVM::zero_extend[U128, U256](sh.item0)
   return b128_round_fixed(neg: neg, mag: v, scale: -148_s64, err: 22_u256 +% (v >>> 127_u32))
 
 ### The high and low words of a positive finite B128 that b128_log_scaled can take (normal, not next to 1),
