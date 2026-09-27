@@ -1216,7 +1216,11 @@ secret routine d128_pow_fast_try(x: D128, y: D128, acc: Bool) -> (Bool, D128)
   if not oky
     return (false, x)
   var (oktn, tn) = d128_diff_parts(p: ax, k: 1_u128)
+  # below 10^-6 from x - 1, and on the retry below 10^-2: there the fixed-point logarithm's absolute error,
+  # times a large |y|, can widen the band past what the rounding needs
   var near = oktn and digits10_u128(c: tn.coeff) +% tn.exp <= -7_s64
+  if acc and oktn and digits10_u128(c: tn.coeff) +% tn.exp <= -2_s64
+    near = true
   # ln|x| as a 256-bit magnitude lm * 2^lsc with relative error lrel: the fixed-point sum where it applies,
   # else (near 1) the 128-bit value
   var lm = 0_u256
@@ -1225,7 +1229,7 @@ secret routine d128_pow_fast_try(x: D128, y: D128, acc: Bool) -> (Bool, D128)
   var lneg = false
   var (okw, lw, lerr) = d128_ln_fixed(p: ax)
   if near
-    # |x - 1| < 10^-6: ln x = log1p(x - 1) in 256 bits from the exact decimal difference
+    # ln x = log1p(x - 1) in 256 bits from the exact decimal difference
     var (okn, nneg, nm, nsc, nrel) = d128x_log1p_wide(t: tn)
     if not okn
       return (false, x)
