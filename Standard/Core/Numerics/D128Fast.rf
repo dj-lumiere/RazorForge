@@ -647,7 +647,7 @@ secret preset D128F_SIXTH_M: U128 = 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB_u128
 ### sin(xb) and cos(xb) for a finite nonzero B128 xb as signed B128Fx values, or false: one argument
 ### reduction for both (the CORE-MATH fast path, 16 units each), and below 2^-57 x - x^3/6 and 1 - x^2/2
 ### (the next terms are below 2^-225 of each).
-secret routine b128_sincos_fx(xb: B128) -> (Bool, B128Fx, B128Fx)
+secret routine b128_sincos_fx(xb: B128, acc: Bool) -> (Bool, B128Fx, B128Fx)
   var bits = xb.to_bits()
   var signmask = 1_u128 << 127_u32
   var implicit = 1_u128 << 112_u32
@@ -665,6 +665,10 @@ secret routine b128_sincos_fx(xb: B128) -> (Bool, B128Fx, B128Fx)
     return (ok1 and ok2, d128_widen(v: sn, r: 0x1p-225), d128_widen(v: cs, r: 0x1p-225))
   var m = (ax & (implicit -% 1_u128)) | implicit
   var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112_u32)) -% 16383_s64
+  if acc
+    var parts = b128_trig_wide_parts(m: m, e: e)
+    var sa = b128_trig_acc_fx(parts: parts, cosine: false)
+    return (true, B128Fx(neg: sa.neg != neg, m: sa.m, e: sa.e, rel: sa.rel), b128_trig_acc_fx(parts: parts, cosine: true))
   var fs = (false, 0_u128, 0_s64, 0_u128)
   var fc = fs
   if e < -8_s64
@@ -686,6 +690,13 @@ secret routine b128_sincos_fx(xb: B128) -> (Bool, B128Fx, B128Fx)
 ### sin (which 0), cos (1) or tan (2) of a D128, or false: by the angle addition formulas over xb and lo,
 ### with the split's error, absolute in the argument, added as absolute in the result.
 secret routine d128_trig_fast(x: D128, which: U64) -> (Bool, D128)
+  var (ok, v) = d128_trig_fast_try(x: x, which: which, acc: false)
+  if ok
+    return (true, v)
+  return d128_trig_fast_try(x: x, which: which, acc: true)
+
+### d128_trig_fast with sin / cos from the CORE-MATH fast phase (acc false) or its 384-bit path.
+secret routine d128_trig_fast_try(x: D128, which: U64, acc: Bool) -> (Bool, D128)
   if d128_tiny(x: x)
     if which == 1_u64
       return (true, d128_one())
@@ -693,7 +704,7 @@ secret routine d128_trig_fast(x: D128, which: U64) -> (Bool, D128)
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
-  var (okt, sn, cs) = b128_sincos_fx(xb: d128_signed_xb(s: s))
+  var (okt, sn, cs) = b128_sincos_fx(xb: d128_signed_xb(s: s), acc: acc)
   if not okt
     return (false, x)
   # the split's error, absolute in the argument, as relative bounds on sin and cos (below)
@@ -706,7 +717,7 @@ secret routine d128_trig_fast(x: D128, which: U64) -> (Bool, D128)
     var (okb, lb) = b128fx_to_b128(v: lo)
     if not okb
       return (false, x)
-    var (okl, sl, cl) = b128_sincos_fx(xb: lb)
+    var (okl, sl, cl) = b128_sincos_fx(xb: lb, acc: acc)
     if not okl
       return (false, x)
     var (ok1, s2) = b128fx_add(a: b128fx_mul(a: sn, b: cl), b: b128fx_mul(a: cs, b: sl))
@@ -990,7 +1001,7 @@ secret routine d128_asin_of_fx(s: B128Fx) -> (Bool, B128Fx)
   if not okb
     return (false, s)
   var r0 = sb.asin_unchecked()
-  var (okt, sn, cs) = b128_sincos_fx(xb: r0)
+  var (okt, sn, cs) = b128_sincos_fx(xb: r0, acc: false)
   if not okt
     return (false, s)
   var rf = b128fx_of(x: r0)
@@ -1032,7 +1043,7 @@ secret routine d128_atan_of_fx(v: B128Fx) -> (Bool, B128Fx)
   if not okb
     return (false, v)
   var r0 = vb.atan()
-  var (okt, sn, cs) = b128_sincos_fx(xb: r0)
+  var (okt, sn, cs) = b128_sincos_fx(xb: r0, acc: false)
   if not okt
     return (false, v)
   var (okq, t) = b128fx_div(a: sn, b: cs)

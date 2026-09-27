@@ -654,7 +654,6 @@ secret routine b128_trig_round384(frac: (U128, U128, U128), e2: S64, sign: U128)
 
 ### The 384-bit path: everything the fast path would not decide.
 secret routine b128_trig_accurate(m: U128, e: S64, cosine: Bool, sign: U128) -> U128
-  var signmask = 1_u128 << 127
   var n = 0_s64
   var negative = false
   var t = (0_u128, 0_u128, m << 15)
@@ -665,6 +664,14 @@ secret routine b128_trig_accurate(m: U128, e: S64, cosine: Bool, sign: U128) -> 
     negative = rw.item1
     t = rw.item2
     et = rw.item3
+  var (sg, frac, e2) = b128_trig_accurate_eval(n: n, negative: negative, t: t, et: et, cosine: cosine, sign: sign)
+  return b128_trig_round384(frac: frac, e2: e2, sign: sg)
+
+### sin (cosine false) or cos of n pi/256 + theta, theta = (-1)^negative t 2^(et - 384) with t a normalized
+### 384-bit fraction, to about 2^-370: the sign bit to apply (sign, the argument's for the sine, flipped by the
+### quadrant) and the normalized 384-bit result frac with its exponent e2 (value frac 2^(e2 - 384)).
+secret routine b128_trig_accurate_eval(n: S64, negative: Bool, t: (U128, U128, U128), et: S64, cosine: Bool, sign: U128) -> (U128, (U128, U128, U128), S64)
+  var signmask = 1_u128 << 127
   var u = b128_trig_shr384(x: b128_trig_mul384(a: t, b: t), shift: 0 -% (et +% et))
   var k = n >> 7
   if cosine
@@ -681,8 +688,8 @@ secret routine b128_trig_accurate(m: U128, e: S64, cosine: Bool, sign: U128) -> 
   var es = et -% lzs
   if j == 0 and want_cos == 0
     if negative
-      return b128_trig_round384(frac: s, e2: es, sign: sg ^ signmask)
-    return b128_trig_round384(frac: s, e2: es, sign: sg)
+      return (sg ^ signmask, s, es)
+    return (sg, s, es)
   # 1 - cos(theta) = u*Q, so T*cos(theta) = T - T*(u*Q) never overflows the frame
   var c = b128_trig_mul384(a: u, b: b128_trig_alternating(u: u, cosine: true))
   var first = b128_trig_sincos384(j: j, w: want_cos)
@@ -693,7 +700,7 @@ secret routine b128_trig_accurate(m: U128, e: S64, cosine: Bool, sign: U128) -> 
   if negative != (want_cos != 0)
     f = b128_trig_sub384(a: base, b: term)
   var lz = b128_trig_lz384(x: f)
-  return b128_trig_round384(frac: b128_trig_shl384(x: f, shift: lz), e2: 0 -% lz, sign: sg)
+  return (sg, b128_trig_shl384(x: f, shift: lz), 0 -% lz)
 
 # 2/pi as 64-bit limbs: B128_TRIG_FRAC_2_PI[i] holds bits 64i+1 ..= 64i+64 after the binary point, most
 # significant limb first (264 limbs: a window of 10 limbs must reach exponent 16383).

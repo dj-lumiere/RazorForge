@@ -416,6 +416,20 @@ secret routine b128_log1p_cr(x: B128) -> (Bool, B128)
 secret routine b128_trig_fx(f: (Bool, U128, S64, U128)) -> B128Fx
   return B128Fx(neg: f.item3 != 0_u128, m: f.item1, e: f.item2 -% 128_s64, rel: 17.0 *! 0x1p-127)
 
+### The reduction of a finite nonzero |x| = m 2^(e - 112) for the CORE-MATH 384-bit path: n (in units of
+### pi/256), whether the residual is negative, and the residual as a normalized 384-bit t 2^(et - 384) (below
+### 2^-8 no reduction).
+secret routine b128_trig_wide_parts(m: U128, e: S64) -> (S64, Bool, (U128, U128, U128), S64)
+  if e < -8_s64
+    return (0_s64, false, (0_u128, 0_u128, m << 15_u32), e +% 1_s64)
+  return b128_trig_reduce_wide(m: m, e: e)
+
+### sin (cosine false) or cos of n pi/256 + theta (as b128_trig_wide_parts gives it) as a B128Fx: the CORE-MATH
+### 384-bit value (about 2^-370) truncated to 128 bits, within 2^-126.
+secret routine b128_trig_acc_fx(parts: (S64, Bool, (U128, U128, U128), S64), cosine: Bool) -> B128Fx
+  var (sg, frac, e2) = b128_trig_accurate_eval(n: parts.item0, negative: parts.item1, t: parts.item2, et: parts.item3, cosine: cosine, sign: 0_u128)
+  return B128Fx(neg: sg != 0_u128, m: frac.item2, e: e2 -% 128_s64, rel: 0x1p-126)
+
 ### tan(x) for a finite x, or false when the band does not settle it: sin / cos from one argument
 ### reduction (the CORE-MATH fast path), and below 2^-57 x itself (x^3/3 is under a quarter of its half-unit).
 secret routine b128_tan_fast(x: B128) -> (Bool, B128)
@@ -435,19 +449,26 @@ secret routine b128_tan_fast(x: B128) -> (Bool, B128)
     fs = b128_trig_fast(m: m, e: e, cosine: false)
     fc = b128_trig_fast(m: m, e: e, cosine: true)
   else
+    # a reduction the fast path cannot vouch for leaves fs and fc unset, for the 384-bit path below
     var r = b128_trig_reduce(m: m, e: e)
-    if not r.item0
-      return (false, x)
-    var sq = b128_trig_squares(t1: r.item3, et: r.item4)
-    var s1 = b128_trig_sin_frac(t1: r.item3, u: sq.item0, v: sq.item1)
-    fs = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: false)
-    fc = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: true)
-  if not fs.item0 or not fc.item0
+    if r.item0
+      var sq = b128_trig_squares(t1: r.item3, et: r.item4)
+      var s1 = b128_trig_sin_frac(t1: r.item3, u: sq.item0, v: sq.item1)
+      fs = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: false)
+      fc = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: true)
+  var neg = (bits & signmask) != 0_u128
+  if fs.item0 and fc.item0
+    var (ok, q) = b128fx_div(a: b128_trig_fx(f: fs), b: b128_trig_fx(f: fc))
+    if ok
+      var (okr, r) = b128fx_round(v: B128Fx(neg: q.neg != neg, m: q.m, e: q.e, rel: q.rel))
+      if okr
+        return (true, r)
+  # the fast phase's band did not settle it: sin and cos from the CORE-MATH 384-bit path
+  var parts = b128_trig_wide_parts(m: m, e: e)
+  var (oka, qa) = b128fx_div(a: b128_trig_acc_fx(parts: parts, cosine: false), b: b128_trig_acc_fx(parts: parts, cosine: true))
+  if not oka
     return (false, x)
-  var (ok, q) = b128fx_div(a: b128_trig_fx(f: fs), b: b128_trig_fx(f: fc))
-  if not ok
-    return (false, x)
-  return b128fx_round(v: B128Fx(neg: q.neg != ((bits & signmask) != 0_u128), m: q.m, e: q.e, rel: q.rel))
+  return b128fx_round(v: B128Fx(neg: qa.neg != neg, m: qa.m, e: qa.e, rel: qa.rel))
 
 ### b128_trig_reduce for pi*y instead of x, |y| = m * 2^(e-112) not a multiple of 1/256: 256|y| splits
 ### exactly into n + r / 2^s (s = 104 - e, |r| <= 2^(s-1)), so the residual g = r * 2^(-s-7) is exact where
@@ -476,6 +497,33 @@ secret routine b128_trigpi_reduce(m: U128, e: S64) -> (Bool, S64, Bool, U128, S6
   var t1 = b128_trig_top256(s: (pp.item1, pp.item0), shift: lzt)
   var nn = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](n & 511_u128))
   return (true, nn, negative, t1, 122_s64 -% lzr -% s -% lzt)
+
+### b128_trigpi_reduce for the CORE-MATH 384-bit path: the same exact n and residual r, times pi/2 to 384
+### bits, as b128_trig_wide_parts gives its reduction (false as b128_trigpi_reduce).
+secret routine b128_trigpi_wide_parts(m: U128, e: S64) -> (Bool, (S64, Bool, (U128, U128, U128), S64))
+  var nothing = (0_s64, false, (0_u128, 0_u128, 0_u128), 0_s64)
+  var s = 104_s64 -% e
+  if s <= 0_s64
+    return (false, nothing)
+  var n = 0_u128
+  var r = m
+  var negative = false
+  if s < 115_s64
+    n = (m +% (1_u128 << b128_trig_sh(n: s -% 1_s64))) >>> b128_trig_sh(n: s)
+    var base = n << b128_trig_sh(n: s)
+    if base > m
+      r = base -% m
+      negative = true
+    else
+      r = m -% base
+  if r == 0_u128
+    return (false, nothing)
+  var lzr = b128_trig_clz128(x: r)
+  var pio2 = (0x514A08798E3404DDEF9519B3CD3A431B_u128, 0x29024E088A67CC74020BBEA63B139B22_u128, 0xC90FDAA22168C234C4C6628B80DC1CD1_u128)
+  var pp = b128_trig_mul384(a: (0_u128, 0_u128, r << b128_trig_sh(n: lzr)), b: pio2)
+  var lzt = b128_trig_lz384(x: pp)
+  var nn = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](n & 511_u128))
+  return (true, (nn, negative, b128_trig_shl384(x: pp, shift: lzt), 122_s64 -% lzr -% s -% lzt))
 
 ### sin(pi|y|) (cosine false) or cos(pi|y|) as a B128Fx from a pi reduction, or false where the fast tail
 ### would set a tiny theta against a table entry (theta below 2^-60 with j or the cosine term in play).
@@ -541,8 +589,33 @@ secret routine b128_trigpi_exact(m: U128, e: S64, which: U64, neg: Bool, y: B128
   return b128fx_round(v: q)
 
 ### sinpi (which 0), cospi (1) or tanpi (2) of a finite y that is not an integer (nor, for cospi and
-### tanpi, a half-integer), or false when the band does not settle it.
+### tanpi, a half-integer), or false when the band does not settle it: from the CORE-MATH fast phase, and
+### when its band does not settle the rounding, from the 384-bit path over the same exact reduction.
 secret routine b128_trigpi_fast(y: B128, which: U64) -> (Bool, B128)
+  var (ok, v) = b128_trigpi_try(y: y, which: which)
+  if ok
+    return (true, v)
+  var bits = y.to_bits()
+  var ax = bits & ((1_u128 << 127_u32) -% 1_u128)
+  if ax >= (0x7FFF_u128 << 112_u32) or ax == 0_u128
+    return (false, y)
+  var (m, e) = b128_trigpi_parts(ax: ax)
+  var (okp, parts) = b128_trigpi_wide_parts(m: m, e: e)
+  if not okp
+    return (false, y)
+  var neg = (bits >>> 127_u32) != 0_u128
+  if which == 1_u64
+    return b128fx_round(v: b128_trig_acc_fx(parts: parts, cosine: true))
+  var sv = b128_trig_acc_fx(parts: parts, cosine: false)
+  if which == 0_u64
+    return b128fx_round(v: B128Fx(neg: sv.neg != neg, m: sv.m, e: sv.e, rel: sv.rel))
+  var (okq, q) = b128fx_div(a: sv, b: b128_trig_acc_fx(parts: parts, cosine: true))
+  if not okq
+    return (false, y)
+  return b128fx_round(v: B128Fx(neg: q.neg != neg, m: q.m, e: q.e, rel: q.rel))
+
+### b128_trigpi_fast from the CORE-MATH fast phase alone.
+secret routine b128_trigpi_try(y: B128, which: U64) -> (Bool, B128)
   var bits = y.to_bits()
   var signmask = 1_u128 << 127_u32
   var ax = bits & (signmask -% 1_u128)
