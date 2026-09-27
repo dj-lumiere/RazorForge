@@ -50,17 +50,6 @@ secret routine b128fx_wide_b64(hi: U128, lo: U128) -> B64
   var lz2 = b128_trig_clz128(x: lo)
   return b128fx_top(m: lo << b128_trig_sh(n: lz2)) *! b128fx_p2(k: 64_s64 -% lz2)
 
-### |d| truncated to an integer, as a U128, for a finite d with |d| < 2^127.
-secret routine b128fx_b64_int(d: B64) -> U128
-  var bits = d.to_bits() & 0x7FFFFFFFFFFFFFFF_u64
-  if bits < 0x3FF0000000000000_u64
-    return 0_u128
-  var ex = LLVM::reinterpret_bits[U64, S64](bits >>> 52_u32) -% 1075_s64
-  var mant = LLVM::zero_extend[U64, U128]((bits & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64)
-  if ex >= 0_s64
-    return mant << b128_trig_sh(n: ex)
-  return mant >>> b128_trig_sh(n: 0_s64 -% ex)
-
 ### A B128Fx from the fixed-point value (-1)^neg * mag * 2^scale known to within abserr units of 2^scale.
 ### mag must be nonzero. The bound divides by mag's top 64 bits (so it is 2^-52 loose at most), and adds
 ### the truncation to 128 bits. The 256-bit mag is handled as two 128-bit halves (a 256-bit shift by a
@@ -152,53 +141,22 @@ secret routine b128fx_add(a: B128Fx, b: B128Fx) -> (Bool, B128Fx)
   var rel = (abserr +! 0x1p-127) /! sv *! (1.0 +! 0x1p-50) +! 0x1p-127
   return (true, B128Fx(neg: x.neg, m: m, e: en, rel: rel))
 
-### a / b. The quotient T = N / b.m with N = a.m * 2^127 (2^128 when a.m < b.m, so T lands in [2^127, 2^128))
-### starts from a B64 estimate and takes two corrections q += (N - b.m q) / b.m, the residual exact in 256
-### bits and the step (times one B64 reciprocal of b.m) within 2^-50.5 of it plus the truncation to an
-### integer: the estimate is within 2^77, the first step within 2^27, the second within 2 units. False in the rare cases where q leaves [2^127, 2^128).
+### a / b. The quotient T = floor(N / b.m) with N = a.m * 2^127 (2^128 when a.m < b.m, so T lands in [2^127, 2^128)),
+### by two digits of Knuth's Algorithm D on 64-bit limbs (b.m is normalized, N's top 128 bits are below it):
+### exact, so the quotient's own error is its truncation, under 2^-127.
 secret routine b128fx_div(a: B128Fx, b: B128Fx) -> (Bool, B128Fx)
   var sh = 127_s64
+  var top = a.m >>> 1_u32
+  var x1 = LLVM::int_truncate[U128, U64](a.m & 1_u128) << 63_u32
   if a.m < b.m
     sh = 128_s64
+    top = a.m
+    x1 = 0_u64
   var e = a.e -% b.e -% sh
-  var nh = a.m >>> b128_trig_sh(n: 128_s64 -% sh)
-  var nl = a.m << b128_trig_sh(n: sh)
-  var bv = b128fx_top(m: b.m)
-  # one reciprocal for the estimate and both steps (a multiplication each instead of a division, within
-  # 2^-52 of the quotient either way)
-  var rb = 1.0 /! bv
-  var est = b128fx_top(m: a.m) *! rb *! b128fx_p2(k: sh)
-  if est >= 0x1p128
-    est = 0x1.fffffffffffffp127
-  var q = b128fx_b64_int(d: est)
-  var step = 0_s64
-  while step < 2_s64
-    var p = b128_trig_wmul(x: b.m, y: q)
-    var below = p.item0 < nh or (p.item0 == nh and p.item1 <= nl)
-    var rh = 0_u128
-    var rl = 0_u128
-    if below
-      rl = nl -% p.item1
-      rh = nh -% p.item0
-      if nl < p.item1
-        rh = rh -% 1_u128
-    else
-      rl = p.item1 -% nl
-      rh = p.item0 -% nh
-      if p.item1 < nl
-        rh = rh -% 1_u128
-    var dq = b128fx_b64_int(d: b128fx_wide_b64(hi: rh, lo: rl) *! rb *! 0x1p-64)
-    if below
-      if q +% dq < q
-        return (false, a)
-      q = q +% dq
-    else
-      if dq > q
-        return (false, a)
-      q = q -% dq
-    step = step +% 1_s64
-  if (q >>> 127_u32) == 0_u128
-    return (false, a)
+  var vrec = reciprocal_word(LLVM::int_truncate[U128, U64](b.m >>> 64_u32))
+  var (q1, r1) = b128_knuth_digit(r: top, x: x1, v: b.m, vrec: vrec)
+  var (q0, r0) = b128_knuth_digit(r: r1, x: 0_u64, v: b.m, vrec: vrec)
+  var q = (LLVM::zero_extend[U64, U128](q1) << 64_u32) | LLVM::zero_extend[U64, U128](q0)
   var rel = a.rel +! b.rel +! 2.0 *! a.rel *! b.rel +! 2.0 *! b.rel *! b.rel +! 0x1.8p-126
   return (true, B128Fx(neg: a.neg != b.neg, m: q, e: e, rel: rel))
 
