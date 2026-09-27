@@ -403,7 +403,20 @@ public sealed partial class StdlibLoader
             new Tokenizer.Tokenizer(source: code, fileName: filePath, language: language);
         List<Token> tokens = tokenizer.Tokenize();
         var parser = new Parser.Parser(tokens: tokens, language: language, fileName: filePath);
-        return parser.Parse();
+        Program program = parser.Parse();
+
+        // A stdlib file is never a program entry. A loose top-level statement (e.g. a stray literal left
+        // by a table generator) would otherwise become a script `start()` inside the stdlib module and
+        // collide with the user's own entry point far from the real cause.
+        if (program.Declarations.OfType<RoutineDeclaration>()
+                   .FirstOrDefault(predicate: r => r.IsScriptEntry) is { } script)
+        {
+            throw new InvalidOperationException(
+                message: $"line {script.Location.Line} is a statement at the top level of a stdlib file; " +
+                         "stdlib files may only contain declarations.");
+        }
+
+        return program;
     }
 
     /// <summary>

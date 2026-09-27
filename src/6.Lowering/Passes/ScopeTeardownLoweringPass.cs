@@ -336,6 +336,10 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             }
 
             stmts.Add(item: LowerStatement(stmt: s, live: live, loopBoundary: loopBoundary));
+            if (s is AssignmentStatement { IsGlobalInit: true, Target: IdentifierExpression g })
+            {
+                RegisterGlobalsSingleton(target: g, live: live);
+            }
         }
 
         // Fall-through end-of-block: destroy this block's own locals in REVERSE declaration order
@@ -355,6 +359,25 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         }
 
         return block with { Statements = stmts };
+    }
+
+    // The Suflae globals singleton (`__globals__ = __ModuleGlobals(...)`, the first statement of
+    // start()) lives in a module-level cell so every routine can reach it, but its lifetime is start()'s
+    // scope: it is constructed there and released at every exit of start(), like a local declared at
+    // that point. Registered AFTER its init assignment, so the init itself is not lowered as a reassign
+    // that destroys a not-yet-constructed handle. Only a Roamed handle is registered; a bare entity
+    // destroy would bypass the RC release and the cycle collector.
+    private void RegisterGlobalsSingleton(IdentifierExpression target, List<Owned> live)
+    {
+        TypeSymbol? t = ctx.Registry.LookupVariable(name: target.Name)?.Type ?? target.ResolvedType;
+        if (t is not (WrapperTypeSymbol { Name: RuntimeContract.Roamed }
+                or RecordTypeSymbol { GenericDefinition.Name: RuntimeContract.Roamed }) ||
+            !TryResolveDestroy(type: t, destroy: out RoutineInfo? d) || d == null)
+        {
+            return;
+        }
+
+        live.Add(item: new Owned(Name: target.Name, Type: t, Destroy: d));
     }
 
     // Records a block-local `var` declaration into `live` (so its scope-exit teardown is emitted),

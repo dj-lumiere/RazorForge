@@ -505,11 +505,23 @@ public sealed partial class SemanticVerifier
 
         RoutineInfo? routine = _registry.LookupRoutine(fullName: callName,
             isFailable: isFailableCall);
-        // Try current module prefix (e.g., "infinite_loop" -> "HelloWorld.infinite_loop")
-        if (routine == null && _currentModuleName != null && !callName.Contains(value: '.'))
+        // Try current module prefix (e.g., "infinite_loop" -> "HelloWorld.infinite_loop"). A foreign
+        // (C/LLVM) routine found by the bare lookup does not count: it is reachable only through its
+        // realm qualifier, so it must not hide the module's own routine of the same name (the bare
+        // lookup falls back to `Core.add`, which the `LLVM::add[T]` intrinsic owns).
+        if (routine is null or { IsForeign: true } && _currentModuleName != null &&
+            !callName.Contains(value: '.'))
         {
             routine = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{callName}",
-                isFailable: isFailableCall);
+                isFailable: isFailableCall) ?? routine;
+        }
+
+        // Same rule for a routine of that name in an imported module. A foreign routine stays only
+        // when nothing else of that name is visible, so the realm gate can say "call it as LLVM::…".
+        if (routine is { IsForeign: true } && calleeRealm == null &&
+            LookupRoutineWithImports(name: callName) is { IsForeign: false } ambient)
+        {
+            routine = ambient;
         }
 
         // Call-site `!` is OPTIONAL: a bare `foo()` call may bind a failable routine `foo!`

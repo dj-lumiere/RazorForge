@@ -752,7 +752,8 @@ public sealed partial class SemanticVerifier
                args.Any(predicate: ContainsUnresolvedTypeParameter);
     }
 
-    private TypeSymbol AnalyzeConditionalExpression(ConditionalExpression cond)
+    private TypeSymbol AnalyzeConditionalExpression(ConditionalExpression cond,
+        TypeSymbol? expectedType = null)
     {
         // #145: Track nesting depth for deep conditional warning
         _conditionalNestingDepth++;
@@ -774,8 +775,23 @@ public sealed partial class SemanticVerifier
                 location: cond.Condition.Location);
         }
 
-        TypeSymbol trueType = AnalyzeExpression(expression: cond.TrueExpression);
-        TypeSymbol falseType = AnalyzeExpression(expression: cond.FalseExpression);
+        // Bare literals in the branches conform to the context like anywhere else: `return if neg then
+        // -1 else 0` in an S8 routine types both literals as S8. Without a context, one branch's type is
+        // the other's context, and a literal branch follows the non-literal one (`if c then 0 else x`).
+        TypeSymbol trueType;
+        TypeSymbol falseType;
+        if (expectedType == null && cond.TrueExpression is LiteralExpression &&
+            cond.FalseExpression is not LiteralExpression)
+        {
+            falseType = AnalyzeExpression(expression: cond.FalseExpression);
+            trueType = AnalyzeExpression(expression: cond.TrueExpression, expectedType: falseType);
+        }
+        else
+        {
+            trueType = AnalyzeExpression(expression: cond.TrueExpression, expectedType: expectedType);
+            falseType = AnalyzeExpression(expression: cond.FalseExpression,
+                expectedType: expectedType ?? trueType);
+        }
 
         // Both branches must be compatible
         if (!IsAssignableTo(source: trueType, target: falseType) &&

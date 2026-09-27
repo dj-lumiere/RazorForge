@@ -512,7 +512,10 @@ public static class ManifestLoader
                          searchPattern: pattern,
                          searchOption: SearchOption.AllDirectories))
             {
-                IndexSourceFile(filePath: filePath, index: index, entryModules: entryModules);
+                IndexSourceFile(filePath: filePath,
+                    projectDir: projectDir,
+                    index: index,
+                    entryModules: entryModules);
             }
         }
 
@@ -521,9 +524,10 @@ public static class ManifestLoader
 
     /// <summary>Indexes one source file into <paramref name="index"/>: extracts its module name,
     /// records the mapping, and promotes/validates entry-point-bearing files (throwing on a genuine
-    /// two-entry-point ambiguity for one module).</summary>
-    private static void IndexSourceFile(string filePath, Dictionary<string, string> index,
-        HashSet<string> entryModules)
+    /// two-entry-point ambiguity for one module). A file with no <c>module</c> header is indexed under
+    /// the module path the build driver derives from its location.</summary>
+    private static void IndexSourceFile(string filePath, string projectDir,
+        Dictionary<string, string> index, HashSet<string> entryModules)
     {
         // Skip debug AST dump files — they share the module name with the real source
         if (filePath.EndsWith(value: ".rf.desugared",
@@ -539,11 +543,9 @@ public static class ManifestLoader
             return;
         }
 
-        string? moduleName = ExtractModuleName(filePath: filePath);
-        if (moduleName == null)
-        {
-            return;
-        }
+        string moduleName = Declaration.ModulePathDerivation.ReadDeclaredModule(filePath: filePath) ??
+                            Declaration.ModulePathDerivation.FromFile(projectRoot: projectDir,
+                                filePath: filePath);
 
         string fullPath = Path.GetFullPath(path: filePath);
         bool hasEntryPoint = FileDeclaresEntryPoint(filePath: filePath);
@@ -579,18 +581,22 @@ public static class ManifestLoader
     }
 
     /// <summary>
-    /// Returns true if the file declares the program entry point <c>routine start()</c>.
-    /// Member routines (<c>routine Type.start()</c>) are excluded — only the bare, module-level
-    /// <c>start</c> is an entry point.
+    /// Returns true if the file declares the program entry point: an explicit <c>routine start()</c>, or
+    /// a loose top-level statement (script mode, whose <c>start()</c> the parser synthesizes). Member
+    /// routines (<c>routine Type.start()</c>) are excluded — only the bare, module-level <c>start</c> is
+    /// an entry point. This is a line scan, not a parse: it only has to pick the entry among files that
+    /// share one declared module name.
     /// </summary>
     private static bool FileDeclaresEntryPoint(string filePath)
     {
         try
         {
             return File.ReadLines(path: filePath)
-                       .Any(predicate: line => line.Trim()
-                                                   .StartsWith(value: "routine start(",
-                                                        comparisonType: StringComparison.Ordinal));
+                       .Any(predicate: line =>
+                            line.Trim()
+                                .StartsWith(value: "routine start(",
+                                     comparisonType: StringComparison.Ordinal) ||
+                            IsTopLevelStatementLine(line: line));
         }
         catch (IOException)
         {
@@ -599,45 +605,35 @@ public static class ManifestLoader
         }
     }
 
-    /// <summary>
-    /// Reads the first "module X" declaration from a source file.
-    /// </summary>
-    private static string? ExtractModuleName(string filePath)
+    /// <summary>Words that begin a top-level declaration rather than a statement.</summary>
+    private static readonly HashSet<string> DeclarationKeywords = new(comparer: StringComparer.Ordinal)
     {
-        try
-        {
-            foreach (string line in File.ReadLines(path: filePath))
-            {
-                string trimmed = line.Trim();
-                if (trimmed.StartsWith(value: "module "))
-                {
-                    string name = trimmed["module ".Length..]
-                       .Trim();
-                    int commentIdx = name.IndexOf(value: '#');
-                    if (commentIdx >= 0)
-                    {
-                        name = name[..commentIdx]
-                           .Trim();
-                    }
+        "module", "import", "define", "preset", "global", "lateinit", "var", "routine", "record",
+        "entity", "choice", "variant", "flags", "protocol", "crashable", "dangerous", "suspended",
+        "threaded", "external", "common", "secret", "posted", "needs", "relates"
+    };
 
-                    return name;
-                }
-
-                // Skip comments, empty lines, and imports — stop at first real declaration
-                if (!string.IsNullOrWhiteSpace(value: trimmed) &&
-                    !trimmed.StartsWith(value: '#') && !trimmed.StartsWith(value: "import "))
-                {
-                    break;
-                }
-            }
-        }
-        catch (Exception ex)
+    /// <summary>
+    /// True for an unindented line that starts a statement: not blank, not a comment or annotation, not
+    /// the closing bracket of a multi-line literal or parameter list, and not opened by a declaration
+    /// keyword or a declaration's <c>needs</c>/<c>relates</c> clause. A top-level <c>var</c> counts as a
+    /// declaration here, since alone it does not make a script.
+    /// </summary>
+    private static bool IsTopLevelStatementLine(string line)
+    {
+        if (line.Length == 0 || char.IsWhiteSpace(c: line[index: 0]) ||
+            line[index: 0] is '#' or '@' or ')' or ']' or '}')
         {
-            Console.Error.WriteLine(
-                value:
-                $"Warning: Could not read or parse '{filePath}' for module name extraction: {ex.Message}");
+            return false;
         }
 
-        return null;
+        int wordEnd = 0;
+        while (wordEnd < line.Length && (char.IsLetterOrDigit(c: line[index: wordEnd]) || line[index: wordEnd] == '_'))
+        {
+            wordEnd++;
+        }
+
+        return !DeclarationKeywords.Contains(item: line[..wordEnd]);
     }
+
 }

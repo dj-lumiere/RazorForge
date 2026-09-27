@@ -527,6 +527,14 @@ public enum SemanticDiagnosticCode
     /// other (or a global references itself) in their initializers, so none can initialize first.</summary>
     ModuleGlobalCircularInit = 436,
 
+    /// <summary>A Suflae <c>global</c> whose initializer reads another global has a type the build cannot
+    /// seed before the ordered initialization runs (only number, <c>Text</c> and <c>Bool</c> globals can).</summary>
+    ModuleGlobalDependentInitUnsupported = 437,
+
+    /// <summary>Suflae <c>global</c> declarations exist but no file in the build has a
+    /// <c>routine start()</c> (or top-level statements) to host their initialization.</summary>
+    ModuleGlobalWithoutStart = 438,
+
     /// <summary>A Suflae routine's parameter or return type is a bare <c>RF::</c> RazorForge entity. An
     /// RF entity has no reference count, so passing it by value across an SF routine boundary would let
     /// SF's scope-exit teardown destroy the same object more than once (caller + callee + return) →
@@ -548,6 +556,14 @@ public enum SemanticDiagnosticCode
     /// declaration (e.g. on a variable declaration or a use-site type). Memory layout is a per-type
     /// property fixed at the record's declaration.</summary>
     LayoutAnnotationNotOnRecord = 442,
+
+    /// <summary>A file other than the build's entry file has loose top-level statements. Only the entry
+    /// file may run as a script; anywhere else they would silently create a second program entry.</summary>
+    ScriptStatementsOutsideEntryFile = 443,
+
+    /// <summary>A routine refers to a top-level <c>var</c> of a script-mode file. Those variables are
+    /// locals of the implicit <c>start()</c>, so routines in the same file cannot see them.</summary>
+    ScriptVariableNotVisibleInRoutine = 444,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)

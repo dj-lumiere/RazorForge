@@ -271,7 +271,56 @@ public sealed class ModuleResolver
             }
         }
 
-        return null;
+        return DerivedModuleFiles()
+           .GetValueOrDefault(key: modulePart);
+    }
+
+    /// <summary>Header-less project and library files keyed by the module path the build driver
+    /// derives for them. Built on first use.</summary>
+    private Dictionary<string, string>? _derivedModuleFiles;
+
+    /// <summary>
+    /// A file without a <c>module</c> header is named after its location (<c>tools/text utils.rf</c> is
+    /// <c>Tools/TextUtils</c>). That name cannot be turned back into a path — the PascalCasing drops
+    /// spaces and changes letter case, which a case-sensitive file system will not match — so such
+    /// imports are found by deriving the name of every header-less file instead.
+    /// </summary>
+    private Dictionary<string, string> DerivedModuleFiles()
+    {
+        if (_derivedModuleFiles != null)
+        {
+            return _derivedModuleFiles;
+        }
+
+        _derivedModuleFiles = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        foreach (string root in (string[])[_projectRoot, .. _libraryRoots])
+        {
+            if (!Directory.Exists(path: root))
+            {
+                continue;
+            }
+
+            IEnumerable<string> files = Directory
+                                       .EnumerateFiles(path: root,
+                                            searchPattern: "*.rf",
+                                            searchOption: SearchOption.AllDirectories)
+                                       .Concat(second: Directory.EnumerateFiles(path: root,
+                                            searchPattern: "*.sf",
+                                            searchOption: SearchOption.AllDirectories))
+                                       .Where(predicate: f =>
+                                            Targeting.TargetGate.ShouldCompile(filePath: f) &&
+                                            ModulePathDerivation.ReadDeclaredModule(filePath: f) ==
+                                            null)
+                                       .Order(comparer: StringComparer.Ordinal);
+            foreach (string file in files)
+            {
+                _derivedModuleFiles.TryAdd(
+                    key: ModulePathDerivation.FromFile(projectRoot: _projectRoot, filePath: file),
+                    value: Path.GetFullPath(path: file));
+            }
+        }
+
+        return _derivedModuleFiles;
     }
 
     /// <summary>

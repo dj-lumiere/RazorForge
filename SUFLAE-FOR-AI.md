@@ -47,12 +47,13 @@ When unsure, consult ground truth in the repo:
 1. **`routine start()` is OPTIONAL.** A `.sf` file may consist of loose
    top-level statements; they (plus top-level runtime `var`s) fold into an
    implicit `routine start()`, in source order, with a trailing return. This is
-   **script mode** — write a `.sf` like a Python script.
+   **script mode** — write a `.sf` like a Python script. (RazorForge has the same
+   script mode.) Only the program's entry file may be a script.
 2. **A bare `.sf` file runs like `python hello.py`.** `suflae hello.sf` (or any
-   bare `.sf` invocation) builds AND executes the file. (RazorForge is not
-   script-mode; a bare `.rf` under `razorforge` dumps the parse instead.)
+   bare `.sf` invocation) builds AND executes the file. (A bare `.rf` under
+   `razorforge` dumps the parse instead.)
 3. **`module` is optional** — the module path is inferred from the file's
-   location (relative to `razorforge.toml`). Declare `module` only to override.
+   location (relative to `config.toml`). Declare `module` only to override.
 4. **The default number types are `Integer` and `Decimal`, not fixed-width.**
    A bare `42` is an arbitrary-precision `Integer`; a bare `3.14` is a `Decimal`.
    Indices and counts are also `Integer`. (In RF, bare literals default to
@@ -140,6 +141,10 @@ routine start()
   coexist with loose top-level statements.
 - Mixing loose top-level statements AND an explicit `routine start()` in the same
   file is a conflict (SF-G150). Choose one.
+- Only the program's entry file may have loose top-level statements. In an
+  imported file they are an error (RF-S443) — they would start a second program.
+- A top-level `var` belongs to the script's own top-level scope: routines in the
+  file cannot see it (RF-S444). Pass it as an argument, or make it a `global`.
 - Routines you define are still their own scopes → they still need an explicit
   `return` (the "every scope has one definite exit → teardown anchor" rule). The
   single top-level scope's exit is EOF, so script mode needs no trailing return.
@@ -294,7 +299,7 @@ suflae hello.sf        # build + run the file (like `python hello.py`)
 suflae build hello.sf  # build to a native executable, don't run
 ```
 
-Configuration lives in `razorforge.toml` (see `RAZORFORGE-FOR-AI.md` §11); there
+Configuration lives in `config.toml` (see `RAZORFORGE-FOR-AI.md` §11); there
 are no build flags. The shared stdlib resolves relative to the compiler, not the
 current directory, so a repo-external `.sf` still finds `Core`.
 

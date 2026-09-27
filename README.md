@@ -132,8 +132,8 @@ break, plus pointers to the 140+ CI-verified example programs in
 RazorForge <source-file>                  Parse file and show AST summary
 RazorForge parse <source-file>            Parse file and show AST summary
 RazorForge tokenize <source-file>         Tokenize file and show tokens
-RazorForge codegen <source-file> [out.ll] Generate LLVM IR (single file)
-RazorForge build [entry-file] [out.ll]    Build a multi-file project
+RazorForge codegen [entry-file] [out.ll] Build up to LLVM IR only (no opt/link)
+RazorForge build [entry-file]            Build a native executable (no run)
 RazorForge buildandrun [entry-file]       Build, link, and execute
 RazorForge check [entry-file]             Type-check only (no codegen)
 RazorForge validate-stdlib [rf]           Validate stdlib routine bodies
@@ -142,7 +142,7 @@ RazorForge version                        Show compiler version
 ```
 
 **There are no build flags.** All build configuration lives in the
-`razorforge.toml` manifest's single `[target]` section:
+`config.toml` manifest's single `[target]` section:
 
 ```toml
 [package]
@@ -159,7 +159,7 @@ the import search space, requirements.txt-style. (When the package manager lands
 entries will also accept versioned packages from the package site, e.g.
 `"json-utils@1.2.0"`, fetched into a cache that builds consume the same way.)
 With no entry file given, the CLI searches the current and parent directories for
-`razorforge.toml` — `cd` into a project and `razorforge buildandrun` just works.
+`config.toml` — `cd` into a project and `razorforge buildandrun` just works.
 
 ---
 

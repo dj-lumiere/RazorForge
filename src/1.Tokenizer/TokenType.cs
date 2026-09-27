@@ -696,8 +696,6 @@ public enum TokenType
     /// <summary>Right bit shift operator (>>)</summary>
     RightShift,
 
-    /// <summary>Logical left bit shift operator (&lt;&lt;&lt;)</summary>
-    LogicalLeftShift,
 
     /// <summary>Logical right bit shift operator (>>>)</summary>
     LogicalRightShift,
@@ -739,8 +737,6 @@ public enum TokenType
     /// <summary>Right shift assignment operator (&gt;&gt;=)</summary>
     RightShiftAssign,
 
-    /// <summary>Logical left shift assignment operator (&lt;&lt;&lt;=)</summary>
-    LogicalLeftShiftAssign,
 
     /// <summary>Logical right shift assignment operator (&gt;&gt;&gt;=)</summary>
     LogicalRightShiftAssign,

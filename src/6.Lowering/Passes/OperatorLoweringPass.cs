@@ -1373,8 +1373,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
         }
 
         if (bin.Operator is not (BinaryOperator.ArithmeticLeftShift
-            or BinaryOperator.ArithmeticRightShift or BinaryOperator.LogicalLeftShift
-            or BinaryOperator.LogicalRightShift))
+            or BinaryOperator.ArithmeticRightShift or BinaryOperator.LogicalRightShift))
         {
             return argument;
         }

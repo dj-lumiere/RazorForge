@@ -1,3 +1,5 @@
+using Builder.Diagnostics;
+
 namespace RazorForge.Tests.Parser;
 
 using static TestHelpers;
@@ -532,17 +534,17 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts logical left shift.
+    /// There is no `<<<`: a left shift fills with zeros whether the value is signed or not, so the
+    /// tokenizer rejects it and points at `<<`.
     /// </summary>
     [Fact]
-    public void Parse_LogicalLeftShift()
+    public void Tokenize_TripleLeftShift_IsRejected()
     {
-        string source = """
-                        routine test() -> U32
-                          return value <<< 4
-                        """;
-
-        AssertParses(source: source);
+        var ex = Assert.Throws<GrammarException>(testCode: () => Tokenize(source: """
+            routine test() -> U32
+              return value <<< 4
+            """));
+        Assert.Contains(expectedSubstring: "write '<<'", actualString: ex.Message);
     }
     /// <summary>
     /// Verifies that the parser accepts logical right shift.

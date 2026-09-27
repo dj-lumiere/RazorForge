@@ -39,7 +39,8 @@ public sealed partial class SemanticVerifier
             SpliceExpression splice => AnalyzeSpliceExpression(splice: splice),
             RecoveryExpression recovery => AnalyzeRecoveryExpression(recovery: recovery),
             IndexExpression index => AnalyzeIndexExpression(index: index),
-            ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond),
+            ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond,
+                expectedType: expectedType),
             LambdaExpression lambda => AnalyzeLambdaExpression(lambda: lambda,
                 expectedType: expectedType),
             RangeExpression range => AnalyzeRangeExpression(range: range,
@@ -180,11 +181,52 @@ public sealed partial class SemanticVerifier
             return ErrorTypeSymbol.Instance;
         }
 
+        if (TryReportScriptVariableInRoutine(id: id))
+        {
+            return ErrorTypeSymbol.Instance;
+        }
+
         ReportError(code: SemanticDiagnosticCode.UnknownIdentifier,
             message:
             $"Unknown identifier '{id.Name}'.{DidYouMean(target: id.Name, candidates: IdentifierSuggestionCandidates())}",
             location: id.Location);
         return ErrorTypeSymbol.Instance;
+    }
+
+    private readonly HashSet<(RoutineInfo Routine, string Name)> _reportedScriptVariables = [];
+
+    /// <summary>
+    /// A top-level <c>var</c> of a script-mode file is a local of the implicit <c>start()</c>, so a
+    /// routine in the same file cannot see it. That reads like a module variable, so say why it is
+    /// unknown and point toward the fix instead of reporting a bare unknown identifier. Reported once per
+    /// routine and name (<c>total = total + n</c> would otherwise report both sides).
+    /// </summary>
+    private bool TryReportScriptVariableInRoutine(IdentifierExpression id)
+    {
+        if (_currentRoutine is null or { Name: "start", OwnerType: null } ||
+            _currentFilePath == null ||
+            !_scriptVariablesByFile.TryGetValue(key: _currentFilePath,
+                value: out IReadOnlySet<string>? names) ||
+            !names.Contains(item: id.Name))
+        {
+            return false;
+        }
+
+        if (!_reportedScriptVariables.Add(item: (_currentRoutine, id.Name)))
+        {
+            return true;
+        }
+
+        string fix = _registry.Language == Language.Suflae
+            ? $"Pass it in as an argument, or declare it as 'global {id.Name}: <Type> = ...' to share it " +
+              "across routines."
+            : "Pass it in as an argument. RazorForge has no module-level mutable state.";
+        ReportError(code: SemanticDiagnosticCode.ScriptVariableNotVisibleInRoutine,
+            message:
+            $"'{id.Name}' is a top-level variable of this script, and those live only in the script's " +
+            $"own top-level scope, so routine '{_currentRoutine.Name}' cannot see it. {fix}",
+            location: id.Location);
+        return true;
     }
 
     /// <summary>
@@ -1461,11 +1503,10 @@ public sealed partial class SemanticVerifier
         // as the target (e.g. `U64`) rather than the language default — `Integer` in
         // Suflae, `S64` in RazorForge. Without this hint an SF `U64 += 1` leaves the `1`
         // an `Integer`, which mis-lowers (Integer.from_literal against a fixed-width
-        // target) into a runaway/garbage result. Shift amounts (`<<= >>= <<<= >>>=`) are
+        // target) into a runaway/garbage result. Shift amounts (`<<= >>= >>>=`) are
         // U32, not the target type, so they keep their own inference.
         bool isShift = compound.Operator is BinaryOperator.ArithmeticLeftShift
-            or BinaryOperator.ArithmeticRightShift or BinaryOperator.LogicalLeftShift
-            or BinaryOperator.LogicalRightShift;
+            or BinaryOperator.ArithmeticRightShift or BinaryOperator.LogicalRightShift;
         AnalyzeExpression(expression: compound.Value,
             expectedType: isShift
                 ? null

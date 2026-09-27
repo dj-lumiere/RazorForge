@@ -132,20 +132,27 @@ internal sealed class TypeResolver
     /// </summary>
     internal RoutineInfo? LookupRoutineWithImports(string name)
     {
-        // Try Core module prefix (Core routines are auto-imported)
+        // Try Core module prefix (Core routines are auto-imported). A foreign (C/LLVM) Core routine is
+        // reachable only through its realm qualifier, so an imported module's routine of the same name
+        // wins over it; the foreign one is returned only when nothing else of that name exists.
+        RoutineInfo? core = null;
         if (!name.Contains(value: '.'))
         {
-            RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"Core.{name}");
-            if (result != null)
+            core = _sa._registry.LookupRoutine(fullName: $"Core.{name}");
+            if (core is { IsForeign: false })
             {
-                return result;
+                return core;
             }
         }
 
         // Try each imported module
-        return _sa._importedModules
-                  .Select(selector: ns => _sa._registry.LookupRoutine(fullName: $"{ns}.{name}"))
-                  .FirstOrDefault(predicate: result => result != null);
+        List<RoutineInfo> imported = _sa._importedModules
+                                        .Select(selector: ns =>
+                                             _sa._registry.LookupRoutine(fullName: $"{ns}.{name}"))
+                                        .OfType<RoutineInfo>()
+                                        .ToList();
+        return imported.FirstOrDefault(predicate: r => !r.IsForeign) ?? core ??
+               imported.FirstOrDefault();
     }
 
     /// <summary>

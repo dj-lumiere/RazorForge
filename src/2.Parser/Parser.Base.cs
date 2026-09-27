@@ -270,8 +270,7 @@ public partial class Parser
 
     private static bool IsShiftOperator(TokenType type)
     {
-        return type is TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift
-            or TokenType.LogicalRightShift;
+        return type is TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalRightShift;
     }
 
     private static bool IsAdditiveOperator(TokenType type)
@@ -700,7 +699,6 @@ public partial class Parser
             TokenType.Caret => BinaryOperator.BitwiseXor,
             TokenType.LeftShift => BinaryOperator.ArithmeticLeftShift,
             TokenType.RightShift => BinaryOperator.ArithmeticRightShift,
-            TokenType.LogicalLeftShift => BinaryOperator.LogicalLeftShift,
             TokenType.LogicalRightShift => BinaryOperator.LogicalRightShift,
             TokenType.Assign => BinaryOperator.Assign,
             TokenType.In => BinaryOperator.In,

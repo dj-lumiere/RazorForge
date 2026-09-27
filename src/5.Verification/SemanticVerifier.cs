@@ -444,6 +444,12 @@ public sealed partial class SemanticVerifier
         // `grab`/`lookup` keyword and the variant-body rewriter mint a base's recovery variant on demand
         // from the deferred base index, rather than eagerly registering every failable's variants.
         _registry.OnDemandVariantForBase = SynthesizeVariantForBase;
+        if (!ModuleGlobalsSynthesisPass.Run(orderedFiles: [(program, _currentFilePath)],
+                report: ReportError))
+        {
+            return AbortedResult();
+        }
+
         RunPhase1Declarations(program: program);
         Mark(label: "Phase 1 Declarations");
         CaptureCurrentImportStateSnapshot(filePath: _currentFilePath);
@@ -517,6 +523,21 @@ public sealed partial class SemanticVerifier
             Warnings: UserVisibleWarnings(),
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized,
+            InstantiatedGenericBodies: _instantiatedGenericBodies,
+            LiveRoutineKeys: _liveRoutineKeys,
+            LiveOwnerTypeNames: _liveOwnerTypeNames,
+            MaySuspendRoutineKeys: _maySuspendRoutineKeys);
+    }
+
+    /// <summary>The result of an analysis that stopped before the declaration phases because a
+    /// pre-analysis step reported errors.</summary>
+    private AnalysisResult AbortedResult()
+    {
+        return new AnalysisResult(Registry: _registry,
+            Errors: _errors.ToList(),
+            Warnings: UserVisibleWarnings(),
+            ParsedLiterals: _parsedLiterals,
+            SynthesizedBodies: new Dictionary<string, Statement>(),
             InstantiatedGenericBodies: _instantiatedGenericBodies,
             LiveRoutineKeys: _liveRoutineKeys,
             LiveOwnerTypeNames: _liveOwnerTypeNames,
@@ -1966,6 +1987,13 @@ public sealed partial class SemanticVerifier
             new Dictionary<string, HashSet<string>>(comparer: StringComparer.OrdinalIgnoreCase);
         var moduleNameSnapshots =
             new Dictionary<string, string?>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        // Suflae `global`s move onto the shared __ModuleGlobals singleton before any declaration is
+        // collected, so the synthesized entity and singleton register like user declarations.
+        if (!ModuleGlobalsSynthesisPass.Run(orderedFiles: files, report: ReportError))
+        {
+            return AbortedResult();
+        }
 
         // Every file in the build graph contributes its declarations via Phase 1 below.
         // Pre-mark their declared modules as provided so `import` statements between them

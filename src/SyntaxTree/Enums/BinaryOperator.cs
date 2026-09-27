@@ -192,9 +192,6 @@ public enum BinaryOperator
     /// <summary>Arithmetic right shift operator (&gt;&gt;)</summary>
     ArithmeticRightShift,
 
-    /// <summary>Logical left shift operator (&lt;&lt;&lt;)</summary>
-    LogicalLeftShift,
-
     /// <summary>Logical right shift operator (&gt;&gt;&gt;)</summary>
     LogicalRightShift,
 
@@ -284,7 +281,6 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.BitwiseXor => "^",
                 BinaryOperator.ArithmeticLeftShift => "<<",
                 BinaryOperator.ArithmeticRightShift => ">>",
-                BinaryOperator.LogicalLeftShift => "<<<",
                 BinaryOperator.LogicalRightShift => ">>>",
 
                 BinaryOperator.Assign => "=",
@@ -348,7 +344,6 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.BitwiseXor => "bitxor",
                 BinaryOperator.ArithmeticLeftShift => "ashl",
                 BinaryOperator.ArithmeticRightShift => "ashr",
-                BinaryOperator.LogicalLeftShift => "lshl",
                 BinaryOperator.LogicalRightShift => "lshr",
 
                 // Legacy element-first membership (operands reversed in desugaring):
@@ -395,7 +390,6 @@ public static class BinaryOperatorExtensions
                 // Shift
                 BinaryOperator.ArithmeticLeftShift => "iashl",
                 BinaryOperator.ArithmeticRightShift => "iashr",
-                BinaryOperator.LogicalLeftShift => "ilshl",
                 BinaryOperator.LogicalRightShift => "ilshr",
 
                 // Overflow variants and other operators have no in-place form

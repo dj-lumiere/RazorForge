@@ -232,21 +232,19 @@ public partial class Parser
             }
         }
 
-        if (_language == Language.Suflae)
-        {
-            declarations = WrapScriptStatementsIntoStart(nodes: declarations);
-        }
+        declarations = WrapScriptStatementsIntoStart(nodes: declarations);
 
         return new Program(Declarations: declarations, Location: GetLocation());
     }
 
     /// <summary>
-    /// Suflae "script mode": a file whose top level has loose STATEMENTS (an expression, `each`/`while`/
+    /// Script mode (RazorForge and Suflae): a file whose top level has loose STATEMENTS (an expression, `each`/`while`/
     /// `if`, an assignment, …) needs no explicit entry point — those statements, together with any top-level
     /// runtime <c>var</c> declarations, become the body of an implicit <c>routine start()</c> (in source
     /// order; a trailing <c>return</c> is added). Hoistable declarations (module/import/type/routine/preset/
     /// define) stay as siblings and hoist as usual. A no-op for a normal module file (no loose statements).
-    /// An explicit <c>start</c> alongside top-level statements is a conflict.
+    /// An explicit <c>start</c> alongside top-level statements is a conflict. Only the build's entry file
+    /// may be a script (BuildDriver reports one anywhere else).
     /// </summary>
     private List<ISyntaxTreeNode> WrapScriptStatementsIntoStart(List<ISyntaxTreeNode> nodes)
     {
@@ -274,13 +272,23 @@ public partial class Parser
             body.Add(item: new ReturnStatement(Value: null, Location: startLoc));
         }
 
+        var scriptVariables = new HashSet<string>(
+            collection: body.OfType<DeclarationStatement>()
+                            .Select(selector: d => d.Declaration)
+                            .OfType<VariableDeclaration>()
+                            .Select(selector: v => v.Name),
+            comparer: StringComparer.Ordinal);
         kept.Add(item: new RoutineDeclaration(Name: "start",
             Parameters: [],
             ReturnType: null,
             Body: new BlockStatement(Statements: body, Location: startLoc),
             Visibility: VisibilityModifier.Open,
             Annotations: [],
-            Location: startLoc));
+            Location: startLoc)
+        {
+            IsScriptEntry = true,
+            ScriptVariableNames = scriptVariables
+        });
         return kept;
     }
 
@@ -309,7 +317,9 @@ public partial class Parser
 
                     body.Add(item: s);
                     break;
-                case VariableDeclaration vd:
+                // A Suflae `global` is module-level state, not a statement: it stays a sibling
+                // declaration so ModuleGlobalsSynthesisPass moves it onto the __ModuleGlobals singleton.
+                case VariableDeclaration { IsGlobal: false } vd:
                     if (!locSet)
                     {
                         startLoc = vd.Location;
@@ -340,7 +350,7 @@ public partial class Parser
     {
         var ex = new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
             message:
-            "A Suflae file cannot mix top-level statements with an explicit `routine start()`. " +
+            "A file cannot mix top-level statements with an explicit `routine start()`. " +
             "Either move the top-level statements into start(), or remove the explicit start().",
             fileName: FileName,
             line: startLoc.Line,

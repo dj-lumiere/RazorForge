@@ -730,7 +730,7 @@ public partial class LlvmEmitter
             } => e,
             _ => null
         };
-        return inner?.BareName == Builder.Execution.Program.ModuleGlobalsEntityName
+        return inner?.BareName == Builder.Desugaring.Passes.ModuleGlobalsSynthesisPass.ModuleGlobalsEntityName
             ? inner
             : null;
     }

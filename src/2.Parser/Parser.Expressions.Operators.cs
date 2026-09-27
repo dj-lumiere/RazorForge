@@ -73,7 +73,6 @@ public partial class Parser
             TokenType.CaretAssign => BinaryOperator.BitwiseXor,
             TokenType.LeftShiftAssign => BinaryOperator.ArithmeticLeftShift,
             TokenType.RightShiftAssign => BinaryOperator.ArithmeticRightShift,
-            TokenType.LogicalLeftShiftAssign => BinaryOperator.LogicalLeftShift,
             TokenType.LogicalRightShiftAssign => BinaryOperator.LogicalRightShift,
             TokenType.NoneCoalesceAssign => BinaryOperator.NoneCoalesce,
             // Overflow variant compound assignments

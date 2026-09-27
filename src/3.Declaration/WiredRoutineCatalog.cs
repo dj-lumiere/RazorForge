@@ -584,14 +584,6 @@ public static class WiredRoutineCatalog
             },
             new WiredEntry
             {
-                Name = "lshl",
-                Kind = WiredKind.Shift,
-                Views = Cap | Known | Proto | Seed,
-                Protocols = [ShiftableProtocol],
-                CapabilityWiredOverride = AshlCapability
-            },
-            new WiredEntry
-            {
                 Name = "lshr",
                 Kind = WiredKind.Shift,
                 Views = Cap | Known | Proto | Seed,
@@ -677,7 +669,7 @@ public static class WiredRoutineCatalog
                 CapabilityWiredOverride = IbitandCapability
             },
 
-            // ---- In-place shift (iashr/ilshl/ilshr share iashl) ----
+            // ---- In-place shift (iashr/ilshr share iashl) ----
             new WiredEntry
             {
                 Name = IashlCapability,
@@ -689,14 +681,6 @@ public static class WiredRoutineCatalog
             new WiredEntry
             {
                 Name = "iashr",
-                Kind = WiredKind.InPlaceShift,
-                Views = Cap | Known | Proto | Seed,
-                Protocols = [InPlaceShiftableProtocol],
-                CapabilityWiredOverride = IashlCapability
-            },
-            new WiredEntry
-            {
-                Name = "ilshl",
                 Kind = WiredKind.InPlaceShift,
                 Views = Cap | Known | Proto | Seed,
                 Protocols = [InPlaceShiftableProtocol],

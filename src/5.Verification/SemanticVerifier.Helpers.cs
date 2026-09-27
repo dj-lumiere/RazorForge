@@ -1583,7 +1583,7 @@ public sealed partial class SemanticVerifier
     private static bool IsShiftOperator(BinaryOperator op)
     {
         return op is BinaryOperator.ArithmeticLeftShift or BinaryOperator.ArithmeticRightShift
-            or BinaryOperator.LogicalLeftShift or BinaryOperator.LogicalRightShift;
+            or BinaryOperator.LogicalRightShift;
     }
 
     /// <summary>
@@ -1602,7 +1602,7 @@ public sealed partial class SemanticVerifier
         "eq", "ne", "lt", "le", "gt", "ge", "cmp",
         // Bitwise
         "bitand", "bitor", "bitxor",
-        "ashl", "ashr", "lshl", "lshr",
+        "ashl", "ashr", "lshr",
         // Unary
         "neg", "bitnot",
         // Membership

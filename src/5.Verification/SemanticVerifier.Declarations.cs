@@ -14,6 +14,11 @@ public sealed partial class SemanticVerifier
 {
     #region Phase 3: Declaration Collection
 
+    /// <summary>Per file: the top-level <c>var</c> names a script-mode file's implicit <c>start()</c>
+    /// absorbed. Lets an unknown identifier inside a routine be explained as a script variable.</summary>
+    private readonly Dictionary<string, IReadOnlySet<string>> _scriptVariablesByFile =
+        new(comparer: StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Collects all type and routine declarations without resolving bodies.
     /// Creates placeholder entries in the type registry for forward references.
@@ -21,6 +26,15 @@ public sealed partial class SemanticVerifier
     /// <param name="program">The program to collect declarations from.</param>
     private void CollectDeclarations(Program program)
     {
+        if (program.Declarations
+                   .OfType<RoutineDeclaration>()
+                   .FirstOrDefault(predicate: r => r.IsScriptEntry) is
+            { ScriptVariableNames.Count: > 0 } script)
+        {
+            _scriptVariablesByFile[key: _currentFilePath ?? program.Location.FileName] =
+                script.ScriptVariableNames;
+        }
+
         // #106: Validate that imports appear before other declarations
         bool seenNonImport = false;
         foreach (ISyntaxTreeNode declaration in program.Declarations)

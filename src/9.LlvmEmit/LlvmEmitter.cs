@@ -722,7 +722,7 @@ public partial class LlvmEmitter
     /// <summary>
     /// Emits one zero-initialized LLVM <c>@global</c> per Suflae module-level <c>global</c> declaration
     /// and records the name-&gt;symbol mapping in <see cref="_moduleGlobals"/>. The initializer itself is
-    /// NOT emitted here — <c>InjectGlobalInitializers</c> moved it into a runtime assignment at the top of
+    /// NOT emitted here — <c>ModuleGlobalsSynthesisPass</c> moved it into a runtime assignment at the top of
     /// <c>start()</c>, so the storage only needs a zero placeholder. The global's resolved type comes from
     /// the registry (the declaration's initializer was stripped by that injection).
     /// </summary>

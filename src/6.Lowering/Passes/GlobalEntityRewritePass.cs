@@ -41,7 +41,7 @@ internal sealed class GlobalEntityRewritePass(PostprocessingContext ctx)
             if (!_resolvedSingleton)
             {
                 _singletonType = Registry
-                                .LookupVariable(name: Builder.Execution.Program.ModuleGlobalsSingletonName)
+                                .LookupVariable(name: Builder.Desugaring.Passes.ModuleGlobalsSynthesisPass.ModuleGlobalsSingletonName)
                                ?.Type;
                 _resolvedSingleton = true;
             }
@@ -70,7 +70,7 @@ internal sealed class GlobalEntityRewritePass(PostprocessingContext ctx)
         // lives as fields of __ModuleGlobals; leaving them would emit dead @global cells.
         program.Declarations.RemoveAll(match: node =>
             node is VariableDeclaration { IsGlobal: true } g &&
-            g.Name != Builder.Execution.Program.ModuleGlobalsSingletonName);
+            g.Name != Builder.Desugaring.Passes.ModuleGlobalsSynthesisPass.ModuleGlobalsSingletonName);
     }
 
     /// <summary>Rewrites global references inside synthesized error-handling variant bodies.</summary>
@@ -225,7 +225,7 @@ internal sealed class GlobalEntityRewritePass(PostprocessingContext ctx)
     {
         // The one real substitution: a stamped global reference -> `__globals__.<name>`.
         if (e is IdentifierExpression id && id.IsModuleGlobal &&
-            id.Name != Builder.Execution.Program.ModuleGlobalsSingletonName)
+            id.Name != Builder.Desugaring.Passes.ModuleGlobalsSynthesisPass.ModuleGlobalsSingletonName)
         {
             return RewriteGlobalIdentifier(id: id);
         }
@@ -240,7 +240,7 @@ internal sealed class GlobalEntityRewritePass(PostprocessingContext ctx)
     private MemberExpression RewriteGlobalIdentifier(IdentifierExpression id)
     {
         var receiver = new IdentifierExpression(
-            Name: Builder.Execution.Program.ModuleGlobalsSingletonName,
+            Name: Builder.Desugaring.Passes.ModuleGlobalsSynthesisPass.ModuleGlobalsSingletonName,
             Location: id.Location) { ResolvedType = SingletonType };
         return new MemberExpression(Object: receiver, MemberName: id.Name, Location: id.Location)
         {

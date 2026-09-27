@@ -364,7 +364,6 @@ public partial class Parser
 
         while (CheckAndAdvance(TokenType.LeftShift,
                    TokenType.RightShift,
-                   TokenType.LogicalLeftShift,
                    TokenType.LogicalRightShift))
         {
             Token op = PeekToken(offset: -1);

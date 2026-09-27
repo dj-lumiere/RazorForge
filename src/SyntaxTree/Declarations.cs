@@ -249,6 +249,19 @@ public record RoutineDeclaration(
     public HashSet<string>? StolenVariableNames { get; set; }
 
     /// <summary>
+    /// True for the <c>start()</c> the parser synthesized from a file's loose top-level statements
+    /// (script mode). Only the build's entry file may have one.
+    /// </summary>
+    public bool IsScriptEntry { get; init; }
+
+    /// <summary>
+    /// For a script-mode <c>start()</c>: the names of the top-level <c>var</c>s it absorbed. They are
+    /// locals of <c>start()</c>, so a routine in the same file cannot see them. Semantic analysis uses
+    /// this to explain that instead of reporting a bare unknown identifier.
+    /// </summary>
+    public IReadOnlySet<string>? ScriptVariableNames { get; init; }
+
+    /// <summary>
     /// Superset of <see cref="StolenVariableNames"/>: every variable stolen ANYWHERE in this routine
     /// (accumulated across all branches, never cleared per-branch). Drives the codegen use-after-steal
     /// null-guard elision — a variable absent here is never stolen, so its loads emit no guard.

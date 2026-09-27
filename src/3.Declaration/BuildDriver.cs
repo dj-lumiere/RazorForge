@@ -164,6 +164,8 @@ public sealed class BuildDriver
                 importPathString: null);
         }
 
+        ReportScriptsOutsideEntryFiles(sourceFiles: sourceFiles);
+
         // Collect errors from resolver and dependency graph
         _errors.AddRange(collection: _resolver.Errors);
         _errors.AddRange(collection: _dependencyGraph.Errors);
@@ -191,6 +193,40 @@ public sealed class BuildDriver
             Errors: _errors,
             Warnings: _warnings,
             InitializationOrder: initOrder);
+    }
+
+    /// <summary>
+    /// Only an entry file may run as a script. Loose top-level statements in an imported file would give
+    /// the program a second, accidental entry point, so they are reported at the first statement.
+    /// </summary>
+    private void ReportScriptsOutsideEntryFiles(List<string> sourceFiles)
+    {
+        var entries = new HashSet<string>(
+            collection: sourceFiles.Select(selector: f => Path.GetFullPath(path: f)),
+            comparer: StringComparer.OrdinalIgnoreCase);
+        foreach ((string path, FileBuildUnit unit) in _compiledUnits)
+        {
+            if (entries.Contains(item: path))
+            {
+                continue;
+            }
+
+            RoutineDeclaration? script = unit.Ast.Declarations
+                                             .OfType<RoutineDeclaration>()
+                                             .FirstOrDefault(predicate: r => r.IsScriptEntry);
+            if (script == null)
+            {
+                continue;
+            }
+
+            _errors.Add(item: new SemanticError(
+                Code: SemanticDiagnosticCode.ScriptStatementsOutsideEntryFile,
+                Message:
+                $"This file has top-level statements, but module '{unit.Module}' is imported, not " +
+                "the program's entry file. Only the entry file can run statements at the top level. " +
+                "Move these statements into a routine, or into the entry file.",
+                Location: script.Location));
+        }
     }
 
     /// <summary>
@@ -675,57 +711,11 @@ public sealed class BuildDriver
         }
     }
 
-    /// <summary>
-    /// Derives a module path for a file with no <c>module</c> header, from its location relative to
-    /// the project root (the config.toml directory). Path segments are PascalCased (whitespace
-    /// removed, each word's first letter capitalized), <c>.</c>/<c>..</c> segments are dropped, the
-    /// file extension is stripped, and segments are joined with <c>/</c>. E.g.
-    /// <c>../SomeFolder/SomeMoreFolder/file a.rf</c> -> <c>SomeFolder/SomeMoreFolder/FileA</c>.
-    /// </summary>
+    /// <summary>Derives the module path of a file with no <c>module</c> header from its location
+    /// relative to the project root (see <see cref="ModulePathDerivation"/>).</summary>
     private string DeriveModuleFromPath(string filePath)
     {
-        string rel = Path.GetRelativePath(relativeTo: _projectRoot, path: filePath);
-        var segments = rel.Split(separator:
-                               ['/', '\\'],
-                               options: StringSplitOptions.RemoveEmptyEntries)
-                          .Where(predicate: s => s != "." && s != "..")
-                          .ToList();
-
-        if (segments.Count == 0)
-        {
-            return PascalCaseSegment(segment: Path.GetFileNameWithoutExtension(path: filePath));
-        }
-
-        // Strip the extension from the final segment (the file name).
-        segments[^1] = Path.GetFileNameWithoutExtension(path: segments[^1]);
-        return string.Join(separator: '/', values: segments.Select(selector: PascalCaseSegment));
-    }
-
-    /// <summary>
-    /// PascalCases one path segment: splits on whitespace, capitalizes the first letter of each word
-    /// (preserving the rest), and concatenates. <c>file a</c> -> <c>FileA</c>; an already-cased
-    /// <c>SomeFolder</c> stays <c>SomeFolder</c>.
-    /// </summary>
-    private static string PascalCaseSegment(string segment)
-    {
-        string[] words = segment.Split(separator: (char[]?)null,
-            options: StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0)
-        {
-            return segment;
-        }
-
-        var sb = new System.Text.StringBuilder();
-        foreach (string w in words)
-        {
-            sb.Append(value: char.ToUpperInvariant(c: w[index: 0]));
-            if (w.Length > 1)
-            {
-                sb.Append(value: w[1..]);
-            }
-        }
-
-        return sb.ToString();
+        return ModulePathDerivation.FromFile(projectRoot: _projectRoot, filePath: filePath);
     }
 
     /// <summary>
