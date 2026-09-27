@@ -458,15 +458,7 @@ secret routine d64_by_d128(x: D64, r: D128, which: U64) -> D64
   return d64_settle_tie(r: r, done: done, d: d, w: w)
 
 ### f(x) from r, the correctly rounded B128 routine's value at x's B128 rounding, kept when the band of d32_b128_k
-### (the argument's rounding through the condition number bound `cond`, plus half an ulp) rounds to one D64.
-@inline
-secret routine d64_b128_band(r: B128, cond: B64) -> (Bool, D64)
-  var k = d32_b128_k(cond: cond)
-  if k < 60_s64
-    return (false, D64.quiet_nan())
-  return d64_round_within(r: r, k: k)
-
-### d64_b128_band for a condition number below 2^(ce + 1), as the binary exponent of the argument gives it.
+### (the argument's rounding through a condition number below 2^(ce + 1), plus half an ulp) rounds to one D64.
 @inline
 secret routine d64_b128_band_e(r: B128, ce: S64) -> (Bool, D64)
   var k = 110_s64
@@ -1227,6 +1219,25 @@ routine D64.fma_unchecked(b: D64, c: D64) -> D64
   var (sign, coeff, ex, pref) = d128_fma_core(a: pa, b: pb, c: pc)
   return decfin64_wide(sign: sign, coeff: coeff, exp: ex, pref: pref)
 
+### The condition exponent (d64_b128_band_e) of asin (acos false) or acos at a finite B128 x, from x's bits alone:
+### below |x| = 1/2 asin's condition is under 1.2 and acos's under 0.6. From 1/2 on 1 - |x| = g 2^-113 exactly
+### (g = 2^112 minus the fraction field) and 1 - x^2 >= 1 - |x|, so asin (at least pi/6 there) and acos of a
+### negative x (at least 2pi/3) have a condition below 2 / sqrt(1 - |x|), and acos of a positive x (at least
+### sqrt(2 (1 - x))) below 1 / (sqrt(2) (1 - x)). |x| >= 1 (and NaN) gives 1000, which no band settles.
+secret routine d64_arc_cond_e(x: B128, acos: Bool) -> S64
+  var bits = x.to_bits()
+  var be = LLVM::int_truncate[U128, S64]((bits >>> 112) & 0x7FFF_u128)
+  if be >= 16383_s64
+    return 1000_s64
+  if be < 16382_s64
+    return if acos then -1_s64 else 1_s64
+  var g = (1_u128 << 112) -% (bits & ((1_u128 << 112) -% 1_u128))
+  # 1 - |x| lies in [2^eom, 2^(eom + 1))
+  var eom = 14_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(g))
+  if acos and (bits >>> 127) == 0_u128
+    return 0_s64 -% eom
+  return 2_s64 +% ((1_s64 -% eom) >> 1)
+
 ### Arcsine asin(me) via DD. Crashes if non-finite (|me|>1).
 ### :returns: The arcsine of `me` in radians.
 ### :throws: {NumericDomainError} on NaN (|me|>1); {NumericOverflowError} on ±inf.
@@ -1241,15 +1252,11 @@ routine D64.asin!() -> D64
 ### asin(me), raw IEEE: NaN for |me|>1. Never crashes.
 ### :returns: The arcsine of `me`, possibly NaN.
 routine D64.asin_unchecked() -> D64
-  # DD.asin = atan(me/sqrt(1-me^2)); for |me|>1 that sqrt clamps to 0 (wrong ±pi/2 instead of
-  # NaN), so guard the domain here to preserve IEEE (asin NaN for |me|>1).
-  if me.abs().cmp(you: D64(from: 1_s64)) == ME_LARGE
-    return D64.quiet_nan()
+  # a D64 above 1 in magnitude stays above 1 in B128 (its excess is far above 2^-113)
   var xb = d64_to_b128(x: me)
-  var r = xb.asin_unchecked()
-  var om = B64(from: 1.0_b128 -! xb.abs())
-  var cond = B64(from: xb).abs() /! ((om *! (2.0 -! om)).sqrt_unchecked() *! B64(from: r).abs())
-  var (ok, v) = d64_b128_band(r: r, cond: cond)
+  if xb.abs() > 1.0_b128
+    return D64.quiet_nan()
+  var (ok, v) = d64_b128_band_e(r: xb.asin_unchecked(), ce: d64_arc_cond_e(x: xb, acos: false))
   if ok
     return v
   return d64_by_d128(x: me, r: D128(from: me).asin_unchecked(), which: 8_u64)
@@ -1268,14 +1275,11 @@ routine D64.acos!() -> D64
 ### acos(me), raw IEEE: NaN for |me|>1. Never crashes.
 ### :returns: The arccosine of `me`, possibly NaN.
 routine D64.acos_unchecked() -> D64
-  # acos = pi/2 - asin; same |me|>1 domain guard (DD.sqrt clamp would otherwise mask the NaN).
-  if me.abs().cmp(you: D64(from: 1_s64)) == ME_LARGE
-    return D64.quiet_nan()
+  # a D64 above 1 in magnitude stays above 1 in B128 (its excess is far above 2^-113)
   var xb = d64_to_b128(x: me)
-  var r = xb.acos_unchecked()
-  var om = B64(from: 1.0_b128 -! xb.abs())
-  var cond = B64(from: xb).abs() /! ((om *! (2.0 -! om)).sqrt_unchecked() *! B64(from: r).abs())
-  var (ok, v) = d64_b128_band(r: r, cond: cond)
+  if xb.abs() > 1.0_b128
+    return D64.quiet_nan()
+  var (ok, v) = d64_b128_band_e(r: xb.acos_unchecked(), ce: d64_arc_cond_e(x: xb, acos: true))
   if ok
     return v
   return d64_by_d128(x: me, r: D128(from: me).acos_unchecked(), which: 9_u64)
