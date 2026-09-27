@@ -419,10 +419,13 @@ secret routine b128_log1p_cr(x: B128) -> (Bool, B128)
     return (false, x)
   if (u >>> 127_u32) != 0_u128 and a >= (0x3FFF_u128 << 112_u32)
     return (false, x)
-  var (ok, l) = b128fx_log1p(t: b128fx_of(x: x))
+  var tf = b128fx_of(x: x)
+  if tf.e < -148_s64
+    return b128fx_round(v: b128_log1p_small(xf: tf))
+  var (ok, neg, mag, err) = b128fx_log1p_fixed(t: tf)
   if not ok
     return (false, x)
-  return b128fx_round(v: l)
+  return b128_round_fixed_b64(neg: neg, mag: mag, scale: -148_s64, err: err)
 
 # ============================================================================
 # tan, sinpi, cospi, tanpi
@@ -709,41 +712,82 @@ secret routine b128fx_neg(v: B128Fx) -> B128Fx
 secret routine b128fx_one() -> B128Fx
   return B128Fx(neg: false, m: 1_u128 << 127_u32, e: -127_s64, rel: 0.0)
 
-### log1p(t) for a B128Fx t > -1, or false. Below 2^-20 in magnitude by the series of b128_log1p_small.
-### Otherwise 1 + t is split exactly into v + c, v the B128 truncation of 1 + t and c = t - (v - 1) (v - 1 is
-### exact in B128), and log1p(t) = log(v) + c/v with (c/v)^2/2 (below 2^-220) dropped: log(v) is the
-### CORE-MATH fixed-point value (v is at least 2^-20 away from 1), and c/v takes 1/v in B64, which is ample
-### for a term below 2^-110 of the result. The error of t carries through c (or is added when c cancels to
-### zero).
+### log1p(t) for a B128Fx t > -1 at or above 2^-20 in magnitude (t.e >= -148), or false, as the fixed-point value
+### (neg, mag, err): log1p(t) = (-1)^neg mag 2^-148 within err units. 1 + t is split exactly into v + c, v the
+### truncation of 1 + t to 113 bits and c >= 0 the rest, and log1p(t) = log(v) + c/v with (c/v)^2/2 (below 2^-220)
+### dropped: log(v) is the CORE-MATH fixed-point value (12 units, v is at least 2^-28 away from 1 so it is above
+### 2^119 units), and c/v, below 2^-112 of v (under 2^37 units), is added as an integer from B64 values (within
+### 2^-50 of it, plus half a unit for its rounding). t's own error moves log1p by |t| t.rel / v.
+secret routine b128fx_log1p_fixed(t: B128Fx) -> (Bool, Bool, U256, B64)
+  # 1 + t exactly as the integer S in units of 2^t.e (t below 2^127 in magnitude, so 1 is a whole number of
+  # units, 2^-t.e <= 2^148): v its top 113 bits, c the rest, both from integer operations
+  if t.e >= 0_s64
+    return (false, false, 0_u256, 0.0)
+  var one = 1_u256 << LLVM::zero_extend[U64, U256](LLVM::reinterpret_bits[S64, U64](0_s64 -% t.e))
+  var tm = LLVM::zero_extend[U128, U256](t.m)
+  var sv = one +% tm
+  if t.neg
+    sv = one -% tm
+  var shi = LLVM::int_truncate[U256, U128](sv >>> 128_u32)
+  var slo = LLVM::int_truncate[U256, U128](sv)
+  var lead = 127_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(slo))
+  if shi != 0_u128
+    lead = 255_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(shi))
+  var k = lead -% 112_s64
+  var vm = slo
+  var low = 0_u256
+  if k > 0_s64
+    var ku = LLVM::zero_extend[U64, U256](LLVM::reinterpret_bits[S64, U64](k))
+    vm = LLVM::int_truncate[U256, U128](sv >>> ku)
+    low = sv & ((1_u256 << ku) -% 1_u256)
+  elseif k < 0_s64
+    # a negative t near -1 leaves S short: v is S itself, normalized
+    vm = slo << LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](0_s64 -% k))
+  var vbiased = lead +% t.e +% 16383_s64
+  if vbiased < 1_s64 or vbiased > 32766_s64
+    return (false, false, 0_u256, 0.0)
+  var v = B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](vbiased)) << 112_u32) | (vm & ((1_u128 << 112_u32) -% 1_u128)))
+  var (ok, hi, lo) = b128_log_scaled_ok(x: v)
+  if not ok
+    return (false, false, 0_u256, 0.0)
+  var (lneg, mag) = b128_fs_magnitude(fs: b128_log_fs(hi: hi, lo: lo))
+  if mag == 0_u256
+    return (false, false, 0_u256, 0.0)
+  # v within 2^-52 as a B64, t's own error moved through log1p' = 1 / v
+  var vb = b128fx_top(m: vm << 15_u32) *! b128fx_p2(k: lead +% t.e -% 63_s64)
+  var err = 12.5 +! b128fx_b64(v: t) *! t.rel *! 1.001 /! vb *! 0x1p148
+  if low == 0_u256
+    return (true, lneg, mag, err)
+  # c = low 2^t.e (below 2^-112 v, so under 2^37 units of 2^-148 as c / v), exact, added as an integer
+  var lhi = LLVM::int_truncate[U256, U128](low >>> 128_u32)
+  var llo = LLVM::int_truncate[U256, U128](low)
+  var cb = b128fx_wide_b64(hi: lhi, lo: llo)
+  var cu = cb /! vb *! b128fx_p2(k: t.e +% 148_s64)
+  var ci = LLVM::zero_extend[U64, U256](LLVM::float_to_unsigned[B64, U64](LLVM::rint[B64](value: cu)))
+  # c is positive: it adds to a positive log(v) and subtracts from a negative one
+  if lneg
+    mag = mag -% ci
+  else
+    mag = mag +% ci
+  return (true, lneg, mag, err +! cu *! 0x1p-49)
+
+### log1p(t) for a B128Fx t > -1, or false: below 2^-20 in magnitude the series of b128_log1p_small, else
+### b128fx_log1p_fixed normalized.
 secret routine b128fx_log1p(t: B128Fx) -> (Bool, B128Fx)
   if t.e < -148_s64
     return (true, b128_log1p_small(xf: t))
-  var (oks, s) = b128fx_add(a: b128fx_one(), b: t)
-  if not oks
-    return (false, t)
-  var (okv, v) = b128fx_to_b128(v: s)
-  if not okv
-    return (false, t)
-  var (ok, hi, lo) = b128_log_scaled_ok(x: v)
+  var (ok, neg, mag, err) = b128fx_log1p_fixed(t: t)
   if not ok
     return (false, t)
-  var (lneg, mag) = b128_fs_magnitude(fs: b128_log_fs(hi: hi, lo: lo))
-  if mag == 0_u256
-    return (false, t)
-  var l = b128fx_norm(neg: lneg, mag: mag, scale: -148_s64, abserr: 12.0)
-  var vm1 = v -! B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
-  var (okc, c) = b128fx_add(a: t, b: b128fx_neg(v: b128fx_of(x: vm1)))
-  if okc
-    var cv = b128fx_mul(a: c, b: b128fx_of_b64(v: 1.0 /! B64(from: v), rel: 0x1p-51))
-    var (oka, sum) = b128fx_add(a: l, b: cv)
-    if not oka
-      return (false, t)
-    return (true, B128Fx(neg: sum.neg, m: sum.m, e: sum.e, rel: sum.rel +! 0x1p-200))
-  # c is exactly 0: the error of t, |t| t.rel, moves log1p by up to |t| t.rel / v (|t| / v <= 1 for t > 0)
-  var ratio = 1.0
-  if t.neg
-    ratio = b128fx_b64(v: t) /! B64(from: v)
-  return (true, B128Fx(neg: l.neg, m: l.m, e: l.e, rel: l.rel +! t.rel *! ratio *! 1.001 /! b128fx_b64(v: l)))
+  return (true, b128fx_norm(neg: neg, mag: mag, scale: -148_s64, abserr: err))
+
+### The B128 that every value of (-1)^neg mag 2^scale within err units rounds to (b128_round_fixed, with err as
+### a B64 taken up to the next integer), or false for a band that wide.
+@inline
+secret routine b128_round_fixed_b64(neg: Bool, mag: U256, scale: S64, err: B64) -> (Bool, B128)
+  if not (err < 0x1p60)
+    return (false, B128.from_bits(bits: 0_u128))
+  return b128_round_fixed(neg: neg, mag: mag, scale: scale, err: LLVM::zero_extend[U64, U256](LLVM::float_to_unsigned[B64, U64](err) +% 1_u64))
 
 ### sqrt(v) for a positive B128Fx v in the normal B128 range, or false: s0 = sqrt of v's B128 truncation
 ### (correctly rounded, so within 2^-111 of sqrt(v)), then one Newton step s0 + (v - s0^2) / (2 s0) with
@@ -759,7 +803,7 @@ secret routine b128fx_sqrt(v: B128Fx) -> (Bool, B128Fx)
   var (okr, r) = b128fx_add(a: v, b: b128fx_neg(v: sq))
   if not okr
     return (true, B128Fx(neg: false, m: s0f.m, e: s0f.e, rel: (v.rel +! sq.rel) *! 0.5001 +! 0x1p-200))
-  var corr = b128fx_mul(a: r, b: b128fx_of_b64(v: 0.5 /! B64(from: s0), rel: 0x1p-51))
+  var corr = b128fx_mul(a: r, b: b128fx_of_b64(v: 0.5 /! b128fx_b64(v: s0f), rel: 0x1p-50))
   var (oka, s) = b128fx_add(a: s0f, b: corr)
   if not oka
     return (false, v)
@@ -852,8 +896,14 @@ secret routine b128_asinh_fast(x: B128) -> (Bool, B128)
       if not ok6
         return (false, x)
       t = t2
-    var (ok7, l) = b128fx_log1p(t: t)
-    if not ok7
+    if t.e >= -148_s64
+      # rounded straight from the fixed-point logarithm
+      var (ok7, lneg, lmag, lerr) = b128fx_log1p_fixed(t: t)
+      if not ok7
+        return (false, x)
+      return b128_round_fixed_b64(neg: neg != lneg, mag: lmag, scale: -148_s64, err: lerr)
+    var (ok8, l) = b128fx_log1p(t: t)
+    if not ok8
       return (false, x)
     r = l
   return b128fx_round(v: B128Fx(neg: neg, m: r.m, e: r.e, rel: r.rel))
@@ -882,8 +932,13 @@ secret routine b128_acosh_fast(x: B128) -> (Bool, B128)
     var (ok3, t) = b128fx_add(a: df, b: s)
     if not ok3
       return (false, x)
-    var (ok4, l) = b128fx_log1p(t: t)
-    if not ok4
+    if t.e >= -148_s64
+      var (ok4, lneg, lmag, lerr) = b128fx_log1p_fixed(t: t)
+      if not ok4
+        return (false, x)
+      return b128_round_fixed_b64(neg: lneg, mag: lmag, scale: -148_s64, err: lerr)
+    var (ok5, l) = b128fx_log1p(t: t)
+    if not ok5
       return (false, x)
     r = l
   return b128fx_round(v: r)
@@ -909,8 +964,14 @@ secret routine b128_atanh_fast(x: B128) -> (Bool, B128)
   var (ok2, q) = b128fx_div(a: B128Fx(neg: false, m: af.m, e: af.e +% 1_s64, rel: af.rel), b: omx)
   if not ok2
     return (false, x)
-  var (ok3, l) = b128fx_log1p(t: q)
-  if not ok3
+  if q.e >= -148_s64
+    # log1p(q) / 2: the fixed-point value one scale step down
+    var (ok3, lneg, lmag, lerr) = b128fx_log1p_fixed(t: q)
+    if not ok3
+      return (false, x)
+    return b128_round_fixed_b64(neg: neg != lneg, mag: lmag, scale: -149_s64, err: lerr)
+  var (ok4, l) = b128fx_log1p(t: q)
+  if not ok4
     return (false, x)
   return b128fx_round(v: B128Fx(neg: neg, m: l.m, e: l.e -% 1_s64, rel: l.rel))
 
