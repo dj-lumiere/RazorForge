@@ -71,7 +71,7 @@ secret routine d128_scale_parts(c: U128, q: S64) -> (Bool, U256, S64, B64)
     x1 = pr.item0
     x0 = pr.item1
   else
-    if q < -4928_s64 or q > 5055_s64
+    if q < -6208_s64 or q > 6207_s64
       return (false, 0_u256, 0_s64, 0.0)
     var (mh, ml, e10) = b128t_pow10(n: q)
     var ph = b128_trig_wmul(x: c, y: mh)
@@ -82,10 +82,13 @@ secret routine d128_scale_parts(c: U128, q: S64) -> (Bool, U256, S64, B64)
     x0 = pl.item1
     sc = e10
     err = 0x1.8p-253
-  # the top 256 bits of x2 : x1 : x0
+  # the top 256 bits of x2 : x1 : x0 (a product within the low word is normalized from there, exactly)
   var top = (LLVM::zero_extend[U128, U256](x2) << 128_u32) | LLVM::zero_extend[U128, U256](x1)
   if top == 0_u256
-    return (false, 0_u256, 0_s64, 0.0)
+    if x0 == 0_u128
+      return (false, 0_u256, 0_s64, 0.0)
+    var lz0 = b128_trig_clz128(x: x0)
+    return (true, LLVM::zero_extend[U128, U256](x0 << b128_trig_sh(n: lz0)) << 128_u32, sc -% 128_s64 -% lz0, err)
   var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(top))
   var v = (top << b128_trig_sh(n: lz)) | (LLVM::zero_extend[U128, U256](x0) >>> b128_trig_sh(n: 128_s64 -% lz))
   if lz < 128_s64 and (x0 << b128_trig_sh(n: lz)) != 0_u128
@@ -123,6 +126,27 @@ secret routine d128_split(x: D128) -> (Bool, D128Split)
   var lo = b128fx_norm(neg: false, mag: rest, scale: sc, abserr: 0.0)
   return (true, D128Split(neg: p.sign, xb: xb, lo: lo, has_lo: true, err: err +! 0x1p-238, full: full))
 
+### Whether a finite nonzero D128 is below 10^-40 in magnitude, where f(x) = x (1 + O(x^2)) and
+### g(x) = 1 + O(x) already round to x and 1 (a D128 digit is 10^-34 of the value at least).
+secret routine d128_tiny(x: D128) -> Bool
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u128
+    return false
+  return digits10_u128(c: p.coeff) +% p.exp <= -40_s64
+
+### x stored reduced (trailing zeros stripped), as the W=192 engine stores its results.
+secret routine d128_reduced(x: D128) -> D128
+  var p = x.decode()
+  var tz = trailing_zeros10_u128(c: p.coeff, cap0: 34_s64)
+  if tz == 0_s64 or p.exp +% tz > 6111_s64
+    return x
+  return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: p.exp +% tz, coeff: div_pow10_u128(x: p.coeff, k: tz)))
+
+### 1 as a D128.
+@inline
+secret routine d128_one() -> D128
+  return D128.from_components(sign: false, coeff: 1_u128, exp: 0_s64)
+
 ### xb with the sign of x.
 @inline
 secret routine d128_signed_xb(s: D128Split) -> B128
@@ -134,6 +158,22 @@ secret routine d128_signed_xb(s: D128Split) -> B128
 @inline
 secret routine d128_signed_lo(s: D128Split) -> B128Fx
   return B128Fx(neg: s.neg, m: s.lo.m, e: s.lo.e, rel: s.lo.rel)
+
+### |lo| / |v| for a split with a rest (0 without one).
+secret routine d128_lo_ratio(s: D128Split, v: B128Fx) -> B64
+  if not s.has_lo
+    return 0.0
+  return b128fx_ratio(a: s.lo, b: v)
+
+### |a| / |b| as a B64 (within 2^-51), saturating at 2^+-1000 when the exponents are that far apart, so a
+### bound between two values outside the B64 range stays finite.
+secret routine b128fx_ratio(a: B128Fx, b: B128Fx) -> B64
+  var d = a.e -% b.e
+  if d > 1000_s64
+    return 0x1p1000
+  if d < -1000_s64
+    return 0x1p-1000
+  return b128fx_top(m: a.m) /! b128fx_top(m: b.m) *! b128fx_p2(k: d)
 
 ### v with its relative bound raised by r.
 @inline
@@ -156,18 +196,24 @@ secret routine d128_round_fx(v: B128Fx) -> (Bool, D128)
   var e = schubfach_flog10pow2(q: v.e +% 127_s64)
   var tries = 0_s64
   while tries < 3_s64
+    # below 10^-6143 the result is subnormal: a coefficient of fewer digits at 10^-6176
+    var sub = e < -6143_s64
     var p = 33_s64 -% e
-    if p < -4928_s64 or p > 5055_s64
+    if sub
+      p = 6176_s64
+    if p < -6208_s64 or p > 6207_s64
       return (false, zero)
     var (mh, ml, e10) = b128t_pow10(n: p)
     var sh = 0_s64 -% (v.e +% e10 +% 128_s64)
     if sh < 129_s64
       return (false, zero)
-    var x = b128t_scale(cb: v.m, mh: mh, ml: ml, sh: sh)
+    var x = 0_u256
+    if sh < 400_s64
+      x = b128t_scale(cb: v.m, mh: mh, ml: ml, sh: sh)
     var d = LLVM::int_truncate[U256, U128](x >>> 128_u32)
-    if d >= hi34
+    if not sub and d >= hi34
       e = e +% 1_s64
-    elseif d < lo34
+    elseif not sub and d < lo34
       e = e -% 1_s64
     else
       var frac = x & ((1_u256 << 128_u32) -% 1_u256)
@@ -184,6 +230,10 @@ secret routine d128_round_fx(v: B128Fx) -> (Bool, D128)
       if frac > half
         c = c +% 1_u128
       var ex = e -% 33_s64
+      if sub
+        ex = -6176_s64
+        if c == 0_u128
+          return (true, D128.from_components(sign: v.neg, coeff: 0_u128, exp: 0_s64))
       if c == hi34
         c = lo34
         ex = ex +% 1_s64
@@ -227,6 +277,44 @@ secret routine b128fx_ln(w: B128Fx) -> (Bool, B128Fx)
 # exp, exp2, exp10, expm1
 # ============================================================================
 
+### e^z for z = z148 * 2^-148 known to within err units, over the whole D128 range: z = m ln 10 + r with
+### m = round(z / ln 10) and r formed in the same fixed point (ln 10 to 2^-148, |m| / 2 units more), e^r by
+### the CORE-MATH exp (|r| <= 1.2), times the 256-bit 10^m. Beyond 10^6145 infinity, below half the
+### smallest subnormal zero.
+secret routine d128_exp_fixed(z148: S256, err: B64) -> (Bool, D128)
+  var zero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
+  var zneg = z148 < 0_s256
+  var zm = LLVM::reinterpret_bits[S256, U256](z148)
+  if zneg
+    zm = 0_u256 -% zm
+  var zv = b128fx_wide_b64(hi: LLVM::int_truncate[U256, U128](zm >>> 128_u32), lo: LLVM::int_truncate[U256, U128](zm)) *! 0x1p-148
+  if not zneg and zv > 14150.0
+    return (true, D128.infinity(sign: false))
+  if zneg and zv > 14224.0
+    return (true, zero)
+  var zs = zv
+  if zneg
+    zs = 0.0 -! zv
+  var mf = (zs /! 2.302585092994046).round()
+  var m = LLVM::float_to_signed[B64, S64](mf)
+  var ln10 = LLVM::reinterpret_bits[U256, S256]((LLVM::zero_extend[U128, U256](D128F_LN10_148_HI) << 128_u32) | LLVM::zero_extend[U128, U256](D128F_LN10_148_LO))
+  var r148 = z148 -% ln10 *% LLVM::sign_extend[S64, S256](m)
+  var g = b128fx_one()
+  if r148 != 0_s256
+    var rneg = r148 < 0_s256
+    var rm = LLVM::reinterpret_bits[S256, U256](r148)
+    if rneg
+      rm = 0_u256 -% rm
+    var r = b128fx_norm(neg: rneg, mag: rm, scale: -148_s64, abserr: err +! 0.5 *! B64(from: m).abs() +! 1.0)
+    var (oke, eg) = b128fx_exp_small(w: r)
+    if not oke
+      return (false, zero)
+    g = eg
+  if m != 0_s64
+    var (mh, ml, e10) = b128t_pow10(n: m)
+    g = b128fx_mul(a: g, b: B128Fx(neg: false, m: mh, e: e10 +% 128_s64, rel: 0x1p-127))
+  return d128_round_fx(v: g)
+
 ### e^x as a B128Fx for a split x: e^xb from the CORE-MATH fast phase times 1 + lo (lo^2/2 below 2^-190
 ### dropped), and the split's error, absolute in the argument, as a relative one in the result.
 secret routine d128_exp_split(s: D128Split) -> (Bool, B128Fx)
@@ -243,13 +331,31 @@ secret routine d128_exp_split(s: D128Split) -> (Bool, B128Fx)
 
 ### e^x for a D128, or false when the fast path does not settle it.
 secret routine d128_exp_fast(x: D128) -> (Bool, D128)
+  if d128_tiny(x: x)
+    return (true, d128_one())
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u128
+    return (false, x)
+  if digits10_u128(c: p.coeff) +% p.exp > 6_s64
+    # |x| >= 10^6: e^x is past the D128 range, or below half its smallest subnormal
+    if p.sign
+      return (true, D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64))
+    return (true, D128.infinity(sign: false))
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
   var (oke, r) = d128_exp_split(s: s)
-  if not oke
+  if oke
+    return d128_round_fx(v: r)
+  # past the B128 exponential (|x| from 11356 on): x in fixed point, reduced by multiples of ln 10
+  var (okv, v, sc, rel) = d128_scale_parts(c: p.coeff, q: p.exp)
+  var sh = 0_s64 -% (sc +% 148_s64)
+  if not okv or sh <= 0_s64
     return (false, x)
-  return d128_round_fx(v: r)
+  var z = LLVM::reinterpret_bits[U256, S256](v >>> b128_trig_sh(n: sh))
+  if p.sign
+    z = 0_s256 -% z
+  return d128_exp_fixed(z148: z, err: 1.0 +! rel *! 20000.0 *! 0x1p148)
 
 ### b^x for b = 2 (ten false) or 10 (ten true): x = +-(k + f) with k an integer and 0 <= f < 1 split
 ### exactly in decimal, b^f = e^(f ln b) and b^k exact (a power of two in the exponent, or the 256-bit
@@ -279,7 +385,10 @@ secret routine d128_exp_base_fast(x: D128, ten: Bool) -> (Bool, D128)
   else
     r = p.coeff
   if k > 40000_u128
-    return (false, x)
+    # far past the range: 2^x and 10^x overflow or round to zero
+    if p.sign
+      return (true, D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64))
+    return (true, D128.infinity(sign: false))
   var ki = LLVM::int_truncate[U128, S64](k)
   if p.sign
     ki = 0_s64 -% ki
@@ -298,8 +407,10 @@ secret routine d128_exp_base_fast(x: D128, ten: Bool) -> (Bool, D128)
   if not ten
     return d128_round_fx(v: B128Fx(neg: false, m: g.m, e: g.e +% ki, rel: g.rel))
   if ki != 0_s64
-    if ki < -4928_s64 or ki > 5055_s64
-      return (false, x)
+    if ki < -6208_s64
+      return (true, D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64))
+    if ki > 6207_s64
+      return (true, D128.infinity(sign: false))
     var (mh, ml, e10) = b128t_pow10(n: ki)
     g = b128fx_mul(a: g, b: B128Fx(neg: false, m: mh, e: e10 +% 128_s64, rel: 0x1p-127))
   return d128_round_fx(v: g)
@@ -309,6 +420,8 @@ secret routine d128_exp_base_fast(x: D128, ten: Bool) -> (Bool, D128)
 ### 2^-131), by Horner in units of 2^-126 with |x| < 1/2 damping every earlier error (so within 3.5 units
 ### of a value at least 0.78).
 secret routine d128_expm1_fast(x: D128) -> (Bool, D128)
+  if d128_tiny(x: x)
+    return (true, d128_reduced(x: x))
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
@@ -453,6 +566,8 @@ secret routine d128_diff_parts(p: D128Parts, k: U128) -> (Bool, D128Parts)
 ### ln(1 + x) for a D128 x > -1, or false: log1p of the 128-bit value, except below -1/2, where 1 + x is
 ### formed exactly in decimal first (the condition number grows as 1 + x shrinks).
 secret routine d128_log1p_fast(x: D128) -> (Bool, D128)
+  if d128_tiny(x: x)
+    return (true, d128_reduced(x: x))
   var p = x.decode()
   if p.special != 0_u64 or p.coeff == 0_u128
     return (false, x)
@@ -472,6 +587,12 @@ secret routine d128_log1p_fast(x: D128) -> (Bool, D128)
       if not okl
         return (false, x)
       return d128_round_fx(v: l)
+  if not p.sign and digits10_u128(c: p.coeff) +% p.exp > 41_s64
+    # log1p x = ln x + ln(1 + 1/x), the second term below 10^-80 of the first
+    var (okh, lh) = d128_ln_fx(p: p)
+    if not okh
+      return (false, x)
+    return d128_round_fx(v: d128_widen(v: lh, r: 0x1p-250))
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
@@ -541,13 +662,18 @@ secret routine b128_sincos_fx(xb: B128) -> (Bool, B128Fx, B128Fx)
 ### sin (which 0), cos (1) or tan (2) of a D128, or false: by the angle addition formulas over xb and lo,
 ### with the split's error, absolute in the argument, added as absolute in the result.
 secret routine d128_trig_fast(x: D128, which: U64) -> (Bool, D128)
+  if d128_tiny(x: x)
+    if which == 1_u64
+      return (true, d128_one())
+    return (true, d128_reduced(x: x))
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
   var (okt, sn, cs) = b128_sincos_fx(xb: d128_signed_xb(s: s))
   if not okt
     return (false, x)
-  var ea = s.err *! 1.001 *! B64(from: s.xb) +! 0x1p-200
+  # the split's error, absolute in the argument, as relative bounds on sin and cos (below)
+  var lerr = 0.0
   if s.has_lo
     # lo reaches 2^-112 |x|, so for a large x its own sine and cosine are needed: lo is taken to its
     # B128 truncation lb (the rest, below 2^-112 lo, joins the argument's error) and the angle addition
@@ -565,9 +691,11 @@ secret routine d128_trig_fast(x: D128, which: U64) -> (Bool, D128)
       return (false, x)
     sn = s2
     cs = c2
-    ea = ea +! b128fx_b64(v: lo) *! 0x1p-111
-  sn = d128_widen(v: sn, r: ea /! b128fx_b64(v: sn))
-  cs = d128_widen(v: cs, r: ea /! b128fx_b64(v: cs))
+    lerr = 0x1p-111
+  var xa = B128Fx(neg: false, m: s.full.m, e: s.full.e, rel: 0.0)
+  var err = s.err *! 1.001
+  sn = d128_widen(v: sn, r: err *! b128fx_ratio(a: xa, b: sn) +! (d128_lo_ratio(s: s, v: sn) *! lerr) +! 0x1p-200)
+  cs = d128_widen(v: cs, r: err *! b128fx_ratio(a: xa, b: cs) +! (d128_lo_ratio(s: s, v: cs) *! lerr) +! 0x1p-200)
   if which == 0_u64
     return d128_round_fx(v: sn)
   if which == 1_u64
@@ -591,6 +719,10 @@ secret routine d128_trig_fast(x: D128, which: U64) -> (Bool, D128)
 ### sinh by its series, cosh = 1 + 2 sinh(x/2)^2. From there sinh|xb| and cosh|xb| from the CORE-MATH exp
 ### pair, corrected by the derivative (sinh x = sinh xb + cosh xb lo, cosh x = cosh xb + sinh xb lo).
 secret routine d128_hyp_fast(x: D128, which: U64) -> (Bool, D128)
+  if d128_tiny(x: x)
+    if which == 1_u64
+      return (true, d128_one())
+    return (true, d128_reduced(x: x))
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
@@ -621,7 +753,7 @@ secret routine d128_hyp_fast(x: D128, which: U64) -> (Bool, D128)
       sh = s2
       ch = c2
     var ea = s.err *! 1.001 *! B64(from: s.xb) *! 1.001
-    sh = d128_widen(v: sh, r: ea *! b128fx_b64(v: ch) /! b128fx_b64(v: sh))
+    sh = d128_widen(v: sh, r: ea *! b128fx_ratio(a: ch, b: sh))
     ch = d128_widen(v: ch, r: ea)
   if which == 0_u64
     return d128_round_fx(v: B128Fx(neg: s.neg, m: sh.m, e: sh.e, rel: sh.rel))
@@ -654,6 +786,17 @@ secret routine d128_ln_twice(p: D128Parts) -> (Bool, B128Fx)
 ### (log1p forms without cancellation) on the 128-bit value; acosh takes x - 1 exact in decimal, and atanh
 ### from |x| = 1/2 on takes ln(1 + |x|) - ln(1 - |x|) with both exact in decimal.
 secret routine d128_arch_fast(x: D128, which: U64) -> (Bool, D128)
+  if which != 1_u64 and d128_tiny(x: x)
+    return (true, d128_reduced(x: x))
+  var p0 = x.decode()
+  # asinh / acosh from 10^31 (above 2^100) on are ln(2|x|), without the binary split
+  if which != 2_u64 and p0.special == 0_u64 and p0.coeff != 0_u128 and digits10_u128(c: p0.coeff) +% p0.exp > 31_s64
+    if which == 1_u64 and p0.sign
+      return (false, x)
+    var (okl, l) = d128_ln_twice(p: p0)
+    if not okl
+      return (false, x)
+    return d128_round_fx(v: B128Fx(neg: p0.sign, m: l.m, e: l.e, rel: l.rel))
   var p = x.decode()
   var (ok, s) = d128_split(x: x)
   if not ok
@@ -777,39 +920,8 @@ secret routine d128_arch_fast(x: D128, which: U64) -> (Bool, D128)
   return d128_round_fx(v: B128Fx(neg: s.neg, m: dd.m, e: dd.e -% 1_s64, rel: dd.rel))
 
 # ============================================================================
-# asin, acos, atan, atan2: one Newton step from the correctly rounded B128 value
+# asin, acos, atan, atan2: one step from the correctly rounded B128 value, at a small angle
 # ============================================================================
-
-### f(x) = r0 + delta for the inverse trigonometric functions: r0 is the correctly rounded B128 result at
-### xb (within 2^-112 of it), delta = num / den the Newton correction. delta is below 2^-110 of the result,
-### so its own relative error only needs to be small (the products are 128-bit, and every cancelling sum
-### carries its bound), and the second-order term (delta^2 times tan r0 / 2, or cot, or 0 for atan) is
-### added as an error.
-secret routine d128_newton_finish(r0: B128, num: B128Fx, den: B128Fx, second: B64, argerr: B64) -> (Bool, D128)
-  var zero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
-  var rf = b128fx_of(x: r0)
-  var r = rf
-  if num.m != 0_u128
-    var (okd, dl) = b128fx_div(a: num, b: den)
-    if not okd
-      return (false, zero)
-    var dv = b128fx_b64(v: dl)
-    var (oka, s) = b128fx_add(a: rf, b: dl)
-    if not oka
-      return (false, zero)
-    r = d128_widen(v: s, r: dv *! dv *! second /! B64(from: r0).abs())
-  return d128_round_fx(v: d128_widen(v: r, r: argerr /! B64(from: r0).abs()))
-
-### xb - v + lo as a B128Fx (x's split minus a B128Fx v), or false when it cancels to zero. When xb - v
-### cancels exactly, v's own error (|v| v.rel) still bounds the difference, so it is carried into lo's bound.
-secret routine d128_residual(s: D128Split, v: B128Fx) -> (Bool, B128Fx)
-  var (ok, d) = b128fx_add(a: b128fx_of(x: d128_signed_xb(s: s)), b: b128fx_neg(v: v))
-  if not s.has_lo
-    return (ok, d)
-  if not ok
-    var lo = d128_signed_lo(s: s)
-    return (true, d128_widen(v: lo, r: v.rel *! 1.001 *! b128fx_b64(v: v) /! b128fx_b64(v: lo)))
-  return b128fx_add(a: d, b: d128_signed_lo(s: s))
 
 ### x - k for a D128 x = c * 10^q and a small integer k, exact in decimal, as a B128Fx (128 bits), or false
 ### (x - k = 0, or q outside -38 .. 0 where the difference is not formed here).
@@ -863,99 +975,157 @@ secret routine d128_asin_of_fx(s: B128Fx) -> (Bool, B128Fx)
 # pi as a 128-bit significand (exponent -126), rounded.
 secret preset D128F_PI_M: U128 = 0xC90FDAA22168C234C4C6628B80DC1CD1_u128
 
-### acos(x) for 1/2 <= |x| < 1 without the cancellation at +-1: with w = 1 - |x| exact in decimal,
-### acos x = 2 asin(sqrt(w / 2)) for x > 0 and pi - 2 asin(sqrt(w / 2)) for x < 0.
-secret routine d128_acos_edge(p: D128Parts) -> (Bool, D128)
-  var zero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
-  # |x| - 1 exactly in decimal, then negated
+### 2 asin(sqrt((1 - |x|) / 2)) for a D128 1/2 <= |x| < 1 as a B128Fx, with 1 - |x| exact in decimal: acos |x|
+### without the cancellation at 1 (acos x = pi - this for a negative x, and asin |x| = pi/2 - this).
+secret routine d128_acos_edge_fx(p: D128Parts) -> (Bool, B128Fx)
   var (okw, w) = d128_minus_int(p: D128Parts(sign: false, special: 0_u64, exp: p.exp, coeff: p.coeff), k: 1_u128)
   if not okw or not w.neg
-    return (false, zero)
+    return (false, w)
   var onem = b128fx_neg(v: w)
   var (oks, sq) = b128fx_sqrt(v: B128Fx(neg: false, m: onem.m, e: onem.e -% 1_s64, rel: onem.rel))
   if not oks
-    return (false, zero)
+    return (false, w)
   var (oka, a) = d128_asin_of_fx(s: sq)
   if not oka
-    return (false, zero)
-  var two_a = B128Fx(neg: false, m: a.m, e: a.e +% 1_s64, rel: a.rel)
-  if not p.sign
-    return d128_round_fx(v: two_a)
-  var (okp, r) = b128fx_add(a: B128Fx(neg: false, m: D128F_PI_M, e: -126_s64, rel: 0x1p-128), b: b128fx_neg(v: two_a))
-  if not okp
-    return (false, zero)
-  return d128_round_fx(v: r)
+    return (false, w)
+  return (true, B128Fx(neg: false, m: a.m, e: a.e +% 1_s64, rel: a.rel))
 
-### asin (which 0), acos (1) or atan (2) of a D128, or false: from r0 = the B128 function at xb, asin x =
-### r0 + (x - sin r0) / cos r0, acos x = r0 - (x - cos r0) / sin r0, atan x = r0 + (x - tan r0) /
-### (1 + x tan r0), each to first order (atan's step is its exact tangent difference, so its next term is
-### cubic).
-secret routine d128_arctrig_fast(x: D128, which: U64) -> (Bool, D128)
-  var (ok, s) = d128_split(x: x)
-  if not ok
-    return (false, x)
-  var xs = d128_signed_xb(s: s)
-  var r0 = xs
-  if which == 0_u64
-    if s.xb.to_bits() >= (0x3FFF_u128 << 112_u32)
-      return (false, x)
-    r0 = xs.asin_unchecked()
-  elseif which == 1_u64
-    if s.xb.to_bits() >= (0x3FFF_u128 << 112_u32)
-      return (false, x)
-    if s.xb.to_bits() >= (0x3FFE_u128 << 112_u32)
-      return d128_acos_edge(p: x.decode())
-    r0 = xs.acos_unchecked()
-  else
-    r0 = xs.atan()
-  if not r0.is_finite() or r0.is_zero()
-    return (false, x)
+### atan(v) for a B128Fx v with 0 < |v| <= 1: r0 = the B128 atan of v's truncation, one step
+### (v - tan r0) / (1 + v tan r0), the tangent of the remaining angle (so the next term is cubic in it).
+secret routine d128_atan_of_fx(v: B128Fx) -> (Bool, B128Fx)
+  var (okb, vb) = b128fx_to_b128(v: v)
+  if not okb
+    return (false, v)
+  var r0 = vb.atan()
   var (okt, sn, cs) = b128_sincos_fx(xb: r0)
   if not okt
-    return (false, x)
-  var argerr = s.err *! 1.001 *! B64(from: s.xb)
-  if which == 0_u64
-    var (okr, num) = d128_residual(s: s, v: sn)
-    if not okr
-      return (false, x)
-    return d128_newton_finish(r0: r0, num: num, den: cs, second: b128fx_b64(v: sn) /! b128fx_b64(v: cs), argerr: argerr /! b128fx_b64(v: cs))
-  if which == 1_u64
-    var (okr2, num2) = d128_residual(s: s, v: cs)
-    if not okr2
-      return (false, x)
-    return d128_newton_finish(r0: r0, num: b128fx_neg(v: num2), den: sn, second: b128fx_b64(v: cs) /! b128fx_b64(v: sn), argerr: argerr /! b128fx_b64(v: sn))
+    return (false, v)
   var (okq, t) = b128fx_div(a: sn, b: cs)
   if not okq
-    return (false, x)
-  var (okr3, num3) = d128_residual(s: s, v: t)
-  var (okd, den) = b128fx_add(a: b128fx_one(), b: b128fx_mul(a: s.full, b: t))
-  if not okr3 or not okd
-    return (false, x)
-  return d128_newton_finish(r0: r0, num: num3, den: den, second: 0.0, argerr: argerr /! b128fx_b64(v: den))
+    return (false, v)
+  var rf = b128fx_of(x: r0)
+  var (okn, num) = b128fx_add(a: v, b: b128fx_neg(v: t))
+  if not okn
+    # v and tan r0 agree exactly: their own errors bound the step
+    return (true, d128_widen(v: rf, r: (v.rel +! t.rel) *! 1.01 *! b128fx_ratio(a: v, b: rf)))
+  var (okd, den) = b128fx_add(a: b128fx_one(), b: b128fx_mul(a: v, b: t))
+  if not okd
+    return (false, v)
+  var (okx, dl) = b128fx_div(a: num, b: den)
+  if not okx
+    return (false, v)
+  var (oka, r) = b128fx_add(a: rf, b: dl)
+  if not oka
+    return (false, v)
+  return (true, d128_widen(v: r, r: 0x1p-200))
 
-### atan2(y, x) for finite nonzero D128 y and x, or false: r0 = the B128 atan2 at (yb, xb), and the step
-### (y cos r0 - x sin r0) / (x cos r0 + y sin r0), the tangent of the remaining angle (cubic next term).
+### pi/2 (half false) or pi as a B128Fx.
+@inline
+secret routine d128_pi_fx(half: Bool) -> B128Fx
+  if half
+    return B128Fx(neg: false, m: D128F_PI_M, e: -127_s64, rel: 0x1p-128)
+  return B128Fx(neg: false, m: D128F_PI_M, e: -126_s64, rel: 0x1p-128)
+
+### c - v for B128Fx values, or false when it cancels to zero.
+@inline
+secret routine d128_fx_sub(c: B128Fx, v: B128Fx) -> (Bool, B128Fx)
+  return b128fx_add(a: c, b: b128fx_neg(v: v))
+
+### asin (which 0), acos (1) or atan (2) of a D128, or false. Each is taken where its Newton step starts
+### from a small angle: asin |x| < 1/2 directly, from 1/2 on pi/2 - 2 asin(sqrt((1 - |x|)/2)) with 1 - |x|
+### exact in decimal; acos x = pi/2 - asin x below 1/2, 2 asin(sqrt((1 - |x|)/2)) (or pi minus it) above;
+### atan |x| <= 1 directly, beyond as pi/2 - atan(1/|x|). Below 10^-40, asin x and atan x round to x and
+### acos x to pi/2.
+secret routine d128_arctrig_fast(x: D128, which: U64) -> (Bool, D128)
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u128
+    return (false, x)
+  if d128_tiny(x: x)
+    if which == 1_u64
+      return d128_round_fx(v: d128_pi_fx(half: true))
+    return (true, d128_reduced(x: x))
+  var (okf, full) = d128_coeff_fx(neg: false, c: p.coeff, q: p.exp)
+  if not okf
+    return (false, x)
+  var halfbits = 0x3FFE0000000000000000000000000000_u128
+  var r = full
+  if which == 2_u64
+    if digits10_u128(c: p.coeff) +% p.exp <= 0_s64 or (p.exp == 0_s64 and p.coeff == 1_u128)
+      var (oka, a) = d128_atan_of_fx(v: full)
+      if not oka
+        return (false, x)
+      r = a
+    else
+      var (oki, inv) = b128fx_div(a: b128fx_one(), b: full)
+      var (oka2, a2) = d128_atan_of_fx(v: inv)
+      if not oki or not oka2
+        return (false, x)
+      var (oks, t) = d128_fx_sub(c: d128_pi_fx(half: true), v: a2)
+      if not oks
+        return (false, x)
+      r = t
+    return d128_round_fx(v: B128Fx(neg: p.sign, m: r.m, e: r.e, rel: r.rel))
+  # asin / acos: |x| < 1 only
+  var (okb, xb) = b128fx_to_b128(v: full)
+  if not okb or xb.to_bits() >= (0x3FFF_u128 << 112_u32)
+    return (false, x)
+  if xb.to_bits() < halfbits
+    var (oka3, a3) = d128_asin_of_fx(s: full)
+    if not oka3
+      return (false, x)
+    if which == 0_u64
+      return d128_round_fx(v: B128Fx(neg: p.sign, m: a3.m, e: a3.e, rel: a3.rel))
+    var (oks2, t2) = d128_fx_sub(c: d128_pi_fx(half: true), v: B128Fx(neg: p.sign, m: a3.m, e: a3.e, rel: a3.rel))
+    if not oks2
+      return (false, x)
+    return d128_round_fx(v: t2)
+  var (oke, e) = d128_acos_edge_fx(p: p)
+  if not oke
+    return (false, x)
+  if which == 0_u64
+    var (oks3, t3) = d128_fx_sub(c: d128_pi_fx(half: true), v: e)
+    if not oks3
+      return (false, x)
+    return d128_round_fx(v: B128Fx(neg: p.sign, m: t3.m, e: t3.e, rel: t3.rel))
+  if not p.sign
+    return d128_round_fx(v: e)
+  var (oks4, t4) = d128_fx_sub(c: d128_pi_fx(half: false), v: e)
+  if not oks4
+    return (false, x)
+  return d128_round_fx(v: t4)
+
+### atan2(y, x) for finite nonzero D128 y and x, or false: atan(y/x) (plus or minus pi for a negative x)
+### when |y| <= |x|, else pi/2 - atan(x/y) with y's sign, so the atan argument stays within 1.
 secret routine d128_atan2_fast(y: D128, x: D128) -> (Bool, D128)
-  var (oky, sy) = d128_split(x: y)
-  var (okx, sx) = d128_split(x: x)
+  var py = y.decode()
+  var px = x.decode()
+  if py.special != 0_u64 or px.special != 0_u64 or py.coeff == 0_u128 or px.coeff == 0_u128
+    return (false, x)
+  var (oky, yf) = d128_coeff_fx(neg: py.sign, c: py.coeff, q: py.exp)
+  var (okx, xf) = d128_coeff_fx(neg: px.sign, c: px.coeff, q: px.exp)
   if not oky or not okx
     return (false, x)
-  var r0 = atan2(y: d128_signed_xb(s: sy), x: d128_signed_xb(s: sx))
-  if not r0.is_finite() or r0.is_zero()
+  var ylex = yf.e < xf.e or (yf.e == xf.e and yf.m <= xf.m)
+  if ylex
+    var (okq, q) = b128fx_div(a: yf, b: xf)
+    var (oka, a) = d128_atan_of_fx(v: q)
+    if not okq or not oka
+      return (false, x)
+    if not px.sign
+      return d128_round_fx(v: a)
+    # x < 0: atan(y/x) + pi with y's sign
+    var (oks, t) = b128fx_add(a: B128Fx(neg: py.sign, m: D128F_PI_M, e: -126_s64, rel: 0x1p-128), b: a)
+    if not oks
+      return (false, x)
+    return d128_round_fx(v: t)
+  var (okq2, q2) = b128fx_div(a: xf, b: yf)
+  var (oka2, a2) = d128_atan_of_fx(v: q2)
+  if not okq2 or not oka2
     return (false, x)
-  var (okt, sn, cs) = b128_sincos_fx(xb: r0)
-  if not okt
+  var (oks2, t2) = b128fx_add(a: B128Fx(neg: py.sign, m: D128F_PI_M, e: -127_s64, rel: 0x1p-128), b: b128fx_neg(v: a2))
+  if not oks2
     return (false, x)
-  var (ok1, num) = b128fx_add(a: b128fx_mul(a: sy.full, b: cs), b: b128fx_neg(v: b128fx_mul(a: sx.full, b: sn)))
-  var (ok2, den) = b128fx_add(a: b128fx_mul(a: sx.full, b: cs), b: b128fx_mul(a: sy.full, b: sn))
-  if not ok2
-    return (false, x)
-  var argerr = (sy.err *! B64(from: sy.xb) +! sx.err *! B64(from: sx.xb)) *! 1.001 /! b128fx_b64(v: den)
-  if not ok1
-    # the two products cancel exactly: their own errors bound the step
-    var pe = (b128fx_b64(v: sy.full) *! b128fx_b64(v: cs) *! (sy.full.rel +! cs.rel) +! b128fx_b64(v: sx.full) *! b128fx_b64(v: sn) *! (sx.full.rel +! sn.rel)) *! 1.01
-    return d128_newton_finish(r0: r0, num: B128Fx(neg: false, m: 0_u128, e: 0_s64, rel: 0.0), den: den, second: 0.0, argerr: argerr +! pe /! b128fx_b64(v: den))
-  return d128_newton_finish(r0: r0, num: num, den: den, second: 0.0, argerr: argerr)
+  return d128_round_fx(v: t2)
 
 # ============================================================================
 # pow
@@ -991,6 +1161,8 @@ secret routine d128_pow_fast(x: D128, y: D128) -> (Bool, D128)
   var (oky, vy, sy, ey) = d128_scale_parts(c: py.coeff, q: py.exp)
   if not oky
     return (false, x)
+  var (oktn, tn) = d128_diff_parts(p: ax, k: 1_u128)
+  var near = oktn and digits10_u128(c: tn.coeff) +% tn.exp <= -7_s64
   # ln|x| as a 256-bit magnitude lm * 2^lsc with relative error lrel: the fixed-point sum where it applies,
   # else (near 1) the 128-bit value
   var lm = 0_u256
@@ -998,7 +1170,16 @@ secret routine d128_pow_fast(x: D128, y: D128) -> (Bool, D128)
   var lrel = 0.0
   var lneg = false
   var (okw, lw, lerr) = d128_ln_fixed(p: ax)
-  if okw
+  if near
+    # |x - 1| < 10^-6: ln x = log1p(x - 1) in 256 bits from the exact decimal difference
+    var (okn, nneg, nm, nsc, nrel) = d128x_log1p_wide(t: tn)
+    if not okn
+      return (false, x)
+    lneg = nneg
+    lm = nm
+    lsc = nsc
+    lrel = nrel
+  elseif okw
     lneg = lw < 0_s256
     lm = LLVM::reinterpret_bits[S256, U256](lw)
     if lneg
@@ -1027,9 +1208,25 @@ secret routine d128_pow_fast(x: D128, y: D128) -> (Bool, D128)
     return (false, x)
   # |z| as a B64, and its absolute error: l's relative error times |z|, plus y's and the product's
   var zv = b128fx_top(m: LLVM::int_truncate[U256, U128](hi >>> b128_trig_sh(n: lead -% 127_s64))) *! b128fx_p2(k: lead +% zscale -% 63_s64)
-  if not (zv < 11000.0)
-    return (false, x)
   var zerr = zv *! (lrel +! ey +! 0x1p-250) *! 1.001
+  if not (zv < 11000.0)
+    # past the B128 exponential: z in fixed point (units of 2^-148), e^z over the whole D128 range
+    if not (zv < 1.0e6)
+      if zneg
+        return (true, D128.from_components(sign: neg, coeff: 0_u128, exp: 0_s64))
+      return (true, D128.infinity(sign: neg))
+    var zsh = 0_s64 -% (zscale +% 148_s64)
+    if zsh <= 0_s64
+      return (false, x)
+    var z148 = LLVM::reinterpret_bits[U256, S256](hi >>> b128_trig_sh(n: zsh))
+    if zneg
+      z148 = 0_s256 -% z148
+    var (okz, rz) = d128_exp_fixed(z148: z148, err: zerr *! 0x1p148 +! 2.0)
+    if not okz
+      return (false, x)
+    if neg
+      return (true, rz.neg())
+    return (true, rz)
   var sh = b128_trig_sh(n: lead -% 112_s64)
   var zsig = LLVM::int_truncate[U256, U128](hi >>> sh)
   var rest = hi & ((1_u256 << sh) -% 1_u256)
@@ -1083,41 +1280,46 @@ secret routine d128_erf_fast(x: D128, which: U64) -> (Bool, D128)
       return (false, x)
     f = d128_widen(v: r, r: 0x1p-200)
   # the split's error moves the result by at most 2 e^(-x^2) |x| err <= 2 |x| err absolute
-  return d128_round_fx(v: d128_widen(v: f, r: 2.0 *! s.err *! (xv +! 1.0) /! b128fx_b64(v: f)))
+  # the split's error moves the result by |x f'/f| err relative: at most 1 for erf and 2x^2 + 2 for erfc
+  var xc = xv
+  if not (xc < 200.0)
+    xc = 200.0
+  return d128_round_fx(v: d128_widen(v: f, r: s.err *! (2.0 *! xc *! xc +! 4.0)))
 
-### lgamma (which 0) or tgamma (1) of a positive D128, or false: the B128 core at xb and the digamma
+### lgamma (which 0) or tgamma (1) of a D128, or false: the B128 core at xb and the digamma
 ### correction psi(xb) lo (added for lgamma, as a factor 1 + psi lo for tgamma), psi in B64 within its
 ### bound; the next term, trigamma lo^2 / 2, is below 2^-200 of the result away from the poles. An integer
 ### up to 57 is (n - 1)! exactly, 1 and 2 give lgamma 0.
 secret routine d128_gamma_fast(x: D128, which: U64) -> (Bool, D128)
   var p = x.decode()
-  if p.special != 0_u64 or p.coeff == 0_u128 or p.sign
+  if p.special != 0_u64 or p.coeff == 0_u128
     return (false, x)
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
-  if not s.has_lo and s.err == 0.0
+  if not p.sign and not s.has_lo and s.err == 0.0
     var (isn, fac) = b128_gamma_int(x: s.xb)
     if isn and which == 1_u64
       return (true, d128_of_parts(p: decfinB(sign: false, coeff: fac, exp: 0_s64, pref: 6111_s64)))
     if isn and fac == 1_u256
       return (true, D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64))
-  if which == 0_u64 and s.xb.to_bits() >= (0x3FFE_u128 << 112_u32) and s.xb.to_bits() < 0x40004000000000000000000000000000_u128
+  if which == 0_u64 and not p.sign and s.xb.to_bits() >= (0x3FFE_u128 << 112_u32) and s.xb.to_bits() < 0x40004000000000000000000000000000_u128
     return d128_lgamma_near(p: p, s: s)
-  var (okc, g) = b128_lgamma_fx(x: s.xb)
+  var xs = d128_signed_xb(s: s)
+  var (okc, g) = b128_lgamma_fx(x: xs)
   if which == 1_u64
-    var (okc2, g2) = b128_tgamma_fx(x: s.xb)
+    var (okc2, g2) = b128_tgamma_fx(x: xs)
     okc = okc2
     g = g2
   if not okc
     return (false, x)
-  var xv = B64(from: s.xb)
+  var xv = B64(from: xs)
   var (psi, epsi) = b64_digamma_approx(x: xv)
   if not psi.is_finite() or not epsi.is_finite()
     return (false, x)
   var r = g
   if s.has_lo and psi != 0.0
-    var pl = b128fx_mul(a: s.lo, b: b128fx_of_b64(v: psi, rel: epsi /! psi.abs() +! 0x1p-50))
+    var pl = b128fx_mul(a: d128_signed_lo(s: s), b: b128fx_of_b64(v: psi, rel: epsi /! psi.abs() +! 0x1p-50))
     var ok2 = false
     if which == 0_u64
       var (oka, sum) = b128fx_add(a: g, b: pl)
@@ -1132,7 +1334,7 @@ secret routine d128_gamma_fast(x: D128, which: U64) -> (Bool, D128)
   # x's rounding to B64 in psi and the split's error: |x psi| err, absolute for lgamma, relative for tgamma
   var moved = s.err *! 1.001 *! (xv *! psi).abs() +! 0x1p-200
   if which == 0_u64
-    moved = moved /! b128fx_b64(v: r)
+    moved = s.err *! 1.001 *! psi.abs() *! b128fx_ratio(a: B128Fx(neg: false, m: s.full.m, e: s.full.e, rel: 0.0), b: r) +! 0x1p-200
   return d128_round_fx(v: d128_widen(v: r, r: moved))
 
 ### lgamma(x) for a D128 1/2 <= x < 5/2, around its zeros at 1 and 2, from z = x - 1 or x - 2 exact in

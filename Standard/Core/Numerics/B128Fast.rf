@@ -232,6 +232,15 @@ secret routine b128_exp_pair(a: U128) -> (Bool, B128Fx, Bool, B128Fx)
   var (ok2, e2) = b128_exp_fx(x: B128.from_bits(bits: a | (1_u128 << 127_u32)))
   return (ok2, e1, true, e2)
 
+### cosh(|x|) for |x| < 1/4 (a is |x|'s bit pattern) as a B128Fx: 1 + 2 sinh(|x|/2)^2 from the series of
+### sinh, without the exp pair's wider band.
+secret routine b128_cosh_small(a: U128) -> B128Fx
+  var hf = b128fx_of(x: B128.from_bits(bits: a))
+  var h = b128_sinh_small(x: B128Fx(neg: false, m: hf.m, e: hf.e -% 1_s64, rel: 0.0))
+  var h2 = b128fx_mul(a: h, b: h)
+  var (ok, c) = b128fx_add(a: b128fx_one(), b: B128Fx(neg: false, m: h2.m, e: h2.e +% 1_s64, rel: h2.rel))
+  return c
+
 ### cosh(|x|) as a B128Fx: (e^|x| + e^-|x|) / 2, or e^|x| / 2 from 45 on (e^-2|x| < 2^-129 dropped).
 secret routine b128_cosh_fx(a: U128) -> (Bool, B128Fx)
   var (ok, e1, both, e2) = b128_exp_pair(a: a)
@@ -282,13 +291,16 @@ secret routine b128_cosh_fast(x: B128) -> (Bool, B128)
   # below 2^-57, x^2/2 is under a quarter of the half-unit of 1
   if a < B128_FAST_TINY
     return (true, B128.from_bits(bits: 0x3FFF_u128 << 112_u32))
+  if a < B128_FAST_QUARTER
+    return b128fx_round(v: b128_cosh_small(a: a))
   var (ok, c) = b128_cosh_fx(a: a)
   if not ok
     return (false, x)
   return b128fx_round(v: c)
 
 ### tanh(x) for a finite x, or false when the band does not settle it: (e^|x| - e^-|x|) / (e^|x| + e^-|x|),
-### with sinh from its series below 1/4, and +-1 from 45 on (1 - tanh(45) < 2^-128).
+### below 1/4 sinh / cosh from the series of sinh (cosh = 1 + 2 sinh(x/2)^2), and +-1 from 45 on
+### (1 - tanh(45) < 2^-128).
 secret routine b128_tanh_fast(x: B128) -> (Bool, B128)
   var u = x.to_bits()
   var a = u & ((1_u128 << 127_u32) -% 1_u128)
@@ -299,19 +311,18 @@ secret routine b128_tanh_fast(x: B128) -> (Bool, B128)
   var neg = (u >>> 127_u32) != 0_u128
   if a >= B128_FAST_45
     return (true, B128.from_bits(bits: (0x3FFF_u128 << 112_u32) | (u & (1_u128 << 127_u32))))
+  if a < B128_FAST_QUARTER
+    var (oksm, qs) = b128fx_div(a: b128_sinh_small(x: b128fx_of(x: B128.from_bits(bits: a))), b: b128_cosh_small(a: a))
+    if not oksm
+      return (false, x)
+    return b128fx_round(v: B128Fx(neg: neg, m: qs.m, e: qs.e, rel: qs.rel))
   var (ok1, e1, both, e2) = b128_exp_pair(a: a)
   if not ok1
     return (false, x)
   var (okc, c) = b128fx_add(a: e1, b: e2)
-  var s = c
-  if a < B128_FAST_QUARTER
-    s = b128_sinh_small(x: b128fx_of(x: B128.from_bits(bits: a)))
-    c = B128Fx(neg: false, m: c.m, e: c.e -% 1_s64, rel: c.rel)
-  else
-    var (oks, h) = b128fx_add(a: e1, b: B128Fx(neg: true, m: e2.m, e: e2.e, rel: e2.rel))
-    if not oks
-      return (false, x)
-    s = h
+  var (oks, s) = b128fx_add(a: e1, b: B128Fx(neg: true, m: e2.m, e: e2.e, rel: e2.rel))
+  if not oks
+    return (false, x)
   var (ok, q) = b128fx_div(a: s, b: c)
   if not ok
     return (false, x)
@@ -341,7 +352,8 @@ secret routine b128_log1p_small(xf: B128Fx) -> B128Fx
   var od = (1_u128 << 127_u32) +% b128_trig_mhi(x: t2, y: B128_LOG1P_Q[1] +% b128_trig_mhi(x: t2, y: B128_LOG1P_Q[3] +% b128_trig_mhi(x: t2, y: B128_LOG1P_Q[5])))
   var tod = b128_trig_mhi(x: t, y: od)
   var p = B128Fx(neg: false, m: (1_u128 << 127_u32) +% ((tod +% ev) >>> 1_u32), e: -127_s64, rel: 12.0 *! 0x1p-128)
-  if not xf.neg
+  # for a positive x P = 1 - D, and D may vanish in these units (then P is 1 itself)
+  if not xf.neg and tod != ev
     p = B128Fx(neg: false, m: 0_u128 -% (tod -% ev), e: -128_s64, rel: 12.0 *! 0x1p-128)
   return b128fx_mul(a: xf, b: p)
 
@@ -447,6 +459,50 @@ secret routine b128_trigpi_parts(ax: U128) -> (U128, S64)
     return (ax, -16382_s64)
   return ((ax & (implicit -% 1_u128)) | implicit, ex -% 16383_s64)
 
+### sin (cosine false) or cos of n pi/256 for n = 0 .. 511 as a B128Fx (m = 0 for an exact 0): the
+### quadrant n >> 7 and the table entry j = n & 127, like the sine/cosine fast tail, from the 384-bit table
+### (its top 256 bits kept).
+secret routine b128_sincos_table_fx(n: U64, cosine: Bool) -> B128Fx
+  var k = n >>> 7_u32
+  if cosine
+    k = k +% 1_u64
+  var want_cos = LLVM::reinterpret_bits[U64, S64](k & 1_u64)
+  var j = LLVM::reinterpret_bits[U64, S64](n & 127_u64)
+  var neg = (k & 2_u64) != 0_u64
+  if j == 0_s64 and want_cos == 0_s64
+    return B128Fx(neg: false, m: 0_u128, e: 0_s64, rel: 0.0)
+  var hi = b128_trig_sincos(j: j, w: want_cos, limb: 2)
+  var mid = b128_trig_sincos(j: j, w: want_cos, limb: 1)
+  var v = (LLVM::zero_extend[U128, U256](hi) << 128_u32) | LLVM::zero_extend[U128, U256](mid)
+  return b128fx_norm(neg: neg, mag: v, scale: -256_s64, abserr: 1.0)
+
+### sinpi (which 0), cospi (1) or tanpi (2) of a finite y with 256 |y| = m 2^(e - 104) an integer n (mod
+### 512), exactly from the table: an exact 0 or +-1 comes out exactly, anything else rounded once.
+secret routine b128_trigpi_exact(m: U128, e: S64, which: U64, neg: Bool, y: B128) -> (Bool, B128)
+  var n = 0_u64
+  if e >= 104_s64
+    if e -% 104_s64 < 9_s64
+      n = LLVM::int_truncate[U128, U64](m << b128_trig_sh(n: e -% 104_s64)) & 511_u64
+  else
+    n = LLVM::int_truncate[U128, U64](m >>> b128_trig_sh(n: 104_s64 -% e)) & 511_u64
+  var sv = b128_sincos_table_fx(n: n, cosine: false)
+  var cv = b128_sincos_table_fx(n: n, cosine: true)
+  if which == 1_u64
+    if cv.m == 0_u128
+      return (false, y)
+    return b128fx_round(v: cv)
+  if sv.m == 0_u128
+    return (false, y)
+  var sg = B128Fx(neg: sv.neg != neg, m: sv.m, e: sv.e, rel: sv.rel)
+  if which == 0_u64
+    return b128fx_round(v: sg)
+  if cv.m == 0_u128
+    return (false, y)
+  var (ok, q) = b128fx_div(a: sg, b: cv)
+  if not ok
+    return (false, y)
+  return b128fx_round(v: q)
+
 ### sinpi (which 0), cospi (1) or tanpi (2) of a finite y that is not an integer (nor, for cospi and
 ### tanpi, a half-integer), or false when the band does not settle it.
 secret routine b128_trigpi_fast(y: B128, which: U64) -> (Bool, B128)
@@ -461,7 +517,8 @@ secret routine b128_trigpi_fast(y: B128, which: U64) -> (Bool, B128)
   var (m, e) = b128_trigpi_parts(ax: ax)
   var red = b128_trigpi_reduce(m: m, e: e)
   if not red.item0
-    return (false, y)
+    # 256 |y| is an integer n: sin and cos of n pi/256 come from the 384-bit table
+    return b128_trigpi_exact(m: m, e: e, which: which, neg: (bits & signmask) != 0_u128, y: y)
   var sq = b128_trig_squares(t1: red.item3, et: red.item4)
   var s1 = b128_trig_sin_frac(t1: red.item3, u: sq.item0, v: sq.item1)
   var neg = (bits & signmask) != 0_u128
@@ -477,7 +534,14 @@ secret routine b128_trigpi_fast(y: B128, which: U64) -> (Bool, B128)
     return b128fx_round(v: B128Fx(neg: sv.neg != neg, m: sv.m, e: sv.e, rel: sv.rel))
   var (okc2, c2) = b128_trigpi_fx(red: red, sq: sq, s1: s1, cosine: true)
   if not okc2
-    return (false, y)
+    # below 2^-59 cos(pi y) = 1 - sin(pi y)^2 / 2 to within 2^-230 (the cosine tail declines a theta that small)
+    if ax >= 0x3FC40000000000000000000000000000_u128
+      return (false, y)
+    var s2 = b128fx_mul(a: sv, b: sv)
+    var (okc3, c3) = b128fx_add(a: b128fx_one(), b: B128Fx(neg: true, m: s2.m, e: s2.e -% 1_s64, rel: s2.rel))
+    if not okc3
+      return (false, y)
+    c2 = B128Fx(neg: false, m: c3.m, e: c3.e, rel: c3.rel +! 0x1p-230)
   var (ok, q) = b128fx_div(a: sv, b: c2)
   if not ok
     return (false, y)
@@ -595,6 +659,9 @@ secret routine b128_arc_small(xf: B128Fx, atanh: Bool) -> B128Fx
     var ev = b128_trig_mhi(x: t2, y: B128_LOG1P_Q[0] +% b128_trig_mhi(x: t2, y: B128_LOG1P_Q[2] +% b128_trig_mhi(x: t2, y: B128_LOG1P_Q[4])))
     return B128Fx(neg: false, m: (1_u128 << 127_u32) +% (ev >>> 1_u32), e: -127_s64, rel: 12.0 *! 0x1p-128)
   var d = b128_trig_mhi(x: t2, y: B128_ASINH_Q[0] -% b128_trig_mhi(x: t2, y: B128_ASINH_Q[1] -% b128_trig_mhi(x: t2, y: B128_ASINH_Q[2])))
+  if d == 0_u128
+    # P = 1 - D with D vanishing in these units: P is 1 itself
+    return B128Fx(neg: false, m: 1_u128 << 127_u32, e: -127_s64, rel: 12.0 *! 0x1p-128)
   return B128Fx(neg: false, m: 0_u128 -% d, e: -128_s64, rel: 12.0 *! 0x1p-128)
 
 ### log(2a) for a finite a with 2a a normal B128 (the value asinh and acosh approach from 2^100 on, where the
@@ -722,6 +789,70 @@ secret routine b128_atanh_fast(x: B128) -> (Bool, B128)
 # pow
 # ============================================================================
 
+### The sign bit when neg, else 0.
+@inline
+secret routine b128_sign_bit(neg: Bool) -> U128
+  if neg
+    return 1_u128 << 127_u32
+  return 0_u128
+
+### log1p(t) for an exact B128 t with 0 < |t| < 2^-20 in 256 bits: (sign, mag, scale, err) with log1p(t) =
+### (-1)^sign mag 2^scale, mag normalized to [2^255, 2^256), within err units: t times the series
+### F = sum (-t)^k / (k + 1) in 256-bit fixed point (d128x's series helpers), each step truncated once.
+secret routine b128_log1p_u256(t: B128) -> (Bool, Bool, U256, S64, B64)
+  if t.is_zero() or not t.is_finite()
+    return (false, false, 0_u256, 0_s64, 0.0)
+  var tf = b128fx_of(x: t)
+  var sh = tf.e +% 254_s64
+  if sh < 0_s64 or sh > 126_s64
+    return (false, false, 0_u256, 0_s64, 0.0)
+  var ts = LLVM::reinterpret_bits[U256, S256](LLVM::zero_extend[U128, U256](tf.m) << b128_trig_sh(n: sh))
+  if tf.neg
+    ts = 0_s256 -% ts
+  var f = LLVM::reinterpret_bits[U256, S256](1_u256 << 254_u32)
+  var p = ts
+  var k = 1_u64
+  while k < 20_u64 and p != 0_s256
+    var term = d128x_div_small(a: p, k: k +% 1_u64)
+    if (k & 1_u64) == 1_u64
+      f = f -% term
+    else
+      f = f +% term
+    p = d128x_smul(a: p, b: ts)
+    k = k +% 1_u64
+  if p != 0_s256
+    return (false, false, 0_u256, 0_s64, 0.0)
+  var l = u256_mulhi(a: LLVM::zero_extend[U128, U256](tf.m) << 128_u32, b: LLVM::reinterpret_bits[S256, U256](f))
+  var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(l))
+  var kk = B64(from: k)
+  var err = (2.0 *! (kk +! 1.0) *! (kk +! 1.0) +! 10.0) *! b128fx_p2(k: lz)
+  return (true, tf.neg, l << b128_trig_sh(n: lz), tf.e -% 126_s64 -% lz, err)
+
+# 1/ln 2 and 1/ln 10 as 256-bit significands (hi, lo; exponents -255 and -257), rounded.
+secret preset B128_INV_LN2_HI: U128 = 0xB8AA3B295C17F0BBBE87FED0691D3E88_u128
+secret preset B128_INV_LN2_LO: U128 = 0xEB577AA8DD695A588B25166CD1A13248_u128
+secret preset B128_INV_LN10_HI: U128 = 0xDE5BD8A937287195355BAAAFAD33DC32_u128
+secret preset B128_INV_LN10_LO: U128 = 0x3EE3460245C9A2023A3F2D44F78EA53C_u128
+
+### log2 (ten false) or log10 of a B128 within 2^-21 of 1 (where the CORE-MATH logarithm's fixed-point
+### value loses its relative accuracy), or false: log1p(x - 1) in 256 bits (x - 1 exact) times 1/ln 2 or
+### 1/ln 10 in 256 bits, rounded once.
+secret routine b128_log_near1(x: B128, ten: Bool) -> (Bool, B128)
+  var u = x.to_bits()
+  if u < 0x3FFEFFFFF0000000_u128 << 64_u32 or u > (0x3FFF000008000020_u128 << 64_u32) | 0xFFFFFFFFFFFFFFFF_u128
+    return (false, x)
+  var (ok, neg, mag, sc, err) = b128_log1p_u256(t: x -! B128.from_bits(bits: 0x3FFF_u128 << 112_u32))
+  if not ok
+    return (false, x)
+  var c = (LLVM::zero_extend[U128, U256](B128_INV_LN2_HI) << 128_u32) | LLVM::zero_extend[U128, U256](B128_INV_LN2_LO)
+  var cs = -255_s64
+  if ten
+    c = (LLVM::zero_extend[U128, U256](B128_INV_LN10_HI) << 128_u32) | LLVM::zero_extend[U128, U256](B128_INV_LN10_LO)
+    cs = -257_s64
+  var prod = u256_mulhi(a: mag, b: c)
+  var perr = LLVM::zero_extend[U64, U256](LLVM::float_to_unsigned[B64, U64](err) +% 3_u64)
+  return b128_round_fixed(neg: neg, mag: prod, scale: sc +% cs +% 256_s64, err: perr)
+
 ### x^y for finite nonzero x and y, or false (also for the cases the caller's ladder settles: x = +-1, a
 ### negative x with a non-integer y, results outside the normal range, and x within 2^-21 of 1). The value
 ### is e^z with z = y ln|x|: ln|x| is the CORE-MATH fixed-point value mag * 2^-148 (12 units), and z is formed
@@ -750,25 +881,47 @@ secret routine b128_pow_fast(x: B128, y: B128) -> (Bool, B128)
       if (sig & ((1_u128 << fb) -% 1_u128)) != 0_u128
         return (false, x)
       neg = ((sig >>> fb) & 1_u128) == 1_u128
+  # ln|x| as mag * 2^lsc within lerr units: the CORE-MATH fixed-point value, or within 2^-21 of 1 the
+  # 256-bit series of log1p(x - 1)
+  var lneg = false
+  var mag = 0_u256
+  var lsc = -148_s64
+  var lerr = 12.0
   var (ok, hi, lo) = b128_log_scaled_ok(x: B128.from_bits(bits: xa))
-  if not ok
-    return (false, x)
-  var (lneg, mag) = b128_fs_magnitude(fs: b128_log_fs(hi: hi, lo: lo))
+  if ok
+    var (fneg, fmag) = b128_fs_magnitude(fs: b128_log_fs(hi: hi, lo: lo))
+    lneg = fneg
+    mag = fmag
+  else
+    var (okn, nneg, nmag, nsc, nerr) = b128_log1p_u256(t: B128.from_bits(bits: xa) -! B128.from_bits(bits: 0x3FFF_u128 << 112_u32))
+    if not okn or xa < (0x3FFE_u128 << 112_u32) or xa > (0x3FFF_u128 << 112_u32) +% (1_u128 << 110_u32)
+      return (false, x)
+    lneg = nneg
+    mag = nmag
+    lsc = nsc
+    lerr = nerr
   if mag == 0_u256
     return (false, x)
+  var llz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(mag))
+  mag = mag << b128_trig_sh(n: llz)
+  lsc = lsc -% llz
+  lerr = lerr *! b128fx_p2(k: llz)
   var yf = b128fx_of(x: y)
-  var mh = LLVM::int_truncate[U256, U128](mag >>> 64_u32)
-  var ml = mag & 0xFFFFFFFFFFFFFFFF_u256
-  var p1 = b128_trig_wmul(x: yf.m, y: mh)
-  var p2 = b128_trig_wmul(x: yf.m, y: LLVM::int_truncate[U256, U128](ml))
-  var pw = ((LLVM::zero_extend[U128, U256](p1.item0) << 128_u32) | LLVM::zero_extend[U128, U256](p1.item1)) +% ((LLVM::zero_extend[U128, U256](p2.item0) << 64_u32) | LLVM::zero_extend[U128, U256](p2.item1 >>> 64_u32))
-  # z = pw * 2^(ey - 84), known to within 12 |y| 2^-148 + 2 units, which is 12 (my / 2^64) + 2 units
-  var scale = yf.e -% 84_s64
-  var abserr = 12.0 *! b128fx_top(m: yf.m) +! 2.0
+  # z = y ln|x| = pw * 2^scale (the product's lower half dropped): |y| lerr 2^lsc + 2 units, in pw's units
+  # lerr (my / 2^128) + 2
+  var pw = u256_mulhi(a: LLVM::zero_extend[U128, U256](yf.m) << 128_u32, b: mag)
+  var scale = yf.e +% lsc +% 128_s64
+  var abserr = lerr *! b128fx_top(m: yf.m) *! 0x1p-64 +! 2.0
   var zneg = yf.neg != lneg
   var lead = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(pw))
   if lead < 160_s64 or scale < -900_s64
     return (false, x)
+  # past the B128 exponential: overflow, or below half the smallest subnormal
+  var zv = b128fx_top(m: LLVM::int_truncate[U256, U128](pw >>> b128_trig_sh(n: lead -% 127_s64))) *! b128fx_p2(k: lead +% scale -% 63_s64)
+  if not zneg and zv > 11357.0
+    return (true, B128.from_bits(bits: (0x7FFF_u128 << 112_u32) | (b128_sign_bit(neg: neg))))
+  if zneg and zv > 11434.0
+    return (true, B128.from_bits(bits: b128_sign_bit(neg: neg)))
   var sh = b128_trig_sh(n: lead -% 112_s64)
   var zsig = LLVM::int_truncate[U256, U128](pw >>> sh)
   var rest = pw & ((1_u256 << sh) -% 1_u256)
@@ -862,3 +1015,22 @@ secret routine b128_pow_exact(x: B128, y: B128) -> (Bool, B128)
     p = p *% LLVM::zero_extend[U128, U256](o)
     i = i +% 1_s64
   return b128_round_exact(neg: neg and (n & 1_s64) == 1_s64, mag: p, scale: n *% e)
+
+### sin(pi y) for a finite nonzero B128 y as a signed B128Fx, or false (y a multiple of 1/256, where the
+### exact reduction leaves no residual, and |y| from 2^104 on).
+secret routine b128_sinpi_fx(y: B128) -> (Bool, B128Fx)
+  var bits = y.to_bits()
+  var signmask = 1_u128 << 127_u32
+  var ax = bits & (signmask -% 1_u128)
+  if ax >= (0x7FFF_u128 << 112_u32) or ax == 0_u128
+    return (false, b128fx_one())
+  var (m, e) = b128_trigpi_parts(ax: ax)
+  var red = b128_trigpi_reduce(m: m, e: e)
+  if not red.item0
+    return (false, b128fx_one())
+  var sq = b128_trig_squares(t1: red.item3, et: red.item4)
+  var s1 = b128_trig_sin_frac(t1: red.item3, u: sq.item0, v: sq.item1)
+  var (oks, sv) = b128_trigpi_fx(red: red, sq: sq, s1: s1, cosine: false)
+  if not oks
+    return (false, sv)
+  return (true, B128Fx(neg: sv.neg != ((bits & signmask) != 0_u128), m: sv.m, e: sv.e, rel: sv.rel))

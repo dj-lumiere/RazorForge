@@ -97,7 +97,7 @@ secret routine d128x_const(hi: U128, lo: U128, neg: Bool) -> S256
 ### |t| * 2^254 for a D128 t = c * 10^q with |t| < 1, as a signed value (the sign of t), within 2 units:
 ### c times the 256-bit power of ten.
 secret routine d128x_fixed(t: D128Parts) -> (Bool, S256)
-  if t.exp < -4928_s64 or t.exp > 0_s64 or t.coeff == 0_u128
+  if t.exp < -6208_s64 or t.exp > 0_s64 or t.coeff == 0_u128
     return (false, 0_s256)
   var (mh, ml, e10) = b128t_pow10(n: t.exp)
   var sh = 0_s64 -% (e10 +% 254_s64)
@@ -316,3 +316,36 @@ secret routine d128x_cos_tiny(x: D128Parts, hyperbolic: Bool) -> (Bool, D128)
   var tz = trailing_zeros10_u128(c: c, cap0: 34_s64)
   c = div_pow10_u128(x: c, k: tz)
   return (true, d128_of_parts(p: D128Parts(sign: false, special: 0_u64, exp: ex +% tz, coeff: c)))
+
+### log1p(t) for a D128 t with |t| < 10^-6 as (sign, mag, scale, rel): log1p(t) = (-1)^sign mag 2^scale with
+### mag normalized to [2^255, 2^256), within rel of it. t in fixed point (2 units of 2^-254) times the series
+### F = sum (-t)^k / (k + 1).
+secret routine d128x_log1p_wide(t: D128Parts) -> (Bool, Bool, U256, S64, B64)
+  var (ok, ts) = d128x_fixed(t: t)
+  if not ok or ts == 0_s256
+    return (false, false, 0_u256, 0_s64, 0.0)
+  var f = LLVM::reinterpret_bits[U256, S256](1_u256 << 254_u32)
+  var p = ts
+  var k = 1_u64
+  while k < 20_u64 and p != 0_s256
+    var term = d128x_div_small(a: p, k: k +% 1_u64)
+    if (k & 1_u64) == 1_u64
+      f = f -% term
+    else
+      f = f +% term
+    p = d128x_smul(a: p, b: ts)
+    k = k +% 1_u64
+  if p != 0_s256
+    return (false, false, 0_u256, 0_s64, 0.0)
+  var tm = LLVM::reinterpret_bits[S256, U256](ts)
+  if t.sign
+    tm = 0_u256 -% tm
+  # |t| F / 2^256 in units of 2^-252
+  var l = u256_mulhi(a: tm, b: LLVM::reinterpret_bits[S256, U256](f))
+  if l == 0_u256
+    return (false, false, 0_u256, 0_s64, 0.0)
+  var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(l))
+  var kk = B64(from: k)
+  var tv = b128fx_wide_b64(hi: LLVM::int_truncate[U256, U128](tm >>> 128_u32), lo: LLVM::int_truncate[U256, U128](tm))
+  var rel = 3.0 /! tv +! (2.0 *! (kk +! 1.0) *! (kk +! 1.0) +! 8.0) *! 0x1p-253
+  return (true, t.sign, l << b128_trig_sh(n: lz), -252_s64 -% lz, rel)
