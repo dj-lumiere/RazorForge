@@ -583,6 +583,33 @@ public class FeatureCoverageTests
     }
 
     [Fact]
+    public void Suflae_ScriptGlobals_ReleasedAtStartExit()
+    {
+        // Script mode (no explicit start) with a routine that reads the global: the global must reach
+        // the __ModuleGlobals singleton, and the singleton is released at start()'s exit.
+        const string source = """
+                              module Test/Feat/SfGlobalTeardown
+                              import IO/Console
+
+                              global name: Text = "abc"
+                              global counter: S64 = 0
+
+                              routine bump()
+                                counter = counter + 1
+                                return
+
+                              bump()
+                              show(f"{name} {counter}")
+                              """;
+        string ir = GenerateIrSuflae(source: source);
+        int defAt = ir.IndexOf(value: "SfGlobalTeardown.start()\"", comparisonType: StringComparison.Ordinal);
+        defAt = ir.LastIndexOf(value: "define ", startIndex: defAt, comparisonType: StringComparison.Ordinal);
+        int endAt = ir.IndexOf(value: "\n}", startIndex: defAt, comparisonType: StringComparison.Ordinal);
+        string start = ir[defAt..endAt];
+        Assert.Contains(expectedSubstring: "__ModuleGlobals].destroy()", actualString: start);
+    }
+
+    [Fact]
     public void Suflae_DependentGlobals_Compile()
     {
         const string source = """

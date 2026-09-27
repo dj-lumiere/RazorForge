@@ -116,7 +116,32 @@ routine start()
   return
 ```
 
-Every file begins with `module <Path>`. Imports use `/` separators.
+A single-file program may skip `routine start()` (script mode): loose top-level
+statements, plus top-level `var`s, run top to bottom as the body of an implicit
+`start()`, and teardown happens at the end of the file.
+
+```razorforge
+import IO/Console
+
+var total = 0
+each n in 1 to 5
+  total += n
+show(f"total = {total}")
+```
+
+- Declarations (`import`/types/routines/`preset`) may sit among the statements.
+- Mixing loose statements with an explicit `routine start()` is an error (RF-G150).
+- Only the program's entry file may be a script. Loose statements in an imported
+  file are an error (RF-S443) — they would start a second program.
+- A top-level `var` lives in the script's top-level scope, not the module:
+  routines in the file cannot see it (RF-S444). Pass it as an argument —
+  RazorForge has no module-level mutable state.
+- Routines you define are still their own scopes and still end with `return`.
+
+`module <Path>` is optional. Without it the module path is derived from the file's
+location relative to `config.toml`: each folder and the file name are PascalCased and
+joined with `/` (`tools/text utils.rf` → `Tools/TextUtils`). Declare `module` to
+override that. Imports use `/` separators.
 
 **Two import forms, distinct meaning:** `import Foo/Bar` is a **module** import
 (`Bar` is a submodule of `Foo`). `import Foo.bar` is a **member** import (`bar` is
@@ -181,8 +206,10 @@ binding is immediately valid and borrowable; assign before reading.)
 
 - Checked: `+ - *` (throw on overflow) · wrapping: `+% -% *%` · clamping: `+^ -^ *^`
   (floats: checked `+ - * / **` or raw IEEE `+! -! *! /! **!` with no `danger` needed)
-- Shifts: `<<` `>>` arithmetic, `<<<` `>>>` logical; shift amounts are `U32`
-  (bare literal amounts fine)
+- Shifts: `<<` left, `>>` right filling with the sign bit, `>>>` right filling with
+  zeros (the same as `>>` on unsigned types). There is no `<<<`. Shift amounts are
+  `U32` (bare literal amounts fine). Shifting by the width or more pushes every bit
+  out: `<<` and `>>>` give 0, `>>` gives -1 for a negative value, else 0.
 - `//` floor division, `/` true division, `%` remainder
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
   idiom is `try x.abs()!!`
@@ -534,13 +561,14 @@ Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
 
 ```
 razorforge buildandrun hello.rf     # build + link + execute one file
-razorforge build [entry] [out.ll]   # multi-file build
+razorforge build [entry]            # build a native executable, don't run
+razorforge codegen [entry] [out.ll] # stop at LLVM IR
 razorforge check [entry]            # type-check only
 razorforge parse|tokenize <file>    # front-end inspection
 razorforge version
 ```
 
-**There are no build flags.** All configuration lives in `razorforge.toml`:
+**There are no build flags.** All configuration lives in `config.toml`:
 
 ```toml
 [package]
@@ -556,7 +584,7 @@ show-build-stages = false   # optional: print build/check stage banners
 ```
 
 With no entry file argument, the CLI walks up from the cwd to find
-`razorforge.toml` — `cd` into a project and `razorforge buildandrun` works.
+`config.toml` — `cd` into a project and `razorforge buildandrun` works.
 
 ## 12. Reading compiler errors
 

@@ -275,6 +275,85 @@ public sealed class MultiFileModuleImportTests
     /// <param name="entrySource">Source of the entry (compiled) file.</param>
     /// <param name="moduleFiles">Additional files written alongside, keyed by relative path.</param>
     /// <param name="entryRelPath">Relative path for the entry file (default at the project root).</param>
+    /// <summary>
+    /// Only the entry file may run as a script. Loose statements in an imported file are RF-S443
+    /// (they would otherwise give the program a second, accidental entry point).
+    /// </summary>
+    [Fact]
+    public void ScriptStatementsInImportedFile_Reported()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import Helper
+                                                             greet()
+                                                             """,
+            moduleFiles:
+            [
+                ("Helper.rf", """
+                              import IO/Console
+                              routine greet()
+                                show("hi")
+                                return
+                              show("stray")
+                              """)
+            ]);
+
+        Assert.Contains(collection: errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ScriptStatementsOutsideEntryFile);
+    }
+
+    /// <summary>
+    /// A header-less file is named after its location, and that name cannot be turned back into a
+    /// path (spaces dropped, letter case changed), so <c>import Tools/TextUtils</c> must still find
+    /// <c>tools/text utils.rf</c>.
+    /// </summary>
+    [Fact]
+    public void HeaderlessModule_ImportedByDerivedName_Resolves()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import IO/Console
+                                                             import Tools/TextUtils
+                                                             show(shout(t: "hi"))
+                                                             """,
+            moduleFiles:
+            [
+                ("tools/text utils.rf", """
+                                        routine shout(t: Text) -> Text
+                                          return t + "!"
+                                        """)
+            ]);
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+    }
+
+    /// <summary>
+    /// A foreign intrinsic is reachable only through its realm qualifier, so it must not hide a user
+    /// routine of the same name: the bare lookup of <c>add</c> falls back to <c>Core.add</c>, which the
+    /// generic <c>LLVM::add[T]</c> intrinsic owns. Both the entry module's own <c>add</c> and one from an
+    /// imported module must win (the bug reported RF-S460 "call it as LLVM::add").
+    /// </summary>
+    [Fact]
+    public void UserRoutineNamedLikeIntrinsic_WinsOverForeign()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import IO/Console
+                                                             import Mathx
+                                                             routine add(n: S64) -> S64
+                                                               return n + 1
+                                                             routine start()
+                                                               show(f"{add(n: 1)} {sub(n: 1)}")
+                                                               return
+                                                             """,
+            moduleFiles:
+            [
+                ("Mathx.rf", """
+                             routine sub(n: S64) -> S64
+                               return n - 1
+                             """)
+            ]);
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+    }
+
     private static List<SemanticError> RunProject(string entrySource,
         IReadOnlyList<(string RelPath, string Source)> moduleFiles,
         string entryRelPath = "ImportProbe.rf")

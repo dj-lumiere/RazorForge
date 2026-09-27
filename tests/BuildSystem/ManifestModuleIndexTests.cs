@@ -51,6 +51,35 @@ public sealed class ManifestModuleIndexTests
     }
 
     /// <summary>
+    /// A header-less script (no <c>module</c> line, no <c>routine start()</c>) is still found as the
+    /// executable: its module name is derived from its location, and loose statements make it an entry.
+    /// </summary>
+    [Fact]
+    public void HeaderlessScript_ResolvesAsExecutable()
+    {
+        string root = CreateTempProject(files: new Dictionary<string, string>
+        {
+            [key: "config.toml"] = Manifest,
+            [key: "App.rf"] = "import IO/Console\n\nshow(\"hi\")\n",
+            [key: "Lib/A.rf"] = "module Lib\n\nrecord A\n  x: S32\n"
+        });
+        try
+        {
+            ProjectManifest manifest = ManifestLoader.Load(
+                tomlPath: Path.Combine(path1: root, path2: "config.toml"));
+
+            Assert.Equal(
+                expected: Path.GetFullPath(path: Path.Combine(path1: root, path2: "App.rf")),
+                actual: manifest.Target.Executable,
+                comparer: StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteTempProject(root: root);
+        }
+    }
+
+    /// <summary>
     /// When several files share a module name, the one declaring <c>routine start()</c> is the
     /// executable — even if a library file of the same module is scanned first.
     /// </summary>

@@ -1,3 +1,5 @@
+using Builder.Diagnostics;
+
 namespace Builder.Tokenizer;
 
 /// <summary>
@@ -247,8 +249,7 @@ public partial class Tokenizer
     ///   <item><description>&lt; (Less) - less than comparison</description></item>
     ///   <item><description>&lt;= (LessEqual) - less than or equal</description></item>
     ///   <item><description>&lt;=&gt; (ThreeWayComparison) - spaceship operator</description></item>
-    ///   <item><description>&lt;&lt; (LeftShift) - arithmetic left shift</description></item>
-    ///   <item><description>&lt;&lt;&lt; (LogicalLeftShift) - logical left shift</description></item>
+    ///   <item><description>&lt;&lt; (LeftShift) - left shift</description></item>
     /// </list>
     /// </para>
     /// </remarks>
@@ -268,15 +269,20 @@ public partial class Tokenizer
         }
         else if (Match(expected: '<'))
         {
-            // << or <<< or <<= or <<<=
-            if (Match(expected: '<'))
+            // << or <<=. There is no `<<<`: a left shift fills with zeros whether the value is
+            // signed or not, so a separate logical form would be the same operation twice.
+            if (Peek() == '<')
             {
-                // <<< or <<<=
-                AddToken(type: Match(expected: '=')
-                    ? TokenType.LogicalLeftShiftAssign
-                    : TokenType.LogicalLeftShift);
+                throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                    message: "There is no '<<<' operator. Shifting left fills with zeros whether the " +
+                             "value is signed or not, so write '<<' (or '<<=').",
+                    fileName: _fileName,
+                    line: _line,
+                    column: _column,
+                    language: _language);
             }
-            else if (Match(expected: '='))
+
+            if (Match(expected: '='))
             {
                 AddToken(type: TokenType.LeftShiftAssign); // <<=
             }
