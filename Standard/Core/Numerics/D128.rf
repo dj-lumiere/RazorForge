@@ -416,9 +416,10 @@ routine decfinB(sign: Bool, coeff: U256, exp: S64, pref: S64) -> D128Parts
       cu = div_pow10_u128(x: cu, k: tz)
       e = LLVM::add(a: e, b: tz)
   # Pad toward `pref` while cu stays under 34 digits. "digits < 34" is exactly
-  # "cu < 10^33" — one U128 compare per step instead of a digits10_u128 clz pass.
+  # "cu < 10^33" — one U128 compare per step instead of a digits10_u128 clz pass. Never below the
+  # minimum exponent, where a subnormal preferred exponent would put it.
   var ten33 = LLVM::int_truncate[U256, U128](pow10_tbl(k: 33_s64))
-  while LLVM::signed_gt(a: e, b: pref) and LLVM::unsigned_lt(a: cu, b: ten33)
+  while LLVM::signed_gt(a: e, b: pref) and LLVM::unsigned_lt(a: cu, b: ten33) and LLVM::signed_gt(a: e, b: -6176_s64)
     cu = LLVM::mul(a: cu, b: ten128)
     e = LLVM::sub(a: e, b: 1_s64)
   # IEEE decimal128 range clamp. The integer-significand exponent q must lie in

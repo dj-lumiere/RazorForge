@@ -961,52 +961,56 @@ routine b128_finish_subnormal(sign: U64, sig: U128, under: S64) -> U128
   return LLVM::bit_or(a: sign_bit, b: LLVM::bit_and(a: sigd, b: b128_mant_mask()))
 
 # ============================================================================
-# Square root — correctly-rounded (round-to-nearest-even) via an integer
-# significand sqrt over U256. Exact; no @llvm float instructions.
+# Integer square root of a U256 (B128 hypot of three, D128 sqrt and hypot).
 # ============================================================================
 
-### Returns `floor(sqrt(n))` for a wide integer via the restoring bitwise method.
-### :param n: The radicand.
-### :returns: The integer square root.
-# Floor integer sqrt of a U256. An b64-seeded Newton iteration (the U256 `//` is the Knuth divide
-# via `udivrem256`, so each step is cheap) lands within a couple of ulp; an exact ±1 correction via
-# `x*x` comparison then pins the EXACT floor — which keeps B128 sqrt correctly-rounded. This
-# replaces
-# the O(W) restoring-bitwise method (~128 wide-int iterations). Only B128.sqrt calls this; its input
-# `bigm < 2^237`, so `x*x` (x < 2^119) never overflows U256.
-### Integer floor square root of a U256 (restoring-bitwise); seeds the B128 sqrt Newton step.
+### A nonzero U256 as a B128, truncated to 113 bits.
+secret routine b128_of_u256_trunc(n: U256) -> B128
+  var top = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(n))
+  var m = n
+  if top > 112_s64
+    m = LLVM::shift_right_unsigned(n, U256.to_width(s: top -% 112_s64))
+  else
+    m = LLVM::shift_left(value: n, bits: U256.to_width(s: 112_s64 -% top))
+  var frac = LLVM::int_truncate[U256, U128](m) & ((1_u128 << 112_u32) -% 1_u128)
+  return B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](top +% 16383_s64)) << 112_u32) | frac)
+
+### The integer part of a finite nonnegative B128 below 2^256.
+secret routine b128_floor_u256(v: B128) -> U256
+  var vb = v.to_bits()
+  var ve = LLVM::int_truncate[U128, S64](vb >>> 112_u32) -% 16383_s64
+  if ve < 0_s64
+    return 0_u256
+  var mant = LLVM::zero_extend[U128, U256]((vb & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32))
+  if ve >= 112_s64
+    return LLVM::shift_left(value: mant, bits: U256.to_width(s: ve -% 112_s64))
+  return LLVM::shift_right_unsigned(mant, U256.to_width(s: 112_s64 -% ve))
+
+### floor(sqrt(n)) for n below 2^240 (the callers stay below 2^238: B128 hypot of three, D128 sqrt and hypot). The
+### B128 square root of n truncated to 113 bits is within s 2^-111 + 1 of the root s (at most 2^9 units, 3 below
+### 2^226), one Newton step s + (n - s^2) / (2s), its quotient taken in B128, brings a larger error within a unit,
+### and s^2 <= n < (s + 1)^2 settles it. No wide division.
 ### :param n: The radicand.
 ### :returns: floor(sqrt(n)).
 routine b128_isqrt256(n: U256) -> U256
-  var zero = b128_u256(0_u128)
-  var one = b128_u256(1_u128)
-  if LLVM::int_eq(a: n, b: zero)
-    return zero
-  # Seed: hardware b64 sqrt of the top <=53 bits, scaled back by 2^(sh/2).
-  var bl = LLVM::sub(a: 256_s64, b: LLVM::int_truncate[U256, S64](LLVM::leading_zeros(n)))
-  var sh = 0_s64
-  if LLVM::signed_gt(a: bl, b: 52_s64)
-    sh = LLVM::sub(a: bl, b: 52_s64)
-    if LLVM::int_ne(a: LLVM::signed_rem(a: sh, b: 2_s64), b: 0_s64)
-      sh = LLVM::sub(a: sh, b: 1_s64)
-  var ntop = LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(n, U256.to_width(s: sh)))
-  var seed = LLVM::float_to_unsigned[B64, U64](B64(from: ntop).sqrt_unchecked())
-  var x = LLVM::shift_left(value: LLVM::zero_extend[U64, U256](seed), bits: U256.to_width(s: LLVM::signed_div(a: sh, b: 2_s64)))
-  if LLVM::int_eq(a: x, b: zero)
-    x = one
-  # Newton: x <- (x + n/x)/2. Quadratic; 4 iterations from a ~52-bit seed is ample.
-  var j = 0_s64
-  while LLVM::signed_lt(a: j, b: 4_s64)
-    var q = udivrem256(num: n, den: x).q
-    x = LLVM::shift_right_unsigned(LLVM::add(a: x, b: q), U256.to_width(s: 1_s64))
-    j = LLVM::add(a: j, b: 1_s64)
-  # Exact correction to floor(sqrt(n)).
-  while LLVM::unsigned_gt(a: LLVM::mul(a: x, b: x), b: n)
-    x = LLVM::sub(a: x, b: one)
-  var x1 = LLVM::add(a: x, b: one)
-  while LLVM::unsigned_le(a: LLVM::mul(a: x1, b: x1), b: n)
+  if n == 0_u256
+    return 0_u256
+  var x = b128_floor_u256(v: b128_of_u256_trunc(n: n).sqrt_unchecked())
+  if x == 0_u256
+    x = 1_u256
+  # the Newton step only when the root is more than 4 units off (|n - x^2| above 8x), past 2^113
+  var sq = x *% x
+  var eight = x << 3_u32
+  if sq > n and sq -% n > eight
+    x = x -% b128_floor_u256(v: b128_of_u256_trunc(n: sq -% n) /! b128_of_u256_trunc(n: x *% 2_u256))
+  elseif sq < n and n -% sq > eight
+    x = x +% b128_floor_u256(v: b128_of_u256_trunc(n: n -% sq) /! b128_of_u256_trunc(n: x *% 2_u256))
+  while x *% x > n
+    x = x -% 1_u256
+  var x1 = x +% 1_u256
+  while x1 *% x1 <= n
     x = x1
-    x1 = LLVM::add(a: x1, b: one)
+    x1 = x1 +% 1_u256
   return x
 
 ### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` ->
