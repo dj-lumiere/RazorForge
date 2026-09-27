@@ -121,29 +121,16 @@ secret routine quadrant_pick_wx(q: U64, s: B128Wx, c: B128Wx) -> B128Wx
     return wx_neg(w: s)
   return wx_neg(w: c)
 
-### The ±2^-k band around r: its bits for r * (1 - 2^-k) and r * (1 + 2^-k), or r itself twice when r is
-### zero, infinite or NaN (exact then). 2^-k relative is at most 2^(113-k) units in r's last place.
-secret routine b128_band(r: B128, k: S64) -> (B128, B128)
-  var bits = r.to_bits()
-  var sbit = bits & (1_u128 << 127)
-  var mag = bits ^ sbit
-  var d = LLVM::shift_left(value: 1_u128, bits: LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](113_s64 -% k)))
-  if (mag >>> 112) == 0x7FFF_u128 or mag <= d
-    return (r, r)
-  return (B128.from_bits(bits: sbit | (mag -% d)), B128.from_bits(bits: sbit | (mag +% d)))
-
 ### The D64 that every value within r * (1 ± 2^-k) rounds to, and whether there is one (a correct
 ### rounding of the true value when r approximates it that closely).
 routine d64_round_within(r: B128, k: S64) -> (Bool, D64)
-  var (lo, hi) = b128_band(r: r, k: k)
-  var a = b128_to_d64(x: lo)
-  return (a.to_bits() == b128_to_d64(x: hi).to_bits(), a)
+  var (ok, p) = b128_to_decimal_band(x: r, digits: 16_s64, emin: -398_s64, emax: 369_s64, zmin: -1325_s64, imax: 1279_s64, bk: k)
+  return (ok, d64_of_parts(p: p))
 
 ### d64_round_within for D32.
 routine d32_round_within(r: B128, k: S64) -> (Bool, D32)
-  var (lo, hi) = b128_band(r: r, k: k)
-  var a = b128_to_d32(x: lo)
-  return (a.to_bits() == b128_to_d32(x: hi).to_bits(), a)
+  var (ok, p) = b128_to_decimal_band(x: r, digits: 7_s64, emin: -101_s64, emax: 90_s64, zmin: -337_s64, imax: 323_s64, bk: k)
+  return (ok, d32_of_parts(p: D32Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: p.coeff)))
 
 ### sin (which = 0), cos (1) or tan (2) of a finite decimal c * 10^e as a B128 near the true value, from the
 ### correctly rounded B128 sin/cos (relative error below 2^-107). `small` means |x| < 0.78, where no reduction
