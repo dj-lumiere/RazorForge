@@ -717,10 +717,11 @@ secret routine b128fx_one() -> B128Fx
 ### truncation of 1 + t to 113 bits and c >= 0 the rest, and log1p(t) = log(v) + c/v with (c/v)^2/2 (below 2^-220)
 ### dropped: log(v) is the CORE-MATH fixed-point value (12 units, v is at least 2^-28 away from 1 so it is above
 ### 2^119 units), and c/v, below 2^-112 of v (under 2^37 units), is added as an integer from B64 values (within
-### 2^-50 of it, plus half a unit for its rounding). t's own error moves log1p by |t| t.rel / v.
+### 2^-50 of it, plus half a unit for its rounding). t's own error moves log1p by |t| t.rel / v. The split and
+### the logarithm are b128fx_log_split's, shared with log(w).
 secret routine b128fx_log1p_fixed(t: B128Fx) -> (Bool, Bool, U256, B64)
   # 1 + t exactly as the integer S in units of 2^t.e (t below 2^127 in magnitude, so 1 is a whole number of
-  # units, 2^-t.e <= 2^148): v its top 113 bits, c the rest, both from integer operations
+  # units, 2^-t.e <= 2^148)
   if t.e >= 0_s64
     return (false, false, 0_u256, 0.0)
   var one = 1_u256 << LLVM::zero_extend[U64, U256](LLVM::reinterpret_bits[S64, U64](0_s64 -% t.e))
@@ -728,6 +729,15 @@ secret routine b128fx_log1p_fixed(t: B128Fx) -> (Bool, Bool, U256, B64)
   var sv = one +% tm
   if t.neg
     sv = one -% tm
+  return b128fx_log_split(sv: sv, e: t.e, tabs: b128fx_b64(v: t) *! t.rel)
+
+### log(w) for a positive B128Fx w (as the fixed point of b128fx_log1p_fixed): w's significand is the integer S.
+secret routine b128fx_log_fixed(w: B128Fx) -> (Bool, Bool, U256, B64)
+  return b128fx_log_split(sv: LLVM::zero_extend[U128, U256](w.m), e: w.e, tabs: b128fx_b64(v: w) *! w.rel)
+
+### log(S 2^e) for a positive integer S below 2^256 known to within tabs absolute (the argument's own error), as
+### the fixed-point (neg, mag, err) of b128fx_log1p_fixed: v the top 113 bits of S, c >= 0 the rest, log(v) + c/v.
+secret routine b128fx_log_split(sv: U256, e: S64, tabs: B64) -> (Bool, Bool, U256, B64)
   var shi = LLVM::int_truncate[U256, U128](sv >>> 128_u32)
   var slo = LLVM::int_truncate[U256, U128](sv)
   var lead = 127_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(slo))
@@ -741,9 +751,9 @@ secret routine b128fx_log1p_fixed(t: B128Fx) -> (Bool, Bool, U256, B64)
     vm = LLVM::int_truncate[U256, U128](sv >>> ku)
     low = sv & ((1_u256 << ku) -% 1_u256)
   elseif k < 0_s64
-    # a negative t near -1 leaves S short: v is S itself, normalized
+    # a short S (1 + t for a t near -1): v is S itself, normalized
     vm = slo << LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](0_s64 -% k))
-  var vbiased = lead +% t.e +% 16383_s64
+  var vbiased = lead +% e +% 16383_s64
   if vbiased < 1_s64 or vbiased > 32766_s64
     return (false, false, 0_u256, 0.0)
   var v = B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](vbiased)) << 112_u32) | (vm & ((1_u128 << 112_u32) -% 1_u128)))
@@ -753,16 +763,16 @@ secret routine b128fx_log1p_fixed(t: B128Fx) -> (Bool, Bool, U256, B64)
   var (lneg, mag) = b128_fs_magnitude(fs: b128_log_fs(hi: hi, lo: lo))
   if mag == 0_u256
     return (false, false, 0_u256, 0.0)
-  # v within 2^-52 as a B64, t's own error moved through log1p' = 1 / v
-  var vb = b128fx_top(m: vm << 15_u32) *! b128fx_p2(k: lead +% t.e -% 63_s64)
-  var err = 12.5 +! b128fx_b64(v: t) *! t.rel *! 1.001 /! vb *! 0x1p148
+  # v within 2^-52 as a B64, the argument's own error tabs moved through log' = 1 / v
+  var vb = b128fx_top(m: vm << 15_u32) *! b128fx_p2(k: lead +% e -% 63_s64)
+  var err = 12.5 +! tabs *! 1.001 /! vb *! 0x1p148
   if low == 0_u256
     return (true, lneg, mag, err)
-  # c = low 2^t.e (below 2^-112 v, so under 2^37 units of 2^-148 as c / v), exact, added as an integer
+  # c = low 2^e (below 2^-112 v, so under 2^37 units of 2^-148 as c / v), exact, added as an integer
   var lhi = LLVM::int_truncate[U256, U128](low >>> 128_u32)
   var llo = LLVM::int_truncate[U256, U128](low)
   var cb = b128fx_wide_b64(hi: lhi, lo: llo)
-  var cu = cb /! vb *! b128fx_p2(k: t.e +% 148_s64)
+  var cu = cb /! vb *! b128fx_p2(k: e +% 148_s64)
   var ci = LLVM::zero_extend[U64, U256](LLVM::float_to_unsigned[B64, U64](LLVM::rint[B64](value: cu)))
   # c is positive: it adds to a positive log(v) and subtracts from a negative one
   if lneg
@@ -882,11 +892,14 @@ secret routine b128_asinh_fast(x: B128) -> (Bool, B128)
       return (false, x)
     var t = s
     if a > (0x3FFF_u128 << 112_u32)
-      # |x| - 1 is exact and both terms are positive
-      var (ok3, t1) = b128fx_add(a: b128fx_of(x: ax -! B128.from_bits(bits: 0x3FFF_u128 << 112_u32)), b: s)
+      # log(|x| + s) straight from the fixed-point logarithm (both terms positive)
+      var (ok3, w) = b128fx_add(a: af, b: s)
       if not ok3
         return (false, x)
-      t = t1
+      var (ok9, wneg, wmag, werr) = b128fx_log_fixed(w: w)
+      if not ok9
+        return (false, x)
+      return b128_round_fixed_b64(neg: neg != wneg, mag: wmag, scale: -148_s64, err: werr)
     else
       var (ok4, den) = b128fx_add(a: b128fx_one(), b: s)
       var (ok5, f) = b128fx_div(a: a2, b: den)
@@ -909,7 +922,8 @@ secret routine b128_asinh_fast(x: B128) -> (Bool, B128)
   return b128fx_round(v: B128Fx(neg: neg, m: r.m, e: r.e, rel: r.rel))
 
 ### acosh(x) for a finite x > 1, or false (also for x <= 1, which the caller settles): log(2x) from 2^100 on,
-### otherwise log1p(d + sqrt(d (x + 1))) with d = x - 1 exact, which has no cancellation near 1.
+### log(x + sqrt(x^2 - 1)) from 2 on, and below 2 log1p(d + sqrt(d (x + 1))) with d = x - 1 exact, which has no
+### cancellation near 1.
 secret routine b128_acosh_fast(x: B128) -> (Bool, B128)
   var u = x.to_bits()
   var one_bits = 0x3FFF_u128 << 112_u32
@@ -921,6 +935,22 @@ secret routine b128_acosh_fast(x: B128) -> (Bool, B128)
     if not okl
       return (false, x)
     r = l
+  elseif u >= (0x4000_u128 << 112_u32)
+    # from 2 on log(x + sqrt(x^2 - 1)) straight from the fixed-point logarithm (x^2 - 1 has no cancellation)
+    var xf = b128fx_of(x: x)
+    var (okq, q) = b128fx_add(a: b128fx_mul(a: xf, b: xf), b: B128Fx(neg: true, m: 1_u128 << 127_u32, e: -127_s64, rel: 0.0))
+    if not okq
+      return (false, x)
+    var (oks, sq) = b128fx_sqrt(v: q)
+    if not oks
+      return (false, x)
+    var (okw, w) = b128fx_add(a: xf, b: sq)
+    if not okw
+      return (false, x)
+    var (ok6, wneg, wmag, werr) = b128fx_log_fixed(w: w)
+    if not ok6
+      return (false, x)
+    return b128_round_fixed_b64(neg: wneg, mag: wmag, scale: -148_s64, err: werr)
   else
     var df = b128fx_of(x: x -! B128.from_bits(bits: one_bits))
     var (ok1, xp1) = b128fx_add(a: b128fx_of(x: x), b: b128fx_one())
