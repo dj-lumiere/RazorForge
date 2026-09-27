@@ -69,7 +69,7 @@ internal sealed class TypeResolver
             {
                 // `secret record`/`secret entity` are MODULE-PRIVATE: visible only within their own
                 // module (step 1 above), INVISIBLE to importers. Skip so an external reference resolves
-                // as "unknown type" rather than leaking an internal engine (e.g. Core's UnpackedFloat).
+                // as "unknown type" rather than leaking an internal record (e.g. Core's B128Fx).
                 if (imported.Visibility == VisibilityModifier.Secret)
                 {
                     continue;

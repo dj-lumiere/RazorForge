@@ -1564,6 +1564,10 @@ public sealed partial class SemanticVerifier
 
     private readonly HashSet<string> _demandAnalyzedFiles = new(comparer: StringComparer.Ordinal);
 
+    /// <summary>Set once a cold build has run <see cref="EagerlyRepairStdlibSignatures"/> ahead of its first
+    /// on-demand stdlib analysis.</summary>
+    private bool _coldLazySignaturesRepaired;
+
     /// <summary>Stdlib files this build restored already analyzed from the warm cache
     /// (<see cref="CompiledStdlibState.AnalyzedFileCache"/>). Reaching one replays what its analysis would
     /// have left behind instead of analyzing it again (see <see cref="ReplayCachedFileAnalysis"/>).</summary>
@@ -1606,6 +1610,17 @@ public sealed partial class SemanticVerifier
         }
 
         _demandStdlibProgramForKey ??= BuildDemandStdlibProgramForKey();
+
+        // A cold build repairs every stdlib file's cross-module-lazy signatures once, before the first file
+        // is body-analyzed (the warm snapshot already folded this in at capture). The per-file repair below
+        // only fixes the file being analyzed, so a file analyzed first would bind its calls into a not-yet-
+        // analyzed file (B128Text's `format_shortest(m: Integer, ...)` from FloatConvert) against the
+        // unrepaired, error-typed signature, which then reaches the LLVM emitter.
+        if (_warmState == null && !_coldLazySignaturesRepaired)
+        {
+            _coldLazySignaturesRepaired = true;
+            EagerlyRepairStdlibSignatures();
+        }
 
         if (!_demandStdlibProgramForKey.TryGetValue(key: routineKey,
                 value: out (Program Program, string FilePath, string Module) entry))

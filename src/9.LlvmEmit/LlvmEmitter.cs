@@ -612,7 +612,7 @@ public partial class LlvmEmitter
     private static bool ContainsGenericParameter(TypeSymbol type)
     {
         // A buildtime const-generic (`${…}` payload-size splice) that has FOLDED to a literal constant
-        // (e.g. the `128` width arg of UnpackedFloat[U128, U256, 128]) is concrete — it mangles to a fixed
+        // (e.g. the `128` length arg of Array[U64, 128]) is concrete — it mangles to a fixed
         // value and its LLVM layout is fixed. Only a STILL-UNFOLDED one (an expression over an unresolved
         // type param) is non-concrete. Without distinguishing these, a folded-const instance is wrongly
         // treated as generic, so its routine declaration is SKIPPED while its call site still emits the

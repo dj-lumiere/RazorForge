@@ -1418,7 +1418,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             SeedImplicitCodegenInserts(type: type);
             SeedEntitySelfFreeIfApplicable(type: type);
             SeedLifecycleHooksIfApplicable(type: type);
-            SeedCommonUnpackedFloatHelpers(type: type);
+            SeedCommonWidthHelpers(type: type);
         }
 
         // (1) Wired derives. The CALL-DRIVEN family is EXCLUDED (denylist): each is reached through a real
@@ -1567,9 +1567,9 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
         // (5) `common` routines. Force-seeding EVERY common member of a reached owner is an
         // over-approximation (NON-DETERMINISTIC — warm vs cold build differ). Only the genuinely
-        // NON-discoverable common family is seeded: the UnpackedFloat integer-width helpers (to_width /
-        // low_mask / from_words), reached only through nested generic-member instantiation with no AST call.
-        private void SeedCommonUnpackedFloatHelpers(TypeSymbol type)
+        // NON-discoverable common family is seeded: the integer-width helpers (to_width / from_words),
+        // reached only through nested generic-member instantiation with no AST call.
+        private void SeedCommonWidthHelpers(TypeSymbol type)
         {
             foreach (RoutineInfo commonR in _ctx.Registry
                                                 .GetMemberRoutinesForType(type: type)
@@ -1577,8 +1577,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                                                      r is
                                                      {
                                                          IsCommon: true, IsGenericDefinition: false
-                                                     } && r.Name is "to_width" or "low_mask"
-                                                         or "from_words"))
+                                                     } && r.Name is "to_width" or "from_words"))
             {
                 Discover(r: commonR);
             }

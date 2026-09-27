@@ -1,0 +1,1235 @@
+module Core
+
+# ============================================================================
+# B128Wx — the 384-bit tier behind the B128, D128, D64 and D32 transcendentals.
+# A value is (-1)^neg * m * 2^e with m a 384-bit integer (limbs m2 m1 m0, m2 the most significant, its top
+# bit set; the value is zero when m2 is 0) and a bound rel on its relative error that every operation
+# carries, as B128Fx does at 128 bits. exp and expm1 are Taylor series after a reduction, sine and cosine
+# come from the CORE-MATH 384-bit table of sin / cos(j pi/256) and short series, log1p takes one Newton
+# step from the B64 value (log goes through log1p), atan one from the B64 arctangent, and the rest follow
+# by identities. The fast paths hand over the inputs whose 128-bit band reaches a rounding midpoint, and a
+# result from here is rounded once, from a band of about 2^-360 of it (as it stands when even that band
+# is undecided).
+# ============================================================================
+
+### A 384-bit binary value with a relative error bound.
+secret record B128Wx
+  neg: Bool
+  m2: U128
+  m1: U128
+  m0: U128
+  e: S64
+  rel: B64
+
+### Zero, exact when rel is 0 (a sum that cancels to zero from inexact operands carries an unbounded rel).
+@inline
+secret routine wx_zero(rel: B64) -> B128Wx
+  return B128Wx(neg: false, m2: 0_u128, m1: 0_u128, m0: 0_u128, e: 0_s64, rel: rel)
+
+@inline
+secret routine wx_is_zero(w: B128Wx) -> Bool
+  return w.m2 == 0_u128
+
+### The significand as the (low, middle, high) triple the 384-bit helpers take.
+@inline
+secret routine wx_t(w: B128Wx) -> (U128, U128, U128)
+  return (w.m0, w.m1, w.m2)
+
+### (-1)^neg * t * 2^e for a 384-bit t, normalized (zero when t is).
+secret routine wx_make(neg: Bool, t: (U128, U128, U128), e: S64, rel: B64) -> B128Wx
+  var lz = b128_trig_lz384(x: t)
+  if lz == 384_s64
+    return wx_zero(rel: rel)
+  var s = b128_trig_shl384(x: t, shift: lz)
+  return B128Wx(neg: neg, m2: s.item2, m1: s.item1, m0: s.item0, e: e -% lz, rel: rel)
+
+### w with its bound raised by r.
+@inline
+secret routine wx_widen(w: B128Wx, r: B64) -> B128Wx
+  return B128Wx(neg: w.neg, m2: w.m2, m1: w.m1, m0: w.m0, e: w.e, rel: w.rel +! r)
+
+@inline
+secret routine wx_neg(w: B128Wx) -> B128Wx
+  return B128Wx(neg: not w.neg, m2: w.m2, m1: w.m1, m0: w.m0, e: w.e, rel: w.rel)
+
+@inline
+secret routine wx_abs(w: B128Wx) -> B128Wx
+  return B128Wx(neg: false, m2: w.m2, m1: w.m1, m0: w.m0, e: w.e, rel: w.rel)
+
+### w * 2^k (exact).
+@inline
+secret routine wx_scale(w: B128Wx, k: S64) -> B128Wx
+  return B128Wx(neg: w.neg, m2: w.m2, m1: w.m1, m0: w.m0, e: w.e +% k, rel: w.rel)
+
+### floor(log2 |w|) for a nonzero w.
+@inline
+secret routine wx_ilog2(w: B128Wx) -> S64
+  return w.e +% 383_s64
+
+### k with |w| < 2^-k, for a nonzero w.
+@inline
+secret routine wx_below(w: B128Wx) -> S64
+  return -384_s64 -% w.e
+
+### A 384-bit integer as a B64 within 2^-52 of it.
+secret routine wx_t_b64(t: (U128, U128, U128)) -> B64
+  var lz = b128_trig_lz384(x: t)
+  if lz == 384_s64
+    return 0.0
+  var s = b128_trig_shl384(x: t, shift: lz)
+  return b128fx_top(m: s.item2) *! b128fx_p2(k: 320_s64 -% lz)
+
+### w as a B64 within 2^-52 of it (+-inf or 0 outside the B64 range).
+secret routine wx_b64(w: B128Wx) -> B64
+  if wx_is_zero(w: w)
+    return 0.0
+  var v = (b128fx_top(m: w.m2) *! 0x1p-63).scaleb_unchecked(n: w.e +% 383_s64)
+  if w.neg
+    return 0.0 -! v
+  return v
+
+### round(v) for a B64 below 2^62 in magnitude, halves away from zero.
+@inline
+secret routine wx_round_b64(v: B64) -> S64
+  if v < 0.0
+    return LLVM::float_to_signed[B64, S64](v -! 0.5)
+  return LLVM::float_to_signed[B64, S64](v +! 0.5)
+
+### Whether a > b as 384-bit integers.
+@inline
+secret routine wx_t_gt(a: (U128, U128, U128), b: (U128, U128, U128)) -> Bool
+  if a.item2 != b.item2
+    return a.item2 > b.item2
+  if a.item1 != b.item1
+    return a.item1 > b.item1
+  return a.item0 > b.item0
+
+### Entry i of WX_TABLE, within half a unit of its last place: 0 ln 2, 1 pi, 2 pi/256, 3 1/ln 2, 4 1/ln 10,
+### 5 ln(2 pi)/2, 6 ln pi, 7 2/sqrt(pi), 8 1/sqrt(pi), 9 pi/2, 10 + i 10^(2^i) and 24 + i 10^-(2^i) for
+### i = 0..13, 37 + k |B_2k| / (2k (2k - 1)) for k = 1..41.
+secret routine wx_table(i: U64) -> B128Wx
+  var k = i *% 3_u64
+  return B128Wx(neg: false, m2: WX_TABLE[k], m1: WX_TABLE[k +% 1_u64], m0: WX_TABLE[k +% 2_u64], e: WX_TABLE_E[i], rel: 0x1p-384)
+
+### 1/k! for 0 <= k <= 110, within half a unit of its last place.
+secret routine wx_inv_fact(k: S64) -> B128Wx
+  var i = LLVM::reinterpret_bits[S64, U64](k)
+  var j = i *% 3_u64
+  return B128Wx(neg: false, m2: WX_INV_FACT[j], m1: WX_INV_FACT[j +% 1_u64], m0: WX_INV_FACT[j +% 2_u64], e: WX_INV_FACT_E[i], rel: 0x1p-384)
+
+### 1 (exact).
+@inline
+secret routine wx_one() -> B128Wx
+  return B128Wx(neg: false, m2: 1_u128 << 127_u32, m1: 0_u128, m0: 0_u128, e: -383_s64, rel: 0.0)
+
+### A U128 integer (exact).
+secret routine wx_of_u128(v: U128) -> B128Wx
+  return wx_make(neg: false, t: (0_u128, 0_u128, v), e: -256_s64, rel: 0.0)
+
+### A U256 integer (exact).
+secret routine wx_of_u256(v: U256) -> B128Wx
+  return wx_make(neg: false, t: (0_u128, LLVM::int_truncate[U256, U128](v), LLVM::int_truncate[U256, U128](v >>> 128_u32)), e: -128_s64, rel: 0.0)
+
+### An S64 integer (exact).
+secret routine wx_of_s64(v: S64) -> B128Wx
+  var u = LLVM::reinterpret_bits[S64, U64](v)
+  if v < 0_s64
+    return wx_neg(w: wx_of_u128(v: LLVM::zero_extend[U64, U128](0_u64 -% u)))
+  return wx_of_u128(v: LLVM::zero_extend[U64, U128](u))
+
+### c * p as a 384-bit integer (low, middle, high), exact for c * p below 2^384.
+secret routine wx_product_t(c: U128, p: U256) -> (U128, U128, U128)
+  var lo = b128_trig_wmul(x: c, y: LLVM::int_truncate[U256, U128](p))
+  var hi = b128_trig_wmul(x: c, y: LLVM::int_truncate[U256, U128](p >>> 128_u32))
+  var (w1, cy) = b128t_add(a: lo.item0, b: hi.item1, cin: 0_u128)
+  return (lo.item1, w1, hi.item0 +% cy)
+
+### A finite B128 (exact; zero included).
+secret routine wx_of_b128(x: B128) -> B128Wx
+  var bits = x.to_bits()
+  var neg = (bits >>> 127_u32) != 0_u128
+  var ex = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
+  var f = bits & ((1_u128 << 112_u32) -% 1_u128)
+  if ex == 0_s64
+    return wx_make(neg: neg, t: (0_u128, 0_u128, f), e: -16750_s64, rel: 0.0)
+  return wx_make(neg: neg, t: (0_u128, 0_u128, f | (1_u128 << 112_u32)), e: ex -% 16751_s64, rel: 0.0)
+
+### A finite B64 (exact).
+secret routine wx_of_b64(v: B64) -> B128Wx
+  return wx_of_b128(x: B128(from: v))
+
+# ============================================================================
+# Arithmetic
+# ============================================================================
+
+### a * b: the top half of the 384 x 384-bit product (at most four units short), normalized (one more unit).
+secret routine wx_mul(a: B128Wx, b: B128Wx) -> B128Wx
+  if wx_is_zero(w: a)
+    return wx_zero(rel: a.rel)
+  if wx_is_zero(w: b)
+    return wx_zero(rel: b.rel)
+  var p = b128_trig_mul384(a: wx_t(w: a), b: wx_t(w: b))
+  var e = a.e +% b.e +% 384_s64
+  if (p.item2 >>> 127_u32) == 0_u128
+    p = b128_trig_shl384(x: p, shift: 1_s64)
+    e = e -% 1_s64
+  return B128Wx(neg: a.neg != b.neg, m2: p.item2, m1: p.item1, m0: p.item0, e: e, rel: a.rel +! b.rel +! a.rel *! b.rel +! 0x1p-379)
+
+### a + b. The smaller operand is aligned to the larger one's last place (one unit lost at most), a carry out
+### of the top shifts one more unit away, and cancellation scales the operands' absolute errors by the size
+### of the sum, which the bound follows. A sum that cancels exactly is an exact zero when both operands were
+### exact and aligned without loss, else a zero of unbounded error.
+secret routine wx_add(a: B128Wx, b: B128Wx) -> B128Wx
+  if wx_is_zero(w: a)
+    return wx_widen(w: b, r: a.rel)
+  if wx_is_zero(w: b)
+    return wx_widen(w: a, r: b.rel)
+  var x = a
+  var y = b
+  if b.e > a.e or (b.e == a.e and wx_t_gt(a: wx_t(w: b), b: wx_t(w: a)))
+    x = b
+    y = a
+  var d = x.e -% y.e
+  var xt = wx_t(w: x)
+  var ys = b128_trig_shr384(x: wx_t(w: y), shift: d)
+  var lost = 0.0
+  if d > 0_s64
+    lost = 1.0
+  var e = x.e
+  var s = xt
+  var carry = 0.0
+  if x.neg == y.neg
+    s = b128_trig_add384(a: xt, b: ys)
+    if wx_t_gt(a: xt, b: s)
+      var h = b128_trig_shr384(x: s, shift: 1_s64)
+      s = (h.item0, h.item1, h.item2 | (1_u128 << 127_u32))
+      e = e +% 1_s64
+      carry = 1.0
+  else
+    s = b128_trig_sub384(a: xt, b: ys)
+  var lz = b128_trig_lz384(x: s)
+  if lz == 384_s64
+    if x.rel == 0.0 and y.rel == 0.0 and d == 0_s64
+      return wx_zero(rel: 0.0)
+    return wx_zero(rel: 0x1p1023 *! 4.0)
+  var sn = b128_trig_shl384(x: s, shift: lz)
+  var en = e -% lz
+  # absolute errors in units of 2^x.e: the operands' own, the aligned operand's truncation, the carry's bit
+  var xv = b128fx_top(m: x.m2) *! b128fx_p2(k: 320_s64)
+  var yv = 0.0
+  if d < 1000_s64
+    yv = (b128fx_top(m: y.m2) *! 0x1p-63).scaleb_unchecked(n: 383_s64 -% d)
+  var sv = (b128fx_top(m: sn.item2) *! 0x1p-63).scaleb_unchecked(n: 383_s64 +% en -% x.e)
+  var abserr = (x.rel *! xv +! y.rel *! yv) *! (1.0 +! 0x1p-50) +! lost +! carry
+  return B128Wx(neg: x.neg, m2: sn.item2, m1: sn.item1, m0: sn.item0, e: en, rel: abserr /! sv *! (1.0 +! 0x1p-50))
+
+### a - b.
+@inline
+secret routine wx_sub(a: B128Wx, b: B128Wx) -> B128Wx
+  return wx_add(a: a, b: wx_neg(w: b))
+
+### w / k for 1 < k < 2^32: the 448-bit quotient of m * 2^64 by k, 32 bits at a time (each step a 64-bit
+### division, the remainder below k), its top 384 bits kept (two units at most).
+secret routine wx_div_small(w: B128Wx, k: U64) -> B128Wx
+  if wx_is_zero(w: w)
+    return w
+  var limbs = Array[U64, 7]()
+  limbs[6_u64] = LLVM::int_truncate[U128, U64](w.m2 >>> 64_u32)
+  limbs[5_u64] = LLVM::int_truncate[U128, U64](w.m2)
+  limbs[4_u64] = LLVM::int_truncate[U128, U64](w.m1 >>> 64_u32)
+  limbs[3_u64] = LLVM::int_truncate[U128, U64](w.m1)
+  limbs[2_u64] = LLVM::int_truncate[U128, U64](w.m0 >>> 64_u32)
+  limbs[1_u64] = LLVM::int_truncate[U128, U64](w.m0)
+  var q = Array[U64, 7]()
+  var rem = 0_u64
+  var i = 7_u64
+  while i > 0_u64
+    i = i -% 1_u64
+    var cur = (rem << 32_u32) | (limbs[i] >>> 32_u32)
+    var qh = cur // k
+    rem = cur -% qh *% k
+    cur = (rem << 32_u32) | (limbs[i] & 0xFFFFFFFF_u64)
+    var ql = cur // k
+    rem = cur -% ql *% k
+    q[i] = (qh << 32_u32) | ql
+  var t = (b128_trig_u128(hi: q[2_u64], lo: q[1_u64]), b128_trig_u128(hi: q[4_u64], lo: q[3_u64]), b128_trig_u128(hi: q[6_u64], lo: q[5_u64]))
+  var lz = b128_trig_lz384(x: t)
+  var s = b128_trig_shl384(x: t, shift: lz)
+  if lz > 0_s64
+    s = (s.item0 | (LLVM::zero_extend[U64, U128](q[0_u64]) >>> b128_trig_sh(n: 64_s64 -% lz)), s.item1, s.item2)
+  return B128Wx(neg: w.neg, m2: s.item2, m1: s.item1, m0: s.item0, e: w.e -% lz, rel: w.rel +! 0x1p-381)
+
+### a / b for b nonzero: 1/b by three Newton steps r (2 - b r) from the B64 reciprocal (2^-52, then about
+### 2^-104, 2^-208 and the rounding of the steps), times a.
+secret routine wx_div(a: B128Wx, b: B128Wx) -> B128Wx
+  if wx_is_zero(w: a)
+    return wx_zero(rel: a.rel)
+  var bn = B128Wx(neg: false, m2: b.m2, m1: b.m1, m0: b.m0, e: -384_s64, rel: 0.0)
+  var r = wx_of_b64(v: 1.0 /! (b128fx_top(m: b.m2) *! 0x1p-64))
+  var two = wx_scale(w: wx_one(), k: 1_s64)
+  var i = 0_s64
+  while i < 3_s64
+    r = wx_mul(a: r, b: wx_sub(a: two, b: wx_mul(a: bn, b: r)))
+    i = i +% 1_s64
+  var q = wx_mul(a: B128Wx(neg: a.neg != b.neg, m2: a.m2, m1: a.m1, m0: a.m0, e: a.e, rel: 0.0), b: r)
+  return B128Wx(neg: q.neg, m2: q.m2, m1: q.m1, m0: q.m0, e: q.e -% b.e -% 384_s64, rel: a.rel +! b.rel +! 0x1p-374)
+
+### sqrt(a) for a >= 0: 1/sqrt by three Newton steps y (3 - A y^2) / 2 from the B64 value, times A (A the
+### significand scaled to [1/2, 2) with an even power of two left over).
+secret routine wx_sqrt(a: B128Wx) -> B128Wx
+  if wx_is_zero(w: a)
+    return a
+  var big = a.e +% 384_s64
+  var aa = B128Wx(neg: false, m2: a.m2, m1: a.m1, m0: a.m0, e: -384_s64, rel: 0.0)
+  if (big & 1_s64) != 0_s64
+    aa = wx_scale(w: aa, k: 1_s64)
+    big = big -% 1_s64
+  var y = wx_of_b64(v: 1.0 /! wx_b64(w: aa).sqrt_unchecked())
+  var three = wx_of_u128(v: 3_u128)
+  var i = 0_s64
+  while i < 3_s64
+    y = wx_scale(w: wx_mul(a: y, b: wx_sub(a: three, b: wx_mul(a: aa, b: wx_mul(a: y, b: y)))), k: -1_s64)
+    i = i +% 1_s64
+  var s = wx_mul(a: aa, b: y)
+  return B128Wx(neg: false, m2: s.m2, m1: s.m1, m0: s.m0, e: s.e +% (big >> 1), rel: a.rel *! 0.5 +! 0x1p-372)
+
+# ============================================================================
+# Powers of ten and decimal inputs
+# ============================================================================
+
+### 10^n: exact for 0 <= n <= 76 (a U256), else the product of the tabled 10^(+-2^i) over the bits of |n|
+### (|n| < 16384).
+secret routine wx_pow10(n: S64) -> B128Wx
+  if n >= 0_s64 and n <= 76_s64
+    return wx_of_u256(v: pow10_tbl(k: n))
+  var base = 10_u64
+  var a = n
+  if n < 0_s64
+    base = 24_u64
+    a = 0_s64 -% n
+  var r = wx_one()
+  var i = 0_u64
+  while a != 0_s64
+    if (a & 1_s64) != 0_s64
+      r = wx_mul(a: r, b: wx_table(i: base +% i))
+    a = a >> 1
+    i = i +% 1_u64
+  return r
+
+### (-1)^neg * c * 10^q for c < 2^113: exact when q is 0..76 (an integer product) or when q < 0 and 5^-q
+### divides c (a binary fraction), else within about 2^-372.
+secret routine wx_of_decimal(neg: Bool, c: U128, q: S64) -> B128Wx
+  var w = wx_zero(rel: 0.0)
+  if c == 0_u128
+    return w
+  if q >= 0_s64 and q <= 76_s64
+    w = wx_make(neg: false, t: wx_product_t(c: c, p: pow10_tbl(k: q)), e: 0_s64, rel: 0.0)
+  elseif q < 0_s64 and q >= -48_s64 and c % b128t_pow5(p: 0_s64 -% q) == 0_u128
+    w = wx_scale(w: wx_of_u128(v: c // b128t_pow5(p: 0_s64 -% q)), k: q)
+  elseif q < 0_s64 and q >= -76_s64
+    w = wx_div(a: wx_of_u128(v: c), b: wx_of_u256(v: pow10_tbl(k: 0_s64 -% q)))
+  else
+    w = wx_mul(a: wx_of_u128(v: c), b: wx_pow10(n: q))
+  if neg
+    return wx_neg(w: w)
+  return w
+
+### A finite D128 (see wx_of_decimal).
+@inline
+secret routine wx_of_d128(p: D128Parts) -> B128Wx
+  return wx_of_decimal(neg: p.sign, c: p.coeff, q: p.exp)
+
+# ============================================================================
+# Rounding
+# ============================================================================
+
+### (whether the band settles it, the IEEE bits) of w rounded to nearest-even in a binary format with a p-bit
+### significand, exponent bias emax and the sign bit at sbit: subnormal results and overflow to infinity
+### included. Unsettled means w's band reaches the midpoint between two neighbours (force rounds anyway).
+secret routine wx_round_ieee(w: B128Wx, p: S64, emax: S64, sbit: S64, force: Bool) -> (Bool, U128)
+  var sign = 0_u128
+  if w.neg
+    sign = 1_u128 << b128_trig_sh(n: sbit)
+  if wx_is_zero(w: w)
+    return (force or w.rel == 0.0, sign)
+  var pw = b128_trig_sh(n: p -% 1_s64)
+  var lead = wx_ilog2(w: w)
+  if lead > emax
+    return (true, sign | (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](emax *% 2_s64 +% 1_s64)) << pw))
+  var emin = 1_s64 -% emax
+  var k = p
+  if lead < emin
+    k = p -% (emin -% lead)
+  if k < -2_s64
+    return (force or w.rel < 0.25, sign)
+  var t = wx_t(w: w)
+  var keep = 0_u128
+  var rs = t
+  var trunc = 0.0
+  if k > 0_s64
+    keep = w.m2 >>> b128_trig_sh(n: 128_s64 -% k)
+    rs = b128_trig_shl384(x: t, shift: k)
+  elseif k < 0_s64
+    rs = b128_trig_shr384(x: t, shift: 0_s64 -% k)
+    trunc = 1.0
+  # the dropped bits against one half of the last kept place, in units of 2^-384 of it
+  var half = (0_u128, 0_u128, 1_u128 << 127_u32)
+  var above = not wx_t_gt(a: half, b: rs)
+  var dist = b128_trig_sub384(a: half, b: rs)
+  if above
+    dist = b128_trig_sub384(a: rs, b: half)
+  var errb = w.rel *! b128fx_top(m: w.m2) *! b128fx_p2(k: 320_s64 +% k) *! (1.0 +! 0x1p-50) +! trunc
+  var ok = force or errb == 0.0 or wx_t_b64(t: dist) > errb
+  if above and (b128_trig_lz384(x: dist) < 384_s64 or (keep & 1_u128) == 1_u128)
+    keep = keep +% 1_u128
+  var bits = keep
+  if lead >= emin
+    bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead +% emax)) << pw) +% (keep -% (1_u128 << pw))
+  return (ok, sign | bits)
+
+### w rounded to a B128, and whether its band settles that.
+secret routine wx_to_b128(w: B128Wx, force: Bool) -> (Bool, B128)
+  var (ok, bits) = wx_round_ieee(w: w, p: 113_s64, emax: 16383_s64, sbit: 127_s64, force: force)
+  return (ok, B128.from_bits(bits: bits))
+
+### w rounded to a B128 as it stands.
+@inline
+secret routine wx_b128(w: B128Wx) -> B128
+  return wx_to_b128(w: w, force: true).item1
+
+### w rounded to a B64, and whether its band settles that.
+secret routine wx_to_b64(w: B128Wx, force: Bool) -> (Bool, B64)
+  var (ok, bits) = wx_round_ieee(w: w, p: 53_s64, emax: 1023_s64, sbit: 63_s64, force: force)
+  return (ok, B64.from_bits(bits: LLVM::int_truncate[U128, U64](bits)))
+
+### 5^p as a U256, for 0 <= p <= 110.
+secret routine wx_pow5(p: S64) -> U256
+  if p <= 55_s64
+    return LLVM::zero_extend[U128, U256](b128t_pow5(p: p))
+  var pr = b128_trig_wmul(x: b128t_pow5(p: 55_s64), y: b128t_pow5(p: p -% 55_s64))
+  return (LLVM::zero_extend[U128, U256](pr.item0) << 128_u32) | LLVM::zero_extend[U128, U256](pr.item1)
+
+### For an exact w of at most 113 significant bits, w * 10^-q exactly when it is a binary fraction that fits
+### (the only way it can sit exactly halfway between integers): (fits, its integer part, -1 / 0 / 1 as the
+### fraction is below, at or above one half).
+secret routine wx_dec_exact(w: B128Wx, q: S64) -> (Bool, U128, S64)
+  if w.m1 != 0_u128 or w.m0 != 0_u128 or (w.m2 & 0x7FFF_u128) != 0_u128
+    return (false, 0_u128, 0_s64)
+  var mm = w.m2 >>> 15_u32
+  var tz = LLVM::int_truncate[U128, S64](LLVM::trailing_zeros(mm))
+  mm = mm >>> b128_trig_sh(n: tz)
+  var ex = w.e +% 271_s64 +% tz
+  # w * 10^-q = x * 2^-s
+  var x = (mm, 0_u128, 0_u128)
+  var s = 0_s64
+  if q <= 0_s64
+    if q < -110_s64
+      return (false, 0_u128, 0_s64)
+    x = wx_product_t(c: mm, p: wx_pow5(p: 0_s64 -% q))
+    s = 0_s64 -% (ex -% q)
+  else
+    if q > 48_s64 or mm % b128t_pow5(p: q) != 0_u128
+      return (false, 0_u128, 0_s64)
+    x = (mm // b128t_pow5(p: q), 0_u128, 0_u128)
+    s = q -% ex
+  if s <= 0_s64
+    # an integer, which must fit in 128 bits
+    if x.item1 != 0_u128 or x.item2 != 0_u128 or s < -127_s64 or b128_trig_clz128(x: x.item0) < 0_s64 -% s
+      return (false, 0_u128, 0_s64)
+    return (true, x.item0 << b128_trig_sh(n: 0_s64 -% s), -1_s64)
+  if s > 384_s64
+    return (true, 0_u128, -1_s64)
+  var ip = b128_trig_shr384(x: x, shift: s)
+  if ip.item1 != 0_u128 or ip.item2 != 0_u128
+    return (false, 0_u128, 0_s64)
+  var fr = b128_trig_shl384(x: x, shift: 384_s64 -% s)
+  if s == 384_s64
+    fr = x
+  var half = (0_u128, 0_u128, 1_u128 << 127_u32)
+  if wx_t_gt(a: fr, b: half)
+    return (true, ip.item0, 1_s64)
+  if wx_t_gt(a: half, b: fr)
+    return (true, ip.item0, -1_s64)
+  return (true, ip.item0, 0_s64)
+
+### (whether the band settles it, sign, coefficient, exponent, overflow) of w rounded to `digits` decimal
+### digits (half to even) at exponents qmin..qmax: w times 10^-q for q = E - digits + 1 (E its leading digit's
+### exponent, estimated from the binary one and settled by the scaled value) has the coefficient as its
+### integer part and the rounding in its fraction. Below 10^(qmin + digits - 1) the coefficient has fewer
+### digits and may round to 0. An exact w the band cannot settle (a tie, or a hair from one) is decided by
+### wx_dec_exact when w * 10^-q is a binary fraction, the only case where it can be a tie.
+secret routine wx_round_dec(w: B128Wx, digits: S64, qmin: S64, qmax: S64, force: Bool) -> (Bool, Bool, U128, S64, Bool)
+  if wx_is_zero(w: w)
+    return (force or w.rel == 0.0, w.neg, 0_u128, 0_s64, false)
+  var lo = LLVM::int_truncate[U256, U128](pow10_tbl(k: digits -% 1_s64))
+  var hi = LLVM::int_truncate[U256, U128](pow10_tbl(k: digits))
+  var q = schubfach_flog10pow2(q: wx_ilog2(w: w)) -% digits +% 1_s64
+  var tries = 0_s64
+  while tries < 4_s64
+    tries = tries +% 1_s64
+    if q < qmin
+      q = qmin
+    if q > qmax
+      return (true, w.neg, 0_u128, 0_s64, true)
+    var t = wx_mul(a: w, b: wx_pow10(n: 0_s64 -% q))
+    var s = 0_s64 -% t.e
+    var tt = wx_t(w: t)
+    if s <= 0_s64
+      q = q +% 1_s64
+      continue
+    var ip = (0_u128, 0_u128, 0_u128)
+    var fr = tt
+    var lost = 0.0
+    if s < 384_s64
+      ip = b128_trig_shr384(x: tt, shift: s)
+      fr = b128_trig_shl384(x: tt, shift: 384_s64 -% s)
+    elseif s > 384_s64
+      fr = b128_trig_shr384(x: tt, shift: s -% 384_s64)
+      lost = 1.0
+    if ip.item2 != 0_u128 or ip.item1 != 0_u128 or ip.item0 >= hi
+      q = q +% 1_s64
+      continue
+    if ip.item0 < lo and q > qmin
+      q = q -% 1_s64
+      continue
+    var c = ip.item0
+    var half = (0_u128, 0_u128, 1_u128 << 127_u32)
+    var above = not wx_t_gt(a: half, b: fr)
+    var dist = b128_trig_sub384(a: half, b: fr)
+    if above
+      dist = b128_trig_sub384(a: fr, b: half)
+    var errb = t.rel *! (b128fx_top(m: t.m2) *! 0x1p-63).scaleb_unchecked(n: 767_s64 -% s) *! (1.0 +! 0x1p-50) +! lost
+    var ok = force or errb == 0.0 or wx_t_b64(t: dist) > errb
+    var up = above and (b128_trig_lz384(x: dist) < 384_s64 or (c & 1_u128) == 1_u128)
+    if not ok and w.rel == 0.0
+      var (fits, ec, side) = wx_dec_exact(w: w, q: q)
+      if fits
+        ok = true
+        c = ec
+        up = side > 0_s64 or (side == 0_s64 and (c & 1_u128) == 1_u128)
+    if up
+      c = c +% 1_u128
+    if c == hi
+      c = lo
+      q = q +% 1_s64
+      if q > qmax
+        return (true, w.neg, 0_u128, 0_s64, true)
+    return (ok, w.neg, c, q, false)
+  return (false, w.neg, 0_u128, 0_s64, false)
+
+### The D128 of rounded parts: the coefficient with its trailing zeros stripped (while the exponent stays
+### within range), a signed zero, or a signed infinity.
+secret routine wx_d128_pack(neg: Bool, c: U128, q: S64, inf: Bool) -> D128
+  if inf
+    return D128.infinity(sign: neg)
+  if c == 0_u128
+    return D128.from_components(sign: neg, coeff: 0_u128, exp: 0_s64)
+  var tz = trailing_zeros10_u128(c: c, cap0: 34_s64)
+  if tz > 6111_s64 -% q
+    tz = 6111_s64 -% q
+  return d128_of_parts(p: D128Parts(sign: neg, special: 0_u64, exp: q +% tz, coeff: div_pow10_u128(x: c, k: tz)))
+
+### w rounded to a D128 (34 digits), and whether its band settles that.
+secret routine wx_to_d128(w: B128Wx, force: Bool) -> (Bool, D128)
+  var (ok, neg, c, q, inf) = wx_round_dec(w: w, digits: 34_s64, qmin: -6176_s64, qmax: 6111_s64, force: force)
+  return (ok, wx_d128_pack(neg: neg, c: c, q: q, inf: inf))
+
+### w rounded to a D128 as it stands.
+@inline
+secret routine wx_d128(w: B128Wx) -> D128
+  return wx_to_d128(w: w, force: true).item1
+
+### w rounded to a D64 (16 digits, stored reduced).
+secret routine wx_d64(w: B128Wx) -> D64
+  var (ok, neg, c, q, inf) = wx_round_dec(w: w, digits: 16_s64, qmin: -398_s64, qmax: 369_s64, force: true)
+  if inf
+    return D64.infinity(sign: neg)
+  if c == 0_u128
+    return D64.from_components(sign: neg, coeff: 0_u64, exp: 0_s64)
+  var tz = trailing_zeros10_u128(c: c, cap0: 16_s64)
+  if tz > 369_s64 -% q
+    tz = 369_s64 -% q
+  return D64.from_components(sign: neg, coeff: LLVM::int_truncate[U128, U64](div_pow10_u128(x: c, k: tz)), exp: q +% tz)
+
+### w rounded to a D32 (7 digits, stored reduced).
+secret routine wx_d32(w: B128Wx) -> D32
+  var (ok, neg, c, q, inf) = wx_round_dec(w: w, digits: 7_s64, qmin: -101_s64, qmax: 90_s64, force: true)
+  if inf
+    return D32.infinity(sign: neg)
+  if c == 0_u128
+    return D32.from_components(sign: neg, coeff: 0_u64, exp: 0_s64)
+  var tz = trailing_zeros10_u128(c: c, cap0: 7_s64)
+  if tz > 90_s64 -% q
+    tz = 90_s64 -% q
+  return D32.from_components(sign: neg, coeff: LLVM::int_truncate[U128, U64](div_pow10_u128(x: c, k: tz)), exp: q +% tz)
+
+# ============================================================================
+# Elementary functions on the tier
+# ============================================================================
+
+### The Taylor terms n with |t|^n / n! below 2^-396 for |t| < 2^-lg: the least n with n lg + floor(log2 2) +
+### ... + floor(log2 n) >= 396 (each floor at most the true log, so n is never short).
+secret routine wx_terms(lg: S64) -> S64
+  var l = lg
+  if l < 1_s64
+    l = 1_s64
+  var n = 0_s64
+  var acc = 0_s64
+  while acc < 396_s64
+    n = n +% 1_s64
+    acc = acc +% l +% 63_s64 -% LLVM::reinterpret_bits[U64, S64](LLVM::reinterpret_bits[S64, U64](n).leading_zeros())
+  return n +% 1_s64
+
+### e^t - 1 for |t| below 1/2: t (1/1! + t (1/2! + t (1/3! + ...))) from the tabled 1/k!, the tail past
+### wx_terms below 2^-392.
+secret routine wx_expm1_series(t: B128Wx) -> B128Wx
+  if wx_is_zero(w: t)
+    return t
+  var i = wx_terms(lg: wx_below(w: t))
+  var p = wx_inv_fact(k: i)
+  while i > 1_s64
+    i = i -% 1_s64
+    p = wx_add(a: wx_inv_fact(k: i), b: wx_mul(a: t, b: p))
+  return wx_widen(w: wx_mul(a: t, b: p), r: 0x1p-390)
+
+### e^x for |x| below 2^16 (callers settle overflow and underflow first): x = k ln 2 + r, and e^r as
+### (e^(r/16))^16 from the series (|r/16| < 2^-5.5).
+secret routine wx_exp(x: B128Wx) -> B128Wx
+  if wx_is_zero(w: x)
+    return wx_widen(w: wx_one(), r: x.rel)
+  var k = wx_round_b64(v: wx_b64(w: x) *! 1.4426950408889634)
+  var r = x
+  if k != 0_s64
+    r = wx_sub(a: x, b: wx_mul(a: wx_table(i: 0_u64), b: wx_of_s64(v: k)))
+  var p = wx_add(a: wx_one(), b: wx_expm1_series(t: wx_scale(w: r, k: -4_s64)))
+  var i = 0_s64
+  while i < 4_s64
+    p = wx_mul(a: p, b: p)
+    i = i +% 1_s64
+  return wx_scale(w: p, k: k)
+
+### e^x - 1: halved to below 2^-8, the series, then E (E + 2) per halving; from 1/2 up, e^x - 1.
+secret routine wx_expm1(x: B128Wx) -> B128Wx
+  if wx_is_zero(w: x)
+    return x
+  var lg = wx_below(w: x)
+  if lg < 1_s64
+    return wx_sub(a: wx_exp(x: x), b: wx_one())
+  var s = 0_s64
+  if lg < 8_s64
+    s = 8_s64 -% lg
+  var e = wx_expm1_series(t: wx_scale(w: x, k: 0_s64 -% s))
+  var two = wx_scale(w: wx_one(), k: 1_s64)
+  var i = 0_s64
+  while i < s
+    e = wx_mul(a: e, b: wx_add(a: e, b: two))
+    i = i +% 1_s64
+  return e
+
+### log1p(d) for |d| below 2^-40: d (1 - d (1/2 - d (1/3 - ...))), 392/k + 2 terms for |d| < 2^-k.
+secret routine wx_log1p_series(d: B128Wx) -> B128Wx
+  if wx_is_zero(w: d)
+    return d
+  var one = wx_one()
+  var n = 392_s64 // wx_below(w: d) +% 2_s64
+  var p = wx_div_small(w: one, k: LLVM::reinterpret_bits[S64, U64](n))
+  var i = n -% 1_s64
+  while i >= 1_s64
+    var inv = one
+    if i > 1_s64
+      inv = wx_div_small(w: one, k: LLVM::reinterpret_bits[S64, U64](i))
+    p = wx_sub(a: inv, b: wx_mul(a: d, b: p))
+    i = i -% 1_s64
+  return wx_widen(w: wx_mul(a: d, b: p), r: 0x1p-390)
+
+### log1p(t) for t > -1: the series below 2^-40, log(1 + t) from |t| = 1/2 on, else one Newton step
+### y0 + log1p((1 + t) e^-y0 - 1) from the B64 value y0 (the residual below 2^-50).
+secret routine wx_log1p(t: B128Wx) -> B128Wx
+  if wx_is_zero(w: t)
+    return t
+  var lg = wx_below(w: t)
+  if lg >= 40_s64
+    return wx_log1p_series(d: t)
+  if lg < 1_s64
+    return wx_log(x: wx_add(a: wx_one(), b: t))
+  var y0 = wx_of_b64(v: wx_b64(w: t).log1p_unchecked())
+  var e = wx_expm1(x: wx_neg(w: y0))
+  var d = wx_add(a: wx_add(a: t, b: e), b: wx_mul(a: t, b: e))
+  return wx_add(a: y0, b: wx_log1p_series(d: d))
+
+### log(x) for x > 0: log1p(x - 1) within 1/4 of 1, else n ln 2 + log1p(f - 1) with x = f 2^n and f in
+### [sqrt(1/2), sqrt(2)).
+secret routine wx_log(x: B128Wx) -> B128Wx
+  var lead = wx_ilog2(w: x)
+  var one = wx_one()
+  if lead == -1_s64 or lead == 0_s64
+    var xb = wx_b64(w: x)
+    if xb >= 0.75 and xb <= 1.25
+      return wx_log1p(t: wx_sub(a: x, b: one))
+  var n = lead +% 1_s64
+  var f = B128Wx(neg: false, m2: x.m2, m1: x.m1, m0: x.m0, e: -384_s64, rel: x.rel)
+  if x.m2 < 0xB504F333F9DE6484597D89B3754ABE9F_u128
+    f = wx_scale(w: f, k: 1_s64)
+    n = n -% 1_s64
+  var lf = wx_log1p(t: wx_sub(a: f, b: one))
+  if n == 0_s64
+    return lf
+  return wx_add(a: wx_mul(a: wx_table(i: 0_u64), b: wx_of_s64(v: n)), b: lf)
+
+### sin(theta) and cos(theta) for |theta| below 2^-5 from their Taylor series with the tabled 1/k!:
+### sin(theta)/theta = 1/1! - u (1/3! - u (1/5! - ...)) and cos(theta) = 1/0! - u (1/2! - u (...)) for
+### u = theta^2, with 392 / (k + 8) + 4 terms for u < 2^-k.
+secret routine wx_sincos_small(theta: B128Wx) -> (B128Wx, B128Wx)
+  var one = wx_one()
+  if wx_is_zero(w: theta)
+    return (theta, wx_widen(w: one, r: theta.rel))
+  var u = wx_mul(a: theta, b: theta)
+  var n = 392_s64 // (wx_below(w: u) +% 8_s64) +% 4_s64
+  var ps = wx_inv_fact(k: 2_s64 *% n +% 1_s64)
+  var pc = wx_inv_fact(k: 2_s64 *% n)
+  var i = n
+  while i > 0_s64
+    i = i -% 1_s64
+    ps = wx_sub(a: wx_inv_fact(k: 2_s64 *% i +% 1_s64), b: wx_mul(a: u, b: ps))
+    pc = wx_sub(a: wx_inv_fact(k: 2_s64 *% i), b: wx_mul(a: u, b: pc))
+  return (wx_widen(w: wx_mul(a: theta, b: ps), r: 0x1p-390), wx_widen(w: pc, r: 0x1p-390))
+
+### sin and cos of n pi/256 + theta (|theta| below 2^-5): the CORE-MATH 384-bit sin / cos(j pi/256) for
+### j = n mod 128 and the series, by the addition formulas, then turned by the quadrant n / 128.
+secret routine wx_sincos_red(n: S64, theta: B128Wx) -> (B128Wx, B128Wx)
+  var (st, ct) = wx_sincos_small(theta: theta)
+  var j = n & 127_s64
+  var s = st
+  var c = ct
+  if j != 0_s64
+    var sj = wx_make(neg: false, t: b128_trig_sincos384(j: j, w: 0_s64), e: -384_s64, rel: 0x1p-383)
+    var cj = wx_make(neg: false, t: b128_trig_sincos384(j: j, w: 1_s64), e: -384_s64, rel: 0x1p-383)
+    s = wx_add(a: wx_mul(a: sj, b: ct), b: wx_mul(a: cj, b: st))
+    c = wx_sub(a: wx_mul(a: cj, b: ct), b: wx_mul(a: sj, b: st))
+  var q = (n >> 7) & 3_s64
+  if q == 1_s64
+    return (c, wx_neg(w: s))
+  if q == 2_s64
+    return (wx_neg(w: s), wx_neg(w: c))
+  if q == 3_s64
+    return (wx_neg(w: c), s)
+  return (s, c)
+
+### sin and cos of a (|a| below 2^20): n pi/256 the nearest multiple, theta = a - n pi/256.
+secret routine wx_sincos(a: B128Wx) -> (B128Wx, B128Wx)
+  if wx_is_zero(w: a)
+    return wx_sincos_small(theta: a)
+  var n = wx_round_b64(v: wx_b64(w: a) *! 81.48733086305042)
+  var theta = a
+  if n != 0_s64
+    theta = wx_sub(a: a, b: wx_mul(a: wx_table(i: 2_u64), b: wx_of_s64(v: n)))
+  return wx_sincos_red(n: n, theta: theta)
+
+### sin and cos of a finite B128 x: below 2^-8 no reduction, else the CORE-MATH 448-bit reduction to
+### n pi/256 + theta (the residual good to about 2^-440 absolute).
+secret routine wx_sincos_b128(x: B128) -> (B128Wx, B128Wx)
+  var bits = x.to_bits()
+  var ax = bits & ((1_u128 << 127_u32) -% 1_u128)
+  var e = LLVM::int_truncate[U128, S64](ax >>> 112_u32) -% 16383_s64
+  if e < -8_s64
+    return wx_sincos_red(n: 0_s64, theta: wx_of_b128(x: x))
+  var m = (ax & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32)
+  var rw = b128_trig_reduce_wide(m: m, e: e)
+  var theta = wx_make(neg: rw.item1, t: rw.item2, e: rw.item3 -% 384_s64, rel: 0x1p-378)
+  theta = wx_widen(w: theta, r: 1.0.scaleb_unchecked(n: -440_s64 -% wx_ilog2(w: theta)))
+  var (s, c) = wx_sincos_red(n: rw.item0, theta: theta)
+  if (bits >>> 127_u32) != 0_u128
+    return (wx_neg(w: s), c)
+  return (s, c)
+
+### sin(pi r) and cos(pi r) for |r| <= 1/2 (r exact or close): j = round(256 r) comes off exactly, and
+### pi (r - j/256) is the residual angle.
+secret routine wx_sincospi(r: B128Wx) -> (B128Wx, B128Wx)
+  var j = wx_round_b64(v: wx_b64(w: r) *! 256.0)
+  var rr = r
+  if j != 0_s64
+    rr = wx_sub(a: r, b: wx_scale(w: wx_of_s64(v: j), k: -8_s64))
+  return wx_sincos_red(n: j, theta: wx_mul(a: wx_table(i: 1_u64), b: rr))
+
+### The 512-bit little-endian value a as a B128Wx (its top 384 bits).
+secret routine wx_of_limbs8(a: Array[U64, 8], rel: B64) -> B128Wx
+  var w = 7_s64
+  while w >= 0_s64 and a[LLVM::reinterpret_bits[S64, U64](w)] == 0_u64
+    w = w -% 1_s64
+  if w < 0_s64
+    return wx_zero(rel: rel)
+  var lead = w *% 64_s64 +% 63_s64 -% LLVM::reinterpret_bits[U64, S64](a[LLVM::reinterpret_bits[S64, U64](w)].leading_zeros())
+  # shift left by 511 - lead so the lead lands on bit 511, then keep limbs 7..2
+  var sh = 511_s64 -% lead
+  var ws = sh >> 6
+  var bs = sh & 63_s64
+  var o = Array[U64, 8]()
+  var i = 7_s64
+  while i >= 0_s64
+    var v = 0_u64
+    var src = i -% ws
+    if src >= 0_s64
+      v = a[LLVM::reinterpret_bits[S64, U64](src)] << b128_trig_sh(n: bs)
+      if bs != 0_s64 and src >= 1_s64
+        v = v | (a[LLVM::reinterpret_bits[S64, U64](src -% 1_s64)] >>> b128_trig_sh(n: 64_s64 -% bs))
+    o[LLVM::reinterpret_bits[S64, U64](i)] = v
+    i = i -% 1_s64
+  var t = (b128_trig_u128(hi: o[3_u64], lo: o[2_u64]), b128_trig_u128(hi: o[5_u64], lo: o[4_u64]), b128_trig_u128(hi: o[7_u64], lo: o[6_u64]))
+  return B128Wx(neg: false, m2: t.item2, m1: t.item1, m0: t.item0, e: lead -% 383_s64, rel: rel +! 0x1p-383)
+
+### atan(z) for |z| < 2^-12: z (1 - z^2 (1/3 - z^2 (1/5 - ...))), 196/k + 2 terms for |z| < 2^-k.
+secret routine wx_atan_series(z: B128Wx) -> B128Wx
+  if wx_is_zero(w: z)
+    return z
+  var one = wx_one()
+  var u = wx_mul(a: z, b: z)
+  var n = 196_s64 // wx_below(w: z) +% 2_s64
+  var p = wx_div_small(w: one, k: LLVM::reinterpret_bits[S64, U64](2_s64 *% n +% 1_s64))
+  var i = n -% 1_s64
+  while i >= 0_s64
+    var inv = one
+    if i > 0_s64
+      inv = wx_div_small(w: one, k: LLVM::reinterpret_bits[S64, U64](2_s64 *% i +% 1_s64))
+    p = wx_sub(a: inv, b: wx_mul(a: u, b: p))
+    i = i -% 1_s64
+  return wx_widen(w: wx_mul(a: z, b: p), r: 0x1p-390)
+
+### atan(z): the series below 2^-12, pi/2 - atan(1/|z|) above 1, else one Newton step t0 + atan(d) with
+### d = (z cos t0 - sin t0) / (cos t0 + z sin t0) from the B64 arctangent t0 (d below 2^-50).
+secret routine wx_atan(z: B128Wx) -> B128Wx
+  if wx_is_zero(w: z)
+    return z
+  var lead = wx_ilog2(w: z)
+  var one = wx_one()
+  if lead >= 0_s64 and not (lead == 0_s64 and z.m2 == (1_u128 << 127_u32) and z.m1 == 0_u128 and z.m0 == 0_u128)
+    var r = wx_sub(a: wx_table(i: 9_u64), b: wx_atan(z: wx_div(a: one, b: wx_abs(w: z))))
+    if z.neg
+      return wx_neg(w: r)
+    return r
+  if lead < -12_s64
+    return wx_atan_series(z: z)
+  var t0 = wx_of_b64(v: wx_b64(w: z).atan())
+  var (s, c) = wx_sincos(a: t0)
+  var d = wx_div(a: wx_sub(a: wx_mul(a: z, b: c), b: s), b: wx_add(a: c, b: wx_mul(a: z, b: s)))
+  return wx_add(a: t0, b: wx_atan_series(z: d))
+
+### asin(x) for |x| <= 1 given omx = 1 - |x| (exact or close): atan(x / sqrt(omx (1 + |x|))), +-pi/2 at
+### |x| = 1.
+secret routine wx_asin(x: B128Wx, omx: B128Wx) -> B128Wx
+  if wx_is_zero(w: omx)
+    if x.neg
+      return wx_neg(w: wx_table(i: 9_u64))
+    return wx_table(i: 9_u64)
+  var r = wx_sqrt(a: wx_mul(a: omx, b: wx_add(a: wx_one(), b: wx_abs(w: x))))
+  return wx_atan(z: wx_div(a: x, b: r))
+
+### acos(x) for |x| <= 1 given omx = 1 - |x|: pi/2 - asin(x) below |x| = 1/2, else 2 asin(sqrt(omx / 2))
+### (pi minus that for x < 0).
+secret routine wx_acos(x: B128Wx, omx: B128Wx) -> B128Wx
+  var xb = wx_b64(w: x)
+  if xb < 0.5 and xb > -0.5
+    return wx_sub(a: wx_table(i: 9_u64), b: wx_asin(x: x, omx: omx))
+  var s = wx_sqrt(a: wx_scale(w: omx, k: -1_s64))
+  var a = wx_scale(w: wx_asin(x: s, omx: wx_sub(a: wx_one(), b: s)), k: 1_s64)
+  if x.neg
+    return wx_sub(a: wx_table(i: 1_u64), b: a)
+  return a
+
+### atan2(y, x) for finite y and x, not both zero.
+secret routine wx_atan2(y: B128Wx, x: B128Wx) -> B128Wx
+  var a = wx_table(i: 9_u64)
+  if not wx_is_zero(w: x)
+    a = wx_atan(z: wx_div(a: wx_abs(w: y), b: wx_abs(w: x)))
+    if x.neg
+      a = wx_sub(a: wx_table(i: 1_u64), b: a)
+  if y.neg
+    return wx_neg(w: a)
+  return a
+
+### sinh(x) = (E + E/(E + 1)) / 2 with E = expm1(|x|) (no cancellation), the sign of x.
+secret routine wx_sinh(x: B128Wx) -> B128Wx
+  var e = wx_expm1(x: wx_abs(w: x))
+  var r = wx_scale(w: wx_add(a: e, b: wx_div(a: e, b: wx_add(a: e, b: wx_one()))), k: -1_s64)
+  if x.neg
+    return wx_neg(w: r)
+  return r
+
+### cosh(x) = (e + 1/e) / 2 with e = e^|x|.
+secret routine wx_cosh(x: B128Wx) -> B128Wx
+  var e = wx_exp(x: wx_abs(w: x))
+  return wx_scale(w: wx_add(a: e, b: wx_div(a: wx_one(), b: e)), k: -1_s64)
+
+### tanh(x) = E / (E + 2) with E = expm1(2|x|), the sign of x.
+secret routine wx_tanh(x: B128Wx) -> B128Wx
+  var e = wx_expm1(x: wx_scale(w: wx_abs(w: x), k: 1_s64))
+  var r = wx_div(a: e, b: wx_add(a: e, b: wx_scale(w: wx_one(), k: 1_s64)))
+  if x.neg
+    return wx_neg(w: r)
+  return r
+
+### asinh(x): log1p(a + a^2 / (1 + sqrt(1 + a^2))) below a = |x| = 1/2, log(a + sqrt(a^2 + 1)) above, the
+### sign of x.
+secret routine wx_asinh(x: B128Wx) -> B128Wx
+  var a = wx_abs(w: x)
+  var one = wx_one()
+  var sq = wx_sqrt(a: wx_add(a: wx_mul(a: a, b: a), b: one))
+  var r = a
+  if wx_ilog2(w: a) < -1_s64
+    r = wx_log1p(t: wx_add(a: a, b: wx_div(a: wx_mul(a: a, b: a), b: wx_add(a: one, b: sq))))
+  else
+    r = wx_log(x: wx_add(a: a, b: sq))
+  if x.neg
+    return wx_neg(w: r)
+  return r
+
+### acosh(1 + t) for t >= 0: log1p(t + sqrt(t (t + 2))).
+secret routine wx_acosh(t: B128Wx) -> B128Wx
+  var two = wx_scale(w: wx_one(), k: 1_s64)
+  return wx_log1p(t: wx_add(a: t, b: wx_sqrt(a: wx_mul(a: t, b: wx_add(a: t, b: two)))))
+
+### atanh(x) for |x| < 1 given omx = 1 - |x|: log1p(2|x| / omx) / 2, the sign of x.
+secret routine wx_atanh(x: B128Wx, omx: B128Wx) -> B128Wx
+  var r = wx_scale(w: wx_log1p(t: wx_div(a: wx_scale(w: wx_abs(w: x), k: 1_s64), b: omx)), k: -1_s64)
+  if x.neg
+    return wx_neg(w: r)
+  return r
+
+### erf(a) for 0 < a <= 8: (2/sqrt(pi)) e^-a^2 sum_n a (2a^2)^n / (1 3 5 ... (2n+1)), every term positive,
+### summed until a term past n = 2a^2 (where the ratio is below 1/2) falls below 2^-392 of the sum.
+secret routine wx_erf_series(a: B128Wx) -> B128Wx
+  var a2 = wx_mul(a: a, b: a)
+  var q = wx_scale(w: a2, k: 1_s64)
+  var peak = LLVM::float_to_unsigned[B64, U64](wx_b64(w: q))
+  var term = a
+  var sum = a
+  var n = 1_u64
+  while n < 4000_u64
+    term = wx_div_small(w: wx_mul(a: term, b: q), k: 2_u64 *% n +% 1_u64)
+    sum = wx_add(a: sum, b: term)
+    if n > peak and wx_ilog2(w: term) < wx_ilog2(w: sum) -% 392_s64
+      break
+    n = n +% 1_u64
+  return wx_widen(w: wx_mul(a: wx_mul(a: wx_table(i: 7_u64), b: wx_exp(x: wx_neg(w: a2))), b: sum), r: 0x1p-390)
+
+### erfc(a) for a > 8: e^-a^2 / sqrt(pi) / f with f = a + (1/2)/(a + 1/(a + (3/2)/(a + ...))) over
+### 13000/a^2 + 600/a + 35 levels (within 2^-392), f = P/Q from P' = a P + (k/2) Q, Q' = P bottom up.
+secret routine wx_erfc_cf(a: B128Wx) -> B128Wx
+  var ab = wx_b64(w: a)
+  var p = a
+  var q = wx_one()
+  var k = LLVM::float_to_signed[B64, S64](13000.0 /! (ab *! ab) +! 600.0 /! ab +! 35.0)
+  while k >= 1_s64
+    var np = wx_add(a: wx_mul(a: a, b: p), b: wx_scale(w: wx_mul(a: wx_of_s64(v: k), b: q), k: -1_s64))
+    q = p
+    p = np
+    k = k -% 1_s64
+  var g = wx_mul(a: wx_exp(x: wx_neg(w: wx_mul(a: a, b: a))), b: wx_table(i: 8_u64))
+  return wx_widen(w: wx_div(a: wx_mul(a: g, b: q), b: p), r: 0x1p-390)
+
+### erf(x) (complement false) or erfc(x) (true) for a finite x with |x| <= 130: the series up to |x| = 8,
+### the continued fraction above, and the complements by 1 - and 1 + (erfc(x) for x <= 8 loses at most 96
+### bits of the 384 to the cancellation).
+secret routine wx_erf(x: B128Wx, complement: Bool) -> B128Wx
+  var one = wx_one()
+  if wx_is_zero(w: x)
+    if complement
+      return one
+    return x
+  var a = wx_abs(w: x)
+  var big = wx_b64(w: a) > 8.0
+  if not complement
+    var r = a
+    if big
+      r = wx_sub(a: one, b: wx_erfc_cf(a: a))
+    else
+      r = wx_erf_series(a: a)
+    if x.neg
+      return wx_neg(w: r)
+    return r
+  if x.neg
+    if big
+      return wx_sub(a: wx_scale(w: one, k: 1_s64), b: wx_erfc_cf(a: a))
+    return wx_add(a: one, b: wx_erf_series(a: a))
+  if big
+    return wx_erfc_cf(a: a)
+  return wx_sub(a: one, b: wx_erf_series(a: a))
+
+### ln Gamma(x) for x >= 1/2: Stirling at X = x + n >= 128 with 41 terms (the rest below 2^-392), less
+### ln(x (x + 1) ... (x + n - 1)).
+secret routine wx_lgamma_pos(x: B128Wx) -> B128Wx
+  var one = wx_one()
+  var xb = wx_b64(w: x)
+  var n = 0_s64
+  if xb < 128.0
+    n = 128_s64 -% LLVM::float_to_signed[B64, S64](xb)
+  var prod = one
+  var i = 0_s64
+  while i < n
+    prod = wx_mul(a: prod, b: wx_add(a: x, b: wx_of_s64(v: i)))
+    i = i +% 1_s64
+  var big = wx_add(a: x, b: wx_of_s64(v: n))
+  var w = wx_div(a: one, b: big)
+  var w2 = wx_mul(a: w, b: w)
+  # sum_k (-1)^(k+1) |B_2k| / (2k (2k - 1)) w^(2k-1) = w (c1 + w2 (c2 + ...)), the signs alternating from +
+  var k = 41_u64
+  var sum = wx_table(i: 78_u64)
+  while k > 1_u64
+    k = k -% 1_u64
+    var c = wx_table(i: 37_u64 +% k)
+    if (k & 1_u64) == 0_u64
+      c = wx_neg(w: c)
+    sum = wx_add(a: c, b: wx_mul(a: w2, b: sum))
+  sum = wx_mul(a: w, b: sum)
+  var half = wx_scale(w: one, k: -1_s64)
+  var l = wx_add(a: wx_sub(a: wx_mul(a: wx_sub(a: big, b: half), b: wx_log(x: big)), b: big), b: wx_table(i: 5_u64))
+  l = wx_add(a: l, b: sum)
+  if n > 0_s64
+    l = wx_sub(a: l, b: wx_log(x: prod))
+  return wx_widen(w: l, r: 0x1p-390)
+
+### ln|Gamma(x)| and whether Gamma(x) < 0, for a finite x that is not a pole, given x = k + r with k an
+### integer (k_odd its parity) and |r| <= 1/2 (r exact or close): wx_lgamma_pos from 1/2 up, below it the
+### reflection ln pi - ln|sin(pi x)| - ln Gamma(1 - x) with sin(pi x) = (-1)^k sin(pi r).
+secret routine wx_lgamma(x: B128Wx, k_odd: Bool, r: B128Wx) -> (B128Wx, Bool)
+  if not x.neg and wx_b64(w: x) >= 0.5
+    return (wx_lgamma_pos(x: x), false)
+  var s = wx_sincospi(r: r).item0
+  var l = wx_sub(a: wx_sub(a: wx_table(i: 6_u64), b: wx_log(x: wx_abs(w: s))), b: wx_lgamma_pos(x: wx_sub(a: wx_one(), b: x)))
+  return (l, s.neg != k_odd)
+
+### Gamma(x) for a finite x that is not a pole, with ln|Gamma| below about 15000 in magnitude (see
+### wx_lgamma for k_odd and r): e^lgamma, the sign from the reflection.
+secret routine wx_tgamma(x: B128Wx, k_odd: Bool, r: B128Wx) -> B128Wx
+  var (l, negative) = wx_lgamma(x: x, k_odd: k_odd, r: r)
+  var g = wx_exp(x: l)
+  if negative
+    return wx_neg(w: g)
+  return g
+
+# ============================================================================
+# Tables
+# ============================================================================
+
+# 384-bit significands (rounded to nearest, top bit set) and exponents, value = m * 2^e: ln 2, pi, pi/256,
+# 1/ln 2, 1/ln 10, ln(2 pi)/2, ln pi, 2/sqrt(pi), 1/sqrt(pi), pi/2, 10^(2^i) and 10^-(2^i) for i = 0..13, and
+# |B_2k| / (2k (2k - 1)) for k = 1..41. Row i is m2, m1, m0.
+secret preset WX_TABLE: Array[U128, 237] = [
+  0xB17217F7D1CF79ABC9E3B39803F2F6AF_u128, 0x40F343267298B62D8A0D175B8BAAFA2B_u128, 0xE7B876206DEBAC98559552FB4AFA1B11_u128,
+  0xC90FDAA22168C234C4C6628B80DC1CD1_u128, 0x29024E088A67CC74020BBEA63B139B22_u128, 0x514A08798E3404DDEF9519B3CD3A431B_u128,
+  0xC90FDAA22168C234C4C6628B80DC1CD1_u128, 0x29024E088A67CC74020BBEA63B139B22_u128, 0x514A08798E3404DDEF9519B3CD3A431B_u128,
+  0xB8AA3B295C17F0BBBE87FED0691D3E88_u128, 0xEB577AA8DD695A588B25166CD1A13247_u128, 0xDE1C43F755176CD624D92F75C16BE0B4_u128,
+  0xDE5BD8A937287195355BAAAFAD33DC32_u128, 0x3EE3460245C9A2023A3F2D44F78EA53C_u128, 0x75424EFA1402F3F292235592C6464A15_u128,
+  0xEB3F8E4325F5A53494BC900144192023_u128, 0xCFB08F8D13458B4DDEC6A3133DAA155D_u128, 0x212F9D7FE00E86BF93EABF905C5569BC_u128,
+  0x928682473D0DE85EAFCAB635421FA4CC_u128, 0x2F36EDF9D9F9303719C0176577D49847_u128, 0x2D53626FA918B07369201612B6D85C33_u128,
+  0x906EBA8214DB688D71D48A7F6BFEC344_u128, 0x1409A0EBAC3E751739A15830CCE620B0_u128, 0xC0759CF859270F1140C036096CC79AEC_u128,
+  0x906EBA8214DB688D71D48A7F6BFEC344_u128, 0x1409A0EBAC3E751739A15830CCE620B0_u128, 0xC0759CF859270F1140C036096CC79AEC_u128,
+  0xC90FDAA22168C234C4C6628B80DC1CD1_u128, 0x29024E088A67CC74020BBEA63B139B22_u128, 0x514A08798E3404DDEF9519B3CD3A431B_u128,
+  0xA0000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0xC8000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0x9C400000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0xBEBC2000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0x8E1BC9BF040000000000000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0x9DC5ADA82B70B59DF020000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0xC2781F49FFCFA6D53CBF6B71C76B25FB_u128, 0x50F80800000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0x93BA47C980E98CDFC66F336C36B10137_u128, 0x0234F3FD7B08DD390BC3C54E3F40F7E6_u128, 0x424BA54F804000000000000000000000_u128,
+  0xAA7EEBFB9DF9DE8DDDBB901B98FEEAB7_u128, 0x851E4CBF3DE2F98AAE780C7FEA81C788_u128, 0x5A6B43A2A6C495B8CCD604D64E2DDAB3_u128,
+  0xE319A0AEA60E91C6CC655C54BC5058F8_u128, 0x9C6583981D134CBA422D38EA3584CDE4_u128, 0x0B9A1D7D634DF2D874A24BBAE09B3399_u128,
+  0xC976758681750C17650D3D28F18B50CE_u128, 0x526B988275249B0FD6F4B6D27BD1C61C_u128, 0x253069A5C329F9AF4A9CF154D24DAA38_u128,
+  0x9E8B3B5DC53D5DE4A74D28CE329ACE52_u128, 0x6A3197BBEBE3034F77154CE2BCBA1964_u128, 0x8B21C11EB962B1B61B93CF2EE5CA6F7F_u128,
+  0xC46052028A20979AC94C153F804A4A92_u128, 0x65761FB2444E2267DD5CF7C945F22A3F_u128, 0xFFF0D1D2E18469B1EA38AAC7E917A569_u128,
+  0x96A3A1D17FAF211A0C7C2892305F4E12_u128, 0x072B211ACEB5055E412E0901A7BB6C7D_u128, 0x98AB274A132284C80C3F77471B93102B_u128,
+  0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC_u128, 0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC_u128, 0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCD_u128,
+  0xA3D70A3D70A3D70A3D70A3D70A3D70A3_u128, 0xD70A3D70A3D70A3D70A3D70A3D70A3D7_u128, 0x0A3D70A3D70A3D70A3D70A3D70A3D70A_u128,
+  0xD1B71758E219652BD3C36113404EA4A8_u128, 0xC154C985F06F694467381D7DBF487FCB_u128, 0x923A29C779A6B50B0F27BB2FEC56D5D0_u128,
+  0xABCC77118461CEFCFDC20D2B36BA7C3D_u128, 0x3D4D3D758161697C7068F3B46D2F8350_u128, 0x5705755FD37A3B048DD947039F9CBDE6_u128,
+  0xE69594BEC44DE15B4C2EBE687989A9B3_u128, 0xBF716C1ADD27F08523CCD3484DB670AA_u128, 0xD6E012CF7FA7CF42858294CA267AE62E_u128,
+  0xCFB11EAD453994BA67DE18EDA5814AF2_u128, 0x0B5B1AA028CCD99E59E338E387AD8E28_u128, 0x56760892162196AF3C7EDE8038A3B844_u128,
+  0xA87FEA27A539E9A53F2398D747B36224_u128, 0x2A1FEE40D90AAB310E128B5D938CFB3F_u128, 0x6F203147025D1129E4926E2D6669A036_u128,
+  0xDDD0467C64BCE4A0AC7CB3F6D05DDBDE_u128, 0xE26CA6063461FFFA4ED775FC49F27952_u128, 0xF2F3A45F9009F3C9EE49E1C12E611CAA_u128,
+  0xC0314325637A1939FA911155FEFB5308_u128, 0xA23E2ED27766E8CC9B03537708B1648F_u128, 0x7A730E52E6E7436055F3DFF45E1BDF18_u128,
+  0x9049EE32DB23D21C7132D332E3F204D4_u128, 0xE7317D62209B6A93D4C94A9DA0693E0C_u128, 0xFEFDE89B01E51068E0E47572DFADEA99_u128,
+  0xA2A682A5DA57C0BD87A601586BD3F698_u128, 0xF53E94D1B2357C32C0EAFF3755A2DDCD_u128, 0x5191A70F9E339AA962702807D10D8CFA_u128,
+  0xCEAE534F34362DE4492512D4F2EAD2CB_u128, 0x8263CA5CBC774BD971AAD59046C74249_u128, 0xDDDDC0DFBB0D6F2C0583C8FE05B57DC3_u128,
+  0xA6DD04C8D2CE9FDE2DE38123A1C3CFFC_u128, 0x20305D0244E091BA5E2D7403972F6F2B_u128, 0x04E663AC16D512159834265791E1CF29_u128,
+  0xD986C20B686DA8695D1D4FD85B05F4C2_u128, 0xEEF183849AEE88F76E7AD89A55416D56_u128, 0x354824302CB9572C4628BEE7C8B0D71B_u128,
+  0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_u128, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_u128, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB_u128,
+  0xB60B60B60B60B60B60B60B60B60B60B6_u128, 0x0B60B60B60B60B60B60B60B60B60B60B_u128, 0x60B60B60B60B60B60B60B60B60B60B61_u128,
+  0xD00D00D00D00D00D00D00D00D00D00D0_u128, 0x0D00D00D00D00D00D00D00D00D00D00D_u128, 0x00D00D00D00D00D00D00D00D00D00D01_u128,
+  0x9C09C09C09C09C09C09C09C09C09C09C_u128, 0x09C09C09C09C09C09C09C09C09C09C09_u128, 0xC09C09C09C09C09C09C09C09C09C09C1_u128,
+  0xDCA8F158C7F91AB87539C0372A3C5631_u128, 0xFE46AE1D4E700DCA8F158C7F91AB8753_u128, 0x9C0372A3C5631FE46AE1D4E700DCA8F1_u128,
+  0xFB5586CCC9E3E40FB5586CCC9E3E40FB_u128, 0x5586CCC9E3E40FB5586CCC9E3E40FB55_u128, 0x86CCC9E3E40FB5586CCC9E3E40FB5587_u128,
+  0xD20D20D20D20D20D20D20D20D20D20D2_u128, 0x0D20D20D20D20D20D20D20D20D20D20D_u128, 0x20D20D20D20D20D20D20D20D20D20D21_u128,
+  0xF21436587A9CBEE1032547698BADCFF2_u128, 0x1436587A9CBEE1032547698BADCFF214_u128, 0x36587A9CBEE1032547698BADCFF21436_u128,
+  0xB7F4B1C0F033FFD0C3B7F4B1C0F033FF_u128, 0xD0C3B7F4B1C0F033FFD0C3B7F4B1C0F0_u128, 0x33FFD0C3B7F4B1C0F033FFD0C3B7F4B2_u128,
+  0xB23B3808C0F9CF6DEDCE7312CC3EA607_u128, 0x48B14C1F4AA70223B3808C0F9CF6DEDC_u128, 0xE7312CC3EA60748B14C1F4AA70223B38_u128,
+  0xD672219167002D3A7A9C886459C00B4E_u128, 0x9EA72219167002D3A7A9C886459C00B4_u128, 0xE9EA72219167002D3A7A9C886459C00B_u128,
+  0x9CD9292E6660D55B3F712EB9E07CA39D_u128, 0xB44A9292E6660D55B3F712EB9E07CA39_u128, 0xDB44A9292E6660D55B3F712EB9E07CA4_u128,
+  0x8911A740DA740DA740DA740DA740DA74_u128, 0x0DA740DA740DA740DA740DA740DA740D_u128, 0xA740DA740DA740DA740DA740DA740DA7_u128,
+  0x8D0CC570E255BF59FF6EEC24B48FF1B3_u128, 0x94D92E2FD250842C8D541CDBCBC68B5D_u128, 0xEBD101B8D006A04AA1996CF5F3A9C5E4_u128,
+  0xA8D1044D3708D1C219EE4FDC4469CCAE_u128, 0xDCB00698234D582B96093D5EE562C084_u128, 0x6967B29EE369D34F6A57DA7B74683DCB_u128,
+  0xE8844D8A169ABBC406169ABBC406169A_u128, 0xBBC406169ABBC406169ABBC406169ABB_u128, 0xC406169ABBC406169ABBC406169ABBC4_u128,
+  0xB694D07B219DBCC48676F31219DBCC48_u128, 0x676F31219DBCC48676F31219DBCC4867_u128, 0x6F31219DBCC48676F31219DBCC48676F_u128,
+  0xA2288CECF23376AEA6024D5C49761634_u128, 0xDA88C0793F07A1F8F3066B7EA521C5CD_u128, 0xDBB1324E3CD10483F9BE6F5E30FAFCE7_u128,
+  0xA1BBCDE4EA0127350B88127350B88127_u128, 0x350B88127350B88127350B88127350B8_u128, 0x8127350B88127350B88127350B881273_u128,
+  0xB4005BDE03D4642A243581714AF642A2_u128, 0x43581714AF642A243581714AF642A243_u128, 0x581714AF642A243581714AF642A24358_u128,
+  0xDE466B7C78FBAAE3C3A9E6DAEAE46D98_u128, 0xEEECAC9E8573ED1EAAC0952D3B2DCF5D_u128, 0x7D424E930F914416C3FC164488D03738_u128,
+  0x977D762877729BCB40509F4FD884644B_u128, 0x72037C5E151661B4CBD569367A8E3A5C_u128, 0x877F7942E7457DEBABFED3995BC0B405_u128,
+  0xE2E1337F5AF0BED90B6B0A352D4F335C_u128, 0x83DA6597D3226A6F46BA523A04C2CB44_u128, 0x4E986E10DD6C40121349260C05F8A82A_u128,
+  0xB9E094058AD89016B4F92FF986CDEEA2_u128, 0x09D8D881AD4571561F50A7D30F4B3A8C_u128, 0x9209871FA77C3AE366715B3ADE4AE3B8_u128,
+  0xA5F7EEF9E71AC7C80326AB4CC8BF3F7C_u128, 0x478F4715B08640E90B3D95ED5188A0D9_u128, 0xD86BA7F9AAD3322FCFDF11E3D1C56C22_u128,
+  0xA0EF80E57954084CDA64925C6C86491A_u128, 0x694DEEF08CB9CEBD071730F3C513F899_u128, 0x9B37647967B1C1DB9E6FBEA34445E20F_u128,
+  0xA8EBFE48DA17DD999790760B0CE0256E_u128, 0xC758797BF482690066BA7710D48231E8_u128, 0x32502FFFEBCC75507F8ADDDF7F1DB5EB_u128,
+  0xBF582A433556FB1724C95AB56CBEC2EF_u128, 0x3BA1B5EF128B14782409B737C796CBEC_u128, 0x2EF3BA1B5EF128B14782409B737C796D_u128,
+  0xE940B3723E6C7D0E7770E67104316DCB_u128, 0x45C0EB78E86D69D5EDFBFDAA63368772_u128, 0x837D2BB83DE9B8B2D64F6BD099DE7492_u128,
+  0x989A150689672663F8CC3B4F451835E1_u128, 0x174B18C9BD60A7D4B5C73E81CD5CEE1B_u128, 0xA1E0619AAA6B15CB7924791FCDBE610E_u128,
+  0xD5CEC8C0E5ACCFED58FBED95C39002CC_u128, 0x3D8D4A245F202CC3D8D4A245F202CC3D_u128, 0x8D4A245F202CC3D8D4A245F202CC3D8D_u128,
+  0xA00536CAA55D946E12E5B9C2738F0D8D_u128, 0x4CCAC2A22017F7756D4CCAC2A22017F7_u128, 0x756D4CCAC2A22017F7756D4CCAC2A220_u128,
+  0xFF5CA480718D0478053990055E272CEC_u128, 0xC135E5D9A18C2463400E7586295F18D9_u128, 0xCC135E5D9A18C2463400E7586295F18E_u128,
+  0xD8CACDE8FD42524351CE652DA1AC906F_u128, 0x8970D80209ADFA65618F6933B59EB1CC_u128, 0x8B970D80209ADFA65618F6933B59EB1D_u128,
+  0xC375BBF4BD004BF46D260A614FFDD36D_u128, 0x7D64C29CC515283C3609112F8D0CE908_u128, 0xD329C3CE04B258BE1BE10EF189B252A9_u128,
+  0xBAD33621BFB252C939D8E8F16B379936_u128, 0x5962547774D040932F302BB2A9EF67B0_u128, 0x597E8319AB73D9C56F72BBCED18E9B83_u128,
+  0xBCFF6120E3920B45F50FD61D72FE906A_u128, 0xBB0F66012B404AD012B404AD012B404A_u128, 0xD012B404AD012B404AD012B404AD012B_u128,
+  0xCA0AAFB0E0D2AD9CF8DC79DC8231CF7E_u128, 0xA3FE41E5230B2674F6AB93AEFD7F341C_u128, 0x378607BCA4C00E90452D489718CDB5D1_u128,
+  0xE3E6A8D1CECA9D6A978134FC5FBD6DF4_u128, 0x767C95D95FAAC26FE3271A69E84561C8_u128, 0xF5CCD91419DCD2F447F89EAE67A3855F_u128,
+  0x876F6FFD5A2B432DEDBA5116DCFEFF56_u128, 0x87F8B38341B4D93F959D1FAA42D32EF2_u128, 0x4C494E529790564499E2187031287729_u128,
+  0xA962FD6B48EA68A8AA3A923A585C9BD4_u128, 0x8F69CA6682BEA2579AF73AB4362C3236_u128, 0x66AF2F6ECB83F76B71B05D9F27833476_u128
+]
+secret preset WX_TABLE_E: Array[S64, 79] = [
+  -384_s64, -382_s64, -390_s64, -383_s64, -385_s64, -384_s64, -383_s64, -383_s64, -384_s64, -383_s64,
+  -380_s64, -377_s64, -370_s64, -357_s64, -330_s64, -277_s64, -171_s64, 42_s64, 467_s64, 1317_s64,
+  3018_s64, 6420_s64, 13223_s64, 26830_s64, -387_s64, -390_s64, -397_s64, -410_s64, -437_s64, -490_s64,
+  -596_s64, -809_s64, -1234_s64, -2084_s64, -3785_s64, -7187_s64, -13990_s64, -27597_s64, -387_s64, -392_s64,
+  -394_s64, -394_s64, -394_s64, -393_s64, -391_s64, -389_s64, -386_s64, -383_s64, -380_s64, -376_s64,
+  -372_s64, -368_s64, -364_s64, -360_s64, -355_s64, -350_s64, -345_s64, -340_s64, -335_s64, -329_s64,
+  -324_s64, -318_s64, -312_s64, -306_s64, -300_s64, -294_s64, -288_s64, -281_s64, -275_s64, -268_s64,
+  -262_s64, -255_s64, -248_s64, -241_s64, -234_s64, -227_s64, -220_s64, -212_s64, -205_s64
+]
+
+# 1/k! for k = 0..110, the same layout.
+secret preset WX_INV_FACT: Array[U128, 333] = [
+  0x80000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0x80000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0x80000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128, 0x00000000000000000000000000000000_u128,
+  0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_u128, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_u128, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB_u128,
+  0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_u128, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA_u128, 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB_u128,
+  0x88888888888888888888888888888888_u128, 0x88888888888888888888888888888888_u128, 0x88888888888888888888888888888889_u128,
+  0xB60B60B60B60B60B60B60B60B60B60B6_u128, 0x0B60B60B60B60B60B60B60B60B60B60B_u128, 0x60B60B60B60B60B60B60B60B60B60B61_u128,
+  0xD00D00D00D00D00D00D00D00D00D00D0_u128, 0x0D00D00D00D00D00D00D00D00D00D00D_u128, 0x00D00D00D00D00D00D00D00D00D00D01_u128,
+  0xD00D00D00D00D00D00D00D00D00D00D0_u128, 0x0D00D00D00D00D00D00D00D00D00D00D_u128, 0x00D00D00D00D00D00D00D00D00D00D01_u128,
+  0xB8EF1D2AB6399C7D560E4472800B8EF1_u128, 0xD2AB6399C7D560E4472800B8EF1D2AB6_u128, 0x399C7D560E4472800B8EF1D2AB6399C8_u128,
+  0x93F27DBBC4FAE397780B69F5333C725B_u128, 0x0EEF82E16CAAB3E9D28666FA58E4222B_u128, 0x6149FDDE71D05B99A2D8C17555E947D3_u128,
+  0xD7322B3FAA271C7F3A3F25C1BEE38F10_u128, 0x15B9788DB55562C878094FF7C71D48F9_u128, 0x47B171438E4656B0ECDE30AAAB81DCD6_u128,
+  0x8F76C77FC6C4BDAA26D4C3D67F425F60_u128, 0x0E7BA5B3CE38EC85A55B8AA52F68DB50_u128, 0xDA764B825ED98F209DE975C71D013DE4_u128,
+  0xB092309D43684BE51C198E91D7B4269D_u128, 0x9BABDFA238E3994206980D1A12F7354F_u128, 0xD1CCABB425F8129E4C33071C7277AEA2_u128,
+  0xC9CBA54603E4E905D6F8A2EFD1F27546_u128, 0x68C46D4BAEBAF84B75400EF93A3F185B_u128, 0x38E9E8CDE2401547328375D75E3FA303_u128,
+  0xD73F9F399DC0F88EC32B58774657F48F_u128, 0x5EAF6383ED943C0C38CCDCC593768061_u128, 0x4DC64DA868CCE37F24D07DB286AA477A_u128,
+  0xD73F9F399DC0F88EC32B58774657F48F_u128, 0x5EAF6383ED943C0C38CCDCC593768061_u128, 0x4DC64DA868CCE37F24D07DB286AA477A_u128,
+  0xCA963B81856A53593028CBBB8D7FF53B_u128, 0xA468D621D08B83CF4484938CC7061E79_u128, 0xB29C855335758AD20487FDD533731619_u128,
+  0xB413C31DCBECBBDD8024435161554BC3_u128, 0x3CCEF73A807C0362E7924A443F21E233_u128, 0x496EAF6668687B65595C6FD9F4D813A4_u128,
+  0x97A4DA340A0AB92650F61DBDCB3A5ABF_u128, 0x5BA0D03143C6BF7BB588AA546B0F0F53_u128, 0x9C2750563CF9AB47DF76433E47729747_u128,
+  0xF2A15D201011283D4E5695FC785D5DFE_u128, 0xF9014D1B9FA46592BC0DDD53DE7E7EEC_u128, 0x2D0BB3BD2E5C453FCBF06B96D8B75872_u128,
+  0xB8DC77B6E7AB8C5F78A37E77372290C2_u128, 0x43D03ABFB695A2B8F0CD9C70A984F2FD_u128, 0x16214BFDDA2DEB9E523D45C84397E1DD_u128,
+  0x8671CB6DBFC294A286485BF99C763ABB_u128, 0xD43A59459C0FBC29694FB797C11ADF43_u128, 0xB300F172CD38AB5BDEB832C03128A443_u128,
+  0xBB0DA098B1C0CECBDC3826EBFB13CC26_u128, 0xB7F82329322C272E7C42639B7BF8DD95_u128, 0xD7A844CC3EEAABA135DEE26F924ECE47_u128,
+  0xF96780CB97ABBE6525A033E54EC51033_u128, 0x9FF58436ED90343DFB032F79FAA12772_u128, 0x74E05BBAFE8E3A2C47D3D894C313BDB5_u128,
+  0x9F9E66E8B2FD46A722520CBBB7885C49_u128, 0xFFF94A60980A5EDFFCCED6B4777160ED_u128, 0x1799D44EB76543F3612B6BE453E3AC9D_u128,
+  0xC4742FE35272CD1C790285D3580A4A33_u128, 0xB132D1B1F63425FFFC124354443CC610_u128, 0x1D0C18FE6B9053A1B2AB987B7AF0D472_u128,
+  0xE8D58E16E67519054D0C78AEA13B9A50_u128, 0x3A4F316A9F0E65ED04D34650E893E142_u128, 0x813DBECEB85F33B629173975E70A770C_u128,
+  0x850C5131A842E9B9E2E28E1AA546A152_u128, 0x6A7665617F75F119B99D4CC084E6C9DC_u128, 0xDC234876203666B13C0D4567F1BCD650_u128,
+  0x92CFCC5A1AC56BD5F1873BB378948EB3_u128, 0x37AEC824F693CC3FB2554BDD4333A0F3_u128, 0xB51E1AFDEE944E015CBF321A6BD9331A_u128,
+  0x9C9962823EB0730656F6A614C4E2BA58_u128, 0xC3EDA2498F8C959946C161FD147B5659_u128, 0x49B9B66431AF422396214682952BF23E_u128,
+  0xA1A6973C1FADE2170F7237D35FE1C89D_u128, 0xB1796DB749DB7122598DD0811D668AAE_u128, 0xBFB771F3D030C866CC8572132EA0FA0F_u128,
+  0xA1A6973C1FADE2170F7237D35FE1C89D_u128, 0xB1796DB749DB7122598DD0811D668AAE_u128, 0xBFB771F3D030C866CC8572132EA0FA0F_u128,
+  0x9CC092A6E86A8DA9C166FFD4BA113EA8_u128, 0x6E092492B439A402475336CAC72D21A1_u128, 0xB2263FF42EBAF0DFCE14CBB5828C9564_u128,
+  0x9388118E07EBD09FC515A57CEB5B8644_u128, 0x2B53E62FB8AEB87A9D7B7EDCF7B20189_u128, 0x2023FFF4E0AFF1C394C847416BCF9BA9_u128,
+  0x86E2CE38B6C8F9419E3FAD3F0311D9D7_u128, 0xED1981FFBECBA15A29957B4DAF43A9A1_u128, 0xF17FFFF5D4BE1EDEB3EA4FC6C8F853CE_u128,
+  0xEFCC19486165495835C6895393ADF50E_u128, 0x1749CAAA36BF57BCBBB4696DA95BD83C_u128, 0x57FFFFEDEBFCA8A85C4B387DD70ECDDF_u128,
+  0xCF6468E4A742D7A63C58AE1EC4E979FE_u128, 0x5954939A2182E418D9B0C9E24D4883A9_u128, 0xCF914C0C0A5DF9A65DA8D6E9600CCDBA_u128,
+  0xAEA565CE061D57489E9B85276273C50C_u128, 0x1554B230F3CC8A2FDFBD4BB118A8DAA9_u128, 0xF2298368748508204EDF05D2000AC831_u128,
+  0x8F4CA24D25D66F008223B575A61D5979_u128, 0x81178BA4E24BEE1A272BBAD2F369B9FB_u128, 0x08569334E2E34EDF6EA9DD641A4A7CE0_u128,
+  0xE5476A1509571800D0392255D6955BF5_u128, 0x9B58DF6E36DFE35D0B792AEB1F0F8FF8_u128, 0x0D5751EE37D217CBE442FBD35D43FB00_u128,
+  0xB2F30E1CE812063F12E7E8D8D96E5442_u128, 0xD0A9443D0B9C02A008F46C6C951EE0C1_u128, 0x9A05B694767E82F68CB12873041C1513_u128,
+  0x8857A93A986F41B626C912EE5C84D27C_u128, 0x0CB1BA162139E99E80BA3A3A593C18F5_u128, 0x07A2D4405A480241F14A067003219627_u128,
+  0xCAEDA292BF28916E5D72B6F79B901B83_u128, 0x0CF0B5B5C64A49DA0CFD5C9E49479643_u128, 0x05696B897482FD6819BB9282FEB4F74C_u128,
+  0x93958D81FF63527ECF993F3FB6F47119_u128, 0x7DC6559B78F035B5DAE6CEFEC0EE3EBC_u128, 0x6106D9D854BC5B346FCE3C022D9AE266_u128,
+  0xD1E5C39110323C70162F48E32655F62F_u128, 0xA1D01EBAFBA546B2FE7015538F8BB9EF_u128, 0x78ED4C9461C1EDCD6BCFFA52BE041A2A_u128,
+  0x9204027B2CA8831652372792E30425B1_u128, 0xD4BD4D07A3ED68D58F9BE25063DBA2BC_u128, 0xD9B03545D4B36DC68DC855182B243EB9_u128,
+  0xC6D4705093F5CDBC5A2A6C5B1472955F_u128, 0x16CB4DA85C7F322840D44483412B1411_u128, 0x7F9358E1CFEEE1BCAB4742DA1A10AC8F_u128,
+  0x848DA035B7F933D2E6C6F2E762F70E3F_u128, 0x6487891AE854CC1AD5E2D85780C762B6_u128, 0x550CE5EBDFF4967DC784D73C1160730A_u128,
+  0xAD21786FF5842ECA51FEA0870918E396_u128, 0xB78C7461D6A300230CE997F4E6E51337_u128, 0x4A83C90A4915AA7009D213E5F759673C_u128,
+  0xDD9B7B70966BC102F85029A29B012350_u128, 0x471A2E91B6933360108728E78DF2041D_u128, 0xD004D85F15DE4ACCD95ED1CA325DF4C8_u128,
+  0x8B0C395FBDC119BB96C8E2E8896A2032_u128, 0x5ECF2C47597575919BF069FAB36AAD3F_u128, 0xE1E4EC2795402EEEF6D21533930DC6C4_u128,
+  0xAB22BCC49AC6470E436D660A81BDB179_u128, 0x123A0F1CBCDF559F84D91FF97A5BE8EC_u128, 0x29B74A09553B4D74E102903F79E9922C_u128,
+  0xCEA7882C33A6FA079036D229AB28AFAA_u128, 0x59A1E1F2667CC7FF6B49CFAAD7607EB2_u128, 0xE9EBD22840479C532CB0FB781F4A5991_u128,
+  0xF4EC7B76C1F54E41DA53EF99AE691C0C_u128, 0x444E15453718A12EB80BA0CA7A8553CA_u128, 0x907FC9AAF6D99CD45AE4B84283E65730_u128,
+  0x8E8047D562E28150348DED2636EE0702_u128, 0x7B85DDD47D259A49BA354F9663364CAD_u128, 0xB5D154C08F9F315AF85FD642A086042F_u128,
+  0xA2DBBFCF4C7093C960A2339963592C95_u128, 0x1F746B3BFCBD429D67185AF503ABC558_u128, 0xCFCAAA00A423A61ED2B6ABB9DC06E035_u128,
+  0xB6DBC9E443DCB7E69969C529FAC6EEB0_u128, 0x6B2D61F28313614073C18590DBB36451_u128, 0xC0E38D79FBAA45BFCD26EDBA3A6A86F9_u128,
+  0xC9C66330D81FB07136865DF95B571909_u128, 0x4A206C146D532D84E9A9673EBD76805A_u128, 0x35F243D60CDF327B5DF5FD7E0B7E5FF8_u128,
+  0xDADFE0BFD4BE940150D72D87FAF2011F_u128, 0xC58FA4F7C907C93DBC60FAD7951CBF4C_u128, 0x292981FDE292A792D6BCBC31F26F0CFB_u128,
+  0xE9775621F3FE7BBD2307A80883244577_u128, 0x3921C1084DE62BFD95BCC74C5AC95495_u128, 0x813D577535F1C3CFD3FC84798B211EEA_u128,
+  0xF4F2B6B24FBB42DF9E7525CE2D436EA7_u128, 0x0DC716111B2C3EF0E03FC482786E82B6_u128, 0x09B1AB7F2C01DA08368B08E43E0991BF_u128,
+  0xFCD982C8945E3483BC57E4F5DC249341_u128, 0x167AED7D034672850883E39F740EFA8A_u128, 0x5C965E72C2126D73D534AE56F5B74C20_u128,
+  0x806E7B519070DDB8C130B5502ECD7F9F_u128, 0x075AE247A023C864149442DB26A2055A_u128, 0x98ADE6D4B3D8991E642B03385C4CD976_u128,
+  0x806E7B519070DDB8C130B5502ECD7F9F_u128, 0x075AE247A023C864149442DB26A2055A_u128, 0x98ADE6D4B3D8991E642B03385C4CD976_u128,
+  0xFCE9515DAA38D8113D6BBBB1973E0721_u128, 0x889376B46E8D5B5ABE2FC69BDDCCD757_u128, 0xD2137FAABCBE39576AAB590C867FB41B_u128,
+  0xF53F56A86700D18514C58F37D87A3575_u128, 0xD9C54C51DF90D4B51583A95153333D6C_u128, 0x6E9E8B503AE7014D0296A3ED1D931B41_u128,
+  0xEA4424ED47A5148E67E6BE4C453B6C61_u128, 0x4A49D64690C77AF1C07DC41FD534C439_u128, 0xB9E7AF1AF74F49D6EF5E393E332CFF4A_u128,
+  0xDC7C5EFD709B5EA4258DE047C8B06601_u128, 0x36DC14F71ED9DD1FC43A21FFD7B93127_u128, 0x458EC2EC340E639D1D85DB85D5CFFF54_u128,
+  0xCC82330155E571C110483B9F55F8F304_u128, 0xD621779EB87108768210D19F63EAD842_u128, 0x1B6A7203E614C44786FA4D786D467D86_u128,
+  0xBAFAB24A5D298C93421627E222B7B99E_u128, 0x059AF10624F9A1566849E439F4F3F8EB_u128, 0xFBCF092822D1287BE91F5CC5E04072C4_u128,
+  0xA88B71D6DCFDCA6F1B1EC9CF7239713B_u128, 0x833FF28021546629D4FE197189DF863D_u128, 0x47F0B5530D5B2F4F3E4EBFCB9B44E941_u128,
+  0x95D148BEFD535E9BA654419BF3C14834_u128, 0xE671BB1C8F677741A0E1DDBA41AA3E6F_u128, 0x5C642F6644C2D4B8376271988A045D8F_u128,
+  0x8358CC0D243B105059B694B2CEB07769_u128, 0xFEA2D5238F42296E23D78DC9DE6428B5_u128, 0xCBBD883D9AF7F61C3E956E1C87075588_u128,
+  0xE331CFA807516853A219388F3C00CE8D_u128, 0xD42093446D6B85EEF1E38D78DA9F6903_u128, 0x1B3A006A8F836483E1DFE10EC00CAF9F_u128,
+  0xC1DF698524F6F609ED4F8C6C92C6A96E_u128, 0xC97EC8C2ECBB5391DF7A7F8CACE79A76_u128, 0xB43F25E6E0DD592FAFADFA1369DB09EA_u128,
+  0xA342DF988AEAEA234E93D491532E07F1_u128, 0x814258385B90465FE49D0D1825D08213_u128, 0x1E8604F85191FA431AAD74463E31B782_u128,
+  0x87B2989962D733A5A860464A3E7CB37C_u128, 0x438A42AD2E2EC6212867F04944006C1D_u128, 0x30A4966AA789F494DDA771445B970991_u128,
+  0xDEAEED4A7AD0BDC7A4B83ED5BBE0547D_u128, 0x26A13F78174631717D625C5DF9704864_u128, 0x6A14A8117BF614A585FF15C5829BF571_u128,
+  0xB466D3ADC1787FD25813A4526AD6240A_u128, 0xA7657777F8EE556C24C457CA82C923F6_u128, 0x9D3ADC68E60B683852A148B9EEABB6A2_u128,
+  0x905242F1679399751342E9DB88AB5008_u128, 0x85EAC5F993F1DDF01D69DFD5356DB65E_u128, 0xE42F16BA51A2B9C6A88106FB25562BB5_u128,
+  0xE4103737F2B05ACBF88306188C1E84CB_u128, 0x192725E2E377E3751EADA0EBC95E5C3D_u128, 0x753A9C03AA17452D497CE1F2021CB6D9_u128,
+  0xB2002B18EF5DEF737D470B006D5C809E_u128, 0x8405943434A87F939B10E17FD55C60F7_u128, 0xC5A460CAAA37A02358936BAA271CA7AF_u128,
+  0x8940E6A11B455905C661F5FA29256642_u128, 0xB5FE2215BFBC8762651019D4B0DB47AF_u128, 0xA1A6D88398D79D685CF96270B234F056_u128,
+  0xD125F1B88B1456E43A7CE48963452E1C_u128, 0x83095882AA43DA7D8DCF64504A72B660_u128, 0xF6539311ABF339008DACC6C41BBE6209_u128,
+  0x9D79EF39A1F1325D8967127983F7DA6F_u128, 0xD2191B7D7D3013F21C78033F774D561E_u128, 0xD7964491D2C933F45EA035485D2BF57C_u128,
+  0xEA6222915049391A19E6CE1A11D02759_u128, 0x09138237CC2FBE6E4E17D534C9613EB0_u128, 0xE19E2A85B0CC358386E28AD6DE05E471_u128,
+  0xAC6B806AE5BA476E6B54744E07380567_u128, 0xC00E59E84F95E16BA06FB170650FA0E0_u128, 0x47CF920A123DF266A3F619A1017CFA71_u128,
+  0xFACAE955AB3D7F2C3F067AA00A8007DC_u128, 0xBA436B8073C2BC3F74FF8DBAC18B188C_u128, 0x0B5C7754779FEC38344EB0EA30B5C95E_u128,
+  0xB45862C1EB519D9B80BCBFBAFEEBE323_u128, 0x0A41BD7C02B44DD757028E30011C1D28_u128, 0x4D341C483F02D222A9EDCCE1EF4090CE_u128,
+  0x803EDA237F83FE4C724D5524437FEB79_u128, 0xA0E4CB02DA19D0F4271E42FA506F03AA_u128, 0xE191252DAFA6FBD4621530FBAFD2E421_u128,
+  0xB463A8FC7B194F3073C3FBFABE97CC9F_u128, 0xD43F016C1975E535AA5D34034150322B_u128, 0x6FEB1AF9EEA1BC3E6DD4AA2C9209B169_u128,
+  0xFAF9F63DE2EB8F915326EF4699DE5458_u128, 0xCE416627184AFC1E24AE321ACA2CCB5D_u128, 0xD35D5D2F35BFA1BB081CC03E02D5D571_u128,
+  0xACB7070C4F15B821F1A72E4C1CD00E00_u128, 0x8DF07257769131A12180227B09C13C1F_u128, 0x89327CAFA0DBF62E211C0B2D6D4E5653_u128,
+  0xEB2FB272CDBB8859CBC86A9E1C573931_u128, 0xC6B9CCB875E0F1E0DBEA656BA058D497_u128, 0xE0F30BD3EB61FD859F77E3A558ED6535_u128,
+  0x9E70F990B5B6ED5F86972F92F00FA52F_u128, 0x01D618BCF118E39F91757CEA30BD30E7_u128, 0xAA6873C1F77FFE54A153765471CDBD72_u128,
+  0xD3414CC0F2493C7F5E1EEA194014DC3E_u128, 0xAD1D7651417684D4C1F1FBE2EBA6EBDF_u128, 0x8DE09A57F4AAA870D719F31B4267A743_u128,
+  0x8B6281D11E8A0D862E43E6FE2F8F1546_u128, 0x62629D3D87902D6A111E570490ECD069_u128, 0x45DB7307E368AE79F4D9B2DFD75C2476_u128,
+  0xB60DB93AEE6B2BC960FFDF56725CD7DE_u128, 0x8AF3BDB3A1637F3C2B41C005F6C25E93_u128, 0xF2C0963E8C4A08757E7F9B43B6056917_u128,
+  0xEB61E7BB62CDCC01C86744F63BF19339_u128, 0x9735F7DB51F50198C8BC71CED26FAB69_u128, 0xF40B1A2CAB0A62DB24D8B40F243AB66C_u128,
+  0x96A50F303F3C07AF3894032CF329F7D2_u128, 0xF0228A25F7033438D2641FE086ADDE58_u128, 0x4A448BA1B5255DFCE461BAEAF8777EFD_u128,
+  0xBEEA87D7C232BB2A1A144AFEAB4BFFC6_u128, 0xE44A3058AB1ADF54AF630260FBCA9B0D_u128, 0x0A7A5AC7DDF7981056A97AD39B3496CC_u128,
+  0xEF94BE8C3EFE685CFD96F4B3092827E0_u128, 0x7DDA9705DBBD547E599558518C498B5B_u128, 0xA8C1B32D0277F60A76CAA42CAEB06CEC_u128,
+  0x94DDAA97C3B96B197849EA10CC864F75_u128, 0x1EFA2728EBF46635A7821414D8695913_u128, 0xABF71D50294D063D2E78F13221FB4B23_u128,
+  0xB738346C0495701F58F8828AD456892D_u128, 0xAFF8CDBC36191B55BA78B6410A5A463F_u128, 0x98929A3B46862F10393263EEEEBF2166_u128,
+  0xDF5A758AFE46050684D72C8BFB892FC2_u128, 0xAAA1E4DBAFA993E9B9DEBC0B054E5A83_u128, 0x2A254E4D22C5B5B721277C42F728633B_u128,
+  0x86DAD7DFFEF524D876D8DC1A8E35D936_u128, 0xBDF77BB01CC6FD884994F8C7DC8FE95D_u128, 0xAF2EACDC75992EEC2756A1F8214D845D_u128,
+  0xA1525AC42E9A7D6C380A993EDEC19CF7_u128, 0x514E55C1EDCA281D0DDAE1D4C4DC01A2_u128, 0x505E1DBD8F1229C6C3653E2B389626B8_u128,
+  0xBF3232AF9F87B117F6914D53FE86A712_u128, 0x27794931B1874BFC8232D2C348213158_u128, 0x13661048F56ADC2DF10FB1FA56074A55_u128,
+  0xE0861AA3F60DBAD355378C20DFBCA802_u128, 0x879A2BAD702E258FDD00F78054B3E565_u128, 0x146E75C40FC198DF0CFD4B21467DFE0A_u128,
+  0x82A1CE561623EA5F07B09C00822C999B_u128, 0x12630223BEF0F545BD17D5D1A5A52D07_u128, 0x9C2DA64386D709D0E6F9C54FDE8A77E1_u128
+]
+secret preset WX_INV_FACT_E: Array[S64, 111] = [
+  -383_s64, -383_s64, -384_s64, -386_s64, -388_s64, -390_s64, -393_s64, -396_s64, -399_s64, -402_s64,
+  -405_s64, -409_s64, -412_s64, -416_s64, -420_s64, -424_s64, -428_s64, -432_s64, -436_s64, -440_s64,
+  -445_s64, -449_s64, -453_s64, -458_s64, -463_s64, -467_s64, -472_s64, -477_s64, -481_s64, -486_s64,
+  -491_s64, -496_s64, -501_s64, -506_s64, -511_s64, -516_s64, -522_s64, -527_s64, -532_s64, -537_s64,
+  -543_s64, -548_s64, -553_s64, -559_s64, -564_s64, -570_s64, -575_s64, -581_s64, -586_s64, -592_s64,
+  -598_s64, -603_s64, -609_s64, -615_s64, -621_s64, -626_s64, -632_s64, -638_s64, -644_s64, -650_s64,
+  -656_s64, -662_s64, -668_s64, -673_s64, -679_s64, -686_s64, -692_s64, -698_s64, -704_s64, -710_s64,
+  -716_s64, -722_s64, -728_s64, -734_s64, -741_s64, -747_s64, -753_s64, -759_s64, -766_s64, -772_s64,
+  -778_s64, -785_s64, -791_s64, -797_s64, -804_s64, -810_s64, -817_s64, -823_s64, -830_s64, -836_s64,
+  -842_s64, -849_s64, -856_s64, -862_s64, -869_s64, -875_s64, -882_s64, -888_s64, -895_s64, -902_s64,
+  -908_s64, -915_s64, -922_s64, -928_s64, -935_s64, -942_s64, -948_s64, -955_s64, -962_s64, -969_s64,
+  -975_s64
+]

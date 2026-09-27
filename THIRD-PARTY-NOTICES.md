@@ -18,12 +18,9 @@ projects, their copyright notices and license terms are retained here as require
 
 ## TLFloat — IEEE 754 binary128 / binary256 / binary512 software floating point
 
-Used by the RazorForge `F128`, `F256`, `F512`, and `UnpackedFloat` engines and
-their transcendental / constant tables (`F128`, `F128Math`, `F128Const`, `F256`,
-`F256Exp`, `F512`, `F512Atan`, `F512Gamma`, `UnpackedFloat`, and the decimal
-transcendental bridges that route through them). The arithmetic cores, the
-correctly-/faithfully-rounded transcendental polynomials, the Payne–Hanek
-range-reduction tables, and the `%g` decimal-text formatting are ports of TLFloat.
+Used by the RazorForge software `B128` (`Standard/RazorForge/Core/Numerics/B128.rf`): its
+arithmetic cores (add, subtract, multiply, divide, square root and rounding to integers) are a
+port and extension of TLFloat.
 
 - Project: **TLFloat** — https://github.com/shibatch/tlfloat
 - Copyright © Naoki Shibata and TLFloat contributors.

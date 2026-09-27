@@ -443,7 +443,7 @@ public partial class LlvmEmitter
                .Trim());
         }
 
-        // A quoted type name keeps its type arguments' spaces (`%"Record.Core.UnpackedFloat[3, 6]"`):
+        // A quoted type name keeps its type arguments' spaces (`%"Record.Core.Array[U64, 6]"`):
         // the type runs to the closing quote.
         if (operand.StartsWith(value: "%\"", comparisonType: StringComparison.Ordinal))
         {

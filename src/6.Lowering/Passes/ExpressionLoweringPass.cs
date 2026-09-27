@@ -941,7 +941,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         // ConditionalExpression nodes (from DerivedOperatorPass) are explicitly typed.
         // Prefer a concrete (non-generic-definition) candidate: SA types a conditional from
         // its TRUE branch, and in a monomorphized body `if e==0 then me else …` the cond node's
-        // own ResolvedType can keep the generic self-type `UnpackedFloat[M,L,W]` (the
+        // own ResolvedType can keep the generic self-type (`Box[T]` rather than `Box[S64]`) (the
         // rewriter concretizes the `me` IDENTIFIER but not the conditional node it feeds). A
         // generic-definition record lowers to `ptr` (GetLlvmType), mistyping the `_cif` slot —
         // so fall through to a branch type that the rewriter DID concretize.
