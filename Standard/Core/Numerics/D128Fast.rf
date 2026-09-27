@@ -753,6 +753,81 @@ secret routine d128_residual(s: D128Split, v: B128Fx) -> (Bool, B128Fx)
     return (true, d128_widen(v: lo, r: v.rel *! 1.001 *! b128fx_b64(v: v) /! b128fx_b64(v: lo)))
   return b128fx_add(a: d, b: d128_signed_lo(s: s))
 
+### x - k for a D128 x = c * 10^q and a small integer k, exact in decimal, as a B128Fx (128 bits), or false
+### (x - k = 0, or q outside -38 .. 0 where the difference is not formed here).
+secret routine d128_minus_int(p: D128Parts, k: U128) -> (Bool, B128Fx)
+  if p.exp > 0_s64 or p.exp < -38_s64
+    return (false, b128fx_one())
+  var pw = 1_u128
+  var j = 0_s64
+  while j < 0_s64 -% p.exp
+    pw = pw *% 10_u128
+    j = j +% 1_s64
+  var kc = k *% pw
+  var c = p.coeff
+  var neg = p.sign
+  var d = 0_u128
+  if neg
+    d = c +% kc
+  elseif c >= kc
+    d = c -% kc
+  else
+    d = kc -% c
+    neg = true
+  if d == 0_u128
+    return (false, b128fx_one())
+  return d128_coeff_fx(neg: neg, c: d, q: p.exp)
+
+### asin(s) for a B128Fx s with 0 < |s| <= 1/2 (so cos asin s >= 0.86): r0 = the B128 asin of s's
+### truncation, one Newton step (s - sin r0) / cos r0, the second-order term added as an error.
+secret routine d128_asin_of_fx(s: B128Fx) -> (Bool, B128Fx)
+  var (okb, sb) = b128fx_to_b128(v: s)
+  if not okb
+    return (false, s)
+  var r0 = sb.asin_unchecked()
+  var (okt, sn, cs) = b128_sincos_fx(xb: r0)
+  if not okt
+    return (false, s)
+  var rf = b128fx_of(x: r0)
+  var (okn, num) = b128fx_add(a: s, b: b128fx_neg(v: sn))
+  if not okn
+    # s and sin r0 agree exactly: their own errors bound the step
+    return (true, d128_widen(v: rf, r: (s.rel +! sn.rel) *! 1.01 *! b128fx_b64(v: s) /! b128fx_b64(v: cs) /! b128fx_b64(v: rf)))
+  var (okd, dl) = b128fx_div(a: num, b: cs)
+  if not okd
+    return (false, s)
+  var dv = b128fx_b64(v: dl)
+  var (oka, r) = b128fx_add(a: rf, b: dl)
+  if not oka
+    return (false, s)
+  return (true, d128_widen(v: r, r: dv *! dv /! b128fx_b64(v: rf)))
+
+# pi as a 128-bit significand (exponent -126), rounded.
+secret preset D128F_PI_M: U128 = 0xC90FDAA22168C234C4C6628B80DC1CD1_u128
+
+### acos(x) for 1/2 <= |x| < 1 without the cancellation at +-1: with w = 1 - |x| exact in decimal,
+### acos x = 2 asin(sqrt(w / 2)) for x > 0 and pi - 2 asin(sqrt(w / 2)) for x < 0.
+secret routine d128_acos_edge(p: D128Parts) -> (Bool, D128)
+  var zero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
+  # |x| - 1 exactly in decimal, then negated
+  var (okw, w) = d128_minus_int(p: D128Parts(sign: false, special: 0_u64, exp: p.exp, coeff: p.coeff), k: 1_u128)
+  if not okw or not w.neg
+    return (false, zero)
+  var onem = b128fx_neg(v: w)
+  var (oks, sq) = b128fx_sqrt(v: B128Fx(neg: false, m: onem.m, e: onem.e -% 1_s64, rel: onem.rel))
+  if not oks
+    return (false, zero)
+  var (oka, a) = d128_asin_of_fx(s: sq)
+  if not oka
+    return (false, zero)
+  var two_a = B128Fx(neg: false, m: a.m, e: a.e +% 1_s64, rel: a.rel)
+  if not p.sign
+    return d128_round_fx(v: two_a)
+  var (okp, r) = b128fx_add(a: B128Fx(neg: false, m: D128F_PI_M, e: -126_s64, rel: 0x1p-128), b: b128fx_neg(v: two_a))
+  if not okp
+    return (false, zero)
+  return d128_round_fx(v: r)
+
 ### asin (which 0), acos (1) or atan (2) of a D128, or false: from r0 = the B128 function at xb, asin x =
 ### r0 + (x - sin r0) / cos r0, acos x = r0 - (x - cos r0) / sin r0, atan x = r0 + (x - tan r0) /
 ### (1 + x tan r0), each to first order (atan's step is its exact tangent difference, so its next term is
@@ -770,6 +845,8 @@ secret routine d128_arctrig_fast(x: D128, which: U64) -> (Bool, D128)
   elseif which == 1_u64
     if s.xb.to_bits() >= (0x3FFF_u128 << 112_u32)
       return (false, x)
+    if s.xb.to_bits() >= (0x3FFE_u128 << 112_u32)
+      return d128_acos_edge(p: x.decode())
     r0 = xs.acos_unchecked()
   else
     r0 = xs.atan()
@@ -967,6 +1044,8 @@ secret routine d128_gamma_fast(x: D128, which: U64) -> (Bool, D128)
       return (true, d128_of_parts(p: decfinB(sign: false, coeff: fac, exp: 0_s64, pref: 6111_s64)))
     if isn and fac == 1_u256
       return (true, D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64))
+  if which == 0_u64 and s.xb.to_bits() >= (0x3FFE_u128 << 112_u32) and s.xb.to_bits() < 0x40004000000000000000000000000000_u128
+    return d128_lgamma_near(p: p, s: s)
   var (okc, g) = b128_lgamma_fx(x: s.xb)
   if which == 1_u64
     var (okc2, g2) = b128_tgamma_fx(x: s.xb)
@@ -997,3 +1076,35 @@ secret routine d128_gamma_fast(x: D128, which: U64) -> (Bool, D128)
   if which == 0_u64
     moved = moved /! b128fx_b64(v: r)
   return d128_round_fx(v: d128_widen(v: r, r: moved))
+
+### lgamma(x) for a D128 1/2 <= x < 5/2, around its zeros at 1 and 2, from z = x - 1 or x - 2 exact in
+### decimal: lgamma(2 + z) = z Q(z) by the series, and for x < 3/2 lgamma(x) = lgamma(2 + z) - log1p(z)
+### with z = x - 1 (at most a factor 2.5 of cancellation, which the sum's bound follows).
+secret routine d128_lgamma_near(p: D128Parts, s: D128Split) -> (Bool, D128)
+  var zero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
+  var below = s.xb.to_bits() < 0x3FFF8000000000000000000000000000_u128
+  var k = 2_u128
+  if below
+    k = 1_u128
+  var (okz, z) = d128_minus_int(p: p, k: k)
+  if not okz
+    # x = 1 or 2 exactly (in any cohort) gives +0
+    if p.exp <= 0_s64 and p.exp >= -38_s64
+      var pw = 1_u128
+      var j = 0_s64
+      while j < 0_s64 -% p.exp
+        pw = pw *% 10_u128
+        j = j +% 1_s64
+      if p.coeff == k *% pw
+        return (true, zero)
+    return (false, zero)
+  var g = b128fx_mul(a: z, b: b128_lgamma2_q_fx(zf: z))
+  if not below
+    return d128_round_fx(v: g)
+  var (okl, l) = b128fx_log1p(t: z)
+  if not okl
+    return (false, zero)
+  var (oka, r) = b128fx_add(a: g, b: b128fx_neg(v: l))
+  if not oka
+    return (false, zero)
+  return d128_round_fx(v: r)
