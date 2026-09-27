@@ -532,7 +532,7 @@ secret routine b128_erfc_mid(af: B128Fx) -> (Bool, B128Fx)
 ### e^(-a^2) for a finite a as a B128Fx, or false (a result outside exp's fast range): a^2 is exact in 256
 ### bits, split into its first 113 bits zb (a B128) and the rest zl (below 2^-112 zb), and e^(-a^2) =
 ### e^(-zb) (1 - zl), dropping zl^2/2 (below 2^-200 wherever the result is normal).
-secret routine b128_exp_neg_sq(a: B128) -> (Bool, B128Fx)
+secret routine b128_exp_neg_sq(a: B128, acc: Bool) -> (Bool, B128Fx)
   var af = b128fx_of(x: a)
   var p = b128_trig_wmul(x: af.m, y: af.m)
   var pw = (LLVM::zero_extend[U128, U256](p.item0) << 128_u32) | LLVM::zero_extend[U128, U256](p.item1)
@@ -545,7 +545,7 @@ secret routine b128_exp_neg_sq(a: B128) -> (Bool, B128Fx)
   if biased < 1_s64 or biased > 32766_s64
     return (false, af)
   var zbits = (1_u128 << 127_u32) | (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112_u32) | (zsig -% (1_u128 << 112_u32))
-  var (ok, ez) = b128_exp_fx(x: B128.from_bits(bits: zbits))
+  var (ok, ez) = b128_exp_fx(x: B128.from_bits(bits: zbits), acc: acc)
   if not ok
     return (false, af)
   if rest == 0_u256
@@ -562,7 +562,7 @@ secret routine b128_exp_neg_sq(a: B128) -> (Bool, B128Fx)
 ### is alternating with shrinking terms there, so the tail is below the last term). Each term adds one unit
 ### of truncation to the previous one's error times (2n - 1) u < 3/4, so every term is within 4 units and P
 ### within 4N + 4 over N terms, and the relative error of u moves P by less than 2u of it.
-secret routine b128_erfc_big(a: B128) -> (Bool, B128Fx)
+secret routine b128_erfc_big(a: B128, acc: Bool) -> (Bool, B128Fx)
   var af = b128fx_of(x: a)
   var x2 = b128fx_mul(a: af, b: af)
   var (oku, u) = b128fx_div(a: b128fx_one(), b: B128Fx(neg: false, m: x2.m, e: x2.e +% 1_s64, rel: x2.rel))
@@ -592,7 +592,7 @@ secret routine b128_erfc_big(a: B128) -> (Bool, B128Fx)
   var pf = b128fx_norm(neg: false, mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](sum)), scale: -126_s64, abserr: nn *! 4.0 +! 4.0)
   pf = B128Fx(neg: false, m: pf.m, e: pf.e, rel: pf.rel +! 2.0 *! u.rel *! 0.01)
   var (okd, inv) = b128fx_div(a: B128Fx(neg: false, m: B128_INV_SQRTPI, e: -128_s64, rel: 0x1p-128), b: af)
-  var (oke, ez) = b128_exp_neg_sq(a: a)
+  var (oke, ez) = b128_exp_neg_sq(a: a, acc: acc)
   if not okd or not oke
     return (false, af)
   return (true, b128fx_mul(a: ez, b: b128fx_mul(a: pf, b: inv)))
@@ -601,6 +601,8 @@ secret routine b128_erfc_big(a: B128) -> (Bool, B128Fx)
 secret preset B128_ERF_HALF: U128 = 0x3FFE0000000000000000000000000000_u128
 secret preset B128_ERF_TEN: U128 = 0x40024000000000000000000000000000_u128
 secret preset B128_ERF_MAX: U128 = 0x4005AA00000000000000000000000000_u128
+# 107, from which erfc rounds to +0
+secret preset B128_ERF_ZERO: U128 = 0x4005AC00000000000000000000000000_u128
 
 ### erf(x) for a finite nonzero x as a B128Fx, or false: the series below 1/2,
 ### 1 - erfc from the table up to 10, and +-1 from there (erfc(10) < 2^-148).
@@ -636,8 +638,9 @@ secret routine b128_erf_fast(x: B128) -> (Bool, B128)
 
 ### erfc(x) for a finite nonzero x as a B128Fx, or false: 1 - erf below 1/2, the table up to
 ### 10, the asymptotic series up to 106.5 (beyond it the result leaves the normal range), and for negative
-### x, 2 - erfc(|x|) (exactly 2 from -10 down, as 2 - erfc(10) rounds to 2).
-secret routine b128_erfc_fx(x: B128) -> (Bool, B128Fx)
+### x, 2 - erfc(|x|) (exactly 2 from -10 down, as 2 - erfc(10) rounds to 2). acc takes e^(-x^2) of the series
+### from the exponential's accurate phase.
+secret routine b128_erfc_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
   var u = x.to_bits()
   var a = u & ((1_u128 << 127_u32) -% 1_u128)
   if a >= (0x7FFF_u128 << 112_u32) or a == 0_u128
@@ -666,7 +669,7 @@ secret routine b128_erfc_fx(x: B128) -> (Bool, B128Fx)
     return (true, B128Fx(neg: false, m: 1_u128 << 127_u32, e: -126_s64, rel: 0x1p-149))
   if a >= B128_ERF_MAX
     return (false, b128fx_one())
-  var (okb, cb) = b128_erfc_big(a: B128.from_bits(bits: a))
+  var (okb, cb) = b128_erfc_big(a: B128.from_bits(bits: a), acc: acc)
   if not okb
     return (false, b128fx_one())
   return (true, cb)
@@ -674,7 +677,16 @@ secret routine b128_erfc_fx(x: B128) -> (Bool, B128Fx)
 
 ### erfc(x) as a B128, or false when the band does not settle it.
 secret routine b128_erfc_fast(x: B128) -> (Bool, B128)
-  var (ok, r) = b128_erfc_fx(x: x)
+  if x.to_bits() >= B128_ERF_ZERO and x.to_bits() < (1_u128 << 127_u32) and not x.is_nan()
+    # from 107 on e^(-x^2) / (x sqrt(pi)) is below half the smallest subnormal (+inf included)
+    return (true, B128.from_bits(bits: 0_u128))
+  var (ok, r) = b128_erfc_fx(x: x, acc: false)
   if not ok
     return (false, x)
-  return b128fx_round(v: r)
+  var (okr, v) = b128fx_round(v: r)
+  if okr or x < 10.0_b128
+    return (okr, v)
+  var (oka, ra) = b128_erfc_fx(x: x, acc: true)
+  if not oka
+    return (false, x)
+  return b128fx_round(v: ra)

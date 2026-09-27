@@ -86,15 +86,15 @@ secret routine b128_ln_fx(x: B128) -> (Bool, B128Fx)
 
 ### e^w for a B128Fx w with |w| < 1, or false: w splits into its B128 truncation wb and the rest wl
 ### (|wl| < 2^-111 |w|), e^w = e^wb (1 + wl) with wl^2/2 below 2^-200 dropped, and below 2^-100 simply
-### e^w = 1 + w (w^2/2 below 2^-200 of it).
-secret routine b128fx_exp_small(w: B128Fx) -> (Bool, B128Fx)
+### e^w = 1 + w (w^2/2 below 2^-200 of it). acc takes e^wb from the exponential's accurate phase.
+secret routine b128fx_exp_small(w: B128Fx, acc: Bool) -> (Bool, B128Fx)
   if w.e < -228_s64
     var (ok0, r0) = b128fx_add(a: b128fx_one(), b: w)
     return (ok0, B128Fx(neg: false, m: r0.m, e: r0.e, rel: r0.rel +! 0x1p-199))
   var (okb, wb) = b128fx_to_b128(v: w)
   if not okb
     return (false, w)
-  var (oke, ez) = b128_exp_fx(x: wb)
+  var (oke, ez) = b128_exp_fx(x: wb, acc: acc)
   if not oke
     return (false, w)
   var (okl, wl) = b128fx_add(a: w, b: b128fx_neg(v: b128fx_of(x: wb)))
@@ -337,11 +337,11 @@ secret routine b128_lgamma_fast(x: B128) -> (Bool, B128)
   return b128fx_round(v: r)
 
 ### tgamma(x) for a positive finite x as a B128Fx, or false (also for x <= 0 or at overflow, which the
-### caller's engine settles).
-secret routine b128_tgamma_fx(x: B128) -> (Bool, B128Fx)
+### caller settles), its exponentials from the fast phase or with acc the accurate one.
+secret routine b128_tgamma_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
   var u = x.to_bits()
   if (u >>> 127_u32) != 0_u128
-    return b128_tgamma_neg_fx(x: x)
+    return b128_tgamma_neg_fx(x: x, acc: acc)
   if u == 0_u128 or u >= B128_GAMMA_MAX
     return (false, b128fx_one())
   var one = B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
@@ -357,7 +357,7 @@ secret routine b128_tgamma_fx(x: B128) -> (Bool, B128Fx)
     var rest = zm & ((1_u256 << sh) -% 1_u256)
     var biased = lead -% 148_s64 +% 16383_s64
     var zb = B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112_u32) | (zsig -% (1_u128 << 112_u32)))
-    var (oke, ez) = b128_exp_fx(x: zb)
+    var (oke, ez) = b128_exp_fx(x: zb, acc: acc)
     if not oke
       return (false, b128fx_one())
     var r = B128Fx(neg: false, m: ez.m, e: ez.e, rel: ez.rel +! err *! 1.001 *! 0x1p-148)
@@ -388,7 +388,7 @@ secret routine b128_tgamma_fx(x: B128) -> (Bool, B128Fx)
     num = p
   var g = b128fx_one()
   if not z.is_zero()
-    var (okg, eg) = b128fx_exp_small(w: b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z)))
+    var (okg, eg) = b128fx_exp_small(w: b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z)), acc: acc)
     if not okg
       return (false, b128fx_one())
     g = eg
@@ -421,10 +421,16 @@ secret routine b128_tgamma_fast(x: B128) -> (Bool, B128)
   var (isn, f) = b128_gamma_int(x: x)
   if isn
     return b128_round_exact(neg: false, mag: f, scale: 0_s64)
-  var (ok, r) = b128_tgamma_fx(x: x)
+  var (ok, r) = b128_tgamma_fx(x: x, acc: false)
   if not ok
     return (false, x)
-  return b128fx_round(v: r)
+  var (okr, v) = b128fx_round(v: r)
+  if okr
+    return (true, v)
+  var (oka, ra) = b128_tgamma_fx(x: x, acc: true)
+  if not oka
+    return (false, x)
+  return b128fx_round(v: ra)
 
 # pi as a 128-bit significand (exponent -126) and ln(pi) likewise (exponent -127), rounded.
 secret preset B128_GAMMA_PI_M: U128 = 0xC90FDAA22168C234C4C6628B80DC1CD1_u128
@@ -434,7 +440,7 @@ secret preset B128_GAMMA_LNPI_M: U128 = 0x928682473D0DE85EAFCAB635421FA4CC_u128
 ### (Gamma(2 + x) / (x (1 + x)), the series taking a negative z too), from -1 to -1/2 as Gamma(2 + z) /
 ### (x z (1 + z)) with z = x + 1 exact, and below -1 by reflection, pi / (sin(pi x) Gamma(1 - x)) with
 ### Gamma(1 - x) = |x| Gamma(|x|) (|x| is exact where 1 - x may round).
-secret routine b128_tgamma_neg_fx(x: B128) -> (Bool, B128Fx)
+secret routine b128_tgamma_neg_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
   var a = x.to_bits() & ((1_u128 << 127_u32) -% 1_u128)
   if a == 0_u128 or a >= (0x7FFF_u128 << 112_u32)
     return (false, b128fx_one())
@@ -442,7 +448,7 @@ secret routine b128_tgamma_neg_fx(x: B128) -> (Bool, B128Fx)
   var xf = b128fx_of(x: x)
   if a < B128_GAMMA_HALF
     var (ok1, xp1) = b128fx_add(a: b128fx_one(), b: xf)
-    var (okg, g) = b128fx_exp_small(w: b128fx_mul(a: xf, b: b128_lgamma2_q(z: x)))
+    var (okg, g) = b128fx_exp_small(w: b128fx_mul(a: xf, b: b128_lgamma2_q(z: x)), acc: acc)
     if not ok1 or not okg
       return (false, xf)
     return b128fx_div(a: g, b: b128fx_mul(a: xf, b: xp1))
@@ -451,14 +457,14 @@ secret routine b128_tgamma_neg_fx(x: B128) -> (Bool, B128Fx)
     if z.is_zero()
       return (false, xf)
     var zf = b128fx_of(x: z)
-    var (okg2, g2) = b128fx_exp_small(w: b128fx_mul(a: zf, b: b128_lgamma2_q(z: z)))
+    var (okg2, g2) = b128fx_exp_small(w: b128fx_mul(a: zf, b: b128_lgamma2_q(z: z)), acc: acc)
     var (okp, zp1) = b128fx_add(a: b128fx_one(), b: zf)
     if not okg2 or not okp
       return (false, xf)
     return b128fx_div(a: g2, b: b128fx_mul(a: b128fx_mul(a: xf, b: zf), b: zp1))
   # Gamma(1 - x) = |x| Gamma(|x|), |x| exact (1 - x itself may round)
   var (oks, sn) = b128_sinpi_fx(y: x)
-  var (okg3, g3) = b128_tgamma_fx(x: B128.from_bits(bits: a))
+  var (okg3, g3) = b128_tgamma_fx(x: B128.from_bits(bits: a), acc: acc)
   if not oks or not okg3
     return (false, xf)
   var den = b128fx_mul(a: b128fx_mul(a: sn, b: g3), b: B128Fx(neg: false, m: xf.m, e: xf.e, rel: 0.0))

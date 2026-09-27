@@ -170,9 +170,11 @@ secret routine b128fx_round(v: B128Fx) -> (Bool, B128)
 # exp, sinh, cosh, tanh
 # ============================================================================
 
-### e^x as a B128Fx for a finite x with 2^-114 <= |x| < 11356, from the CORE-MATH exp fast phase (within 6
-### units of its 2^123-scaled significand, 7 taken), or false for other x and for subnormal results.
-secret routine b128_exp_fx(x: B128) -> (Bool, B128Fx)
+### e^x as a B128Fx for a finite x with 2^-114 <= |x| < 11356, or false for other x and for subnormal results:
+### from the CORE-MATH exp fast phase (within 6 units of its 2^123-scaled significand, 7 taken), or with acc
+### from its accurate phase (192 bits within 8 units, truncated to 128: within 2^-126), which a fast path
+### retries with when the fast phase's band does not settle its rounding.
+secret routine b128_exp_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
   var u = x.to_bits()
   var hi = b128_expfam_hi(u: u)
   var lo = b128_expfam_lo(u: u)
@@ -180,6 +182,12 @@ secret routine b128_exp_fx(x: B128) -> (Bool, B128Fx)
   var nofx = B128Fx(neg: false, m: 0_u128, e: 0_s64, rel: 1.0)
   if b1 < 0x3F8D000000000000_u64 or b1 >= 0x400C62E42FEFA39E_u64
     return (false, nofx)
+  if acc
+    var (ael, f0, f1, f2) = b128_expfam_accurate_words(x0: u, kind: 0_u64)
+    if ael < -16382_s64
+      return (false, nofx)
+    var am = (LLVM::zero_extend[U64, U128](f2) << 67_u32) | (LLVM::zero_extend[U64, U128](f1) << 3_u32) | (LLVM::zero_extend[U64, U128](f0) >>> 61_u32)
+    return (true, B128Fx(neg: false, m: am, e: ael -% 127_s64, rel: 0x1p-126))
   var sm = b128_expfam_sar(v: hi, n: 63_u64)
   var m = b128_expfam_w(hi: (hi & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64, lo: lo)
   var fs = b128_expfam_mh3x2(a0: B128_EXPFAM_ILN2[4], a1: B128_EXPFAM_ILN2[5], a2: B128_EXPFAM_ILN2[6], b: m)
@@ -222,14 +230,18 @@ secret routine b128_sinh_small(x: B128Fx) -> B128Fx
 secret preset B128_FAST_TINY: U128 = 0x3FC60000000000000000000000000000_u128
 secret preset B128_FAST_QUARTER: U128 = 0x3FFD0000000000000000000000000000_u128
 secret preset B128_FAST_45: U128 = 0x40046800000000000000000000000000_u128
+# |x| from which tanh rounds to +-1 (1 - tanh(40.5) = 2 e^-81 / (1 + e^-81) < 2^-115, under half the unit below
+# 1) and from which sinh and cosh overflow (11358 > ln(2 B128_MAX) + 1).
+secret preset B128_FAST_TANH_ONE: U128 = 0x40044400000000000000000000000000_u128
+secret preset B128_FAST_HYP_INF: U128 = 0x400C62F0000000000000000000000000_u128
 
 ### e^|x| and e^-|x| for 2^-57 <= |x| < 45, or e^|x| alone (the third item false) from 45 on, when the exp
 ### fast phase takes them. a is |x|'s bit pattern.
-secret routine b128_exp_pair(a: U128) -> (Bool, B128Fx, Bool, B128Fx)
-  var (ok1, e1) = b128_exp_fx(x: B128.from_bits(bits: a))
+secret routine b128_exp_pair(a: U128, acc: Bool) -> (Bool, B128Fx, Bool, B128Fx)
+  var (ok1, e1) = b128_exp_fx(x: B128.from_bits(bits: a), acc: acc)
   if not ok1 or a >= B128_FAST_45
     return (ok1, e1, false, e1)
-  var (ok2, e2) = b128_exp_fx(x: B128.from_bits(bits: a | (1_u128 << 127_u32)))
+  var (ok2, e2) = b128_exp_fx(x: B128.from_bits(bits: a | (1_u128 << 127_u32)), acc: acc)
   return (ok2, e1, true, e2)
 
 ### cosh(|x|) for |x| < 1/4 (a is |x|'s bit pattern) as a B128Fx: 1 + 2 sinh(|x|/2)^2 from the series of
@@ -242,8 +254,8 @@ secret routine b128_cosh_small(a: U128) -> B128Fx
   return c
 
 ### cosh(|x|) as a B128Fx: (e^|x| + e^-|x|) / 2, or e^|x| / 2 from 45 on (e^-2|x| < 2^-129 dropped).
-secret routine b128_cosh_fx(a: U128) -> (Bool, B128Fx)
-  var (ok, e1, both, e2) = b128_exp_pair(a: a)
+secret routine b128_cosh_fx(a: U128, acc: Bool) -> (Bool, B128Fx)
+  var (ok, e1, both, e2) = b128_exp_pair(a: a, acc: acc)
   if not ok
     return (false, e1)
   var c = B128Fx(neg: false, m: e1.m, e: e1.e -% 1_s64, rel: e1.rel +! 0x1p-129)
@@ -254,8 +266,8 @@ secret routine b128_cosh_fx(a: U128) -> (Bool, B128Fx)
 
 ### sinh(|x|) as a B128Fx for |x| >= 1/4: (e^|x| - e^-|x|) / 2 (cancelling at most by a factor
 ### coth(1/4) ~ 4, which the sum's bound follows), or e^|x| / 2 from 45 on.
-secret routine b128_sinh_fx(a: U128) -> (Bool, B128Fx)
-  var (ok, e1, both, e2) = b128_exp_pair(a: a)
+secret routine b128_sinh_fx(a: U128, acc: Bool) -> (Bool, B128Fx)
+  var (ok, e1, both, e2) = b128_exp_pair(a: a, acc: acc)
   if not ok
     return (false, e1)
   var h = B128Fx(neg: false, m: e1.m, e: e1.e -% 1_s64, rel: e1.rel +! 0x1p-129)
@@ -276,12 +288,20 @@ secret routine b128_sinh_fast(x: B128) -> (Bool, B128)
   if a < B128_FAST_TINY
     return (true, x)
   var neg = (u >>> 127_u32) != 0_u128
+  if a >= B128_FAST_HYP_INF
+    return (true, B128.from_bits(bits: (0x7FFF_u128 << 112_u32) | (u & (1_u128 << 127_u32))))
   if a < B128_FAST_QUARTER
     return b128fx_round(v: b128_sinh_small(x: b128fx_of(x: x)))
-  var (ok, h) = b128_sinh_fx(a: a)
+  var (ok, h) = b128_sinh_fx(a: a, acc: false)
   if not ok
     return (false, x)
-  return b128fx_round(v: B128Fx(neg: neg, m: h.m, e: h.e, rel: h.rel))
+  var (okr, r) = b128fx_round(v: B128Fx(neg: neg, m: h.m, e: h.e, rel: h.rel))
+  if okr
+    return (true, r)
+  var (oka, ha) = b128_sinh_fx(a: a, acc: true)
+  if not oka
+    return (false, x)
+  return b128fx_round(v: B128Fx(neg: neg, m: ha.m, e: ha.e, rel: ha.rel))
 
 ### cosh(x) for a finite x, or false when the band does not settle it.
 secret routine b128_cosh_fast(x: B128) -> (Bool, B128)
@@ -291,12 +311,20 @@ secret routine b128_cosh_fast(x: B128) -> (Bool, B128)
   # below 2^-57, x^2/2 is under a quarter of the half-unit of 1
   if a < B128_FAST_TINY
     return (true, B128.from_bits(bits: 0x3FFF_u128 << 112_u32))
+  if a >= B128_FAST_HYP_INF
+    return (true, B128.from_bits(bits: 0x7FFF_u128 << 112_u32))
   if a < B128_FAST_QUARTER
     return b128fx_round(v: b128_cosh_small(a: a))
-  var (ok, c) = b128_cosh_fx(a: a)
+  var (ok, c) = b128_cosh_fx(a: a, acc: false)
   if not ok
     return (false, x)
-  return b128fx_round(v: c)
+  var (okr, r) = b128fx_round(v: c)
+  if okr
+    return (true, r)
+  var (oka, ca) = b128_cosh_fx(a: a, acc: true)
+  if not oka
+    return (false, x)
+  return b128fx_round(v: ca)
 
 ### tanh(x) for a finite x, or false when the band does not settle it: (e^|x| - e^-|x|) / (e^|x| + e^-|x|),
 ### below 1/4 sinh / cosh from the series of sinh (cosh = 1 + 2 sinh(x/2)^2), and +-1 from 45 on
@@ -309,14 +337,23 @@ secret routine b128_tanh_fast(x: B128) -> (Bool, B128)
   if a < B128_FAST_TINY
     return (true, x)
   var neg = (u >>> 127_u32) != 0_u128
-  if a >= B128_FAST_45
+  if a >= B128_FAST_TANH_ONE
     return (true, B128.from_bits(bits: (0x3FFF_u128 << 112_u32) | (u & (1_u128 << 127_u32))))
   if a < B128_FAST_QUARTER
     var (oksm, qs) = b128fx_div(a: b128_sinh_small(x: b128fx_of(x: B128.from_bits(bits: a))), b: b128_cosh_small(a: a))
     if not oksm
       return (false, x)
     return b128fx_round(v: B128Fx(neg: neg, m: qs.m, e: qs.e, rel: qs.rel))
-  var (ok1, e1, both, e2) = b128_exp_pair(a: a)
+  var (okf, rf) = b128_tanh_exp(a: a, neg: neg, acc: false)
+  if okf
+    return (true, rf)
+  return b128_tanh_exp(a: a, neg: neg, acc: true)
+
+### tanh(|x|) (with x's sign) for 1/4 <= |x| < 45 as (e^|x| - e^-|x|) / (e^|x| + e^-|x|), rounded when the band
+### settles it.
+secret routine b128_tanh_exp(a: U128, neg: Bool, acc: Bool) -> (Bool, B128)
+  var x = B128.from_bits(bits: a)
+  var (ok1, e1, both, e2) = b128_exp_pair(a: a, acc: acc)
   if not ok1
     return (false, x)
   var (okc, c) = b128fx_add(a: e1, b: e2)
@@ -861,6 +898,13 @@ secret routine b128_log_near1(x: B128, ten: Bool) -> (Bool, B128)
 ### e^zb (1 + zl) drops zl^2/2 (|zl| < 2^-98 wherever the result is finite, so below 2^-190). The error of
 ### z, |y| 12 * 2^-148 plus the truncation, is absolute, so it is also the relative error it causes in e^z.
 secret routine b128_pow_fast(x: B128, y: B128) -> (Bool, B128)
+  var (ok, v) = b128_pow_try(x: x, y: y, acc: false)
+  if ok
+    return (true, v)
+  return b128_pow_try(x: x, y: y, acc: true)
+
+### b128_pow_fast with the exponential's fast phase (acc false) or its accurate phase.
+secret routine b128_pow_try(x: B128, y: B128, acc: Bool) -> (Bool, B128)
   var xu = x.to_bits()
   var yu = y.to_bits()
   var signmask = 1_u128 << 127_u32
@@ -931,7 +975,7 @@ secret routine b128_pow_fast(x: B128, y: B128) -> (Bool, B128)
   var zbits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112_u32) | (zsig -% (1_u128 << 112_u32))
   if zneg
     zbits = zbits | signmask
-  var (oke, ez) = b128_exp_fx(x: B128.from_bits(bits: zbits))
+  var (oke, ez) = b128_exp_fx(x: B128.from_bits(bits: zbits), acc: acc)
   if not oke
     return (false, x)
   var r = B128Fx(neg: false, m: ez.m, e: ez.e, rel: ez.rel +! abserr *! 1.001 *! b128fx_p2(k: scale))
