@@ -557,7 +557,100 @@ routine B128.fma!(b: B128, c: B128) -> B128
 
 ### `me*b + c` with a single rounding and raw IEEE propagation. No crash. The product is exact (226 bits) and
 ### the sum exact up to a sticky bit (b128_exact_sum), so its one rounding is the correct one.
+### The bits of a * b + c, correctly rounded, for finite nonzero a, b, c (bit patterns) whose result is a
+### normal B128, or false (then the general path decides): the 226-bit product and c, each normalized to the
+### top of a 256-bit window, the smaller aligned below the larger with the bits it drops folded into a sticky
+### bit. Bits drop only when the smaller sits more than 30 bits (the product) or 143 bits (c) below the larger,
+### and then the sum keeps its top within one bit of the larger one's, so the sticky bit at bit 0 is far below
+### the rounding place (bit 143); a subtraction that drops bits takes one unit off first, the true value lying
+### strictly between that and the next unit up.
+secret routine b128_fma_fast(a: U128, b: U128, c: U128) -> (Bool, U128)
+  var signmask = 1_u128 << 127_u32
+  var expmask = 0x7FFF_u128 << 112_u32
+  var fracmask = (1_u128 << 112_u32) -% 1_u128
+  var aa = a & (signmask -% 1_u128)
+  var ba = b & (signmask -% 1_u128)
+  var ca = c & (signmask -% 1_u128)
+  if aa == 0_u128 or ba == 0_u128 or ca == 0_u128 or aa >= expmask or ba >= expmask or ca >= expmask
+    return (false, 0_u128)
+  if aa < (1_u128 << 112_u32) or ba < (1_u128 << 112_u32) or ca < (1_u128 << 112_u32)
+    return (false, 0_u128)
+  # value = m 2^e with m the 113-bit significand and e the exponent of its last bit
+  var ma = (aa & fracmask) | (1_u128 << 112_u32)
+  var mb = (ba & fracmask) | (1_u128 << 112_u32)
+  var mc = (ca & fracmask) | (1_u128 << 112_u32)
+  var ea = LLVM::int_truncate[U128, S64](aa >>> 112_u32) -% 16495_s64
+  var eb = LLVM::int_truncate[U128, S64](ba >>> 112_u32) -% 16495_s64
+  var ec = LLVM::int_truncate[U128, S64](ca >>> 112_u32) -% 16495_s64
+  var pneg = ((a ^ b) & signmask) != 0_u128
+  var cneg = (c & signmask) != 0_u128
+  # the product (225 or 226 bits) and c with their top bits at 255, and the exponents of their bit 0
+  var pr = b128_trig_wmul(x: ma, y: mb)
+  var pw = (LLVM::zero_extend[U128, U256](pr.item0) << 128_u32) | LLVM::zero_extend[U128, U256](pr.item1)
+  var plz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(pw))
+  pw = pw << b128_trig_sh(n: plz)
+  var pe = ea +% eb -% plz
+  var cw = LLVM::zero_extend[U128, U256](mc) << 143_u32
+  var ce = ec -% 143_s64
+  var x = pw
+  var xe = pe
+  var xneg = pneg
+  var y = cw
+  var ye = ce
+  var yneg = cneg
+  if ce > pe or (ce == pe and cw > pw)
+    x = cw
+    xe = ce
+    xneg = cneg
+    y = pw
+    ye = pe
+    yneg = pneg
+  var d = xe -% ye
+  var ys = 0_u256
+  var sticky = true
+  if d < 256_s64
+    ys = y >>> b128_trig_sh(n: d)
+    sticky = (ys << b128_trig_sh(n: d)) != y
+  var sum = 0_u256
+  var e = xe
+  if xneg == yneg
+    sum = x +% ys
+    if sum < x
+      # the carry: one bit up, the dropped low bit into the sticky bit
+      if (sum & 1_u256) != 0_u256
+        sticky = true
+      sum = (sum >>> 1_u32) | (1_u256 << 255_u32)
+      e = e +% 1_s64
+  else
+    sum = x -% ys
+    if sticky
+      sum = sum -% 1_u256
+    if sum == 0_u256
+      # exact cancellation: +0
+      return (true, 0_u128)
+  var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(sum))
+  sum = sum << b128_trig_sh(n: lz)
+  e = e -% lz
+  if sticky
+    sum = sum | 1_u256
+  var lead = e +% 255_s64
+  if lead < -16382_s64 or lead > 16383_s64
+    return (false, 0_u128)
+  # the top 113 bits, rounded to nearest even on the 143 below
+  var q = LLVM::int_truncate[U256, U128](sum >>> 143_u32)
+  var rem = sum & ((1_u256 << 143_u32) -% 1_u256)
+  var half = 1_u256 << 142_u32
+  var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead +% 16383_s64)) << 112_u32) +% (q -% (1_u128 << 112_u32))
+  if rem > half or (rem == half and (q & 1_u128) == 1_u128)
+    bits = bits +% 1_u128
+  if xneg
+    bits = bits | signmask
+  return (true, bits)
+
 routine B128.fma_unchecked(b: B128, c: B128) -> B128
+  var (fast, fb) = b128_fma_fast(a: me.to_bits(), b: b.to_bits(), c: c.to_bits())
+  if fast
+    return B128.from_bits(bits: fb)
   var nan = B128.from_bits(bits: b128_qnan())
   if me.is_nan() or b.is_nan() or c.is_nan()
     return nan
