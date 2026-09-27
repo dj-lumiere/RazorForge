@@ -277,6 +277,7 @@ routine b128_to_decimal_parts(x: B128, digits: S64, emin: S64, emax: S64, zmin: 
 ### always true). The band is N 2^-bk units of N's last place, N < 2^57 the scaled integer part, so it settles
 ### the rounding when the scaled value lies farther than that from the rounding midpoint (bk below 60 never
 ### settles). One conversion instead of one per band end.
+@inline
 routine b128_to_decimal_band(x: B128, digits: S64, emin: S64, emax: S64, zmin: S64, imax: S64, bk: S64) -> (Bool, D64Parts)
   var bits = x.to_bits()
   var sign = (bits >>> 127) != 0_u128
@@ -1293,11 +1294,36 @@ routine D64.atan() -> D64
     return v
   return d64_by_d128(x: me, r: D128(from: me).atan(), which: 10_u64)
 
+### A nonzero integer below 2^113 as a B128, exactly (negated when neg).
+secret routine b128_of_u128_exact(v: U128, neg: Bool) -> B128
+  var top = 127_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(v))
+  var frac = (v << LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](112_s64 -% top))) & ((1_u128 << 112) -% 1_u128)
+  var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](top +% 16383_s64)) << 112) | frac
+  if neg
+    bits = bits | (1_u128 << 127)
+  return B128.from_bits(bits: bits)
+
 ### Two-argument arctangent atan2(y, x), quadrant-aware, via DD. Never crashes.
 ### :param y: The y-coordinate.
 ### :param x: The x-coordinate.
 ### :returns: The angle of (x, y) in radians, in (-pi, pi].
 routine atan2(y: D64, x: D64) -> D64
+  var py = y.decode()
+  var px = x.decode()
+  if py.special == 0_u64 and px.special == 0_u64 and py.coeff != 0_u64 and px.coeff != 0_u64
+    # the angle depends on y / x alone: with exponents at most 16 apart, both coefficients scaled to the
+    # smaller exponent are integers below 10^32 < 2^113, exact in B128, and only the atan2 rounding remains
+    var d = py.exp -% px.exp
+    if d >= -16_s64 and d <= 16_s64
+      var cy = LLVM::zero_extend[U64, U128](py.coeff)
+      var cx = LLVM::zero_extend[U64, U128](px.coeff)
+      if d >= 0_s64
+        cy = cy *% p10_u128(k: d)
+      else
+        cx = cx *% p10_u128(k: 0_s64 -% d)
+      var (eok, ev) = d64_b128_band_e(r: atan2(y: b128_of_u128_exact(v: cy, neg: py.sign), x: b128_of_u128_exact(v: cx, neg: px.sign)), ce: -1_s64)
+      if eok
+        return ev
   var (ok, v) = d64_b128_band_e(r: atan2(y: d64_to_b128(x: y), x: d64_to_b128(x: x)), ce: 1_s64)
   if ok
     return v
