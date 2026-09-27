@@ -43,11 +43,14 @@ routine d128_to_d32parts(p: D128Parts) -> D32Parts
     return D32Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: 0_u64)
   var c = p.coeff
   var e = p.exp
+  if c == 0_u128
+    # a zero keeps its exponent, clamped into range
+    return decfin32(sign: p.sign, coeff: 0_u64, exp: e, pref: e)
   var nd = digits10_u128(c: c)
   if LLVM::signed_gt(a: nd, b: 7_s64)
     var drop = LLVM::sub(a: nd, b: 7_s64)
     var divv = p10_u128(k: drop)
-    var q = LLVM::unsigned_div(a: c, b: divv)
+    var q = div_pow10_u128(x: c, k: drop)
     var r = LLVM::sub(a: c, b: LLVM::mul(a: q, b: divv))
     var twice = LLVM::mul(a: r, b: LLVM::zero_extend[U64, U128](2_u64))
     if LLVM::unsigned_gt(a: twice, b: divv)
@@ -58,7 +61,7 @@ routine d128_to_d32parts(p: D128Parts) -> D32Parts
     e = LLVM::add(a: e, b: drop)
     # half-even rounding can carry 9999999 -> 10000000 (8 digits); renormalize one digit.
     if LLVM::unsigned_ge(a: c, b: p10_u128(k: 7_s64))
-      c = LLVM::unsigned_div(a: c, b: LLVM::zero_extend[U64, U128](10_u64))
+      c = div_pow10_u128(x: c, k: 1_s64)
       e = LLVM::add(a: e, b: 1_s64)
   # pref = 90 (qmax) strips trailing zeros so the result is the simplest cohort member (matches the
   # other float->decimal converters: 0.8414710 -> 0.841471).
@@ -317,7 +320,11 @@ routine decfin32(sign: Bool, coeff: U64, exp: S64, pref: S64) -> D32Parts
   var under = LLVM::sub(a: -101_s64, b: e)
   if LLVM::signed_gt(a: under, b: drop)
     drop = under
+  # whether the rounding drops a nonzero digit: an inexact result keeps its full precision (it is never
+  # stripped toward the preferred exponent, which only an exact result takes)
+  var inexact = false
   if LLVM::signed_ge(a: drop, b: nd)
+    inexact = true
     # every digit goes: the result is 1 only when the value is above half of 10^drop (exactly half is
     # a tie that rounds to the even 0)
     var above = LLVM::int_eq(a: drop, b: nd) and LLVM::signed_le(a: nd, b: 19_s64) and LLVM::unsigned_gt(a: c, b: LLVM::mul(a: p10_u64(k: LLVM::sub(a: nd, b: 1_s64)), b: 5_u64))
@@ -327,6 +334,7 @@ routine decfin32(sign: Bool, coeff: U64, exp: S64, pref: S64) -> D32Parts
     var divv = p10_u64(k: drop)  # 10^drop divisor
     var q = div_pow10_u64(x: c, k: drop)  # kept high digits
     var r = LLVM::sub(a: c, b: LLVM::mul(a: q, b: divv))  # dropped remainder
+    inexact = r != 0_u64
     var twice = LLVM::mul(a: r, b: 2_u64)
     # round up when remainder > half; on exact half (==) round to even (odd q)
     if LLVM::unsigned_gt(a: twice, b: divv)
@@ -351,7 +359,7 @@ routine decfin32(sign: Bool, coeff: U64, exp: S64, pref: S64) -> D32Parts
   # strip trailing zeros toward pref (raise e); pad toward pref (lower e) within 7 digits.
   # Batched: count trailing zeros (capped at pref-e) and divide them off in one reciprocal-
   # multiply instead of one U64 ÷10 per digit — matches decfin64/decfinB/decfinA.
-  if LLVM::signed_lt(a: e, b: pref)
+  if not inexact and LLVM::signed_lt(a: e, b: pref)
     var tz = trailing_zeros10_u64(c: c, cap0: LLVM::sub(a: pref, b: e))
     c = div_pow10_u64(x: c, k: tz)
     e = LLVM::add(a: e, b: tz)
@@ -399,6 +407,10 @@ routine d32_add(a: D32, b: D32) -> D32
     cl = pa.coeff
     sl = pa.sign
   var pref = el  # preferred exponent = the smaller input exponent
+  # a zero with the larger exponent: the sum is the other operand exactly (aligning it under the zero's
+  # exponent would round it into a sticky unit there)
+  if ch == 0_u64 and cl != 0_u64
+    return d32_of_parts(p: D32Parts(sign: sl, special: 0_u64, exp: el, coeff: cl))
   var shift = LLVM::sub(a: eh, b: el)  # decimal places to align l up to h
   var ew = el  # working exponent of the aligned result
   # shift <= 9: full U64-scale alignment stays within U64
