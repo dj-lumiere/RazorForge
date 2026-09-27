@@ -768,31 +768,110 @@ routine dec_digit_range(c: U128, hi: S64, lo: S64) -> Text
 ### Decimal text of decoded parts (decNumber decToString: plain when exp<=0 and the
 ### adjusted exponent >= -6, else scientific with an explicit-sign exponent).
 routine d128_represent(p: D128Parts) -> Text
-  if LLVM::int_eq(a: p.special, b: 1_u64)
-    return if p.sign then "-inf" else "inf"
-  if LLVM::int_eq(a: p.special, b: 3_u64)
-    return "sNaN"
-  if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-    return "NaN"
-  var nd = digits10_u128(c: p.coeff)
-  var adj = LLVM::add(a: p.exp, b: LLVM::sub(a: nd, b: 1_s64))
-  var body = ""
-  if LLVM::signed_le(a: p.exp, b: 0_s64) and LLVM::signed_ge(a: adj, b: -6_s64)
-    var point = LLVM::add(a: nd, b: p.exp)
-    if LLVM::int_eq(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 0_u64)
-      body = dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 1_s64), lo: 0_s64)
-    elseif LLVM::signed_le(a: point, b: 0_s64)
-      body = "0." + dec_zeros(n: LLVM::sub(a: 0_s64, b: point)) + dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 1_s64), lo: 0_s64)
+  return d128_represent_wrapped(p: p, wrap: "", strip: false)
+
+### d128_represent written straight into one character buffer, as `wrap(...)` when wrap is nonempty (the
+### diagnose form). With strip, fractional trailing zeros are dropped first, up toward exponent 0 (the
+### canonical Decimal text).
+routine d128_represent_wrapped(p: D128Parts, wrap: Text, strip: Bool) -> Text
+  if LLVM::int_ne(a: p.special, b: 0_u64)
+    var sp = "NaN"
+    if LLVM::int_eq(a: p.special, b: 1_u64)
+      sp = "inf"
+      if p.sign
+        sp = "-inf"
+    elseif LLVM::int_eq(a: p.special, b: 3_u64)
+      sp = "sNaN"
+    if wrap.count() > 0_u64
+      return wrap + "(" + sp + ")"
+    return sp
+  danger
+    var dig = Array[U32, 40]()
+    var dp = LLVM::reinterpret_bits[Hijacked[Array[U32, 40]], Hijacked[U32]](dig.hijack())
+    var nd = b128t_digits(v: p.coeff, buf: dp)
+    if nd == 0_s64
+      dp.poke(value: 0x30_u32)
+      nd = 1_s64
+    var e = p.exp
+    var lo = 0_s64
+    if strip and p.coeff != 0_u128
+      while e < 0_s64 and dp.stride(count: lo).peek() == 0x30_u32
+        lo = lo +% 1_s64
+        e = e +% 1_s64
+    # the digits dp[lo .. nd - 1], most significant at nd - 1
+    var k = nd -% lo
+    var adj = e +% k -% 1_s64
+    var buf = Array[Character, 96]()
+    var o = LLVM::reinterpret_bits[Hijacked[Array[Character, 96]], Hijacked[Character]](buf.hijack())
+    var n = 0_s64
+    var wn = LLVM::reinterpret_bits[U64, S64](wrap.count())
+    if wn > 0_s64
+      while n < wn
+        o.stride(count: n).poke(value: wrap[LLVM::reinterpret_bits[S64, U64](n)])
+        n = n +% 1_s64
+      o.stride(count: n).poke(value: Character(0x28_u32))
+      n = n +% 1_s64
+    if p.sign
+      o.stride(count: n).poke(value: Character(0x2D_u32))
+      n = n +% 1_s64
+    if e <= 0_s64 and adj >= -6_s64
+      var point = k +% e
+      if point <= 0_s64
+        # 0.000ddd
+        o.stride(count: n).poke(value: Character(0x30_u32))
+        o.stride(count: n +% 1_s64).poke(value: Character(0x2E_u32))
+        n = n +% 2_s64
+        var z = 0_s64
+        while z < 0_s64 -% point
+          o.stride(count: n).poke(value: Character(0x30_u32))
+          n = n +% 1_s64
+          z = z +% 1_s64
+      var i = k -% 1_s64
+      var written = 0_s64
+      while i >= 0_s64
+        if point > 0_s64 and written == point and e != 0_s64
+          o.stride(count: n).poke(value: Character(0x2E_u32))
+          n = n +% 1_s64
+        o.stride(count: n).poke(value: Character(dp.stride(count: lo +% i).peek()))
+        n = n +% 1_s64
+        written = written +% 1_s64
+        i = i -% 1_s64
     else
-      body = dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 1_s64), lo: LLVM::sub(a: nd, b: point)) + "." + dec_digit_range(c: p.coeff, hi: LLVM::sub(a: LLVM::sub(a: nd, b: point), b: 1_s64), lo: 0_s64)
-  else
-    var mant = dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 1_s64), lo: LLVM::sub(a: nd, b: 1_s64))
-    if LLVM::signed_gt(a: nd, b: 1_s64)
-      mant = mant + "." + dec_digit_range(c: p.coeff, hi: LLVM::sub(a: nd, b: 2_s64), lo: 0_s64)
-    var mag = if LLVM::signed_lt(a: adj, b: 0_s64) then LLVM::sub(a: 0_s64, b: adj) else adj
-    var es = if LLVM::signed_lt(a: adj, b: 0_s64) then "-" else "+"
-    body = mant + "E" + es + f"{mag}"
-  return if p.sign then "-" + body else body
+      # d[.ddd]E+-x
+      o.stride(count: n).poke(value: Character(dp.stride(count: lo +% k -% 1_s64).peek()))
+      n = n +% 1_s64
+      if k > 1_s64
+        o.stride(count: n).poke(value: Character(0x2E_u32))
+        n = n +% 1_s64
+        var j = k -% 2_s64
+        while j >= 0_s64
+          o.stride(count: n).poke(value: Character(dp.stride(count: lo +% j).peek()))
+          n = n +% 1_s64
+          j = j -% 1_s64
+      o.stride(count: n).poke(value: Character(0x45_u32))
+      n = n +% 1_s64
+      var mag = adj
+      if adj < 0_s64
+        mag = 0_s64 -% adj
+        o.stride(count: n).poke(value: Character(0x2D_u32))
+      else
+        o.stride(count: n).poke(value: Character(0x2B_u32))
+      n = n +% 1_s64
+      var ed = Array[U32, 20]()
+      var edp = LLVM::reinterpret_bits[Hijacked[Array[U32, 20]], Hijacked[U32]](ed.hijack())
+      var en = b128t_digits(v: LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](mag)), buf: edp)
+      if en == 0_s64
+        edp.poke(value: 0x30_u32)
+        en = 1_s64
+      var t = en -% 1_s64
+      while t >= 0_s64
+        o.stride(count: n).poke(value: Character(edp.stride(count: t).peek()))
+        n = n +% 1_s64
+        t = t -% 1_s64
+    if wn > 0_s64
+      o.stride(count: n).poke(value: Character(0x29_u32))
+      n = n +% 1_s64
+    return Text(from_span: o, count: LLVM::reinterpret_bits[S64, U64](n))
 
 ### Returns the decimal text of this value.
 @override
@@ -810,7 +889,7 @@ routine D128.fixed(places: U64) -> Text
 ### Returns a diagnostic representation tagged with the type name.
 @override
 routine D128.diagnose() -> Text
-  return "D128(" + me.represent() + ")"
+  return d128_represent_wrapped(p: me.decode(), wrap: "D128", strip: false)
 
 # ============================================================================
 # pow10 tables + Granlund-Montgomery reciprocals (formerly Pow10Recip).

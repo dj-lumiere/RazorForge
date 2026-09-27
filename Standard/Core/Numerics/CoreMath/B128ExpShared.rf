@@ -8,7 +8,7 @@ module Core
 # these tables, of the 2^x evaluation and of its two fallback paths. The three functions differ only in how
 # the argument becomes a fixed-point multiple of log2 (times 1/ln(2), times 1, times log2(10)).
 # Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
-# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# Distributed under the MIT license: see THIRD-PARTY-NOTICES.md at the repository root. RazorForge has no dynamic
 # rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
 # exception-flag and errno handling are dropped).
 # All arithmetic is on 64-bit words. The multi-word products keep every partial-product word at or above
@@ -346,11 +346,11 @@ secret routine b128_expfam_ars3(w0: U64, w1: U64, w2: U64, n: U64) -> (U64, U64,
     return (b128_expfam_shl(v: w2, n: lk1) | b128_expfam_shr(v: w1, n: rk), b128_expfam_sar(v: w2, n: rk), sgn)
   return (b128_expfam_sar(v: w2, n: rk), sgn, sgn)
 
-### Finishes exp, exp2 or exp10 from the reduced argument (fs0, fs1, fs2): a 2's complement fixed-point
-### value of x*log2(base) whose integer part sits above the 20 low bits of fs2. x0 is the input's bit
-### pattern (for the fallback paths). Returns the correctly rounded result.
+### The fast evaluation of 2^v for the reduced argument (fs0, fs1, fs2) of b128_expfam_finish: the unbiased
+### exponent el and the significand res in [2^123, 2^124), with 2^v = res * 2^(el - 123) to within 6 units of
+### res (the rounding test of b128_expfam_finish relies on that bound).
 @inline
-secret routine b128_expfam_finish(fs0: U64, fs1: U64, fs2: U64, x0: U128, kind: U64) -> B128
+secret routine b128_expfam_eval(fs0: U64, fs1: U64, fs2: U64) -> (S64, U128)
   var el = LLVM::reinterpret_bits[U64, S64](fs2) >> 20
   var i0 = (fs2 >>> 15) & 31
   var i1 = (fs2 >>> 10) & 31
@@ -372,6 +372,14 @@ secret routine b128_expfam_finish(fs0: U64, fs1: U64, fs2: U64, x0: U128, kind: 
   var k = b128_expfam_mhuu(a: 0xB17217F7D1CF79AC_u64, b: fs0)
   m = m +% (b128_expfam_mul(a: b128_expfam_hi(u: m), b: k) >>> 84)
   res = b128_expfam_mhuu128(a: res, b: m)
+  return (el, res)
+
+### Finishes exp, exp2 or exp10 from the reduced argument (fs0, fs1, fs2): a 2's complement fixed-point
+### value of x*log2(base) whose integer part sits above the 20 low bits of fs2. x0 is the input's bit
+### pattern (for the fallback paths). Returns the correctly rounded result.
+@inline
+secret routine b128_expfam_finish(fs0: U64, fs1: U64, fs2: U64, x0: U128, kind: U64) -> B128
+  var (el, res) = b128_expfam_eval(fs0: fs0, fs1: fs1, fs2: fs2)
   var rnd = 0_u64
   if el >= -16382
     # rounding test: fall back when the 11 dropped bits are too close to a rounding boundary
