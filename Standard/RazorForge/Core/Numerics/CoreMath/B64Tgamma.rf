@@ -19,6 +19,35 @@ module Core
 ### :returns: The correctly rounded gamma function, possibly ±infinity or NaN.
 routine B64.tgamma_unchecked() -> B64
   var x = me
+  var (st, h, l, eps, sc) = b64_tgamma_dd(x: x)
+  if st == 0_u64
+    var ub = h +! (l +! eps)
+    var lb = h +! (l -! eps)
+    if ub != lb
+      return b64_tgamma_accurate(x: x)
+    return B64.from_bits(bits: ub.to_bits() +% (LLVM::reinterpret_bits[S64, U64](sc) << 52))
+  if st == 2_u64
+    # reflection with a subnormal result: h + l is the value times 2^e, e = -sc
+    var e = 0_s64 - sc
+    var rh = h
+    var rl = l
+    var re = LLVM::reinterpret_bits[U64, S64]((rh.to_bits() >>> 52) & 0x7FF_u64)
+    if re - e <= 0
+      var th = rh.to_bits() +% (LLVM::reinterpret_bits[S64, U64](e - re + 1) << 52)
+      th = th & (0xFFF_u64 << 52)
+      var s2 = b64_gamma_fasttwosum(x: B64.from_bits(bits: th), y: rh)
+      rh = s2.item0
+      rl = rl +! s2.item1
+      var ub = rh +! (rl +! eps)
+      var lb = rh +! (rl -! eps)
+      if ub != lb
+        return b64_tgamma_accurate(x: x)
+      return B64.from_bits(bits: ub.to_bits() & (0x7FF_u64 << 52).bitnot())
+    var ub = rh +! (rl +! eps)
+    var lb = rh +! (rl -! eps)
+    if ub != lb
+      return b64_tgamma_accurate(x: x)
+    return B64.from_bits(bits: ub.to_bits() -% (LLVM::reinterpret_bits[S64, U64](e) << 52))
   var t = x.to_bits()
   var ax = t << 1
   if ax >= (0x7FF_u64 << 53)
@@ -29,40 +58,16 @@ routine B64.tgamma_unchecked() -> B64
       return x
     # NaN: x + x also quiets a signaling NaN
     return x +! x
-  var z = x
-  if x.abs() < 0.25
-    if ax < 0x71E0000000000000_u64
-      # |x| < 2^-112: gamma(x) rounds to 1/x (or just below it for x = 2^k)
-      if x == 0x1p-1024
-        return 0x1.fffffffffffffp+1023 +! 0x1p+970
-      var r = 1.0 /! x
-      if x == 0.0
-        return r
-      if LLVM::fma[B64](a: r, b: x, c: -1.0) == 0.0
-        r = r -! 0.5
+  if ax < 0x71E0000000000000_u64
+    # |x| < 2^-112: gamma(x) rounds to 1/x (or just below it for x = 2^k)
+    if x == 0x1p-1024
+      return 0x1.fffffffffffffp+1023 +! 0x1p+970
+    var r = 1.0 /! x
+    if x == 0.0
       return r
-    var x2 = x *! x
-    var x4 = x2 *! x2
-    var x8 = x4 *! x4
-    var c0 = (b64_tgamma_t(i: 899_u64) +! x *! b64_tgamma_t(i: 899_u64 + 1_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 2_u64) +! x *! b64_tgamma_t(i: 899_u64 + 3_u64))
-    var c4 = (b64_tgamma_t(i: 899_u64 + 4_u64) +! x *! b64_tgamma_t(i: 899_u64 + 5_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 6_u64) +! x *! b64_tgamma_t(i: 899_u64 + 7_u64))
-    var c8 = (b64_tgamma_t(i: 899_u64 + 8_u64) +! x *! b64_tgamma_t(i: 899_u64 + 9_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 10_u64) +! x *! b64_tgamma_t(i: 899_u64 + 11_u64))
-    var c12 = (b64_tgamma_t(i: 899_u64 + 12_u64) +! x *! b64_tgamma_t(i: 899_u64 + 13_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 14_u64) +! x *! b64_tgamma_t(i: 899_u64 + 15_u64))
-    c0 = c0 +! x4 *! c4
-    c8 = c8 +! x4 *! c12
-    var cl = x *! (c0 +! x8 *! c8)
-    var p = b64_tgamma_polyddd(x: x, n: 5_u64, base: 889_u64, l: cl)
-    var fh = 1.0 /! z
-    var fl = LLVM::fma[B64](a: fh, b: -z, c: 1.0) *! fh
-    var f = b64_gamma_fastsum(xh: fh, xl: fl, yh: p.item0, yl: p.item1)
-    fh = f.item0
-    fl = f.item1
-    var eps = fh *! (0x1.9d35025bff857p-62 +! (x2 *! x4) *! 0x1.203af9ee75616p-48)
-    var ub = fh +! (fl +! eps)
-    var lb = fh +! (fl -! eps)
-    if ub != lb
-      return b64_tgamma_accurate(x: x)
-    return ub
+    if LLVM::fma[B64](a: r, b: x, c: -1.0) == 0.0
+      r = r -! 0.5
+    return r
   if x >= 0x1.573fae561f648p+7
     # overflow
     return 0x1.fp1023 +! 0x1.fp1023
@@ -86,14 +91,44 @@ routine B64.tgamma_unchecked() -> B64
       i = i + 1
       x0 = x0 +! 1.0
     return t0h +! t0l
-  if x <= -184.0
-    # negative non-integer: |gamma(x)| < 2^-1078 rounds to ±0
-    var kk = 0_s64
-    if fx >= -0x1p+62
-      kk = LLVM::float_to_signed[B64, S64](fx)
-    if (kk & 1) == 0
-      return 0x1p-1022 *! 0x1p-1022
-    return 0x1p-1022 *! (-0x1p-1022)
+  # x <= -184, a negative non-integer: |gamma(x)| < 2^-1078 rounds to ±0
+  var kk = 0_s64
+  if fx >= -0x1p+62
+    kk = LLVM::float_to_signed[B64, S64](fx)
+  if (kk & 1) == 0
+    return 0x1p-1022 *! 0x1p-1022
+  return 0x1p-1022 *! (-0x1p-1022)
+
+### The double-double fast phase of gamma for a B64 x, shared with the D64 gamma (which widens it past
+### B64 precision): (status, h, l, eps, sc) with gamma(x) within eps * 2^sc of (h + l) * 2^sc. Status 0 is
+### a normal result, 2 a reflection result that would be subnormal (sc = -e, for the caller's subnormal
+### rounding), and 1 a case this does not cover: infinity or NaN, |x| < 2^-112, overflow, integers and
+### x <= -184, all handled exactly by B64.tgamma_unchecked.
+secret routine b64_tgamma_dd(x: B64) -> (U64, B64, B64, B64, S64)
+  var ax = x.to_bits() << 1
+  if ax >= (0x7FF_u64 << 53) or ax < 0x71E0000000000000_u64
+    return (1_u64, 0.0, 0.0, 0.0, 0_s64)
+  var z = x
+  if x.abs() < 0.25
+    var x2 = x *! x
+    var x4 = x2 *! x2
+    var x8 = x4 *! x4
+    var c0 = (b64_tgamma_t(i: 899_u64) +! x *! b64_tgamma_t(i: 899_u64 + 1_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 2_u64) +! x *! b64_tgamma_t(i: 899_u64 + 3_u64))
+    var c4 = (b64_tgamma_t(i: 899_u64 + 4_u64) +! x *! b64_tgamma_t(i: 899_u64 + 5_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 6_u64) +! x *! b64_tgamma_t(i: 899_u64 + 7_u64))
+    var c8 = (b64_tgamma_t(i: 899_u64 + 8_u64) +! x *! b64_tgamma_t(i: 899_u64 + 9_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 10_u64) +! x *! b64_tgamma_t(i: 899_u64 + 11_u64))
+    var c12 = (b64_tgamma_t(i: 899_u64 + 12_u64) +! x *! b64_tgamma_t(i: 899_u64 + 13_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 14_u64) +! x *! b64_tgamma_t(i: 899_u64 + 15_u64))
+    c0 = c0 +! x4 *! c4
+    c8 = c8 +! x4 *! c12
+    var cl = x *! (c0 +! x8 *! c8)
+    var p = b64_tgamma_polyddd(x: x, n: 5_u64, base: 889_u64, l: cl)
+    var fh = 1.0 /! z
+    var fl = LLVM::fma[B64](a: fh, b: -z, c: 1.0) *! fh
+    var f = b64_gamma_fastsum(xh: fh, xl: fl, yh: p.item0, yl: p.item1)
+    fh = f.item0
+    fl = f.item1
+    return (0_u64, fh, fl, fh *! (0x1.9d35025bff857p-62 +! (x2 *! x4) *! 0x1.203af9ee75616p-48), 0_s64)
+  if x >= 0x1.573fae561f648p+7 or x.floor() == x or x <= -184.0
+    return (1_u64, 0.0, 0.0, 0.0, 0_s64)
   if x < -3.0
     # reflection: gamma(x) = pi / (sin(pi x) * gamma(1 - x))
     var s = b64_gamma_fasttwosum(x: -x, y: 1.0)
@@ -118,42 +153,13 @@ routine B64.tgamma_unchecked() -> B64
       rh = -rh
       rl = -rl
     var eps = rh *! (0x1.48ad3caefe280p-67 -! x *! 0x1.61019f74442b7p-73)
-    var eshift = LLVM::reinterpret_bits[S64, U64](e) << 52
     if ip >= -170
-      var ub = rh +! (rl +! eps)
-      var lb = rh +! (rl -! eps)
-      if ub != lb
-        return b64_tgamma_accurate(x: x)
-      return B64.from_bits(bits: ub.to_bits() -% eshift)
-    var re = LLVM::reinterpret_bits[U64, S64]((rh.to_bits() >>> 52) & 0x7FF_u64)
-    if re - e <= 0
-      # subnormal result
-      var th = rh.to_bits() +% (LLVM::reinterpret_bits[S64, U64](e - re + 1) << 52)
-      th = th & (0xFFF_u64 << 52)
-      var s2 = b64_gamma_fasttwosum(x: B64.from_bits(bits: th), y: rh)
-      rh = s2.item0
-      rl = rl +! s2.item1
-      var ub = rh +! (rl +! eps)
-      var lb = rh +! (rl -! eps)
-      if ub != lb
-        return b64_tgamma_accurate(x: x)
-      return B64.from_bits(bits: ub.to_bits() & (0x7FF_u64 << 52).bitnot())
-    var ub = rh +! (rl +! eps)
-    var lb = rh +! (rl -! eps)
-    if ub != lb
-      return b64_tgamma_accurate(x: x)
-    return B64.from_bits(bits: ub.to_bits() -% eshift)
+      return (0_u64, rh, rl, eps, 0_s64 - e)
+    return (2_u64, rh, rl, eps, 0_s64 - e)
   if x > 4.0
     var lg = b64_tgamma_lgamma_asym(xh: x, xl: 0.0)
     var ex = b64_tgamma_expd(x: lg.item0, l: lg.item1)
-    var lh = ex.item0
-    var ll = ex.item1
-    var eps = lh *! (0x1.2e3b40a0e9b4fp-69 +! x *! 0x1.bce27bce24d11p-73)
-    var ub = lh +! (ll +! eps)
-    var lb = lh +! (ll -! eps)
-    if ub != lb
-      return b64_tgamma_accurate(x: x)
-    return B64.from_bits(bits: ub.to_bits() +% (LLVM::reinterpret_bits[S64, U64](ex.item2) << 52))
+    return (0_u64, ex.item0, ex.item1, ex.item0 *! (0x1.2e3b40a0e9b4fp-69 +! x *! 0x1.bce27bce24d11p-73), ex.item2)
   # -3 <= x <= 4: a polynomial around 3.5 + i, shifted by the recurrence gamma(x+1) = x gamma(x)
   var mm = z -! 3.5
   var ri = LLVM::rint[B64](value: mm)
@@ -186,14 +192,7 @@ routine B64.tgamma_unchecked() -> B64
   var rh = 1.0 /! wh
   var rl = (LLVM::fma[B64](a: rh, b: -wh, c: 1.0) -! wl *! rh) *! rh
   f = b64_gamma_muldd(xh: rh, xl: rl, ch: fh, cl: fl)
-  fh = f.item0
-  fl = f.item1
-  var eps = fh *! 0x1.2e3b40a0e9b4fp-70
-  var ub = fh +! (fl +! eps)
-  var lb = fh +! (fl -! eps)
-  if ub != lb
-    return b64_tgamma_accurate(x: x)
-  return ub
+  return (0_u64, f.item0, f.item1, f.item0 *! 0x1.2e3b40a0e9b4fp-70, 0_s64)
 
 ### Reads entry `i` of the coefficient table B64_TGAMMA_T.
 ### :param i: The table index.
