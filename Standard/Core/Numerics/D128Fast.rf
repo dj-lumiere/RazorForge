@@ -334,7 +334,14 @@ secret routine d128_expm1_fast(x: D128) -> (Bool, D128)
     k = k -% 1_u64
     acc = D128F_EXPM1_SERIES[k] +% b128erf_smul(a: xs, b: acc)
   var pf = b128fx_norm(neg: false, mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](acc)), scale: -126_s64, abserr: 4.5)
-  return d128_round_fx(v: b128fx_mul(a: xf, b: pf))
+  var (okr, r) = d128_round_fx(v: b128fx_mul(a: xf, b: pf))
+  if okr
+    return (true, r)
+  # too close to a midpoint for 128 bits: a tiny x goes to the 256-bit tier
+  var p = x.decode()
+  if digits10_u128(c: p.coeff) +% p.exp <= -6_s64
+    return d128x_expm1_tiny(t: p)
+  return (false, x)
 
 # ============================================================================
 # log, log2, log10, log1p
@@ -399,16 +406,49 @@ secret routine d128_ln_fixed(p: D128Parts) -> (Bool, S256, B64)
     return (false, 0_s256, 0.0)
   return (true, sum, err)
 
-### ln (which 0), log2 (1) or log10 (2) of a D128, or false: ln x times 1/ln 2 or 1/ln 10.
+### ln (which 0), log2 (1) or log10 (2) of a D128, or false: ln x times 1/ln 2 or 1/ln 10. When ln x's band
+### cannot decide next to 1 (|x - 1| < 10^-6), the 256-bit tier does.
 secret routine d128_log_fast(x: D128, which: U64) -> (Bool, D128)
-  var (ok, l) = d128_ln_fx(p: x.decode())
+  var p = x.decode()
+  var (ok, l) = d128_ln_fx(p: p)
   if not ok
     return (false, x)
   if which == 1_u64
     l = b128fx_mul(a: l, b: B128Fx(neg: false, m: D128F_INV_LN2_M, e: -127_s64, rel: 0x1p-128))
   elseif which == 2_u64
     l = b128fx_mul(a: l, b: B128Fx(neg: false, m: D128F_INV_LN10_M, e: -129_s64, rel: 0x1p-128))
-  return d128_round_fx(v: l)
+  var (okr, r) = d128_round_fx(v: l)
+  if okr or which != 0_u64
+    return (okr, r)
+  var (okt, t) = d128_diff_parts(p: p, k: 1_u128)
+  if okt and digits10_u128(c: t.coeff) +% t.exp <= -6_s64
+    return d128x_log1p_tiny(t: t)
+  return (false, x)
+
+### x - k exact in decimal as D128 parts (x = c * 10^q, -38 <= q <= 0, k a small integer), or false
+### (a zero difference, or q outside that range).
+secret routine d128_diff_parts(p: D128Parts, k: U128) -> (Bool, D128Parts)
+  var noparts = D128Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u128)
+  if p.special != 0_u64 or p.exp > 0_s64 or p.exp < -38_s64
+    return (false, noparts)
+  var pw = 1_u128
+  var j = 0_s64
+  while j < 0_s64 -% p.exp
+    pw = pw *% 10_u128
+    j = j +% 1_s64
+  var kc = k *% pw
+  var neg = p.sign
+  var d = 0_u128
+  if neg
+    d = p.coeff +% kc
+  elseif p.coeff >= kc
+    d = p.coeff -% kc
+  else
+    d = kc -% p.coeff
+    neg = true
+  if d == 0_u128
+    return (false, noparts)
+  return (true, D128Parts(sign: neg, special: 0_u64, exp: p.exp, coeff: d))
 
 ### ln(1 + x) for a D128 x > -1, or false: log1p of the 128-bit value, except below -1/2, where 1 + x is
 ### formed exactly in decimal first (the condition number grows as 1 + x shrinks).
@@ -440,7 +480,13 @@ secret routine d128_log1p_fast(x: D128) -> (Bool, D128)
   var (ok2, l2) = b128fx_log1p(t: s.full)
   if not ok2
     return (false, x)
-  return d128_round_fx(v: l2)
+  var (okr, r) = d128_round_fx(v: l2)
+  if okr
+    return (true, r)
+  # too close to a midpoint for 128 bits: a tiny x goes to the 256-bit tier
+  if digits10_u128(c: p.coeff) +% p.exp <= -6_s64
+    return d128x_log1p_tiny(t: p)
+  return (false, x)
 
 # ============================================================================
 # sin, cos, tan
@@ -525,7 +571,13 @@ secret routine d128_trig_fast(x: D128, which: U64) -> (Bool, D128)
   if which == 0_u64
     return d128_round_fx(v: sn)
   if which == 1_u64
-    return d128_round_fx(v: cs)
+    var (okc, rc) = d128_round_fx(v: cs)
+    if okc
+      return (true, rc)
+    var pc = x.decode()
+    if digits10_u128(c: pc.coeff) +% pc.exp <= -6_s64
+      return d128x_cos_tiny(x: pc, hyperbolic: false)
+    return (false, x)
   var (okd, q) = b128fx_div(a: sn, b: cs)
   if not okd
     return (false, x)
@@ -574,7 +626,13 @@ secret routine d128_hyp_fast(x: D128, which: U64) -> (Bool, D128)
   if which == 0_u64
     return d128_round_fx(v: B128Fx(neg: s.neg, m: sh.m, e: sh.e, rel: sh.rel))
   if which == 1_u64
-    return d128_round_fx(v: ch)
+    var (okc, rc) = d128_round_fx(v: ch)
+    if okc
+      return (true, rc)
+    var pc = x.decode()
+    if digits10_u128(c: pc.coeff) +% pc.exp <= -6_s64
+      return d128x_cos_tiny(x: pc, hyperbolic: true)
+    return (false, x)
   var (okd, q) = b128fx_div(a: sh, b: ch)
   if not okd
     return (false, x)
@@ -1099,12 +1157,20 @@ secret routine d128_lgamma_near(p: D128Parts, s: D128Split) -> (Bool, D128)
         return (true, zero)
     return (false, zero)
   var g = b128fx_mul(a: z, b: b128_lgamma2_q_fx(zf: z))
-  if not below
-    return d128_round_fx(v: g)
-  var (okl, l) = b128fx_log1p(t: z)
-  if not okl
-    return (false, zero)
-  var (oka, r) = b128fx_add(a: g, b: b128fx_neg(v: l))
-  if not oka
-    return (false, zero)
-  return d128_round_fx(v: r)
+  var v = g
+  if below
+    var (okl, l) = b128fx_log1p(t: z)
+    if not okl
+      return (false, zero)
+    var (oka, r) = b128fx_add(a: g, b: b128fx_neg(v: l))
+    if not oka
+      return (false, zero)
+    v = r
+  var (okr, res) = d128_round_fx(v: v)
+  if okr
+    return (true, res)
+  # too close to a midpoint for 128 bits: a tiny z goes to the 256-bit tier
+  var (okp, zp) = d128_diff_parts(p: p, k: k)
+  if okp and digits10_u128(c: zp.coeff) +% zp.exp <= -6_s64
+    return d128x_lgamma_tiny(z: zp, two: not below)
+  return (false, zero)
