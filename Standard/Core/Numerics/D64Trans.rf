@@ -619,6 +619,103 @@ secret routine d64_erf_fast(x: D64) -> (Bool, D64)
     r2 = r2.neg()
   return d64_round_within(r: r2, k: 95_s64)
 
+### digamma(x) for a finite B64 x that is not a pole, to the accuracy a first-order correction needs, and a
+### bound on its absolute error. Negative x reflect (digamma(x) = digamma(1 - x) - pi cot(pi x)), x below 6 is
+### raised by digamma(x) = digamma(x + 1) - 1/x, and from 6 on the asymptotic series log y - 1/(2y) -
+### 1/(12y^2) + 1/(120y^4) - 1/(252y^6) leaves a remainder below 1/(240y^8) < 3e-9. The bound adds 2^-40
+### of every magnitude summed, far above the B64 rounding of each step.
+secret routine b64_digamma_approx(x: B64) -> (B64, B64)
+  var y = x
+  var acc = 0.0
+  var mag = 0.0
+  if y < 0.5
+    var c = 3.141592653589793 /! y.tanpi()
+    acc = acc -! c
+    mag = mag +! c.abs()
+    y = 1.0 -! y
+  while y < 6.0
+    var r = 1.0 /! y
+    acc = acc -! r
+    mag = mag +! r.abs()
+    y = y +! 1.0
+  var iy = 1.0 /! y
+  var iy2 = iy *! iy
+  var ln = y.log_unchecked()
+  var psi = acc +! ln -! 0.5 *! iy -! iy2 *! (0.08333333333333333 -! iy2 *! (0.008333333333333333 -! iy2 *! 0.003968253968253968))
+  return (psi, 3e-9 +! (mag +! ln.abs() +! psi.abs() +! 1.0) *! 0x1p-40)
+
+### 2^n as a B128 for n in [-16382, 16383].
+@inline
+secret routine b128_pow2(n: S64) -> B128
+  return B128.from_bits(bits: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](16383_s64 +% n)), bits: 112_u128))
+
+### lgamma of a finite D64 from the B64 CORE-MATH fast phase, widened past B64 precision: x (rounded to
+### B128) is split xh + xl as in d64_tgamma_fast, b64_lgamma_dd gives lgamma(xh) as h + l within eps, and
+### lgamma(x) = lgamma(xh) + digamma(xh) xl + trigamma(xh) xl^2 / 2 + ... is taken to first order. The
+### absolute error is at most eps, |xl| times the digamma error, xl^2 trigamma, the input's rounding to
+### B128 times |x digamma(x)|, and the B64 rounding of the correction; over |h| plus 2^-100 for the B128
+### sums it bounds the relative error, which grows near the zeros of lgamma (the engine decides there).
+secret routine d64_lgamma_fast(x: D64) -> (Bool, D64)
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u64
+    return (false, x)
+  var xb = d64_to_b128(x: x)
+  var xh = B64(from: xb)
+  var xl = B64(from: xb -! B128(from: xh))
+  if not (xh.abs() < 0x1p1000) or xh.floor() == xh
+    return (false, x)
+  var (h, l, eps) = b64_lgamma_dd(x: xh)
+  if h.is_zero() or not h.is_finite()
+    return (false, x)
+  var (psi, epsi) = b64_digamma_approx(x: xh)
+  var t = xh.tanpi()
+  var trig = 1.0 /! (xh *! xh) +! 1.0 /! xh.abs() +! 9.8696044 *! (1.0 +! 1.0 /! (t *! t)) +! 2.0
+  var corr = xl *! psi
+  var abserr = eps.abs() +! xl.abs() *! epsi +! xl *! xl *! trig +! (xh *! psi).abs() *! 0x1p-112 +! corr.abs() *! 0x1p-52
+  var err = abserr /! h.abs() +! 0x1p-100
+  if not err.is_finite() or err <= 0.0
+    return (false, x)
+  var k = 0_s64 -% b64_exponent(x: err) -% 1_s64
+  if k < 60_s64
+    return (false, x)
+  if k > 110_s64
+    k = 110_s64
+  return d64_round_within(r: (B128(from: h) +! B128(from: l)) +! B128(from: corr), k: k)
+
+### tgamma of a finite D64 from the B64 CORE-MATH fast phase, widened past B64 precision. x (rounded to
+### B128, 2^-113 relative) is split xh + xl with xh its B64 rounding and |xl| <= 2^-53 |xh|;
+### b64_tgamma_dd gives gamma(xh) as h + l within eps (both scaled by 2^sc), and
+### gamma(x) = gamma(xh) * exp(digamma(xh) xl + trigamma(xh) xl^2 / 2 + ...) is taken to first order. The
+### relative error is at most: eps / |h| from the fast phase; |xl| times the digamma error; xl^2 (digamma^2
+### + trigamma) for the dropped terms, with trigamma bounded by 1/x^2 + 1/|x| + pi^2 (1 + cot^2(pi x)) + 2;
+### the input's rounding to B128 times the condition number |x digamma(x)|; the B64 rounding of the
+### correction xl * digamma; and 2^-100 for the B128 sums.
+### The value is kept when that band rounds to one D64 (at least 60 bits), otherwise the engine decides.
+secret routine d64_tgamma_fast(x: D64) -> (Bool, D64)
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u64
+    return (false, x)
+  var xb = d64_to_b128(x: x)
+  var xh = B64(from: xb)
+  var xl = B64(from: xb -! B128(from: xh))
+  var (st, h, l, eps, sc) = b64_tgamma_dd(x: xh)
+  if st != 0_u64 or h.is_zero() or not h.is_finite()
+    return (false, x)
+  var (psi, epsi) = b64_digamma_approx(x: xh)
+  var t = xh.tanpi()
+  var trig = 1.0 /! (xh *! xh) +! 1.0 /! xh.abs() +! 9.8696044 *! (1.0 +! 1.0 /! (t *! t)) +! 2.0
+  var err = (eps /! h).abs() +! xl.abs() *! epsi +! xl *! xl *! (psi *! psi +! trig) +! (xh *! psi).abs() *! 0x1p-112 +! (xl *! psi).abs() *! 0x1p-52 +! 0x1p-100
+  if not err.is_finite() or err <= 0.0
+    return (false, x)
+  var k = 0_s64 -% b64_exponent(x: err) -% 1_s64
+  if k < 60_s64
+    return (false, x)
+  if k > 110_s64
+    k = 110_s64
+  var v = B128(from: h) +! B128(from: l)
+  v = v +! v *! B128(from: xl *! psi)
+  return d64_round_within(r: v *! b128_pow2(n: sc), k: k)
+
 ### erfc of a finite D64 (-5.8 < x < 26, |x| above 2^-50) from the B64 CORE-MATH fast kernel, which returns
 ### h + l and an absolute error bound. x (rounded to B128) is split xh + xl as in d64_erf_fast, with the
 ### correction -xl * 2/sqrt(pi) * exp(-xh^2), whose error stays below 2^-85 relative up to x = 26.
@@ -1067,11 +1164,17 @@ routine D64.tgamma!() -> D64
 ### tgamma(me), raw IEEE: ±inf at poles, NaN for neg-int poles, overflow. Never crashes.
 ### :returns: The gamma function of `me`, possibly non-finite.
 routine D64.tgamma_unchecked() -> D64
+  var (ok, r) = d64_tgamma_fast(x: me)
+  if ok
+    return r
   return b128_to_d64(x: d64_to_b128(x: me).tgamma_unchecked())
 
 ### Log-gamma lgamma(me) = ln(|gamma(me)|) via DD. Never crashes (+inf at poles).
 ### :returns: The natural log of the absolute gamma of `me`.
 routine D64.lgamma() -> D64
+  var (ok, r) = d64_lgamma_fast(x: me)
+  if ok
+    return r
   return b128_to_d64(x: d64_to_b128(x: me).lgamma())
 
 # ============================================================================

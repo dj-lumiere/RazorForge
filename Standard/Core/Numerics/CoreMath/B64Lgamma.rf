@@ -43,6 +43,19 @@ routine B64.lgamma() -> B64
       return 1.0 /! 0.0
     if x == 1.0 or x == 2.0
       return 0.0
+  var (fh, fl, eps) = b64_lgamma_dd(x: x)
+  var ub = fh +! (fl +! eps)
+  var lb = fh +! (fl -! eps)
+  if ub != lb
+    return b64_lgamma_accurate(x: x)
+  return ub
+
+### The double-double fast phase of lgamma for a finite B64 x that is not a pole, not 1 or 2, and below
+### 0x1.006df1bfac84ep+1015 in magnitude (the cases B64.lgamma settles first): (h, l, eps) with lgamma(x)
+### within eps of h + l. Shared with the D64 lgamma, which widens it past B64 precision.
+secret routine b64_lgamma_dd(x: B64) -> (B64, B64, B64)
+  var t = x.to_bits()
+  var nx = t << 1
   var au = nx >>> 38
   var fh = 0.0
   var fl = 0.0
@@ -159,11 +172,7 @@ routine B64.lgamma() -> B64
       fh = -s.item0
       fl = -s.item1
       eps = eps +! lg.item0.abs() *! 0x1.e392010175ee6p-71
-  var ub = fh +! (fl +! eps)
-  var lb = fh +! (fl -! eps)
-  if ub != lb
-    return b64_lgamma_accurate(x: x)
-  return ub
+  return (fh, fl, eps)
 
 ### Reads entry `i` of the coefficient table B64_LGAMMA_T.
 ### :param i: The table index.
