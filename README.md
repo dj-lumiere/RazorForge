@@ -14,16 +14,16 @@ pieces of the level below, and nothing is hidden between them.
 | **solution** | The code compiled together to make one application. |
 
 ```tessera
-routine sum(%n: I64) -> I64
+routine sum(%n: S64) -> S64
     block entry():
         jump loop(0, 0)
 
-    block loop(%i: I64, %acc: I64):
+    block loop(%i: S64, %acc: S64):
         %done: Bool = %i.sge(%n)
         branch %done ? return(%acc) : body(%i, %acc)
 
-    block body(%i: I64, %acc: I64):
-        %next_acc: I64 = %acc.add(%i)
+    block body(%i: S64, %acc: S64):
+        %next_acc: S64 = %acc.add(%i)
         jump loop(%i.add(1), %next_acc)
 ```
 
