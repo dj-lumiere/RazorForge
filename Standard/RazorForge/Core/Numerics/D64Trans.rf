@@ -1595,7 +1595,7 @@ routine D64.finite!() -> D64
     throw NumericOverflowError(description: "overflow: out of range")
   return me
 
-### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
+### C99 fmod: me - trunc(me/you)*you (truncated-division remainder), exact (d64_mod_core / d128_mod_core).
 routine D64.fmod(you: D64) -> D64
   if me.is_nan() or you.is_nan()
     return D64.quiet_nan()
@@ -1603,8 +1603,10 @@ routine D64.fmod(you: D64) -> D64
     return D64.quiet_nan()
   if you.is_infinite()
     return me
-  var n = me.truediv_unchecked(you: you).trunc()
-  return me.sub_unchecked(you: you.mul_unchecked(you: n))
+  var px = me.decode()
+  var py = you.decode()
+  var (flip, r, e) = d64_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: false)
+  return d64_of_parts(p: D64Parts(sign: px.sign, special: 0_u64, exp: e, coeff: r))
 
 ### C99 fmax: the larger of me and you, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
@@ -1791,6 +1793,75 @@ routine D64.quantize(you: D64) -> D64
     q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
   return d64_of_parts(p: D64Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::int_truncate[U256, U64](q)))
 
+### n mod d for a U128 n and a nonzero U64 d, by the single-limb Knuth division: d normalized so its top bit is
+### set (n shifted with it into three limbs, the top one below d), two multiply-only 2-by-1 steps.
+secret routine d64_rem_u128(n: U128, d: U64) -> U64
+  var s = LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(d))
+  var su = LLVM::reinterpret_bits[S64, U64](s)
+  var dn = d << su
+  var vrec = reciprocal_word(dn)
+  var n1 = LLVM::int_truncate[U128, U64](n >>> 64_u32)
+  var n0 = LLVM::int_truncate[U128, U64](n)
+  var u2 = 0_u64
+  var u1 = n1
+  var u0 = n0
+  if s > 0_s64
+    var si = LLVM::reinterpret_bits[S64, U64](64_s64 -% s)
+    u2 = n1 >>> si
+    u1 = (n1 << su) | (n0 >>> si)
+    u0 = n0 << su
+  var r = div2by1(u1: u2, u0: u1, d: dn, v: vrec).r
+  r = div2by1(u1: r, u0: u0, d: dn, v: vrec).r
+  return r >>> su
+
+### The exact remainder of x = cx 10^ex by y = cy 10^ey (cy nonzero, coefficients below 10^16) at exponent
+### e = min(ex, ey), as (flip, r, e): fmod (near false) is |x| mod |y| with x's sign, the IEEE remainder (near true)
+### is x - n y with n the nearest integer (ties to even), whose magnitude is r and whose sign is x's flipped when
+### flip. With X and Y the coefficients aligned to e, X mod M is taken for M = Y (M = 2Y for the remainder, so
+### whether the quotient is odd is known for a tie): X = cx 10^d reduces as (r 10^k) mod M 19 digits at a time,
+### and for ex < ey the aligned Y exceeds X once d > 19. The result is never longer than cx or cy, so it is exact.
+secret routine d64_mod_core(cx: U64, ex: S64, cy: U64, ey: S64, near: Bool) -> (Bool, U64, S64)
+  var e = ey
+  var r2 = 0_u128
+  var y = LLVM::zero_extend[U64, U128](cy)
+  if ex >= ey
+    var m = cy
+    if near
+      m = cy *% 2_u64
+    var r = cx % m
+    var d = ex -% ey
+    while d > 0_s64
+      var k = d
+      if k > 19_s64
+        k = 19_s64
+      r = d64_rem_u128(n: LLVM::zero_extend[U64, U128](r) *% LLVM::zero_extend[U64, U128](p10_u64(k: k)), d: m)
+      d = d -% k
+    r2 = LLVM::zero_extend[U64, U128](r)
+  else
+    e = ex
+    var d = ey -% ex
+    if d > 19_s64
+      # Y >= 10^20 > 2 X: X is its own remainder
+      return (false, cx, ex)
+    y = LLVM::zero_extend[U64, U128](cy) *% LLVM::zero_extend[U64, U128](p10_u64(k: d))
+    var m = y
+    if near
+      m = y *% 2_u128
+    r2 = LLVM::zero_extend[U64, U128](cx)
+    if r2 >= m
+      # then m < 2^64
+      r2 = LLVM::zero_extend[U64, U128](cx % LLVM::int_truncate[U128, U64](m))
+  if not near
+    return (false, LLVM::int_truncate[U128, U64](r2), e)
+  var r = r2
+  var odd = false
+  if r >= y
+    r = r -% y
+    odd = true
+  if r *% 2_u128 > y or (r *% 2_u128 == y and odd)
+    return (true, LLVM::int_truncate[U128, U64](y -% r), e)
+  return (false, LLVM::int_truncate[U128, U64](r), e)
+
 ### IEEE 754 remainder: `me - other * n` with `n` the nearest integer to `me / other` (ties even).
 ### NaN if `me` infinite or `other` zero; `me` if `other` infinite. Never crashes.
 ### :param you: The divisor.
@@ -1802,8 +1873,10 @@ routine D64.remainder(you: D64) -> D64
     return D64.quiet_nan()
   if you.is_infinite()
     return me
-  var n = me.truediv_unchecked(you: you).rint()
-  return me.sub_unchecked(you: you.mul_unchecked(you: n))
+  var px = me.decode()
+  var py = you.decode()
+  var (flip, r, e) = d64_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: true)
+  return d64_of_parts(p: D64Parts(sign: px.sign != flip, special: 0_u64, exp: e, coeff: r))
 
 ### IEEE 754 normalize (the `reduce` operation): trailing zeros stripped to the simplest cohort
 ### member (`3.00` -> `3`, `1.50` -> `1.5`, `100` -> `1E+2`, `0.00` -> `0`). Specials pass through.

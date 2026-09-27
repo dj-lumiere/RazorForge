@@ -1083,7 +1083,49 @@ routine D128.finite!() -> D128
     throw NumericOverflowError(description: "overflow: out of range")
   return me
 
-### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
+### d64_mod_core for D128 coefficients (below 10^34): the reductions through the Knuth U256 division
+### (udivrem256), 38 digits at a time, and for ex < ey the aligned Y exceeds X once d > 38.
+secret routine d128_mod_core(cx: U128, ex: S64, cy: U128, ey: S64, near: Bool) -> (Bool, U128, S64)
+  var e = ey
+  var r2 = 0_u256
+  var y = LLVM::zero_extend[U128, U256](cy)
+  if ex >= ey
+    var m = y
+    if near
+      m = y *% 2_u256
+    var r = udivrem256(num: LLVM::zero_extend[U128, U256](cx), den: m).r
+    var d = ex -% ey
+    while d > 0_s64
+      var k = d
+      if k > 38_s64
+        k = 38_s64
+      r = udivrem256(num: r *% pow10b(k: k), den: m).r
+      d = d -% k
+    r2 = r
+  else
+    e = ex
+    var d = ey -% ex
+    if d > 38_s64
+      return (false, cx, ex)
+    y = y *% pow10b(k: d)
+    var m = y
+    if near
+      m = y *% 2_u256
+    r2 = LLVM::zero_extend[U128, U256](cx)
+    if r2 >= m
+      r2 = udivrem256(num: r2, den: m).r
+  if not near
+    return (false, LLVM::int_truncate[U256, U128](r2), e)
+  var r = r2
+  var odd = false
+  if r >= y
+    r = r -% y
+    odd = true
+  if r *% 2_u256 > y or (r *% 2_u256 == y and odd)
+    return (true, LLVM::int_truncate[U256, U128](y -% r), e)
+  return (false, LLVM::int_truncate[U256, U128](r), e)
+
+### C99 fmod: me - trunc(me/you)*you (truncated-division remainder), exact (d64_mod_core / d128_mod_core).
 routine D128.fmod(you: D128) -> D128
   if me.is_nan() or you.is_nan()
     return D128.quiet_nan()
@@ -1091,8 +1133,10 @@ routine D128.fmod(you: D128) -> D128
     return D128.quiet_nan()
   if you.is_infinite()
     return me
-  var n = (me / you).trunc()
-  return me - n * you
+  var px = me.decode()
+  var py = you.decode()
+  var (flip, r, e) = d128_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: false)
+  return d128_of_parts(p: D128Parts(sign: px.sign, special: 0_u64, exp: e, coeff: r))
 
 ### C99 fmax: the larger of me and you, treating NaN as missing (returns the non-NaN operand).
 ### :param you: The value to compare against.
@@ -1291,8 +1335,10 @@ routine D128.remainder(you: D128) -> D128
     return D128.quiet_nan()
   if you.is_infinite()
     return me
-  var n = me.truediv_unchecked(you: you).rint()
-  return me.sub_unchecked(you: you.mul_unchecked(you: n))
+  var px = me.decode()
+  var py = you.decode()
+  var (flip, r, e) = d128_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: true)
+  return d128_of_parts(p: D128Parts(sign: px.sign != flip, special: 0_u64, exp: e, coeff: r))
 
 ### IEEE 754 normalize (the `reduce` operation): the value with trailing zeros stripped to the
 ### simplest member of its cohort (e.g. `3.00` -> `3`, `1.50` -> `1.5`, `100` -> `1E+2`,

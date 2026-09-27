@@ -1044,7 +1044,7 @@ routine D32.finite!() -> D32
     throw NumericOverflowError(description: "overflow: out of range")
   return me
 
-### C99 fmod: me - trunc(me/you)*you (truncated-division remainder).
+### C99 fmod: me - trunc(me/you)*you (truncated-division remainder), exact (d64_mod_core / d128_mod_core).
 routine D32.fmod(you: D32) -> D32
   if me.is_nan() or you.is_nan()
     return D32.quiet_nan()
@@ -1052,8 +1052,10 @@ routine D32.fmod(you: D32) -> D32
     return D32.quiet_nan()
   if you.is_infinite()
     return me
-  var n = me.truediv_unchecked(you: you).trunc()
-  return me.sub_unchecked(you: you.mul_unchecked(you: n))
+  var px = me.decode()
+  var py = you.decode()
+  var (flip, r, e) = d64_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: false)
+  return d32_of_parts(p: D32Parts(sign: px.sign, special: 0_u64, exp: e, coeff: r))
 
 ### C99 fmax: the larger of me and you, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
@@ -1251,8 +1253,10 @@ routine D32.remainder(you: D32) -> D32
     return D32.quiet_nan()
   if you.is_infinite()
     return me
-  var n = me.truediv_unchecked(you: you).rint()
-  return me.sub_unchecked(you: you.mul_unchecked(you: n))
+  var px = me.decode()
+  var py = you.decode()
+  var (flip, r, e) = d64_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: true)
+  return d32_of_parts(p: D32Parts(sign: px.sign != flip, special: 0_u64, exp: e, coeff: r))
 
 ### IEEE 754 normalize (the `reduce` operation): trailing zeros stripped to the simplest cohort
 ### member (`3.00` -> `3`, `1.50` -> `1.5`, `100` -> `1E+2`, `0.00` -> `0`). Specials pass through.
