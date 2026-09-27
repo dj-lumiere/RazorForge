@@ -63,14 +63,22 @@ secret routine b128fx_b64_int(d: B64) -> U128
 
 ### A B128Fx from the fixed-point value (-1)^neg * mag * 2^scale known to within abserr units of 2^scale.
 ### mag must be nonzero. The bound divides by mag's top 64 bits (so it is 2^-52 loose at most), and adds
-### the truncation to 128 bits.
+### the truncation to 128 bits. The 256-bit mag is handled as two 128-bit halves (a 256-bit shift by a
+### variable amount is far costlier).
 secret routine b128fx_norm(neg: Bool, mag: U256, scale: S64, abserr: B64) -> B128Fx
-  var lead = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(mag))
-  var m = 0_u128
-  if lead >= 127_s64
-    m = LLVM::int_truncate[U256, U128](mag >>> b128_trig_sh(n: lead -% 127_s64))
-  else
-    m = LLVM::int_truncate[U256, U128](mag << b128_trig_sh(n: 127_s64 -% lead))
+  var hi = LLVM::int_truncate[U256, U128](mag >>> 128_u32)
+  var lo = LLVM::int_truncate[U256, U128](mag)
+  var lead = 127_s64 -% b128_trig_clz128(x: lo)
+  if hi != 0_u128
+    lead = 255_s64 -% b128_trig_clz128(x: hi)
+  var sh = lead -% 127_s64
+  var m = lo
+  if sh >= 128_s64
+    m = hi >>> b128_trig_sh(n: sh -% 128_s64)
+  elseif sh > 0_s64
+    m = (hi << b128_trig_sh(n: 128_s64 -% sh)) | (lo >>> b128_trig_sh(n: sh))
+  elseif sh < 0_s64
+    m = lo << b128_trig_sh(n: 0_s64 -% sh)
   var rel = abserr /! (b128fx_top(m: m) *! b128fx_p2(k: lead -% 63_s64)) +! 0x1p-127
   return B128Fx(neg: neg, m: m, e: scale +% lead -% 127_s64, rel: rel)
 
@@ -84,9 +92,10 @@ secret routine b128fx_mul(a: B128Fx, b: B128Fx) -> B128Fx
     e = e -% 1_s64
   return B128Fx(neg: a.neg != b.neg, m: m, e: e, rel: a.rel +! b.rel +! a.rel *! b.rel +! 0x1p-127)
 
-### a + b, false when it cancels to zero. The smaller operand is aligned in a 256-bit frame (at most one unit
-### of 2^(e-127) lost, e the larger exponent) and the sum is truncated to 128 bits. Cancellation scales the
-### operands' absolute errors by the size of the sum, which the bound follows exactly.
+### a + b, false when it cancels to zero. The sum is formed in 256 bits as two 128-bit halves, x (the larger)
+### on the high half and y shifted down by the exponent difference d (a y more than 130 places down only
+### moves the sum by under a quarter unit of x, taken as one unit), then normalized and truncated to 128 bits.
+### Cancellation scales the operands' absolute errors by the size of the sum, which the bound follows exactly.
 secret routine b128fx_add(a: B128Fx, b: B128Fx) -> (Bool, B128Fx)
   var x = a
   var y = b
@@ -94,27 +103,59 @@ secret routine b128fx_add(a: B128Fx, b: B128Fx) -> (Bool, B128Fx)
     x = b
     y = a
   var d = x.e -% y.e
-  var xs = LLVM::zero_extend[U128, U256](x.m) << 127_u32
-  var ys = 0_u256
+  # absolute errors in units of x's last place: the operands' own, and 2^-60 of slack for the B64 estimates
   var yv = 0.0
-  if d < 256_s64
-    ys = (LLVM::zero_extend[U128, U256](y.m) << 127_u32) >>> b128_trig_sh(n: d)
   if d < 1000_s64
-    yv = b128fx_top(m: y.m) *! b128fx_p2(k: 191_s64 -% d)
-  var s = xs +% ys
-  if x.neg != y.neg
-    s = xs -% ys
-  if s == 0_u256
+    yv = b128fx_top(m: y.m) *! b128fx_p2(k: 64_s64 -% d)
+  var abserr = (x.rel *! b128fx_top(m: x.m) *! 0x1p64 +! y.rel *! yv) *! (1.0 +! 0x1p-50)
+  if d > 130_s64
+    return (true, B128Fx(neg: x.neg, m: x.m, e: x.e, rel: (abserr +! 1.0) /! (b128fx_top(m: x.m) *! 0x1p64) +! 0x1p-127))
+  # y aligned below x: (yh, yl) = y.m * 2^(128 - d), the bits past 2^-128 of x's unit dropped
+  var yh = 0_u128
+  var yl = 0_u128
+  if d == 0_s64
+    yh = y.m
+  elseif d < 128_s64
+    yh = y.m >>> b128_trig_sh(n: d)
+    yl = y.m << b128_trig_sh(n: 128_s64 -% d)
+  else
+    yl = y.m >>> b128_trig_sh(n: d -% 128_s64)
+  var hi = 0_u128
+  var lo = 0_u128
+  var e = x.e
+  if x.neg == y.neg
+    hi = x.m +% yh
+    lo = yl
+    if hi < x.m
+      # the carry out of the top: one place up, the lowest bit into the truncation
+      lo = (lo >>> 1_u32) | (hi << 127_u32)
+      hi = (hi >>> 1_u32) | (1_u128 << 127_u32)
+      e = e +% 1_s64
+  else
+    lo = 0_u128 -% yl
+    var borrow = 0_u128
+    if yl != 0_u128
+      borrow = 1_u128
+    hi = x.m -% yh -% borrow
+  if hi == 0_u128 and lo == 0_u128
     return (false, x)
-  # units of 2^(x.e - 127): the operands' errors, the aligned operand's truncation, and 2^-60 of slack for
-  # the B64 estimates of their sizes
-  var abserr = (x.rel *! b128fx_top(m: x.m) *! b128fx_p2(k: 191_s64) +! y.rel *! yv) *! (1.0 +! 0x1p-50) +! 1.0
-  return (true, b128fx_norm(neg: x.neg, mag: s, scale: x.e -% 127_s64, abserr: abserr))
+  var lz = b128_trig_clz128(x: hi)
+  var m = hi
+  if hi == 0_u128
+    lz = 128_s64 +% b128_trig_clz128(x: lo)
+    m = lo << b128_trig_sh(n: lz -% 128_s64)
+  elseif lz > 0_s64
+    m = (hi << b128_trig_sh(n: lz)) | (lo >>> b128_trig_sh(n: 128_s64 -% lz))
+  var en = e -% lz
+  # the sum in units of x's last place is m 2^(en - x.e); its truncation below 2^-128 units adds one of those
+  var sv = b128fx_top(m: m) *! b128fx_p2(k: 64_s64 +% en -% x.e)
+  var rel = (abserr +! 0x1p-127) /! sv *! (1.0 +! 0x1p-50) +! 0x1p-127
+  return (true, B128Fx(neg: x.neg, m: m, e: en, rel: rel))
 
 ### a / b. The quotient T = N / b.m with N = a.m * 2^127 (2^128 when a.m < b.m, so T lands in [2^127, 2^128))
 ### starts from a B64 estimate and takes two corrections q += (N - b.m q) / b.m, the residual exact in 256
-### bits and the step within 2^-51 of it plus the truncation to an integer: the estimate is within 2^77, the
-### first step within 2^27, the second within 2 units. False in the rare cases where q leaves [2^127, 2^128).
+### bits and the step (times one B64 reciprocal of b.m) within 2^-50.5 of it plus the truncation to an
+### integer: the estimate is within 2^77, the first step within 2^27, the second within 2 units. False in the rare cases where q leaves [2^127, 2^128).
 secret routine b128fx_div(a: B128Fx, b: B128Fx) -> (Bool, B128Fx)
   var sh = 127_s64
   if a.m < b.m
@@ -123,7 +164,10 @@ secret routine b128fx_div(a: B128Fx, b: B128Fx) -> (Bool, B128Fx)
   var nh = a.m >>> b128_trig_sh(n: 128_s64 -% sh)
   var nl = a.m << b128_trig_sh(n: sh)
   var bv = b128fx_top(m: b.m)
-  var est = b128fx_top(m: a.m) /! bv *! b128fx_p2(k: sh)
+  # one reciprocal for the estimate and both steps (a multiplication each instead of a division, within
+  # 2^-52 of the quotient either way)
+  var rb = 1.0 /! bv
+  var est = b128fx_top(m: a.m) *! rb *! b128fx_p2(k: sh)
   if est >= 0x1p128
     est = 0x1.fffffffffffffp127
   var q = b128fx_b64_int(d: est)
@@ -143,7 +187,7 @@ secret routine b128fx_div(a: B128Fx, b: B128Fx) -> (Bool, B128Fx)
       rh = p.item0 -% nh
       if p.item1 < nl
         rh = rh -% 1_u128
-    var dq = b128fx_b64_int(d: b128fx_wide_b64(hi: rh, lo: rl) /! bv *! 0x1p-64)
+    var dq = b128fx_b64_int(d: b128fx_wide_b64(hi: rh, lo: rl) *! rb *! 0x1p-64)
     if below
       if q +% dq < q
         return (false, a)
@@ -159,12 +203,27 @@ secret routine b128fx_div(a: B128Fx, b: B128Fx) -> (Bool, B128Fx)
   return (true, B128Fx(neg: a.neg != b.neg, m: q, e: e, rel: rel))
 
 ### The B128 that every value of v's band rounds to, or false (a band wider than 2^-116, or a result outside
-### the normal range).
+### the normal range): the 128-bit m keeps 113 bits and rounds on the 15 below, the band's err units of m's
+### last place plus two, kept only while below a quarter of the rounding place and clear of the midpoint.
 secret routine b128fx_round(v: B128Fx) -> (Bool, B128)
-  if not (v.rel < 0x1p-116)
-    return (false, B128.from_bits(bits: 0_u128))
-  var units = LLVM::float_to_unsigned[B64, U64]((v.rel *! 1.0000001).scaleb_unchecked(n: 128_s64)) +% 2_u64
-  return b128_round_fixed(neg: v.neg, mag: LLVM::zero_extend[U128, U256](v.m), scale: v.e, err: LLVM::zero_extend[U64, U256](units))
+  var zero = B128.from_bits(bits: 0_u128)
+  if not (v.rel < 0x1p-116) or (v.m >>> 127_u32) == 0_u128
+    return (false, zero)
+  var err = LLVM::float_to_unsigned[B64, U64]((v.rel *! 1.0000001).scaleb_unchecked(n: 128_s64)) +% 2_u64
+  if err >= 0x2000_u64
+    return (false, zero)
+  var r = LLVM::int_truncate[U128, U64](v.m) & 0x7FFF_u64
+  if (r > 0x4000_u64 and r -% 0x4000_u64 <= err) or (r <= 0x4000_u64 and 0x4000_u64 -% r <= err)
+    return (false, zero)
+  var biased = v.e +% 127_s64 +% 16383_s64
+  if biased < 1_s64 or biased > 32766_s64
+    return (false, zero)
+  var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112_u32) +% ((v.m >>> 15_u32) -% (1_u128 << 112_u32))
+  if r > 0x4000_u64
+    bits = bits +% 1_u128
+  if v.neg
+    bits = bits | (1_u128 << 127_u32)
+  return (true, B128.from_bits(bits: bits))
 
 # ============================================================================
 # exp, sinh, cosh, tanh
@@ -872,8 +931,8 @@ secret routine b128_acosh_fast(x: B128) -> (Bool, B128)
   return b128fx_round(v: r)
 
 ### atanh(x) for a finite |x| < 1, or false (also for |x| >= 1, which the caller settles): x below 2^-57
-### (x^3/3 is under a quarter of its half-unit), the series below 2^-20, and otherwise
-### (log1p(|x|) - log1p(-|x|)) / 2, a sum of two magnitudes with no cancellation.
+### (x^3/3 is under a quarter of its half-unit), the series below 2^-20, and otherwise log1p(2|x| / (1 - |x|)) / 2
+### (one logarithm: 1 - |x| is within 2^-127 in the 128-bit frame, and the quotient has no cancellation).
 secret routine b128_atanh_fast(x: B128) -> (Bool, B128)
   var u = x.to_bits()
   var a = u & ((1_u128 << 127_u32) -% 1_u128)
@@ -886,14 +945,16 @@ secret routine b128_atanh_fast(x: B128) -> (Bool, B128)
   if a < B128_FAST_2M20
     var p = b128fx_mul(a: af, b: b128_arc_small(xf: af, atanh: true))
     return b128fx_round(v: B128Fx(neg: neg, m: p.m, e: p.e, rel: p.rel))
-  var (ok1, l1) = b128fx_log1p(t: af)
-  var (ok2, l2) = b128fx_log1p(t: b128fx_neg(v: af))
-  if not ok1 or not ok2
+  var (ok1, omx) = b128fx_add(a: b128fx_one(), b: b128fx_neg(v: af))
+  if not ok1
     return (false, x)
-  var (ok3, d) = b128fx_add(a: l1, b: b128fx_neg(v: l2))
+  var (ok2, q) = b128fx_div(a: B128Fx(neg: false, m: af.m, e: af.e +% 1_s64, rel: af.rel), b: omx)
+  if not ok2
+    return (false, x)
+  var (ok3, l) = b128fx_log1p(t: q)
   if not ok3
     return (false, x)
-  return b128fx_round(v: B128Fx(neg: neg, m: d.m, e: d.e -% 1_s64, rel: d.rel))
+  return b128fx_round(v: B128Fx(neg: neg, m: l.m, e: l.e -% 1_s64, rel: l.rel))
 
 # ============================================================================
 # pow
