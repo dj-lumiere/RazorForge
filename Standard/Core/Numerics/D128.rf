@@ -360,11 +360,25 @@ routine decfinB(sign: Bool, coeff: U256, exp: S64, pref: S64) -> D128Parts
   var c = coeff
   var e = exp
   var nd = digits10b(c: c)
-  if LLVM::signed_gt(a: nd, b: 34_s64)
-    var drop = LLVM::sub(a: nd, b: 34_s64)
+  # Drop, in ONE half-even rounding, every digit that must go: the excess over 34 digits and the digits
+  # below the minimum exponent (rounding to 34 digits first and then to the subnormal position rounded
+  # twice). An inexact result keeps its full precision: only an exact one is stripped toward `pref`.
+  var drop = LLVM::sub(a: nd, b: 34_s64)
+  var under = LLVM::sub(a: -6176_s64, b: e)
+  if LLVM::signed_gt(a: under, b: drop)
+    drop = under
+  var inexact = false
+  if LLVM::signed_ge(a: drop, b: nd)
+    # every digit goes: 1 only above half of 10^drop (exactly half ties to the even 0)
+    inexact = true
+    var above = LLVM::int_eq(a: drop, b: nd) and LLVM::unsigned_gt(a: c, b: LLVM::mul(a: pow10b(k: LLVM::sub(a: nd, b: 1_s64)), b: LLVM::zero_extend[U64, U256](5_u64)))
+    c = if above then one else LLVM::zero_extend[U64, U256](0_u64)
+    e = LLVM::add(a: e, b: drop)
+  elseif LLVM::signed_gt(a: drop, b: 0_s64)
     var div = pow10b(k: drop)
     var q = div_pow10b(x: c, k: drop)
     var r = LLVM::sub(a: c, b: LLVM::mul(a: q, b: div))
+    inexact = r != LLVM::zero_extend[U64, U256](0_u64)
     var twice = LLVM::mul(a: r, b: two)
     if LLVM::unsigned_gt(a: twice, b: div)
       q = LLVM::add(a: q, b: one)
@@ -379,13 +393,16 @@ routine decfinB(sign: Bool, coeff: U256, exp: S64, pref: S64) -> D128Parts
       e = LLVM::add(a: e, b: 1_s64)
   # c is now <= 34 digits, so it fits U128. Do strip / pad / digit-count in U128
   # (mulhi via U256, about half the cost of the U256 path's 256 x 256 mulhi) instead of widening every op.
+  if LLVM::int_eq[U256](a: c, b: 0)
+    # rounded away entirely: a signed zero at the minimum exponent
+    return D128Parts(sign: sign, special: 0_u64, exp: -6176_s64, coeff: LLVM::zero_extend[U64, U128](0_u64))
   var cu = LLVM::int_truncate[U256, U128](c)
   var ten128 = 10_u128
   # Strip trailing zeros toward `pref`, batched: binary-search the largest tz (capped at
   # both `pref-e` and 34) with cu divisible by 10^tz, then strip all tz at once. cu is
   # divisible by 10^k iff (cu // 10^k) * 10^k == cu.
   var room = LLVM::sub(a: pref, b: e)
-  if LLVM::signed_gt(a: room, b: 0_s64) and LLVM::int_ne(a: cu, b: 0_u128)
+  if not inexact and LLVM::signed_gt(a: room, b: 0_s64) and LLVM::int_ne(a: cu, b: 0_u128)
     var cap = if LLVM::signed_lt(a: room, b: 34_s64) then room else 34_s64
     # Decimal trailing zeros tz <= binary trailing zeros (each factor 10 carries a
     # factor 2). cttz is one hardware instruction; capping the search at it means the
@@ -510,7 +527,8 @@ routine div_special_parts(pa: D128Parts, pb: D128Parts) -> D128Parts
     if LLVM::int_eq(a: pb.special, b: 1_u64)
       return nan_parts()
     return inf_parts(sign: sign)
-  return zero_parts(sign: sign)
+  # finite / infinity: a zero at the minimum exponent (clamped into the narrower formats by their conversions)
+  return D128Parts(sign: sign, special: 0_u64, exp: -6176_s64, coeff: LLVM::zero_extend[U64, U128](0_u64))
 
 # ============================================================================
 # Multiply

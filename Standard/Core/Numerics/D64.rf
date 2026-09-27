@@ -283,6 +283,29 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
     if LLVM::signed_gt(a: ez, b: 369_s64)
       ez = 369_s64
     return D64Parts(sign: sign, special: 0_u64, exp: ez, coeff: 0_u64)
+  # U64 fast path (the usual sum, product or quotient): a coefficient below 2^64 at an exponent that neither
+  # underflows nor can overflow, and a preferred exponent the result does not have to strip or pad toward -
+  # the general path below does the same in U128 arithmetic
+  if (coeff >>> 64_u32) == 0_u128 and exp >= -398_s64 and exp <= 360_s64 and pref <= exp
+    var c64 = LLVM::int_truncate[U128, U64](coeff)
+    var nd64 = digits10_u64(c: c64)
+    if nd64 <= 16_s64
+      if exp == pref
+        return D64Parts(sign: sign, special: 0_u64, exp: exp, coeff: c64)
+    else
+      # one half-even rounding of the 1 to 4 excess digits, the result has 16 digits (so no padding)
+      var drop64 = nd64 -% 16_s64
+      var p10d = p10_u64(k: drop64)
+      var q64 = div_pow10_u64(x: c64, k: drop64)
+      var r64 = c64 -% q64 *% p10d
+      var twice64 = r64 *% 2_u64
+      if twice64 > p10d or (twice64 == p10d and (q64 & 1_u64) != 0_u64)
+        q64 = q64 +% 1_u64
+      var e64 = exp +% drop64
+      if q64 == 10000000000000000_u64
+        q64 = 1000000000000000_u64
+        e64 = e64 +% 1_s64
+      return D64Parts(sign: sign, special: 0_u64, exp: e64, coeff: q64)
   var c = coeff
   var e = exp
   var nd = digits10_u128(c: c)  # current digit count
@@ -293,7 +316,11 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
   var under = LLVM::sub(a: -398_s64, b: e)
   if LLVM::signed_gt(a: under, b: drop)
     drop = under
+  # whether the rounding drops a nonzero digit: an inexact result keeps its full precision (it is never
+  # stripped toward the preferred exponent, which only an exact result takes)
+  var inexact = false
   if LLVM::signed_ge(a: drop, b: nd)
+    inexact = true
     # every digit goes: the result is 1 only when the value is above half of 10^drop (exactly half is
     # a tie that rounds to the even 0)
     var above = LLVM::int_eq(a: drop, b: nd) and LLVM::signed_le(a: nd, b: 38_s64) and LLVM::unsigned_gt(a: c, b: LLVM::mul[U128](a: p10_u128(k: LLVM::sub(a: nd, b: 1_s64)), b: 5))
@@ -303,6 +330,7 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
     var divv = p10_u128(k: drop)  # 10^drop divisor
     var q = div_pow10_u128(x: c, k: drop)  # kept high digits
     var r = LLVM::sub(a: c, b: LLVM::mul(a: q, b: divv))  # dropped remainder
+    inexact = r != 0_u128
     var twice = LLVM::mul[U128](a: r, b: 2)
     # round up when remainder > half; on exact half (==) round to even (odd q)
     if LLVM::unsigned_gt(a: twice, b: divv)
@@ -333,7 +361,7 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
   # toward an out-of-range pref (e.g. pref=370 for `1e370`) would re-raise e above qmax and encode
   # a garbage BID pattern. Clamp the strip target to qmax.
   var strip_to = if LLVM::signed_gt(a: pref, b: 369_s64) then 369_s64 else pref
-  if LLVM::signed_lt[S64](a: e, b: strip_to)
+  if not inexact and LLVM::signed_lt[S64](a: e, b: strip_to)
     var tz = trailing_zeros10_u128(c: c, cap0: LLVM::sub(a: strip_to, b: e))
     c = div_pow10_u128(x: c, k: tz)
     e = LLVM::add(a: e, b: tz)
@@ -382,6 +410,10 @@ routine d64_add(a: D64, b: D64) -> D64
     cl = pa.coeff
     sl = pa.sign
   var pref = el  # preferred exponent = the smaller input exponent
+  # a zero with the larger exponent: the sum is the other operand exactly (aligning it under the zero's
+  # exponent would round it into a sticky unit there)
+  if ch == 0_u64 and cl != 0_u64
+    return d64_of_parts(p: D64Parts(sign: sl, special: 0_u64, exp: el, coeff: cl))
   var shift = LLVM::sub(a: eh, b: el)  # decimal places to align l up to h
   var ew = el  # working exponent of the aligned result
   var chw = LLVM::zero_extend[U64, U128](0_u64)  # high coeff scaled to working exp
