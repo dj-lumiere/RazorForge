@@ -186,7 +186,7 @@ secret routine decimal_trig_wide(which: U64, sign: Bool, c: U128, e: S64, small:
   return wx_div(a: s, b: co)
 
 ### sin / cos / tan of a D64 (which = 0 / 1 / 2), correctly rounded: the B128 fast value when its band settles
-### the decimal rounding, else the 384-bit tier.
+### the decimal rounding, else the 384-bit tier. D32 goes through the same after its B64 band.
 secret routine d64_trig(x: D64, which: U64) -> D64
   var p = x.decode()
   if p.special != 0_u64
@@ -199,11 +199,31 @@ secret routine d64_trig(x: D64, which: U64) -> D64
     return r
   return wx_d64(w: decimal_trig_wide(which: which, sign: p.sign, c: c, e: p.exp, small: small))
 
-### sin / cos / tan of a D32 (which = 0 / 1 / 2); see d64_trig.
+### sin / cos / tan of a D32 (which = 0 / 1 / 2): first the correctly rounded B64 routine at x's B64 rounding, kept
+### when its band settles the D32 rounding (as for the other D32 functions), the band being the argument's rounding
+### through the condition number (|x cot x| <= |x / sin x| for sin, |x / cos x| for cos, |x| (|tan x| + 1 / |tan x|)
+### for tan) plus half an ulp. It grows near the zeros and poles and with |x|, where the D64 path takes over.
 secret routine d32_trig(x: D32, which: U64) -> D32
   var p = x.decode()
   if p.special != 0_u64
     return D32.quiet_nan()
+  var xd = d32_to_b64(x: x)
+  var ad = xd.abs()
+  var yd = 0.0_b64
+  var cond = 0.0_b64
+  if which == 0_u64
+    yd = xd.sin()
+    cond = ad /! yd.abs()
+  elseif which == 1_u64
+    yd = xd.cos()
+    cond = ad /! yd.abs()
+  else
+    yd = xd.tan()
+    var at = yd.abs()
+    cond = ad *! (at +! 1.0_b64 /! at)
+  var (fast, v) = d32_from_b64_band(y: yd, k: d32_b64_k(cond: cond))
+  if fast
+    return v
   var xb = B128(from: x)
   var small = xb.abs() < 0.78_b128
   var c = LLVM::zero_extend[U64, U128](p.coeff)
