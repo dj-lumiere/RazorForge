@@ -8,7 +8,7 @@ module Core
 # code did, moved it by up to x * 2^-113, which is a different angle once x is large, and near a multiple
 # of pi even a small x lost most of its relative accuracy.) The reduced angle |t| <= pi/4 then goes to the
 # correctly rounded B128 sin/cos for D32 and D64 (the result is kept only when its error bound cannot move
-# the decimal rounding, else the W=192 engine recomputes it) and to the W=192 engine for D128.
+# the decimal rounding) or D128's fast path, and otherwise to the 384-bit tier (B128Wx.rf).
 # ============================================================================
 
 ### frac(10^a / (2 pi)) for a = 32 * i, i = 0..190 (every decimal128 exponent up to 6111 is 32 * i + b,
@@ -24,12 +24,12 @@ secret routine dec_turn_word(neg: Bool, row: U64, j: U64) -> U64
   return if neg then DEC_TURN_NEG[i] else DEC_TURN_POS[i]
 
 ### The reduction of x = c * 10^e (c > 0, x >= 0.78) modulo pi/2: the quadrant q in 0..3 and the angle
-### x - q * pi/2 in [-pi/4, pi/4] on the W=192 engine. For e >= 0, frac(x / (2 pi)) = frac(c * 10^b *
+### x - q * pi/2 in [-pi/4, pi/4] on the 384-bit tier. For e >= 0, frac(x / (2 pi)) = frac(c * 10^b *
 ### frac(10^(32i) / (2 pi))) with e = 32i + b, and for e < 0 it is frac(c * (1 / (2 pi 10^-e))), where
 ### -e <= 33 since x >= 0.78 and c < 10^34. The multiplier is below 2^217 and the table fraction has 512
-### bits, so the turn fraction is known to about 2^-295: the angle keeps 191 good bits unless x lies within
-### 2^-104 of a quarter turn of a multiple of pi/2, far closer than any decimal128 value comes.
-routine decimal_quarter_reduce(c: U128, e: S64) -> (U64, UnpackedFloat[3, 6])
+### bits, so the turn fraction is known to about 2^-295, which the angle's bound carries (relative to the
+### angle: no decimal128 value comes within 2^-104 of a quarter turn of a multiple of pi/2).
+secret routine decimal_quarter_reduce(c: U128, e: S64) -> (U64, B128Wx)
   var m = Array[U64, 4]()
   var neg = e < 0_s64
   var row = 0_u64
@@ -88,73 +88,14 @@ routine decimal_quarter_reduce(c: U128, e: S64) -> (U64, UnpackedFloat[3, 6])
       acc[k] = v
       k = k +% 1_u64
     acc[7] = acc[7] & 0x3FFFFFFFFFFFFFFF_u64
-  # the leading bit L of the remainder (in units of 2^-510 quarter turns)
-  var w = 7_s64
-  while w >= 0_s64 and acc[LLVM::reinterpret_bits[S64, U64](w)] == 0_u64
-    w = w -% 1_s64
-  if w < 0_s64
-    return (q, UnpackedFloat[3, 6].zero(sign: false))
-  var lead = w *% 64_s64 +% 63_s64 -% LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(acc[LLVM::reinterpret_bits[S64, U64](w)]))
-  if lead < 191_s64
-    return (q, UnpackedFloat[3, 6].zero(sign: false))
-  # the 192 bits from lead - 191 up: 191 significand bits and the rounding bit below them
-  var lo = LLVM::reinterpret_bits[S64, U64](lead -% 191_s64)
-  var wi = lo >>> 6
-  var b = LLVM::int_truncate[U64, U32](lo & 63_u64)
-  var win = Array[U64, 3]()
-  var k2 = 0_u64
-  while k2 < 3_u64
-    var wlo = acc[wi +% k2]
-    var whi = 0_u64
-    if wi +% k2 +% 1_u64 < 8_u64
-      whi = acc[wi +% k2 +% 1_u64]
-    if b == 0_u32
-      win[k2] = wlo
-    else
-      win[k2] = (wlo >>> b) | (whi << (64_u32 -% b))
-    k2 = k2 +% 1_u64
-  var round = win[0] & 1_u64
-  var h0 = (win[0] >>> 1) | (win[1] << 63)
-  var h1 = (win[1] >>> 1) | (win[2] << 63)
-  var h2 = win[2] >>> 1
-  var ex = lead -% 511_s64
-  if round != 0_u64
-    h0 = h0 +% 1_u64
-    if h0 == 0_u64
-      h1 = h1 +% 1_u64
-      if h1 == 0_u64
-        h2 = h2 +% 1_u64
-        if (h2 >>> 63) != 0_u64
-          h2 = h2 >>> 1
-          ex = ex +% 1_s64
-  var quarter = UnpackedFloat[3, 6].make(mant: wide_words3[3](h2: h2, h1: h1, h0: h0), exp: ex, fpclass: POSITIVE_NORMAL)
-  var pi = UnpackedFloat[3, 6].pi()
-  var angle = quarter.mul(you: UnpackedFloat[3, 6].make(mant: pi.mant, exp: pi.exp -% 1_s64, fpclass: POSITIVE_NORMAL))
+  # the remainder in units of 2^-510 quarter turns, times pi/2
+  var t = wx_scale(w: wx_mul(a: wx_of_limbs8(a: acc, rel: 0.0), b: wx_table(i: 9_u64)), k: -510_s64)
+  if wx_is_zero(w: t)
+    return (q, t)
+  t = wx_widen(w: t, r: b128fx_p2(k: -292_s64 -% wx_ilog2(w: t)))
   if negative
-    return (q, angle.neg())
-  return (q, angle)
-
-### sin(t) for |t| <= pi/4 on the W=192 engine: the odd Taylor series in -t^2 through t^31 (the whole
-### coefficient table), no reduction. The first dropped term is below 2^-133 of the result.
-routine uf192_sin_small(t: UnpackedFloat[3, 6]) -> UnpackedFloat[3, 6]
-  var negsq = t.mul(you: t).neg()
-  var d = UnpackedFloat[3, 6].sin_coef(15_s64)
-  var i = 14_s64
-  while i >= 0_s64
-    d = d.fma_finite(b: negsq, c: UnpackedFloat[3, 6].sin_coef(i))
-    i = i -% 1_s64
-  return d.mul(you: t)
-
-### cos(t) for |t| <= pi/4 on the W=192 engine: the even Taylor series in -t^2 through t^32 (the whole
-### coefficient table), no reduction. The first dropped term is below 2^-140 of the result.
-routine uf192_cos_small(t: UnpackedFloat[3, 6]) -> UnpackedFloat[3, 6]
-  var negsq = t.mul(you: t).neg()
-  var d = UnpackedFloat[3, 6].cos_coef(16_s64)
-  var i = 15_s64
-  while i >= 0_s64
-    d = d.fma_finite(b: negsq, c: UnpackedFloat[3, 6].cos_coef(i))
-    i = i -% 1_s64
-  return d
+    return (q, wx_neg(w: t))
+  return (q, t)
 
 ### Which of sin(t), cos(t), -sin(t), -cos(t) is sin(t + q * pi/2) (cos: shift q by one).
 @inline
@@ -168,17 +109,17 @@ secret routine quadrant_pick_b128(q: U64, s: B128, c: B128) -> B128
     return s.neg()
   return c.neg()
 
-### quadrant_pick_b128 on the W=192 engine.
+### quadrant_pick_b128 on the 384-bit tier.
 @inline
-secret routine quadrant_pick_uf192(q: U64, s: UnpackedFloat[3, 6], c: UnpackedFloat[3, 6]) -> UnpackedFloat[3, 6]
+secret routine quadrant_pick_wx(q: U64, s: B128Wx, c: B128Wx) -> B128Wx
   var k = q & 3_u64
   if k == 0_u64
     return s
   if k == 1_u64
     return c
   if k == 2_u64
-    return s.neg()
-  return c.neg()
+    return wx_neg(w: s)
+  return wx_neg(w: c)
 
 ### The ±2^-k band around r: its bits for r * (1 - 2^-k) and r * (1 + 2^-k), or r itself twice when r is
 ### zero, infinite or NaN (exact then). 2^-k relative is at most 2^(113-k) units in r's last place.
@@ -204,11 +145,9 @@ routine d32_round_within(r: B128, k: S64) -> (Bool, D32)
   var a = b128_to_d32(x: lo)
   return (a.to_bits() == b128_to_d32(x: hi).to_bits(), a)
 
-### sin (which = 0), cos (1) or tan (2) of a finite decimal c * 10^e as a B128 near the true value: the
-### fast value from the correctly rounded B128 sin/cos (relative error below 2^-107), and the W=192 engine
-### value (error far below any decimal rounding) for when the fast one cannot decide the rounding.
-### `small` means |x| < 0.78, where no reduction is needed and xb = the B128 of x (relative error 2^-113)
-### and xu = the engine value of x.
+### sin (which = 0), cos (1) or tan (2) of a finite decimal c * 10^e as a B128 near the true value, from the
+### correctly rounded B128 sin/cos (relative error below 2^-107). `small` means |x| < 0.78, where no reduction
+### is needed and xb = the B128 of x (relative error 2^-113).
 routine decimal_trig_fast(which: U64, sign: Bool, c: U128, e: S64, small: Bool, xb: B128) -> B128
   if small
     if which == 0_u64
@@ -218,7 +157,7 @@ routine decimal_trig_fast(which: U64, sign: Bool, c: U128, e: S64, small: Bool, 
     var (ss, cs) = xb.sincos()
     return ss /! cs
   var (q, t) = decimal_quarter_reduce(c: c, e: e)
-  var tb = t.to_b128()
+  var tb = wx_b128(w: t)
   if which == 2_u64
     var (st, ct) = tb.sincos()
     var s = quadrant_pick_b128(q: q, s: st, c: ct)
@@ -237,29 +176,30 @@ routine decimal_trig_fast(which: U64, sign: Bool, c: U128, e: S64, small: Bool, 
     v = v.neg()
   return v
 
-### decimal_trig_fast on the W=192 engine (xu = the engine value of x when small).
-routine decimal_trig_engine(which: U64, sign: Bool, c: U128, e: S64, small: Bool, xu: UnpackedFloat[3, 6]) -> UnpackedFloat[3, 6]
-  var s = UnpackedFloat[3, 6].zero(sign: false)
+### sin (which = 0), cos (1) or tan (2) of a finite nonzero decimal c * 10^e (sign `sign`) on the 384-bit tier:
+### below 0.78 (`small`) directly, else from the exact quarter-turn reduction.
+secret routine decimal_trig_wide(which: U64, sign: Bool, c: U128, e: S64, small: Bool) -> B128Wx
+  var s = wx_zero(rel: 0.0)
   var co = s
   if small
-    s = uf192_sin_small(t: xu)
-    co = uf192_cos_small(t: xu)
+    var sc = wx_sincos(a: wx_of_decimal(neg: false, c: c, q: e))
+    s = sc.item0
+    co = sc.item1
   else
     var (q, t) = decimal_quarter_reduce(c: c, e: e)
-    var st = uf192_sin_small(t: t)
-    var ct = uf192_cos_small(t: t)
-    s = quadrant_pick_uf192(q: q, s: st, c: ct)
-    co = quadrant_pick_uf192(q: q +% 1_u64, s: st, c: ct)
-    if sign
-      s = s.neg()
+    var (st, ct) = wx_sincos(a: t)
+    s = quadrant_pick_wx(q: q, s: st, c: ct)
+    co = quadrant_pick_wx(q: q +% 1_u64, s: st, c: ct)
+  if sign
+    s = wx_neg(w: s)
   if which == 0_u64
     return s
   if which == 1_u64
     return co
-  return s.div(you: co)
+  return wx_div(a: s, b: co)
 
-### sin / cos / tan of a D64 (which = 0 / 1 / 2), correctly rounded unless the engine value is needed and
-### lands within its own tiny error of a decimal midpoint.
+### sin / cos / tan of a D64 (which = 0 / 1 / 2), correctly rounded: the B128 fast value when its band settles
+### the decimal rounding, else the 384-bit tier.
 secret routine d64_trig(x: D64, which: U64) -> D64
   var p = x.decode()
   if p.special != 0_u64
@@ -270,10 +210,7 @@ secret routine d64_trig(x: D64, which: U64) -> D64
   var (ok, r) = d64_round_within(r: decimal_trig_fast(which: which, sign: p.sign, c: c, e: p.exp, small: small, xb: xb), k: 106_s64)
   if ok
     return r
-  var xu = UnpackedFloat[3, 6].zero(sign: false)
-  if small
-    xu = d128_to_uf192(x: D128(from: x))
-  return b128_to_d64(x: decimal_trig_engine(which: which, sign: p.sign, c: c, e: p.exp, small: small, xu: xu).to_b128())
+  return wx_d64(w: decimal_trig_wide(which: which, sign: p.sign, c: c, e: p.exp, small: small))
 
 ### sin / cos / tan of a D32 (which = 0 / 1 / 2); see d64_trig.
 secret routine d32_trig(x: D32, which: U64) -> D32
@@ -286,21 +223,20 @@ secret routine d32_trig(x: D32, which: U64) -> D32
   var (ok, r) = d32_round_within(r: decimal_trig_fast(which: which, sign: p.sign, c: c, e: p.exp, small: small, xb: xb), k: 106_s64)
   if ok
     return r
-  var xu = UnpackedFloat[3, 6].zero(sign: false)
-  if small
-    xu = d128_to_uf192(x: D128(from: x))
-  return b128_to_d32(x: decimal_trig_engine(which: which, sign: p.sign, c: c, e: p.exp, small: small, xu: xu).to_b128())
+  return wx_d32(w: decimal_trig_wide(which: which, sign: p.sign, c: c, e: p.exp, small: small))
 
-### sin / cos / tan of a D128 (which = 0 / 1 / 2) on the W=192 engine.
+### sin / cos / tan of a D128 (which = 0 / 1 / 2) on the 384-bit tier, for when its fast path leaves the
+### rounding open.
 secret routine d128_trig(x: D128, which: U64) -> D128
   var p = x.decode()
   if p.special != 0_u64
     return D128.quiet_nan()
-  var xu = d128_to_uf192(x: x)
-  # |x| < 0.78 needs no reduction (x = 0 included): below 1/2 by the exponent, else by comparing
-  var e2 = xu.exp +% 1_s64
-  var small = p.coeff == 0_u128 or e2 < -1_s64 or (e2 == -1_s64 and xu.to_b128().abs() < 0.78_b128)
-  return uf192_to_d128(x: decimal_trig_engine(which: which, sign: p.sign, c: p.coeff, e: p.exp, small: small, xu: xu))
+  if p.coeff == 0_u128
+    if which == 1_u64
+      return D128.from_components(sign: false, coeff: 1_u128, exp: 0_s64)
+    return x
+  var small = x.abs() < D128.from_components(sign: false, coeff: 78_u128, exp: -2_s64)
+  return wx_d128(w: decimal_trig_wide(which: which, sign: p.sign, c: p.coeff, e: p.exp, small: small))
 
 ### Sine of me (radians), correctly rounded. NaN for a non-finite argument.
 routine D64.sin() -> D64

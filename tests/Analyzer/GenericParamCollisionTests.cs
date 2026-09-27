@@ -7,7 +7,7 @@ using static TestHelpers;
 ///
 /// A generic parameter's NAME is a label, not an identity — a user type named the same as a stdlib
 /// generic's parameter (`record T` vs `List[T]`/`Array[T,N]`/`Hijacked[T]`, `record N` vs `Array[T,N]`,
-/// `record M` vs `UnpackedFloat[M,L,W]`) must NOT break that generic's monomorphization. Today it DOES
+/// `record M` vs a generic's `M` parameter) must NOT break that generic's monomorphization. Today it DOES
 /// (Track-C "unsubstituted generic parameter" / RF-S954), because the pipeline keys on the parameter
 /// NAME as identity in ~6 places. These tests encode the fixed behavior; UN-SKIP each when the alpha-
 /// rename (parameter identity = slot, not name) lands.
@@ -34,7 +34,7 @@ public class GenericParamCollisionTests
     }
 
     /// <summary>
-    /// The full goal: user `record T`/`N`/`M` (colliding with `Array[T,N]`, `UnpackedFloat[M,L,W]`) plus a
+    /// The full goal: user `record T`/`N`/`M` (colliding with generic parameters such as `Array[T,N]`'s) plus a
     /// user generic routine `identity[T]` plus B128 (heavy generic instantiation) all coexist in one file.
     /// </summary>
     [Fact]

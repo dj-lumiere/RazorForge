@@ -142,11 +142,22 @@ routine B64(from: D64) -> B64
   var d = from.decode()
   return B64.from_bits(bits: LLVM::int_truncate[U128, U64](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 53_s64, emin: -1022_s64, emax: 1023_s64)))
 
-### Converts a decimal128 value to double-precision binary floating point.
+### Converts a decimal128 value to double-precision binary floating point, correctly rounded in one step (see
+### B128(from: D128)).
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B64` value.
 routine B64(from: D128) -> B64
-  return d128parts_to_uf192(p: from.decode()).to_b128().B64()
+  var p = from.decode()
+  if p.special >= 2_u64
+    return B64.from_bits(bits: 0x7FF8000000000000_u64)
+  var zb = 0_u64
+  if p.sign
+    zb = 1_u64 << 63_u32
+  if p.special == 1_u64
+    return B64.from_bits(bits: zb | 0x7FF0000000000000_u64)
+  if p.coeff == 0_u128
+    return B64.from_bits(bits: zb)
+  return wx_to_b64(w: wx_of_d128(p: p), force: true).item1
 
 # ============================================================================
 # Arithmetic Operations
@@ -627,8 +638,8 @@ routine B64.hash(k0: U64, k1: U64) -> U64
 # ============================================================================
 # Platform libm (<math.h>) doubles via the runtime's UNIQUELY-NAMED rf_b64_*
 # passthroughs (native/runtime/math_functions.c). Unique names are essential: a
-# bare `atan`/`cbrt`/... (or a method `x.cbrt()`) resolves to UnpackedFloat's
-# same-named 0-arg generic wherever the engine is in scope (a resolver quirk).
+# bare `atan`/`cbrt`/... (or a method `x.cbrt()`) can resolve to a
+# same-named 0-arg generic in scope (a resolver quirk).
 # The transcendental functions themselves are CORE-MATH ports under CoreMath/.
 # ============================================================================
 ### C libm extern (rf_b64_ passthrough): cube root.

@@ -552,6 +552,10 @@ routine d128_add(a: D128, b: D128) -> D128
     cl = cwb(c: pa.coeff)
     sl = pa.sign
   var pref = el
+  if LLVM::int_eq[U256](a: ch, b: 0) and LLVM::int_ne[U256](a: cl, b: 0)
+    # a zero with the larger exponent adds nothing: the sum is the other operand exactly (aligning past the
+    # 40-digit guard below would fold it into a sticky unit)
+    return d128_of_parts(p: decfinB(sign: sl, coeff: cl, exp: el, pref: pref))
   var shift = LLVM::sub(a: eh, b: el)
   var ew = el
   if LLVM::signed_le(a: shift, b: 40_s64)
@@ -1163,24 +1167,31 @@ routine D128(from: U256) -> D128
   return d128_of_parts(p: decfinB(sign: false, coeff: from, exp: 0_s64, pref: 0_s64))
 
 # ============================================================================
-# Creators — binary floats (route through the W=192 engine, correctly rounded)
+# Creators — binary floats (correctly rounded, see wx_round_dec)
 # ============================================================================
 
-### Converts a binary float to decimal128 (correctly rounded via the W=192 engine).
+### Converts a binary float to decimal128 (correctly rounded).
 routine D128(from: B16) -> D128
   return D128(from: from.B32())
 
-### Converts an B32 to decimal128 (widen to B64 -> B128 -> W=192 engine, correctly rounded).
+### Converts an B32 to decimal128 (widen to B64 -> B128, correctly rounded).
 routine D128(from: B32) -> D128
   return D128(from: from.B64())
 
-### Converts an B64 to decimal128 (widen to B128 -> W=192 engine, correctly rounded).
+### Converts an B64 to decimal128 (widen to B128, exact, then correctly rounded).
 routine D128(from: B64) -> D128
-  return uf192_to_d128(x: B128(from: from).to_uf192())
+  return D128(from: B128(from: from))
 
-### Converts an B128 to decimal128 (via the W=192 engine, correctly rounded).
+### Converts an B128 to decimal128, correctly rounded: 34 digits from the 384-bit product with the power of
+### ten, and exactly when the value times that power is a binary fraction (the only case that can be a tie).
 routine D128(from: B128) -> D128
-  return uf192_to_d128(x: from.to_uf192())
+  if from.is_nan()
+    return D128.quiet_nan()
+  if from.is_infinite()
+    return D128.infinity(sign: from.is_negative())
+  if from.is_zero()
+    return D128.from_components(sign: from.is_negative(), coeff: 0_u128, exp: 0_s64)
+  return wx_to_d128(w: wx_of_b128(x: from), force: true).item1
 
 # ============================================================================
 # Creators — decimal <-> decimal (widen narrow parts to D128Parts)
