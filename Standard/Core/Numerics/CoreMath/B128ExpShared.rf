@@ -547,9 +547,10 @@ secret routine b128_expfam_wide_shift(x0: U128, kind: U64) -> U64
     return 0x402F_u64 - e
   return 0x402D_u64 - e
 
-### The accurate path: returns the unbiased exponent and the 2^x significand for the finishing step, or
-### defers to the superaccurate path when this result is still too close to a rounding boundary.
-secret routine b128_expfam_accurate(x0: U128, kind: U64) -> (S64, U128)
+### The accurate path's value of 2^x: the unbiased exponent el and the 192-bit significand f (three words, the
+### low first) with 2^x = f * 2^(el - 188), f in [2^188, 2^189), within 8 units of f (the rounding test of
+### b128_expfam_accurate relies on that bound).
+secret routine b128_expfam_accurate_words(x0: U128, kind: U64) -> (S64, U64, U64, U64)
   var x = b128_expfam_reduce_wide(x0: x0, kind: kind, len: 4_u64)
   x = b128_expfam_ars(o: x, len: 4_u64, n: b128_expfam_wide_shift(x0: x0, kind: kind))
   var el = LLVM::reinterpret_bits[U64, S64](x[3])
@@ -572,6 +573,16 @@ secret routine b128_expfam_accurate(x0: U128, kind: U64) -> (S64, U128)
   f1[1] = b128_expfam_hi(u: f2)
   f1[2] = B128_EXPFAM_C3[2]
   f = b128_expfam_tmul(a: ft, na: 3_u64, b: f1, nb: 3_u64, p: 3_u64, nout: 3_u64)
+  return (el, f[0], f[1], f[2])
+
+### The accurate path: returns the unbiased exponent and the 2^x significand for the finishing step, or
+### defers to the superaccurate path when this result is still too close to a rounding boundary.
+secret routine b128_expfam_accurate(x0: U128, kind: U64) -> (S64, U128)
+  var (el, f0, f1w, f2) = b128_expfam_accurate_words(x0: x0, kind: kind)
+  var f = Array[U64, 8]()
+  f[0] = f0
+  f[1] = f1w
+  f[2] = f2
   var m = b128_expfam_w(hi: f[2] >>> 1, lo: (f[1] >>> 1) | (f[2] << 63))
   var rndfail = false
   if el >= -16382

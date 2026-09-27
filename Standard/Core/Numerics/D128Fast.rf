@@ -281,7 +281,7 @@ secret routine b128fx_ln(w: B128Fx) -> (Bool, B128Fx)
 ### m = round(z / ln 10) and r formed in the same fixed point (ln 10 to 2^-148, |m| / 2 units more), e^r by
 ### the CORE-MATH exp (|r| <= 1.2), times the 256-bit 10^m. Beyond 10^6145 infinity, below half the
 ### smallest subnormal zero.
-secret routine d128_exp_fixed(z148: S256, err: B64) -> (Bool, D128)
+secret routine d128_exp_fixed(z148: S256, err: B64, acc: Bool) -> (Bool, D128)
   var zero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
   var zneg = z148 < 0_s256
   var zm = LLVM::reinterpret_bits[S256, U256](z148)
@@ -306,7 +306,7 @@ secret routine d128_exp_fixed(z148: S256, err: B64) -> (Bool, D128)
     if rneg
       rm = 0_u256 -% rm
     var r = b128fx_norm(neg: rneg, mag: rm, scale: -148_s64, abserr: err +! 0.5 *! B64(from: m).abs() +! 1.0)
-    var (oke, eg) = b128fx_exp_small(w: r)
+    var (oke, eg) = b128fx_exp_small(w: r, acc: acc)
     if not oke
       return (false, zero)
     g = eg
@@ -317,8 +317,8 @@ secret routine d128_exp_fixed(z148: S256, err: B64) -> (Bool, D128)
 
 ### e^x as a B128Fx for a split x: e^xb from the CORE-MATH fast phase times 1 + lo (lo^2/2 below 2^-190
 ### dropped), and the split's error, absolute in the argument, as a relative one in the result.
-secret routine d128_exp_split(s: D128Split) -> (Bool, B128Fx)
-  var (ok, e) = b128_exp_fx(x: d128_signed_xb(s: s))
+secret routine d128_exp_split(s: D128Split, acc: Bool) -> (Bool, B128Fx)
+  var (ok, e) = b128_exp_fx(x: d128_signed_xb(s: s), acc: acc)
   if not ok
     return (false, e)
   var r = e
@@ -331,6 +331,14 @@ secret routine d128_exp_split(s: D128Split) -> (Bool, B128Fx)
 
 ### e^x for a D128, or false when the fast path does not settle it.
 secret routine d128_exp_fast(x: D128) -> (Bool, D128)
+  var (ok, v) = d128_exp_fast_try(x: x, acc: false)
+  if ok
+    return (true, v)
+  return d128_exp_fast_try(x: x, acc: true)
+
+### d128_exp_fast with the exponentials from the CORE-MATH fast phase (acc false) or its accurate phase, which the
+### wrapper retries with when the first band does not settle the rounding.
+secret routine d128_exp_fast_try(x: D128, acc: Bool) -> (Bool, D128)
   if d128_tiny(x: x)
     return (true, d128_one())
   var p = x.decode()
@@ -344,7 +352,7 @@ secret routine d128_exp_fast(x: D128) -> (Bool, D128)
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
-  var (oke, r) = d128_exp_split(s: s)
+  var (oke, r) = d128_exp_split(s: s, acc: acc)
   if oke
     return d128_round_fx(v: r)
   # past the B128 exponential (|x| from 11356 on): x in fixed point, reduced by multiples of ln 10
@@ -355,12 +363,20 @@ secret routine d128_exp_fast(x: D128) -> (Bool, D128)
   var z = LLVM::reinterpret_bits[U256, S256](v >>> b128_trig_sh(n: sh))
   if p.sign
     z = 0_s256 -% z
-  return d128_exp_fixed(z148: z, err: 1.0 +! rel *! 20000.0 *! 0x1p148)
+  return d128_exp_fixed(z148: z, err: 1.0 +! rel *! 20000.0 *! 0x1p148, acc: acc)
 
 ### b^x for b = 2 (ten false) or 10 (ten true): x = +-(k + f) with k an integer and 0 <= f < 1 split
 ### exactly in decimal, b^f = e^(f ln b) and b^k exact (a power of two in the exponent, or the 256-bit
 ### power of ten).
 secret routine d128_exp_base_fast(x: D128, ten: Bool) -> (Bool, D128)
+  var (ok, v) = d128_exp_base_fast_try(x: x, ten: ten, acc: false)
+  if ok
+    return (true, v)
+  return d128_exp_base_fast_try(x: x, ten: ten, acc: true)
+
+### d128_exp_base_fast with the exponentials from the CORE-MATH fast phase (acc false) or its accurate phase, which the
+### wrapper retries with when the first band does not settle the rounding.
+secret routine d128_exp_base_fast_try(x: D128, ten: Bool, acc: Bool) -> (Bool, D128)
   var p = x.decode()
   if p.special != 0_u64 or p.coeff == 0_u128
     return (false, x)
@@ -400,7 +416,7 @@ secret routine d128_exp_base_fast(x: D128, ten: Bool) -> (Bool, D128)
     var lnb = B128Fx(neg: false, m: D128F_LN2_M, e: -128_s64, rel: 0x1p-128)
     if ten
       lnb = B128Fx(neg: false, m: D128F_LN10_M, e: -126_s64, rel: 0x1p-128)
-    var (oke, ef) = b128fx_exp_small(w: b128fx_mul(a: f, b: lnb))
+    var (oke, ef) = b128fx_exp_small(w: b128fx_mul(a: f, b: lnb), acc: acc)
     if not oke
       return (false, x)
     g = ef
@@ -420,13 +436,21 @@ secret routine d128_exp_base_fast(x: D128, ten: Bool) -> (Bool, D128)
 ### 2^-131), by Horner in units of 2^-126 with |x| < 1/2 damping every earlier error (so within 3.5 units
 ### of a value at least 0.78).
 secret routine d128_expm1_fast(x: D128) -> (Bool, D128)
+  var (ok, v) = d128_expm1_fast_try(x: x, acc: false)
+  if ok
+    return (true, v)
+  return d128_expm1_fast_try(x: x, acc: true)
+
+### d128_expm1_fast with the exponentials from the CORE-MATH fast phase (acc false) or its accurate phase, which the
+### wrapper retries with when the first band does not settle the rounding.
+secret routine d128_expm1_fast_try(x: D128, acc: Bool) -> (Bool, D128)
   if d128_tiny(x: x)
     return (true, d128_reduced(x: x))
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
   if s.xb.to_bits() >= (0x3FFE_u128 << 112_u32)
-    var (oke, e) = d128_exp_split(s: s)
+    var (oke, e) = d128_exp_split(s: s, acc: acc)
     if not oke
       return (false, x)
     var (oka, r) = b128fx_add(a: e, b: b128fx_neg(v: b128fx_one()))
@@ -441,12 +465,12 @@ secret routine d128_expm1_fast(x: D128) -> (Bool, D128)
   var xs = LLVM::reinterpret_bits[U128, S128](mag)
   if xf.neg
     xs = 0_s128 -% xs
-  var acc = D128F_EXPM1_SERIES[29]
+  var series = D128F_EXPM1_SERIES[29]
   var k = 29_u64
   while k > 0_u64
     k = k -% 1_u64
-    acc = D128F_EXPM1_SERIES[k] +% b128erf_smul(a: xs, b: acc)
-  var pf = b128fx_norm(neg: false, mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](acc)), scale: -126_s64, abserr: 4.5)
+    series = D128F_EXPM1_SERIES[k] +% b128erf_smul(a: xs, b: series)
+  var pf = b128fx_norm(neg: false, mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](series)), scale: -126_s64, abserr: 4.5)
   var (okr, r) = d128_round_fx(v: b128fx_mul(a: xf, b: pf))
   if okr
     return (true, r)
@@ -719,10 +743,21 @@ secret routine d128_trig_fast(x: D128, which: U64) -> (Bool, D128)
 ### sinh by its series, cosh = 1 + 2 sinh(x/2)^2. From there sinh|xb| and cosh|xb| from the CORE-MATH exp
 ### pair, corrected by the derivative (sinh x = sinh xb + cosh xb lo, cosh x = cosh xb + sinh xb lo).
 secret routine d128_hyp_fast(x: D128, which: U64) -> (Bool, D128)
+  var (ok, v) = d128_hyp_fast_try(x: x, which: which, acc: false)
+  if ok
+    return (true, v)
+  return d128_hyp_fast_try(x: x, which: which, acc: true)
+
+### d128_hyp_fast with the exponentials from the CORE-MATH fast phase (acc false) or its accurate phase, which the
+### wrapper retries with when the first band does not settle the rounding.
+secret routine d128_hyp_fast_try(x: D128, which: U64, acc: Bool) -> (Bool, D128)
   if d128_tiny(x: x)
     if which == 1_u64
       return (true, d128_one())
     return (true, d128_reduced(x: x))
+  if which == 2_u64 and x.abs() >= D128.from_components(sign: false, coeff: 41_u128, exp: 0_s64) and not x.is_nan()
+    # 1 - tanh(41) = 2 e^-82 / (1 + e^-82) is below half the unit below 1 (5 10^-35)
+    return (true, D128.from_components(sign: x.decode().sign, coeff: 1_u128, exp: 0_s64))
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
@@ -739,8 +774,8 @@ secret routine d128_hyp_fast(x: D128, which: U64) -> (Bool, D128)
       return (false, x)
     ch = c
   else
-    var (oks, sx) = b128_sinh_fx(a: a)
-    var (okc2, cx) = b128_cosh_fx(a: a)
+    var (oks, sx) = b128_sinh_fx(a: a, acc: acc)
+    var (okc2, cx) = b128_cosh_fx(a: a, acc: acc)
     if not oks or not okc2
       return (false, x)
     sh = sx
@@ -1136,6 +1171,14 @@ secret routine d128_atan2_fast(y: D128, x: D128) -> (Bool, D128)
 ### of d128_ln_fx, taken in fixed point here, so a large z keeps its absolute accuracy), then e^z as in
 ### the B128 pow. Near |x| = 1 ln|x| is only a 128-bit value, which is enough while |z| stays below 16.
 secret routine d128_pow_fast(x: D128, y: D128) -> (Bool, D128)
+  var (ok, v) = d128_pow_fast_try(x: x, y: y, acc: false)
+  if ok
+    return (true, v)
+  return d128_pow_fast_try(x: x, y: y, acc: true)
+
+### d128_pow_fast with the exponentials from the CORE-MATH fast phase (acc false) or its accurate phase, which the
+### wrapper retries with when the first band does not settle the rounding.
+secret routine d128_pow_fast_try(x: D128, y: D128, acc: Bool) -> (Bool, D128)
   var px = x.decode()
   var py = y.decode()
   if px.special != 0_u64 or py.special != 0_u64 or px.coeff == 0_u128 or py.coeff == 0_u128
@@ -1221,7 +1264,7 @@ secret routine d128_pow_fast(x: D128, y: D128) -> (Bool, D128)
     var z148 = LLVM::reinterpret_bits[U256, S256](hi >>> b128_trig_sh(n: zsh))
     if zneg
       z148 = 0_s256 -% z148
-    var (okz, rz) = d128_exp_fixed(z148: z148, err: zerr *! 0x1p148 +! 2.0)
+    var (okz, rz) = d128_exp_fixed(z148: z148, err: zerr *! 0x1p148 +! 2.0, acc: acc)
     if not okz
       return (false, x)
     if neg
@@ -1233,7 +1276,7 @@ secret routine d128_pow_fast(x: D128, y: D128) -> (Bool, D128)
   var zbits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112_u32) | (zsig -% (1_u128 << 112_u32))
   if zneg
     zbits = zbits | (1_u128 << 127_u32)
-  var (oke, ez) = b128_exp_fx(x: B128.from_bits(bits: zbits))
+  var (oke, ez) = b128_exp_fx(x: B128.from_bits(bits: zbits), acc: acc)
   if not oke
     return (false, x)
   var r = d128_widen(v: ez, r: zerr)
@@ -1252,13 +1295,21 @@ secret routine d128_pow_fast(x: D128, y: D128) -> (Bool, D128)
 ### erf (which 0) or erfc (1) of a D128, or false: the B128 core at xb plus (or minus) (2/sqrt(pi))
 ### e^(-xb^2) lo (the next term, 2|x| e^(-x^2) lo^2, is below 2^-200 of it for |x| < 106.5).
 secret routine d128_erf_fast(x: D128, which: U64) -> (Bool, D128)
+  var (ok, v) = d128_erf_fast_try(x: x, which: which, acc: false)
+  if ok
+    return (true, v)
+  return d128_erf_fast_try(x: x, which: which, acc: true)
+
+### d128_erf_fast with the exponentials from the CORE-MATH fast phase (acc false) or its accurate phase, which the
+### wrapper retries with when the first band does not settle the rounding.
+secret routine d128_erf_fast_try(x: D128, which: U64, acc: Bool) -> (Bool, D128)
   var (ok, s) = d128_split(x: x)
   if not ok
     return (false, x)
   var xs = d128_signed_xb(s: s)
   var (okc, f) = b128_erf_fx(x: xs)
   if which == 1_u64
-    var (okc2, f2) = b128_erfc_fx(x: xs)
+    var (okc2, f2) = b128_erfc_fx(x: xs, acc: acc)
     okc = okc2
     f = f2
   if not okc
@@ -1268,7 +1319,7 @@ secret routine d128_erf_fast(x: D128, which: U64) -> (Bool, D128)
   if s.has_lo and (which == 1_u64 or s.xb.to_bits() < D128F_ERF_TEN)
     var g = b128fx_one()
     if s.xb.to_bits() >= D128F_TINY
-      var (okg, eg) = b128_exp_neg_sq(a: s.xb)
+      var (okg, eg) = b128_exp_neg_sq(a: s.xb, acc: acc)
       if not okg
         return (false, x)
       g = eg
@@ -1291,6 +1342,14 @@ secret routine d128_erf_fast(x: D128, which: U64) -> (Bool, D128)
 ### bound; the next term, trigamma lo^2 / 2, is below 2^-200 of the result away from the poles. An integer
 ### up to 57 is (n - 1)! exactly, 1 and 2 give lgamma 0.
 secret routine d128_gamma_fast(x: D128, which: U64) -> (Bool, D128)
+  var (ok, v) = d128_gamma_fast_try(x: x, which: which, acc: false)
+  if ok
+    return (true, v)
+  return d128_gamma_fast_try(x: x, which: which, acc: true)
+
+### d128_gamma_fast with the exponentials from the CORE-MATH fast phase (acc false) or its accurate phase, which the
+### wrapper retries with when the first band does not settle the rounding.
+secret routine d128_gamma_fast_try(x: D128, which: U64, acc: Bool) -> (Bool, D128)
   var p = x.decode()
   if p.special != 0_u64 or p.coeff == 0_u128
     return (false, x)
@@ -1308,7 +1367,7 @@ secret routine d128_gamma_fast(x: D128, which: U64) -> (Bool, D128)
   var xs = d128_signed_xb(s: s)
   var (okc, g) = b128_lgamma_fx(x: xs)
   if which == 1_u64
-    var (okc2, g2) = b128_tgamma_fx(x: xs)
+    var (okc2, g2) = b128_tgamma_fx(x: xs, acc: acc)
     okc = okc2
     g = g2
   if not okc
