@@ -33,6 +33,10 @@ public sealed class VariableInfo
     /// module-level mutable state).</summary>
     public bool IsGlobal { get; init; }
 
+    /// <summary>Whether this is a routine's (or a lambda's) parameter, which a local declared in its body may
+    /// not reuse the name of.</summary>
+    public bool IsParameter { get; init; }
+
     /// <summary>The module this variable belongs to.</summary>
     public string? Module { get; init; }
 

@@ -290,7 +290,8 @@ public sealed partial class SemanticVerifier
             SourceLocation? paramLoc = pi < routine.Parameters.Count
                 ? routine.Parameters[index: pi].Location
                 : null;
-            _registry.DeclareVariable(name: param.Name, type: param.Type, location: paramLoc);
+            _registry.DeclareVariable(name: param.Name, type: param.Type, location: paramLoc,
+                isParameter: true);
         }
     }
 
@@ -796,6 +797,19 @@ public sealed partial class SemanticVerifier
             ReportNullableIntoNonNull(target: $"variable '{varDecl.Name}'",
                 value: varDecl.Initializer,
                 optionalHint: $"{varDecl.Name}: <Type>?");
+        }
+
+        // A local may not hide a parameter or a local of an enclosing block: one name is one variable within a
+        // routine (as for pattern bindings), and the backend keeps one slot per name.
+        if (!_registry.CurrentScope.IsDeclaredLocally(name: varDecl.Name) &&
+            _registry.CurrentScope.Parent?.LookupWithinRoutine(name: varDecl.Name) is { } hidden)
+        {
+            string what = hidden.IsParameter ? "a parameter of this routine" : "a variable of an enclosing block";
+            string where = hidden.Location is { } hl ? $" (declared at line {hl.Line})" : "";
+            ReportError(code: SemanticDiagnosticCode.IdentifierShadowing,
+                message: $"You declare '{varDecl.Name}' here, but '{varDecl.Name}' is already {what}{where}. " +
+                         "A local cannot hide another variable of the routine: give this one a different name.",
+                location: varDecl.Location);
         }
 
         bool declared = _registry.DeclareVariable(name: varDecl.Name,

@@ -204,6 +204,11 @@ constants. (`lateinit var x: T` defers initialization: storage is allocated at
 the declaration — entities get a real zeroed block, `create` not run — so the
 binding is immediately valid and borrowable; assign before reading.)
 
+**No shadowing inside a routine.** A `var` may not reuse the name of a parameter
+or of a local of an enclosing block (RF-S008, the same rule as `when` pattern
+bindings): one name is one variable within a routine. Sibling blocks may each
+declare their own `i`.
+
 - Checked: `+ - *` (throw on overflow) · wrapping: `+% -% *%` · clamping: `+^ -^ *^`
   (floats: checked `+ - * / **` or raw IEEE `+! -! *! /! **!` with no `danger` needed)
 - Shifts: `<<` left, `>>` right filling with the sign bit, `>>>` right filling with

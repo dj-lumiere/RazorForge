@@ -863,7 +863,8 @@ public sealed partial class SemanticVerifier
                 paramType = ErrorTypeSymbol.Instance;
             }
 
-            _registry.DeclareVariable(name: param.Name, type: paramType, location: param.Location);
+            _registry.DeclareVariable(name: param.Name, type: paramType, location: param.Location,
+                isParameter: true);
             parameterNames.Add(item: param.Name);
             parameterTypes.Add(item: paramType);
         }

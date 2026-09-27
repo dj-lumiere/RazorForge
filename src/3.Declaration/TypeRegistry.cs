@@ -2546,7 +2546,7 @@ public sealed partial class TypeRegistry
     /// <returns>True if successful, false if already declared in this scope.</returns>
     public bool DeclareVariable(string name, TypeSymbol type, bool isPreset = false,
         Expression? presetValue = null, bool isNullable = false, bool isGlobal = false,
-        SourceLocation? location = null)
+        SourceLocation? location = null, bool isParameter = false)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
@@ -2555,6 +2555,7 @@ public sealed partial class TypeRegistry
             PresetValue = presetValue,
             IsNullable = isNullable,
             IsGlobal = isGlobal,
+            IsParameter = isParameter,
             Location = location
         };
 

@@ -74,6 +74,21 @@ public sealed class Scope
     }
 
     /// <summary>
+    /// Looks up a variable by name in this scope and its parents up to and including the nearest routine
+    /// (Function) scope: the variables a local declared here would hide.
+    /// </summary>
+    /// <returns>The variable info if found, null otherwise.</returns>
+    public VariableInfo? LookupWithinRoutine(string name)
+    {
+        if (_variables.TryGetValue(key: name, value: out VariableInfo? variable))
+        {
+            return variable;
+        }
+
+        return Kind == ScopeKind.Function ? null : Parent?.LookupWithinRoutine(name: name);
+    }
+
+    /// <summary>
     /// Checks if a variable is declared in this exact scope (not parent scopes).
     /// </summary>
     /// <param name="name">The variable name to check.</param>
