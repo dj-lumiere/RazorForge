@@ -1648,9 +1648,7 @@ public sealed partial class SemanticVerifier
         // Membership operators (in, notin): check that right has contains accepting left
         if (op is BinaryOperator.In or BinaryOperator.NotIn)
         {
-            RoutineInfo? containsMemberRoutine =
-                _registry.LookupMemberRoutine(type: right, memberRoutineName: "contains");
-            if (containsMemberRoutine == null)
+            if (LookupContains(container: right, element: left) == null)
             {
                 ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
                     message:
@@ -1665,8 +1663,7 @@ public sealed partial class SemanticVerifier
         // test (handled before this by TryAnalyzeFlagsOperator); any other container must have `contains`.
         if (op is BinaryOperator.Have or BinaryOperator.Lack)
         {
-            if (left is not FlagsTypeSymbol &&
-                _registry.LookupMemberRoutine(type: left, memberRoutineName: "contains") == null)
+            if (left is not FlagsTypeSymbol && LookupContains(container: left, element: right) == null)
             {
                 ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
                     message:
@@ -1678,6 +1675,17 @@ public sealed partial class SemanticVerifier
         }
 
         return false;
+    }
+
+    /// <summary>The <c>contains</c> a membership operator calls on <paramref name="container"/>: picked by the element
+    /// type, since a container may declare several (<c>Text.contains</c> takes a <c>Character</c> or a <c>Text</c>) and a
+    /// name alone cannot choose among them.</summary>
+    private RoutineInfo? LookupContains(TypeSymbol container, TypeSymbol element)
+    {
+        return _registry.LookupMemberRoutineOverload(type: container,
+                   memberRoutineName: "contains",
+                   argTypes: [element]) ??
+               _registry.LookupMemberRoutine(type: container, memberRoutineName: "contains");
     }
 
     /// <summary>

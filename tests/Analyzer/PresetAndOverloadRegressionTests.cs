@@ -134,4 +134,21 @@ public class PresetAndOverloadRegressionTests
                                """,
             expectedErrorSubstring: "cannot convert 'Array[Core.U64, 2]' to 'Hijacked[Core.Array[Core.U64, 2]]'");
     }
+
+    /// <summary>
+    /// <c>B128</c> declares both <c>hash()</c> and the keyed <c>hash(k0:, k1:)</c>. With two routines of the name on
+    /// the type, the name-only lookup fell through to the universal <c>T.hash(k0:, k1:)</c> default, and a call
+    /// without arguments skipped the arity re-selection, so <c>x.hash()</c> reported "expects 2 argument(s)".
+    /// </summary>
+    [Fact]
+    public void ZeroArgumentCall_PicksTheZeroParameterOverload()
+    {
+        AssertAnalyzes(source: """
+                               routine start()
+                                 var x = 3.0_b128
+                                 var h = x.hash()
+                                 var k = x.hash(k0: 1_u64, k1: 2_u64)
+                                 return
+                               """);
+    }
 }

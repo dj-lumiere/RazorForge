@@ -1235,6 +1235,14 @@ public sealed partial class TypeRegistry
             return ownMatch;
         }
 
+        // The type declares several routines of this name (`B128.hash()` and `B128.hash(k0:, k1:)`), so the
+        // name alone cannot pick one. Falling through to a universal default would pick one anyway by name
+        // (`T.hash(k0:, k1:)` for `x.hash()`), so the caller resolves it from the call's arguments instead.
+        if (HasSeveralOwnMemberRoutines(type: type, memberRoutineName: memberRoutineName, isFailable: isFailable))
+        {
+            return null;
+        }
+
         // For protocol types, check the protocol's memberRoutine signatures
         if (type is ProtocolTypeSymbol proto)
         {
@@ -1484,6 +1492,16 @@ public sealed partial class TypeRegistry
     /// normalizes a generic-def owner to the concrete owner. Returns null when the type has no own table
     /// entry or no name/failability match (caller falls through to the other resolution paths).
     /// </summary>
+    /// <summary>Whether the type itself declares more than one routine named <paramref name="memberRoutineName"/>
+    /// with the requested failability.</summary>
+    private bool HasSeveralOwnMemberRoutines(TypeSymbol type, string memberRoutineName, bool? isFailable)
+    {
+        return _routinesByOwner.TryGetValue(key: RealmRegistryKey(type: type),
+                   value: out Dictionary<string, List<RoutineInfo>>? ownByName) &&
+               ownByName.TryGetValue(key: memberRoutineName, value: out List<RoutineInfo>? memberRoutines) &&
+               memberRoutines.Count(predicate: m => isFailable == null || m.IsFailable == isFailable) > 1;
+    }
+
     private RoutineInfo? LookupOwnMemberRoutine(TypeSymbol type, string memberRoutineName,
         bool? isFailable, TypeSymbol? forImplementer)
     {

@@ -404,6 +404,14 @@ public sealed partial class SemanticVerifier
         generic.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
         generic.IsInFlight = routine.IsInFlightReturn;
 
+        if (routine.LlvmIrTemplate is { } template && typeSubs != null)
+        {
+            CheckIntrinsicConversionTypes(template: template,
+                typeSubs: typeSubs,
+                routineName: funcId.Realm != null ? $"{funcId.Realm}::{funcId.Name}" : funcId.Name,
+                location: generic.Location);
+        }
+
         // With concrete type arguments the routine is concrete here (monomorphized, or a pre-built
         // resolution), so its arguments get the same binding, count and type checks as any other call. Only
         // typing them against the expected type let `probe[Text](p: 5_s64)` through, and an array passed
@@ -920,5 +928,135 @@ public sealed partial class SemanticVerifier
             $"Internal: semantic analyzer has no handler for AST node '{expression.GetType().Name}'. This expression will be skipped; downstream type info may be incomplete. Please report as a compiler bug.",
             location: expression.Location);
         return ErrorTypeSymbol.Instance;
+    }
+
+    /// <summary>The LLVM cast opcodes an <c>@llvm_ir</c> conversion template can carry, keyed by opcode:
+    /// the scalar kind each side must be (integer or floating point) and how the target width must
+    /// relate to the source width.</summary>
+    private static readonly Dictionary<string, (bool FromFloat, bool ToFloat, int WidthOrder)>
+        IntrinsicConversionRules = new(comparer: StringComparer.Ordinal)
+        {
+            ["trunc"] = (false, false, -1),
+            ["zext"] = (false, false, 1),
+            ["sext"] = (false, false, 1),
+            ["fptrunc"] = (true, true, -1),
+            ["fpext"] = (true, true, 1),
+            ["sitofp"] = (false, true, 2),
+            ["uitofp"] = (false, true, 2),
+            ["fptosi"] = (true, false, 2),
+            ["fptoui"] = (true, false, 2)
+        };
+
+    /// <summary>
+    /// Rejects an <c>LLVM::</c> conversion whose concrete type arguments its cast cannot take:
+    /// <c>int_truncate[U32, U64]</c> would otherwise reach the emitter as <c>trunc i32 ... to i64</c>,
+    /// which opt refuses long after the call was written. Only templates of the shape
+    /// <c>{result} = OPCODE {From} {value} to {To}</c> are checked, and only when both sides are
+    /// scalar LLVM types; <c>bitcast</c> needs equal widths.
+    /// </summary>
+    private void CheckIntrinsicConversionTypes(string template, Dictionary<string, TypeSymbol> typeSubs,
+        string routineName, SourceLocation location)
+    {
+        const string prefix = "{result} = ";
+        const string middle = " {From} {value} to {To}";
+        string body = template.Trim();
+        if (!body.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) ||
+            !body.EndsWith(value: middle, comparisonType: StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        string opcode = body[prefix.Length..^middle.Length];
+        if (!typeSubs.TryGetValue(key: "From", value: out TypeSymbol? from) ||
+            !typeSubs.TryGetValue(key: "To", value: out TypeSymbol? to) ||
+            from is not RecordTypeSymbol fromRecord || to is not RecordTypeSymbol toRecord ||
+            !TryGetScalarLlvmWidth(llvmType: fromRecord.LlvmType, width: out int fromWidth, isFloat: out bool fromFloat) ||
+            !TryGetScalarLlvmWidth(llvmType: toRecord.LlvmType, width: out int toWidth, isFloat: out bool toFloat))
+        {
+            return;
+        }
+
+        (string Problem, string Fix)? mismatch;
+        if (opcode == "bitcast")
+        {
+            mismatch = fromWidth == toWidth
+                ? null
+                : ($"it reinterprets the bits of a {fromWidth}-bit '{from.Name}' as a {toWidth}-bit '{to.Name}', and a bit reinterpretation needs both types to be the same size",
+                    "Widen or narrow the value first so both sides have the same width");
+        }
+        else if (IntrinsicConversionRules.TryGetValue(key: opcode, value: out var rule))
+        {
+            mismatch = DescribeConversionProblem(rule: rule,
+                from: from.Name,
+                fromWidth: fromWidth,
+                fromFloat: fromFloat,
+                to: to.Name,
+                toWidth: toWidth,
+                toFloat: toFloat);
+        }
+        else
+        {
+            return;
+        }
+
+        if (mismatch is not { } found)
+        {
+            return;
+        }
+
+        ReportError(code: SemanticDiagnosticCode.IntrinsicConversionTypeMismatch,
+            message: $"'{routineName}[{from.Name}, {to.Name}]' cannot be built: {found.Problem}. {found.Fix}.",
+            location: location);
+    }
+
+    private static (string Problem, string Fix)? DescribeConversionProblem((bool FromFloat, bool ToFloat, int WidthOrder) rule,
+        string from, int fromWidth, bool fromFloat, string to, int toWidth, bool toFloat)
+    {
+        const string kindFix = "Use the conversion made for that pair of integer and floating-point types";
+        if (rule.FromFloat != fromFloat)
+        {
+            return ($"it takes {(rule.FromFloat ? "a floating-point" : "an integer")} source, and '{from}' is {(fromFloat ? "floating-point" : "an integer")}",
+                kindFix);
+        }
+
+        if (rule.ToFloat != toFloat)
+        {
+            return ($"it produces {(rule.ToFloat ? "a floating-point" : "an integer")} value, and '{to}' is {(toFloat ? "floating-point" : "an integer")}",
+                kindFix);
+        }
+
+        const string widthFix = "Swap the type arguments if they are reversed, or use the conversion that goes the other way";
+        return rule.WidthOrder switch
+        {
+            -1 when toWidth >= fromWidth =>
+                ($"it narrows, and the {toWidth}-bit '{to}' is not narrower than the {fromWidth}-bit '{from}'", widthFix),
+            1 when toWidth <= fromWidth =>
+                ($"it widens, and the {toWidth}-bit '{to}' is not wider than the {fromWidth}-bit '{from}'", widthFix),
+            _ => null
+        };
+    }
+
+    /// <summary>The bit width of a scalar LLVM type (<c>iN</c>, <c>half</c>, <c>bfloat</c>, <c>float</c>,
+    /// <c>double</c>, <c>x86_fp80</c>, <c>fp128</c>, <c>ppc_fp128</c>); false for anything else.</summary>
+    private static bool TryGetScalarLlvmWidth(string llvmType, out int width, out bool isFloat)
+    {
+        isFloat = true;
+        width = llvmType switch
+        {
+            "half" or "bfloat" => 16,
+            "float" => 32,
+            "double" => 64,
+            "x86_fp80" => 80,
+            "fp128" or "ppc_fp128" => 128,
+            _ => 0
+        };
+        if (width != 0)
+        {
+            return true;
+        }
+
+        isFloat = false;
+        return llvmType.Length > 1 && llvmType[0] == 'i' &&
+               int.TryParse(s: llvmType.AsSpan(start: 1), result: out width) && width > 0;
     }
 }

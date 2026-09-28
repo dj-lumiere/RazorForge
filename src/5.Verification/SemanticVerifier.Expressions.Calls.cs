@@ -2883,7 +2883,9 @@ public sealed partial class SemanticVerifier
     private void SelectMemberOverloadByArgumentTypes(CallExpression call, string callLookupName,
         TypeSymbol dispatchType, ref RoutineInfo? memberRoutine, bool ambiguousSeed)
     {
-        if (memberRoutine is not { IsGenericDefinition: false } || call.Arguments.Count == 0)
+        // A call without arguments still goes through the arity check below: `x.hash()` whose seed is
+        // the keyed `hash(k0:, k1:)` must move to the zero-parameter overload.
+        if (memberRoutine is not { IsGenericDefinition: false })
         {
             return;
         }

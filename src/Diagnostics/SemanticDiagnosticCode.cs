@@ -651,6 +651,12 @@ public enum SemanticDiagnosticCode
     /// than one imported module that share the same path leaf. Disambiguate the module name.</summary>
     AmbiguousModuleQualifiedCall = 513,
 
+    /// <summary>An `LLVM::` conversion intrinsic is given a source/target type pair its LLVM cast
+    /// cannot take — a truncation to a type that is not narrower, an extension to a type that is
+    /// not wider, a bit reinterpretation between types of different sizes, or an integer cast on a
+    /// floating-point type (and the reverse).</summary>
+    IntrinsicConversionTypeMismatch = 514,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // COLLECTION LITERAL ERRORS (RF-S550 - RF-S599)
     // ═══════════════════════════════════════════════════════════════════════════
