@@ -19,7 +19,7 @@ routine sum(%n: S64) -> S64
         jump loop(0, 0)
 
     block loop(%i: S64, %acc: S64):
-        %done: Bool = %i.sge(%n)
+        %done: Bool = %i.ge(%n)
         branch %done ? return(%acc) : body(%i, %acc)
 
     block body(%i: S64, %acc: S64):
