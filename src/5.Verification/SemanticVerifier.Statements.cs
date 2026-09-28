@@ -321,6 +321,24 @@ public sealed partial class SemanticVerifier
                 location: routine.Location);
         }
 
+        // A routine whose body throws or goes absent must say so on its declaration: `routine f!(...)`.
+        // Call sites never write the `!`, so the declaration is the one place a reader learns the
+        // routine can fail. Synthesized routines carry their failability from the routine they derive from.
+        if ((routineInfo.HasThrow || routineInfo.HasAbsent) && !routine.IsFailable &&
+            !routineInfo.IsSynthesized)
+        {
+            string what = routineInfo.HasThrow
+                ? "throws"
+                : "can go absent";
+            ReportError(code: routineInfo.HasThrow
+                    ? SemanticDiagnosticCode.ThrowOutsideFailableFunction
+                    : SemanticDiagnosticCode.AbsentOutsideFailableFunction,
+                message:
+                $"'{routine.Name}' {what}, so its declaration needs '!': write 'routine {routine.Name}!(...)'. " +
+                $"Callers still call it as '{routine.Name}(...)'.",
+                location: routine.Location);
+        }
+
         // Failable routine with no throw/absent — error: a ! routine that can't fail is misleading.
         if (routineInfo is
             { IsFailable: true, HasThrow: false, HasAbsent: false, HasFailableCalls: false })

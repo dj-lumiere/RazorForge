@@ -268,6 +268,30 @@ internal sealed class GenericCallLoweringPass : AstRewriter
     /// zero-init of the type's storage). Returns false for null and for types that carry
     /// fields needing initialization.
     /// </summary>
+    /// <summary>
+    /// True unless a named argument of the construction names something other than a member variable of
+    /// the constructed type: <c>List[T](data: d, count: n, capacity: c)</c> is a field-init,
+    /// <c>Dict[K, V](from: sv)</c> is a creator call.
+    /// </summary>
+    private bool NamedArgumentsAreFields(GenericMemberRoutineCallExpression gmc)
+    {
+        TypeSymbol? type = gmc.ConstructedType ?? _registry.LookupType(name: gmc.MemberRoutineName);
+        List<MemberVariableInfo>? fields = type switch
+        {
+            RecordTypeSymbol r => r.MemberVariables,
+            EntityTypeSymbol e => e.MemberVariables,
+            _ => null
+        };
+        if (fields == null)
+        {
+            return true;
+        }
+
+        return gmc.Arguments
+                  .OfType<NamedArgumentExpression>()
+                  .All(predicate: arg => fields.Any(predicate: f => f.Name == arg.Name));
+    }
+
     private static bool HasZeroMemberVariables(TypeSymbol? type)
     {
         return type switch
@@ -383,14 +407,13 @@ internal sealed class GenericCallLoweringPass : AstRewriter
         // here — the type relies on a real create() overload that SA failed to bind, and
         // forging an empty CreatorExpression would just re-issue the bug as S455
         // (missing field). Leave that case to the SA fix path.
-        // A FAILABLE construction `Type![Args](args)` (IsMemoryOperation) must NOT be lowered to a
-        // field-init CreatorExpression here — it routes to the type's failable `create!` overload
-        // (e.g. the variant-arm extractor `Dict[Text, SerialValue].create!(from: sv)`). Leave it as a
-        // GMC so SA resolves the creator; SA-time lowering (below, once ResolvedRoutine is set) or the
+        // A construction whose named arguments are not all fields of the type (the variant-arm extractor
+        // `Dict[Text, SerialValue](from: sv)`) is a creator call, not a field-init: leave it as a GMC so
+        // SA resolves the creator; SA-time lowering (below, once ResolvedRoutine is set) or the
         // creator-routing path handles it.
         if (gmc.Object is IdentifierExpression literalId &&
             literalId.Name == gmc.MemberRoutineName && !gmc.IsMemoryOperation &&
-            gmc.ResolvedRoutine == null
+            gmc.ResolvedRoutine == null && NamedArgumentsAreFields(gmc: gmc)
             // Constructor form `Type[Args](...)`: MemberRoutineName names a type. Prefer the SA-resolved
             // ConstructedType (import-precise) over a bare `LookupType(name)`, which only found a
             // cross-module type (e.g. Collections.BitArray) via the short-name scan.

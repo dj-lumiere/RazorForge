@@ -807,11 +807,9 @@ public sealed partial class SemanticVerifier
             return;
         }
 
-        // Failability is now INFERRED: a recoverable `throw` in a routine not declared `!` is FINE —
-        // it simply makes the routine inferred-failable (the `InferFailableRoutines` fixpoint sets
-        // IsFailable=true before codegen). The declaration `!` is an OPTIONAL honest annotation, no
-        // longer required at the throw site. `pierce` (IsFatal) stays a fatal uncatchable crash that
-        // never marks the routine failable.
+        // A recoverable `throw` requires the routine to be declared `!`; the check runs once the body is
+        // analyzed (ValidateRoutineBodyPostAnalysis, RF-S750). `pierce` (IsFatal) stays a fatal
+        // uncatchable crash that never marks the routine failable.
         TypeSymbol errorType = AnalyzeExpression(expression: throwStmt.Error);
 
         // Only `crashable`-kind types are throwable errors. The `crashable` keyword implicitly
@@ -830,10 +828,8 @@ public sealed partial class SemanticVerifier
                 location: throwStmt.Error.Location);
         }
 
-        // Mark routine as having throw statements (drives both failability inference and variant
-        // generation). Recorded UNCONDITIONALLY for a recoverable `throw` — the inference fixpoint reads
-        // HasThrow to derive IsFailable, so it must be set even when `!` was not declared. A `pierce`
-        // never marks failable — it is a crash, not a recoverable failure.
+        // Mark routine as having throw statements (drives the declaration check and variant
+        // generation). A `pierce` never marks failable — it is a crash, not a recoverable failure.
         if (!throwStmt.IsFatal)
         {
             _currentRoutine.HasThrow = true;
@@ -850,9 +846,8 @@ public sealed partial class SemanticVerifier
             return;
         }
 
-        // Failability is INFERRED: an `absent` in a routine not declared `!` is FINE and simply makes
-        // the routine inferred-failable. Mark routine as having absent statements (for both inference
-        // and variant generation) UNCONDITIONALLY — the fixpoint reads HasAbsent to derive IsFailable.
+        // An `absent` requires the routine to be declared `!` (RF-S751, checked after the body is
+        // analyzed). Mark routine as having absent statements for that check and variant generation.
         _currentRoutine.HasAbsent = true;
     }
 

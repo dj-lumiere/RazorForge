@@ -160,6 +160,12 @@ public enum GrammarDiagnosticCode
     /// <summary>A RazorForge-only language construct was used in a Suflae source file.</summary>
     RfOnlyConstruct = 210,
 
+    /// <summary>A call site wrote the failable <c>!</c> (<c>foo!(x)</c>); the <c>!</c> belongs on the declaration only.</summary>
+    BangAtCallSite = 211,
+
+    /// <summary><c>x in coll</c> used as a membership test; containment is container-first: <c>coll have x</c>.</summary>
+    InAsMembership = 212,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN ERRORS (250 - 299)
     // ═══════════════════════════════════════════════════════════════════════════

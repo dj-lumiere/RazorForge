@@ -226,11 +226,10 @@ public class ErrorVariantGenerationTests
     #region Error Cases
 
     /// <summary>
-    /// Failability is now INFERRED: a <c>throw</c> in a routine NOT declared <c>!</c> no longer emits
-    /// ThrowOutsideFailableFunction — the routine is inferred-failable instead.
+    /// A <c>throw</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
     /// </summary>
     [Fact]
-    public void Analyze_ThrowInNonFailableRoutine_NoLongerErrors()
+    public void Analyze_ThrowInNonFailableRoutine_RequiresBangOnDeclaration()
     {
         string source = """
                         crashable SomeError
@@ -249,15 +248,14 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
     }
     /// <summary>
-    /// Failability is now INFERRED: an <c>absent</c> in a routine NOT declared <c>!</c> no longer emits
-    /// AbsentOutsideFailableFunction — the routine is inferred-failable instead.
+    /// An <c>absent</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
     /// </summary>
     [Fact]
-    public void Analyze_AbsentInNonFailableRoutine_NoLongerErrors()
+    public void Analyze_AbsentInNonFailableRoutine_RequiresBangOnDeclaration()
     {
         string source = """
                         routine might_fail() -> S32
@@ -266,7 +264,7 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
     /// <summary>

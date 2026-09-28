@@ -54,7 +54,7 @@ public class UnwrapOperatorTests
                             absent
                           return 42
                         routine test!() -> S64
-                          var x = get!(flag: true)!!
+                          var x = get(flag: true)!!
                           return x
                         """;
 
@@ -78,7 +78,7 @@ public class UnwrapOperatorTests
                             absent
                           return 42
                         routine test!() -> S64
-                          var x = get!(flag: true) ?? 0
+                          var x = get(flag: true) ?? 0
                           return x
                         """;
 

@@ -397,7 +397,6 @@ public sealed partial class SemanticVerifier
         }
 
         if (AnalyzeArgumentConstruction(call: call,
-                isFailableCall: isFailableCall,
                 callableType: ref callableType) is { } resultAnalyzeArgumentConstruction)
         {
             return resultAnalyzeArgumentConstruction;
@@ -750,7 +749,6 @@ public sealed partial class SemanticVerifier
         return AnalyzeUnresolvedMemberFieldCall(call: call,
             member: member,
             objectType: objectType,
-            isFailableMemberRoutineCall: isFailableMemberRoutineCall,
             callLookupName: callLookupName);
     }
 
@@ -953,20 +951,18 @@ public sealed partial class SemanticVerifier
     private TypeSymbol? AnalyzeMemberChainConversion(CallExpression call, MemberExpression member,
         TypeSymbol objectType)
     {
-        // #78: memberRoutine-chain constructor — "42".S32!() -> S32.create!(from: "42").
-        // MemberName is bare; failability is carried structurally in member.IsFailable.
-        bool isFailable = member.IsFailable;
+        // #78: memberRoutine-chain constructor — "42".S32() -> S32.create!(from: "42").
         string potentialTypeName = member.MemberName;
         string creatorName = RoutineInfo.CreatorName;
 
         TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
 
-        // Type-arg inference for a memberRoutine-chain variant arm extractor: `sv.Dict!()` where `Dict`
+        // Type-arg inference for a memberRoutine-chain variant arm extractor: `sv.Dict()` where `Dict`
         // is a generic definition and the receiver is a variant — adopt the type arguments of the
         // variant's arm whose generic base is `Dict` (mirrors the construction-form inference), so
         // the concrete `Dict[Text, SerialValue].create!(from: sv)` is found instead of the def's
         // bare `Dict.create()` (which trips RF-S770 with 0 params).
-        if (targetType is { IsGenericDefinition: true } && isFailable &&
+        if (targetType is { IsGenericDefinition: true } &&
             objectType is VariantTypeSymbol mcVariant)
         {
             string mcBase = targetType.Name;
@@ -1001,7 +997,7 @@ public sealed partial class SemanticVerifier
     /// ambiguity error, sets <paramref name="ambiguous"/>, and returns null.
     /// </summary>
     private RoutineInfo? ResolveModuleQualifiedRoutine(string moduleRef, string routineName,
-        bool isFailable, SourceLocation location, out bool ambiguous)
+        SourceLocation location, out bool ambiguous)
     {
         ambiguous = false;
         var matches = new List<RoutineInfo>();
@@ -1017,8 +1013,7 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
-            RoutineInfo? candidate = _registry.LookupRoutine(fullName: $"{module}.{routineName}",
-                isFailable: isFailable);
+            RoutineInfo? candidate = _registry.LookupRoutine(fullName: $"{module}.{routineName}");
             if (candidate is { OwnerType: null } && seenKeys.Add(item: candidate.RegistryKey))
             {
                 matches.Add(item: candidate);
@@ -1210,7 +1205,7 @@ public sealed partial class SemanticVerifier
     }
 
 
-    private TypeSymbol? AnalyzeArgumentConstruction(CallExpression call, bool isFailableCall,
+    private TypeSymbol? AnalyzeArgumentConstruction(CallExpression call,
         ref TypeSymbol? callableType)
     {
         if (callableType == null || call.Arguments.Count == 0)
@@ -1242,7 +1237,6 @@ public sealed partial class SemanticVerifier
             callableType: callableType);
 
         TryInferVariantArmCreatorType(callableType: ref callableType,
-            isFailableCall: isFailableCall,
             creatorArgTypes: creatorArgTypes);
 
         RoutineInfo? creator = _registry.LookupCreatorOverload(type: callableType,
@@ -1474,16 +1468,16 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// When the callable type is a generic definition and the sole constructor argument is a
     /// variant, adopts the type arguments of the matching variant arm so that (for example)
-    /// <c>Dict!(from: sv)</c> resolves to the concrete <c>Dict[Text, SerialValue]</c> arm type
+    /// <c>Dict(from: sv)</c> resolves to the concrete <c>Dict[Text, SerialValue]</c> arm type
     /// instead of the bare generic definition.
     /// </summary>
     private static void TryInferVariantArmCreatorType(ref TypeSymbol callableType,
-        bool isFailableCall, List<TypeSymbol> creatorArgTypes)
+        List<TypeSymbol> creatorArgTypes)
     {
-        // Type-arg inference for a bare failable variant arm extractor: `Dict!(from: sv)`
-        // where `Dict` is a generic definition and the single argument is a variant — adopt
-        // the type args of the variant's arm whose generic base is `Dict`.
-        if (!callableType.IsGenericDefinition || !isFailableCall ||
+        // Type-arg inference for a variant arm extractor: `Dict(from: sv)` where `Dict` is a
+        // generic definition and the single argument is a variant — adopt the type args of the
+        // variant's arm whose generic base is `Dict`.
+        if (!callableType.IsGenericDefinition ||
             creatorArgTypes is not [VariantTypeSymbol argVariant])
         {
             return;
@@ -2135,8 +2129,7 @@ public sealed partial class SemanticVerifier
     }
 
     private ErrorTypeSymbol? AnalyzeUnresolvedMemberFieldCall(CallExpression call,
-        MemberExpression member, TypeSymbol objectType, bool isFailableMemberRoutineCall,
-        string callLookupName)
+        MemberExpression member, TypeSymbol objectType, string callLookupName)
     {
         if (objectType is EntityTypeSymbol or RecordTypeSymbol)
         {
@@ -2169,10 +2162,8 @@ public sealed partial class SemanticVerifier
                     return ErrorTypeSymbol.Instance;
                 }
 
-                string hint = BuildUnresolvedMemberCallHint(objectType: objectType,
-                    callLookupName: callLookupName,
-                    namedField: namedField,
-                    isFailableMemberRoutineCall: isFailableMemberRoutineCall);
+                string hint = BuildUnresolvedMemberCallHint(callLookupName: callLookupName,
+                    namedField: namedField);
 
                 ReportError(code: SemanticDiagnosticCode.MemberRoutineNotFound,
                     message:
@@ -2187,23 +2178,15 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Builds the trailing hint for a "no routine defined" diagnostic: points at a same-named field
-    /// (access without parentheses), or suggests the failable form when only a failable overload exists.
+    /// (access without parentheses).
     /// </summary>
-    private string BuildUnresolvedMemberCallHint(TypeSymbol objectType, string callLookupName,
-        MemberVariableInfo? namedField, bool isFailableMemberRoutineCall)
+    private static string BuildUnresolvedMemberCallHint(string callLookupName,
+        MemberVariableInfo? namedField)
     {
         if (namedField != null)
         {
             return $" '{callLookupName}' is a field — access it as '.{callLookupName}' " +
                    "(no parentheses), or define a routine of that name.";
-        }
-
-        if (!isFailableMemberRoutineCall &&
-            _registry.LookupMemberRoutine(type: objectType,
-                memberRoutineName: callLookupName,
-                isFailable: true) != null)
-        {
-            return $" Did you mean the failable form '.{callLookupName}!()'?";
         }
 
         return "";
@@ -3121,11 +3104,9 @@ public sealed partial class SemanticVerifier
              _registry.LookupVariable(name: $"{_currentModuleName}.{moduleRef.Name}") == null) &&
             LookupTypeWithImports(name: moduleRef.Name) == null)
         {
-            bool modFailable = member.IsFailable;
             string modName = member.MemberName;
             RoutineInfo? modRoutine = ResolveModuleQualifiedRoutine(moduleRef: moduleRef.Name,
                 routineName: modName,
-                isFailable: modFailable,
                 location: call.Location,
                 ambiguous: out bool ambiguous);
             if (ambiguous)

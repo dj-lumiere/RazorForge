@@ -154,6 +154,13 @@ public partial class Parser
     /// </summary>
     private bool _inWhenClauseBody;
 
+    /// <summary>
+    /// True while parsing a range's end or step operand (<c>0 to 10</c>, <c>by 2</c>). A <c>have</c> /
+    /// <c>lack</c> there belongs to the whole range (<c>0 to 10 have 10</c>), so the operand stops
+    /// before it and <see cref="ParseRange"/> applies it to the range.
+    /// </summary>
+    private bool _inRangeOperand;
+
     #endregion
 
     /// <summary>

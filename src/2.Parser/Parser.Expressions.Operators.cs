@@ -270,44 +270,44 @@ public partial class Parser
     {
         Expression expr = ParseLogicalAnd();
 
-        // Handle ascending range expressions: A to B or A to B by C
-        if (CheckAndAdvance(type: TokenType.To))
+        // A to B / A til B, each optionally followed by `by C`.
+        bool inclusive = Check(type: TokenType.To);
+        if (!inclusive && !Check(type: TokenType.Til))
         {
-            Expression end = ParseLogicalAnd();
-            Expression? step = null;
-
-            if (CheckAndAdvance(type: TokenType.By))
-            {
-                step = ParseLogicalAnd();
-            }
-
-            return new RangeExpression(Start: expr,
-                End: end,
-                Step: step,
-                IsDescending: false,
-                Location: expr.Location);
+            return expr;
         }
 
-        // Handle exclusive range expressions: A til B or A til B by C
-        if (CheckAndAdvance(type: TokenType.Til))
+        Advance(); // consume 'to' / 'til'
+
+        bool savedInRangeOperand = _inRangeOperand;
+        _inRangeOperand = true;
+        Expression end = ParseLogicalAnd();
+        Expression? step = null;
+        if (CheckAndAdvance(type: TokenType.By))
         {
-            Expression end = ParseLogicalAnd();
-            Expression? step = null;
-
-            if (CheckAndAdvance(type: TokenType.By))
-            {
-                step = ParseLogicalAnd();
-            }
-
-            return new RangeExpression(Start: expr,
-                End: end,
-                Step: step,
-                IsDescending: false,
-                Location: expr.Location,
-                IsExclusive: true);
+            step = ParseLogicalAnd();
         }
 
-        return expr;
+        _inRangeOperand = savedInRangeOperand;
+
+        Expression range = new RangeExpression(Start: expr,
+            End: end,
+            Step: step,
+            IsDescending: false,
+            Location: expr.Location,
+            IsExclusive: !inclusive);
+
+        // Membership on the whole range: `0 to 10 have 10`, `0 til 10 lack x`.
+        if (!_inRangeOperand && !_inWhenPatternContext && !_inWhenClauseBody &&
+            CheckAndAdvance(TokenType.Have, TokenType.Lack))
+        {
+            Token op = PeekToken(offset: -1);
+            range = ParseHaveOrLackExpression(container: range,
+                op: op,
+                location: GetLocation(token: op));
+        }
+
+        return range;
     }
 
     /// <summary>
@@ -431,10 +431,21 @@ public partial class Parser
     {
         Expression expr = ParseBitwiseOr();
 
+        // `x in coll` as a test: containment is written container-first. `in` only introduces a loop
+        // source (`each x in xs`, `expand m in ...`), which those headers consume themselves.
+        if (!_inWhenPatternContext && !_inWhenClauseBody && Check(type: TokenType.In))
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.InAsMembership,
+                message: "'in' only names what a loop walks (`each x in xs`). To test membership, " +
+                         "put the container first: `xs have x` (or `xs lack x`).");
+        }
+
         // Handle is/isnot/have/lack/obeys/disobeys expressions when not in when pattern/clause context.
         // (`in`/`notin` are RETIRED at the expression level — `in` is iteration-only, containment is
         // `have`/`lack`.)
-        while (!_inWhenPatternContext && !_inWhenClauseBody && CheckAndAdvance(TokenType.Is,
+        while (!_inWhenPatternContext && !_inWhenClauseBody &&
+               !(_inRangeOperand && (Check(type: TokenType.Have) || Check(type: TokenType.Lack))) &&
+               CheckAndAdvance(TokenType.Is,
                    TokenType.IsNot,
                    TokenType.Have,
                    TokenType.Lack,

@@ -449,9 +449,9 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Lookup[Config])
                           when result
-                            is ValidationError e => stop!(f"Invalid config name: {e.message}")
+                            is ValidationError e => stop(f"Invalid config name: {e.message}")
                             is IOError e => show(f"IO error: {e.message}")
-                            is Crashable e => breach!()
+                            is Crashable e => breach()
                             is None => use_default_config()
                             else config => apply(config)
                           return

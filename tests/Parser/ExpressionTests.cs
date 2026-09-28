@@ -90,7 +90,7 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = "42".S32!()
+                          var result = "42".S32()
                           return
                         """;
 
@@ -790,7 +790,7 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var x = value.S64!()
+                          var x = value.S64()
                           return
                         """;
 

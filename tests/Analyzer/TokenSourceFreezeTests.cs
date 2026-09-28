@@ -127,7 +127,7 @@ public class TokenSourceFreezeTests
                                     var boxes = List[Box]()
                                     boxes.add_last(value: Box(n: 1))
                                     boxes.add_last(value: Box(n: 2))
-                                    boxes[0].n = boxes.remove_last!().n
+                                    boxes[0].n = boxes.remove_last().n
                                     return
                                   """;
 

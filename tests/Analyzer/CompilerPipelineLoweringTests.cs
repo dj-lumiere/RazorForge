@@ -765,7 +765,7 @@ public class CompilerPipelineLoweringTests
                         import Collections.BitList
 
                         routine test(bits: BitList) -> U8!
-                          return bits.to_u8!()
+                          return bits.to_u8()
 
                         routine trigger(bits: BitList) -> U8
                           discard try bits.to_u8()
@@ -1117,7 +1117,7 @@ public class CompilerPipelineLoweringTests
                           return value
 
                         routine test!(text: Text) -> S32
-                          return helper(text.count().S32!())
+                          return helper(text.count().S32())
                         """;
 
         Program program = Parse(source: source);

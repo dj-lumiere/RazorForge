@@ -567,21 +567,32 @@ public sealed partial class StdlibLoader
 
             progs.Add(item: (ast, filePath, effectiveModule));
 
-            // Two-pass registration for single module
-            RegisterProgramTypes(registry: registry, program: ast, moduleName: effectiveModule);
-            RegisterProgramRoutines(registry: registry, program: ast, moduleName: effectiveModule);
-
-            // Handle any imports within this module (recursive loading)
-            foreach (ISyntaxTreeNode node in ast.Declarations)
+            // Load the file's imports FIRST, so a field or signature naming a type from an imported module
+            // (IO/File's `File.metadata() -> FileMetadata` from IO/FileSystem) finds it registered. The
+            // module is already marked loaded, so an import cycle back to it stops here.
+            foreach (ImportDeclaration import in ast.Declarations.OfType<ImportDeclaration>())
             {
-                if (node is ImportDeclaration import)
-                {
-                    // Recursively load imported modules
-                    registry.LoadModule(importPath: import.ModulePath,
-                        currentFile: filePath,
-                        location: import.Location,
-                        effectiveModule: out _);
-                }
+                registry.LoadModule(importPath: import.ModulePath,
+                    currentFile: filePath,
+                    location: import.Location,
+                    effectiveModule: out _);
+            }
+
+            // Register with the file's imports in scope, so a bare cross-module type name resolves
+            // through them. Then re-resolve fields and signatures once every type of the file exists
+            // (a forward reference inside the file, or a type from a module reached through a cycle).
+            IReadOnlyCollection<string>? savedImports = registry.ActiveRegistrationImports;
+            registry.ActiveRegistrationImports = ImportScopeOf(program: ast);
+            try
+            {
+                RegisterProgramTypes(registry: registry, program: ast, moduleName: effectiveModule);
+                ResolveProgramMemberVariables(registry: registry, program: ast);
+                RegisterProgramRoutines(registry: registry, program: ast, moduleName: effectiveModule);
+                ResolveRoutineSignatures(registry: registry, program: ast, moduleName: effectiveModule);
+            }
+            finally
+            {
+                registry.ActiveRegistrationImports = savedImports;
             }
 
             return effectiveModule;
@@ -680,19 +691,36 @@ public sealed partial class StdlibLoader
     private static void StampProgram(TypeRegistry registry, Program program, string filePath)
     {
         StampRealm(realm: RealmOf(filePath: filePath));
+        registry.ActiveRegistrationImports = ImportScopeOf(program: program);
+    }
+
+    /// <summary>
+    /// The module prefixes a program's imports make visible to bare type names during registration. A type
+    /// is keyed by its module exactly as the module declares it (<c>IO/FileSystem.FileMetadata</c>), so the
+    /// import path is kept verbatim. The dotted spelling and the top-level segment are kept as well, for
+    /// modules declared in dotted form and for bare top-level module imports.
+    /// </summary>
+    private static List<string> ImportScopeOf(Program program)
+    {
         var imports = new List<string>();
         foreach (ImportDeclaration import in program.Declarations.OfType<ImportDeclaration>())
         {
-            string importModule = import.ModulePath.Replace(oldChar: '/', newChar: '.');
-            imports.Add(item: importModule);
-            int dotIdx = importModule.IndexOf(value: '.');
+            string declared = import.ModulePath;
+            imports.Add(item: declared);
+            string dotted = declared.Replace(oldChar: '/', newChar: '.');
+            if (dotted != declared)
+            {
+                imports.Add(item: dotted);
+            }
+
+            int dotIdx = dotted.IndexOf(value: '.');
             if (dotIdx > 0)
             {
-                imports.Add(item: importModule[..dotIdx]);
+                imports.Add(item: dotted[..dotIdx]);
             }
         }
 
-        registry.ActiveRegistrationImports = imports;
+        return imports;
     }
 
     /// <summary>

@@ -817,8 +817,8 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     public string VisitTypeConversionExpression(TypeConversionExpression node)
     {
         return node.IsMemberRoutineStyle
-            ? $"{node.Expression.Accept(visitor: this)}.{node.TargetType}!()"
-            : $"{node.TargetType}!({node.Expression.Accept(visitor: this)})";
+            ? $"{node.Expression.Accept(visitor: this)}.{node.TargetType}()"
+            : $"{node.TargetType}({node.Expression.Accept(visitor: this)})";
     }
 
 
@@ -1084,15 +1084,12 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     /// <inheritdoc/>
     public string VisitBracketAccessExpression(BracketAccessExpression node)
     {
-        string bang = node.IsFailable
-            ? "!"
-            : "";
         string args = string.Join(separator: ", ",
             values: node.Args.Select(selector: a => a.Accept(visitor: this)));
         string call = node.CallArgs is null
             ? ""
             : $"({string.Join(separator: ", ", values: node.CallArgs.Select(selector: a => a.Accept(visitor: this)))})";
-        return $"{node.Object.Accept(visitor: this)}{bang}[{args}]{call}";
+        return $"{node.Object.Accept(visitor: this)}[{args}]{call}";
     }
 
 

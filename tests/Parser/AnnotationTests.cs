@@ -353,7 +353,7 @@ public class AttributeTests
         string source = """
                         @test
                         routine test_addition()
-                          verify!(1 + 1 == 2)
+                          verify(1 + 1 == 2)
                           return
                         """;
 

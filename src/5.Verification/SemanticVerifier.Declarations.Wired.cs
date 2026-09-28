@@ -104,10 +104,9 @@ public sealed partial class SemanticVerifier
     /// after Phase-4 body analysis has populated <see cref="RoutineInfo.HasThrow"/> /
     /// <see cref="RoutineInfo.HasAbsent"/> / <see cref="RoutineInfo.FailableCallees"/>.
     ///
-    /// <para>A routine is failable iff it was DECLARED <c>!</c> (kept — the annotation is now OPTIONAL
-    /// but honest) OR its body directly <c>throw</c>s / <c>absent</c>s. The declaration <c>!</c> is
-    /// never REMOVED by inference; inference only ADDS failability to a routine that throws/absents
-    /// without a declared <c>!</c> (the newly-allowed un-declared-failable case).</para>
+    /// <para>A routine is failable iff it was DECLARED <c>!</c> OR its body directly <c>throw</c>s /
+    /// <c>absent</c>s. User and stdlib routines that throw/absent must be declared <c>!</c> (RF-S750 /
+    /// RF-S751), so for them this is a no-op; it still gives synthesized bodies their failability.</para>
     ///
     /// <para>Failability is NOT propagated through the call graph here: a non-failable routine calling
     /// a failable one is the language's established CRASH-ONLY path (the call fails ⇒ the program

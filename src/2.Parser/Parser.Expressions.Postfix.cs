@@ -40,11 +40,10 @@ public partial class Parser
             return true;
         }
 
-        // Failable call: identifier!(args)
+        // `identifier!(args)`: the failable `!` belongs on the declaration, never at a call site.
         if (IsFailableCallStart())
         {
-            expr = HandleFailableCall(expr: expr);
-            return true;
+            throw BangAtCallSiteError();
         }
 
         // Plain call: expr(args)
@@ -98,11 +97,24 @@ public partial class Parser
                .Type == TokenType.LeftBracket;
     }
 
-    /// <summary>Returns true when the current token sequence starts a failable call expression.</summary>
+    /// <summary>Returns true when the current token sequence is a call written with a `!` (<c>foo!(</c>).</summary>
     private bool IsFailableCallStart()
     {
         return Check(type: TokenType.Bang) && PeekToken(offset: 1)
            .Type == TokenType.LeftParen;
+    }
+
+    /// <summary>
+    /// The error for a `!` written at a call site (<c>foo!(x)</c>, <c>obj.foo!(x)</c>, <c>Type![T](x)</c>).
+    /// Failability is declared once, on the routine (<c>routine foo!(...)</c>); a call is written plain and
+    /// recovered with <c>try</c>/<c>grab</c>/<c>lookup</c>.
+    /// </summary>
+    private GrammarException BangAtCallSiteError()
+    {
+        return ThrowParseError(code: GrammarDiagnosticCode.BangAtCallSite,
+            message: "A call doesn't take '!'. The '!' goes on the routine's declaration only " +
+                     "(`routine parse!(...)`); call it as `parse(...)`, and put `try`, `grab` or `lookup` " +
+                     "in front of the call to recover from a failure.");
     }
 
     /// <summary>
@@ -149,12 +161,14 @@ public partial class Parser
     /// index. It parses the bracket contents uniformly as expressions and emits a
     /// BracketAccessExpression; the BracketReclassifyPass (run before the main semantic resolve)
     /// rewrites this into an IndexExpression / GenericMemberRoutineCallExpression / GenericMemberExpression.
-    /// A failable <c>!</c> may precede the brackets (func![T](x)); it is recorded as
-    /// BracketAccessExpression.IsFailable, never baked into a name.
+    /// A <c>!</c> before the brackets (<c>func![T](x)</c>) is a call-site bang and is rejected.
     /// </summary>
     private Expression HandleBracketAccess(Expression expr)
     {
-        bool isFailable = CheckAndAdvance(type: TokenType.Bang);
+        if (Check(type: TokenType.Bang))
+        {
+            throw BangAtCallSiteError();
+        }
 
         Advance(); // consume '['
         var bracketArgs = new List<Expression>();
@@ -179,36 +193,8 @@ public partial class Parser
         var bracketNode = new BracketAccessExpression(Object: expr,
             Args: bracketArgs,
             CallArgs: callArgs,
-            Location: expr.Location) { IsFailable = isFailable };
+            Location: expr.Location);
         return BracketReclassifyPass.Reclassify(node: bracketNode);
-    }
-
-    /// <summary>
-    /// Handles a throwable function call: <c>identifier!(args)</c> with named arguments.
-    /// </summary>
-    private CallExpression HandleFailableCall(Expression expr)
-    {
-        Advance(); // consume '!'
-        Advance(); // consume '('
-
-        List<Expression> args = ParseArgumentList();
-        Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
-
-        if (expr is IdentifierExpression identExpr)
-        {
-            return new CallExpression(Callee: new IdentifierExpression(Name: identExpr.Name,
-                    Location: identExpr.Location,
-                    // Preserve the `::` realm qualifier on a failable foreign call
-                    // (`C::rf_foo!(...)`) so the strict realm gate can see it.
-                    Realm: identExpr.Realm),
-                Arguments: args,
-                Location: expr.Location) { IsFailable = true };
-        }
-
-        return new CallExpression(Callee: expr, Arguments: args, Location: expr.Location)
-        {
-            IsFailable = true
-        };
     }
 
     /// <summary>
@@ -223,9 +209,8 @@ public partial class Parser
         // wired attribute, and lookup keys on the BARE name, so the call name stays bare.
         CheckAndAdvance(type: TokenType.Dollar);
         // Consume the bare member name WITHOUT folding a trailing `!` into it (unlike
-        // ConsumeMemberRoutineName, which the declaration parser still uses): the `!` stays a separate
-        // Bang token so the failable-call / generic-failable handling below records it as a
-        // structured MemberExpression.IsFailable / GenericMemberRoutineCallExpression flag.
+        // ConsumeMemberRoutineName, which the declaration parser still uses): a `!` after the name is
+        // a call-site bang, which the handlers below reject.
         if (!Check(type: TokenType.Identifier) &&
             !IsKeywordValidAsMemberRoutineName(type: CurrentToken.Type))
         {
@@ -236,12 +221,11 @@ public partial class Parser
         string member = CurrentToken.Text;
         Advance();
 
-        // Generic member access / call: obj.MemberRoutine[T](...) or obj.MemberRoutine![T](...).
+        // Generic member access / call: obj.MemberRoutine[T](...).
         // Parsed uniformly (no generic-vs-index decision): the `.MemberRoutine` folds into a
         // MemberExpression and the brackets attach as a BracketAccessExpression whose
         // Object is that MemberExpression. BracketReclassifyPass rewrites this into a
-        // GenericMemberRoutineCallExpression / GenericMemberExpression. A `!` before the
-        // brackets is the memory-op marker, recorded as BracketAccessExpression.IsFailable.
+        // GenericMemberRoutineCallExpression / GenericMemberExpression.
         if (Check(type: TokenType.Bang) && PeekToken(offset: 1)
                .Type == TokenType.LeftBracket || Check(type: TokenType.LeftBracket))
         {
@@ -252,13 +236,15 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Handles a generic member access/call: <c>obj.MemberRoutine[T](...)</c> or
-    /// <c>obj.MemberRoutine![T](...)</c>. Called after the member name is consumed and a bracket
-    /// (optionally preceded by <c>!</c>) is confirmed next.
+    /// Handles a generic member access/call: <c>obj.MemberRoutine[T](...)</c>. Called after the member
+    /// name is consumed and a bracket (or a rejected call-site <c>![</c>) is confirmed next.
     /// </summary>
     private Expression HandleGenericMemberAccess(Expression expr, string member)
     {
-        bool isGenericMemOp = CheckAndAdvance(type: TokenType.Bang);
+        if (Check(type: TokenType.Bang))
+        {
+            throw BangAtCallSiteError();
+        }
 
         Advance(); // consume '['
         var bracketArgs = new List<Expression>();
@@ -282,31 +268,20 @@ public partial class Parser
         var bracketNode = new BracketAccessExpression(Object: memberObj,
             Args: bracketArgs,
             CallArgs: callArgs,
-            Location: expr.Location) { IsFailable = isGenericMemOp };
+            Location: expr.Location);
         return BracketReclassifyPass.Reclassify(node: bracketNode);
     }
 
     /// <summary>
-    /// Handles a plain member access, a member call, or a failable member call after the member name is
-    /// consumed: <c>obj.MemberRoutine</c>, <c>obj.MemberRoutine(args)</c>, <c>obj.MemberRoutine!(args)</c>.
+    /// Handles a plain member access or a member call after the member name is consumed:
+    /// <c>obj.MemberRoutine</c>, <c>obj.MemberRoutine(args)</c>. <c>obj.MemberRoutine!(args)</c> is a
+    /// call-site bang and is rejected.
     /// </summary>
     private Expression HandlePlainMemberAccess(Expression expr, string member)
     {
-        // Regular member access
-        // Check for failable memberRoutine call with ! suffix
-        if (CheckAndAdvance(type: TokenType.Bang) && CheckAndAdvance(type: TokenType.LeftParen))
+        if (IsFailableCallStart())
         {
-            // Failable memberRoutine call: obj.MemberRoutine!(args)
-            // Represented as CallExpression with MemberExpression callee
-            List<Expression> args = ParseArgumentList();
-            Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
-
-            Expression memberExpr = new MemberExpression(Object: expr,
-                MemberName: member,
-                Location: expr.Location) { IsFailable = true };
-            return new CallExpression(Callee: memberExpr,
-                Arguments: args,
-                Location: expr.Location);
+            throw BangAtCallSiteError();
         }
 
         if (CheckAndAdvance(type: TokenType.LeftParen))

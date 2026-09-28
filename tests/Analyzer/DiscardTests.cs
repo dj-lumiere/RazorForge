@@ -162,7 +162,7 @@ public class DiscardTests
 
                         routine test()
                           var w = Wrapper(value: 42)
-                          discard w.get_value!()
+                          discard w.get_value()
                           return
                         """;
 
@@ -186,7 +186,7 @@ public class DiscardTests
                           return 42
 
                         routine test!()
-                          discard get!(flag: true)
+                          discard get(flag: true)
                           return
                         """;
 
@@ -209,7 +209,7 @@ public class DiscardTests
                           return 42
 
                         routine test()
-                          discard get!(flag: true)
+                          discard get(flag: true)
                           return
                         """;
 
