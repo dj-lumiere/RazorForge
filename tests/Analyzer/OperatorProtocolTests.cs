@@ -308,7 +308,8 @@ public class OperatorProtocolTests
     #region Non-Operator memberRoutines (No Protocol Required)
 
     /// <summary>
-    /// Verifies semantic analysis behavior for create without protocol without unexpected diagnostics.
+    /// A member routine named <c>create</c> is an ordinary member routine (constructors are
+    /// <c>routine T(...)</c> only) and needs no protocol.
     /// </summary>
     [Fact]
     public void Analyze_CreateWithoutProtocol_NoError()

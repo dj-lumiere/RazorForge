@@ -96,7 +96,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   "borrow" in prose or API names. Ownership is expressed via entities + `steal`
   + RC wrappers + **access tokens** (below).
 - compiler-synthesized per-type routines are **wired routines** (`represent`,
-  `diagnose`, `serialize`, `create`, `eq`, `cmp`, `hash`, …) — named with **NO
+  `diagnose`, `serialize`, the constructor, `eq`, `cmp`, `hash`, …) — named with **NO
   sigil**; wired-ness is INFERRED from protocol conformance. Not
   "derives"/"macros"/"trait impls". (The `$` sigil is a separate, unrelated
   feature — a buildtime SPLICE, e.g. `$nameof(m)`.)
@@ -205,7 +205,7 @@ preset MAX_RETRIES: S32 = 5   # named constant: UPPER_CASE, explicit type requir
 
 There is **no `let` and no `const`** — `var` for bindings, `preset` for
 constants. (`lateinit var x: T` defers initialization: storage is allocated at
-the declaration — entities get a real zeroed block, `create` not run — so the
+the declaration — entities get a real zeroed block, the constructor not run — so the
 binding is immediately valid and borrowable; assign before reading.)
 
 **No shadowing inside a routine.** A `var` may not reuse the name of a parameter
@@ -289,16 +289,18 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   (keeps the `Crashable`); `lookup get_text(n: 0)` → `Lookup[Text]` (T | absent |
   `Crashable`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are compiler-synthesized lifecycle/operator hooks (NO sigil):
-  `create`, `destroy`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
+  the constructor `T(...)`, `destroy`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
 - Failure inside a failable routine: `throw SomeError(...)` or `absent`
   (absence without an error object).
-- The `!` is part of the routine NAME, before the argument list, in both static
-  and method calls: `S64.from_digit_bytes_at!(bytes: bs)`, `x.divmod!(other: m)`.
-  Writing `foo(args)!` (bang after the parens) is a parse error. Constructor
-  overload resolution picks `create` vs `create!` for you — the call site
-  writes neither `!` nor ceremony.
+- The `!` goes on the DECLARATION only (`routine S64.from_digit_bytes_at!(...)`,
+  `routine S32!(from_text: Text)`). Calls never write it:
+  `S64.from_digit_bytes_at(bytes: bs)`, `x.divmod(other: m)`, `S32(from_text: t)`.
+  `foo!(...)`, `x.foo!(...)` and `T![..](...)` are RF-G211; `foo(args)!` is a parse
+  error too. A constructor is declared `routine T(...)` / `routine T!(...)`
+  (`routine T.create(...)` is an ordinary member routine named `create`), and
+  overload resolution picks the failable or plain one for you.
 - Bare routine names are first-class values: `select(transform: double)`
   (free routines only).
 
