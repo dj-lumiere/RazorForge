@@ -277,15 +277,16 @@ public sealed partial class StdlibLoader
 
     /// <summary>
     /// Whether an inner RF member routine should be forwarded onto the SF wrapper: excludes lifecycle
-    /// (create/destroy), @dangerous and secret surface, builder-internal borrow-token helpers, and
+    /// (destroy), @dangerous and secret surface, builder-internal borrow-token helpers, and
     /// specialized-receiver methods (only the PLAIN generic form <c>X[T,..].m</c> forwards cleanly).
     /// </summary>
     private static bool ShouldForwardInnerMember(RoutineDeclaration inner,
         List<string> ownerParams)
     {
         string member = inner.MemberRoutineName!;
-        // Lifecycle: constructor is hand-written; destroy is a synthesized field-walk.
-        if (member is "create" or "destroy")
+        // Lifecycle: destroy is a synthesized field-walk. (A constructor `routine X(...)` has no member
+        // name and never reaches here.)
+        if (member is "destroy")
         {
             return false;
         }

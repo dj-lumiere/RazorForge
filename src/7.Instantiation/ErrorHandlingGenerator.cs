@@ -22,6 +22,10 @@ public sealed class ErrorHandlingGenerator
 {
     private const string NoneTypeName = "None";
 
+    /// <summary>The base name of a constructor's recovery variants (<c>try_$creator</c>): the <c>$</c> keeps
+    /// it out of reach of any source identifier.</summary>
+    internal const string CreatorVariantBase = "$creator";
+
     private readonly TypeRegistry _registry;
 
     /// <summary>
@@ -42,13 +46,12 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The variant name.</returns>
     private static string GenerateVariantName(string prefix, RoutineInfo original)
     {
-        // A creator carries no name (RoutineInfo.CreatorName). Its failable recovery variant is a DISTINCT,
-        // explicitly-called routine (`K.try_create`), so it uses the reserved "create" token as its base —
-        // the constructor stays anonymous at the call site (`K(x)`); this token exists only in the recovery
-        // spelling. (Surface `try_K` vs `K.try_create` is a pending design decision; this is the internal
-        // variant name either resolves to.)
+        // A creator carries no name (RoutineInfo.CreatorName). Its failable recovery variant is a DISTINCT
+        // internal routine, so it takes a base that no source identifier can spell — a type's own member
+        // routine named `create` must never collide with its constructor's variant. The variant is only
+        // ever reached through `try`/`grab`/`lookup` on a construction, bound by reference.
         string baseName = original.IsCreator
-            ? "create"
+            ? CreatorVariantBase
             : original.Name;
         return $"{prefix}_{baseName}";
     }

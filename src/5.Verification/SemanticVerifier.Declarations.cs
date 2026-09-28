@@ -887,15 +887,6 @@ public sealed partial class SemanticVerifier
 
         if (_currentType != null)
         {
-            // Inside a type body. A legacy in-body `routine create(...)` is a constructor — detected from
-            // the SURFACE decl name, then given the reserved creator identity: RoutineKind.Creator + NO
-            // member name (RoutineInfo.CreatorName). The internal "create" name is gone; only the surface
-            // token is read here.
-            if (routine.Name == "create")
-            {
-                return (RoutineKind.Creator, ownerType, RoutineInfo.CreatorName);
-            }
-
             RoutineKind inBodyKind = isCommon
                 ? RoutineKind.CommonRoutine
                 : RoutineKind.MemberRoutine;
@@ -913,14 +904,8 @@ public sealed partial class SemanticVerifier
             // generic-definition key, so no generic-param strip needed here.
             ownerType = LookupTypeWithImports(name: routine.OwnerName!);
 
-            // The `routine Type.create(...)` member spelling is a CONSTRUCTOR too — same identity as the
-            // `routine Type(...)` sugar: Creator kind, NO member name (RoutineInfo.CreatorName). The
-            // surface "create" token is read only here; nothing downstream keys off the name.
-            if (declaredMember == "create")
-            {
-                return (RoutineKind.Creator, ownerType, RoutineInfo.CreatorName);
-            }
-
+            // A constructor is only ever `routine Type(...)`; `routine Type.create(...)` is an ordinary
+            // member routine named `create`.
             RoutineKind memberKind = isCommon
                 ? RoutineKind.CommonRoutine
                 : RoutineKind.MemberRoutine;

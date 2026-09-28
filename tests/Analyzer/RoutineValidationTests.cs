@@ -136,9 +136,6 @@ public class RoutineValidationTests
     [Fact]
     public void Analyze_CommonRoutineCalledOnInstance_ReportsError()
     {
-        // `make`, not `create`: `create` is the reserved constructor identity (RoutineKind.Creator),
-        // so a `common routine T.create()` is folded to a constructor and could never be a common
-        // routine. Use a plain common routine name to exercise the static/instance mismatch.
         string source = """
                         record Counter
                           value: S32
@@ -175,6 +172,28 @@ public class RoutineValidationTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CommonRoutineMismatch);
+    }
+
+    /// <summary>
+    /// <c>routine T.create()</c> is an ordinary member routine: it is called on an instance, and it does not
+    /// stand in for the constructor.
+    /// </summary>
+    [Fact]
+    public void Analyze_MemberRoutineNamedCreate_IsNotAConstructor()
+    {
+        string source = """
+                        record Folder
+                          path: Text
+                        routine Folder.create() -> Bool
+                          return true
+
+                        routine test()
+                          var f = Folder(path: "x")
+                          var made = f.create()
+                          return
+                        """;
+
+        AssertAnalyzesSa(source: source);
     }
 
     #endregion

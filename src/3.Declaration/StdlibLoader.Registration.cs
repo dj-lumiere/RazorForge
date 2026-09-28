@@ -8,10 +8,6 @@ namespace Builder.Declaration;
 
 public sealed partial class StdlibLoader
 {
-    /// <summary>Surface spelling of the creator (constructor) keyword in stdlib routine declarations,
-    /// used to detect and normalize the old <c>routine T.create(...)</c> form.</summary>
-    private const string SurfaceCreateKeyword = "create";
-
     private static void ResolveProtocolParents(TypeRegistry registry, Program program)
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
@@ -703,7 +699,7 @@ public sealed partial class StdlibLoader
     /// Resolves the owner type for a stdlib routine from its rendered receiver. For a member routine
     /// (<c>List[T].add_last</c>, <c>S32.add</c>) this is the receiver type; for a bare constructor
     /// (<c>routine List(...)</c>) it is the constructed type and <paramref name="memberRoutineName"/>
-    /// is rewritten to "create". For a generic-specialized receiver (<c>List[Agent[V]]</c>) the owner
+    /// is cleared to <see cref="RoutineInfo.CreatorName"/>. For a generic-specialized receiver (<c>List[Agent[V]]</c>) the owner
     /// stays the generic def and <paramref name="meTypeName"/> carries the receiver text so `me` can be
     /// typed as the specialization. Returns null when the receiver is a bare name matching no type and
     /// no constructor (a plain free routine).
@@ -731,11 +727,10 @@ public sealed partial class StdlibLoader
         }
 
         // No dot: a top-level free function, OR a CONSTRUCTOR `routine T(...)` /
-        // `routine T[params](...)` (renamed from `routine T.create(...)`). Detect the
-        // constructor by matching the bare name against a known type and route it to the
-        // reserved creator name "create" with that type as owner — mirroring the old
-        // `T.create` registration so call-site construction resolves the creator. The
-        // trailing `!` (failable) is carried structurally on routine.IsFailable.
+        // `routine T[params](...)`. Detect the constructor by matching the bare name against a
+        // known type and give it the creator identity with that type as owner, so call-site
+        // construction resolves the creator. The trailing `!` (failable) is carried structurally
+        // on routine.IsFailable.
         string bareName = TypeSymbol.StripTypeArgs(name: routineName);
         // Own-module FIRST: a constructor `routine List(...)` in `module Suflae` owns `Suflae.List`,
         // NOT the first-registered context-free `List` (Core.List, loaded earlier). Resolving bare
@@ -915,15 +910,8 @@ public sealed partial class StdlibLoader
         // bug: this path left Kind at the default FreeRoutine, so a constructor's DEFINE wrongly gained an
         // implicit `me` param the static construction call omits → arg shift → NULL-write AV). The former
         // orthogonal `StorageClass.Common` axis is folded in as RoutineKind.CommonRoutine.
-        // A constructor is spelled either as the bare `routine T(...)` (ResolveRoutineOwner cleared the
-        // member name to RoutineInfo.CreatorName) OR the member form `routine T.create(...)` (surface
-        // member name "create"). Both are the reserved Creator kind with NO internal name — normalize the
-        // surface "create" token away here so nothing downstream keys off it.
-        if (ownerType != null && memberRoutineName == SurfaceCreateKeyword)
-        {
-            memberRoutineName = RoutineInfo.CreatorName;
-        }
-
+        // A constructor is only the bare `routine T(...)` (ResolveRoutineOwner cleared the member name to
+        // RoutineInfo.CreatorName); `routine T.create(...)` is an ordinary member routine named `create`.
         RoutineKind routineKind;
         if (memberRoutineName == RoutineInfo.CreatorName && ownerType != null)
         {
