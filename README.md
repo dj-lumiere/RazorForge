@@ -44,6 +44,7 @@ routine sum(%n: U64) -> U64
 | `tests/` | Golden tests for the compiler. |
 | `examples/` | Introductory programs, one idea each: FizzBuzz, binary search, a Caesar cipher, a prime sieve, word count, and more. |
 | `playground/` | Larger programs: Dijkstra, a lazy segment tree, SHA-256, a calculator, and more. |
+| `Mini/` | A small language that compiles to Tessera, testing Tessera as a code generation target. |
 | `Tessera.tmbundle/` | A TextMate grammar for syntax highlighting. |
 
 The language reference lives in the [wiki](https://github.com/dj-lumiere/Tessera/wiki): start with
@@ -61,7 +62,7 @@ You need the [.NET 10 SDK](https://dotnet.microsoft.com/) and clang 21 or newer 
 dotnet run --project Tessera -- run tests/hello.tess          # build and run a program
 dotnet run --project Tessera -- build prog.tess -o prog       # build an executable
 dotnet run --project Tessera -- build prog.tess --emit-llvm   # write LLVM IR instead
-dotnet run --project Tessera -- test tests playground examples  # run the golden tests
+dotnet run --project Tessera -- test tests playground examples Mini/generated  # run the golden tests
 ```
 
 `build` and `run` also take `--target <arch-os-abi>` and `-O`. All files on one command line form one solution,
