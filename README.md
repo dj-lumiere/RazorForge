@@ -24,11 +24,7 @@ routine sum(%n: U64) -> U64
 
     block loop(%i: U64, %acc: U64):
         %done : Bool = %i.ge(%n)
-        branch %done ? return(%acc) : body(%i, %acc)
-
-    block body(%i: U64, %acc: U64):
-        %next_acc : U64 = %acc.add(%i)
-        jump loop(%i.add(1), %next_acc)
+        branch %done ? return(%acc) : loop(%i.add(1), %acc.add(%i))
 ```
 
 > **Status:** the language is in design, and the spec is still a proposal. The compiler works but is incomplete.
