@@ -38,7 +38,8 @@ routine sum(%n: U64) -> U64
 | `Tessera/` | The compiler, in C#. It emits LLVM IR text and links through `clang`. |
 | `stdlib/` | The standard library, written in Tessera. It's the source of truth for the current design. |
 | `tests/` | Golden tests for the compiler. |
-| `playground/` | Example programs: Dijkstra, a lazy segment tree, SHA-256, a calculator, and more. |
+| `examples/` | Introductory programs, one idea each: FizzBuzz, binary search, a Caesar cipher, a prime sieve, word count, and more. |
+| `playground/` | Larger programs: Dijkstra, a lazy segment tree, SHA-256, a calculator, and more. |
 | `Tessera.tmbundle/` | A TextMate grammar for syntax highlighting. |
 
 The language reference lives in the [wiki](https://github.com/dj-lumiere/Tessera/wiki): start with
@@ -56,7 +57,7 @@ You need the [.NET 10 SDK](https://dotnet.microsoft.com/) and clang 21 or newer 
 dotnet run --project Tessera -- run tests/hello.tess          # build and run a program
 dotnet run --project Tessera -- build prog.tess -o prog       # build an executable
 dotnet run --project Tessera -- build prog.tess --emit-llvm   # write LLVM IR instead
-dotnet run --project Tessera -- test tests playground         # run the golden tests
+dotnet run --project Tessera -- test tests playground examples  # run the golden tests
 ```
 
 `build` and `run` also take `--target <arch-os-abi>` and `-O`. All files on one command line form one solution,
@@ -70,4 +71,4 @@ Each test in `tests/` is `<name>.tess` with one of:
 - `<name>.exit`: its exit code (default 0)
 - `<name>.error`: text the compile error must contain
 
-The programs in `playground/` carry `<name>.expected` files too, so they run as tests alongside `tests/`.
+The programs in `examples/` and `playground/` carry `<name>.expected` files too, so they run as tests alongside `tests/`.
