@@ -526,6 +526,21 @@ public sealed partial class TypeRegistry
         List<(Program Program, string FilePath, string Module)> programs)
     {
         _restoredStdlibPrograms = programs;
+        // The snapshot restores _presets (one entry per name) but not the (file, name) declaration sites, so
+        // a restored build would treat every stdlib `secret preset` use as coming from a foreign file
+        // (FileDeclaresPreset false → RF-S secret-access error, the argument typed as an error, overloads
+        // chosen differently from a cold build). The restored programs carry the declarations: re-record
+        // their sites exactly as RegisterPreset does in a cold build.
+        foreach ((Program program, string _, string _) in programs)
+        {
+            foreach (ISyntaxTreeNode node in program.Declarations)
+            {
+                if (node is PresetDeclaration { Location.FileName: { Length: > 0 } file } preset)
+                {
+                    _presetDeclarationSites.Add(item: (file, preset.Name));
+                }
+            }
+        }
     }
 
 
