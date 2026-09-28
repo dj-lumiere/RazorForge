@@ -2,8 +2,12 @@
 
 **Tessera is a structured SSA language built from explicit operations.**
 
+Tessera is an attempt to keep what makes IR honest, one explicit step at a time, while taming what makes it painful
+to write by hand. Nothing happens between the lines: phi nodes become block parameters, raw integers become typed
+values, and hand-rolled loops over memory become collections.
+
 A tessera is one tile of a mosaic. A Tessera program is put together the same way: each level is made of whole
-pieces of the level below, and nothing is hidden between them.
+pieces of the level below.
 
 | Level | What it is |
 |-------|------------|
