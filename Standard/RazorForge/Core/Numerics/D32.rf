@@ -554,33 +554,68 @@ routine D32.mul_unchecked(you: D32) -> D32
 routine D32.truediv_unchecked(you: D32) -> D32
   return d32_div(a: me, b: you)
 
+### -1, 0 or 1 as |a| = ca 10^ea is below, equal to or above |b| = cb 10^eb (both coefficients nonzero): the same
+### exponent compares the coefficients, a different adjusted exponent (digits + exponent) decides alone, and
+### otherwise the coefficient with the larger exponent is scaled by 10^(exponent difference), which stays below
+### 10^7 (the two adjusted exponents are equal), so the comparison is exact.
+routine d32_cmp_mag(ca: U64, ea: S64, cb: U64, eb: S64) -> S64
+  var x = ca
+  var y = cb
+  if ea != eb
+    var aa = digits10_u64(c: ca) +% ea
+    var ab = digits10_u64(c: cb) +% eb
+    if aa < ab
+      return -1_s64
+    if aa > ab
+      return 1_s64
+    if ea > eb
+      x = ca *% p10_u64(k: ea -% eb)
+    else
+      y = cb *% p10_u64(k: eb -% ea)
+  if x < y
+    return -1_s64
+  if x > y
+    return 1_s64
+  return 0_s64
+
+### The order of a and b: -1, 0 or 1 as a is below, equal to or above b (+0 and -0 equal, cohorts equal), 2 when
+### either is a NaN. Decodes each operand once instead of forming a - b.
+routine d32_order(a: D32, b: D32) -> S64
+  var pa = a.decode()
+  var pb = b.decode()
+  if pa.special >= 2_u64 or pb.special >= 2_u64
+    return 2_s64
+  if pa.special == 1_u64 or pb.special == 1_u64
+    if pa.special == pb.special and pa.sign == pb.sign
+      return 0_s64
+    if pa.special == 1_u64
+      return if pa.sign then -1_s64 else 1_s64
+    return if pb.sign then 1_s64 else -1_s64
+  var za = pa.coeff == 0_u64
+  var zb = pb.coeff == 0_u64
+  if za and zb
+    return 0_s64
+  if za
+    return if pb.sign then 1_s64 else -1_s64
+  if zb or pa.sign != pb.sign
+    return if pa.sign then -1_s64 else 1_s64
+  var m = d32_cmp_mag(ca: pa.coeff, ea: pa.exp, cb: pb.coeff, eb: pb.exp)
+  return if pa.sign then 0_s64 -% m else m
+
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;
 ### finite values compare by value, so different cohorts of the same number are equal).
 routine D32.eq(you: D32) -> Bool
-  if me.is_nan() or you.is_nan()
-    return false
-  if me.is_infinite() or you.is_infinite()
-    var pa = me.decode()
-    var pb = you.decode()
-    return LLVM::int_eq(a: pa.special, b: pb.special) and pa.sign == pb.sign
-  return LLVM::int_eq(a: d32_sub(a: me, b: you).decode().coeff, b: 0_u64)
+  return d32_order(a: me, b: you) == 0_s64
 
-### Three-way decimal comparison (NaN unordered -> SAME; finite by sign of me - you).
+### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
+### maps to `SAME` (matching the B128 engine convention).
 routine D32.cmp(you: D32) -> ComparisonSign
-  if me.is_nan() or you.is_nan()
-    return SAME
-  if me.is_infinite() or you.is_infinite()
-    var pa = me.decode()
-    var pb = you.decode()
-    if LLVM::int_eq(a: pa.special, b: pb.special) and pa.sign == pb.sign
-      return SAME
-    if LLVM::int_eq(a: pa.special, b: 1_u64)
-      return if pa.sign then ME_SMALL else ME_LARGE
-    return if pb.sign then ME_LARGE else ME_SMALL
-  var d = d32_sub(a: me, b: you).decode()
-  if LLVM::int_eq(a: d.coeff, b: 0_u64)
-    return SAME
-  return if d.sign then ME_SMALL else ME_LARGE
+  var o = d32_order(a: me, b: you)
+  if o == -1_s64
+    return ME_SMALL
+  if o == 1_s64
+    return ME_LARGE
+  return SAME
 
 ### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
 routine D32.pow!(you: D32) -> D32

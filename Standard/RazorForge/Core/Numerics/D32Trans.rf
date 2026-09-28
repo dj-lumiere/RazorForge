@@ -1280,17 +1280,17 @@ routine d32_round_int(x: D32, mode: S64) -> D32
   if LLVM::signed_ge(a: p.exp, b: 0_s64)
     return x
   var ndrop = LLVM::sub(a: 0_s64, b: p.exp)
-  var cw = LLVM::zero_extend[U64, U256](p.coeff)
-  var q = LLVM::zero_extend[U64, U256](0_u64)
+  var cw = p.coeff
+  var q = 0_u64
   var rnz = true
   var half = false
   var gthalf = false
   if LLVM::signed_le(a: ndrop, b: 7_s64)
-    var divp = pow10b(k: ndrop)
-    q = div_pow10b(x: cw, k: ndrop)
+    var divp = p10_u64(k: ndrop)
+    q = div_pow10_u64(x: cw, k: ndrop)
     var r = LLVM::sub(a: cw, b: LLVM::mul(a: q, b: divp))
-    rnz = LLVM::int_ne[U256](a: r, b: 0)
-    var twice = LLVM::mul(a: r, b: LLVM::zero_extend[U64, U256](2_u64))
+    rnz = r != 0_u64
+    var twice = r *% 2_u64
     half = LLVM::int_eq(a: twice, b: divp)
     gthalf = LLVM::unsigned_gt(a: twice, b: divp)
   var inc = false
@@ -1304,11 +1304,11 @@ routine d32_round_int(x: D32, mode: S64) -> D32
     if gthalf
       inc = true
     elseif half
-      inc = LLVM::int_ne(a: LLVM::bit_and(a: q, b: LLVM::zero_extend[U64, U256](1_u64)), b: LLVM::zero_extend[U64, U256](0_u64))
+      inc = (q & 1_u64) != 0_u64
   var qq = q
   if inc
-    qq = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
-  return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::int_truncate[U256, U64](qq)))
+    qq = q +% 1_u64
+  return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: qq))
 
 ### Truncates toward zero to an integral value. Never crashes.
 ### :returns: `me` with its fractional part discarded.
