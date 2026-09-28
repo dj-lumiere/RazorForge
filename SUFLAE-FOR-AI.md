@@ -374,12 +374,11 @@ Suflae is at v0.1, and the core is now standing end-to-end:
   wrapped under `Standard/Suflae/Collections/*.sf` (List/Dict/Set/CircularList/
   PriorityQueue/Sorted{Dict,List,Set}/SplitList), auto-forwarded + re-wrapped.
 - **Approachable-surface gates:** `danger`/`extern` rejected; `dangerous` calls
-  rejected (RF-S800); `@readonly`/`@reshaping` absent; fixed-width import-gated.
+  rejected (RF-S800); `@readonly`/`@reshaping` absent.
 - **Verified:** the `StdlibSf/*.sf` fixtures run in the main harness (StdlibApiTests)
   with an RF-twin output-equivalence lock.
 
-**Not yet real:** `BitList` (its SF wrapper hits a non-generic-wrapper codegen bug — deferred);
-literal-suffix number gating; `ObjectHacker` runtime reflection; hot reload; the
+**Not yet real:** literal-suffix number gating; `ObjectHacker` runtime reflection; hot reload; the
 REPL / fast-rebuild loop. When generating Suflae, prefer the closest
 `tests/Fixtures/StdlibSf/*.sf` fixture, keep arguments named, use bare `Integer`
-numbers (add `import Numerics` only for fixed-width), and lean on the shared Core.
+numbers (fixed-width types need no import; `Complex` needs `import Numerics`), and lean on the shared Core.

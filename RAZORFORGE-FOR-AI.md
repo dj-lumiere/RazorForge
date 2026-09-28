@@ -36,8 +36,8 @@ When unsure, consult ground truth in the repo/package:
 6. **Entities have a single owner.** Assigning or passing an entity requires
    explicit transfer: `consume(r: steal b)`. Plain `var s = obj.field_entity`
    is rejected (RF-S413).
-7. **Failable routines carry a `!` suffix; the `!` is OPTIONAL** (failability is
-   inferred from the body — `foo` and `foo!` are the SAME routine). A BARE call
+7. **Failable routines carry a `!` suffix on the DECLARATION** (`routine parse!(...)`);
+   call sites never write it (`parse(...)`, `try parse(...)`). A BARE call
    crashes LOUDLY on failure. To RECOVER, prefix the whole expression with a
    keyword and match the carrier with `when`:
    `try EXPR` → `Maybe[T]` (present | absent, no error kept);
@@ -338,7 +338,7 @@ consume(r: steal b)   # ownership moves; using b afterwards = compile error
     acquire (a hand-written method returning the token, used with `using … fallback`
     — NOT a recovery variant, so no `try` keyword).
 - **RC wrappers** (opt-in shared ownership, reference-counted):
-  - **`Retained[T]`** — single-thread strong handle (copy verb `.retain()`);
+  - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, copy verb `.share()`);
     forwards direct access to the retained entity.
   - **`Guarded[T,P]`** — multi-thread strong handle (atomic, copy verb `.share()`);
     reaching its inner value goes through a `Consulting`/`Amending` token.
@@ -374,8 +374,8 @@ using c.modify() as m        # Modifying[Counter], write intent
   point at the same entity.
 
 ```razorforge
-var r1 = a.retain()          # Retained[Node]
-var r2 = r1.retain()         # second handle to the SAME node
+var r1 = Retained(from: steal a)   # Retained[Node]
+var r2 = r1.share()                # second handle to the SAME node
 show(r1 === r2)              # true  — same object
 show(a === make_other())    # false — different objects
 ```
@@ -791,7 +791,7 @@ you are writing another language.
 - **Protocols & constraints**: `obeys` `disobeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `unless` `when` `is` `isnot` `loop`
   `while` `each` `break` `continue` `return` `throw` `pierce` `absent` `becomes`
-- **Iteration / range / ownership**: `in` `notin` `to` `til` `by` `steal`†
+- **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `with` `given` `discard`
 - **Logical operators**: `and` `or` `not` `but`
