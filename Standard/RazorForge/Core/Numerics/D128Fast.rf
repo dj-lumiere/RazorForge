@@ -1087,12 +1087,34 @@ secret routine d128_minus_int(p: D128Parts, k: U128) -> (Bool, B128Fx)
     return (false, b128fx_one())
   return d128_coeff_fx(neg: neg, c: d, q: p.exp)
 
-### asin(s) for a B128Fx s with 0 < |s| <= 1/2 (so cos asin s >= 0.86): r0 = the B128 asin of s's
-### truncation, one Newton step (s - sin r0) / cos r0, the second-order term added as an error.
+### asin(s) for a B128Fx s with 0 < |s| < 1 - 2^-20, or false. From |s| = 0.022 on, the unrounded fast phase
+### of the B128 asin at s's truncation sb plus (s - sb) c, c = 1 / sqrt(1 - sb^2) in B64: s - sb is below
+### 2^-112 |s| and c below 2^11, so c's own error is below 2^-150 of the result; the dropped second-order term
+### (s - sb)^2 |sb| c^3 / 2 and s's error through asin' = c are added to the bound. Below 0.022 (|s| <= 1/2
+### there): r0 = the B128 asin of sb, one Newton step (s - sin r0) / cos r0, the second-order term added as an
+### error.
 secret routine d128_asin_of_fx(s: B128Fx) -> (Bool, B128Fx)
   var (okb, sb) = b128fx_to_b128(v: s)
   if not okb
     return (false, s)
+  if (sb.to_bits() & ((1_u128 << 127_u32) -% 1_u128)) >= D128F_ASIN_EDGE
+    return (false, s)
+  var (okf, a) = b128_asin_fx(x: sb)
+  if okf
+    var r = a
+    var sv = B64(from: sb)
+    var c = 1.0 /! (1.0 -! sv *! sv).sqrt()
+    var second = 0.0
+    var (okd, dl) = b128fx_add(a: s, b: b128fx_neg(v: b128fx_of(x: sb)))
+    if okd
+      var (okr, rr) = b128fx_add(a: a, b: b128fx_mul(a: dl, b: b128fx_of_b64(v: c, rel: 0x1p-50)))
+      if not okr
+        return (false, s)
+      r = rr
+      var dv = b128fx_b64(v: dl)
+      second = dv *! dv *! sv.abs() *! c *! c *! c *! 0.51 /! b128fx_b64(v: r).abs()
+    # s's error through asin' = c, relative to asin s >= s
+    return (true, d128_widen(v: r, r: s.rel *! c *! 1.01 +! second +! 0x1p-150))
   var r0 = sb.asin_unchecked()
   var (okt, sn, cs) = b128_sincos_fx(xb: r0, acc: false)
   if not okt
@@ -1110,6 +1132,11 @@ secret routine d128_asin_of_fx(s: B128Fx) -> (Bool, B128Fx)
   if not oka
     return (false, s)
   return (true, d128_widen(v: r, r: dv *! dv /! b128fx_b64(v: rf)))
+
+# 1 - 2^-20 as a B128 bit pattern: asin takes its argument directly below it.
+secret preset D128F_ASIN_EDGE: U128 = 0x3FFEFFFFE00000000000000000000000_u128
+# 7/8 as a B128 bit pattern: acos of a positive x below it is pi/2 - asin x.
+secret preset D128F_ACOS_DIRECT: U128 = 0x3FFEC000000000000000000000000000_u128
 
 # pi as a 128-bit significand (exponent -126), rounded.
 secret preset D128F_PI_M: U128 = 0xC90FDAA22168C234C4C6628B80DC1CD1_u128
@@ -1129,13 +1156,28 @@ secret routine d128_acos_edge_fx(p: D128Parts) -> (Bool, B128Fx)
     return (false, w)
   return (true, B128Fx(neg: false, m: a.m, e: a.e +% 1_s64, rel: a.rel))
 
-### atan(v) for a nonzero B128Fx v below 10^34 in magnitude: r0 = the B128 atan of v's truncation, one step
-### (v - tan r0) / (1 + v tan r0) = (v cos r0 - sin r0) / (cos r0 + v sin r0), the tangent of the remaining angle
-### (so the next term is cubic in it).
+### atan(v) for a nonzero B128Fx v below 10^34 in magnitude. From |v| = 2^-7 on, the unrounded fast phase of
+### the B128 atan at v's truncation vb plus (v - vb) / (1 + vb^2): v - vb is below 2^-112 |v|, so the derivative
+### in B64 and the dropped second-order term move the result by less than 2^-150 of it. Below 2^-7: r0 = the
+### B128 atan of vb, one step (v - tan r0) / (1 + v tan r0) = (v cos r0 - sin r0) / (cos r0 + v sin r0), the
+### tangent of the remaining angle (so the next term is cubic in it).
 secret routine d128_atan_of_fx(v: B128Fx) -> (Bool, B128Fx)
   var (okb, vb) = b128fx_to_b128(v: v)
   if not okb
     return (false, v)
+  var (okf, a) = b128_atan_fx(x: vb)
+  if okf
+    var r = a
+    var (okd, dl) = b128fx_add(a: v, b: b128fx_neg(v: b128fx_of(x: vb)))
+    if okd
+      var w = B64(from: vb)
+      var c = 1.0 /! (1.0 +! w *! w)
+      var (okr, rr) = b128fx_add(a: a, b: b128fx_mul(a: dl, b: b128fx_of_b64(v: c, rel: 0x1p-50)))
+      if not okr
+        return (false, v)
+      r = rr
+    # v's own error through atan' = 1 / (1 + v^2), relative to atan v >= v / (1 + v^2)
+    return (true, d128_widen(v: r, r: v.rel *! 1.01 +! 0x1p-150))
   var r0 = vb.atan()
   var (okt, sn, cs) = b128_sincos_fx(xb: r0, acc: false)
   if not okt
@@ -1218,6 +1260,19 @@ secret routine d128_arctrig_fast(x: D128, which: U64) -> (Bool, D128)
     if not oks2
       return (false, x)
     return d128_round_fx(v: t2)
+  # asin, and acos of a negative x (pi/2 + asin |x|), have no cancellation: directly while 1 - |x| >= 2^-20. acos
+  # of a positive x below 7/8 is pi/2 - asin x with at most a factor 3.2 of cancellation (acos 7/8 = 0.505),
+  # which the difference's bound follows
+  if (which == 0_u64 or p.sign or xb.to_bits() < D128F_ACOS_DIRECT) and xb.to_bits() < D128F_ASIN_EDGE
+    var (okd, ad) = d128_asin_of_fx(s: full)
+    if okd
+      if which == 0_u64
+        return d128_round_fx(v: B128Fx(neg: p.sign, m: ad.m, e: ad.e, rel: ad.rel))
+      var (okp, tp) = b128fx_add(a: d128_pi_fx(half: true), b: B128Fx(neg: not p.sign, m: ad.m, e: ad.e, rel: ad.rel))
+      if okp
+        var (okr, vr) = d128_round_fx(v: tp)
+        if okr
+          return (true, vr)
   var (oke, e) = d128_acos_edge_fx(p: p)
   if not oke
     return (false, x)

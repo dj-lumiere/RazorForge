@@ -168,6 +168,96 @@ routine B128.asin_unchecked() -> B128
   v = v +% b128_asinfam_join(hi: (b128_asinfam_u(n: xn) << 48) | xsgn, lo: rnd)
   return B128.from_bits(bits: v)
 
+### asin(x) before rounding, for 0.022 <= |x| < 1 (the table-reduced branch of `asin_unchecked`'s fast path), as
+### a B128Fx, or false below 0.022 (and for |x| >= 1). The fast path's 192-bit value xc (asin |x| = xc 2^-191:
+### the result's exponent field is added onto its leading bit) is within eps of its units, the bound its rounding
+### test uses; the bound kept here is 4 eps plus the
+### truncation to 128 bits.
+secret routine b128_asin_fx(x: B128) -> (Bool, B128Fx)
+  var u = x.to_bits()
+  var xb0 = LLVM::int_truncate[U128, U64](u)
+  var xb1 = LLVM::int_truncate[U128, U64](u >>> 64)
+  var neg = (xb1 & 0x8000000000000000_u64) != 0_u64
+  xb1 = xb1 & 0x7FFFFFFFFFFFFFFF_u64
+  var xn = b128_asinfam_s(u: xb1 >>> 48)
+  if xn < 0x3FFF -% 56 or xn >= 0x3FFF
+    return (false, b128fx_one())
+  var j = b128_asinfam_jget(x: xb1)
+  if j == 0_u64
+    return (false, b128fx_one())
+  xb1 = xb1 | 0x0001000000000000_u64
+  var xa = b128_asinfam_join(hi: xb1, lo: xb0) << 15
+  xb0 = b128_asinfam_lo(u: xa)
+  xb1 = b128_asinfam_hi(u: xa)
+  var nz = 0x3FFF -% xn
+  var red = b128_asinfam_fast_sqrt(x0: xb0, x1: xb1, nz: nz, mode: 0_u64)
+  var e = red.item3
+  var xs = xa >>> b128_asinfam_sh(n: nz)
+  var ci = j *% 5_u64
+  var p = b128_asinfam_mh3d(y0: b128_asinfam_lo(u: xs), y1: b128_asinfam_hi(u: xs), x0: B128_ASINFAM_CTH[ci +% 2_u64], x1: B128_ASINFAM_CTH[ci +% 3_u64], x2: B128_ASINFAM_CTH[ci +% 4_u64])
+  var sj = B128_ASINFAM_PTH[j]
+  var sp = 43 -% (e >> 1)
+  var sx0 = 0_u64
+  var sx1 = 0_u64
+  var sx2 = 0_u64
+  if sp >= 0
+    sj = sj << b128_asinfam_sh(n: sp)
+    var m = b128_asinfam_mh3w(y: sj, x0: red.item0, x1: red.item1, x2: red.item2)
+    sx0 = m.item0
+    sx1 = m.item1
+    sx2 = m.item2
+  else
+    var m = b128_asinfam_mh3w(y: sj, x0: red.item0, x1: red.item1, x2: red.item2)
+    var rk = b128_asinfam_sh(n: 0 -% sp)
+    var lk = b128_asinfam_sh(n: 64 +% sp)
+    sx0 = (m.item0 >>> rk) | (m.item1 << lk)
+    sx1 = (m.item1 >>> rk) | (m.item2 << lk)
+    sx2 = m.item2 >>> rk
+  var d = b128_asinfam_sub3(a0: p.item0, a1: p.item1, a2: p.item2, b0: sx0, b1: sx1, b2: sx2)
+  nz = b128_asinfam_clz(x: d.item2)
+  var l = b128_asinfam_sh(n: nz)
+  var r = b128_asinfam_sh(n: 0 -% nz)
+  var t = b128_asinfam_join(hi: (d.item2 << l) | (d.item1 >>> r), lo: (d.item1 << l) | (d.item0 >>> r))
+  var pi = j *% 5_u64
+  var sc = b128_asinfam_add3(a0: d.item0, a1: d.item1, a2: d.item2, b0: B128_ASIN_PHI0[pi +% 2_u64], b1: B128_ASIN_PHI0[pi +% 3_u64], b2: B128_ASIN_PHI0[pi +% 4_u64])
+  var f = b128_asinfam_fast_poly(t: t, s2: 2 *% (nz -% 6))
+  var sf = 3 *% nz
+  var f2 = b128_asinfam_hi(u: f)
+  var f1 = b128_asinfam_lo(u: f)
+  var f0 = 0_u64
+  if sf < 64
+    f0 = f1 << b128_asinfam_sh(n: 0 -% sf)
+    f1 = (f1 >>> b128_asinfam_sh(n: sf)) | (f2 << b128_asinfam_sh(n: 0 -% sf))
+    f2 = f2 >>> b128_asinfam_sh(n: sf)
+  elseif sf < 128
+    var s1 = sf -% 64
+    f0 = (f1 >>> b128_asinfam_sh(n: s1)) | ((f2 << 1) << b128_asinfam_sh(n: s1 ^ -1))
+    f1 = f2 >>> b128_asinfam_sh(n: s1)
+    f2 = 0_u64
+  elseif sf < 192
+    f0 = f2 >>> b128_asinfam_sh(n: sf -% 128)
+    f1 = 0_u64
+    f2 = 0_u64
+  else
+    f1 = 0_u64
+    f2 = 0_u64
+  var xc = b128_asinfam_add3(a0: sc.item0, a1: sc.item1, a2: sc.item2, b0: f0, b1: f1, b2: f2)
+  var eps = 64_u64
+  if 3 *% nz -% 6 <= 57
+    eps = 0x8000000000000000_u64 >>> b128_asinfam_sh(n: 3 *% nz -% 6)
+  # the top 128 bits of xc, normalized (asin |x| >= 0.022, so xc's top word is nonzero)
+  var k = b128_asinfam_clz(x: xc.item2)
+  var hi = xc.item2
+  var mid = xc.item1
+  var lo = xc.item0
+  if k > 0
+    hi = (hi << b128_asinfam_sh(n: k)) | (mid >>> b128_asinfam_sh(n: 64 -% k))
+    mid = (mid << b128_asinfam_sh(n: k)) | (lo >>> b128_asinfam_sh(n: 64 -% k))
+  var mm = b128_asinfam_join(hi: hi, lo: mid)
+  # 4 eps and one unit of the dropped word (2^64 units at most), over xc >= 2^(191 - k)
+  var err = (4.0 *! B64(from: eps) +! 0x1p64) *! b128fx_p2(k: k -% 191_s64) *! 2.0
+  return (true, B128Fx(neg: neg, m: mm, e: -127_s64 -% k, rel: err +! 0x1p-127))
+
 ### The 320-bit accurate path of `asin_unchecked` for the inputs whose fast result cannot be rounded
 ### safely (the C as_asinq_accurate).
 ### :param x: The argument, with 2^-57 <= |x| < 1.

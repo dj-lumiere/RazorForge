@@ -151,6 +151,118 @@ routine B128.atan() -> B128
   var dv = b128_atanfam_mk(hi: (LLVM::reinterpret_bits[S64, U64](xn) << 48) | xsgn, lo: rnd)
   return LLVM::reinterpret_bits[U128, B128](b128_atanfam_mk(hi: v1, lo: v0) +% dv)
 
+### atan(x) before rounding for 2^-7 <= |x| < 2^115 (the table branch of `atan`'s fast path, pi/2 - atan(1/x) from
+### |x| = 1 on) as a B128Fx, or false elsewhere. The fast path's 192-bit value f (atan |x| = f 2^-190: the result's
+### exponent field is added onto its leading bit) is within the 0x0CA2339C0EBEDFA4 units its rounding test allows;
+### the bound kept here is 4 of those plus the truncation to 128 bits.
+secret routine b128_atan_fx(x: B128) -> (Bool, B128Fx)
+  var u = LLVM::reinterpret_bits[B128, U128](x)
+  var xh = b128_atanfam_hi(v: u)
+  var xl = b128_atanfam_lo(v: u)
+  var neg = (xh & 0x8000000000000000_u64) != 0_u64
+  xh = xh & 0x7FFFFFFFFFFFFFFF_u64
+  var xn = LLVM::reinterpret_bits[U64, S64](xh >>> 48)
+  if xn < 0x3FFF -% 57 or xn > 0x3FFF +% 114
+    return (false, b128fx_one())
+  xh = (xh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+  var kn = 0_u128
+  var kd = 0_u128
+  var dn = 0_s64
+  var isct = 0_u64
+  var g = xn >= 0x3FFF
+  if not g
+    var e = 0x3FFF -% xn
+    if e > 7
+      kn = b128_atanfam_mk(hi: xh, lo: xl) << 15
+      kd = 1_u128 << 127
+      dn = e
+    else
+      isct = B128_ATAN_INDL[xh >>> b128_atanfam_sa(n: e +% 41)]
+      if B128_ATANFAM_TN[isct +% 1] <= (xh >>> b128_atanfam_sa(n: e +% 33))
+        isct = isct +% 1
+      var tt = B128_ATANFAM_TN[isct] << b128_atanfam_sa(n: 33 +% e)
+      var nr = b128_atan_norm(knh: xh -% tt, knl: xl)
+      kn = nr.item0
+      var xa = b128_atanfam_mk(hi: xh, lo: xl) *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
+      var x0 = b128_atanfam_lo(v: xa)
+      var x1 = b128_atanfam_hi(v: xa)
+      var se = b128_atanfam_sa(n: e)
+      var sne = b128_atanfam_sa(n: (0 -% e) & 63)
+      x0 = (x0 >>> se) | (x1 << sne)
+      x1 = (x1 >>> se) | 0x8000000000000000_u64
+      kd = b128_atanfam_mk(hi: x1, lo: x0)
+      dn = e +% nr.item1 -% 15
+  else
+    var e = xn -% 0x3FFF
+    if e > 6
+      kn = 1_u128 << 127
+      kd = b128_atanfam_mk(hi: xh, lo: xl) << 15
+      dn = e
+    else
+      var xa = b128_atanfam_mk(hi: xh, lo: xl)
+      isct = B128_ATAN_INDH[(xh ^ 0x0000FFFFFFFFFFFF_u64) >>> b128_atanfam_sa(n: e +% 42)]
+      if (B128_ATANFAM_TN[isct +% 1] *% xh) < (1_u64 << b128_atanfam_sa(n: 63 -% e))
+        isct = isct +% 1
+      var t = xa *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
+      if (b128_atanfam_hi(v: t) & (1_u64 << b128_atanfam_sa(n: 63 -% e))) != 0
+        isct = isct -% 1
+        t = xa *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
+      var nr = b128_atan_negnorm(t: t, e: e)
+      kn = nr.item0
+      var tt = B128_ATANFAM_TN[isct] << b128_atanfam_sa(n: 33 -% e)
+      xh = xh +% tt
+      var nzd = b128_atanfam_clz(v: xh)
+      var snzd = b128_atanfam_sa(n: nzd)
+      var x1 = (xh << snzd) | (xl >>> b128_atanfam_sa(n: (0 -% nzd) & 63))
+      var x0 = xl << snzd
+      kd = b128_atanfam_mk(hi: x1, lo: x0)
+      dn = e +% nr.item1 -% nzd +% 15
+  var f = b128_atanfam_fast_core(kn: kn, kd: kd, dn: dn)
+  if isct == 0 and not g
+    return (false, b128fx_one())
+  var f0 = 0_u64
+  var f1 = b128_atanfam_lo(v: f)
+  var f2 = b128_atanfam_hi(v: f)
+  dn = dn +% 1
+  if dn < 64
+    var sd = b128_atanfam_sa(n: dn)
+    var sl = b128_atanfam_sa(n: 64 -% dn)
+    f0 = f1 << sl
+    f1 = (f1 >>> sd) | (f2 << sl)
+    f2 = f2 >>> sd
+  else
+    var fa = Array[U64, 8]()
+    fa[1] = f1
+    fa[2] = f2
+    fa = b128_atanfam_shr(a: fa, n: 3_u64, k: dn)
+    f0 = fa[0]
+    f1 = fa[1]
+    f2 = fa[2]
+  var s = b128_atanfam_add3(a0: B128_ATANFAM_PHI0[6 *% isct +% 3], a1: B128_ATANFAM_PHI0[6 *% isct +% 4], a2: B128_ATANFAM_PHI0[6 *% isct +% 5], b0: f0, b1: f1, b2: f2)
+  f0 = s.item0
+  f1 = s.item1
+  f2 = s.item2
+  if g
+    # pi/2 - f
+    var pl = b128_atanfam_mk(hi: B128_ATANFAM_QOFF[10], lo: B128_ATANFAM_QOFF[9])
+    var fl = b128_atanfam_mk(hi: f1, lo: f0)
+    var dl = pl -% fl
+    var top = B128_ATANFAM_QOFF[11] -% f2
+    if pl < fl
+      top = top -% 1
+    f0 = b128_atanfam_lo(v: dl)
+    f1 = b128_atanfam_hi(v: dl)
+    f2 = top
+  var k = b128_atanfam_clz(v: f2)
+  var hi = f2
+  var mid = f1
+  if k > 0
+    hi = (f2 << b128_atanfam_sa(n: k)) | (f1 >>> b128_atanfam_sa(n: 64 -% k))
+    mid = (f1 << b128_atanfam_sa(n: k)) | (f0 >>> b128_atanfam_sa(n: 64 -% k))
+  # 4 times the rounding test's allowance and one unit of the dropped word, over f >= 2^(191 - k)
+  var err = (4.0 *! B64(from: 0x0CA2339C0EBEDFA4_u64) +! 0x1p64) *! b128fx_p2(k: k -% 191_s64) *! 2.0
+  return (true, B128Fx(neg: neg, m: b128_atanfam_mk(hi: hi, lo: mid), e: -126_s64 -% k, rel: err +! 0x1p-127))
+
 # normalizes the 128-bit knh:knl so its top bit is set; returns it and the shift applied
 @inline
 secret routine b128_atan_norm(knh: U64, knl: U64) -> (U128, S64)
