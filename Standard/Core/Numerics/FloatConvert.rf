@@ -870,6 +870,11 @@ routine format_binary_shortest_wrapped(raw: U64, fmt: S32, wrap: Text) -> Text
     mant_bits = 10u64
     exp_bits = 5u64
     sci_from = 4u64
+  elseif fmt == 3_s32
+    # bfloat16: B32's exponent with 7 fraction bits
+    mant_bits = 7u64
+    exp_bits = 8u64
+    sci_from = 3u64
   var exp_all_ones = LLVM::sub(a: LLVM::shift_left(1u64, exp_bits), b: 1u64)
   var bias = LLVM::reinterpret_bits[U64, S64](LLVM::shift_right_unsigned(exp_all_ones, 1u64))
   var neg = LLVM::int_ne(a: LLVM::shift_right_unsigned(raw, LLVM::add(a: mant_bits, b: exp_bits)), b: 0u64)
@@ -1091,6 +1096,14 @@ routine round_and_pack(neg: Bool, num_in: Integer, den_in: Integer, fmt: S32) ->
     bias = 15_s64
     mant_bits = 10u64
     exp_bits = 5u64
+  elseif fmt == 3_s32
+    p = 8_s64
+    min_lsb = -133_s64
+    emin = -126_s64
+    emax = 127_s64
+    bias = 127_s64
+    mant_bits = 7u64
+    exp_bits = 8u64
   var num = num_in
   var den = den_in
   # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
@@ -1298,6 +1311,34 @@ routine b16_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B16
     den = pow10_int(k: 0_s64 - dec_exp)
   var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 2_s32)
   return B16.from_bits(bits: LLVM::int_truncate[U64, U16](bits))
+
+### Rounds significand × 10^dec_exp to the nearest BF16 (single rounding, ties to even).
+routine bf16_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> BF16
+  var m = Integer.from_literal(text: digits)
+  if m.is_zero()
+    var z = 0u16
+    if neg
+      z = 0x8000u16
+    return BF16.from_bits(bits: z)
+  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+  if mag > 320_s64
+    var big = 0x7F80u16
+    if neg
+      big = 0xFF80u16
+    return BF16.from_bits(bits: big)
+  if mag < -330_s64
+    var zz = 0u16
+    if neg
+      zz = 0x8000u16
+    return BF16.from_bits(bits: zz)
+  var num = m
+  var den = Integer.one()
+  if dec_exp >= 0_s64
+    num = m.mul(other: pow10_int(k: dec_exp))
+  else
+    den = pow10_int(k: 0_s64 - dec_exp)
+  var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 3_s32)
+  return BF16.from_bits(bits: LLVM::int_truncate[U64, U16](bits))
 
 ### Rounds significand × 10^dec_exp to the nearest B128 (single rounding, ties to even) and packs
 ### the IEEE 754 binary128 bit pattern: 113 significand bits, normal exponents -16382..16383,

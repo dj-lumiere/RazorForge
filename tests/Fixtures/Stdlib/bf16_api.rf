@@ -1,0 +1,49 @@
+module Tests/Stdlib/Bf16Api
+import IO/Console
+
+# BF16 (bfloat16) as a storage type: bit patterns, conversions to and from B32/B64, text, comparison, bytes.
+routine start()
+  # bit patterns and exact widening
+  var one = BF16.from_bits(bits: 0x3F80_u16)
+  show(f"one: {one} bits {one.to_bits()} as B32 {B32(from: one)} as B64 {B64(from: one)}")
+  var pi = BF16(from: 3.14159265358979_b64)
+  show(f"pi: {pi} bits {pi.to_bits()} diagnose {pi.diagnose()}")
+
+  # narrowing rounds to nearest, ties to even
+  show(f"1 + 2^-8 (tie, even stays): {BF16(from: B32.from_bits(bits: 0x3F808000_u32)).to_bits()}")
+  show(f"1 + 3 2^-8 (tie, odd goes up): {BF16(from: B32.from_bits(bits: 0x3F818000_u32)).to_bits()}")
+  show(f"just above the tie: {BF16(from: B32.from_bits(bits: 0x3F808001_u32)).to_bits()}")
+
+  # range: B32's exponent, so large values stay finite, and past the largest finite value is infinity
+  show(f"1e38: {BF16(from: 1.0e38_b64)}")
+  show(f"3.4e38: {BF16(from: 3.4e38_b64)} (infinite {BF16(from: 3.4e38_b64).is_infinite()})")
+  show(f"smallest subnormal: {BF16.from_bits(bits: 1_u16)} from B64 2^-133: {BF16(from: B64.from_bits(bits: 0x37A0000000000000_u64)).to_bits()}")
+  show(f"2^-134 (half the smallest subnormal, ties to 0): {BF16(from: B64.from_bits(bits: 0x3790000000000000_u64)).to_bits()}")
+
+  # one rounding from B64, where going through B32 first would round twice
+  var twice = B64.from_bits(bits: 0x3FF0100000000001_u64)
+  show(f"direct: {BF16(from: twice).to_bits()} via B32: {BF16(from: B32(from: twice)).to_bits()}")
+
+  # specials
+  var nan = BF16(from: B32.from_bits(bits: 0x7FC00000_u32))
+  show(f"nan: {nan} is_nan {nan.is_nan()} signaling {BF16.signaling_nan().is_signaling()}")
+  show(f"-0: {BF16.from_bits(bits: 0x8000_u16)} is_zero {BF16.from_bits(bits: 0x8000_u16).is_zero()} signbit {BF16.from_bits(bits: 0x8000_u16).signbit()}")
+
+  # text: shortest round-trip form, and parsing with one rounding
+  show(f"0.1 parsed: {BF16!(from_text: "0.1")} bits {BF16!(from_text: "0.1").to_bits()}")
+  show(f"1e-40 parsed: {BF16!(from_text: "1e-40")}")
+  show(f"-inf parsed: {BF16!(from_text: "-inf")}")
+  when try BF16!(from_text: "abc")
+    is None => show("abc: rejected")
+    else v => show(f"abc: {v}")
+
+  # comparison: IEEE semantics
+  var a = BF16!(from_text: "1.5")
+  var b = BF16!(from_text: "2")
+  show(f"1.5 < 2: {a < b}  1.5 == 1.5: {a == BF16!(from_text: "1.5")}  +0 == -0: {BF16.from_bits(bits: 0_u16) == BF16.from_bits(bits: 0x8000_u16)}  nan == nan: {nan == nan}")
+
+  # bytes
+  var le = pi.to_bytes_le()
+  var be = pi.to_bytes_be()
+  show(f"pi bytes le: {le[0]} {le[1]}  be: {be[0]} {be[1]}")
+  return

@@ -159,6 +159,10 @@ binding RazorForge has.
 
 - Signed ints: `S8 S16 S32 S64 S128 S256` · unsigned: `U8 U16 U32 U64 U128 U256`
 - Binary floats: `B16 B32 B64 B128` (literal suffixes `b16`/`b32`/`b64`/`b128`) · decimals: `D32 D64 D128`
+- `BF16` (bfloat16) is a STORAGE type (ML weights/tensors): bit patterns (`from_bits`/`to_bits`/bytes),
+  `B32(from:)`/`B64(from:)` widen exactly, `BF16(from: B32/B64)` narrows with ONE round-to-nearest-even
+  (from `B64` directly, never through `B32`), `represent`/`BF16!(from_text:)`, `==`/`<`. No arithmetic and
+  no literal suffix: widen to compute, narrow the result back.
 - Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `0x1p-23_b32`,
   `0x1.fffffep+127_b32`. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
   EXACTLY: too many significant bits or a bit below the smallest subnormal is RF-S018, not a rounding. On a
