@@ -278,7 +278,7 @@ Fatal messages name what the PROGRAM did, never the machine (no malloc/OS/signal
   `Decimal` (exact, base-10), `Bool`, plus `Text`/`Bytes`. A bare `42` is an
   `Integer`, a bare `3.14` is a `Decimal`.
 - **Fixed-width scalar/complex zoo is available directly (no import):** `S8..U1024`,
-  `B16..B128`, `D32/D64/D128`, `C64/C128/C256`, `Q128/Q256` all live in the Core
+  `B16..B128`, `BF16` (storage only), `D32/D64/D128`, `C64/C128/C256`, `Q128/Q256` all live in the Core
   auto-prelude and can be named in a `.sf` with no `import` — bare literals still
   default to `Integer`/`Decimal`, but writing `S32`/`B64`/`C128`/`5_s32` directly is
   fine. (The old SF import-gate on these — RF-S636 — was removed.) Only the
