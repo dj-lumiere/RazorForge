@@ -82,17 +82,29 @@ secret routine d128_scale_parts(c: U128, q: S64) -> (Bool, U256, S64, B64)
     x0 = pl.item1
     sc = e10
     err = 0x1.8p-253
-  # the top 256 bits of x2 : x1 : x0 (a product within the low word is normalized from there, exactly)
-  var top = (LLVM::zero_extend[U128, U256](x2) << 128_u32) | LLVM::zero_extend[U128, U256](x1)
-  if top == 0_u256
+  # the top 256 bits of x2 : x1 : x0, normalized by 128-bit word shifts (a variable 256-bit shift and
+  # leading-zero count are far costlier); the bits of x0 shifted out are dropped
+  var h = 0_u128
+  var m = 0_u128
+  var lz = 0_s64
+  if x2 != 0_u128
+    lz = b128_trig_clz128(x: x2)
+    h = (x2 << b128_trig_sh(n: lz)) | (x1 >>> b128_trig_sh(n: 128_s64 -% lz))
+    m = (x1 << b128_trig_sh(n: lz)) | (x0 >>> b128_trig_sh(n: 128_s64 -% lz))
+    if (x0 << b128_trig_sh(n: lz)) != 0_u128
+      err = err +! 0x1p-255
+  elseif x1 != 0_u128
+    var l1 = b128_trig_clz128(x: x1)
+    h = (x1 << b128_trig_sh(n: l1)) | (x0 >>> b128_trig_sh(n: 128_s64 -% l1))
+    m = x0 << b128_trig_sh(n: l1)
+    lz = 128_s64 +% l1
+  else
+    # a product within the low word: normalized from there, exactly
     if x0 == 0_u128
       return (false, 0_u256, 0_s64, 0.0)
     var lz0 = b128_trig_clz128(x: x0)
     return (true, LLVM::zero_extend[U128, U256](x0 << b128_trig_sh(n: lz0)) << 128_u32, sc -% 128_s64 -% lz0, err)
-  var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(top))
-  var v = (top << b128_trig_sh(n: lz)) | (LLVM::zero_extend[U128, U256](x0) >>> b128_trig_sh(n: 128_s64 -% lz))
-  if lz < 128_s64 and (x0 << b128_trig_sh(n: lz)) != 0_u128
-    err = err +! 0x1p-255
+  var v = (LLVM::zero_extend[U128, U256](h) << 128_u32) | LLVM::zero_extend[U128, U256](m)
   return (true, v, sc +% 128_s64 -% lz, err)
 
 ### (-1)^neg * c * 10^q as a B128Fx (c > 0 below 2^128), or false outside the power table.
@@ -180,6 +192,17 @@ secret routine b128fx_ratio(a: B128Fx, b: B128Fx) -> B64
 secret routine d128_widen(v: B128Fx, r: B64) -> B128Fx
   return B128Fx(neg: v.neg, m: v.m, e: v.e, rel: v.rel +! r)
 
+### floor(x) for a B64 0 <= x < 2^128, from its bits (a B64 to U128 conversion is a library call on x86-64).
+secret routine b64_floor_u128(x: B64) -> U128
+  var bits = x.to_bits()
+  var ex = LLVM::reinterpret_bits[U64, S64](bits >>> 52_u32) -% 1075_s64
+  if ex < -52_s64
+    return 0_u128
+  var mant = LLVM::zero_extend[U64, U128]((bits & 0xFFFFFFFFFFFFF_u64) | 0x10000000000000_u64)
+  if ex >= 0_s64
+    return mant << b128_trig_sh(n: ex)
+  return mant >>> b128_trig_sh(n: 0_s64 -% ex)
+
 ### The D128 that every value of v's band rounds to (34 digits, half to even), stored reduced, or false:
 ### the band is wider than 2^-116, reaches a rounding midpoint, or the result leaves the normal D128 range.
 ### v is scaled by 10^(33 - E), E its leading digit's exponent (estimated from the binary exponent and
@@ -207,24 +230,34 @@ secret routine d128_round_fx(v: B128Fx) -> (Bool, D128)
     var sh = 0_s64 -% (v.e +% e10 +% 128_s64)
     if sh < 129_s64
       return (false, zero)
-    var x = 0_u256
-    if sh < 400_s64
-      x = b128t_scale(cb: v.m, mh: mh, ml: ml, sh: sh)
-    var d = LLVM::int_truncate[U256, U128](x >>> 128_u32)
+    # v.m * 10^p * 2^-sh as the coefficient d and the fraction below it (in units of 2^-128), taken from the
+    # top two words (x2, x1) of the 384-bit product by 128-bit shifts, the lowest word dropped
+    var d = 0_u128
+    var frac = 0_u128
+    if sh < 384_s64
+      var ph = b128_trig_wmul(x: v.m, y: mh)
+      var pl = b128_trig_wmul(x: v.m, y: ml)
+      var (x1, cy) = b128t_add(a: pl.item0, b: ph.item1, cin: 0_u128)
+      var x2 = ph.item0 +% cy
+      if sh < 256_s64
+        var t = sh -% 128_s64
+        d = x2 >>> b128_trig_sh(n: t)
+        frac = (x2 << b128_trig_sh(n: 128_s64 -% t)) | (x1 >>> b128_trig_sh(n: t))
+      else
+        frac = x2 >>> b128_trig_sh(n: sh -% 256_s64)
     if not sub and d >= hi34
       e = e +% 1_s64
     elseif not sub and d < lo34
       e = e -% 1_s64
     else
-      var frac = x & ((1_u256 << 128_u32) -% 1_u256)
-      var xv = b128fx_wide_b64(hi: LLVM::int_truncate[U256, U128](x >>> 128_u32), lo: LLVM::int_truncate[U256, U128](x))
+      var xv = b128fx_wide_b64(hi: d, lo: frac)
       var errf = v.rel *! xv *! 1.0001 +! 4.0
       # the band must stay below a quarter of the last digit's unit (2^128 here)
       if not (errf < 0x1p125)
         return (false, zero)
-      var err = LLVM::zero_extend[U128, U256](LLVM::float_to_unsigned[B64, U128](errf) +% 1_u128)
-      var half = 1_u256 << 127_u32
-      if frac +% err >= half and frac <= half +% err
+      var err = b64_floor_u128(x: errf) +% 1_u128
+      var half = 1_u128 << 127_u32
+      if frac >= half -% err and frac <= half +% err
         return (false, zero)
       var c = d
       if frac > half
