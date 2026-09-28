@@ -10,7 +10,7 @@ pieces of the level below, and nothing is hidden between them.
 | **operation** | One explicit step: a named method (`%a.add(%b)`), a load (`:=`), a store (`=`), an `alloca`, a call. There are no operators, so every operation says what it does and what it costs. |
 | **block** | A straight run of operations. Values come in as block parameters (no phi nodes), and the block ends in exactly one terminator: `jump`, `branch`, `select`, `switch`, or `return`. |
 | **routine** | A set of blocks with one entry. Control moves between its blocks only through terminators, and every value is SSA. |
-| **module** | A namespace for routines, types, and constants (`Std::Format`). It's declared in the source, not tied to files. |
+| **module** | A namespace for routines, types, and constants (`Standard::Format`). It's declared in the source, not tied to files. |
 | **solution** | The code compiled together to make one application. |
 
 ```tessera
