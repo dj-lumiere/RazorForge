@@ -359,7 +359,14 @@ routine decfinB(sign: Bool, coeff: U256, exp: S64, pref: S64) -> D128Parts
     return D128Parts(sign: sign, special: 0_u64, exp: ez, coeff: LLVM::zero_extend[U64, U128](0_u64))
   var c = coeff
   var e = exp
-  var nd = digits10b(c: c)
+  # a coefficient below 2^128 (a quotient, an aligned sum) counts and rounds its digits in U128
+  var narrow = LLVM::int_truncate[U256, U128](coeff >>> 128_u32) == 0_u128
+  var c128 = LLVM::int_truncate[U256, U128](coeff)
+  var nd = 0_s64
+  if narrow
+    nd = digits10_u128(c: c128)
+  else
+    nd = digits10b(c: c)
   # Drop, in ONE half-even rounding, every digit that must go: the excess over 34 digits and the digits
   # below the minimum exponent (rounding to 34 digits first and then to the subnormal position rounded
   # twice). An inexact result keeps its full precision: only an exact one is stripped toward `pref`.
@@ -374,6 +381,20 @@ routine decfinB(sign: Bool, coeff: U256, exp: S64, pref: S64) -> D128Parts
     var above = LLVM::int_eq(a: drop, b: nd) and LLVM::unsigned_gt(a: c, b: LLVM::mul(a: pow10b(k: LLVM::sub(a: nd, b: 1_s64)), b: LLVM::zero_extend[U64, U256](5_u64)))
     c = if above then one else LLVM::zero_extend[U64, U256](0_u64)
     e = LLVM::add(a: e, b: drop)
+  elseif narrow and LLVM::signed_gt(a: drop, b: 0_s64)
+    # drop <= 38 here (nd <= 39), so twice the remainder stays below 2 10^38 < 2^128
+    var div1 = p10_u128(k: drop)
+    var q1 = div_pow10_u128(x: c128, k: drop)
+    var r1 = c128 -% q1 *% div1
+    inexact = r1 != 0_u128
+    var twice1 = r1 *% 2_u128
+    if twice1 > div1 or (twice1 == div1 and (q1 & 1_u128) != 0_u128)
+      q1 = q1 +% 1_u128
+    c = LLVM::zero_extend[U128, U256](q1)
+    e = LLVM::add(a: e, b: drop)
+    if q1 >= p10_u128(k: 34_s64)
+      c = LLVM::zero_extend[U128, U256](div_pow10_u128(x: q1, k: 1_s64))
+      e = LLVM::add(a: e, b: 1_s64)
   elseif LLVM::signed_gt(a: drop, b: 0_s64)
     var div = pow10b(k: drop)
     var q = div_pow10b(x: c, k: drop)
@@ -557,6 +578,36 @@ routine d128_add(a: D128, b: D128) -> D128
   var pb = b.decode()
   if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
     return d128_of_parts(p: add_special_parts(pa: pa, pb: pb))
+  # the common case, exact: the larger-exponent coefficient scaled to the smaller exponent and the sum both stay
+  # below 10^34, so the result is that sum at the smaller (preferred) exponent, with no rounding
+  var d = pa.exp -% pb.exp
+  var hc = pa.coeff
+  var hs = pa.sign
+  var lc = pb.coeff
+  var ls = pb.sign
+  var le = pb.exp
+  if d < 0_s64
+    d = 0_s64 -% d
+    hc = pb.coeff
+    hs = pb.sign
+    lc = pa.coeff
+    ls = pa.sign
+    le = pa.exp
+  if d <= 33_s64 and hc < p10_u128(k: 34_s64 -% d)
+    var hw = hc *% p10_u128(k: d)
+    var sc = 0_u128
+    var ss = hs
+    if hs == ls
+      sc = hw +% lc
+    elseif hw >= lc
+      sc = hw -% lc
+    else
+      sc = lc -% hw
+      ss = ls
+    if sc < p10_u128(k: 34_s64)
+      if sc == 0_u128
+        ss = hs and ls
+      return d128_of_parts(p: D128Parts(sign: ss, special: 0_u64, exp: le, coeff: sc))
   var eh = pa.exp
   var ch = cwb(c: pa.coeff)
   var sh = pa.sign
@@ -643,8 +694,8 @@ routine d128_div(a: D128, b: D128) -> D128
   # (set below from a nonzero remainder) carries everything beneath, so 1 guard digit
   # suffices for correct round-half-even. Smaller num => narrower divide + less to strip
   # in decfin than the old +38 (which computed ~3 needless extra quotient digits).
-  var target = LLVM::add(a: digits10b(c: den), b: 36_s64)
-  var shift = LLVM::sub(a: target, b: digits10b(c: num))
+  var target = LLVM::add(a: digits10_u128(c: pb.coeff), b: 36_s64)
+  var shift = LLVM::sub(a: target, b: digits10_u128(c: pa.coeff))
   if LLVM::signed_lt(a: shift, b: 0_s64)
     shift = 0_s64
   num = LLVM::mul(a: num, b: pow10b(k: shift))
