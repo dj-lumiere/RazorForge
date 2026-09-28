@@ -590,7 +590,7 @@ public class ControlFlowTests
         string source = """
                         routine divide!(a: S32, b: S32) -> S32
                           if b == 0
-                            stop!("Division by zero")
+                            stop("Division by zero")
                           return a // b
                         """;
 
@@ -604,7 +604,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine process(data: List[S32])
-                          verify!(data.length() > 0, "Data cannot be empty")
+                          verify(data.length() > 0, "Data cannot be empty")
                           do_process(data)
                           return
                         """;
@@ -619,7 +619,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine test(x: S32)
-                          verify!(x >= 0)
+                          verify(x >= 0)
                           process(x)
                           return
                         """;
@@ -634,7 +634,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine unreachable()
-                          breach!("Should never reach here")
+                          breach("Should never reach here")
                           return
                         """;
 
@@ -648,7 +648,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          breach!()
+                          breach()
                           return
                         """;
 

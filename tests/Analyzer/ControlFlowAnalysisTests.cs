@@ -220,11 +220,10 @@ public class ControlFlowAnalysisTests
     #region Failable Routine Analysis
 
     /// <summary>
-    /// Failability is now INFERRED: an <c>absent</c> in a routine NOT declared <c>!</c> no longer emits
-    /// AbsentOutsideFailableFunction — the routine is inferred-failable instead.
+    /// An <c>absent</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
     /// </summary>
     [Fact]
-    public void Analyze_AbsentInNonFailable_NoLongerErrors()
+    public void Analyze_AbsentInNonFailable_RequiresBangOnDeclaration()
     {
         string source = """
                         routine test() -> S32
@@ -233,7 +232,7 @@ public class ControlFlowAnalysisTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
     /// <summary>

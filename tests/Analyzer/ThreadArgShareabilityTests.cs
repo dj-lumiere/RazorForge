@@ -39,7 +39,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                     var t = work(n: 5)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -57,7 +57,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var origin = Point(x: 1, y: 2)
                                     var t = work(p: origin)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -76,7 +76,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var counter = Atomic[S64](initial: 0_s64)
                                     var t = work(cell: counter)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -94,7 +94,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var s = Guarded[Node, ReadOnly](from: Node(value: 1))
                                     var t = work(s: s.share())
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -112,7 +112,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var n = Node(value: 1)
                                     var t = work(node: n)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -138,7 +138,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var h = Holder(node: Retained(from: Node(value: 1)))
                                     var t = work(h: h)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -166,7 +166,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var h = Holder(node: Guarded[Node, ReadOnly](from: Node(value: 1)))
                                     var t = work(h: h)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -186,7 +186,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var n = Node(value: 1)
                                     var t = work(node: steal n)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -203,7 +203,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                     var t = work(n: 5)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -226,7 +226,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var h = Holder(node: Retained(from: Node(value: 1)))
                                     var t = work(h: h)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -251,7 +251,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var r = Retained(from: Node(value: 1))
                                     var t = work(r: steal r)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 
@@ -278,7 +278,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                     var h = Holder(node: Retained(from: Node(value: 1)))
                                     var t = work(h: steal h)
-                                    discard t.retrieve!()
+                                    discard t.retrieve()
                                     return
                                   """;
 

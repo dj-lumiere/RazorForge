@@ -221,7 +221,7 @@ public class EnterableConformanceTests
                         import IO/File
 
                         routine start!()
-                          var f = File("x.txt").open_write!()
+                          var f = File("x.txt").open_write()
                           f.flush()
                           return
                         """;

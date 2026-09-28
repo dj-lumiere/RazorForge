@@ -120,11 +120,10 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Failability is now INFERRED: a <c>throw</c> inside a routine NOT declared <c>!</c> no longer
-    /// errors (the declaration is optional). The routine is inferred-failable instead.
+    /// A <c>throw</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
     /// </summary>
     [Fact]
-    public void Analyze_ThrowInNonFailableRoutine_NoLongerErrors()
+    public void Analyze_ThrowInNonFailableRoutine_RequiresBangOnDeclaration()
     {
         string source = """
                         crashable SampleError
@@ -136,16 +135,15 @@ public class WikiLanguageBreakageTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        Assert.DoesNotContain(collection: result.Errors,
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
     }
 
     /// <summary>
-    /// Failability is now INFERRED: an <c>absent</c> inside a routine NOT declared <c>!</c> no longer
-    /// errors (the declaration is optional). The routine is inferred-failable instead.
+    /// An <c>absent</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
     /// </summary>
     [Fact]
-    public void Analyze_AbsentInNonFailableRoutine_NoLongerErrors()
+    public void Analyze_AbsentInNonFailableRoutine_RequiresBangOnDeclaration()
     {
         string source = """
                         routine test() -> S32
@@ -154,7 +152,7 @@ public class WikiLanguageBreakageTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        Assert.DoesNotContain(collection: result.Errors,
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
 

@@ -200,7 +200,7 @@ public class ErrorHandlingValidationTests
                         routine parse!(data: S32) -> S32
                           throw ParseError(message: "bad")
                         routine caller() -> S32
-                          parse!(data: 1)
+                          parse(data: 1)
                           return 0
                         """;
 
@@ -220,7 +220,7 @@ public class ErrorHandlingValidationTests
                         routine parse!(data: S32) -> S32
                           throw ParseError(message: "bad")
                         routine caller!() -> S32
-                          parse!(data: 1)
+                          parse(data: 1)
                           return 0
                         """;
 
@@ -348,7 +348,7 @@ public class ErrorHandlingValidationTests
                             throw MyErr(message: "bad")
                           return value
                         routine outer!(value: S32) -> S32
-                          return inner!(value: value)
+                          return inner(value: value)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

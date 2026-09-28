@@ -16,7 +16,7 @@ public sealed partial class SourceFolderFailurePointTests
             "BuildSystem",
             "manifest parsing validates required fields, indexes modules, and the native toolchain detects linker failures",
             [
-                "ReadRequiredString", "BuildModuleIndex", "ExtractModuleName",
+                "ReadRequiredString", "BuildModuleIndex", "IndexSourceFile",
                 "DetectLinkerFromStderr"
             ]
         },

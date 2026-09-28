@@ -77,7 +77,7 @@ public class TextBytesInteropTests
                                                   routine test!()
                                                     var text: Text = "Hello, 계"
                                                     var bytes: Bytes = text.encode_as_utf8()
-                                                    var roundtrip: Text = bytes.decode_as_utf8!()
+                                                    var roundtrip: Text = bytes.decode_as_utf8()
                                                     return
                                                   """);
 
@@ -96,7 +96,7 @@ public class TextBytesInteropTests
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test!()
                                                     var bytes: Bytes = "Hi".encode_as_utf8()
-                                                    each ch in bytes.interpret_as_utf8!()
+                                                    each ch in bytes.interpret_as_utf8()
                                                       var cp: U32 = ch.codepoint()
                                                     return
                                                   """);
@@ -131,8 +131,8 @@ public class TextBytesInteropTests
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test!()
                                                     var bytes: Bytes = b"ABC"
-                                                    var text: Text = bytes.decode_as_utf8!()
-                                                    var view = bytes.interpret_as_utf8!()
+                                                    var text: Text = bytes.decode_as_utf8()
+                                                    var view = bytes.interpret_as_utf8()
                                                     each ch in view
                                                       var cp: U32 = ch.codepoint()
                                                     absent

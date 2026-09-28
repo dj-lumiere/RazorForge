@@ -5,10 +5,9 @@ namespace RazorForge.Tests.Parser;
 using static TestHelpers;
 
 /// <summary>
-/// Locks down the rule that `!` belongs inside a routine name, never after a
-/// call expression's closing paren. <c>memberRoutine(args)!</c> is a parse error;
-/// failability is invoked via <c>memberRoutine!(args)</c> and propagates through the
-/// enclosing `!`-marked routine.
+/// Locks down the rule that the failable `!` belongs on a routine's declaration only. A call is
+/// written plain: <c>memberRoutine(args)!</c>, <c>memberRoutine!(args)</c>, <c>obj.m!(args)</c> and
+/// <c>Type![T](args)</c> are all parse errors.
 /// </summary>
 public class TrailingBangCallTests
 {
@@ -16,12 +15,12 @@ public class TrailingBangCallTests
     [Fact]
     public void Parse_TrailingBang_OnMemberRoutineCall_IsParseError()
     {
-        // `memberRoutine(args)!` form — must fail to parse. The correct form is
-        // `memberRoutine!(args)` with the bang INSIDE the routine name.
+        // `memberRoutine(args)!` form — must fail to parse. The correct form is a plain
+        // `memberRoutine(args)`; the `!` lives on the declaration.
         string source = """
                         module L/Test
                         routine f!() -> S64
-                          return g!()!
+                          return g()!
                         routine g!() -> S64
                           return 0_s64
                         """;
@@ -77,16 +76,54 @@ public class TrailingBangCallTests
         AssertParses(source: source);
     }
 
-    /// <summary>Verifies that the correct memberRoutine!(args) form with bang in the name parses without error.</summary>
+    /// <summary>Verifies that a `!` written at a free call site is a parse error.</summary>
     [Fact]
-    public void Parse_BangInMemberRoutineName_OK()
+    public void Parse_BangAtFreeCallSite_IsParseError()
     {
-        // Positive control — the correct form `memberRoutine!(args)` must parse cleanly.
-        // (Goes through `Parse`, not `AssertParseError`, so any throw fails the test.)
         string source = """
                         module L/Test
                         routine f!() -> S64
                           return g!()
+                        routine g!() -> S64
+                          throw DivisionByZeroError()
+                        """;
+        AssertParseError(source: source);
+    }
+
+    /// <summary>Verifies that a `!` written at a member call site is a parse error.</summary>
+    [Fact]
+    public void Parse_BangAtMemberCallSite_IsParseError()
+    {
+        string source = """
+                        module L/Test
+                        routine f(xs: List[S64]) -> S64
+                          return xs.last!()
+                        """;
+        AssertParseError(source: source);
+    }
+
+    /// <summary>Verifies that a `!` before a generic call's brackets is a parse error.</summary>
+    [Fact]
+    public void Parse_BangBeforeGenericCallBrackets_IsParseError()
+    {
+        string source = """
+                        module L/Test
+                        routine f(t: Text) -> S64
+                          return parse_as![S64](t)
+                        """;
+        AssertParseError(source: source);
+    }
+
+    /// <summary>Verifies that `!` on the declaration with a plain call parses without error.</summary>
+    [Fact]
+    public void Parse_BangOnDeclarationOnly_OK()
+    {
+        // Positive control — the `!` on the declarations, plain calls.
+        // (Goes through `Parse`, not `AssertParseError`, so any throw fails the test.)
+        string source = """
+                        module L/Test
+                        routine f!() -> S64
+                          return g()
                         routine g!() -> S64
                           return 0_s64
                         """;

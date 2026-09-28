@@ -364,7 +364,7 @@ dangerous routine File.wield_range[T](start: U64, count: U64) -> Wielded[T]
 
 # To PRODUCE output through a mapping (mmap cannot grow a file), size the file first, then wield it:
 #   var f = File(at: out)
-#   f.set_size!(bytes: count *% T.data_size().byte_size())
+#   f.set_size(bytes: count *% T.data_size().byte_size())
 #   using f.wield[T]() as w
 #     ...
 # For output larger than the address space, size the file, then wield one window at a time with
@@ -381,7 +381,7 @@ dangerous routine File.wield_range[T](start: U64, count: U64) -> Wielded[T]
 ### RazorForge-only. Zero-copy: the bytes are NOT read into a heap buffer but faulted in on access
 ### (demand paging), so `File.expose` is near-instant with no large allocation. `using`-required (obeys
 ### {Enterable}) so the view's lifetime is lexically bound and released at scope exit. Read elements
-### with `peek!(i)` (bounds-checked) or, for hot bounds-check-free scanning, the `dangerous`
+### with `peek(i)` (bounds-checked) or, for hot bounds-check-free scanning, the `dangerous`
 ### `raw_buffer()`. Unlike a {Source}, an `Exposed[T]` has NO cursor — it is a live window onto the
 ### bytes, indexed directly. Suflae never sees this: `File.expose`/`raw_buffer` are `dangerous`, and
 ### Suflae has no `danger` block.
@@ -440,7 +440,7 @@ dangerous routine Exposed[T].raw_buffer() -> Hijacked[T]
 # ============================================================================
 
 ### A read/write, element-addressable view of a file's bytes as a sequence of `T` — RazorForge-only.
-### Like {Exposed} but writable: `poke!(i, v)` overwrites element `i` in place, and the write lands in
+### Like {Exposed} but writable: `poke(i, v)` overwrites element `i` in place, and the write lands in
 ### the file (SHARED — flushed lazily, on `flush()`, or on scope exit). The view CANNOT grow the file:
 ### `poke!` is bounds-checked to `count()`, so it overwrites but never appends. `using`-required (obeys
 ### {Enterable}); `exit` flushes dirty pages back to the file and releases the view. Unlike a {Sink}, a
@@ -649,7 +649,7 @@ routine read_text(path: Text) -> Text
 routine write_text(path: Text, content: Text) -> S64
   var cstr = CStr(from: path)
   var data = CStr(from: content)
-  return rf_io_write_file_all(path: cstr, path_len: cstr.count().S32(), data: data.ptr(), data_len: data.count().S64!())
+  return rf_io_write_file_all(path: cstr, path_len: cstr.count().S32(), data: data.ptr(), data_len: data.count().S64())
 
 # ============================================================================
 # Directory — a named location in the filesystem that contains entries
@@ -855,12 +855,12 @@ routine Directory.move_to_if_absent!(destination: Directory) -> Bool
 ### :param destination: The destination `Directory`.
 ### :throws: {IOError} when any entry cannot be copied.
 routine Directory.copy_to!(destination: Directory)
-  destination.create_all!()
-  each entry in me.entries!()
+  destination.create_all()
+  each entry in me.entries()
     if entry.is_directory
-      me.subdir(name: entry.name).copy_to!(destination: destination.subdir(name: entry.name))
+      me.subdir(name: entry.name).copy_to(destination: destination.subdir(name: entry.name))
     else
-      me.file(name: entry.name).copy_to!(destination: destination.file(name: entry.name))
+      me.file(name: entry.name).copy_to(destination: destination.file(name: entry.name))
   return
 
 # ============================================================================
@@ -909,7 +909,7 @@ routine Directory.entries!() -> List[DirEntry]
     # Each line is `<kind><mtime> <name>`: 'd'/'f', then decimal Unix seconds, one
     # space, then the raw name (which may itself contain spaces).
     var is_dir = line[0u64] == 'd'
-    var space = line.find!(letter: ' ')
+    var space = line.find(letter: ' ')
     var mtime: S64 = 0
     each k in 1u64 til space
       mtime = mtime * 10_s64 + S64(line[k].digit_value())
@@ -929,11 +929,11 @@ routine Directory.entries!() -> List[DirEntry]
 @readonly
 routine Directory.walk!() -> List[Text]
   var result = List[Text]()
-  each entry in me.entries!()
+  each entry in me.entries()
     var full = join_path(a: me.at, b: entry.name)
     result.add_last(value: full)
     if entry.is_directory
-      each descendant in me.subdir(name: entry.name).walk!()
+      each descendant in me.subdir(name: entry.name).walk()
         result.add_last(value: descendant)
   return result
 
