@@ -306,7 +306,15 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
     var (oks, s) = b128_stirling_sum(x: x)
     if not okl or not oks
       return (false, b128fx_one())
-    var a = b128fx_mul(a: b128fx_of(x: x -! B128.from_bits(bits: 0x3FFE_u128 << 112_u32)), b: lx)
+    # x - 1/2 is exact in B128 below 2^112. From there x's unit is 1 and the B128 difference would round, so
+    # it is formed in B128Fx, whose 128-bit significand holds it exactly
+    var xh = b128fx_of(x: x -! B128.from_bits(bits: 0x3FFE_u128 << 112_u32))
+    if u >= (0x406F_u128 << 112_u32)
+      var (okh, xhf) = b128fx_add(a: b128fx_of(x: x), b: b128fx_of(x: B128.from_bits(bits: 0xBFFE_u128 << 112_u32)))
+      if not okh
+        return (false, b128fx_one())
+      xh = xhf
+    var a = b128fx_mul(a: xh, b: lx)
     var (ok1, b) = b128fx_add(a: a, b: b128fx_neg(v: b128fx_of(x: x)))
     var c = b128fx_norm(neg: false, mag: (LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_HI) << 128_u32) | LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_LO), scale: -148_s64, abserr: 1.0)
     var (ok2, d) = b128fx_add(a: b, b: c)
