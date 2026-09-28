@@ -23,11 +23,11 @@ routine sum(%n: U64) -> U64
         jump loop(0, 0)
 
     block loop(%i: U64, %acc: U64):
-        %done: Bool = %i.ge(%n)
+        %done : Bool = %i.ge(%n)
         branch %done ? return(%acc) : body(%i, %acc)
 
     block body(%i: U64, %acc: U64):
-        %next_acc: U64 = %acc.add(%i)
+        %next_acc : U64 = %acc.add(%i)
         jump loop(%i.add(1), %next_acc)
 ```
 
@@ -63,6 +63,7 @@ dotnet run --project Tessera -- run tests/hello.tess          # build and run a 
 dotnet run --project Tessera -- build prog.tess -o prog       # build an executable
 dotnet run --project Tessera -- build prog.tess --emit-llvm   # write LLVM IR instead
 dotnet run --project Tessera -- test tests playground examples Mini/generated  # run the golden tests
+dotnet run --project Tessera -- fmt stdlib tests examples playground          # format the sources
 ```
 
 `build` and `run` also take `--target <arch-os-abi>` and `-O`. All files on one command line form one solution,
