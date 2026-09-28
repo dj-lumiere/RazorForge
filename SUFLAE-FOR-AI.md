@@ -56,7 +56,7 @@ When unsure, consult ground truth in the repo:
    location (relative to `config.toml`). Declare `module` only to override.
 4. **The default number types are `Integer` and `Decimal`, not fixed-width.**
    A bare `42` is an arbitrary-precision `Integer`; a bare `3.14` is a `Decimal`.
-   Indices and counts are also `Integer`. (In RF, bare literals default to
+   Indices and counts are `U64`, not `Integer`. (In RF, bare literals default to
    `S64`/`B64`.)
 5. **`Decimal` is base-10, not binary.** `0.1 + 0.2 == 0.3` holds in Suflae —
    that footgun-freedom is the whole point. (`Real`, the arbitrary-precision

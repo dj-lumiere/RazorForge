@@ -161,7 +161,7 @@ binding RazorForge has.
 - Binary floats: `B16 B32 B64 B128` (literal suffixes `b16`/`b32`/`b64`/`b128`) · decimals: `D32 D64 D128`
 - `BF16` (bfloat16) is a STORAGE type (ML weights/tensors): bit patterns (`from_bits`/`to_bits`/bytes),
   `B32(from:)`/`B64(from:)` widen exactly, `BF16(from: B32/B64)` narrows with ONE round-to-nearest-even
-  (from `B64` directly, never through `B32`), `represent`/`BF16!(from_text:)`, `==`/`<`. No arithmetic and
+  (from `B64` directly, never through `B32`), `represent`/`BF16(from_text:)`, `==`/`<`. No arithmetic and
   no literal suffix: widen to compute, narrow the result back.
 - Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `0x1p-23_b32`,
   `0x1.fffffep+127_b32`. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
@@ -435,7 +435,7 @@ inside the braces:
   (`2.675.fixed(2)` is `2.67`; `Real` rounds ties away from zero). `to_text(sig_digits:)` on
   `B16`/`B32`/`B64` is the significant-digit (`%g`) form. A binary float's plain text (`show(x)`,
   `f"{x}"`, `represent()`) is the SHORTEST decimal that reads back as the same value, so
-  `B64!(from_text: x.represent())` returns `x` bit for bit on `B16`..`B128` (`0.1 + 0.2` shows
+  `B64(from_text: x.represent())` returns `x` bit for bit on `B16`..`B128` (`0.1 + 0.2` shows
   `0.30000000000000004`, `0.1` shows `0.1`). Scientific form starts below `1e-04` and at `1e+04` /
   `1e+07` / `1e+16` / `1e+34` for `B16` / `B32` / `B64` / `B128`; a whole value drops the `.0`.
 - **Text**: `pad_start(width)` / `pad_end(width)` / `center(width)` (fill defaults to a space) and
