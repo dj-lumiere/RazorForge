@@ -7,23 +7,23 @@ pieces of the level below, and nothing is hidden between them.
 
 | Level | What it is |
 |-------|------------|
-| **operation** | One explicit step: a named method (`%a.add(%b)`), a load (`:=`), a store (`=`), an `alloca`, a call. There are no operators, so every operation says what it does and what it costs. |
+| **operation** | One explicit step: a named method (`%a.add(%b)`), a load (`#p.load()`), a store (`#p.store(%v)`), an `alloca`, a call. There are no operators, so every operation says what it does and what it costs. |
 | **block** | A straight run of operations. Values come in as block parameters (no phi nodes), and the block ends in exactly one terminator: `jump`, `branch`, `select`, `switch`, or `return`. |
 | **routine** | A set of blocks with one entry. Control moves between its blocks only through terminators, and every value is SSA. |
 | **module** | A namespace for routines, types, and constants (`Standard::Format`). It's declared in the source, not tied to files. |
 | **solution** | The code compiled together to make one application. |
 
 ```tessera
-routine sum(%n: S64) -> S64
+routine sum(%n: U64) -> U64
     block entry():
         jump loop(0, 0)
 
-    block loop(%i: S64, %acc: S64):
+    block loop(%i: U64, %acc: U64):
         %done: Bool = %i.ge(%n)
         branch %done ? return(%acc) : body(%i, %acc)
 
-    block body(%i: S64, %acc: S64):
-        %next_acc: S64 = %acc.add(%i)
+    block body(%i: U64, %acc: U64):
+        %next_acc: U64 = %acc.add(%i)
         jump loop(%i.add(1), %next_acc)
 ```
 
