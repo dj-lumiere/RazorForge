@@ -229,23 +229,38 @@ secret routine d128_wide(x: D128, which: U64) -> D128
 # ============================================================================
 
 ### sqrt(c * 10^q) for a finite positive D128, to 34 digits exactly: C = c * 10^t with q - t even and C of 67
-### or 68 digits has an integer square root s of 34 digits, and (2s + 1)^2 against 4C (odd against even, never
-### equal) says whether the root lies above s + 1/2.
+### or 68 digits has an integer square root s of 34 digits (below 2^113). s starts from the B128 square root of C's
+### truncation (a few units off at most) and is settled by s^2 <= C < (s + 1)^2 with 128 x 128-bit products; the
+### root lies above s + 1/2 exactly when (2s + 1)^2 < 4C, that is when C - s^2 > s.
 secret routine d128_sqrt_exact(c: U128, q: S64) -> D128
   var t = 67_s64 -% digits10_u128(c: c)
   if ((q -% t) & 1_s64) != 0_s64
     t = t +% 1_s64
   var cc = cwb(c: c) *% pow10b(k: t)
-  var s = b128_isqrt256(n: cc)
-  var twice = s *% 2_u256 +% 1_u256
-  if twice *% twice < cc *% 4_u256
-    s = s +% 1_u256
-  var sc = LLVM::int_truncate[U256, U128](s)
+  var sc = LLVM::int_truncate[U256, U128](b128_floor_u256(v: b128_of_u256_trunc(n: cc).sqrt_unchecked()))
+  var sq = d128_square256(s: sc)
+  while sq > cc
+    sc = sc -% 1_u128
+    sq = d128_square256(s: sc)
+  # (s + 1)^2 = s^2 + 2s + 1
+  var step = (LLVM::zero_extend[U128, U256](sc) << 1_u32) +% 1_u256
+  while sq +% step <= cc
+    sq = sq +% step
+    sc = sc +% 1_u128
+    step = step +% 2_u256
+  if cc -% sq > LLVM::zero_extend[U128, U256](sc)
+    sc = sc +% 1_u128
   var ex = (q -% t) >> 1
   if sc == 10000000000000000000000000000000000_u128
     sc = 1000000000000000000000000000000000_u128
     ex = ex +% 1_s64
   return wx_d128_pack(neg: false, c: sc, q: ex, inf: false)
+
+### s^2 for a 128-bit s, as a U256 (exact).
+@inline
+secret routine d128_square256(s: U128) -> U256
+  var p = b128_trig_wmul(x: s, y: s)
+  return (LLVM::zero_extend[U128, U256](p.item0) << 128_u32) | LLVM::zero_extend[U128, U256](p.item1)
 
 ### a * b of a 256-bit a and b, the low 384 bits (exact when the product fits).
 secret routine d128_mul256(a: U256, b: U256) -> (U128, U128, U128)
