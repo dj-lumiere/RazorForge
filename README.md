@@ -23,19 +23,19 @@ pieces of the level below.
 
 ```tessera
 record IndexPair
-    left  : U64
-    right : U64
+    left  : USize
+    right : USize
 
 routine two_sum(%list: Ptr<List<S32>>, %target: S32) -> Option<IndexPair>
     block entry():
         jump search_left(0)
 
-    block search_left(%left_idx: U64):
+    block search_left(%left_idx: USize):
         branch %left_idx.ge(%list.length.load())
             ? return(.Absent)
             : search_right(%left_idx, %left_idx.add(1))
 
-    block search_right(%left_idx: U64, %right_idx: U64):
+    block search_right(%left_idx: USize, %right_idx: USize):
         branch %right_idx.ge(%list.length.load()) ? search_left(%left_idx.add(1)) : continue
         %left_val  : S32 = %list.get(%left_idx)
         %right_val : S32 = %list.get(%right_idx)
