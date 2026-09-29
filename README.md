@@ -22,24 +22,38 @@ pieces of the level below.
 | **solution** | The code compiled together to make one application. |
 
 ```tessera
-routine find_name(%names: Ptr<String>, %length: U64, %target: String) -> Option<U64>
+record IndexPair
+    left  : U64
+    right : U64
+
+routine two_sum(%list: Ptr<List<S32>>, %target: S32) -> Option<IndexPair>
     block entry():
-        jump scan(0)
+        jump search_left(0)
 
-    block scan(%index: U64):
-        branch %index.ge(%length) ? return(.Absent) : check(%index)
+    block search_left(%left_idx: U64):
+        branch %left_idx.ge(%list.length.load())
+            ? return(.Absent)
+            : search_right(%left_idx, %left_idx.add(1))
 
-    block check(%index: U64):
-        %name : String = %names[%index].load()
-        branch %name.eq(%target) ? return(.Present(%index)) : scan(%index.add(1))
+    block search_right(%left_idx: U64, %right_idx: U64):
+        branch %right_idx.ge(%list.length.load()) ? search_left(%left_idx.add(1)) : continue
+        %left_val  : S32 = %list.get(%left_idx)
+        %right_val : S32 = %list.get(%right_idx)
+        branch %left_val.add(%right_val).eq(%target)
+            ? return(.Present(IndexPair { left: %left_idx, right: %right_idx }))
+            : search_right(%left_idx, %right_idx.add(1))
 ```
+
+Two blocks make the two loops of an O(n²) search. Each loop's state travels as block parameters, `continue` goes on
+with the next line when the inner loop isn't done, and the list is held by pointer: `%list.length` is the address of
+a field, read with `load`, while `get` takes the pointer itself.
 
 What sets it apart:
 
 - **No operators.** Every step is a named call, so `add` and `add_wrap`, or `shr` on a signed and an unsigned value,
   never look alike.
-- **Block parameters instead of phi nodes.** A loop passes its state forward (`scan(%index.add(1))`) instead of
-  collecting it from predecessors.
+- **Block parameters instead of phi nodes.** A loop passes its state forward (`search_right(%left_idx,
+  %right_idx.add(1))`) instead of collecting it from predecessors.
 - **`=` only binds.** Memory is read and written by `load` and `store` calls, and every binding states its type.
 - **Sum types are variants.** `Option` and `Result` are variants, read with a `when` whose arms bind the payload.
 - **Nothing hidden.** No implicit conversions, destructors, exceptions, vtables, or allocations: every runtime
