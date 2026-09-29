@@ -1,9 +1,15 @@
-# RazorForge
+<p align="center">
+  <img src="branding/razorforge.svg" alt="RazorForge logo" width="112">
+</p>
 
-**Make programming sharp again.**
+<h1 align="center">RazorForge</h1>
 
-![License](https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue.svg)
-![Status](https://img.shields.io/badge/status-early%20alpha-orange.svg)
+<p align="center"><strong>Make programming sharp again.</strong></p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/status-early%20alpha-orange.svg" alt="Status">
+</p>
 
 RazorForge is a natively compiled, statically typed programming language built around precision:
 in what a program means, in how it fails, and in the numbers it computes.
@@ -220,6 +226,11 @@ because the correctly rounded float math relies on hardware FMA. Older CPUs, and
 Pentium/Celeron/Atom parts without AVX, can't run the output.
 
 ## Suflae
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="branding/suflae-dark.svg">
+  <img src="branding/suflae.svg" alt="Suflae logo" width="72">
+</picture>
 
 Suflae is the easier-going sibling of RazorForge. It has the same grammar and the same standard
 library with the low-level machinery hidden, and the same builder handles `.sf` files.
