@@ -4,7 +4,7 @@
 
 **Tessera is a structured SSA language built from explicit operations.**
 
-**Documentation: [tessera.lumi-dev.xyz/docs](https://tessera.lumi-dev.xyz/docs/)**
+**Documentation: [tessera.lumi-dev.xyz](https://tessera.lumi-dev.xyz/)**
 
 Tessera is an attempt to keep what makes IR honest, one explicit step at a time, while taming what makes it painful
 to write by hand. Nothing happens between the lines: phi nodes become block parameters, raw integers become typed
@@ -75,9 +75,9 @@ What sets it apart:
 | `playground/` | Larger programs: Dijkstra, a lazy segment tree, SHA-256, a calculator, and more. |
 | `Tessera.tmbundle/` | A TextMate grammar for syntax highlighting. |
 
-The language reference lives in the [docs](https://tessera.lumi-dev.xyz/docs): start with
-[Introduction](https://tessera.lumi-dev.xyz/docs/Introduction/) and
-[Quick Start](https://tessera.lumi-dev.xyz/docs/Quick-Start/).
+The language reference lives in the [docs](https://tessera.lumi-dev.xyz): start with
+[Introduction](https://tessera.lumi-dev.xyz/Introduction/) and
+[Quick Start](https://tessera.lumi-dev.xyz/Quick-Start/).
 
 If you're an AI assistant writing Tessera, read [TESSERA-FOR-AI.md](TESSERA-FOR-AI.md) first: it's a one-page summary of the
 rules that are easy to get wrong.
