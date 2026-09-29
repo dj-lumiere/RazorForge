@@ -1,3 +1,5 @@
+<img src="assets/logo.svg" width="96" alt="Tessera logo">
+
 # Tessera
 
 **Tessera is a structured SSA language built from explicit operations.**
