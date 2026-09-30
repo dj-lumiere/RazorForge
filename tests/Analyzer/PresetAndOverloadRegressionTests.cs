@@ -28,9 +28,9 @@ public class PresetAndOverloadRegressionTests
                                         preset WORDS: Array[U16, 2] = [1, 65535]
 
                                         routine start()
-                                          var a = SINGLES[0]
-                                          var b = WORDS[1]
-                                          return
+                                            var a = SINGLES[0]
+                                            var b = WORDS[1]
+                                            return
                                         """);
         AnalysisResult result = new SemanticVerifier(language: Language.RazorForge).Analyze(program: program);
         Assert.Empty(collection: result.Errors);
@@ -52,8 +52,8 @@ public class PresetAndOverloadRegressionTests
                                preset BYTES: Array[U8, 2] = [1, 300]
 
                                routine start()
-                                 var a = BYTES[0]
-                                 return
+                                   var a = BYTES[0]
+                                   return
                                """,
             expectedErrorSubstring: "overflows type 'U8'");
     }
@@ -66,8 +66,8 @@ public class PresetAndOverloadRegressionTests
                                preset VALUES: Array[B64, 2] = [1.0, "x"]
 
                                routine start()
-                                 var a = VALUES[0]
-                                 return
+                                   var a = VALUES[0]
+                                   return
                                """,
             expectedErrorSubstring: "is a 'Text' literal");
     }
@@ -78,11 +78,11 @@ public class PresetAndOverloadRegressionTests
     {
         AssertAnalyzes(source: """
                                secret routine helper(x: S64) -> S64
-                                 return x + 1
+                                   return x + 1
 
                                routine start()
-                                 var y = helper(x: 41)
-                                 return
+                                   var y = helper(x: 41)
+                                   return
                                """);
     }
 
@@ -96,9 +96,9 @@ public class PresetAndOverloadRegressionTests
     {
         AssertAnalyzes(source: """
                                routine start()
-                                 var h: B64 = hypot_unchecked(x: 0.1, y: 0.2)
-                                 var t: B64 = atan2(y: 1.0, x: 2.0)
-                                 return
+                                   var h: B64 = hypot_unchecked(x: 0.1, y: 0.2)
+                                   var t: B64 = atan2(y: 1.0, x: 2.0)
+                                   return
                                """);
     }
 
@@ -112,11 +112,11 @@ public class PresetAndOverloadRegressionTests
     {
         AssertHasError(source: """
                                routine probe[C](p: C) -> U64
-                                 return 0_u64
+                                   return 0_u64
 
                                routine start()
-                                 var r = probe[Text](p: 5_s64)
-                                 return
+                                   var r = probe[Text](p: 5_s64)
+                                   return
                                """,
             expectedErrorSubstring: "cannot convert 'S64' to 'Text'");
     }
@@ -128,9 +128,9 @@ public class PresetAndOverloadRegressionTests
                                preset TAB: Array[U64, 2] = [1_u64, 2_u64]
 
                                routine start()
-                                 danger
-                                   var r = LLVM::load_element_ref[Array[U64, 2], U64](TAB, 0_u64)
-                                 return
+                                   danger
+                                       var r = LLVM::load_element_ref[Array[U64, 2], U64](TAB, 0_u64)
+                                   return
                                """,
             expectedErrorSubstring: "cannot convert 'Array[Core.U64, 2]' to 'Hijacked[Core.Array[Core.U64, 2]]'");
     }
@@ -145,10 +145,10 @@ public class PresetAndOverloadRegressionTests
     {
         AssertAnalyzes(source: """
                                routine start()
-                                 var x = 3.0_b128
-                                 var h = x.hash()
-                                 var k = x.hash(k0: 1_u64, k1: 2_u64)
-                                 return
+                                   var x = 3.0_b128
+                                   var h = x.hash()
+                                   var k = x.hash(k0: 1_u64, k1: 2_u64)
+                                   return
                                """);
     }
 }

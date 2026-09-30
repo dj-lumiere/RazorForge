@@ -12,162 +12,162 @@ module Core
 
 ### Whether a finite B128 is an integer (every B128 from 2^112 on is).
 secret routine b128_is_int(a: B128) -> Bool
-  var bits = a.to_bits()
-  var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
-  if be == 0x7FFF_s64
-    return false
-  var f = bits & ((1_u128 << 112_u32) -% 1_u128)
-  if be == 0_s64
-    return f == 0_u128
-  var e = be -% 16383_s64
-  if e >= 112_s64
-    return true
-  if e < 0_s64
-    return false
-  return (f & ((1_u128 << b128_trig_sh(n: 112_s64 -% e)) -% 1_u128)) == 0_u128
+    var bits = a.to_bits()
+    var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
+    if be == 0x7FFF_s64
+        return false
+    var f = bits & ((1_u128 << 112_u32) -% 1_u128)
+    if be == 0_s64
+        return f == 0_u128
+    var e = be -% 16383_s64
+    if e >= 112_s64
+        return true
+    if e < 0_s64
+        return false
+    return (f & ((1_u128 << b128_trig_sh(n: 112_s64 -% e)) -% 1_u128)) == 0_u128
 
 ### Whether a finite B128 integer is odd (every B128 from 2^113 on is even).
 secret routine b128_integer_is_odd(a: B128) -> Bool
-  var bits = a.to_bits()
-  var e = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128) -% 16383_s64
-  if e < 0_s64 or e > 112_s64
-    return false
-  var m = (bits & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32)
-  return ((m >>> b128_trig_sh(n: 112_s64 -% e)) & 1_u128) == 1_u128
+    var bits = a.to_bits()
+    var e = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128) -% 16383_s64
+    if e < 0_s64 or e > 112_s64
+        return false
+    var m = (bits & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32)
+    return ((m >>> b128_trig_sh(n: 112_s64 -% e)) & 1_u128) == 1_u128
 
 ### f(x) on the 384-bit tier for a B128 whose fast path left the rounding open: 0 tan, 1 sinh, 2 cosh,
 ### 3 tanh, 4 asinh, 5 acosh, 6 atanh, 7 log2, 8 log10, 9 log1p, 10 erf, 11 erfc, 12 lgamma, 13 tgamma.
 ### Special values, and arguments whose result the range alone settles, are handled first.
 secret routine b128_wide(x: B128, which: U64) -> B128
-  if x.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: x.to_bits()))
-  var nan = B128.from_bits(bits: b128_qnan())
-  var posinf = B128.from_bits(bits: b128_inf(sign: 0_u64))
-  var neginf = B128.from_bits(bits: b128_inf(sign: 1_u64))
-  var one = wx_one()
-  var w = wx_of_b128(x: x)
-  var ax = x.abs()
-  var neg = x.is_negative()
-  var signed_one = B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
-  if neg
-    signed_one = signed_one.neg()
-  if which == 0_u64
+    if x.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: x.to_bits()))
+    var nan = B128.from_bits(bits: b128_qnan())
+    var posinf = B128.from_bits(bits: b128_inf(sign: 0_u64))
+    var neginf = B128.from_bits(bits: b128_inf(sign: 1_u64))
+    var one = wx_one()
+    var w = wx_of_b128(x: x)
+    var ax = x.abs()
+    var neg = x.is_negative()
+    var signed_one = B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
+    if neg
+        signed_one = signed_one.neg()
+    if which == 0_u64
+        if x.is_infinite()
+            return nan
+        if x.is_zero()
+            return x
+        var (s, c) = wx_sincos_b128(x: x)
+        return wx_b128(w: wx_div(a: s, b: c))
+    if which == 1_u64
+        if x.is_infinite() or x.is_zero()
+            return x
+        if ax > 11400.0_b128
+            if neg
+                return neginf
+            return posinf
+        return wx_b128(w: wx_sinh(x: w))
+    if which == 2_u64
+        if x.is_infinite() or ax > 11400.0_b128
+            return posinf
+        return wx_b128(w: wx_cosh(x: w))
+    if which == 3_u64
+        if x.is_zero()
+            return x
+        if x.is_infinite() or ax > 100.0_b128
+            return signed_one
+        return wx_b128(w: wx_tanh(x: w))
+    if which == 4_u64
+        if x.is_infinite() or x.is_zero()
+            return x
+        return wx_b128(w: wx_asinh(x: w))
+    if which == 5_u64
+        if x < 1.0_b128
+            return nan
+        if x.is_infinite()
+            return x
+        return wx_b128(w: wx_acosh(t: wx_sub(a: w, b: one)))
+    if which == 6_u64
+        if ax > 1.0_b128
+            return nan
+        if ax == 1.0_b128
+            if neg
+                return neginf
+            return posinf
+        if x.is_zero()
+            return x
+        return wx_b128(w: wx_atanh(x: w, omx: wx_sub(a: one, b: wx_abs(w: w))))
+    if which == 7_u64 or which == 8_u64
+        if neg and not x.is_zero()
+            return nan
+        if x.is_zero()
+            return neginf
+        if x.is_infinite()
+            return x
+        var scale = wx_table(i: 3_u64)
+        if which == 8_u64
+            scale = wx_table(i: 4_u64)
+        return wx_b128(w: wx_mul(a: wx_log(x: w), b: scale))
+    if which == 9_u64
+        if x < -1.0_b128
+            return nan
+        if x == -1.0_b128
+            return neginf
+        if x.is_infinite() or x.is_zero()
+            return x
+        return wx_b128(w: wx_log1p(t: w))
+    if which == 10_u64
+        if x.is_zero()
+            return x
+        if x.is_infinite() or ax > 20.0_b128
+            return signed_one
+        return wx_b128(w: wx_erf(x: w, complement: false))
+    if which == 11_u64
+        if neg and (x.is_infinite() or ax > 20.0_b128)
+            return 2.0_b128
+        if x.is_infinite() or x > 110.0_b128
+            return B128.from_bits(bits: 0_u128)
+        return wx_b128(w: wx_erf(x: w, complement: true))
+    # lgamma (12) and tgamma (13)
     if x.is_infinite()
-      return nan
+        if which == 13_u64 and neg
+            return nan
+        return posinf
     if x.is_zero()
-      return x
-    var (s, c) = wx_sincos_b128(x: x)
-    return wx_b128(w: wx_div(a: s, b: c))
-  if which == 1_u64
-    if x.is_infinite() or x.is_zero()
-      return x
-    if ax > 11400.0_b128
-      if neg
-        return neginf
-      return posinf
-    return wx_b128(w: wx_sinh(x: w))
-  if which == 2_u64
-    if x.is_infinite() or ax > 11400.0_b128
-      return posinf
-    return wx_b128(w: wx_cosh(x: w))
-  if which == 3_u64
-    if x.is_zero()
-      return x
-    if x.is_infinite() or ax > 100.0_b128
-      return signed_one
-    return wx_b128(w: wx_tanh(x: w))
-  if which == 4_u64
-    if x.is_infinite() or x.is_zero()
-      return x
-    return wx_b128(w: wx_asinh(x: w))
-  if which == 5_u64
-    if x < 1.0_b128
-      return nan
-    if x.is_infinite()
-      return x
-    return wx_b128(w: wx_acosh(t: wx_sub(a: w, b: one)))
-  if which == 6_u64
-    if ax > 1.0_b128
-      return nan
-    if ax == 1.0_b128
-      if neg
-        return neginf
-      return posinf
-    if x.is_zero()
-      return x
-    return wx_b128(w: wx_atanh(x: w, omx: wx_sub(a: one, b: wx_abs(w: w))))
-  if which == 7_u64 or which == 8_u64
-    if neg and not x.is_zero()
-      return nan
-    if x.is_zero()
-      return neginf
-    if x.is_infinite()
-      return x
-    var scale = wx_table(i: 3_u64)
-    if which == 8_u64
-      scale = wx_table(i: 4_u64)
-    return wx_b128(w: wx_mul(a: wx_log(x: w), b: scale))
-  if which == 9_u64
-    if x < -1.0_b128
-      return nan
-    if x == -1.0_b128
-      return neginf
-    if x.is_infinite() or x.is_zero()
-      return x
-    return wx_b128(w: wx_log1p(t: w))
-  if which == 10_u64
-    if x.is_zero()
-      return x
-    if x.is_infinite() or ax > 20.0_b128
-      return signed_one
-    return wx_b128(w: wx_erf(x: w, complement: false))
-  if which == 11_u64
-    if neg and (x.is_infinite() or ax > 20.0_b128)
-      return 2.0_b128
-    if x.is_infinite() or x > 110.0_b128
-      return B128.from_bits(bits: 0_u128)
-    return wx_b128(w: wx_erf(x: w, complement: true))
-  # lgamma (12) and tgamma (13)
-  if x.is_infinite()
-    if which == 13_u64 and neg
-      return nan
-    return posinf
-  if x.is_zero()
-    if which == 13_u64 and neg
-      return neginf
-    return posinf
-  if neg and b128_is_int(a: x)
+        if which == 13_u64 and neg
+            return neginf
+        return posinf
+    if neg and b128_is_int(a: x)
+        if which == 13_u64
+            return nan
+        return posinf
+    var k = x.round()
+    var r = x - k
+    var k_odd = b128_integer_is_odd(a: k)
     if which == 13_u64
-      return nan
-    return posinf
-  var k = x.round()
-  var r = x - k
-  var k_odd = b128_integer_is_odd(a: k)
-  if which == 13_u64
-    if x > 1755.5_b128
-      return posinf
-    if x < -1800.0_b128
-      # |Gamma| underflows; its sign is that of sin(pi x) = (-1)^k sin(pi r)
-      var zb = 0_u128
-      if r.is_negative() != k_odd
-        zb = 1_u128 << 127_u32
-      return B128.from_bits(bits: zb)
-    return wx_b128(w: wx_tgamma(x: w, k_odd: k_odd, r: wx_of_b128(x: r)))
-  return wx_b128(w: wx_lgamma(x: w, k_odd: k_odd, r: wx_of_b128(x: r)).item0)
+        if x > 1755.5_b128
+            return posinf
+        if x < -1800.0_b128
+            # |Gamma| underflows; its sign is that of sin(pi x) = (-1)^k sin(pi r)
+            var zb = 0_u128
+            if r.is_negative() != k_odd
+                zb = 1_u128 << 127_u32
+            return B128.from_bits(bits: zb)
+        return wx_b128(w: wx_tgamma(x: w, k_odd: k_odd, r: wx_of_b128(x: r)))
+    return wx_b128(w: wx_lgamma(x: w, k_odd: k_odd, r: wx_of_b128(x: r)).item0)
 
 ### sinpi (which 0), cospi (1) or tanpi (2) of a finite non-integer B128 on the 384-bit tier: y = k + r with
 ### k the nearest integer and |r| <= 1/2 (both exact), and sin / cos(pi y) = (-1)^k sin / cos(pi r).
 secret routine b128_wide_pi(y: B128, which: U64) -> B128
-  var k = y.round()
-  var (s, c) = wx_sincospi(r: wx_of_b128(x: y - k))
-  if which == 2_u64
-    return wx_b128(w: wx_div(a: s, b: c))
-  var v = s
-  if which == 1_u64
-    v = c
-  if b128_integer_is_odd(a: k)
-    v = wx_neg(w: v)
-  return wx_b128(w: v)
+    var k = y.round()
+    var (s, c) = wx_sincospi(r: wx_of_b128(x: y - k))
+    if which == 2_u64
+        return wx_b128(w: wx_div(a: s, b: c))
+    var v = s
+    if which == 1_u64
+        v = c
+    if b128_integer_is_odd(a: k)
+        v = wx_neg(w: v)
+    return wx_b128(w: v)
 
 # ============================================================================
 # B128 method wrappers
@@ -175,315 +175,315 @@ secret routine b128_wide_pi(y: B128, which: U64) -> B128
 
 ### Returns `e^me`.
 routine B128.exp!() -> B128
-  var rr = me.exp_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.exp_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `ln(me)`.
 routine B128.log!() -> B128
-  var rr = me.log_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.log_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `e^me - 1`.
 routine B128.expm1!() -> B128
-  var rr = me.expm1_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.expm1_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `ln(1 + me)`.
 routine B128.log1p!() -> B128
-  var rr = me.log1p_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.log1p_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `ln(1+me)` with raw IEEE (NaN -> qNaN, me=-1 -> -inf, me<-1 -> qNaN, +inf -> +inf). No crash.
 routine B128.log1p_unchecked() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if me.is_zero()
-    return me
-  if me == -1.0_b128
-    return B128.from_bits(bits: b128_inf(sign: 1_u64))
-  if me < -1.0_b128
-    return B128.from_bits(bits: b128_qnan())
-  if me.is_infinite()
-    return me
-  var (fast, v) = b128_log1p_cr(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 9_u64)
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if me.is_zero()
+        return me
+    if me == -1.0_b128
+        return B128.from_bits(bits: b128_inf(sign: 1_u64))
+    if me < -1.0_b128
+        return B128.from_bits(bits: b128_qnan())
+    if me.is_infinite()
+        return me
+    var (fast, v) = b128_log1p_cr(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 9_u64)
 
 ### Returns `log2(me)`.
 routine B128.log2!() -> B128
-  var rr = me.log2_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.log2_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `log2(me)` with raw IEEE. No crash.
 routine B128.log2_unchecked() -> B128
-  var (near, nv) = b128_log_near1(x: me, ten: false)
-  if near
-    return nv
-  var (ok, hi, lo) = b128_log_scaled_ok(x: me)
-  if ok
-    var (fast, v) = b128_log_scaled(hi: hi, lo: lo, c1: 0xB8AA3B295C17F0BB_u64, c0: 0xBE87FED0691D3E89_u64, p: 127_u32)
-    if fast
-      return v
-  return b128_wide(x: me, which: 7_u64)
+    var (near, nv) = b128_log_near1(x: me, ten: false)
+    if near
+        return nv
+    var (ok, hi, lo) = b128_log_scaled_ok(x: me)
+    if ok
+        var (fast, v) = b128_log_scaled(hi: hi, lo: lo, c1: 0xB8AA3B295C17F0BB_u64, c0: 0xBE87FED0691D3E89_u64, p: 127_u32)
+        if fast
+            return v
+    return b128_wide(x: me, which: 7_u64)
 
 ### Returns `log10(me)`.
 routine B128.log10!() -> B128
-  var rr = me.log10_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.log10_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `log10(me)` with raw IEEE. No crash.
 routine B128.log10_unchecked() -> B128
-  var (near, nv) = b128_log_near1(x: me, ten: true)
-  if near
-    return nv
-  var (ok, hi, lo) = b128_log_scaled_ok(x: me)
-  if ok
-    var (fast, v) = b128_log_scaled(hi: hi, lo: lo, c1: 0xDE5BD8A937287195_u64, c0: 0x355BAAAFAD33DC32_u64, p: 129_u32)
-    if fast
-      return v
-  return b128_wide(x: me, which: 8_u64)
+    var (near, nv) = b128_log_near1(x: me, ten: true)
+    if near
+        return nv
+    var (ok, hi, lo) = b128_log_scaled_ok(x: me)
+    if ok
+        var (fast, v) = b128_log_scaled(hi: hi, lo: lo, c1: 0xDE5BD8A937287195_u64, c0: 0x355BAAAFAD33DC32_u64, p: 129_u32)
+        if fast
+            return v
+    return b128_wide(x: me, which: 8_u64)
 
 ### Returns `2^me`.
 routine B128.exp2!() -> B128
-  var rr = me.exp2_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.exp2_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `10^me`.
 routine B128.exp10!() -> B128
-  var rr = me.exp10_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.exp10_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me ^ you`.
 routine B128.pow!(you: B128) -> B128
-  var rr = me.pow_unchecked(you: you)
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.pow_unchecked(you: you)
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me^you` with raw IEEE (the full C99 pow special-case ladder). No crash. The general case is
 ### exp(you * ln|me|) on the 384-bit tier when the fast path leaves the rounding open, the sign of an
 ### odd-integer exponent reapplied.
 routine B128.pow_unchecked(you: B128) -> B128
-  var (fast, v) = b128_pow_fast(x: me, y: you)
-  if fast
-    return v
-  var (exact, w) = b128_pow_exact(x: me, y: you)
-  if exact
-    return w
-  var one = 1.0_b128
-  var negone = -1.0_b128
-  # integer / odd-integer exponent classification drives the sign rules and domain checks below
-  var yisint = you.is_finite() and b128_is_int(a: you)
-  var yisoddint = yisint and b128_integer_is_odd(a: you)
-  var poszero = B128.from_bits(bits: 0_u128)
-  var negzero = B128.from_bits(bits: 1_u128 << 127_u32)
-  var posinf = B128.from_bits(bits: b128_inf(sign: 0_u64))
-  var neginf = B128.from_bits(bits: b128_inf(sign: 1_u64))
-  var xs = 0_u64
-  if me.is_negative()
-    xs = 1_u64
-  # a negative base raised to a non-integer power has no real result
-  if me.is_negative() and me.is_finite() and not me.is_zero() and you.is_finite() and not yisint
-    return B128.from_bits(bits: b128_qnan())
-  if me == one or you.is_zero()
-    return one
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if you.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
-  if not you.is_negative() and not you.is_zero() and me.is_zero() and yisoddint
-    return me
-  if me.is_zero() and not you.is_negative() and not you.is_zero() and not yisoddint
-    return poszero
-  if you.is_infinite() and me == negone
-    return one
-  var absxlt1 = negone < me and me < one
-  var absxgt1 = me < negone or one < me
-  if you.is_infinite() and you.is_negative() and absxlt1
-    return posinf
-  if you.is_infinite() and you.is_negative() and absxgt1
-    return poszero
-  if you.is_infinite() and not you.is_negative() and absxlt1
-    return poszero
-  if you.is_infinite() and not you.is_negative() and absxgt1
-    return posinf
-  if me.is_infinite() and me.is_negative() and you.is_negative() and yisoddint
-    return negzero
-  if me.is_infinite() and me.is_negative() and you.is_negative() and not you.is_zero() and not yisoddint
-    return poszero
-  if me.is_infinite() and me.is_negative() and not you.is_negative() and yisoddint
-    return neginf
-  if me.is_infinite() and me.is_negative() and not you.is_negative() and not you.is_zero() and not yisoddint
-    return posinf
-  if me.is_infinite() and not me.is_negative() and you.is_negative() and not you.is_zero()
-    return poszero
-  if me.is_infinite() and not me.is_negative() and not you.is_negative() and not you.is_zero()
-    return posinf
-  if me.is_zero() and yisoddint and you.is_negative()
-    return B128.from_bits(bits: b128_inf(sign: xs))
-  if me.is_zero() and you.is_negative() and not you.is_zero() and not yisoddint
-    return posinf
-  # |me|^you = e^z with z = you ln|me|; far past the range the result is infinite or zero
-  var z = wx_mul(a: wx_of_b128(x: you), b: wx_log(x: wx_abs(w: wx_of_b128(x: me))))
-  var zb = wx_b64(w: z)
-  var r = poszero
-  if zb > 12000.0
-    r = posinf
-  elseif zb > -12000.0
-    r = wx_b128(w: wx_exp(x: z))
-  if me.is_negative() and yisoddint
-    return r.neg()
-  return r
+    var (fast, v) = b128_pow_fast(x: me, y: you)
+    if fast
+        return v
+    var (exact, w) = b128_pow_exact(x: me, y: you)
+    if exact
+        return w
+    var one = 1.0_b128
+    var negone = -1.0_b128
+    # integer / odd-integer exponent classification drives the sign rules and domain checks below
+    var yisint = you.is_finite() and b128_is_int(a: you)
+    var yisoddint = yisint and b128_integer_is_odd(a: you)
+    var poszero = B128.from_bits(bits: 0_u128)
+    var negzero = B128.from_bits(bits: 1_u128 << 127_u32)
+    var posinf = B128.from_bits(bits: b128_inf(sign: 0_u64))
+    var neginf = B128.from_bits(bits: b128_inf(sign: 1_u64))
+    var xs = 0_u64
+    if me.is_negative()
+        xs = 1_u64
+    # a negative base raised to a non-integer power has no real result
+    if me.is_negative() and me.is_finite() and not me.is_zero() and you.is_finite() and not yisint
+        return B128.from_bits(bits: b128_qnan())
+    if me == one or you.is_zero()
+        return one
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if you.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
+    if not you.is_negative() and not you.is_zero() and me.is_zero() and yisoddint
+        return me
+    if me.is_zero() and not you.is_negative() and not you.is_zero() and not yisoddint
+        return poszero
+    if you.is_infinite() and me == negone
+        return one
+    var absxlt1 = negone < me and me < one
+    var absxgt1 = me < negone or one < me
+    if you.is_infinite() and you.is_negative() and absxlt1
+        return posinf
+    if you.is_infinite() and you.is_negative() and absxgt1
+        return poszero
+    if you.is_infinite() and not you.is_negative() and absxlt1
+        return poszero
+    if you.is_infinite() and not you.is_negative() and absxgt1
+        return posinf
+    if me.is_infinite() and me.is_negative() and you.is_negative() and yisoddint
+        return negzero
+    if me.is_infinite() and me.is_negative() and you.is_negative() and not you.is_zero() and not yisoddint
+        return poszero
+    if me.is_infinite() and me.is_negative() and not you.is_negative() and yisoddint
+        return neginf
+    if me.is_infinite() and me.is_negative() and not you.is_negative() and not you.is_zero() and not yisoddint
+        return posinf
+    if me.is_infinite() and not me.is_negative() and you.is_negative() and not you.is_zero()
+        return poszero
+    if me.is_infinite() and not me.is_negative() and not you.is_negative() and not you.is_zero()
+        return posinf
+    if me.is_zero() and yisoddint and you.is_negative()
+        return B128.from_bits(bits: b128_inf(sign: xs))
+    if me.is_zero() and you.is_negative() and not you.is_zero() and not yisoddint
+        return posinf
+    # |me|^you = e^z with z = you ln|me|; far past the range the result is infinite or zero
+    var z = wx_mul(a: wx_of_b128(x: you), b: wx_log(x: wx_abs(w: wx_of_b128(x: me))))
+    var zb = wx_b64(w: z)
+    var r = poszero
+    if zb > 12000.0
+        r = posinf
+    elseif zb > -12000.0
+        r = wx_b128(w: wx_exp(x: z))
+    if me.is_negative() and yisoddint
+        return r.neg()
+    return r
 
 ### Returns `asin(me)`.
 routine B128.asin!() -> B128
-  var rr = me.asin_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.asin_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `acos(me)`.
 routine B128.acos!() -> B128
-  var rr = me.acos_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.acos_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `sinh(me)`.
 routine B128.sinh!() -> B128
-  var rr = me.sinh_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.sinh_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `sinh(me)` with raw IEEE (large |me| -> signed inf). No crash.
 routine B128.sinh_unchecked() -> B128
-  var (fast, v) = b128_sinh_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 1_u64)
+    var (fast, v) = b128_sinh_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 1_u64)
 
 ### Returns `cosh(me)`.
 routine B128.cosh!() -> B128
-  var rr = me.cosh_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.cosh_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `cosh(me)` with raw IEEE (large |me| -> +inf). No crash.
 routine B128.cosh_unchecked() -> B128
-  var (fast, v) = b128_cosh_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 2_u64)
+    var (fast, v) = b128_cosh_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 2_u64)
 
 ### Returns `tanh(me)`.
 routine B128.tanh() -> B128
-  var (fast, v) = b128_tanh_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 3_u64)
+    var (fast, v) = b128_tanh_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 3_u64)
 
 ### Returns `atanh(me)`.
 routine B128.atanh!() -> B128
-  var rr = me.atanh_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.atanh_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `atanh(me)` with raw IEEE (|me|=1 -> signed inf, |me|>1 -> qNaN). No crash.
 routine B128.atanh_unchecked() -> B128
-  var (fast, v) = b128_atanh_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 6_u64)
+    var (fast, v) = b128_atanh_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 6_u64)
 
 ### Returns `asinh(me)`.
 routine B128.asinh() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if me.is_zero()
-    return me
-  var (fast, v) = b128_asinh_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 4_u64)
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if me.is_zero()
+        return me
+    var (fast, v) = b128_asinh_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 4_u64)
 
 ### Returns `acosh(me)`.
 routine B128.acosh!() -> B128
-  var rr = me.acosh_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.acosh_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `acosh(me)` with raw IEEE (me<1 -> qNaN). No crash.
 routine B128.acosh_unchecked() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  var (fast, v) = b128_acosh_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 5_u64)
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    var (fast, v) = b128_acosh_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 5_u64)
 
 ### Returns `tan(me)`.
 routine B128.tan() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if me.is_infinite()
-    return B128.from_bits(bits: b128_qnan())
-  if me.is_zero()
-    return me
-  var (fast, v) = b128_tan_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 0_u64)
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if me.is_infinite()
+        return B128.from_bits(bits: b128_qnan())
+    if me.is_zero()
+        return me
+    var (fast, v) = b128_tan_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 0_u64)
 
 # ============================================================================
 # fma and the three-leg hypot: exact integer arithmetic, one rounding
@@ -492,12 +492,12 @@ routine B128.tan() -> B128
 ### A finite nonzero B128 as its integer significand (113 bits, fewer when subnormal) and the exponent of
 ### its last bit.
 secret routine b128_int_parts(x: B128) -> (U128, S64)
-  var bits = x.to_bits()
-  var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
-  var f = bits & ((1_u128 << 112_u32) -% 1_u128)
-  if be == 0_s64
-    return (f, -16494_s64)
-  return (f | (1_u128 << 112_u32), be -% 16495_s64)
+    var bits = x.to_bits()
+    var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
+    var f = bits & ((1_u128 << 112_u32) -% 1_u128)
+    if be == 0_s64
+        return (f, -16494_s64)
+    return (f | (1_u128 << 112_u32), be -% 16495_s64)
 
 ### a + b for exact values a * 2^ea and b * 2^eb (384-bit integers, signs neg_a / neg_b): the smaller is
 ### aligned below the larger one's top and its bits that fall out of the 384-bit window become a sticky bit
@@ -506,54 +506,54 @@ secret routine b128_int_parts(x: B128) -> (U128, S64)
 ### sticky bit sits far below any rounding place. A subtraction that drops bits takes one more unit off: the
 ### true value then lies strictly between that and the next unit up.
 secret routine b128_exact_sum(neg_a: Bool, a: (U128, U128, U128), ea: S64, neg_b: Bool, b: (U128, U128, U128), eb: S64) -> B128Wx
-  var wa = wx_make(neg: neg_a, t: a, e: ea, rel: 0.0)
-  var wb = wx_make(neg: neg_b, t: b, e: eb, rel: 0.0)
-  if wx_is_zero(w: wb)
-    return wa
-  if wx_is_zero(w: wa)
-    return wb
-  var x = wa
-  var y = wb
-  if wb.e > wa.e or (wb.e == wa.e and wx_t_gt(a: wx_t(w: wb), b: wx_t(w: wa)))
-    x = wb
-    y = wa
-  var d = x.e -% y.e
-  var yt = wx_t(w: y)
-  var ys = b128_trig_shr384(x: yt, shift: d)
-  var sticky = false
-  if d >= 384_s64
-    sticky = true
-  elseif d > 0_s64
-    var back = b128_trig_shl384(x: ys, shift: d)
-    sticky = back.item0 != yt.item0 or back.item1 != yt.item1 or back.item2 != yt.item2
-  var xt = wx_t(w: x)
-  var e = x.e
-  var s = xt
-  if x.neg == y.neg
-    s = b128_trig_add384(a: xt, b: ys)
-    if wx_t_gt(a: xt, b: s)
-      if (s.item0 & 1_u128) != 0_u128
+    var wa = wx_make(neg: neg_a, t: a, e: ea, rel: 0.0)
+    var wb = wx_make(neg: neg_b, t: b, e: eb, rel: 0.0)
+    if wx_is_zero(w: wb)
+        return wa
+    if wx_is_zero(w: wa)
+        return wb
+    var x = wa
+    var y = wb
+    if wb.e > wa.e or (wb.e == wa.e and wx_t_gt(a: wx_t(w: wb), b: wx_t(w: wa)))
+        x = wb
+        y = wa
+    var d = x.e -% y.e
+    var yt = wx_t(w: y)
+    var ys = b128_trig_shr384(x: yt, shift: d)
+    var sticky = false
+    if d >= 384_s64
         sticky = true
-      var h = b128_trig_shr384(x: s, shift: 1_s64)
-      s = (h.item0, h.item1, h.item2 | (1_u128 << 127_u32))
-      e = e +% 1_s64
-  else
-    s = b128_trig_sub384(a: xt, b: ys)
+    elseif d > 0_s64
+        var back = b128_trig_shl384(x: ys, shift: d)
+        sticky = back.item0 != yt.item0 or back.item1 != yt.item1 or back.item2 != yt.item2
+    var xt = wx_t(w: x)
+    var e = x.e
+    var s = xt
+    if x.neg == y.neg
+        s = b128_trig_add384(a: xt, b: ys)
+        if wx_t_gt(a: xt, b: s)
+            if (s.item0 & 1_u128) != 0_u128
+                sticky = true
+            var h = b128_trig_shr384(x: s, shift: 1_s64)
+            s = (h.item0, h.item1, h.item2 | (1_u128 << 127_u32))
+            e = e +% 1_s64
+    else
+        s = b128_trig_sub384(a: xt, b: ys)
+        if sticky
+            s = b128_trig_sub384(a: s, b: (1_u128, 0_u128, 0_u128))
+    var r = wx_make(neg: x.neg, t: s, e: e, rel: 0.0)
     if sticky
-      s = b128_trig_sub384(a: s, b: (1_u128, 0_u128, 0_u128))
-  var r = wx_make(neg: x.neg, t: s, e: e, rel: 0.0)
-  if sticky
-    return B128Wx(neg: r.neg, m2: r.m2, m1: r.m1, m0: r.m0 | 1_u128, e: r.e, rel: 0.0)
-  return r
+        return B128Wx(neg: r.neg, m2: r.m2, m1: r.m1, m0: r.m0 | 1_u128, e: r.e, rel: 0.0)
+    return r
 
 ### Returns the fused multiply-add `me*b + c` with a single rounding.
 routine B128.fma!(b: B128, c: B128) -> B128
-  var rr = me.fma_unchecked(b: b, c: c)
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.fma_unchecked(b: b, c: c)
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me*b + c` with a single rounding and raw IEEE propagation. No crash. The product is exact (226 bits) and
 ### the sum exact up to a sticky bit (b128_exact_sum), so its one rounding is the correct one.
@@ -565,161 +565,161 @@ routine B128.fma!(b: B128, c: B128) -> B128
 ### the rounding place (bit 143); a subtraction that drops bits takes one unit off first, the true value lying
 ### strictly between that and the next unit up.
 secret routine b128_fma_fast(a: U128, b: U128, c: U128) -> (Bool, U128)
-  var signmask = 1_u128 << 127_u32
-  var expmask = 0x7FFF_u128 << 112_u32
-  var fracmask = (1_u128 << 112_u32) -% 1_u128
-  var aa = a & (signmask -% 1_u128)
-  var ba = b & (signmask -% 1_u128)
-  var ca = c & (signmask -% 1_u128)
-  if aa == 0_u128 or ba == 0_u128 or ca == 0_u128 or aa >= expmask or ba >= expmask or ca >= expmask
-    return (false, 0_u128)
-  if aa < (1_u128 << 112_u32) or ba < (1_u128 << 112_u32) or ca < (1_u128 << 112_u32)
-    return (false, 0_u128)
-  # value = m 2^e with m the 113-bit significand and e the exponent of its last bit
-  var ma = (aa & fracmask) | (1_u128 << 112_u32)
-  var mb = (ba & fracmask) | (1_u128 << 112_u32)
-  var mc = (ca & fracmask) | (1_u128 << 112_u32)
-  var ea = LLVM::int_truncate[U128, S64](aa >>> 112_u32) -% 16495_s64
-  var eb = LLVM::int_truncate[U128, S64](ba >>> 112_u32) -% 16495_s64
-  var ec = LLVM::int_truncate[U128, S64](ca >>> 112_u32) -% 16495_s64
-  var pneg = ((a ^ b) & signmask) != 0_u128
-  var cneg = (c & signmask) != 0_u128
-  # the product (225 or 226 bits) and c with their top bits at 255, and the exponents of their bit 0
-  var pr = b128_trig_wmul(x: ma, y: mb)
-  var pw = (LLVM::zero_extend[U128, U256](pr.item0) << 128_u32) | LLVM::zero_extend[U128, U256](pr.item1)
-  var plz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(pw))
-  pw = pw << b128_trig_sh(n: plz)
-  var pe = ea +% eb -% plz
-  var cw = LLVM::zero_extend[U128, U256](mc) << 143_u32
-  var ce = ec -% 143_s64
-  var x = pw
-  var xe = pe
-  var xneg = pneg
-  var y = cw
-  var ye = ce
-  var yneg = cneg
-  if ce > pe or (ce == pe and cw > pw)
-    x = cw
-    xe = ce
-    xneg = cneg
-    y = pw
-    ye = pe
-    yneg = pneg
-  var d = xe -% ye
-  var ys = 0_u256
-  var sticky = true
-  if d < 256_s64
-    ys = y >>> b128_trig_sh(n: d)
-    sticky = (ys << b128_trig_sh(n: d)) != y
-  var sum = 0_u256
-  var e = xe
-  if xneg == yneg
-    sum = x +% ys
-    if sum < x
-      # the carry: one bit up, the dropped low bit into the sticky bit
-      if (sum & 1_u256) != 0_u256
-        sticky = true
-      sum = (sum >>> 1_u32) | (1_u256 << 255_u32)
-      e = e +% 1_s64
-  else
-    sum = x -% ys
+    var signmask = 1_u128 << 127_u32
+    var expmask = 0x7FFF_u128 << 112_u32
+    var fracmask = (1_u128 << 112_u32) -% 1_u128
+    var aa = a & (signmask -% 1_u128)
+    var ba = b & (signmask -% 1_u128)
+    var ca = c & (signmask -% 1_u128)
+    if aa == 0_u128 or ba == 0_u128 or ca == 0_u128 or aa >= expmask or ba >= expmask or ca >= expmask
+        return (false, 0_u128)
+    if aa < (1_u128 << 112_u32) or ba < (1_u128 << 112_u32) or ca < (1_u128 << 112_u32)
+        return (false, 0_u128)
+    # value = m 2^e with m the 113-bit significand and e the exponent of its last bit
+    var ma = (aa & fracmask) | (1_u128 << 112_u32)
+    var mb = (ba & fracmask) | (1_u128 << 112_u32)
+    var mc = (ca & fracmask) | (1_u128 << 112_u32)
+    var ea = LLVM::int_truncate[U128, S64](aa >>> 112_u32) -% 16495_s64
+    var eb = LLVM::int_truncate[U128, S64](ba >>> 112_u32) -% 16495_s64
+    var ec = LLVM::int_truncate[U128, S64](ca >>> 112_u32) -% 16495_s64
+    var pneg = ((a ^ b) & signmask) != 0_u128
+    var cneg = (c & signmask) != 0_u128
+    # the product (225 or 226 bits) and c with their top bits at 255, and the exponents of their bit 0
+    var pr = b128_trig_wmul(x: ma, y: mb)
+    var pw = (LLVM::zero_extend[U128, U256](pr.item0) << 128_u32) | LLVM::zero_extend[U128, U256](pr.item1)
+    var plz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(pw))
+    pw = pw << b128_trig_sh(n: plz)
+    var pe = ea +% eb -% plz
+    var cw = LLVM::zero_extend[U128, U256](mc) << 143_u32
+    var ce = ec -% 143_s64
+    var x = pw
+    var xe = pe
+    var xneg = pneg
+    var y = cw
+    var ye = ce
+    var yneg = cneg
+    if ce > pe or (ce == pe and cw > pw)
+        x = cw
+        xe = ce
+        xneg = cneg
+        y = pw
+        ye = pe
+        yneg = pneg
+    var d = xe -% ye
+    var ys = 0_u256
+    var sticky = true
+    if d < 256_s64
+        ys = y >>> b128_trig_sh(n: d)
+        sticky = (ys << b128_trig_sh(n: d)) != y
+    var sum = 0_u256
+    var e = xe
+    if xneg == yneg
+        sum = x +% ys
+        if sum < x
+            # the carry: one bit up, the dropped low bit into the sticky bit
+            if (sum & 1_u256) != 0_u256
+                sticky = true
+            sum = (sum >>> 1_u32) | (1_u256 << 255_u32)
+            e = e +% 1_s64
+    else
+        sum = x -% ys
+        if sticky
+            sum = sum -% 1_u256
+        if sum == 0_u256
+            # exact cancellation: +0
+            return (true, 0_u128)
+    var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(sum))
+    sum = sum << b128_trig_sh(n: lz)
+    e = e -% lz
     if sticky
-      sum = sum -% 1_u256
-    if sum == 0_u256
-      # exact cancellation: +0
-      return (true, 0_u128)
-  var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(sum))
-  sum = sum << b128_trig_sh(n: lz)
-  e = e -% lz
-  if sticky
-    sum = sum | 1_u256
-  var lead = e +% 255_s64
-  if lead < -16382_s64 or lead > 16383_s64
-    return (false, 0_u128)
-  # the top 113 bits, rounded to nearest even on the 143 below
-  var q = LLVM::int_truncate[U256, U128](sum >>> 143_u32)
-  var rem = sum & ((1_u256 << 143_u32) -% 1_u256)
-  var half = 1_u256 << 142_u32
-  var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead +% 16383_s64)) << 112_u32) +% (q -% (1_u128 << 112_u32))
-  if rem > half or (rem == half and (q & 1_u128) == 1_u128)
-    bits = bits +% 1_u128
-  if xneg
-    bits = bits | signmask
-  return (true, bits)
+        sum = sum | 1_u256
+    var lead = e +% 255_s64
+    if lead < -16382_s64 or lead > 16383_s64
+        return (false, 0_u128)
+    # the top 113 bits, rounded to nearest even on the 143 below
+    var q = LLVM::int_truncate[U256, U128](sum >>> 143_u32)
+    var rem = sum & ((1_u256 << 143_u32) -% 1_u256)
+    var half = 1_u256 << 142_u32
+    var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead +% 16383_s64)) << 112_u32) +% (q -% (1_u128 << 112_u32))
+    if rem > half or (rem == half and (q & 1_u128) == 1_u128)
+        bits = bits +% 1_u128
+    if xneg
+        bits = bits | signmask
+    return (true, bits)
 
 routine B128.fma_unchecked(b: B128, c: B128) -> B128
-  var (fast, fb) = b128_fma_fast(a: me.to_bits(), b: b.to_bits(), c: c.to_bits())
-  if fast
-    return B128.from_bits(bits: fb)
-  var nan = B128.from_bits(bits: b128_qnan())
-  if me.is_nan() or b.is_nan() or c.is_nan()
-    return nan
-  var pneg = me.is_negative() != b.is_negative()
-  var pzero = me.is_zero() or b.is_zero()
-  if me.is_infinite() or b.is_infinite()
-    if pzero
-      return nan
-    if c.is_infinite() and c.is_negative() != pneg
-      return nan
-    var ps = 0_u64
-    if pneg
-      ps = 1_u64
-    return B128.from_bits(bits: b128_inf(sign: ps))
-  if c.is_infinite()
-    return c
-  if pzero
-    if c.is_zero()
-      # (+0) + (+0) and (-0) + (-0) keep their sign, mixed signs give +0
-      if pneg and c.is_negative()
+    var (fast, fb) = b128_fma_fast(a: me.to_bits(), b: b.to_bits(), c: c.to_bits())
+    if fast
+        return B128.from_bits(bits: fb)
+    var nan = B128.from_bits(bits: b128_qnan())
+    if me.is_nan() or b.is_nan() or c.is_nan()
+        return nan
+    var pneg = me.is_negative() != b.is_negative()
+    var pzero = me.is_zero() or b.is_zero()
+    if me.is_infinite() or b.is_infinite()
+        if pzero
+            return nan
+        if c.is_infinite() and c.is_negative() != pneg
+            return nan
+        var ps = 0_u64
+        if pneg
+            ps = 1_u64
+        return B128.from_bits(bits: b128_inf(sign: ps))
+    if c.is_infinite()
         return c
-      return B128.from_bits(bits: 0_u128)
-    return c
-  var (ma, ea) = b128_int_parts(x: me)
-  var (mb, eb) = b128_int_parts(x: b)
-  var p = b128_trig_wmul(x: ma, y: mb)
-  var pt = (0_u128, p.item1, p.item0)
-  var pe = ea +% eb -% 128_s64
-  if c.is_zero()
-    return wx_b128(w: wx_make(neg: pneg, t: pt, e: pe, rel: 0.0))
-  var (mc, ec) = b128_int_parts(x: c)
-  var sum = b128_exact_sum(neg_a: pneg, a: pt, ea: pe, neg_b: c.is_negative(), b: (0_u128, 0_u128, mc), eb: ec -% 256_s64)
-  if wx_is_zero(w: sum)
-    return B128.from_bits(bits: 0_u128)
-  return wx_b128(w: sum)
+    if pzero
+        if c.is_zero()
+            # (+0) + (+0) and (-0) + (-0) keep their sign, mixed signs give +0
+            if pneg and c.is_negative()
+                return c
+            return B128.from_bits(bits: 0_u128)
+        return c
+    var (ma, ea) = b128_int_parts(x: me)
+    var (mb, eb) = b128_int_parts(x: b)
+    var p = b128_trig_wmul(x: ma, y: mb)
+    var pt = (0_u128, p.item1, p.item0)
+    var pe = ea +% eb -% 128_s64
+    if c.is_zero()
+        return wx_b128(w: wx_make(neg: pneg, t: pt, e: pe, rel: 0.0))
+    var (mc, ec) = b128_int_parts(x: c)
+    var sum = b128_exact_sum(neg_a: pneg, a: pt, ea: pe, neg_b: c.is_negative(), b: (0_u128, 0_u128, mc), eb: ec -% 256_s64)
+    if wx_is_zero(w: sum)
+        return B128.from_bits(bits: 0_u128)
+    return wx_b128(w: sum)
 
 ### Returns `sqrt(x^2 + y^2)` without spurious overflow.
 ### :param x: One leg.
 ### :param y: The other leg.
 routine hypot!(x: B128, y: B128) -> B128
-  var rr = hypot_unchecked(x: x, y: y)
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = hypot_unchecked(x: x, y: y)
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `sqrt(x^2 + y^2 + z^2)` without spurious overflow. Checked: crashes on non-finite.
 ### :param x: First leg.
 ### :param y: Second leg.
 ### :param z: Third leg.
 routine hypot!(x: B128, y: B128, z: B128) -> B128
-  var rr = hypot_unchecked(x: x, y: y, z: z)
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = hypot_unchecked(x: x, y: y, z: z)
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### The exact square of a finite nonzero B128 added to sum (see b128_exact_sum).
 secret routine b128_add_square(sum: B128Wx, x: B128) -> B128Wx
-  if x.is_zero()
-    return sum
-  var (m, e) = b128_int_parts(x: x)
-  var p = b128_trig_wmul(x: m, y: m)
-  var sq = (0_u128, p.item1, p.item0)
-  if wx_is_zero(w: sum)
-    return wx_make(neg: false, t: sq, e: 2_s64 *% e -% 128_s64, rel: 0.0)
-  return b128_exact_sum(neg_a: false, a: wx_t(w: sum), ea: sum.e, neg_b: false, b: sq, eb: 2_s64 *% e -% 128_s64)
+    if x.is_zero()
+        return sum
+    var (m, e) = b128_int_parts(x: x)
+    var p = b128_trig_wmul(x: m, y: m)
+    var sq = (0_u128, p.item1, p.item0)
+    if wx_is_zero(w: sum)
+        return wx_make(neg: false, t: sq, e: 2_s64 *% e -% 128_s64, rel: 0.0)
+    return b128_exact_sum(neg_a: false, a: wx_t(w: sum), ea: sum.e, neg_b: false, b: sq, eb: 2_s64 *% e -% 128_s64)
 
 ### `sqrt(x^2 + y^2 + z^2)`, correctly rounded, with raw IEEE (any inf -> +inf, any NaN -> qNaN). No crash.
 ### The squares are exact and their sum exact up to a sticky bit; the root of its top 229 or 230 bits (an
@@ -728,117 +728,117 @@ secret routine b128_add_square(sum: B128Wx, x: B128) -> B128Wx
 ### :param y: Second leg.
 ### :param z: Third leg.
 routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
-  if x.is_infinite() or y.is_infinite() or z.is_infinite()
-    return B128.from_bits(bits: b128_inf(sign: 0_u64))
-  if x.is_nan() or y.is_nan() or z.is_nan()
-    return B128.from_bits(bits: b128_qnan())
-  var sum = b128_add_square(sum: b128_add_square(sum: b128_add_square(sum: wx_zero(rel: 0.0), x: x), x: y), x: z)
-  if wx_is_zero(w: sum)
-    return B128.from_bits(bits: 0_u128)
-  # sum = n * 2^s + rest with n its top 230 or 229 bits and s even
-  var s = sum.e +% 154_s64
-  if (s & 1_s64) != 0_s64
-    s = s +% 1_s64
-  var sh = s -% sum.e
-  var t = b128_trig_shr384(x: wx_t(w: sum), shift: sh)
-  var back = b128_trig_shl384(x: t, shift: sh)
-  var sticky = back.item0 != sum.m0 or back.item1 != sum.m1 or back.item2 != sum.m2
-  var n = (LLVM::zero_extend[U128, U256](t.item1) << 128_u32) | LLVM::zero_extend[U128, U256](t.item0)
-  var root = b128_isqrt256(n: n)
-  if root *% root != n
-    sticky = true
-  # the root's 115 bits, two zero bits below them, and the sticky bit below those
-  var rt = LLVM::int_truncate[U256, U128](root) << 2_u32
-  if sticky
-    rt = rt | 1_u128
-  return wx_b128(w: wx_make(neg: false, t: (0_u128, 0_u128, rt), e: (s >> 1) -% 258_s64, rel: 0.0))
+    if x.is_infinite() or y.is_infinite() or z.is_infinite()
+        return B128.from_bits(bits: b128_inf(sign: 0_u64))
+    if x.is_nan() or y.is_nan() or z.is_nan()
+        return B128.from_bits(bits: b128_qnan())
+    var sum = b128_add_square(sum: b128_add_square(sum: b128_add_square(sum: wx_zero(rel: 0.0), x: x), x: y), x: z)
+    if wx_is_zero(w: sum)
+        return B128.from_bits(bits: 0_u128)
+    # sum = n * 2^s + rest with n its top 230 or 229 bits and s even
+    var s = sum.e +% 154_s64
+    if (s & 1_s64) != 0_s64
+        s = s +% 1_s64
+    var sh = s -% sum.e
+    var t = b128_trig_shr384(x: wx_t(w: sum), shift: sh)
+    var back = b128_trig_shl384(x: t, shift: sh)
+    var sticky = back.item0 != sum.m0 or back.item1 != sum.m1 or back.item2 != sum.m2
+    var n = (LLVM::zero_extend[U128, U256](t.item1) << 128_u32) | LLVM::zero_extend[U128, U256](t.item0)
+    var root = b128_isqrt256(n: n)
+    if root *% root != n
+        sticky = true
+    # the root's 115 bits, two zero bits below them, and the sticky bit below those
+    var rt = LLVM::int_truncate[U256, U128](root) << 2_u32
+    if sticky
+        rt = rt | 1_u128
+    return wx_b128(w: wx_make(neg: false, t: (0_u128, 0_u128, rt), e: (s >> 1) -% 258_s64, rel: 0.0))
 
 ### Returns `sin(pi*me)`: sin(pi*n) is ±0 with the sign of me.
 routine B128.sinpi() -> B128
-  if me.is_nan() or me.is_zero()
-    return me
-  if me.is_infinite()
-    return B128.from_bits(bits: b128_qnan())
-  if b128_is_int(a: me)
-    return B128.from_bits(bits: me.to_bits() & (1_u128 << 127_u32))
-  var (fast, v) = b128_trigpi_fast(y: me, which: 0_u64)
-  if fast
-    return v
-  return b128_wide_pi(y: me, which: 0_u64)
+    if me.is_nan() or me.is_zero()
+        return me
+    if me.is_infinite()
+        return B128.from_bits(bits: b128_qnan())
+    if b128_is_int(a: me)
+        return B128.from_bits(bits: me.to_bits() & (1_u128 << 127_u32))
+    var (fast, v) = b128_trigpi_fast(y: me, which: 0_u64)
+    if fast
+        return v
+    return b128_wide_pi(y: me, which: 0_u64)
 
 ### Returns `cos(pi*me)`: cos(pi*(n + 1/2)) is +0.
 routine B128.cospi() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if me.is_infinite()
-    return B128.from_bits(bits: b128_qnan())
-  if b128_is_int(a: me *! 2.0_b128) and not b128_is_int(a: me)
-    return B128.from_bits(bits: 0_u128)
-  var (fast, v) = b128_trigpi_fast(y: me, which: 1_u64)
-  if fast
-    return v
-  return b128_wide_pi(y: me, which: 1_u64)
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if me.is_infinite()
+        return B128.from_bits(bits: b128_qnan())
+    if b128_is_int(a: me *! 2.0_b128) and not b128_is_int(a: me)
+        return B128.from_bits(bits: 0_u128)
+    var (fast, v) = b128_trigpi_fast(y: me, which: 1_u64)
+    if fast
+        return v
+    return b128_wide_pi(y: me, which: 1_u64)
 
 ### Returns `tan(pi*me)`. At an integer n it is +0 for a positive even n and -0 for a positive odd one (IEEE
 ### 754 tanPi), with the opposite signs for negative n since tanpi is odd.
 routine B128.tanpi() -> B128
-  if me.is_nan() or me.is_zero()
-    return me
-  if me.is_infinite()
-    return B128.from_bits(bits: b128_qnan())
-  if b128_is_int(a: me)
-    var zb = 0_u128
-    if me.is_negative() != b128_integer_is_odd(a: me)
-      zb = 1_u128 << 127_u32
-    return B128.from_bits(bits: zb)
-  if b128_is_int(a: me *! 2.0_b128)
-    # n + 1/2: +inf for an even n, -inf for an odd one
-    var sg = 0_u64
-    if b128_integer_is_odd(a: me.floor())
-      sg = 1_u64
-    return B128.from_bits(bits: b128_inf(sign: sg))
-  var (fast, v) = b128_trigpi_fast(y: me, which: 2_u64)
-  if fast
-    return v
-  return b128_wide_pi(y: me, which: 2_u64)
+    if me.is_nan() or me.is_zero()
+        return me
+    if me.is_infinite()
+        return B128.from_bits(bits: b128_qnan())
+    if b128_is_int(a: me)
+        var zb = 0_u128
+        if me.is_negative() != b128_integer_is_odd(a: me)
+            zb = 1_u128 << 127_u32
+        return B128.from_bits(bits: zb)
+    if b128_is_int(a: me *! 2.0_b128)
+        # n + 1/2: +inf for an even n, -inf for an odd one
+        var sg = 0_u64
+        if b128_integer_is_odd(a: me.floor())
+            sg = 1_u64
+        return B128.from_bits(bits: b128_inf(sign: sg))
+    var (fast, v) = b128_trigpi_fast(y: me, which: 2_u64)
+    if fast
+        return v
+    return b128_wide_pi(y: me, which: 2_u64)
 
 ### Returns the error function `erf(me)`.
 routine B128.erf() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  var (fast, v) = b128_erf_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 10_u64)
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    var (fast, v) = b128_erf_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 10_u64)
 
 ### Returns the complementary error function `erfc(me)`.
 routine B128.erfc() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  var (fast, v) = b128_erfc_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 11_u64)
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    var (fast, v) = b128_erfc_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 11_u64)
 
 ### Returns the gamma function `tgamma(me)`.
 routine B128.tgamma!() -> B128
-  var rr = me.tgamma_unchecked()
-  if rr.is_finite()
-    return rr
-  if rr.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var rr = me.tgamma_unchecked()
+    if rr.is_finite()
+        return rr
+    if rr.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `tgamma(me)` with raw IEEE (poles at 0/negative integers -> inf/qNaN). No crash.
 routine B128.tgamma_unchecked() -> B128
-  var (fast, v) = b128_tgamma_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 13_u64)
+    var (fast, v) = b128_tgamma_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 13_u64)
 
 ### Returns the log-gamma function `lgamma(me)` (= ln|gamma(me)|).
 routine B128.lgamma() -> B128
-  var (fast, v) = b128_lgamma_fast(x: me)
-  if fast
-    return v
-  return b128_wide(x: me, which: 12_u64)
+    var (fast, v) = b128_lgamma_fast(x: me)
+    if fast
+        return v
+    return b128_wide(x: me, which: 12_u64)

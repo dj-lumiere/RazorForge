@@ -20,16 +20,16 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.display() -> Text
-                          return "point"
+                            return "point"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -44,12 +44,12 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -63,16 +63,16 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.display() -> S32
-                          return 0
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -91,15 +91,15 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         routine Point.display() -> Text
-                          return "point"
+                            return "point"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -114,15 +114,15 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         entity Point obeys Displayable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         routine Point.display() -> Text
-                          return "point"
+                            return "point"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -141,23 +141,23 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         protocol Comparable
-                          @readonly
-                          routine Me.$cmp(other: Me) -> S32
+                            @readonly
+                            routine Me.$cmp(other: Me) -> S32
 
                         record Value obeys Displayable, Comparable
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine Value.display() -> Text
-                          return "value"
+                            return "value"
 
                         @readonly
                         routine Value.$cmp(other: Value) -> S32
-                          return me.value - other.value
+                            return me.value - other.value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -171,19 +171,19 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         protocol Comparable
-                          @readonly
-                          routine Me.$cmp(other: Me) -> S32
+                            @readonly
+                            routine Me.$cmp(other: Me) -> S32
 
                         record Value obeys Displayable, Comparable
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine Value.display() -> Text
-                          return "value"
+                            return "value"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -202,15 +202,15 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Container
-                          @readonly
-                          routine Me.count() -> uaddr
+                            @readonly
+                            routine Me.count() -> uaddr
 
                         entity MyList[T] obeys Container
-                          items: List[T]
+                            items: List[T]
 
                         @readonly
                         routine MyList[T].count() -> uaddr
-                          return 0
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -229,16 +229,16 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(other: Me) -> Me
+                            @readonly
+                            routine Me.$add(other: Me) -> Me
 
                         record Point obeys Addable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.$add(other: Point) -> Point
-                          return Point(x: me.x + other.x, y: me.y + other.y)
+                            return Point(x: me.x + other.x, y: me.y + other.y)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -252,16 +252,16 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(other: Me) -> Me
+                            @readonly
+                            routine Me.$add(other: Me) -> Me
 
                         record Point obeys Addable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.$add(other: S32) -> Point
-                          return Point(x: me.x, y: me.y)
+                            return Point(x: me.x, y: me.y)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -280,15 +280,15 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Countable
-                          @readonly
-                          routine Me.count() -> S32
+                            @readonly
+                            routine Me.count() -> S32
 
                         entity Counter obeys Countable
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine Counter.count() -> S32
-                          return me.value
+                            return me.value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -307,24 +307,24 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         protocol DebugDisplayable obeys Displayable
-                          @readonly
-                          routine Me.debug_display() -> Text
+                            @readonly
+                            routine Me.debug_display() -> Text
 
                         record Point obeys DebugDisplayable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.display() -> Text
-                          return "point"
+                            return "point"
 
                         @readonly
                         routine Point.debug_display() -> Text
-                          return "Point(x, y)"
+                            return "Point(x, y)"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -338,20 +338,20 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         protocol DebugDisplayable obeys Displayable
-                          @readonly
-                          routine Me.debug_display() -> Text
+                            @readonly
+                            routine Me.debug_display() -> Text
 
                         record Point obeys DebugDisplayable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.debug_display() -> Text
-                          return "Point(x, y)"
+                            return "Point(x, y)"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -370,13 +370,13 @@ public class ProtocolImplementationTests
     {
         string source = """
                         record Point
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @generated
                         @readonly
                         routine Point.display() -> Text
-                          return "point"
+                            return "point"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -391,13 +391,13 @@ public class ProtocolImplementationTests
     {
         string source = """
                         record Point
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @innate
                         @readonly
                         routine Point.display() -> Text
-                          return "point"
+                            return "point"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -412,20 +412,20 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Equatable
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
-                          @generated
-                          @readonly
-                          routine Me.$ne(you: Me) -> Bool
+                            @generated
+                            @readonly
+                            routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool
-                          return me.x == you.x and me.y == you.y
+                            return me.x == you.x and me.y == you.y
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -440,12 +440,12 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Lockable
-                          @innate
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @innate
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
                         entity Widget obeys Lockable
-                          name: Text
+                            name: Text
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -465,16 +465,16 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Lockable
-                          @innate
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @innate
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
                         entity Widget obeys Lockable
-                          name: Text
+                            name: Text
 
                         @readonly
                         routine Widget.$eq(you: Widget) -> Bool
-                          return false
+                            return false
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -489,12 +489,12 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Lockable
-                          @innate
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @innate
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
                         entity Widget obeys Lockable
-                          name: Text
+                            name: Text
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -514,24 +514,24 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Equatable
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
-                          @generated
-                          @readonly
-                          routine Me.$ne(you: Me) -> Bool
+                            @generated
+                            @readonly
+                            routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool
-                          return me.x == you.x and me.y == you.y
+                            return me.x == you.x and me.y == you.y
 
                         @readonly
                         routine Point.$ne(you: Point) -> Bool
-                          return me.x != you.x or me.y != you.y
+                            return me.x != you.x or me.y != you.y
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -546,20 +546,20 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Equatable
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
-                          @generated
-                          @readonly
-                          routine Me.$ne(you: Me) -> Bool
+                            @generated
+                            @readonly
+                            routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool
-                          return me.x == you.x and me.y == you.y
+                            return me.x == you.x and me.y == you.y
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -578,14 +578,14 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Configurable
-                          routine Me.configure(value: S32 = 0)
+                            routine Me.configure(value: S32 = 0)
 
                         entity Settings obeys Configurable
-                          value: S32
+                            value: S32
 
                         routine Settings.configure(value: S32 = 0)
-                          me.value = value
-                          return
+                            me.value = value
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -605,15 +605,15 @@ public class ProtocolImplementationTests
         // routine foo[T obeys Displayable, Comparable](item: T)
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         protocol Comparable
-                          @readonly
-                          routine Me.$cmp(other: Me) -> S32
+                            @readonly
+                            routine Me.$cmp(other: Me) -> S32
 
                         routine foo[T obeys Displayable, Comparable](item: T) -> Text
-                          return item.display()
+                            return item.display()
                         """;
 
         AssertParses(source: source);
@@ -627,15 +627,15 @@ public class ProtocolImplementationTests
         // routine foo[T](item: T) needs T obeys Displayable, Comparable -> Text
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         protocol Comparable
-                          @readonly
-                          routine Me.$cmp(other: Me) -> S32
+                            @readonly
+                            routine Me.$cmp(other: Me) -> S32
 
                         routine foo[T](item: T) needs T obeys Displayable, Comparable -> Text
-                          return item.display()
+                            return item.display()
                         """;
 
         AssertParses(source: source);

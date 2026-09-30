@@ -13,28 +13,28 @@ module Tests/Stdlib/SignalCasterPredicateApi
 import IO/Console
 
 suspended routine consumer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
-  sig.lock()
-  danger
-    while cell.peek() == 0_s64    # predicate, tested under the lock
-      sig.wait()                     # releases the lock while parked, re-acquires on wake
-  sig.unlock()
-  danger
-    return cell.peek()
+    sig.lock()
+    danger
+        while cell.peek() == 0_s64    # predicate, tested under the lock
+            sig.wait()                     # releases the lock while parked, re-acquires on wake
+    sig.unlock()
+    danger
+        return cell.peek()
 
 suspended routine producer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
-  danger
-    cell.poke(value: 42_s64)       # make the predicate true...
-  sig.cast_one()                     # ...then wake the waiter
-  return 1
+    danger
+        cell.poke(value: 42_s64)       # make the predicate true...
+    sig.cast_one()                     # ...then wake the waiter
+    return 1
 
 routine start()
-  var slot = 0_s64
-  var sig = SignalCaster()
-  danger
-    var cell = slot.hijack()         # raw pointer to `slot`, copyable -> both coroutines share it
-    # LAZY: launch consumer + producer TOGETHER (`gather`) so the consumer can park on the predicate and
-    # the producer can set it + cast. Retrieving the consumer ALONE would hang. Both complete before we
-    # read the shared cell, so the frame-aliased slot stays valid. Results in input order: [consumer, producer].
-    var results = [consumer(sig: steal sig.duplicate(), cell: cell), producer(sig: steal sig, cell: cell)].gather()
-    show(f"got={results[0]}")
-  return
+    var slot = 0_s64
+    var sig = SignalCaster()
+    danger
+        var cell = slot.hijack()         # raw pointer to `slot`, copyable -> both coroutines share it
+        # LAZY: launch consumer + producer TOGETHER (`gather`) so the consumer can park on the predicate and
+        # the producer can set it + cast. Retrieving the consumer ALONE would hang. Both complete before we
+        # read the shared cell, so the frame-aliased slot stays valid. Results in input order: [consumer, producer].
+        var results = [consumer(sig: steal sig.duplicate(), cell: cell), producer(sig: steal sig, cell: cell)].gather()
+        show(f"got={results[0]}")
+    return

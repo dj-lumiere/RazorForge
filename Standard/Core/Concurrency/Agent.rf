@@ -6,10 +6,10 @@ module Core
 ### Which substrate runs an `Agent[T]`. One concrete handle backs both so a heterogeneous set can be
 ### raced from a single `List[Agent[T]]`.
 choice AgentKind
-  ### Backed by a stackful coroutine on this thread's implicit scheduler (a `suspended routine`).
-  CORO
-  ### Backed by an OS worker thread (a `threaded routine`).
-  THREAD
+    ### Backed by a stackful coroutine on this thread's implicit scheduler (a `suspended routine`).
+    CORO
+    ### Backed by an OS worker thread (a `threaded routine`).
+    THREAD
 
 ### A handle to in-flight work whose result you can fetch with `retrieve()`. One concrete type backs
 ### BOTH kinds of asynchrony so a heterogeneous set can be raced from a `List[Agent[T]]`:
@@ -34,57 +34,57 @@ choice AgentKind
 ### created but never spawned (a recipe you never invoke) leaks its context — rare, and the routine
 ### body never runs, which is the point of laziness.
 record Agent[AnyType T] obeys Assignable
-  ### CORO = coroutine-backed (suspended routine); THREAD = thread-backed (threaded routine).
-  secret kind: AgentKind
-  ### The coroutine handle (rf_coro*) — created INERT at the call site (kind CORO), spawned by a verb.
-  secret coro: CPtr
-  ### The task control block that holds the produced value (the coroutine's result block, or the
-  ### worker's rf_task* for kind THREAD).
-  secret agent: Address
-  ### The wait deadline; only meaningful when `has_deadline` is true (THREAD).
-  secret deadline: Duration
-  ### Whether a deadline has been attached via `waitfor`.
-  secret has_deadline: Bool
-  ### Whether the OS thread was spawned successfully (THREAD).
-  secret spawned: Bool
+    ### CORO = coroutine-backed (suspended routine); THREAD = thread-backed (threaded routine).
+    secret kind: AgentKind
+    ### The coroutine handle (rf_coro*) — created INERT at the call site (kind CORO), spawned by a verb.
+    secret coro: CPtr
+    ### The task control block that holds the produced value (the coroutine's result block, or the
+    ### worker's rf_task* for kind THREAD).
+    secret agent: Address
+    ### The wait deadline; only meaningful when `has_deadline` is true (THREAD).
+    secret deadline: Duration
+    ### Whether a deadline has been attached via `waitfor`.
+    secret has_deadline: Bool
+    ### Whether the OS thread was spawned successfully (THREAD).
+    secret spawned: Bool
 
 ### Whether this Agent is coroutine-backed (kind CORO). Internal plumbing for `race!`, which dispatches
 ### on kind while reading List elements as temporaries (a direct `agent.kind` field read on a generic
 ### List element miscompiles today; going through a member routine monomorphizes the receiver cleanly).
 ### :returns: true if coroutine-backed, false if thread-backed.
 routine Agent[T].is_coro() -> Bool
-  return me.kind == AgentKind.CORO
+    return me.kind == AgentKind.CORO
 
 ### The raw coroutine handle (valid for kind CORO). Internal plumbing for `race!`.
 ### :returns: the rf_coro* as a CPtr.
 routine Agent[T].coro_handle() -> CPtr
-  return me.coro
+    return me.coro
 
 ### The raw task/result control block (both kinds box their produced value here). Internal `race!`
 ### plumbing; also where the winner's value is read from.
 ### :returns: the rf_task* as an Address.
 routine Agent[T].task_handle() -> Address
-  return me.agent
+    return me.agent
 
 ### Whether the work has finished (its value is ready to `retrieve!` without waiting). A racy snapshot
 ### for polling/heuristics, not a synchronization decision — it can flip to true the instant after you
 ### read it. Branches on kind: a coroutine is done at status COMPLETED (3); a thread at COMPLETED (4).
 ### :returns: `true` if the work has completed.
 routine Agent[T].is_done() -> Bool
-  if me.kind == AgentKind.CORO
-    if me.coro.is_none()
-      return true
+    if me.kind == AgentKind.CORO
+        if me.coro.is_none()
+            return true
+        danger
+            return C::rf_coro_status_get(coro: me.coro) == 3_u32
+    if not me.spawned
+        return false
     danger
-      return C::rf_coro_status_get(coro: me.coro) == 3_u32
-  if not me.spawned
-    return false
-  danger
-    return C::rf_task_status_get(task: me.agent) == 4_u32
+        return C::rf_task_status_get(task: me.agent) == 4_u32
 
 ### Whether the work was spawned and has not yet finished. Racy snapshot (see `is_done`).
 ### :returns: `true` if still in flight.
 routine Agent[T].is_running() -> Bool
-  return not me.is_done()
+    return not me.is_done()
 
 ### Requests cooperative cancellation of this agent — sets a flag in NATIVE memory (reached through
 ### the handle) and returns; it NEVER frees or unwinds (teardown stays in `destroy`, the sole
@@ -94,13 +94,13 @@ routine Agent[T].is_running() -> Bool
 ### read through a member routine so it works on a `List[Agent[T]]` element accessed as a temporary
 ### (the flag persists in C even though the RF `Agent` copy does not).
 dangerous routine Agent[T].request_cancel()
-  if me.kind == AgentKind.CORO
-    if not me.coro.is_none()
-      C::rf_coro_request_cancel(coro: me.coro)
+    if me.kind == AgentKind.CORO
+        if not me.coro.is_none()
+            C::rf_coro_request_cancel(coro: me.coro)
+        return
+    if me.spawned
+        C::rf_task_request_cancel(task: me.agent)
     return
-  if me.spawned
-    C::rf_task_request_cancel(task: me.agent)
-  return
 
 ### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve()` on a
 ### thread-backed Agent. The returned value is a TEMPORARY copy aliasing the same worker — use it
@@ -108,8 +108,8 @@ dangerous routine Agent[T].request_cancel()
 ### :param deadline: The maximum time `retrieve!` will wait.
 ### :returns: A copy of this handle carrying the deadline.
 routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
-  return Agent[T](kind: me.kind, coro: me.coro, agent: me.agent,
-                  deadline: deadline, has_deadline: true, spawned: me.spawned)
+    return Agent[T](kind: me.kind, coro: me.coro, agent: me.agent,
+                    deadline: deadline, has_deadline: true, spawned: me.spawned)
 
 ### Drives the work to completion and returns its produced value. UNCOLORED: a thread-backed Agent
 ### awaited inside a scheduler-driven coroutine PARKS (siblings run meanwhile) instead of blocking;
@@ -123,63 +123,63 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
 routine Agent[T].retrieve!() -> T
-  if me.kind == AgentKind.CORO
-    if me.coro.is_none()
-      throw TaskSpawnError()
+    if me.kind == AgentKind.CORO
+        if me.coro.is_none()
+            throw TaskSpawnError()
+        danger
+            # LAZY: the recipe's coroutine was created inert at the call site — launch it now, then drive
+            # this thread's pool until it finishes.
+            C::rf_sched_spawn_default(coro: me.coro)
+            C::rf_sched_run_until_default(coro: me.coro)
+            var payload = C::rf_task_result_payload(task: me.agent)
+            var value = Hijacked[T](from: payload).peek()
+            rf_invalidate(ptr: payload)
+            # Value is copied out; reap the coroutine + its result block. This is the single consumer.
+            me.reap()
+            return value
+
+    if not me.spawned
+        throw TaskSpawnError()
     danger
-      # LAZY: the recipe's coroutine was created inert at the call site — launch it now, then drive
-      # this thread's pool until it finishes.
-      C::rf_sched_spawn_default(coro: me.coro)
-      C::rf_sched_run_until_default(coro: me.coro)
-      var payload = C::rf_task_result_payload(task: me.agent)
-      var value = Hijacked[T](from: payload).peek()
-      rf_invalidate(ptr: payload)
-      # Value is copied out; reap the coroutine + its result block. This is the single consumer.
-      me.reap()
-      return value
+        if me.has_deadline
+            var total = me.deadline.total_nanoseconds()
+            if C::rf_in_coroutine() != 0_u32
+                # Inside a scheduler-driven coroutine: race the worker against the deadline WITHOUT
+                # blocking. Park on a deadline timer that is also externally wakeable; siblings run.
+                # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — destroy
+                # joins the still-running worker before freeing (the timeout does not stop it).
+                var outcome = C::rf_task_await_coro_deadline(task: me.agent, timeout_ns: U64(total))
+                if outcome == 0_u32
+                    # Deadline won; give up. Reap hands the free to the still-running worker, which frees its own
+                    # block as its final act (non-blocking; destroy is a no-op).
+                    me.reap()
+                    throw TaskTimeoutError()
+            else
+                var secs = total // 1000000000
+                var nanos = U32(total - secs * 1000000000)
+                var kind = C::rf_task_wait_within(task: me.agent, secs: secs, ns: nanos)
+                if kind != 1
+                    # Deadline won on a plain thread; give up. Reap lets the still-running worker free its own
+                    # block on exit (non-blocking; destroy is a no-op).
+                    me.reap()
+                    throw TaskTimeoutError()
+        else
+            if C::rf_in_coroutine() != 0_u32
+                # Inside a scheduler-driven coroutine: park instead of blocking. Register as the task's
+                # awaiter and yield; the worker wakes us (cross-thread) on completion. The loop re-checks
+                # under the lock so no wake is lost, and tolerates spurious wakes.
+                while C::rf_task_await_coro(task: me.agent) == 0_u32
+                    C::rf_sched_park_external()
+            else
+                discard C::rf_task_wait(task: me.agent)
 
-  if not me.spawned
-    throw TaskSpawnError()
-  danger
-    if me.has_deadline
-      var total = me.deadline.total_nanoseconds()
-      if C::rf_in_coroutine() != 0_u32
-        # Inside a scheduler-driven coroutine: race the worker against the deadline WITHOUT
-        # blocking. Park on a deadline timer that is also externally wakeable; siblings run.
-        # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — destroy
-        # joins the still-running worker before freeing (the timeout does not stop it).
-        var outcome = C::rf_task_await_coro_deadline(task: me.agent, timeout_ns: U64(total))
-        if outcome == 0_u32
-          # Deadline won; give up. Reap hands the free to the still-running worker, which frees its own
-          # block as its final act (non-blocking; destroy is a no-op).
-          me.reap()
-          throw TaskTimeoutError()
-      else
-        var secs = total // 1000000000
-        var nanos = U32(total - secs * 1000000000)
-        var kind = C::rf_task_wait_within(task: me.agent, secs: secs, ns: nanos)
-        if kind != 1
-          # Deadline won on a plain thread; give up. Reap lets the still-running worker free its own
-          # block on exit (non-blocking; destroy is a no-op).
-          me.reap()
-          throw TaskTimeoutError()
-    else
-      if C::rf_in_coroutine() != 0_u32
-        # Inside a scheduler-driven coroutine: park instead of blocking. Register as the task's
-        # awaiter and yield; the worker wakes us (cross-thread) on completion. The loop re-checks
-        # under the lock so no wake is lost, and tolerates spurious wakes.
-        while C::rf_task_await_coro(task: me.agent) == 0_u32
-          C::rf_sched_park_external()
-      else
-        discard C::rf_task_wait(task: me.agent)
-
-    var payload = C::rf_task_result_payload(task: me.agent)
-    var value = Hijacked[T](from: payload).peek()
-    rf_invalidate(ptr: payload)
-    # Value is copied out; reap. This is the single driving retrieve!; handle copies (e.g. from
-    # `waitfor`) never reach here — their `destroy` is a no-op — so the worker is freed exactly once.
-    me.reap()
-    return value
+        var payload = C::rf_task_result_payload(task: me.agent)
+        var value = Hijacked[T](from: payload).peek()
+        rf_invalidate(ptr: payload)
+        # Value is copied out; reap. This is the single driving retrieve!; handle copies (e.g. from
+        # `waitfor`) never reach here — their `destroy` is a no-op — so the worker is freed exactly once.
+        me.reap()
+        return value
 
 ### Drives the work to completion and DISCARDS its produced value — the recipe model's `execute` verb,
 ### the twin of `retrieve!` (which returns the value). Use it for fire-and-forget work whose COMPLETION
@@ -192,28 +192,28 @@ routine Agent[T].retrieve!() -> T
 ### :throws: {TaskSpawnError} if the work could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 routine Agent[T].execute!()
-  if me.kind == AgentKind.CORO
-    if me.coro.is_none()
-      throw TaskSpawnError()
+    if me.kind == AgentKind.CORO
+        if me.coro.is_none()
+            throw TaskSpawnError()
+        danger
+            # Fire-and-forget: mark the INERT coroutine + its result task detached BEFORE spawning, so the
+            # pool worker that completes it frees both itself (no consumer, and no complete-before-detach
+            # race — nothing runs until the spawn below). Then spawn and return immediately: the work runs
+            # to completion in the background. An owned return value's box is freed as raw memory (its typed
+            # destroy does not run yet — a discard thunk is the follow-up; None/trivial returns are exact).
+            C::rf_coro_set_detached(coro: me.coro)
+            C::rf_task_set_detached(task: me.agent)
+            C::rf_sched_spawn_default(coro: me.coro)
+        return
+    # THREAD: the OS thread is already running (spawned eagerly at the call site). Mark its task detached
+    # and return immediately — the worker frees the task + unread result box itself on exit, no consumer.
+    # rf_task_set_detached coordinates under the task lock with the worker's self-reap, so it is race-safe
+    # even if the worker completes before (or during) this call.
+    if not me.spawned
+        throw TaskSpawnError()
     danger
-      # Fire-and-forget: mark the INERT coroutine + its result task detached BEFORE spawning, so the
-      # pool worker that completes it frees both itself (no consumer, and no complete-before-detach
-      # race — nothing runs until the spawn below). Then spawn and return immediately: the work runs
-      # to completion in the background. An owned return value's box is freed as raw memory (its typed
-      # destroy does not run yet — a discard thunk is the follow-up; None/trivial returns are exact).
-      C::rf_coro_set_detached(coro: me.coro)
-      C::rf_task_set_detached(task: me.agent)
-      C::rf_sched_spawn_default(coro: me.coro)
+        C::rf_task_set_detached(task: me.agent)
     return
-  # THREAD: the OS thread is already running (spawned eagerly at the call site). Mark its task detached
-  # and return immediately — the worker frees the task + unread result box itself on exit, no consumer.
-  # rf_task_set_detached coordinates under the task lock with the worker's self-reap, so it is race-safe
-  # even if the worker completes before (or during) this call.
-  if not me.spawned
-    throw TaskSpawnError()
-  danger
-    C::rf_task_set_detached(task: me.agent)
-  return
 
 ### Reaps this agent's work — the SOLE freeing path, called EXACTLY ONCE by the consumer that is done
 ### with it (`retrieve!` after reading the value or a deadline give-up; `race!` over its whole set).
@@ -224,39 +224,39 @@ routine Agent[T].execute!()
 ### rendezvous — a still-running worker (a deadline give-up, or a race loser) frees its own block as its
 ### final act, so reaping is NON-BLOCKING (no join).
 dangerous routine Agent[T].reap()
-  if me.kind == AgentKind.CORO
-    if not me.coro.is_none()
-      var status = C::rf_coro_status_get(coro: me.coro)
-      # Dispose race-free against the work-stealing workers. `rf_sched_dispose_default` detaches the
-      # coroutine from the pool and, under the scheduler lock, decides whether WE may free it now (returns
-      # 1) or the free was DEFERRED (returns 0) because a worker still holds it (RUNNING, or mid-pop between
-      # the deque pop and the RUNNING store). Freeing a coroutine a worker is one step from resuming is the
-      # M:N use-after-free (worker co_switch()es a freed stack → jump to NULL → SIGSEGV); deferring lets the
-      # worker free it from its completion path instead. A plain `unschedule + free` cannot see the mid-pop
-      # window and races that resume.
-      if status == 3_u32                # RF_CORO_COMPLETED
-        if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
-          C::rf_coro_delete(coro: me.coro)
-      else
-        # Not driven to completion (a race loser). If disposal succeeds now (parked / idle / removed) run
-        # its cancellation shadow stack + free (abandon); if deferred (still RUNNING) the coroutine runs to
-        # completion and the worker frees it — its own scope teardown replaces the abandon walk.
-        if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
-          C::rf_coro_abandon(coro: me.coro)
-      C::rf_task_destroy(task: me.agent)
-      # The coroutine + task are freed; NULL the handle so a post-consume query on this Agent
-      # (`is_done()` / `is_running()`) reports "done" via the is_none short-circuit instead of reading
-      # the freed rf_coro's status — that read is a use-after-free whose result is platform-dependent
-      # (Windows fibers happen to still read COMPLETED; libco's free() scribbles it → false). `me` is a
-      # by-reference receiver (as for iterator `me.index` mutation), so this reaches the caller's handle.
-      me.coro = cptr_none()
-    return
+    if me.kind == AgentKind.CORO
+        if not me.coro.is_none()
+            var status = C::rf_coro_status_get(coro: me.coro)
+            # Dispose race-free against the work-stealing workers. `rf_sched_dispose_default` detaches the
+            # coroutine from the pool and, under the scheduler lock, decides whether WE may free it now (returns
+            # 1) or the free was DEFERRED (returns 0) because a worker still holds it (RUNNING, or mid-pop between
+            # the deque pop and the RUNNING store). Freeing a coroutine a worker is one step from resuming is the
+            # M:N use-after-free (worker co_switch()es a freed stack → jump to NULL → SIGSEGV); deferring lets the
+            # worker free it from its completion path instead. A plain `unschedule + free` cannot see the mid-pop
+            # window and races that resume.
+            if status == 3_u32                # RF_CORO_COMPLETED
+                if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
+                    C::rf_coro_delete(coro: me.coro)
+            else
+                # Not driven to completion (a race loser). If disposal succeeds now (parked / idle / removed) run
+                # its cancellation shadow stack + free (abandon); if deferred (still RUNNING) the coroutine runs to
+                # completion and the worker frees it — its own scope teardown replaces the abandon walk.
+                if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
+                    C::rf_coro_abandon(coro: me.coro)
+            C::rf_task_destroy(task: me.agent)
+            # The coroutine + task are freed; NULL the handle so a post-consume query on this Agent
+            # (`is_done()` / `is_running()`) reports "done" via the is_none short-circuit instead of reading
+            # the freed rf_coro's status — that read is a use-after-free whose result is platform-dependent
+            # (Windows fibers happen to still read COMPLETED; libco's free() scribbles it → false). `me` is a
+            # by-reference receiver (as for iterator `me.index` mutation), so this reaches the caller's handle.
+            me.coro = cptr_none()
+        return
 
-  # Threaded: hand the free to the worker↔consumer rendezvous. A completed worker's block is freed here
-  # or at the worker's exit (whichever is last); a still-running worker (deadline give-up / race loser)
-  # frees its own block on exit — no join.
-  C::rf_task_release(task: me.agent)
-  return
+    # Threaded: hand the free to the worker↔consumer rendezvous. A completed worker's block is freed here
+    # or at the worker's exit (whichever is last); a still-running worker (deadline give-up / race loser)
+    # frees its own block on exit — no join.
+    C::rf_task_release(task: me.agent)
+    return
 
 ### Teardown is a NO-OP: an Agent handle never owns its work's lifetime — the sole consuming operation
 ### (`retrieve!` / `race!` / `gather!`) reaps it (see `reap`). So a handle copy (from `waitfor`, or a
@@ -265,7 +265,7 @@ dangerous routine Agent[T].reap()
 ### leaks its children (rare — structured-concurrency scopes always race/gather them).
 @override
 dangerous routine Agent[T].destroy()
-  return
+    return
 
 # --- Structured concurrency over a set of Agents -----------------------------------------------
 # A `List[Agent[T]]` bound to a name IS the structured-concurrency scope: ownership already
@@ -283,39 +283,39 @@ dangerous routine Agent[T].destroy()
 ### :throws: {TaskSpawnError} if the set is empty (there is nothing to race).
 ### :returns: The value produced by the first Agent to finish.
 routine List[Agent[V]].race!() -> V
-  danger
-    var n = me.count()
-    if n == 0_u64
-      throw TaskSpawnError()
+    danger
+        var n = me.count()
+        if n == 0_u64
+            throw TaskSpawnError()
 
-    var race = C::rf_race_begin()
-    var i = 0_u64
-    while i < n
-      if me[i].is_coro()
-        # LAZY: spawn each recipe's inert coroutine so the whole set runs CONCURRENTLY, then race.
-        C::rf_sched_spawn_default(coro: me[i].coro_handle())
-        C::rf_race_add_coro(race: race, coro: me[i].coro_handle())
-      else
-        C::rf_race_add_task(race: race, task: me[i].task_handle())
-      i = i + 1
+        var race = C::rf_race_begin()
+        var i = 0_u64
+        while i < n
+            if me[i].is_coro()
+                # LAZY: spawn each recipe's inert coroutine so the whole set runs CONCURRENTLY, then race.
+                C::rf_sched_spawn_default(coro: me[i].coro_handle())
+                C::rf_race_add_coro(race: race, coro: me[i].coro_handle())
+            else
+                C::rf_race_add_task(race: race, task: me[i].task_handle())
+            i = i + 1
 
-    # Drive until the first competitor completes; `winner` indexes the List in add order. Both kinds
-    # box their produced value into a task block referenced by `agent`, so extraction is uniform.
-    var winner = C::rf_race_wait(race: race)
-    C::rf_race_end(race: race)
-    var w = U64(winner)
-    var payload = C::rf_task_result_payload(task: me[w].task_handle())
-    var value = Hijacked[V](from: payload).peek()
-    rf_invalidate(ptr: payload)
-    # race! is the sole consumer of this set: the winner's value is read, the losers are never
-    # retrieved. Reap EVERY agent exactly once here (winner + losers) — a still-running loser's worker
-    # frees its own block on exit (non-blocking). The List's own teardown (Agent.destroy) is a no-op,
-    # so nothing double-frees; without this, none of the raced agents would ever be freed.
-    var k = 0_u64
-    while k < n
-      me[k].reap()
-      k = k + 1
-    return value
+        # Drive until the first competitor completes; `winner` indexes the List in add order. Both kinds
+        # box their produced value into a task block referenced by `agent`, so extraction is uniform.
+        var winner = C::rf_race_wait(race: race)
+        C::rf_race_end(race: race)
+        var w = U64(winner)
+        var payload = C::rf_task_result_payload(task: me[w].task_handle())
+        var value = Hijacked[V](from: payload).peek()
+        rf_invalidate(ptr: payload)
+        # race! is the sole consumer of this set: the winner's value is read, the losers are never
+        # retrieved. Reap EVERY agent exactly once here (winner + losers) — a still-running loser's worker
+        # frees its own block on exit (non-blocking). The List's own teardown (Agent.destroy) is a no-op,
+        # so nothing double-frees; without this, none of the raced agents would ever be freed.
+        var k = 0_u64
+        while k < n
+            me[k].reap()
+            k = k + 1
+        return value
 
 ### Drives the Agents CONCURRENTLY and waits for ALL of them to finish, returning their results in
 ### INPUT order. The twin of `race!` (first finisher); `gather!` returns every finisher. BORROWS the
@@ -326,24 +326,24 @@ routine List[Agent[V]].race!() -> V
 ### scope exit. An empty set yields an empty list.
 ### :returns: The values produced by every Agent, in the order they appear in the list.
 routine List[Agent[V]].gather!() -> List[V]
-  danger
-    var n = me.count()
-    # LAZY: launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
-    # one-by-one would serialize timing-heavy children (park/resume) into N× the wall-clock. retrieve!'s
-    # own spawn is IDEMPOTENT (rf_sched_spawn guards the initial enqueue), so its re-spawn below is a
-    # no-op on these already-launched coroutines. (THREAD recipes are spawned at the call site.)
-    var i = 0_u64
-    while i < n
-      if me[i].is_coro()
-        C::rf_sched_spawn_default(coro: me[i].coro_handle())
-      i = i + 1
-    var results = List[V]()
-    i = 0_u64
-    while i < n
-      var value = me[i].retrieve()
-      results.add_last(value: value)
-      i = i + 1
-    return results
+    danger
+        var n = me.count()
+        # LAZY: launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
+        # one-by-one would serialize timing-heavy children (park/resume) into N× the wall-clock. retrieve!'s
+        # own spawn is IDEMPOTENT (rf_sched_spawn guards the initial enqueue), so its re-spawn below is a
+        # no-op on these already-launched coroutines. (THREAD recipes are spawned at the call site.)
+        var i = 0_u64
+        while i < n
+            if me[i].is_coro()
+                C::rf_sched_spawn_default(coro: me[i].coro_handle())
+            i = i + 1
+        var results = List[V]()
+        i = 0_u64
+        while i < n
+            var value = me[i].retrieve()
+            results.add_last(value: value)
+            i = i + 1
+        return results
 
 ### Requests cooperative cancellation of EVERY Agent in the set, then waits out the wind-down,
 ### returning each Agent's final value in input order (a cooperative worker returns its own sentinel
@@ -355,26 +355,26 @@ routine List[Agent[V]].gather!() -> List[V]
 ### cancel WITHOUT waiting, simply let the list tear down at scope exit (abandon-all).
 ### :returns: Each Agent's final value, in input order.
 routine List[Agent[V]].cancel_all!() -> List[V]
-  danger
-    var n = me.count()
-    var i = 0u64
-    while i < n
-      me[i].request_cancel()
-      i = i + 1
-    # LAZY: launch the whole set CONCURRENTLY (so they run + observe the cancel together), then drive
-    # each to its wind-down. retrieve!'s spawn is idempotent, so re-spawning these is a no-op.
-    i = 0u64
-    while i < n
-      if me[i].is_coro()
-        C::rf_sched_spawn_default(coro: me[i].coro_handle())
-      i = i + 1
-    var results = List[V]()
-    i = 0u64
-    while i < n
-      var value = me[i].retrieve()
-      results.add_last(value: value)
-      i = i + 1
-    return results
+    danger
+        var n = me.count()
+        var i = 0u64
+        while i < n
+            me[i].request_cancel()
+            i = i + 1
+        # LAZY: launch the whole set CONCURRENTLY (so they run + observe the cancel together), then drive
+        # each to its wind-down. retrieve!'s spawn is idempotent, so re-spawning these is a no-op.
+        i = 0u64
+        while i < n
+            if me[i].is_coro()
+                C::rf_sched_spawn_default(coro: me[i].coro_handle())
+            i = i + 1
+        var results = List[V]()
+        i = 0u64
+        while i < n
+            var value = me[i].retrieve()
+            results.add_last(value: value)
+            i = i + 1
+        return results
 
 ### Waits for `duration` to elapse. UNCOLORED: inside a scheduler-driven coroutine it PARKS — the
 ### scheduler runs other coroutines meanwhile and resumes this one when the timer fires — so it
@@ -382,20 +382,20 @@ routine List[Agent[V]].cancel_all!() -> List[V]
 ### thing in either context, which is why it is preferable to a raw `sleep`.
 ### :param duration: How long to wait.
 routine waitfor(duration: Duration)
-  # Interruptible: once cancellation has been requested for this agent, waitfor is a no-op so a
-  # cooperative loop (`while ...: waitfor(...); if cancellation_requested(): return`) exits promptly
-  # instead of sleeping out the full duration.
-  if C::rf_cancel_requested() != 0_u32
+    # Interruptible: once cancellation has been requested for this agent, waitfor is a no-op so a
+    # cooperative loop (`while ...: waitfor(...); if cancellation_requested(): return`) exits promptly
+    # instead of sleeping out the full duration.
+    if C::rf_cancel_requested() != 0_u32
+        return
+    danger
+        var total = duration.total_nanoseconds()
+        if C::rf_in_coroutine() != 0_u32
+            C::rf_sched_park_timer(delay_ns: U64(total))
+        else
+            var secs = total // 1000000000
+            var nanos = U32(total - secs * 1000000000)
+            C::rf_waitfor_duration(secs: secs, ns: nanos)
     return
-  danger
-    var total = duration.total_nanoseconds()
-    if C::rf_in_coroutine() != 0_u32
-      C::rf_sched_park_timer(delay_ns: U64(total))
-    else
-      var secs = total // 1000000000
-      var nanos = U32(total - secs * 1000000000)
-      C::rf_waitfor_duration(secs: secs, ns: nanos)
-  return
 
 ### Cooperatively hands the current turn back to the scheduler, then immediately re-queues this
 ### coroutine as READY — the scheduler runs the other ready coroutines once before resuming here on
@@ -405,10 +405,10 @@ routine waitfor(duration: Duration)
 ### UNCOLORED: outside a scheduler-driven coroutine (a plain thread) there is no turn to yield, so it
 ### is a no-op.
 routine yield_now()
-  danger
-    if C::rf_in_coroutine() != 0_u32
-      C::rf_coro_yield()
-  return
+    danger
+        if C::rf_in_coroutine() != 0_u32
+            C::rf_coro_yield()
+    return
 
 ### Whether cooperative cancellation has been requested for the currently-running agent — a
 ### `suspended` coroutine or a `threaded` worker. An agent body polls this and returns early to stop
@@ -416,4 +416,4 @@ routine yield_now()
 ### A coroutine's `waitfor` also honors the request by returning early. Outside any agent it is always
 ### false. :returns: true if cancellation was requested for this agent.
 routine cancellation_requested() -> Bool
-  return C::rf_cancel_requested() != 0_u32
+    return C::rf_cancel_requested() != 0_u32

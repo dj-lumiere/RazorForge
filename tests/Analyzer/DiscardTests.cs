@@ -24,11 +24,11 @@ public class DiscardTests
     {
         string source = """
                         routine get_value() -> S32
-                          return 42
+                            return 42
 
                         routine test()
-                          discard get_value()
-                          return
+                            discard get_value()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -47,11 +47,11 @@ public class DiscardTests
         // remove SW007 from SuppressedWarnings (and expect fixtures/stdlib to need `discard`).
         string source = """
                         routine get_value() -> S32
-                          return 42
+                            return 42
 
                         routine test()
-                          get_value()
-                          return
+                            get_value()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -67,12 +67,12 @@ public class DiscardTests
     {
         string source = """
                         routine do_something()
-                          pass
-                          return
+                            pass
+                            return
 
                         routine test()
-                          do_something()
-                          return
+                            do_something()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -87,11 +87,11 @@ public class DiscardTests
     {
         string source = """
                         routine get_value() -> S32
-                          return 42
+                            return 42
 
                         routine test()
-                          var x = get_value()
-                          return
+                            var x = get_value()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -109,18 +109,18 @@ public class DiscardTests
     {
         string source = """
                         routine get_value() -> S32
-                          return 42
+                            return 42
 
                         record Wrapper
-                          value: S32
+                            value: S32
 
                         routine Wrapper.extract(self: Wrapper) -> S32
-                          return self.value
+                            return self.value
 
                         routine test()
-                          var w = Wrapper(value: 0)
-                          discard w.extract(w)
-                          return
+                            var w = Wrapper(value: 0)
+                            discard w.extract(w)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -134,15 +134,15 @@ public class DiscardTests
     {
         string source = """
                         record Counter
-                          value: S32
+                            value: S32
 
                         routine Counter.increment(self: Counter) -> Counter
-                          return Counter(value: self.value)
+                            return Counter(value: self.value)
 
                         routine test()
-                          var c = Counter(value: 0)
-                          discard c.increment()
-                          return
+                            var c = Counter(value: 0)
+                            discard c.increment()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -155,15 +155,15 @@ public class DiscardTests
     {
         string source = """
                         record Wrapper
-                          value: S32
+                            value: S32
 
                         routine Wrapper.get_value!(self: Wrapper) -> S32
-                          return self.value
+                            return self.value
 
                         routine test()
-                          var w = Wrapper(value: 42)
-                          discard w.get_value()
-                          return
+                            var w = Wrapper(value: 42)
+                            discard w.get_value()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -181,13 +181,13 @@ public class DiscardTests
     {
         string source = """
                         routine get!(flag: Bool) -> S32
-                          if flag
-                            absent
-                          return 42
+                            if flag
+                                absent
+                            return 42
 
                         routine test!()
-                          discard get(flag: true)
-                          return
+                            discard get(flag: true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -204,13 +204,13 @@ public class DiscardTests
     {
         string source = """
                         routine get!(flag: Bool) -> S32
-                          if flag
-                            absent
-                          return 42
+                            if flag
+                                absent
+                            return 42
 
                         routine test()
-                          discard get(flag: true)
-                          return
+                            discard get(flag: true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -226,13 +226,13 @@ public class DiscardTests
     {
         string source = """
                         routine get!(flag: Bool) -> S32
-                          if flag
-                            absent
-                          return 42
+                            if flag
+                                absent
+                            return 42
 
                         routine test()
-                          discard try get(flag: true)
-                          return
+                            discard try get(flag: true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -251,18 +251,18 @@ public class DiscardTests
     {
         string source = """
                         record Counter
-                          value: S32
+                            value: S32
 
                         routine Counter.incremented(n: S32) -> Counter
-                          return Counter(value: me.value)
+                            return Counter(value: me.value)
 
                         routine Counter.get_value() -> S32
-                          return me.value
+                            return me.value
 
                         routine test()
-                          var c = Counter(value: 0)
-                          discard c.incremented(n: 1).get_value()
-                          return
+                            var c = Counter(value: 0)
+                            discard c.incremented(n: 1).get_value()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -276,12 +276,12 @@ public class DiscardTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine test()
-                          discard Point(x: 1, y: 2)
-                          return
+                            discard Point(x: 1, y: 2)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -295,15 +295,15 @@ public class DiscardTests
     {
         string source = """
                         routine get_a() -> S32
-                          return 1
+                            return 1
 
                         routine get_b() -> S32
-                          return 2
+                            return 2
 
                         routine test()
-                          discard get_a()
-                          discard get_b()
-                          return
+                            discard get_a()
+                            discard get_b()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -319,16 +319,16 @@ public class DiscardTests
     {
         string source = """
                         record Logger
-                          count: S32
+                            count: S32
 
                         routine Logger.log(message: Text)
-                          pass
-                          return
+                            pass
+                            return
 
                         routine test()
-                          var lg = Logger(count: 0)
-                          discard lg.log(message: "hello")
-                          return
+                            var lg = Logger(count: 0)
+                            discard lg.log(message: "hello")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -349,9 +349,9 @@ public class DiscardTests
     {
         string source = """
                         routine test()
-                          var x = 42
-                          discard x
-                          return
+                            var x = 42
+                            discard x
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -365,8 +365,8 @@ public class DiscardTests
     {
         string source = """
                         routine test()
-                          discard 42
-                          return
+                            discard 42
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -380,8 +380,8 @@ public class DiscardTests
     {
         string source = """
                         routine test()
-                          discard "hello"
-                          return
+                            discard "hello"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -395,12 +395,12 @@ public class DiscardTests
     {
         string source = """
                         record Wrapper
-                          value: S32
+                            value: S32
 
                         routine test()
-                          var w = Wrapper(value: 42)
-                          discard w.value
-                          return
+                            var w = Wrapper(value: 42)
+                            discard w.value
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

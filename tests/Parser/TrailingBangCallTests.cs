@@ -20,9 +20,9 @@ public class TrailingBangCallTests
         string source = """
                         module L/Test
                         routine f!() -> S64
-                          return g()!
+                            return g()!
                         routine g!() -> S64
-                          return 0_s64
+                            return 0_s64
                         """;
         AssertParseError(source: source);
     }
@@ -36,7 +36,7 @@ public class TrailingBangCallTests
         string source = """
                         module L/Test
                         routine narrow!(x: S128) -> S64
-                          return S64(from: x)!
+                            return S64(from: x)!
                         """;
         AssertParseError(source: source);
     }
@@ -50,7 +50,7 @@ public class TrailingBangCallTests
         string source = """
                         module L/Test
                         routine pick!(cond: Bool, a: U64, b: U64) -> S64
-                          return if cond then S64(from: a)! else S64(from: b)!
+                            return if cond then S64(from: a)! else S64(from: b)!
                         """;
         AssertParseError(source: source);
     }
@@ -68,10 +68,10 @@ public class TrailingBangCallTests
                         module L/Test
                         import IO/Console
                         routine f(value: S64) -> S64
-                          return value
+                            return value
                         routine start()
-                          show(f"called: {f(value: 2)}")
-                          return
+                            show(f"called: {f(value: 2)}")
+                            return
                         """;
         AssertParses(source: source);
     }
@@ -83,9 +83,9 @@ public class TrailingBangCallTests
         string source = """
                         module L/Test
                         routine f!() -> S64
-                          return g!()
+                            return g!()
                         routine g!() -> S64
-                          throw DivisionByZeroError()
+                            throw DivisionByZeroError()
                         """;
         AssertParseError(source: source);
     }
@@ -97,7 +97,7 @@ public class TrailingBangCallTests
         string source = """
                         module L/Test
                         routine f(xs: List[S64]) -> S64
-                          return xs.last!()
+                            return xs.last!()
                         """;
         AssertParseError(source: source);
     }
@@ -109,7 +109,7 @@ public class TrailingBangCallTests
         string source = """
                         module L/Test
                         routine f(t: Text) -> S64
-                          return parse_as![S64](t)
+                            return parse_as![S64](t)
                         """;
         AssertParseError(source: source);
     }
@@ -123,9 +123,9 @@ public class TrailingBangCallTests
         string source = """
                         module L/Test
                         routine f!() -> S64
-                          return g()
+                            return g()
                         routine g!() -> S64
-                          return 0_s64
+                            return 0_s64
                         """;
         Program result = Parse(source: source);
         Assert.NotNull(@object: result);

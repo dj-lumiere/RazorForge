@@ -20,47 +20,47 @@ secret preset B32_LOG2_LIX: Array[U64, 65] = [0x0000000000000000_u64, 0xBF96E796
 ### `log2(±0) == -infinity`, `log2(+infinity) == +infinity`, a negative input gives NaN and NaN maps to NaN.
 ### :returns: The correctly rounded base-2 logarithm.
 routine B32.log2_unchecked() -> B32
-  var ux = me.to_bits()
-  if ux >= 0x7F800000_u32
-    # <= -0, NaN, infinity
-    return b32_log2_special(x: me)
-  if ux < 0x00800000_u32
-    if ux == 0
-      return b32_log2_special(x: me)
-    # subnormal: normalize
-    var n = ux.leading_zeros() - 8
-    ux = ux << n
-    ux = ux -% (n << 23)
-  var e = LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[U32, S32](ux) >> 23) - 127
-  var m = ux & 0x7FFFFF_u32
-  if m == 0
-    return B32(from: e)
-  var j = LLVM::zero_extend[U32, U64]((m + 0x10000_u32) >>> 17)
-  var xd = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](m) << 29) | 0x3FF0000000000000_u64)
-  var z = xd *! B64.from_bits(bits: B32_LOG2_IX[j]) -! 1.0
-  var z2 = z *! z
-  var el = B64(from: e) -! B64.from_bits(bits: B32_LOG2_LIX[j])
-  var f = (el +! z *! 0x1.7154765bab2b5p+0) +! z2 *! (-0x1.71574d6939f6cp-1 +! z *! 0x1.ec60b584ca47fp-2)
-  var lb = B32(from: f)
-  var ub = B32(from: f +! 0x1.661p-32)
-  if lb == ub
-    return lb
-  # the fast path cannot decide the rounding: a longer polynomial
-  var c0 = 0x1.71547652b8314p+0 -! z *! 0x1.71547652b7f67p-1
-  var c2 = 0x1.ec709db872c63p-2 -! z *! 0x1.715476b064cdfp-2
-  var c4 = 0x1.277c72c15441fp-2 -! z *! 0x1.ec4ff35b64c31p-3
-  c0 = c0 +! z2 *! (c2 +! z2 *! c4)
-  return B32(from: el +! z *! c0)
+    var ux = me.to_bits()
+    if ux >= 0x7F800000_u32
+        # <= -0, NaN, infinity
+        return b32_log2_special(x: me)
+    if ux < 0x00800000_u32
+        if ux == 0
+            return b32_log2_special(x: me)
+        # subnormal: normalize
+        var n = ux.leading_zeros() - 8
+        ux = ux << n
+        ux = ux -% (n << 23)
+    var e = LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[U32, S32](ux) >> 23) - 127
+    var m = ux & 0x7FFFFF_u32
+    if m == 0
+        return B32(from: e)
+    var j = LLVM::zero_extend[U32, U64]((m + 0x10000_u32) >>> 17)
+    var xd = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](m) << 29) | 0x3FF0000000000000_u64)
+    var z = xd *! B64.from_bits(bits: B32_LOG2_IX[j]) -! 1.0
+    var z2 = z *! z
+    var el = B64(from: e) -! B64.from_bits(bits: B32_LOG2_LIX[j])
+    var f = (el +! z *! 0x1.7154765bab2b5p+0) +! z2 *! (-0x1.71574d6939f6cp-1 +! z *! 0x1.ec60b584ca47fp-2)
+    var lb = B32(from: f)
+    var ub = B32(from: f +! 0x1.661p-32)
+    if lb == ub
+        return lb
+    # the fast path cannot decide the rounding: a longer polynomial
+    var c0 = 0x1.71547652b8314p+0 -! z *! 0x1.71547652b7f67p-1
+    var c2 = 0x1.ec709db872c63p-2 -! z *! 0x1.715476b064cdfp-2
+    var c4 = 0x1.277c72c15441fp-2 -! z *! 0x1.ec4ff35b64c31p-3
+    c0 = c0 +! z2 *! (c2 +! z2 *! c4)
+    return B32(from: el +! z *! c0)
 
 ### log2 of ±0 (-infinity), +infinity (itself), NaN (itself) or a negative input (NaN).
 ### :param x: The special input.
 ### :returns: The special result.
 secret routine b32_log2_special(x: B32) -> B32
-  var ux = x.to_bits()
-  if (ux << 1) == 0
-    return B32.from_bits(bits: 0xFF800000_u32)
-  if ux == 0x7F800000_u32
-    return x
-  if (ux << 1) > 0xFF000000_u32
-    return x +! x
-  return B32.from_bits(bits: 0xFFC00000_u32)
+    var ux = x.to_bits()
+    if (ux << 1) == 0
+        return B32.from_bits(bits: 0xFF800000_u32)
+    if ux == 0x7F800000_u32
+        return x
+    if (ux << 1) > 0xFF000000_u32
+        return x +! x
+    return B32.from_bits(bits: 0xFFC00000_u32)

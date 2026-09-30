@@ -16,8 +16,8 @@ public class FStringNestedLiteralTests
     {
         string source = """"
                         routine start()
-                          show(f"x: {f(bytes: b"42")}")
-                          return
+                            show(f"x: {f(bytes: b"42")}")
+                            return
                         """";
 
         AssertParses(source: source);
@@ -28,8 +28,8 @@ public class FStringNestedLiteralTests
     {
         string source = """"
                         routine start()
-                          show(f"x: {len(s: "hi")}")
-                          return
+                            show(f"x: {len(s: "hi")}")
+                            return
                         """";
 
         AssertParses(source: source);
@@ -40,8 +40,8 @@ public class FStringNestedLiteralTests
     {
         string source = """"
                         routine start()
-                          show(f"x: {parse(s: r"\d+")}")
-                          return
+                            show(f"x: {parse(s: r"\d+")}")
+                            return
                         """";
 
         AssertParses(source: source);
@@ -52,8 +52,8 @@ public class FStringNestedLiteralTests
     {
         string source = """"
                         routine start()
-                          show(f"x: {wrap(s: f"inner {y}")}")
-                          return
+                            show(f"x: {wrap(s: f"inner {y}")}")
+                            return
                         """";
 
         AssertParses(source: source);

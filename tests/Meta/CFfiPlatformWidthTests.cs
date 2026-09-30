@@ -42,10 +42,10 @@ public sealed class CFfiPlatformWidthTests
                               import BuilderQuery
 
                               routine start()
-                                show(f"CLong={CLong.data_size().byte_size()}")
-                                show(f"CULong={CULong.data_size().byte_size()}")
-                                show(f"CWChar={CWChar.data_size().byte_size()}")
-                                return
+                                  show(f"CLong={CLong.data_size().byte_size()}")
+                                  show(f"CULong={CULong.data_size().byte_size()}")
+                                  show(f"CWChar={CWChar.data_size().byte_size()}")
+                                  return
                               """;
 
         // LLP64 (Windows): long/unsigned long = 4 bytes, wchar_t = 2 bytes.
@@ -99,8 +99,8 @@ public sealed class CFfiPlatformWidthTests
                                 import IO/Console
 
                                 routine start()
-                                  show(f"v={WIDEN(from: CTOR(from: VALUE))}")
-                                  return
+                                    show(f"v={WIDEN(from: CTOR(from: VALUE))}")
+                                    return
                                 """;
         string source = template.Replace(oldValue: "WIDEN", newValue: widen)
                                 .Replace(oldValue: "CTOR", newValue: ctorType)
@@ -149,15 +149,15 @@ public sealed class CFfiPlatformWidthTests
                               import BuilderQuery
 
                               routine start()
-                                danger
-                                  var elem = CWChar.data_size().byte_size()
-                                  var raw = Hijacked[Byte](from: C::rf_allocate_dynamic(2u64 * elem))
-                                  var buf = raw.recast_as[CWChar]()
-                                  buf.stride(count: 0s64).poke(value: CWChar(from: 65536u32))
-                                  buf.stride(count: 1s64).poke(value: CWChar(from: 0u32))
-                                  var s = CWStr(from_ptr: buf)
-                                  show(f"cp={s.getitem(index: 0u64).codepoint()} count={s.count()}")
-                                return
+                                  danger
+                                      var elem = CWChar.data_size().byte_size()
+                                      var raw = Hijacked[Byte](from: C::rf_allocate_dynamic(2u64 * elem))
+                                      var buf = raw.recast_as[CWChar]()
+                                      buf.stride(count: 0s64).poke(value: CWChar(from: 65536u32))
+                                      buf.stride(count: 1s64).poke(value: CWChar(from: 0u32))
+                                      var s = CWStr(from_ptr: buf)
+                                      show(f"cp={s.getitem(index: 0u64).codepoint()} count={s.count()}")
+                                  return
                               """;
 
         (int exitCode, string stdout, string stderr, bool timedOut) = RunProgram(source: source);

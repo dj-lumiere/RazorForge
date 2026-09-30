@@ -19,7 +19,7 @@ public class ErrorHandlingPatternTests
     {
         string source = """
                         routine test(value: Check[S32])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -35,7 +35,7 @@ public class ErrorHandlingPatternTests
     {
         string source = """
                         routine test(value: Lookup[S32])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -52,7 +52,7 @@ public class ErrorHandlingPatternTests
     {
         string source = """
                         routine test(value: S32?)
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -68,10 +68,10 @@ public class ErrorHandlingPatternTests
     {
         string source = """
                         routine test(value: Check[S32])
-                          when value
-                            is None => pass
-                            else => pass
-                          return
+                            when value
+                                is None => pass
+                                else => pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -87,11 +87,11 @@ public class ErrorHandlingPatternTests
     {
         string source = """
                         routine test(value: Lookup[S32])
-                          when value
-                            is None => pass
-                            is Crashable err => pass
-                            else v => pass
-                          return
+                            when value
+                                is None => pass
+                                is Crashable err => pass
+                                else v => pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -109,10 +109,10 @@ public class ErrorHandlingPatternTests
     {
         string source = """
                         routine test(value: Check[None])
-                          when value
-                            is Crashable err => pass
-                            is None => pass
-                          return
+                            when value
+                                is Crashable err => pass
+                                is None => pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -17,39 +17,39 @@ module Core
 ### is exactly `n`.
 ### :returns: The correctly rounded base-10 logarithm.
 routine B64.log10_unchecked() -> B64
-  var x = me
-  var u = x.to_bits()
-  var e = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 0x3FF
-  # x <= 0, NaN, infinity or subnormal
-  if e >= 0x400 or e == -0x3FF
-    # +infinity or NaN (of either sign)
-    if e == 0x400 or (e == 0xC00 and u != 0xFFF0000000000000_u64)
-      return x +! x
-    if x <= 0.0
-      # negative: the default NaN of 0/0
-      if x < 0.0
-        return B64.from_bits(bits: 0xFFF8000000000000_u64)
-      # ±0: pole
-      return B64.from_bits(bits: 0xFFF0000000000000_u64)
-    # subnormal: scale into the normal range
-    u = (x *! 0x1p52).to_bits()
-    e = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 0x3FF - 52
-  # x = 10^n for 0 <= n <= 22 gives exactly n: n is a guess from the exponent (32-bit wrapping arithmetic)
-  var n = (0x267CFA2_u32 *% (LLVM::int_truncate[S64, U32](e) +% 1_u32)) >>> 27
-  if u == B64_LOG10_POW10[LLVM::zero_extend[U32, U64](n)].to_bits()
-    return B64(from: n)
-  var hl = b64_log10_fast(e: e, mbits: u & 0x000FFFFFFFFFFFFF_u64)
-  # maximal absolute error of the fast path
-  var err = 0x1.04p-69
-  var left = hl.item0 +! (hl.item1 -! err)
-  var right = hl.item0 +! (hl.item1 +! err)
-  if left == right
-    return left
-  # the fast path fails with probability about 2^-11.5: compute log(x) in dint arithmetic and multiply
-  # by 1/log(10)
-  var y = b64_log_dint_log_of(x: x)
-  y = b64_log_dint_mul(am: y.item0, aex: y.item1, asgn: y.item2, bm: b64_log_u128(hi: 0xDE5BD8A937287195_u64, lo: 0x355BAAAFAD33DC32_u64), bex: -2, bsgn: 0)
-  return b64_log_dint_to_b64(m: y.item0, ex: y.item1, sgn: y.item2)
+    var x = me
+    var u = x.to_bits()
+    var e = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 0x3FF
+    # x <= 0, NaN, infinity or subnormal
+    if e >= 0x400 or e == -0x3FF
+        # +infinity or NaN (of either sign)
+        if e == 0x400 or (e == 0xC00 and u != 0xFFF0000000000000_u64)
+            return x +! x
+        if x <= 0.0
+            # negative: the default NaN of 0/0
+            if x < 0.0
+                return B64.from_bits(bits: 0xFFF8000000000000_u64)
+            # ±0: pole
+            return B64.from_bits(bits: 0xFFF0000000000000_u64)
+        # subnormal: scale into the normal range
+        u = (x *! 0x1p52).to_bits()
+        e = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 0x3FF - 52
+    # x = 10^n for 0 <= n <= 22 gives exactly n: n is a guess from the exponent (32-bit wrapping arithmetic)
+    var n = (0x267CFA2_u32 *% (LLVM::int_truncate[S64, U32](e) +% 1_u32)) >>> 27
+    if u == B64_LOG10_POW10[LLVM::zero_extend[U32, U64](n)].to_bits()
+        return B64(from: n)
+    var hl = b64_log10_fast(e: e, mbits: u & 0x000FFFFFFFFFFFFF_u64)
+    # maximal absolute error of the fast path
+    var err = 0x1.04p-69
+    var left = hl.item0 +! (hl.item1 -! err)
+    var right = hl.item0 +! (hl.item1 +! err)
+    if left == right
+        return left
+    # the fast path fails with probability about 2^-11.5: compute log(x) in dint arithmetic and multiply
+    # by 1/log(10)
+    var y = b64_log_dint_log_of(x: x)
+    y = b64_log_dint_mul(am: y.item0, aex: y.item1, asgn: y.item2, bm: b64_log_u128(hi: 0xDE5BD8A937287195_u64, lo: 0x355BAAAFAD33DC32_u64), bex: -2, bsgn: 0)
+    return b64_log_dint_to_b64(m: y.item0, ex: y.item1, sgn: y.item2)
 
 ### The fast path of `log10`: a double-double approximation of log10(2^e * m) with absolute error below
 ### 2^-68.98, where m = 1 + mbits/2^52.
@@ -57,40 +57,40 @@ routine B64.log10_unchecked() -> B64
 ### :param mbits: The 52 fraction bits of m.
 ### :returns: (h, l) with h + l approximating the base-10 logarithm.
 secret routine b64_log10_fast(e: S64, mbits: U64) -> (B64, B64)
-  var ee = e
-  var em = 0x0010000000000000_u64 + mbits
-  var y = B64.from_bits(bits: 0x3FF0000000000000_u64 + mbits)
-  var i = em >>> 43
-  # if m > sqrt(2), divide it by 2 to avoid cancellation: y lies in [1/sqrt(2), sqrt(2))
-  if mbits >= 0x6A09E667F3BCD_u64
-    ee = ee + 1
-    y = B64.from_bits(bits: 0x3FE0000000000000_u64 + mbits)
-    i = em >>> 44
-  var k = i - 362
-  var r = B64_LOG10_INVERSE[k]
-  var l1 = B64_LOG10_LOG_INV[2_u64 * k]
-  var l2 = B64_LOG10_LOG_INV[2_u64 * k + 1_u64]
-  # exact
-  var z = LLVM::fma[B64](a: r, b: y, c: -1.0)
-  # P(z) - z, for |z| < 0.00212097167968735
-  var z2 = z *! z
-  var p45 = LLVM::fma[B64](a: -0x1.55362255e0f63p-3, b: z, c: 0x1.999a14758b084p-3)
-  var p23 = LLVM::fma[B64](a: -0x1.0000000537df6p-2, b: z, c: 0x1.555555554f4d8p-2)
-  var ph = LLVM::fma[B64](a: p45, b: z2, c: p23)
-  ph = LLVM::fma[B64](a: ph, b: z, c: -0x1.ffffffffffffap-2)
-  ph = ph *! z2
-  # add e*log(2): log2_h is an integer multiple of 2^-42, so e*log2_h + l1 is exact
-  var eed = B64(from: ee)
-  var hi = LLVM::fma[B64](a: eed, b: 0x1.62e42fefa38p-1, c: l1)
-  var h = hi +! z
-  var lo = z -! (h -! hi)
-  lo = ph +! (lo +! l2)
-  lo = LLVM::fma[B64](a: eed, b: 0x1.ef35793c7673p-45, c: lo)
-  # multiply by the double-double 1/log(10), neglecting the low*low term
-  var ph10 = h *! 0x1.bcb7b1526e50ep-2
-  var s = LLVM::fma[B64](a: h, b: 0x1.bcb7b1526e50ep-2, c: -ph10)
-  var t = LLVM::fma[B64](a: lo, b: 0x1.bcb7b1526e50ep-2, c: s)
-  return (ph10, LLVM::fma[B64](a: h, b: 0x1.95355baaafad3p-57, c: t))
+    var ee = e
+    var em = 0x0010000000000000_u64 + mbits
+    var y = B64.from_bits(bits: 0x3FF0000000000000_u64 + mbits)
+    var i = em >>> 43
+    # if m > sqrt(2), divide it by 2 to avoid cancellation: y lies in [1/sqrt(2), sqrt(2))
+    if mbits >= 0x6A09E667F3BCD_u64
+        ee = ee + 1
+        y = B64.from_bits(bits: 0x3FE0000000000000_u64 + mbits)
+        i = em >>> 44
+    var k = i - 362
+    var r = B64_LOG10_INVERSE[k]
+    var l1 = B64_LOG10_LOG_INV[2_u64 * k]
+    var l2 = B64_LOG10_LOG_INV[2_u64 * k + 1_u64]
+    # exact
+    var z = LLVM::fma[B64](a: r, b: y, c: -1.0)
+    # P(z) - z, for |z| < 0.00212097167968735
+    var z2 = z *! z
+    var p45 = LLVM::fma[B64](a: -0x1.55362255e0f63p-3, b: z, c: 0x1.999a14758b084p-3)
+    var p23 = LLVM::fma[B64](a: -0x1.0000000537df6p-2, b: z, c: 0x1.555555554f4d8p-2)
+    var ph = LLVM::fma[B64](a: p45, b: z2, c: p23)
+    ph = LLVM::fma[B64](a: ph, b: z, c: -0x1.ffffffffffffap-2)
+    ph = ph *! z2
+    # add e*log(2): log2_h is an integer multiple of 2^-42, so e*log2_h + l1 is exact
+    var eed = B64(from: ee)
+    var hi = LLVM::fma[B64](a: eed, b: 0x1.62e42fefa38p-1, c: l1)
+    var h = hi +! z
+    var lo = z -! (h -! hi)
+    lo = ph +! (lo +! l2)
+    lo = LLVM::fma[B64](a: eed, b: 0x1.ef35793c7673p-45, c: lo)
+    # multiply by the double-double 1/log(10), neglecting the low*low term
+    var ph10 = h *! 0x1.bcb7b1526e50ep-2
+    var s = LLVM::fma[B64](a: h, b: 0x1.bcb7b1526e50ep-2, c: -ph10)
+    var t = LLVM::fma[B64](a: lo, b: 0x1.bcb7b1526e50ep-2, c: s)
+    return (ph10, LLVM::fma[B64](a: h, b: 0x1.95355baaafad3p-57, c: t))
 
 # Reciprocal approximations r[i] of the fast path, 362 <= i <= 724: a 10-bit approximation of 1/y for
 # i*2^-9 <= y < (i+1)*2^-9 such that r[i]*y - 1 is exact.

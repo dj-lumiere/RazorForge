@@ -19,9 +19,9 @@ public class IterPrivacyTests
     {
         string source = """
                         routine start()
-                          var xs = [1_s64, 2_s64, 3_s64]
-                          var it = xs.iter()
-                          return
+                            var xs = [1_s64, 2_s64, 3_s64]
+                            var it = xs.iter()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -34,10 +34,10 @@ public class IterPrivacyTests
     {
         string source = """
                         routine start()
-                          var xs = [1_s64, 2_s64, 3_s64]
-                          each x in xs
+                            var xs = [1_s64, 2_s64, 3_s64]
+                            each x in xs
+                                return
                             return
-                          return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -49,12 +49,12 @@ public class IterPrivacyTests
     {
         string source = """
                         entity Counter
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var c = Counter(value: 1)
-                          var r = c.access()
-                          return
+                            var c = Counter(value: 1)
+                            var r = c.access()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -67,12 +67,12 @@ public class IterPrivacyTests
     {
         string source = """
                         entity Counter
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var c = Counter(value: 1)
-                          var w = c.control()
-                          return
+                            var c = Counter(value: 1)
+                            var w = c.control()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -88,15 +88,15 @@ public class IterPrivacyTests
         // synthesized coercion.
         string source = """
                         record Box
-                          n: S64
+                            n: S64
 
                         routine echo(b: Accessing[Box]) -> S64
-                          return 0_s64
+                            return 0_s64
 
                         routine start()
-                          var b = Box(n: 1)
-                          var r = echo(b: b)
-                          return
+                            var b = Box(n: 1)
+                            var r = echo(b: b)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -111,10 +111,10 @@ public class IterPrivacyTests
         // *calling* `$iter` from user code, not on implementing the protocol.
         string source = """
                         record Bag
-                          n: S64
+                            n: S64
 
                         routine Bag.iter() -> Bag
-                          return me
+                            return me
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -24,15 +24,15 @@ public class GenericResolutionTests
         // S191: Calling a void memberRoutine on a generic resolution should return None, not <error>
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].clear()
-                          return
+                            return
 
                         routine test()
-                          var b = Box[S32](value: 42)
-                          b.clear()
-                          return
+                            var b = Box[S32](value: 42)
+                            b.clear()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -53,15 +53,15 @@ public class GenericResolutionTests
         // convert[U](new_val: U) -> Box[U] should resolve Box[U] with the call-site type arg
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].convert[U](new_val: U) -> Box[U]
-                          return Box[U](value: new_val)
+                            return Box[U](value: new_val)
 
                         routine test()
-                          var b = Box[S32](value: 42)
-                          var c: Box[Bool] = b.convert[Bool](true)
-                          return
+                            var b = Box[S32](value: 42)
+                            var c: Box[Bool] = b.convert[Bool](true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -76,16 +76,16 @@ public class GenericResolutionTests
         // S192: Without explicit type annotation, var c should infer as Box[Bool]
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].convert[U](new_val: U) -> Box[U]
-                          return Box[U](value: new_val)
+                            return Box[U](value: new_val)
 
                         routine test()
-                          var b = Box[S32](value: 42)
-                          var c = b.convert[Bool](true)
-                          var d: Box[Bool] = c
-                          return
+                            var b = Box[S32](value: 42)
+                            var c = b.convert[Bool](true)
+                            var d: Box[Bool] = c
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -100,15 +100,15 @@ public class GenericResolutionTests
         // S192: memberRoutine returning U directly (not wrapped in owner type)
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].extract[U](val: U) -> U
-                          return val
+                            return val
 
                         routine test()
-                          var b = Box[S32](value: 42)
-                          var x: Bool = b.extract[Bool](true)
-                          return
+                            var b = Box[S32](value: 42)
+                            var x: Bool = b.extract[Bool](true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -129,15 +129,15 @@ public class GenericResolutionTests
         // LookupMemberRoutine falls back from Wrapper[S32] → Wrapper to find user-defined memberRoutines
         string source = """
                         record Wrapper[T]
-                          value: T
+                            value: T
 
                         routine Wrapper[T].unwrap() -> T
-                          return me.value
+                            return me.value
 
                         routine test()
-                          var a = Wrapper[S32](value: 1)
-                          var v: S32 = a.unwrap()
-                          return
+                            var a = Wrapper[S32](value: 1)
+                            var v: S32 = a.unwrap()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -158,16 +158,16 @@ public class GenericResolutionTests
         // After fix, no manual SubstituteTypeParameters needed at call site
         string source = """
                         record Pair[T]
-                          first: T
-                          second: T
+                            first: T
+                            second: T
 
                         routine Pair[T].swap_first(value: T) -> T
-                          return me.first
+                            return me.first
 
                         routine test()
-                          var p = Pair[S32](first: 1, second: 2)
-                          var old: S32 = p.swap_first(value: 3)
-                          return
+                            var p = Pair[S32](first: 1, second: 2)
+                            var old: S32 = p.swap_first(value: 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -182,15 +182,15 @@ public class GenericResolutionTests
         // LookupMemberRoutine on generic owner should substitute T in return type
         string source = """
                         record Container[T]
-                          item: T
+                            item: T
 
                         routine Container[T].get() -> T
-                          return me.item
+                            return me.item
 
                         routine test()
-                          var c = Container[Bool](item: true)
-                          var v: Bool = c.get()
-                          return
+                            var c = Container[Bool](item: true)
+                            var v: Bool = c.get()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -205,17 +205,17 @@ public class GenericResolutionTests
         // Dict[Text, List[S32]].$getitem should return List[S32], not T
         string source = """
                         record Mapping[K, V]
-                          key: K
-                          val: V
+                            key: K
+                            val: V
 
                         routine Mapping[K, V].get_val() -> V
-                          return me.val
+                            return me.val
 
                         routine test()
-                          var inner = Mapping[S32, Bool](key: 1, val: true)
-                          var m = Mapping[Bool, Mapping[S32, Bool]](key: false, val: inner)
-                          var result: Mapping[S32, Bool] = m.get_val()
-                          return
+                            var inner = Mapping[S32, Bool](key: 1, val: true)
+                            var m = Mapping[Bool, Mapping[S32, Bool]](key: false, val: inner)
+                            var result: Mapping[S32, Bool] = m.get_val()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -235,16 +235,16 @@ public class GenericResolutionTests
         // P1: Member call on a generic resolution should store ResolvedRoutine with substituted types
         string source = """
                         record Pair[T]
-                          first: T
-                          second: T
+                            first: T
+                            second: T
 
                         routine Pair[T].swap_first(value: T) -> T
-                          return me.first
+                            return me.first
 
                         routine test()
-                          var p = Pair[S32](first: 1, second: 2)
-                          var old = p.swap_first(value: 3)
-                          return
+                            var p = Pair[S32](first: 1, second: 2)
+                            var old = p.swap_first(value: 3)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -278,15 +278,15 @@ public class GenericResolutionTests
         // P1: Void memberRoutine on generic resolution should still store ResolvedRoutine
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].clear()
-                          return
+                            return
 
                         routine test()
-                          var b = Box[S32](value: 42)
-                          b.clear()
-                          return
+                            var b = Box[S32](value: 42)
+                            b.clear()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -315,15 +315,15 @@ public class GenericResolutionTests
         // P1: Generic memberRoutine call (obj.MemberRoutine[U](args)) stores ResolvedRoutine
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].convert[U](new_val: U) -> Box[U]
-                          return Box[U](value: new_val)
+                            return Box[U](value: new_val)
 
                         routine test()
-                          var b = Box[S32](value: 42)
-                          var c = b.convert[Bool](true)
-                          return
+                            var b = Box[S32](value: 42)
+                            var c = b.convert[Bool](true)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -362,15 +362,15 @@ public class GenericResolutionTests
         // so that memberRoutine lookup on the resolved type can substitute T → S32
         string source = """
                         record Cell[T]
-                          data: T
+                            data: T
 
                         routine Cell[T].extract() -> T
-                          return me.data
+                            return me.data
 
                         routine test()
-                          var c = Cell[S32](data: 42)
-                          var v: S32 = c.extract()
-                          return
+                            var c = Cell[S32](data: 42)
+                            var v: S32 = c.extract()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -385,15 +385,15 @@ public class GenericResolutionTests
         // P2: Same test for entity types — GenericDefinition must survive update
         string source = """
                         entity Node[T]
-                          value: T
+                            value: T
 
                         routine Node[T].get_value() -> T
-                          return me.value
+                            return me.value
 
                         routine test()
-                          var n = Node[Bool](value: true)
-                          var v: Bool = n.get_value()
-                          return
+                            var n = Node[Bool](value: true)
+                            var v: Bool = n.get_value()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -414,20 +414,20 @@ public class GenericResolutionTests
         // should substitute T in the return type
         string source = """
                         protocol Supplier[T]
-                          @readonly
-                          routine Me.supply() -> T
+                            @readonly
+                            routine Me.supply() -> T
 
                         record IntSupplier obeys Supplier[S32]
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine IntSupplier.supply() -> S32
-                          return me.value
+                            return me.value
 
                         routine test()
-                          var s = IntSupplier(value: 42)
-                          var v: S32 = s.supply()
-                          return
+                            var s = IntSupplier(value: 42)
+                            var v: S32 = s.supply()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -443,18 +443,18 @@ public class GenericResolutionTests
         // P1: Protocol memberRoutine with generic parameter type should substitute correctly
         string source = """
                         protocol Acceptor[T]
-                          routine Me.accept(item: T) -> None
+                            routine Me.accept(item: T) -> None
 
                         record S32Acceptor obeys Acceptor[S32]
-                          count: S32
+                            count: S32
 
                         routine S32Acceptor.accept(item: S32) -> None
-                          return
+                            return
 
                         routine test()
-                          var a = S32Acceptor(count: 0)
-                          a.accept(item: 42)
-                          return
+                            var a = S32Acceptor(count: 0)
+                            a.accept(item: 42)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -471,20 +471,20 @@ public class GenericResolutionTests
         // should be substituted in memberRoutine signatures
         string source = """
                         protocol Mapper[K, V]
-                          @readonly
-                          routine Me.map_value(key: K) -> V
+                            @readonly
+                            routine Me.map_value(key: K) -> V
 
                         record IntToBoMapper obeys Mapper[S32, Bool]
-                          flag: Bool
+                            flag: Bool
 
                         @readonly
                         routine IntToBoMapper.map_value(key: S32) -> Bool
-                          return me.flag
+                            return me.flag
 
                         routine test()
-                          var m = IntToBoMapper(flag: true)
-                          var v: Bool = m.map_value(key: 1)
-                          return
+                            var m = IntToBoMapper(flag: true)
+                            var v: Bool = m.map_value(key: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -505,20 +505,20 @@ public class GenericResolutionTests
         // must each match their own body via resolved RegistryKey
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine process(item: Box[S32]) -> S32
-                          return item.value
+                            return item.value
 
                         routine process(item: Box[Bool]) -> Bool
-                          return item.value
+                            return item.value
 
                         routine test()
-                          var a = Box[S32](value: 42)
-                          var b = Box[Bool](value: true)
-                          var x: S32 = process(item: a)
-                          var y: Bool = process(item: b)
-                          return
+                            var a = Box[S32](value: 42)
+                            var b = Box[Bool](value: true)
+                            var x: S32 = process(item: a)
+                            var y: Bool = process(item: b)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -534,15 +534,15 @@ public class GenericResolutionTests
         // P4: Extension-syntax routine with generic owner resolves its body
         string source = """
                         record Wrapper[T]
-                          inner: T
+                            inner: T
 
                         routine Wrapper[T].get_inner() -> T
-                          return me.inner
+                            return me.inner
 
                         routine test()
-                          var w = Wrapper[S32](inner: 10)
-                          var v: S32 = w.get_inner()
-                          return
+                            var w = Wrapper[S32](inner: 10)
+                            var v: S32 = w.get_inner()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -558,20 +558,20 @@ public class GenericResolutionTests
         // P4: Overloads where one takes a plain type and another takes a generic resolution
         string source = """
                         record Pair[T]
-                          first: T
-                          second: T
+                            first: T
+                            second: T
 
                         routine describe(item: S32) -> S32
-                          return item
+                            return item
 
                         routine describe(item: Pair[S32]) -> S32
-                          return item.first
+                            return item.first
 
                         routine test()
-                          var p = Pair[S32](first: 1, second: 2)
-                          var a: S32 = describe(item: 5)
-                          var b: S32 = describe(item: p)
-                          return
+                            var p = Pair[S32](first: 1, second: 2)
+                            var a: S32 = describe(item: 5)
+                            var b: S32 = describe(item: p)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -592,11 +592,11 @@ public class GenericResolutionTests
     {
         string source = """
                         routine pick[T](flag: Bool) -> T
-                          return pick[T](flag: flag)
+                            return pick[T](flag: flag)
 
                         routine test()
-                          var r = pick(flag: true)
-                          return
+                            var r = pick(flag: true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -613,11 +613,11 @@ public class GenericResolutionTests
     {
         string source = """
                         routine pick[T](flag: Bool) -> T
-                          return pick[T](flag: flag)
+                            return pick[T](flag: flag)
 
                         routine test()
-                          var r: S64 = pick(flag: true)
-                          return
+                            var r: S64 = pick(flag: true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

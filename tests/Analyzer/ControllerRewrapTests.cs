@@ -20,39 +20,39 @@ public class ControllerRewrapTests
                               import BuilderQuery
 
                               record Blob obeys Assignable, Copyable
-                                secret count: U64
-                                secret ctrl: Hijacked[FrozenController]
+                                  secret count: U64
+                                  secret ctrl: Hijacked[FrozenController]
 
                               @[readonly, inline]
                               routine Blob.assign() -> Blob
-                                danger
-                                  if not me.ctrl.is_none()
-                                    me.ctrl.as_entity().hold()
-                                return Blob(count: me.count, ctrl: me.ctrl)
+                                  danger
+                                      if not me.ctrl.is_none()
+                                          me.ctrl.as_entity().hold()
+                                  return Blob(count: me.count, ctrl: me.ctrl)
 
                               @override
                               dangerous routine Blob.destroy()
-                                if me.ctrl.is_none()
+                                  if me.ctrl.is_none()
+                                      return
+                                  var prev = me.ctrl.as_entity().unhold()
+                                  if prev <= 1u64
+                                      me.ctrl.invalidate()
                                   return
-                                var prev = me.ctrl.as_entity().unhold()
-                                if prev <= 1u64
-                                  me.ctrl.invalidate()
-                                return
 
                               routine blob_new(count: U64) -> Blob
-                                return Blob(count: count, ctrl: fresh_frozen_controller())
+                                  return Blob(count: count, ctrl: fresh_frozen_controller())
 
                               routine resized_bad(r: Blob, count: U64) -> Blob
-                                return Blob(count: count, ctrl: r.ctrl)
+                                  return Blob(count: count, ctrl: r.ctrl)
 
                               routine resized_ok(r: Blob, count: U64) -> Blob
-                                danger
-                                  if not r.ctrl.is_none()
-                                    r.ctrl.as_entity().hold()
-                                return Blob(count: count, ctrl: r.ctrl)
+                                  danger
+                                      if not r.ctrl.is_none()
+                                          r.ctrl.as_entity().hold()
+                                  return Blob(count: count, ctrl: r.ctrl)
 
                               routine start()
-                                return
+                                  return
                               """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -68,36 +68,36 @@ public class ControllerRewrapTests
                               import BuilderQuery
 
                               record Blob obeys Assignable, Copyable
-                                secret count: U64
-                                secret ctrl: Hijacked[FrozenController]
+                                  secret count: U64
+                                  secret ctrl: Hijacked[FrozenController]
 
                               @[readonly, inline]
                               routine Blob.assign() -> Blob
-                                danger
-                                  if not me.ctrl.is_none()
-                                    me.ctrl.as_entity().hold()
-                                return Blob(count: me.count, ctrl: me.ctrl)
+                                  danger
+                                      if not me.ctrl.is_none()
+                                          me.ctrl.as_entity().hold()
+                                  return Blob(count: me.count, ctrl: me.ctrl)
 
                               @override
                               dangerous routine Blob.destroy()
-                                if me.ctrl.is_none()
+                                  if me.ctrl.is_none()
+                                      return
+                                  var prev = me.ctrl.as_entity().unhold()
+                                  if prev <= 1u64
+                                      me.ctrl.invalidate()
                                   return
-                                var prev = me.ctrl.as_entity().unhold()
-                                if prev <= 1u64
-                                  me.ctrl.invalidate()
-                                return
 
                               routine blob_new(count: U64) -> Blob
-                                return Blob(count: count, ctrl: fresh_frozen_controller())
+                                  return Blob(count: count, ctrl: fresh_frozen_controller())
 
                               routine resized_ok(r: Blob, count: U64) -> Blob
-                                danger
-                                  if not r.ctrl.is_none()
-                                    r.ctrl.as_entity().hold()
-                                return Blob(count: count, ctrl: r.ctrl)
+                                  danger
+                                      if not r.ctrl.is_none()
+                                          r.ctrl.as_entity().hold()
+                                  return Blob(count: count, ctrl: r.ctrl)
 
                               routine start()
-                                return
+                                  return
                               """;
 
         AnalysisResult result = AnalyzeSa(source: source);

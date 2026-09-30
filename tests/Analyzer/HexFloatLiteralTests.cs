@@ -60,8 +60,8 @@ public class HexFloatLiteralTests
     {
         AnalysisResult result = AnalyzeSa(source: $"""
                                                    routine probe()
-                                                     {statement}
-                                                     return
+                                                       {statement}
+                                                       return
                                                    """);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.HexFloatLiteralNotBinaryFloat);
@@ -75,8 +75,8 @@ public class HexFloatLiteralTests
     {
         AnalysisResult result = AnalyzeSa(source: $"""
                                                    routine probe()
-                                                     {statement}
-                                                     return
+                                                       {statement}
+                                                       return
                                                    """);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.HexFloatLiteralInexact);
@@ -88,11 +88,11 @@ public class HexFloatLiteralTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine probe()
-                                                    var a = 0x1.8p3
-                                                    var b: B32 = 0x1p-149
-                                                    var c = 0x1.ffcp15_b16
-                                                    var d = 0x1.0000000000000000000000000001p0_b128
-                                                    return
+                                                      var a = 0x1.8p3
+                                                      var b: B32 = 0x1p-149
+                                                      var c = 0x1.ffcp15_b16
+                                                      var d = 0x1.0000000000000000000000000001p0_b128
+                                                      return
                                                   """);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code is SemanticDiagnosticCode.HexFloatLiteralNotBinaryFloat

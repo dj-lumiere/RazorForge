@@ -18,14 +18,14 @@ public class KeptEntityReadTests
                                    import IO/Console
 
                                    entity Box
-                                     n: S64
+                                       n: S64
 
                                    entity Pair
-                                     a: Box
-                                     b: Box
+                                       a: Box
+                                       b: Box
 
                                    routine take(b: Box) -> S64
-                                     return b.n
+                                       return b.n
 
                                    """;
 
@@ -45,10 +45,10 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine start()
-                                      var boxes = List[Box]()
-                                      boxes.add_last(value: Box(n: 1))
-                                      var b = boxes[0]
-                                      return
+                                        var boxes = List[Box]()
+                                        boxes.add_last(value: Box(n: 1))
+                                        var b = boxes[0]
+                                        return
                                     """,
             expected: "You are keeping in 'b' a 'Box' that its container still owns"));
     }
@@ -58,14 +58,14 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine Box.eq(you: Box) -> Bool
-                                      return me.n == you.n
+                                        return me.n == you.n
 
                                     routine start()
-                                      var boxes = List[Box]()
-                                      boxes.add_last(value: Box(n: 1))
-                                      var a = Box(n: 1)
-                                      show(f"{a == boxes[0]}")
-                                      return
+                                        var boxes = List[Box]()
+                                        boxes.add_last(value: Box(n: 1))
+                                        var a = Box(n: 1)
+                                        show(f"{a == boxes[0]}")
+                                        return
                                     """,
             expected: "'eq' takes ownership of its 'you'"));
     }
@@ -75,10 +75,10 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine first(boxes: Viewing[List[Box]]) -> Box
-                                      return boxes[0]
+                                        return boxes[0]
 
                                     routine start()
-                                      return
+                                        return
                                     """,
             expected: "You are returning a 'Box' that its container still owns"));
     }
@@ -88,10 +88,10 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine left(p: Viewing[Pair]) -> Box
-                                      return p.a
+                                        return p.a
 
                                     routine start()
-                                      return
+                                        return
                                     """,
             expected: "You are returning a 'Box' that the value it belongs to still owns"));
     }
@@ -101,12 +101,12 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine start()
-                                      var boxes = List[Box]()
-                                      boxes.add_last(value: Box(n: 1))
-                                      var holder = List[Box]()
-                                      holder.add_last(value: boxes[0])
-                                      discard take(b: boxes[0])
-                                      return
+                                        var boxes = List[Box]()
+                                        boxes.add_last(value: Box(n: 1))
+                                        var holder = List[Box]()
+                                        holder.add_last(value: boxes[0])
+                                        discard take(b: boxes[0])
+                                        return
                                     """,
             expected: "'add_last' takes ownership of its 'value'"));
     }
@@ -116,10 +116,10 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine start()
-                                      var boxes = List[Box]()
-                                      boxes.add_last(value: Box(n: 1))
-                                      var p = Pair(a: boxes[0], b: Box(n: 2))
-                                      return
+                                        var boxes = List[Box]()
+                                        boxes.add_last(value: Box(n: 1))
+                                        var p = Pair(a: boxes[0], b: Box(n: 2))
+                                        return
                                     """,
             expected: "'Pair' takes ownership of its 'a'"));
     }
@@ -129,12 +129,12 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine start()
-                                      var boxes = List[Box]()
-                                      boxes.add_last(value: Box(n: 1))
-                                      boxes.add_last(value: Box(n: 2))
-                                      var p = Pair(a: Box(n: 3), b: Box(n: 4))
-                                      p.b = boxes[1]
-                                      return
+                                        var boxes = List[Box]()
+                                        boxes.add_last(value: Box(n: 1))
+                                        boxes.add_last(value: Box(n: 2))
+                                        var p = Pair(a: Box(n: 3), b: Box(n: 4))
+                                        p.b = boxes[1]
+                                        return
                                     """,
             expected: "You are storing a 'Box' that its container still owns"));
     }
@@ -144,10 +144,10 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine start()
-                                      var boxes = List[Box]()
-                                      boxes.add_last(value: Box(n: 1))
-                                      var t = (boxes[0], 1)
-                                      return
+                                        var boxes = List[Box]()
+                                        boxes.add_last(value: Box(n: 1))
+                                        var t = (boxes[0], 1)
+                                        return
                                     """,
             expected: "You are putting into a tuple a 'Box' that its container still owns"));
     }
@@ -157,9 +157,9 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine start()
-                                      var z = Box(n: 1)
-                                      var t = (z, 1)
-                                      return
+                                        var z = Box(n: 1)
+                                        var t = (z, 1)
+                                        return
                                     """,
             expected: "You are putting into a tuple a 'Box' that 'z' still owns"));
     }
@@ -169,10 +169,10 @@ public class KeptEntityReadTests
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
                                     routine start()
-                                      var grid = List[List[S64]]()
-                                      grid.add_last(value: List[S64]())
-                                      var row = grid[0]
-                                      return
+                                        var grid = List[List[S64]]()
+                                        grid.add_last(value: List[S64]())
+                                        var row = grid[0]
+                                        return
                                     """,
             expected: "make an explicit copy with '.duplicate()'"));
     }
@@ -182,23 +182,23 @@ public class KeptEntityReadTests
     {
         string source = Prelude + """
                                   routine make() -> Box
-                                    var h = Box(n: 7)
-                                    return h
+                                      var h = Box(n: 7)
+                                      return h
 
                                   routine start()
-                                    var boxes = List[Box]()
-                                    boxes.add_last(value: Box(n: 1))
-                                    boxes.add_last(value: Box(n: 2))
-                                    boxes[0].n = 5
-                                    var grid = List[List[S64]]()
-                                    grid.add_last(value: List[S64]())
-                                    grid[0].add_last(value: 3)
-                                    var row = grid[0].duplicate()
-                                    var moved = boxes.remove_at(index: 1)
-                                    var fresh = make()
-                                    var pair = (steal fresh, 1)
-                                    show(f"{boxes[0].n} {row.count()} {moved.n} {pair.item1}")
-                                    return
+                                      var boxes = List[Box]()
+                                      boxes.add_last(value: Box(n: 1))
+                                      boxes.add_last(value: Box(n: 2))
+                                      boxes[0].n = 5
+                                      var grid = List[List[S64]]()
+                                      grid.add_last(value: List[S64]())
+                                      grid[0].add_last(value: 3)
+                                      var row = grid[0].duplicate()
+                                      var moved = boxes.remove_at(index: 1)
+                                      var fresh = make()
+                                      var pair = (steal fresh, 1)
+                                      show(f"{boxes[0].n} {row.count()} {moved.n} {pair.item1}")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);

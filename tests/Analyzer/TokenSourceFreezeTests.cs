@@ -17,15 +17,15 @@ public class TokenSourceFreezeTests
                                    import IO/Console
 
                                    entity Box
-                                     n: S64
+                                       n: S64
 
                                    routine Box.bump()
-                                     me.n = me.n + 1
-                                     return
+                                       me.n = me.n + 1
+                                       return
 
                                    routine take(m: Modifying[Box], b: Box)
-                                     m.bump()
-                                     return
+                                       m.bump()
+                                       return
 
                                    """;
 
@@ -34,11 +34,11 @@ public class TokenSourceFreezeTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var a = Box(n: 1)
-                                    using a.modify() as m
-                                      a = Box(n: 50)
-                                      m.bump()
-                                    return
+                                      var a = Box(n: 1)
+                                      using a.modify() as m
+                                          a = Box(n: 50)
+                                          m.bump()
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -52,11 +52,11 @@ public class TokenSourceFreezeTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var a = Box(n: 1)
-                                    using a.view() as v
-                                      var b = steal a
-                                      show(f"{v.n}")
-                                    return
+                                      var a = Box(n: 1)
+                                      using a.view() as v
+                                          var b = steal a
+                                          show(f"{v.n}")
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -70,9 +70,9 @@ public class TokenSourceFreezeTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var a = Box(n: 1)
-                                    take(m: a.modify(), b: steal a)
-                                    return
+                                      var a = Box(n: 1)
+                                      take(m: a.modify(), b: steal a)
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -85,12 +85,12 @@ public class TokenSourceFreezeTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var a = Box(n: 1)
-                                    using a.modify() as m
-                                      m.bump()
-                                    a = Box(n: 50)
-                                    show(f"{a.n}")
-                                    return
+                                      var a = Box(n: 1)
+                                      using a.modify() as m
+                                          m.bump()
+                                      a = Box(n: 50)
+                                      show(f"{a.n}")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -103,13 +103,13 @@ public class TokenSourceFreezeTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var a = Box(n: 1)
-                                    var b = Box(n: 2)
-                                    using a.modify() as m
-                                      b = Box(n: 9)
-                                      m.bump()
-                                    show(f"{a.n} {b.n}")
-                                    return
+                                      var a = Box(n: 1)
+                                      var b = Box(n: 2)
+                                      using a.modify() as m
+                                          b = Box(n: 9)
+                                          m.bump()
+                                      show(f"{a.n} {b.n}")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -124,11 +124,11 @@ public class TokenSourceFreezeTests
         // `boxes` in the same statement could free that element.
         string source = Prelude + """
                                   routine start()
-                                    var boxes = List[Box]()
-                                    boxes.add_last(value: Box(n: 1))
-                                    boxes.add_last(value: Box(n: 2))
-                                    boxes[0].n = boxes.remove_last().n
-                                    return
+                                      var boxes = List[Box]()
+                                      boxes.add_last(value: Box(n: 1))
+                                      boxes.add_last(value: Box(n: 2))
+                                      boxes[0].n = boxes.remove_last().n
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -143,11 +143,11 @@ public class TokenSourceFreezeTests
         // A @readonly call on the container cannot move the element, so it may share the statement.
         string source = Prelude + """
                                   routine start()
-                                    var grid = List[List[U64]]()
-                                    grid.add_last(value: List[U64]())
-                                    grid[0].add_last(value: grid.count())
-                                    show(f"{grid[0][0]}")
-                                    return
+                                      var grid = List[List[U64]]()
+                                      grid.add_last(value: List[U64]())
+                                      grid[0].add_last(value: grid.count())
+                                      show(f"{grid[0][0]}")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -160,11 +160,11 @@ public class TokenSourceFreezeTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var a = Box(n: 1)
-                                    a.modify().bump()
-                                    a = Box(n: 3)
-                                    show(f"{a.n}")
-                                    return
+                                      var a = Box(n: 1)
+                                      a.modify().bump()
+                                      a = Box(n: 3)
+                                      show(f"{a.n}")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);

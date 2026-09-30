@@ -19,21 +19,21 @@ public class ShapeEffectTests
                                    import IO/Console
 
                                    entity Box
-                                     n: S64
+                                       n: S64
 
                                    routine grow(xs: Modifying[List[S64]])
-                                     xs.add_last(value: 99)
-                                     return
+                                       xs.add_last(value: 99)
+                                       return
 
                                    routine outer(ys: Modifying[List[S64]])
-                                     grow(xs: ys)
-                                     return
+                                       grow(xs: ys)
+                                       return
 
                                    routine total(xs: Viewing[List[S64]]) -> S64
-                                     var sum = 0
-                                     each x in xs
-                                       sum = sum + x
-                                     return sum
+                                       var sum = 0
+                                       each x in xs
+                                           sum = sum + x
+                                       return sum
 
                                    """;
 
@@ -42,10 +42,10 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var nums = List[S64]()
-                                    each x in nums
-                                      grow(xs: nums.modify())
-                                    return
+                                      var nums = List[S64]()
+                                      each x in nums
+                                          grow(xs: nums.modify())
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -59,10 +59,10 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var nums = List[S64]()
-                                    each x in nums
-                                      outer(ys: nums.modify())
-                                    return
+                                      var nums = List[S64]()
+                                      each x in nums
+                                          outer(ys: nums.modify())
+                                      return
                                   """;
 
         AssertHasErrorSa(source: source,
@@ -74,15 +74,15 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine List[S64].push_two()
-                                    me.add_last(value: 1)
-                                    me.add_last(value: 2)
-                                    return
+                                      me.add_last(value: 1)
+                                      me.add_last(value: 2)
+                                      return
 
                                   routine start()
-                                    var nums = List[S64]()
-                                    each x in nums
-                                      nums.push_two()
-                                    return
+                                      var nums = List[S64]()
+                                      each x in nums
+                                          nums.push_two()
+                                      return
                                   """;
 
         AssertHasErrorSa(source: source,
@@ -94,12 +94,12 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine run_each(xs: Modifying[List[S64]], action: Routine[(Modifying[List[S64]]), None])
-                                    each x in xs
-                                      action(xs)
-                                    return
+                                      each x in xs
+                                          action(xs)
+                                      return
 
                                   routine start()
-                                    return
+                                      return
                                   """;
 
         AssertHasErrorSa(source: source,
@@ -111,12 +111,12 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var nums = List[S64]()
-                                    var r = Retained[List[S64]](from: steal nums)
-                                    var r2 = r.share()
-                                    each x in r
-                                      r2.add_last(value: 5)
-                                    return
+                                      var nums = List[S64]()
+                                      var r = Retained[List[S64]](from: steal nums)
+                                      var r2 = r.share()
+                                      each x in r
+                                          r2.add_last(value: 5)
+                                      return
                                   """;
 
         AssertHasErrorSa(source: source, expectedErrorSubstring: "so they may be the same one");
@@ -127,14 +127,14 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine Box.absorb_all(all: Modifying[List[Box]])
-                                    all.add_last(value: Box(n: 0))
-                                    return
+                                      all.add_last(value: Box(n: 0))
+                                      return
 
                                   routine start()
-                                    var boxes = List[Box]()
-                                    boxes.add_last(value: Box(n: 1))
-                                    boxes[0].absorb_all(all: boxes.modify())
-                                    return
+                                      var boxes = List[Box]()
+                                      boxes.add_last(value: Box(n: 1))
+                                      boxes[0].absorb_all(all: boxes.modify())
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -148,16 +148,16 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var nums = List[S64]()
-                                    nums.add_last(value: 1)
-                                    var other = List[S64]()
-                                    each x in nums
-                                      discard total(xs: nums.view())
-                                      nums[0] = 5
-                                      grow(xs: other.modify())
-                                    grow(xs: nums.modify())
-                                    show(f"{nums.count()} {other.count()}")
-                                    return
+                                      var nums = List[S64]()
+                                      nums.add_last(value: 1)
+                                      var other = List[S64]()
+                                      each x in nums
+                                          discard total(xs: nums.view())
+                                          nums[0] = 5
+                                          grow(xs: other.modify())
+                                      grow(xs: nums.modify())
+                                      show(f"{nums.count()} {other.count()}")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -169,11 +169,11 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var grid = List[List[S64]]()
-                                    grid.add_last(value: List[S64]())
-                                    each x in grid[0]
-                                      grid[0].add_last(value: x)
-                                    return
+                                      var grid = List[List[S64]]()
+                                      grid.add_last(value: List[S64]())
+                                      each x in grid[0]
+                                          grid[0].add_last(value: x)
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -187,17 +187,17 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   entity Bag
-                                    items: List[S64]
+                                      items: List[S64]
 
                                   routine Bag.spin()
-                                    each x in me.items
-                                      me.items.add_last(value: x)
-                                    return
+                                      each x in me.items
+                                          me.items.add_last(value: x)
+                                      return
 
                                   routine start()
-                                    var b = Bag(items: List[S64]())
-                                    b.spin()
-                                    return
+                                      var b = Bag(items: List[S64]())
+                                      b.spin()
+                                      return
                                   """;
 
         AssertHasErrorSa(source: source,
@@ -213,22 +213,22 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine ping(xs: Modifying[List[S64]], n: S64)
-                                    if n > 0
-                                      pong(xs: xs, n: n - 1)
-                                    xs.add_last(value: 1)
-                                    return
+                                      if n > 0
+                                          pong(xs: xs, n: n - 1)
+                                      xs.add_last(value: 1)
+                                      return
 
                                   routine pong(xs: Modifying[List[S64]], n: S64)
-                                    ping(xs: xs, n: n)
-                                    return
+                                      ping(xs: xs, n: n)
+                                      return
 
                                   routine start()
-                                    var nums = List[S64]()
-                                    each x in nums
-                                      ping(xs: nums.modify(), n: 0)
-                                    each y in nums
-                                      pong(xs: nums.modify(), n: 0)
-                                    return
+                                      var nums = List[S64]()
+                                      each x in nums
+                                          ping(xs: nums.modify(), n: 0)
+                                      each y in nums
+                                          pong(xs: nums.modify(), n: 0)
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,

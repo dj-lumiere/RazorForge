@@ -35,20 +35,20 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 entity Set[AnyType T] obeys Iterable[T], Container, SetLiteral[T]
 needs T obeys Hashable, Equatable
 relates SetEmittable[T] as Iter
-  secret ctrl: Hijacked[U8]
-  secret indices: Hijacked[U64]
-  secret slots: Hijacked[T]
-  secret entry_live: Hijacked[U8]
-  secret count: U64
-  secret deleted: U64
-  secret entries_used: U64
-  secret capacity: U64
-  secret entries_cap: U64
-  secret k0: U64
-  secret k1: U64
-  ### How many `each` loops and in-place element accesses are using the element positions right now.
-  ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
-  secret shape_users: U64
+    secret ctrl: Hijacked[U8]
+    secret indices: Hijacked[U64]
+    secret slots: Hijacked[T]
+    secret entry_live: Hijacked[U8]
+    secret count: U64
+    secret deleted: U64
+    secret entries_used: U64
+    secret capacity: U64
+    secret entries_cap: U64
+    secret k0: U64
+    secret k1: U64
+    ### How many `each` loops and in-place element accesses are using the element positions right now.
+    ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
+    secret shape_users: U64
 
 # ============================================================================
 # Creators
@@ -61,69 +61,69 @@ relates SetEmittable[T] as Iter
 ### :returns: A set of the distinct given elements.
 common routine Set[T].from_literal(elements...: T) -> Set[T]
 needs T obeys Hashable, Equatable
-  var result = Set[T]()
-  var i = 0u64
-  while i < elements.count()
-    discard result.add(value: elements[i])
-    i = i +% 1u64
-  return result
+    var result = Set[T]()
+    var i = 0u64
+    while i < elements.count()
+        discard result.add(value: elements[i])
+        i = i +% 1u64
+    return result
 
 routine Set[T]() -> Set[T]
-  return Set[T](key: SecureHashKey.random())
+    return Set[T](key: SecureHashKey.random())
 
 routine Set[T](key: SecureHashKey) -> Set[T]
-  var cap = SET_INITIAL_CAPACITY
-  var ecap = SET_INITIAL_ENTRIES
-  var set = Set[T](
-    ctrl: hijacked_none[U8](),
-    indices: hijacked_none[U64](),
-    slots: hijacked_none[T](),
-    entry_live: hijacked_none[U8](),
-    count: 0u64,
-    deleted: 0u64,
-    entries_used: 0u64,
-    capacity: cap,
-    entries_cap: ecap,
-    k0: key.k0,
-    k1: key.k1,
-    shape_users: 0u64
-  )
-  danger
-    set.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
-    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
-    set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
-    set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
-    set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
-  return steal set
+    var cap = SET_INITIAL_CAPACITY
+    var ecap = SET_INITIAL_ENTRIES
+    var set = Set[T](
+        ctrl: hijacked_none[U8](),
+        indices: hijacked_none[U64](),
+        slots: hijacked_none[T](),
+        entry_live: hijacked_none[U8](),
+        count: 0u64,
+        deleted: 0u64,
+        entries_used: 0u64,
+        capacity: cap,
+        entries_cap: ecap,
+        k0: key.k0,
+        k1: key.k1,
+        shape_users: 0u64
+    )
+    danger
+        set.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
+        set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
+        set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
+        set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
+    return steal set
 
 routine Set[T](key: SecureHashKey, capacity: U64) -> Set[T]
-  var cap = SET_INITIAL_CAPACITY
-  while cap < capacity
-    cap = cap *% 2u64
-  var ecap = SET_INITIAL_ENTRIES
-  while ecap < capacity
-    ecap = ecap *% 2u64
-  var set = Set[T](
-    ctrl: hijacked_none[U8](),
-    indices: hijacked_none[U64](),
-    slots: hijacked_none[T](),
-    entry_live: hijacked_none[U8](),
-    count: 0u64,
-    deleted: 0u64,
-    entries_used: 0u64,
-    capacity: cap,
-    entries_cap: ecap,
-    k0: key.k0,
-    k1: key.k1,
-    shape_users: 0u64
-  )
-  danger
-    set.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
-    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
-    set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
-    set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
-    set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
-  return steal set
+    var cap = SET_INITIAL_CAPACITY
+    while cap < capacity
+        cap = cap *% 2u64
+    var ecap = SET_INITIAL_ENTRIES
+    while ecap < capacity
+        ecap = ecap *% 2u64
+    var set = Set[T](
+        ctrl: hijacked_none[U8](),
+        indices: hijacked_none[U64](),
+        slots: hijacked_none[T](),
+        entry_live: hijacked_none[U8](),
+        count: 0u64,
+        deleted: 0u64,
+        entries_used: 0u64,
+        capacity: cap,
+        entries_cap: ecap,
+        k0: key.k0,
+        k1: key.k1,
+        shape_users: 0u64
+    )
+    danger
+        set.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
+        set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
+        set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
+        set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
+    return steal set
 
 # ============================================================================
 # Internal Helpers
@@ -131,117 +131,117 @@ routine Set[T](key: SecureHashKey, capacity: U64) -> Set[T]
 
 @readonly
 routine Set[T].h2(hash: U64) -> U8
-  return U8(hash & U64(CTRL_H2_MASK))
+    return U8(hash & U64(CTRL_H2_MASK))
 
 @readonly
 routine Set[T].h1(hash: U64) -> U64
-  return hash >> 7u32
+    return hash >> 7u32
 
 @readonly
 routine Set[T].read_index(slot: U64) -> U64
-  danger
-    return me.indices.offset(U64.data_size() * slot).peek()
+    danger
+        return me.indices.offset(U64.data_size() * slot).peek()
 
 @readonly
 routine Set[T].find_slot(value: T) -> U64
-  var h = value.hash(k0: me.k0, k1: me.k1)
-  var target = me.h2(h)
-  var mask = me.capacity -% 1u64
-  var i = me.h1(h) & mask
-  danger
-    loop
-      var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
-      if c == CTRL_EMPTY
-        return me.capacity
-      if c == target
-        var ei = me.indices.offset(U64.data_size() * i).peek()
-        if me.slots.offset(T.data_size() * ei).peek() == value
-          return i
-      i = (i +% 1u64) & mask
-  return me.capacity
+    var h = value.hash(k0: me.k0, k1: me.k1)
+    var target = me.h2(h)
+    var mask = me.capacity -% 1u64
+    var i = me.h1(h) & mask
+    danger
+        loop
+            var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
+            if c == CTRL_EMPTY
+                return me.capacity
+            if c == target
+                var ei = me.indices.offset(U64.data_size() * i).peek()
+                if me.slots.offset(T.data_size() * ei).peek() == value
+                    return i
+            i = (i +% 1u64) & mask
+    return me.capacity
 
 routine Set[T].insert_index_raw(h: U64, entry_index: U64)
-  var h2_val = me.h2(h)
-  var mask = me.capacity -% 1u64
-  var i = me.h1(h) & mask
-  danger
-    loop
-      var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
-      if c == CTRL_EMPTY
-        me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
-        me.indices.offset(U64.data_size() * i).poke(entry_index)
-        return
-      if c == CTRL_TOMBSTONED
-        me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
-        me.indices.offset(U64.data_size() * i).poke(entry_index)
-        me.deleted = me.deleted -% 1u64
-        return
-      i = (i +% 1u64) & mask
-  return
+    var h2_val = me.h2(h)
+    var mask = me.capacity -% 1u64
+    var i = me.h1(h) & mask
+    danger
+        loop
+            var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
+            if c == CTRL_EMPTY
+                me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+                me.indices.offset(U64.data_size() * i).poke(entry_index)
+                return
+            if c == CTRL_TOMBSTONED
+                me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+                me.indices.offset(U64.data_size() * i).poke(entry_index)
+                me.deleted = me.deleted -% 1u64
+                return
+            i = (i +% 1u64) & mask
+    return
 
 @readonly
 routine Set[T].should_rehash() -> Bool
-  if (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
-    return true
-  if me.entries_used >= me.entries_cap
-    return true
-  return false
+    if (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
+        return true
+    if me.entries_used >= me.entries_cap
+        return true
+    return false
 
 @reshaping
 routine Set[T].rehash()
-  var old_cap = me.capacity
-  var old_ecap = me.entries_cap
-  var old_ctrl = me.ctrl
-  var old_indices = me.indices
-  var old_slots = me.slots
-  var old_entry_live = me.entry_live
-  var old_entries_used = me.entries_used
+    var old_cap = me.capacity
+    var old_ecap = me.entries_cap
+    var old_ctrl = me.ctrl
+    var old_indices = me.indices
+    var old_slots = me.slots
+    var old_entry_live = me.entry_live
+    var old_entries_used = me.entries_used
 
-  var table_pressured = (me.count +% me.deleted) *% 8u64 >= old_cap *% 7u64
-  var new_cap = old_cap
-  if table_pressured
-    new_cap = old_cap *% 2u64
+    var table_pressured = (me.count +% me.deleted) *% 8u64 >= old_cap *% 7u64
+    var new_cap = old_cap
+    if table_pressured
+        new_cap = old_cap *% 2u64
 
-  var new_ecap = old_ecap
-  if me.count *% 2u64 >= old_ecap
-    new_ecap = old_ecap *% 2u64
+    var new_ecap = old_ecap
+    if me.count *% 2u64 >= old_ecap
+        new_ecap = old_ecap *% 2u64
 
-  danger
-    me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
-    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
-    me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
-    me.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * new_ecap))
-    me.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_ecap))
-  me.capacity = new_cap
-  me.entries_cap = new_ecap
-  me.count = 0u64
-  me.deleted = 0u64
-  me.entries_used = 0u64
-
-  var i = 0u64
-  while i < old_entries_used
     danger
-      var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
-      if live == ENTRY_LIVE
-        var val = old_slots.offset(T.data_size() * i).peek()
-        var new_ei = me.entries_used
-        me.slots.offset(T.data_size() * new_ei).poke(val)
-        me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
-        me.entries_used = me.entries_used +% 1u64
-        me.insert_index_raw(h: val.hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
-        me.count = me.count +% 1u64
-    i = i +% 1u64
+        me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
+        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
+        me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
+        me.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * new_ecap))
+        me.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_ecap))
+    me.capacity = new_cap
+    me.entries_cap = new_ecap
+    me.count = 0u64
+    me.deleted = 0u64
+    me.entries_used = 0u64
 
-  danger
-    if not old_ctrl.is_none()
-      rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
-    if not old_indices.is_none()
-      rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
-    if not old_slots.is_none()
-      rf_invalidate(LLVM::pointer_to_int[T, Address](old_slots))
-    if not old_entry_live.is_none()
-      rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
-  return
+    var i = 0u64
+    while i < old_entries_used
+        danger
+            var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
+            if live == ENTRY_LIVE
+                var val = old_slots.offset(T.data_size() * i).peek()
+                var new_ei = me.entries_used
+                me.slots.offset(T.data_size() * new_ei).poke(val)
+                me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
+                me.entries_used = me.entries_used +% 1u64
+                me.insert_index_raw(h: val.hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
+                me.count = me.count +% 1u64
+        i = i +% 1u64
+
+    danger
+        if not old_ctrl.is_none()
+            rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
+        if not old_indices.is_none()
+            rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
+        if not old_slots.is_none()
+            rf_invalidate(LLVM::pointer_to_int[T, Address](old_slots))
+        if not old_entry_live.is_none()
+            rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
+    return
 
 # ============================================================================
 # Core Operations
@@ -249,49 +249,49 @@ routine Set[T].rehash()
 
 @readonly
 routine Set[T].count() -> U64
-  return me.count
+    return me.count
 
 @readonly
 routine Set[T].is_empty() -> Bool
-  return me.count == 0u64
+    return me.count == 0u64
 
 routine Set[T].clear()
-  danger
-    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
-  me.count = 0u64
-  me.deleted = 0u64
-  me.entries_used = 0u64
-  return
+    danger
+        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
+    me.count = 0u64
+    me.deleted = 0u64
+    me.entries_used = 0u64
+    return
 
 @readonly
 routine Set[T].contains(value: T) -> Bool
-  return me.find_slot(value) < me.capacity
+    return me.find_slot(value) < me.capacity
 
 routine Set[T].add(value: T) -> Bool
-  if me.should_rehash()
-    me.rehash()
-  if me.find_slot(value) < me.capacity
-    return false
-  var ei = me.entries_used
-  danger
-    me.slots.offset(T.data_size() * ei).poke(value)
-    me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
-  me.entries_used = me.entries_used +% 1u64
-  me.insert_index_raw(h: value.hash(k0: me.k0, k1: me.k1), entry_index: ei)
-  me.count = me.count +% 1u64
-  return true
+    if me.should_rehash()
+        me.rehash()
+    if me.find_slot(value) < me.capacity
+        return false
+    var ei = me.entries_used
+    danger
+        me.slots.offset(T.data_size() * ei).poke(value)
+        me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
+    me.entries_used = me.entries_used +% 1u64
+    me.insert_index_raw(h: value.hash(k0: me.k0, k1: me.k1), entry_index: ei)
+    me.count = me.count +% 1u64
+    return true
 
 routine Set[T].remove(value: T) -> Bool
-  var slot = me.find_slot(value)
-  if slot >= me.capacity
-    return false
-  var ei = me.read_index(slot)
-  danger
-    me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
-    me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
-  me.count = me.count -% 1u64
-  me.deleted = me.deleted +% 1u64
-  return true
+    var slot = me.find_slot(value)
+    if slot >= me.capacity
+        return false
+    var ei = me.read_index(slot)
+    danger
+        me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
+        me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
+    me.count = me.count -% 1u64
+    me.deleted = me.deleted +% 1u64
+    return true
 
 # ============================================================================
 # Iteration
@@ -299,29 +299,29 @@ routine Set[T].remove(value: T) -> Bool
 
 @readonly
 routine Set[T].iter() -> SetEmittable[T]
-  danger
-    return SetEmittable[T](
-      slots: me.slots,
-      entry_live: me.entry_live,
-      entries_used: me.entries_used,
-      pos: 0u64
-    )
+    danger
+        return SetEmittable[T](
+            slots: me.slots,
+            entry_live: me.entry_live,
+            entries_used: me.entries_used,
+            pos: 0u64
+        )
 
 ### Emittable that walks the dense entries array of a {Set[T]} in insertion order.
 entity SetEmittable[AnyType T] obeys Emittable[T]
-  secret slots: Hijacked[T]
-  secret entry_live: Hijacked[U8]
-  secret entries_used: U64
-  secret pos: U64
+    secret slots: Hijacked[T]
+    secret entry_live: Hijacked[U8]
+    secret entries_used: U64
+    secret pos: U64
 
 routine SetEmittable[T].emit!() -> T
-  danger
-    while me.pos < me.entries_used
-      var p = me.pos
-      me.pos = me.pos + 1u64
-      if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
-        return me.slots.offset(T.data_size() * p).peek()
-  absent
+    danger
+        while me.pos < me.entries_used
+            var p = me.pos
+            me.pos = me.pos + 1u64
+            if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+                return me.slots.offset(T.data_size() * p).peek()
+    absent
 
 # ============================================================================
 # Set Operations
@@ -329,59 +329,59 @@ routine SetEmittable[T].emit!() -> T
 
 @readonly
 routine Set[T].union(other: Accessing[Set[T]]) -> Set[T]
-  var result = Set[T](key: SecureHashKey.random(), capacity: me.count +% other.count)
-  each val in me
-    discard result.add(val)
-  each val in other
-    discard result.add(val)
-  return steal result
+    var result = Set[T](key: SecureHashKey.random(), capacity: me.count +% other.count)
+    each val in me
+        discard result.add(val)
+    each val in other
+        discard result.add(val)
+    return steal result
 
 @readonly
 routine Set[T].intersection(other: Accessing[Set[T]]) -> Set[T]
-  var result = Set[T]()
-  each val in me
-    if other have val
-      discard result.add(val)
-  return steal result
+    var result = Set[T]()
+    each val in me
+        if other have val
+            discard result.add(val)
+    return steal result
 
 @readonly
 routine Set[T].difference(other: Accessing[Set[T]]) -> Set[T]
-  var result = Set[T]()
-  each val in me
-    if other lack val
-      discard result.add(val)
-  return steal result
+    var result = Set[T]()
+    each val in me
+        if other lack val
+            discard result.add(val)
+    return steal result
 
 @readonly
 routine Set[T].symmetric_difference(other: Accessing[Set[T]]) -> Set[T]
-  var result = Set[T]()
-  each val in me
-    if other lack val
-      discard result.add(val)
-  each val in other
-    if me lack val
-      discard result.add(val)
-  return steal result
+    var result = Set[T]()
+    each val in me
+        if other lack val
+            discard result.add(val)
+    each val in other
+        if me lack val
+            discard result.add(val)
+    return steal result
 
 @readonly
 routine Set[T].is_subset(other: Accessing[Set[T]]) -> Bool
-  if me.count > other.count
-    return false
-  each val in me
-    if other lack val
-      return false
-  return true
+    if me.count > other.count
+        return false
+    each val in me
+        if other lack val
+            return false
+    return true
 
 @readonly
 routine Set[T].is_superset(other: Accessing[Set[T]]) -> Bool
-  return other.is_subset(me)
+    return other.is_subset(me)
 
 @readonly
 routine Set[T].is_disjoint(other: Accessing[Set[T]]) -> Bool
-  each val in me
-    if other have val
-      return false
-  return true
+    each val in me
+        if other have val
+            return false
+    return true
 
 # ============================================================================
 # Conversion
@@ -391,10 +391,10 @@ routine Set[T].is_disjoint(other: Accessing[Set[T]]) -> Bool
 ### :param from: The set to copy elements from.
 ### :returns: A new {List[T]} containing all elements of `from`.
 routine List[T](from: Set[T]) -> List[T]
-  var result = List[T](capacity: from.count)
-  each val in from
-    result.add_last(val)
-  return steal result
+    var result = List[T](capacity: from.count)
+    each val in from
+        result.add_last(val)
+    return steal result
 
 # ============================================================================
 # Display
@@ -402,29 +402,29 @@ routine List[T](from: Set[T]) -> List[T]
 
 @[readonly, override]
 routine Set[T].represent() -> Text
-  if me.is_empty()
-    return "{}"
-  var result = "{"
-  var first = true
-  each val in me
-    if not first
-      result = result + ", "
-    result = result + nested_repr(val)
-    first = false
-  result = result + "}"
-  return steal result
+    if me.is_empty()
+        return "{}"
+    var result = "{"
+    var first = true
+    each val in me
+        if not first
+            result = result + ", "
+        result = result + nested_repr(val)
+        first = false
+    result = result + "}"
+    return steal result
 
 @[readonly, override]
 routine Set[T].diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
-  var first = true
-  each val in me
-    if not first
-      result = result + ", "
-    result = result + nested_repr(val)
-    first = false
-  result = result + "})"
-  return steal result
+    var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
+    var first = true
+    each val in me
+        if not first
+            result = result + ", "
+        result = result + nested_repr(val)
+        first = false
+    result = result + "})"
+    return steal result
 
 # ============================================================================
 # Comparison
@@ -432,29 +432,29 @@ routine Set[T].diagnose() -> Text
 
 @readonly
 routine Set[T].eq(other: Accessing[Set[T]]) -> Bool
-  if me.count != other.count
-    return false
-  each val in me
-    if other lack val
-      return false
-  return true
+    if me.count != other.count
+        return false
+    each val in me
+        if other lack val
+            return false
+    return true
 
 @override
 dangerous routine Set[T].destroy()
-  # Tear down each live element before freeing the buffers (mirrors the live-entry scan in
-  # SetEmittable.emit!). For value elements `destroy` is a no-op; for owned entity elements
-  # this frees them. Must run before invalidating `slots`/`entry_live`.
-  var p = 0u64
-  while p < me.entries_used
-    if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
-      me.slots.offset(T.data_size() * p).peek().destroy()
-    p = p + 1u64
-  me.ctrl.invalidate()
-  me.indices.invalidate()
-  me.slots.invalidate()
-  me.entry_live.invalidate()
-  me.hijack().invalidate()
-  return
+    # Tear down each live element before freeing the buffers (mirrors the live-entry scan in
+    # SetEmittable.emit!). For value elements `destroy` is a no-op; for owned entity elements
+    # this frees them. Must run before invalidating `slots`/`entry_live`.
+    var p = 0u64
+    while p < me.entries_used
+        if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+            me.slots.offset(T.data_size() * p).peek().destroy()
+        p = p + 1u64
+    me.ctrl.invalidate()
+    me.indices.invalidate()
+    me.slots.invalidate()
+    me.entry_live.invalidate()
+    me.hijack().invalidate()
+    return
 
 ### Cycle-collector TRACE: report every live element to the collector. The `slots` buffer is SPARSE
 ### (open-addressing with tombstones), so `cyclic_trace_sparse_buffer` scans slots `0..used`, skipping
@@ -462,28 +462,28 @@ dangerous routine Set[T].destroy()
 ### self-trace).
 @override
 dangerous routine Set[T].roam_trace()
-  me.slots.cyclic_trace_sparse_buffer(live: me.entry_live, used: me.entries_used)
-  return
+    me.slots.cyclic_trace_sparse_buffer(live: me.entry_live, used: me.entries_used)
+    return
 
 ### Cycle-collector FREE: free every owned buffer and this set's own box, but NOT the elements (the
 ### collector frees the whole white cycle directly).
 @override
 dangerous routine Set[T].roam_free()
-  me.ctrl.invalidate()
-  me.indices.invalidate()
-  me.slots.invalidate()
-  me.entry_live.invalidate()
-  me.hijack().invalidate()
-  return
+    me.ctrl.invalidate()
+    me.indices.invalidate()
+    me.slots.invalidate()
+    me.entry_live.invalidate()
+    me.hijack().invalidate()
+    return
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
 @[readonly, override]
 routine Set[T].serialize() -> SerialValue
-  var __sv = List[SerialValue]()
-  each __x in me
-    __sv.add_last(value: __x.serialize())
-  return SerialValue(steal __sv)
+    var __sv = List[SerialValue]()
+    each __x in me
+        __sv.add_last(value: __x.serialize())
+    return SerialValue(steal __sv)
 
 # ============================================================================
 # Shape use (keeps the element positions still for `each` loops and in-place element access)
@@ -494,17 +494,17 @@ routine Set[T].serialize() -> SerialValue
 ### elements), because such a change would leave that loop or call unsure where the elements are.
 @readonly
 routine Set[T].require_shape_free!()
-  if me.shape_users != 0u64
-    throw ReshapingWhileInUseError(container: "set")
-  return
+    if me.shape_users != 0u64
+        throw ReshapingWhileInUseError(container: "set")
+    return
 
 ### Marks one more `each` loop or element call as using this set's element positions. Only the builder
 ### calls this, paired with `end_shape_use` when that use ends.
 dangerous routine Set[T].begin_shape_use()
-  me.shape_users = me.shape_users +% 1u64
-  return
+    me.shape_users = me.shape_users +% 1u64
+    return
 
 ### Ends one use started by `begin_shape_use`.
 dangerous routine Set[T].end_shape_use()
-  me.shape_users = me.shape_users -% 1u64
-  return
+    me.shape_users = me.shape_users -% 1u64
+    return

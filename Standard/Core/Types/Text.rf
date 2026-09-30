@@ -16,12 +16,12 @@ import BuilderQuery
 ### the value represents an empty or static-literal string and `store`/`destroy`
 ### are no-ops.
 record Text obeys Assignable, Copyable, Addable, Ordered, Hashable, TextRepeatable, Iterable[Character], Container
-  ### Stores the character buffer.
-  secret data: Hijacked[Character]
-  ### Stores the number of characters in the buffer.
-  secret count: U64
-  ### Atomic strong-count controller (null for empty / static-literal values).
-  secret ctrl: Hijacked[FrozenController]
+    ### Stores the character buffer.
+    secret data: Hijacked[Character]
+    ### Stores the number of characters in the buffer.
+    secret count: U64
+    ### Atomic strong-count controller (null for empty / static-literal values).
+    secret ctrl: Hijacked[FrozenController]
 
 ### Returns a copy of this value with the underlying refcount bumped.
 ### The buffer is shared; no character data is copied. For values with a null
@@ -30,10 +30,10 @@ record Text obeys Assignable, Copyable, Addable, Ordered, Hashable, TextRepeatab
 ### :returns: The resulting `Text` value.
 @[readonly, inline]
 routine Text.assign() -> Text
-  danger
-    if not me.ctrl.is_none()
-      me.ctrl.as_entity().hold()
-  return Text(data: me.data, count: me.count, ctrl: me.ctrl)
+    danger
+        if not me.ctrl.is_none()
+            me.ctrl.as_entity().hold()
+    return Text(data: me.data, count: me.count, ctrl: me.ctrl)
 
 ### Copy (Copyable): for an IMMUTABLE Text this is the same reference-share as `assign` (the buffer is
 ### never mutated, so a deep byte-copy would be wasteful). Defined explicitly — Text is a managed leaf
@@ -41,21 +41,21 @@ routine Text.assign() -> Text
 ### not apply; it declares `obeys Copyable` and implements `copy` here.
 @[readonly, inline]
 routine Text.duplicate() -> Text
-  return me.assign()
+    return me.assign()
 
 ### Releases this value's reference. Frees the buffer + controller when this
 ### was the last live ref. No-op when `ctrl` is null (empty / static literal).
 @override
 dangerous routine Text.destroy()
-  if me.ctrl.is_none()
+    if me.ctrl.is_none()
+        return
+    var prev = me.ctrl.as_entity().unhold()
+    if prev <= 1_u64
+        # data lives INSIDE the controller's block (see `text_alloc` co-allocation), so the single
+        # `ctrl.invalidate()` frees both the refcount header and the Character buffer — do NOT free
+        # `data` separately (it points mid-block).
+        me.ctrl.invalidate()
     return
-  var prev = me.ctrl.as_entity().unhold()
-  if prev <= 1_u64
-    # data lives INSIDE the controller's block (see `text_alloc` co-allocation), so the single
-    # `ctrl.invalidate()` frees both the refcount header and the Character buffer — do NOT free
-    # `data` separately (it points mid-block).
-    me.ctrl.invalidate()
-  return
 
 # Creators
 
@@ -63,11 +63,11 @@ dangerous routine Text.destroy()
 ### The returned value contains no characters and owns no backing buffer.
 ### :returns: The resulting `Text` value.
 routine Text() -> Text
-  return Text(
-    data: hijacked_none[Character](),
-    count: 0u64,
-    ctrl: hijacked_none[FrozenController]()
-  )
+    return Text(
+        data: hijacked_none[Character](),
+        count: 0u64,
+        ctrl: hijacked_none[FrozenController]()
+    )
 
 ### Allocates ONE block — a `FrozenController` (strong count = 1) header immediately followed by `count`
 ### Characters — and returns a `Text` owning it, with `data` pointing just past the header. This is the
@@ -80,43 +80,43 @@ routine Text() -> Text
 ### :param count: The number of Characters the buffer holds.
 ### :returns: A `Text` owning a fresh co-allocated buffer of `count` Characters.
 routine text_alloc(count: U64) -> Text
-  danger
-    var header = FrozenController.data_size()
-    var ctrl = Hijacked[FrozenController](rf_allocate_dynamic(size: header + Character.data_size() * count))
-    ctrl.recast_as[U64]().poke(value: 1_u64)
-    return Text(
-      data: ctrl.recast_as[Character]().offset(bytes: header),
-      count: count,
-      ctrl: ctrl
-    )
+    danger
+        var header = FrozenController.data_size()
+        var ctrl = Hijacked[FrozenController](rf_allocate_dynamic(size: header + Character.data_size() * count))
+        ctrl.recast_as[U64]().poke(value: 1_u64)
+        return Text(
+            data: ctrl.recast_as[Character]().offset(bytes: header),
+            count: count,
+            ctrl: ctrl
+        )
 
 ### Creates text from a list of characters.
 ### The input characters are copied into a newly allocated immutable buffer.
 ### :param from_list: The characters to copy into the new text value.
 ### :returns: The resulting `Text` value.
 routine Text(from_list: List[Character]) -> Text
-  var n = from_list.count()
-  if n == 0u64
-    return Text()
-  var result = text_alloc(count: n)
-  danger
-    var i: U64 = 0u64
-    loop
-      if i >= n
-        break
-      result.data.stride(count: S64(i)).poke(value: from_list[i])
-      i += 1u64
-  return result
+    var n = from_list.count()
+    if n == 0u64
+        return Text()
+    var result = text_alloc(count: n)
+    danger
+        var i: U64 = 0u64
+        loop
+            if i >= n
+                break
+            result.data.stride(count: S64(i)).poke(value: from_list[i])
+            i += 1u64
+    return result
 
 ### Creates text containing a single character.
 ### This is the most direct way to build one-character text values.
 ### :param from_character: The character to store.
 ### :returns: The resulting `Text` value.
 routine Text(from_character: Character) -> Text
-  var result = text_alloc(count: 1u64)
-  danger
-    result.data.poke(value: from_character)
-  return result
+    var result = text_alloc(count: 1u64)
+    danger
+        result.data.poke(value: from_character)
+    return result
 
 ### Creates text by copying `count` Characters from a raw span (e.g. a stack buffer). Exactly ONE
 ### buffer allocation (+ controller) — no intermediate `List`/`add_first`, unlike `Text(from_list:)`.
@@ -126,17 +126,17 @@ routine Text(from_character: Character) -> Text
 ### :param count: Number of Characters to copy.
 ### :returns: The resulting `Text` value.
 routine Text(from_span: Hijacked[Character], count: U64) -> Text
-  if count == 0u64
-    return Text()
-  var result = text_alloc(count: count)
-  danger
-    var i: U64 = 0u64
-    loop
-      if i >= count
-        break
-      result.data.stride(count: LLVM::reinterpret_bits[U64, S64](i)).poke(value: from_span.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek())
-      i += 1u64
-  return result
+    if count == 0u64
+        return Text()
+    var result = text_alloc(count: count)
+    danger
+        var i: U64 = 0u64
+        loop
+            if i >= count
+                break
+            result.data.stride(count: LLVM::reinterpret_bits[U64, S64](i)).poke(value: from_span.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek())
+            i += 1u64
+    return result
 
 ### Renders an unsigned magnitude (with an optional leading `-`) as decimal `Text` through a STACK
 ### buffer: digits are written back-to-front into a fixed `Array[Character, 21]` (max 20 digits + sign),
@@ -148,72 +148,72 @@ routine Text(from_span: Hijacked[Character], count: U64) -> Text
 ### :param negative: Whether to prefix a `-`.
 ### :returns: the decimal rendering.
 routine int_to_text(mag: U64, negative: Bool) -> Text
-  if LLVM::int_eq(a: mag, b: 0u64)
-    return "0"
-  danger
-    var buf = Array[Character, 21]()
-    var p = LLVM::reinterpret_bits[Hijacked[Array[Character, 21]], Hijacked[Character]](buf.hijack())
-    var idx = 21_s64
-    var m = mag
-    while LLVM::int_ne(a: m, b: 0u64)
-      idx = LLVM::sub(a: idx, b: 1_s64)
-      var d = LLVM::int_truncate[U64, U32](LLVM::unsigned_rem(a: m, b: 10u64))
-      p.stride(count: idx).poke(value: Character(LLVM::add(a: 0x0030u32, b: d)))
-      m = LLVM::unsigned_div(a: m, b: 10u64)
-    if negative
-      idx = LLVM::sub(a: idx, b: 1_s64)
-      p.stride(count: idx).poke(value: Character(0x002Du32))
-    return Text(from_span: p.stride(count: idx), count: LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 21_s64, b: idx)))
+    if LLVM::int_eq(a: mag, b: 0u64)
+        return "0"
+    danger
+        var buf = Array[Character, 21]()
+        var p = LLVM::reinterpret_bits[Hijacked[Array[Character, 21]], Hijacked[Character]](buf.hijack())
+        var idx = 21_s64
+        var m = mag
+        while LLVM::int_ne(a: m, b: 0u64)
+            idx = LLVM::sub(a: idx, b: 1_s64)
+            var d = LLVM::int_truncate[U64, U32](LLVM::unsigned_rem(a: m, b: 10u64))
+            p.stride(count: idx).poke(value: Character(LLVM::add(a: 0x0030u32, b: d)))
+            m = LLVM::unsigned_div(a: m, b: 10u64)
+        if negative
+            idx = LLVM::sub(a: idx, b: 1_s64)
+            p.stride(count: idx).poke(value: Character(0x002Du32))
+        return Text(from_span: p.stride(count: idx), count: LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 21_s64, b: idx)))
 
 ### Decodes UTF-8 text from a null-terminated C string.
 ### Invalid byte sequences are replaced with the Unicode replacement character.
 ### :param from: The source C string.
 ### :returns: The resulting `Text` value.
 routine Text(from: CStr) -> Text
-  if from.is_null()
-    return Text()
-  danger
-    var len = from.count()
-    if len == 0u64
-      return Text()
+    if from.is_null()
+        return Text()
+    danger
+        var len = from.count()
+        if len == 0u64
+            return Text()
 
-    var list = List[Character]()
-    var i: U64 = 0u64
-    loop
-      if i >= len
-        break
-      var b0 = from[i]
+        var list = List[Character]()
+        var i: U64 = 0u64
+        loop
+            if i >= len
+                break
+            var b0 = from[i]
 
-      if b0 <= Byte(0x7Fu8)
-        # ASCII: single byte
-        list.add_last(Character(U32(b0)))
-        i = i + 1u64
-      elseif Byte(0xC0u8) <= b0 <= Byte(0xDFu8) and i + 1u64 < len
-        # 2-byte sequence
-        var b1 = from[i + 1u64]
-        var cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
-        list.add_last(Character(cp))
-        i = i + 2u64
-      elseif Byte(0xE0u8) <= b0 <= Byte(0xEFu8) and i + 2u64 < len
-        # 3-byte sequence
-        var b1 = from[i + 1u64]
-        var b2 = from[i + 2u64]
-        var cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
-        list.add_last(Character(cp))
-        i = i + 3u64
-      elseif Byte(0xF0u8) <= b0 <= Byte(0xF7u8) and i + 3u64 < len
-        # 4-byte sequence
-        var b1 = from[i + 1u64]
-        var b2 = from[i + 2u64]
-        var b3 = from[i + 3u64]
-        var cp = ((U32(b0) & 0x07u32) << 18u32) | ((U32(b1) & 0x3Fu32) << 12u32) | ((U32(b2) & 0x3Fu32) << 6u32) | (U32(b3) & 0x3Fu32)
-        list.add_last(Character(cp))
-        i = i + 4u64
-      else
-        # Invalid byte — replacement character
-        list.add_last(Character(0xFFFDu32))
-        i = i + 1u64
-    return Text(from_list: steal list)
+            if b0 <= Byte(0x7Fu8)
+                # ASCII: single byte
+                list.add_last(Character(U32(b0)))
+                i = i + 1u64
+            elseif Byte(0xC0u8) <= b0 <= Byte(0xDFu8) and i + 1u64 < len
+                # 2-byte sequence
+                var b1 = from[i + 1u64]
+                var cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
+                list.add_last(Character(cp))
+                i = i + 2u64
+            elseif Byte(0xE0u8) <= b0 <= Byte(0xEFu8) and i + 2u64 < len
+                # 3-byte sequence
+                var b1 = from[i + 1u64]
+                var b2 = from[i + 2u64]
+                var cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
+                list.add_last(Character(cp))
+                i = i + 3u64
+            elseif Byte(0xF0u8) <= b0 <= Byte(0xF7u8) and i + 3u64 < len
+                # 4-byte sequence
+                var b1 = from[i + 1u64]
+                var b2 = from[i + 2u64]
+                var b3 = from[i + 3u64]
+                var cp = ((U32(b0) & 0x07u32) << 18u32) | ((U32(b1) & 0x3Fu32) << 12u32) | ((U32(b2) & 0x3Fu32) << 6u32) | (U32(b3) & 0x3Fu32)
+                list.add_last(Character(cp))
+                i = i + 4u64
+            else
+                # Invalid byte — replacement character
+                list.add_last(Character(0xFFFDu32))
+                i = i + 1u64
+        return Text(from_list: steal list)
 
 # Core operations
 
@@ -222,7 +222,7 @@ routine Text(from: CStr) -> Text
 ### :returns: The resulting `U64` value.
 @readonly
 routine Text.count() -> U64
-  return me.count
+    return me.count
 
 ### Returns the number of occurrences of a character.
 ### Matching is exact and does not perform any case folding or normalization.
@@ -230,11 +230,11 @@ routine Text.count() -> U64
 ### :returns: The resulting `U64` value.
 @readonly
 routine Text.count_of(character: Character) -> U64
-  var result: U64 = 0u64
-  each ch in me
-    if ch == character
-      result += 1u64
-  return result
+    var result: U64 = 0u64
+    each ch in me
+        if ch == character
+            result += 1u64
+    return result
 
 ### Returns the number of non-overlapping occurrences of a substring.
 ### After a match the scan resumes past it, so occurrences never overlap
@@ -243,30 +243,30 @@ routine Text.count_of(character: Character) -> U64
 ### :returns: The resulting `U64` value.
 @readonly
 routine Text.count_of(other: Text) -> U64
-  var oc = other.count()
-  if oc == 0u64 or oc > me.count
-    return 0u64
-  var result: U64 = 0u64
-  var i: U64 = 0u64
-  while i + oc <= me.count
-    var found = true
-    each j in 0u64 til oc
-      if me[i + j] != other[j]
-        found = false
-        break
-    if found
-      result += 1u64
-      i += oc
-    else
-      i += 1u64
-  return result
+    var oc = other.count()
+    if oc == 0u64 or oc > me.count
+        return 0u64
+    var result: U64 = 0u64
+    var i: U64 = 0u64
+    while i + oc <= me.count
+        var found = true
+        each j in 0u64 til oc
+            if me[i + j] != other[j]
+                found = false
+                break
+        if found
+            result += 1u64
+            i += oc
+        else
+            i += 1u64
+    return result
 
 ### Returns `true` when this text contains no characters.
 ### This is equivalent to checking whether `count()` is `0`.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Text.is_empty() -> Bool
-  return me.count == 0u64
+    return me.count == 0u64
 
 # Indexing
 
@@ -276,10 +276,10 @@ routine Text.is_empty() -> Bool
 ### :returns: The resulting `Character` value.
 @readonly
 routine Text.getitem!(index: U64) -> Character
-  if index >= me.count
-    throw IndexOutOfBoundsError(index: index, count: me.count)
-  danger
-    return me.data.stride(count: S64(index)).peek()
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    danger
+        return me.data.stride(count: S64(index)).peek()
 
 ### Returns the sub-text spanning an index range — the slice form of indexing (`text[a til b]`).
 ### A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields `[a, b]`; a descending range
@@ -290,12 +290,12 @@ routine Text.getitem!(index: U64) -> Character
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.getitem(range: Range[U64]) -> Text
-  var result = List[Character]()
-  danger
-    each i in range
-      if i < me.count
-        result.add_last(me.data.stride(count: S64(i)).peek())
-  return Text(from_list: steal result)
+    var result = List[Character]()
+    danger
+        each i in range
+            if i < me.count
+                result.add_last(me.data.stride(count: S64(i)).peek())
+    return Text(from_list: steal result)
 
 # String operations
 
@@ -305,17 +305,17 @@ routine Text.getitem(range: Range[U64]) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.concat(other: Text) -> Text
-  var n = me.count + other.count()
-  if n == 0u64
-    return Text()
-  var result = text_alloc(count: n)
-  danger
-    if me.count > 0u64
-      rf_copy_bytes_at(dest: result.data.address(), src: me.data.address(), size: Character.data_size() * me.count)
-    var other_count = other.count()
-    if other_count > 0u64
-      rf_copy_bytes_at(dest: result.data.stride(count: S64(me.count)).address(), src: other.data.address(), size: Character.data_size() * other_count)
-  return result
+    var n = me.count + other.count()
+    if n == 0u64
+        return Text()
+    var result = text_alloc(count: n)
+    danger
+        if me.count > 0u64
+            rf_copy_bytes_at(dest: result.data.address(), src: me.data.address(), size: Character.data_size() * me.count)
+        var other_count = other.count()
+        if other_count > 0u64
+            rf_copy_bytes_at(dest: result.data.stride(count: S64(me.count)).address(), src: other.data.address(), size: Character.data_size() * other_count)
+    return result
 
 ### Returns the sum of this value and the other value.
 ### This is the operator form of `concat`.
@@ -323,7 +323,7 @@ routine Text.concat(other: Text) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.add(other: Text) -> Text
-  return me.concat(other)
+    return me.concat(other)
 
 ### Returns this text repeated `count` times.
 ### Repeating zero times or repeating an empty string returns empty text.
@@ -331,20 +331,20 @@ routine Text.add(other: Text) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.mul[I obeys Integral](count: I) -> Text
-  var times = U64(count)
-  if times == 0u64 or me.count == 0u64
-    return Text()
-  var n = me.count * times
-  var result = text_alloc(count: n)
-  danger
-    var t: U64 = 0u64
-    loop
-      if t >= times
-        break
-      var dest = result.data.stride(count: S64(t * me.count))
-      rf_copy_bytes_at(dest: dest.address(), src: me.data.address(), size: Character.data_size() * me.count)
-      t += 1u64
-  return result
+    var times = U64(count)
+    if times == 0u64 or me.count == 0u64
+        return Text()
+    var n = me.count * times
+    var result = text_alloc(count: n)
+    danger
+        var t: U64 = 0u64
+        loop
+            if t >= times
+                break
+            var dest = result.data.stride(count: S64(t * me.count))
+            rf_copy_bytes_at(dest: dest.address(), src: me.data.address(), size: Character.data_size() * me.count)
+            t += 1u64
+    return result
 
 ### Returns whether both values are equal.
 ### Equality requires the same length and the same character at each position.
@@ -352,16 +352,16 @@ routine Text.mul[I obeys Integral](count: I) -> Text
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Text.eq(other: Text) -> Bool
-  if me.count != other.count()
-    return false
-  var i: U64 = 0u64
-  loop
-    if i >= me.count
-      break
-    if me[i] != other[i]
-      return false
-    i += 1u64
-  return true
+    if me.count != other.count()
+        return false
+    var i: U64 = 0u64
+    loop
+        if i >= me.count
+            break
+        if me[i] != other[i]
+            return false
+        i += 1u64
+    return true
 
 # Comparison
 
@@ -371,20 +371,20 @@ routine Text.eq(other: Text) -> Bool
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Text.cmp(other: Text) -> ComparisonSign
-  var other_count = other.count()
-  var min_len = me.count
-  if other_count < min_len
-    min_len = other_count
-  each i in 0u64 til min_len
-    if me[i] < other[i]
-      return ComparisonSign.ME_SMALL
-    if me[i] > other[i]
-      return ComparisonSign.ME_LARGE
-  if me.count < other_count
-    return ComparisonSign.ME_SMALL
-  if me.count > other_count
-    return ComparisonSign.ME_LARGE
-  return ComparisonSign.SAME
+    var other_count = other.count()
+    var min_len = me.count
+    if other_count < min_len
+        min_len = other_count
+    each i in 0u64 til min_len
+        if me[i] < other[i]
+            return ComparisonSign.ME_SMALL
+        if me[i] > other[i]
+            return ComparisonSign.ME_LARGE
+    if me.count < other_count
+        return ComparisonSign.ME_SMALL
+    if me.count > other_count
+        return ComparisonSign.ME_LARGE
+    return ComparisonSign.SAME
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### Each code point is folded into the keyed hash so equal texts under the same
@@ -394,10 +394,10 @@ routine Text.cmp(other: Text) -> ComparisonSign
 ### :returns: The resulting `U64` keyed hash.
 @readonly
 routine Text.hash(k0: U64, k1: U64) -> U64
-  var h = __hash_leaf(v: me.count)
-  each i in 0u64 til me.count
-    h = __hash_round(acc: h, h: __secure_hash_u64(v: U64(me[i].codepoint()), k0: k0, k1: k1))
-  return __hash_finalize(h)
+    var h = __hash_leaf(v: me.count)
+    each i in 0u64 til me.count
+        h = __hash_round(acc: h, h: __secure_hash_u64(v: U64(me[i].codepoint()), k0: k0, k1: k1))
+    return __hash_finalize(h)
 
 # Search
 
@@ -407,10 +407,10 @@ routine Text.hash(k0: U64, k1: U64) -> U64
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Text.contains(character: Character) -> Bool
-  each i in 0u64 til me.count
-    if me[i] == character
-      return true
-  return false
+    each i in 0u64 til me.count
+        if me[i] == character
+            return true
+    return false
 
 ### Returns `true` when this text contains `other` as a contiguous substring.
 ### An empty `other` value is always considered contained. Uses the
@@ -419,43 +419,43 @@ routine Text.contains(character: Character) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Text.contains(other: Text) -> Bool
-  if other.is_empty()
-    return true
-  var other_count = other.count()
-  if other_count > me.count
-    return false
-
-  # Build KMP longest-proper-prefix-also-suffix (LPS) table for `other`.
-  var lps = List[U64]()
-  each _ in 0u64 til other_count
-    lps.add_last(value: 0u64)
-  var length = 0u64
-  var i = 1u64
-  while i < other_count
-    if other[i] == other[length]
-      length = length + 1u64
-      lps[i] = length
-      i = i + 1u64
-    elseif length != 0u64
-      length = lps[length - 1u64]
-    else
-      lps[i] = 0u64
-      i = i + 1u64
-
-  # Scan `me` against `other` using the LPS table.
-  var hay = 0u64
-  var needle = 0u64
-  while hay < me.count
-    if me[hay] == other[needle]
-      hay = hay + 1u64
-      needle = needle + 1u64
-      if needle == other_count
+    if other.is_empty()
         return true
-    elseif needle != 0u64
-      needle = lps[needle - 1u64]
-    else
-      hay = hay + 1u64
-  return false
+    var other_count = other.count()
+    if other_count > me.count
+        return false
+
+    # Build KMP longest-proper-prefix-also-suffix (LPS) table for `other`.
+    var lps = List[U64]()
+    each _ in 0u64 til other_count
+        lps.add_last(value: 0u64)
+    var length = 0u64
+    var i = 1u64
+    while i < other_count
+        if other[i] == other[length]
+            length = length + 1u64
+            lps[i] = length
+            i = i + 1u64
+        elseif length != 0u64
+            length = lps[length - 1u64]
+        else
+            lps[i] = 0u64
+            i = i + 1u64
+
+    # Scan `me` against `other` using the LPS table.
+    var hay = 0u64
+    var needle = 0u64
+    while hay < me.count
+        if me[hay] == other[needle]
+            hay = hay + 1u64
+            needle = needle + 1u64
+            if needle == other_count
+                return true
+        elseif needle != 0u64
+            needle = lps[needle - 1u64]
+        else
+            hay = hay + 1u64
+    return false
 
 ### Returns `true` when this text begins with `prefix`.
 ### The entire `prefix` must match from the first character onward.
@@ -463,13 +463,13 @@ routine Text.contains(other: Text) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Text.starts_with(prefix: Text) -> Bool
-  var prefix_count = prefix.count()
-  if prefix_count > me.count
-    return false
-  each i in 0u64 til prefix_count
-    if me[i] != prefix[i]
-      return false
-  return true
+    var prefix_count = prefix.count()
+    if prefix_count > me.count
+        return false
+    each i in 0u64 til prefix_count
+        if me[i] != prefix[i]
+            return false
+    return true
 
 ### Returns `true` when this text ends with `suffix`.
 ### The entire `suffix` must match at the end of the text.
@@ -477,14 +477,14 @@ routine Text.starts_with(prefix: Text) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Text.ends_with(suffix: Text) -> Bool
-  var suffix_count = suffix.count()
-  if suffix_count > me.count
-    return false
-  var offset = me.count - suffix_count
-  each i in 0u64 til suffix_count
-    if me[offset + i] != suffix[i]
-      return false
-  return true
+    var suffix_count = suffix.count()
+    if suffix_count > me.count
+        return false
+    var offset = me.count - suffix_count
+    each i in 0u64 til suffix_count
+        if me[offset + i] != suffix[i]
+            return false
+    return true
 
 ### Returns the position of the first occurrence of `letter`.
 ### :param letter: The character to search for.
@@ -492,10 +492,10 @@ routine Text.ends_with(suffix: Text) -> Bool
 ### :absent: Returns absent when the requested value is unavailable.
 @readonly
 routine Text.find!(letter: Character) -> U64
-  each i in 0u64 til me.count
-    if me[i] == letter
-      return i
-  absent
+    each i in 0u64 til me.count
+        if me[i] == letter
+            return i
+    absent
 
 ### Returns the position of the first occurrence of `other`.
 ### :param other: The substring to search for.
@@ -503,20 +503,20 @@ routine Text.find!(letter: Character) -> U64
 ### :absent: Returns absent when the requested value is unavailable.
 @readonly
 routine Text.find!(other: Text) -> U64
-  if other.is_empty()
-    return 0u64
-  if other.count() > me.count
+    if other.is_empty()
+        return 0u64
+    if other.count() > me.count
+        absent
+    var limit = me.count - other.count() + 1u64
+    each i in 0u64 til limit
+        var found = true
+        each j in 0u64 til other.count()
+            if me[i + j] != other[j]
+                found = false
+                break
+        if found
+            return i
     absent
-  var limit = me.count - other.count() + 1u64
-  each i in 0u64 til limit
-    var found = true
-    each j in 0u64 til other.count()
-      if me[i + j] != other[j]
-        found = false
-        break
-    if found
-      return i
-  absent
 
 ### Returns the position of the LAST occurrence of `letter` (reverse search).
 ### :param letter: The character to search for.
@@ -524,14 +524,14 @@ routine Text.find!(other: Text) -> U64
 ### :absent: Returns absent when the requested value is unavailable.
 @readonly
 routine Text.find_last!(letter: Character) -> U64
-  var i = me.count
-  loop
-    if i == 0u64
-      break
-    i -= 1u64
-    if me[i] == letter
-      return i
-  absent
+    var i = me.count
+    loop
+        if i == 0u64
+            break
+        i -= 1u64
+        if me[i] == letter
+            return i
+    absent
 
 ### Returns the position of the LAST occurrence of `other` (reverse search).
 ### An empty `other` matches at `count()` (one past the last index).
@@ -540,24 +540,24 @@ routine Text.find_last!(letter: Character) -> U64
 ### :absent: Returns absent when the requested value is unavailable.
 @readonly
 routine Text.find_last!(other: Text) -> U64
-  var oc = other.count()
-  if oc == 0u64
-    return me.count
-  if oc > me.count
+    var oc = other.count()
+    if oc == 0u64
+        return me.count
+    if oc > me.count
+        absent
+    var i = me.count - oc + 1u64
+    loop
+        if i == 0u64
+            break
+        i -= 1u64
+        var found = true
+        each j in 0u64 til oc
+            if me[i + j] != other[j]
+                found = false
+                break
+        if found
+            return i
     absent
-  var i = me.count - oc + 1u64
-  loop
-    if i == 0u64
-      break
-    i -= 1u64
-    var found = true
-    each j in 0u64 til oc
-      if me[i + j] != other[j]
-        found = false
-        break
-    if found
-      return i
-  absent
 
 ### Splits at the FIRST occurrence of `separator` into a `(before, after)` pair.
 ### The separator itself appears in neither half. Absents when the separator is
@@ -567,10 +567,10 @@ routine Text.find_last!(other: Text) -> U64
 ### :absent: Returns absent when the separator is not found.
 @readonly
 routine Text.split_once!(separator: Text) -> (Text, Text)
-  var pos = me.find(separator)
-  var before = me[0u64 til pos]
-  var after = me[(pos + separator.count()) til ^0]
-  return (before, after)
+    var pos = me.find(separator)
+    var before = me[0u64 til pos]
+    var after = me[(pos + separator.count()) til ^0]
+    return (before, after)
 
 # Transform
 
@@ -579,20 +579,20 @@ routine Text.split_once!(separator: Text) -> (Text, Text)
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.to_uppercase() -> Text
-  var result = List[Character]()
-  each i in 0u64 til me.count
-    result.add_last(me[i].to_uppercase())
-  return Text(from_list: steal result)
+    var result = List[Character]()
+    each i in 0u64 til me.count
+        result.add_last(me[i].to_uppercase())
+    return Text(from_list: steal result)
 
 ### Converts this value to lowercase.
 ### Case conversion follows the behavior defined on `Character`.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.to_lowercase() -> Text
-  var result = List[Character]()
-  each i in 0u64 til me.count
-    result.add_last(me[i].to_lowercase())
-  return Text(from_list: steal result)
+    var result = List[Character]()
+    each i in 0u64 til me.count
+        result.add_last(me[i].to_lowercase())
+    return Text(from_list: steal result)
 
 ### Returns a copy with the first character uppercased and the rest lowercased.
 ### Empty text is returned unchanged. This follows the common "capitalize a word"
@@ -600,13 +600,13 @@ routine Text.to_lowercase() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.capitalize() -> Text
-  if me.is_empty()
-    return me
-  var result = List[Character]()
-  result.add_last(me[0u64].to_uppercase())
-  each i in 1u64 til me.count
-    result.add_last(me[i].to_lowercase())
-  return Text(from_list: steal result)
+    if me.is_empty()
+        return me
+    var result = List[Character]()
+    result.add_last(me[0u64].to_uppercase())
+    each i in 1u64 til me.count
+        result.add_last(me[i].to_lowercase())
+    return Text(from_list: steal result)
 
 ### Returns whether both values are equal ignoring ASCII/Unicode case.
 ### Both operands are case-folded via `to_lowercase` before comparison.
@@ -614,67 +614,67 @@ routine Text.capitalize() -> Text
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Text.eq_ignore_case(other: Text) -> Bool
-  return me.to_lowercase().eq(other.to_lowercase())
+    return me.to_lowercase().eq(other.to_lowercase())
 
 ### Returns a copy with leading and trailing whitespace removed.
 ### Whitespace is identified using `Character.is_whitespace()`.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.trim() -> Text
-  var start: U64 = 0u64
-  loop
-    if start >= me.count
-      return Text()
-    if not me[start].is_whitespace()
-      break
-    start += 1u64
-  var end_idx = me.count
-  loop
-    if end_idx <= start
-      break
-    if not me[end_idx - 1u64].is_whitespace()
-      break
-    end_idx -= 1u64
-  var result = List[Character]()
-  each i in start til end_idx
-    result.add_last(me[i])
-  return Text(from_list: steal result)
+    var start: U64 = 0u64
+    loop
+        if start >= me.count
+            return Text()
+        if not me[start].is_whitespace()
+            break
+        start += 1u64
+    var end_idx = me.count
+    loop
+        if end_idx <= start
+            break
+        if not me[end_idx - 1u64].is_whitespace()
+            break
+        end_idx -= 1u64
+    var result = List[Character]()
+    each i in start til end_idx
+        result.add_last(me[i])
+    return Text(from_list: steal result)
 
 ### Returns a copy with leading whitespace removed.
 ### Trailing content is preserved unchanged.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.trim_start() -> Text
-  var start: U64 = 0u64
-  loop
-    if start >= me.count
-      return Text()
-    if not me[start].is_whitespace()
-      break
-    start += 1u64
-  var result = List[Character]()
-  each i in start til me.count
-    result.add_last(me[i])
-  return Text(from_list: steal result)
+    var start: U64 = 0u64
+    loop
+        if start >= me.count
+            return Text()
+        if not me[start].is_whitespace()
+            break
+        start += 1u64
+    var result = List[Character]()
+    each i in start til me.count
+        result.add_last(me[i])
+    return Text(from_list: steal result)
 
 ### Returns a copy with trailing whitespace removed.
 ### Leading content is preserved unchanged.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.trim_end() -> Text
-  if me.is_empty()
-    return me
-  var end_idx = me.count
-  loop
-    if end_idx == 0u64
-      return Text()
-    if not me[end_idx - 1u64].is_whitespace()
-      break
-    end_idx -= 1u64
-  var result = List[Character]()
-  each i in 0u64 til end_idx
-    result.add_last(me[i])
-  return Text(from_list: steal result)
+    if me.is_empty()
+        return me
+    var end_idx = me.count
+    loop
+        if end_idx == 0u64
+            return Text()
+        if not me[end_idx - 1u64].is_whitespace()
+            break
+        end_idx -= 1u64
+    var result = List[Character]()
+    each i in 0u64 til end_idx
+        result.add_last(me[i])
+    return Text(from_list: steal result)
 
 ### Returns a copy with each `old` value replaced by `new`.
 ### Replacement is performed left to right and does not re-scan newly inserted text.
@@ -683,30 +683,30 @@ routine Text.trim_end() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.replace(old: Text, new: Text) -> Text
-  if old.is_empty()
-    return me
-  var old_count = old.count()
-  var new_count = new.count()
-  var result = List[Character]()
-  var i: U64 = 0u64
-  loop
-    if i >= me.count
-      break
-    var found = false
-    if i + old_count <= me.count
-      found = true
-      each j in 0u64 til old_count
-        if me[i + j] != old[j]
-          found = false
-          break
-    if found
-      each j in 0u64 til new_count
-        result.add_last(new[j])
-      i += old_count
-    else
-      result.add_last(me[i])
-      i += 1u64
-  return Text(from_list: steal result)
+    if old.is_empty()
+        return me
+    var old_count = old.count()
+    var new_count = new.count()
+    var result = List[Character]()
+    var i: U64 = 0u64
+    loop
+        if i >= me.count
+            break
+        var found = false
+        if i + old_count <= me.count
+            found = true
+            each j in 0u64 til old_count
+                if me[i + j] != old[j]
+                    found = false
+                    break
+        if found
+            each j in 0u64 til new_count
+                result.add_last(new[j])
+            i += old_count
+        else
+            result.add_last(me[i])
+            i += 1u64
+    return Text(from_list: steal result)
 
 ### Returns a copy with only the FIRST occurrence of `old` replaced by `new`.
 ### When `old` is empty or not present, the original text is returned unchanged.
@@ -715,28 +715,28 @@ routine Text.replace(old: Text, new: Text) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.replace_first(old: Text, new: Text) -> Text
-  if old.is_empty()
-    return me
-  var oc = old.count()
-  if oc > me.count
-    return me
-  var pos = me.count
-  var i: U64 = 0u64
-  while i + oc <= me.count
-    var found = true
-    each j in 0u64 til oc
-      if me[i + j] != old[j]
-        found = false
-        break
-    if found
-      pos = i
-      break
-    i += 1u64
-  if pos == me.count
-    return me
-  var before = me[0u64 til pos]
-  var after = me[(pos + oc) til ^0]
-  return before.concat(new).concat(after)
+    if old.is_empty()
+        return me
+    var oc = old.count()
+    if oc > me.count
+        return me
+    var pos = me.count
+    var i: U64 = 0u64
+    while i + oc <= me.count
+        var found = true
+        each j in 0u64 til oc
+            if me[i + j] != old[j]
+                found = false
+                break
+        if found
+            pos = i
+            break
+        i += 1u64
+    if pos == me.count
+        return me
+    var before = me[0u64 til pos]
+    var after = me[(pos + oc) til ^0]
+    return before.concat(new).concat(after)
 
 ### Returns a copy without the matching prefix.
 ### When `prefix` is not present, the original text is returned unchanged.
@@ -744,12 +744,12 @@ routine Text.replace_first(old: Text, new: Text) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.remove_prefix(prefix: Text) -> Text
-  if me.starts_with(prefix)
-    var result = List[Character]()
-    each i in prefix.count() til me.count
-      result.add_last(me[i])
-    return Text(from_list: steal result)
-  return me
+    if me.starts_with(prefix)
+        var result = List[Character]()
+        each i in prefix.count() til me.count
+            result.add_last(me[i])
+        return Text(from_list: steal result)
+    return me
 
 ### Returns a copy without the matching suffix.
 ### When `suffix` is not present, the original text is returned unchanged.
@@ -757,13 +757,13 @@ routine Text.remove_prefix(prefix: Text) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.remove_suffix(suffix: Text) -> Text
-  if me.ends_with(suffix)
-    var result = List[Character]()
-    var end_idx = me.count - suffix.count()
-    each i in 0u64 til end_idx
-      result.add_last(me[i])
-    return Text(from_list: steal result)
-  return me
+    if me.ends_with(suffix)
+        var result = List[Character]()
+        var end_idx = me.count - suffix.count()
+        each i in 0u64 til end_idx
+            result.add_last(me[i])
+        return Text(from_list: steal result)
+    return me
 
 ### Returns a repeated copy of this value.
 ### This is the named form of the repetition operator.
@@ -771,21 +771,21 @@ routine Text.remove_suffix(suffix: Text) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.repeat(times: U64) -> Text
-  return me.mul[U64](count: times)
+    return me.mul[U64](count: times)
 
 ### Returns a copy with the value order reversed.
 ### Characters are reversed by position; no grapheme-aware processing is applied.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.reverse() -> Text
-  var result = List[Character]()
-  var i = me.count
-  loop
-    if i == 0u64
-      break
-    i -= 1u64
-    result.add_last(me[i])
-  return Text(from_list: steal result)
+    var result = List[Character]()
+    var i = me.count
+    loop
+        if i == 0u64
+            break
+        i -= 1u64
+        result.add_last(me[i])
+    return Text(from_list: steal result)
 
 ### Returns a copy padded on the left.
 ### If `width` is less than or equal to the current length, the original text is returned.
@@ -794,15 +794,15 @@ routine Text.reverse() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.pad_start(width: U64, fill: Character = ' ') -> Text
-  if me.count >= width
-    return me
-  var result = List[Character]()
-  var pad_count = width - me.count
-  each p in 0u64 til pad_count
-    result.add_last(fill)
-  each i in 0u64 til me.count
-    result.add_last(me[i])
-  return Text(from_list: steal result)
+    if me.count >= width
+        return me
+    var result = List[Character]()
+    var pad_count = width - me.count
+    each p in 0u64 til pad_count
+        result.add_last(fill)
+    each i in 0u64 til me.count
+        result.add_last(me[i])
+    return Text(from_list: steal result)
 
 ### Returns a copy padded on the right.
 ### If `width` is less than or equal to the current length, the original text is returned.
@@ -811,15 +811,15 @@ routine Text.pad_start(width: U64, fill: Character = ' ') -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.pad_end(width: U64, fill: Character = ' ') -> Text
-  if me.count >= width
-    return me
-  var result = List[Character]()
-  each i in 0u64 til me.count
-    result.add_last(me[i])
-  var pad_count = width - me.count
-  each p in 0u64 til pad_count
-    result.add_last(fill)
-  return Text(from_list: steal result)
+    if me.count >= width
+        return me
+    var result = List[Character]()
+    each i in 0u64 til me.count
+        result.add_last(me[i])
+    var pad_count = width - me.count
+    each p in 0u64 til pad_count
+        result.add_last(fill)
+    return Text(from_list: steal result)
 
 ### Returns a copy centered within `width`, padded on both sides with `fill`.
 ### An odd remainder puts the extra fill character on the right. If `width` is at
@@ -829,19 +829,19 @@ routine Text.pad_end(width: U64, fill: Character = ' ') -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.center(width: U64, fill: Character = ' ') -> Text
-  if me.count >= width
-    return me
-  var total = width - me.count
-  var left = total // 2u64
-  var right = total - left
-  var result = List[Character]()
-  each p in 0u64 til left
-    result.add_last(fill)
-  each i in 0u64 til me.count
-    result.add_last(me[i])
-  each p in 0u64 til right
-    result.add_last(fill)
-  return Text(from_list: steal result)
+    if me.count >= width
+        return me
+    var total = width - me.count
+    var left = total // 2u64
+    var right = total - left
+    var result = List[Character]()
+    each p in 0u64 til left
+        result.add_last(fill)
+    each i in 0u64 til me.count
+        result.add_last(me[i])
+    each p in 0u64 til right
+        result.add_last(fill)
+    return Text(from_list: steal result)
 
 ### Returns a copy padded on the left with `0` to `width`, keeping a leading sign (`-` or `+`) in front,
 ### so a rendered number stays a number: `"-5".zero_pad(4)` is `-005`, `"ff".zero_pad(4)` is `00ff`.
@@ -850,11 +850,11 @@ routine Text.center(width: U64, fill: Character = ' ') -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.zero_pad(width: U64) -> Text
-  if me.count >= width
-    return me
-  if me.count > 0u64 and (me[0u64] == '-' or me[0u64] == '+')
-    return me[0u64 til 1u64] + me[1u64 til me.count].pad_start(width: width - 1u64, fill: '0')
-  return me.pad_start(width: width, fill: '0')
+    if me.count >= width
+        return me
+    if me.count > 0u64 and (me[0u64] == '-' or me[0u64] == '+')
+        return me[0u64 til 1u64] + me[1u64 til me.count].pad_start(width: width - 1u64, fill: '0')
+    return me.pad_start(width: width, fill: '0')
 
 # Split/Join
 
@@ -864,16 +864,16 @@ routine Text.zero_pad(width: U64) -> Text
 ### :returns: The resulting `List[Text]` value.
 @readonly
 routine Text.split(separator: Character) -> List[Text]
-  var parts = List[Text]()
-  var current = List[Character]()
-  each i in 0u64 til me.count
-    if me[i] == separator
-      parts.add_last(Text(from_list: steal current))
-      current = List[Character]()
-    else
-      current.add_last(me[i])
-  parts.add_last(Text(from_list: steal current))
-  return steal parts
+    var parts = List[Text]()
+    var current = List[Character]()
+    each i in 0u64 til me.count
+        if me[i] == separator
+            parts.add_last(Text(from_list: steal current))
+            current = List[Character]()
+        else
+            current.add_last(me[i])
+    parts.add_last(Text(from_list: steal current))
+    return steal parts
 
 ### Splits this value into parts.
 ### An empty separator splits the text into one-character segments.
@@ -881,63 +881,63 @@ routine Text.split(separator: Character) -> List[Text]
 ### :returns: The resulting `List[Text]` value.
 @readonly
 routine Text.split(separator: Text) -> List[Text]
-  if separator.is_empty()
+    if separator.is_empty()
+        var parts = List[Text]()
+        each i in 0u64 til me.count
+            parts.add_last(Text(from_character: me[i]))
+        return steal parts
+    var separator_count = separator.count()
     var parts = List[Text]()
-    each i in 0u64 til me.count
-      parts.add_last(Text(from_character: me[i]))
+    var start: U64 = 0u64
+    var i: U64 = 0u64
+    loop
+        if i + separator_count > me.count
+            break
+        var found = true
+        each j in 0u64 til separator_count
+            if me[i + j] != separator[j]
+                found = false
+                break
+        if found
+            var seg = List[Character]()
+            each k in start til i
+                seg.add_last(me[k])
+            parts.add_last(Text(from_list: steal seg))
+            i += separator_count
+            start = i
+        else
+            i += 1u64
+    var tail = List[Character]()
+    each k in start til me.count
+        tail.add_last(me[k])
+    parts.add_last(Text(from_list: steal tail))
     return steal parts
-  var separator_count = separator.count()
-  var parts = List[Text]()
-  var start: U64 = 0u64
-  var i: U64 = 0u64
-  loop
-    if i + separator_count > me.count
-      break
-    var found = true
-    each j in 0u64 til separator_count
-      if me[i + j] != separator[j]
-        found = false
-        break
-    if found
-      var seg = List[Character]()
-      each k in start til i
-        seg.add_last(me[k])
-      parts.add_last(Text(from_list: steal seg))
-      i += separator_count
-      start = i
-    else
-      i += 1u64
-  var tail = List[Character]()
-  each k in start til me.count
-    tail.add_last(me[k])
-  parts.add_last(Text(from_list: steal tail))
-  return steal parts
 
 ### Returns the lines in this text.
 ### Windows line endings are normalized to `\n` before splitting.
 ### :returns: The resulting `List[Text]` value.
 @readonly
 routine Text.lines() -> List[Text]
-  var normalized = me.replace(old: "\r\n", new: "\n")
-  return normalized.split(CHARACTER_NEWLINE)
+    var normalized = me.replace(old: "\r\n", new: "\n")
+    return normalized.split(CHARACTER_NEWLINE)
 
 ### Returns the whitespace-delimited words in this text.
 ### Consecutive whitespace is treated as a single separator.
 ### :returns: The resulting `List[Text]` value.
 @readonly
 routine Text.words() -> List[Text]
-  var parts = List[Text]()
-  var current = List[Character]()
-  each i in 0u64 til me.count
-    if me[i].is_whitespace()
-      if not current.is_empty()
+    var parts = List[Text]()
+    var current = List[Character]()
+    each i in 0u64 til me.count
+        if me[i].is_whitespace()
+            if not current.is_empty()
+                parts.add_last(Text(from_list: steal current))
+                current = List[Character]()
+        else
+            current.add_last(me[i])
+    if not current.is_empty()
         parts.add_last(Text(from_list: steal current))
-        current = List[Character]()
-    else
-      current.add_last(me[i])
-  if not current.is_empty()
-    parts.add_last(Text(from_list: steal current))
-  return steal parts
+    return steal parts
 
 # Conversion to modifiable list
 
@@ -948,38 +948,38 @@ routine Text.words() -> List[Text]
 ### :returns: The resulting `Text` value.
 @[readonly, override]
 routine Text.represent() -> Text
-  return me
+    return me
 
 ### Returns the diagnostic representation of this text.
 ### The result includes the type name and character count for debugging.
 ### :returns: The resulting `Text` value.
 @[readonly, override]
 routine Text.diagnose() -> Text
-  return f"Text(count: {me.count}, \"{me}\")"
+    return f"Text(count: {me.count}, \"{me}\")"
 
 ### Represents the iterator used to traverse a `Text` value.
 ### The iterator reads the text sequentially from the first character to the
 ### last.
 entity TextEmittable
-  ### Stores the source text.
-  text: Text
-  ### Stores the current character index.
-  index: U64
+    ### Stores the source text.
+    text: Text
+    ### Stores the current character index.
+    index: U64
 
 ### Returns an iterator over this text value.
 ### The iterator starts at index `0`.
 ### :returns: The resulting `TextEmittable` value.
 @readonly
 routine Text.iter() -> TextEmittable
-  return TextEmittable(text: me, index: 0u64)
+    return TextEmittable(text: me, index: 0u64)
 
 ### Returns the next character from this iterator.
 ### Each successful call advances the iterator by one character.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine TextEmittable.emit!() -> Character
-  if me.index >= me.text.count
-    absent
-  var value = me.text[me.index]
-  me.index = me.index + 1u64
-  return value
+    if me.index >= me.text.count
+        absent
+    var value = me.text[me.index]
+    me.index = me.index + 1u64
+    return value

@@ -19,16 +19,16 @@ public class OperatorProtocolTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
+                            @readonly
+                            routine Me.$add(you: Me) -> Me
 
                         record Vector obeys Addable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Vector.$add(you: Vector) -> Vector
-                          return Vector(x: me.x +% you.x, y: me.y +% you.y)
+                            return Vector(x: me.x +% you.x, y: me.y +% you.y)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -42,16 +42,16 @@ public class OperatorProtocolTests
     {
         string source = """
                         protocol Equatable
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool
-                          return me.x == you.x and me.y == you.y
+                            return me.x == you.x and me.y == you.y
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -65,24 +65,24 @@ public class OperatorProtocolTests
     {
         string source = """
                         choice ComparisonSign
-                          ME_SMALL
-                          SAME
-                          ME_LARGE
+                            ME_SMALL
+                            SAME
+                            ME_LARGE
 
                         protocol Comparable
-                          @readonly
-                          routine Me.$cmp(you: Me) -> ComparisonSign
+                            @readonly
+                            routine Me.$cmp(you: Me) -> ComparisonSign
 
                         record Score obeys Comparable
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine Score.$cmp(you: Score) -> ComparisonSign
-                          if me.value < you.value
-                            return ME_SMALL
-                          if me.value > you.value
-                            return ME_LARGE
-                          return SAME
+                            if me.value < you.value
+                                return ME_SMALL
+                            if me.value > you.value
+                                return ME_LARGE
+                            return SAME
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -96,24 +96,24 @@ public class OperatorProtocolTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
+                            @readonly
+                            routine Me.$add(you: Me) -> Me
 
                         protocol Subtractable
-                          @readonly
-                          routine Me.$sub(you: Me) -> Me
+                            @readonly
+                            routine Me.$sub(you: Me) -> Me
 
                         record Complex obeys Addable, Subtractable
-                          real: B64
-                          imag: B64
+                            real: B64
+                            imag: B64
 
                         @readonly
                         routine Complex.$add(you: Complex) -> Complex
-                          return Complex(real: me.real + you.real, imag: me.imag + you.imag)
+                            return Complex(real: me.real + you.real, imag: me.imag + you.imag)
 
                         @readonly
                         routine Complex.$sub(you: Complex) -> Complex
-                          return Complex(real: me.real - you.real, imag: me.imag - you.imag)
+                            return Complex(real: me.real - you.real, imag: me.imag - you.imag)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -132,16 +132,16 @@ public class OperatorProtocolTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
+                            @readonly
+                            routine Me.$add(you: Me) -> Me
 
                         record Vector
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Vector.$add(you: Vector) -> Vector
-                          return Vector(x: me.x + you.x, y: me.y + you.y)
+                            return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -162,16 +162,16 @@ public class OperatorProtocolTests
     {
         string source = """
                         protocol Equatable
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool
-                          return me.x == you.x and me.y == you.y
+                            return me.x == you.x and me.y == you.y
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -192,20 +192,20 @@ public class OperatorProtocolTests
     {
         string source = """
                         choice ComparisonSign
-                          ME_SMALL
-                          SAME
-                          ME_LARGE
+                            ME_SMALL
+                            SAME
+                            ME_LARGE
 
                         protocol Comparable
-                          @readonly
-                          routine Me.$cmp(you: Me) -> ComparisonSign
+                            @readonly
+                            routine Me.$cmp(you: Me) -> ComparisonSign
 
                         record Score
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine Score.$cmp(you: Score) -> ComparisonSign
-                          return SAME
+                            return SAME
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -231,16 +231,16 @@ public class OperatorProtocolTests
     {
         string source = """
                         protocol Equatable
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Point.$eq(you: Point) -> S32
-                          return 0_s32
+                            return 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -255,16 +255,16 @@ public class OperatorProtocolTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
+                            @readonly
+                            routine Me.$add(you: Me) -> Me
 
                         record Vector obeys Addable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Vector.$add(you: S32) -> Vector
-                          return Vector(x: me.x, y: me.y)
+                            return Vector(x: me.x, y: me.y)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -283,20 +283,20 @@ public class OperatorProtocolTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
+                            @readonly
+                            routine Me.$add(you: Me) -> Me
 
                         record Vector obeys Addable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Vector.$add(you: Vector) -> Vector
-                          return Vector(x: me.x +% you.x, y: me.y +% you.y)
+                            return Vector(x: me.x +% you.x, y: me.y +% you.y)
 
                         @readonly
                         routine Vector.magnitude_squared() -> S32
-                          return me.x * me.x +% me.y * me.y
+                            return me.x * me.x +% me.y * me.y
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -316,11 +316,11 @@ public class OperatorProtocolTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine Point.create() -> Point
-                          return Point(x: 0, y: 0)
+                            return Point(x: 0, y: 0)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -334,11 +334,11 @@ public class OperatorProtocolTests
     {
         string source = """
                         entity Resource
-                          handle: S32
+                            handle: S32
 
                         dangerous routine Resource.destroy()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -352,12 +352,12 @@ public class OperatorProtocolTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Point.magnitude() -> B64
-                          return 0.0
+                            return 0.0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -30,9 +30,9 @@ public sealed class ManifestModuleIndexTests
         string root = CreateTempProject(files: new Dictionary<string, string>
         {
             [key: "config.toml"] = Manifest,
-            [key: "App.rf"] = "module App\n\nroutine start()\n  return\n",
-            [key: "Lib/A.rf"] = "module Lib\n\nrecord A\n  x: S32\n",
-            [key: "Lib/B.rf"] = "module Lib\n\nrecord B\n  y: S32\n"
+            [key: "App.rf"] = "module App\n\nroutine start()\n    return\n",
+            [key: "Lib/A.rf"] = "module Lib\n\nrecord A\n    x: S32\n",
+            [key: "Lib/B.rf"] = "module Lib\n\nrecord B\n    y: S32\n"
         });
         try
         {
@@ -61,7 +61,7 @@ public sealed class ManifestModuleIndexTests
         {
             [key: "config.toml"] = Manifest,
             [key: "App.rf"] = "import IO/Console\n\nshow(\"hi\")\n",
-            [key: "Lib/A.rf"] = "module Lib\n\nrecord A\n  x: S32\n"
+            [key: "Lib/A.rf"] = "module Lib\n\nrecord A\n    x: S32\n"
         });
         try
         {
@@ -90,8 +90,8 @@ public sealed class ManifestModuleIndexTests
         {
             [key: "config.toml"] = Manifest,
             // Both declare `module App`; only the entry file has start().
-            [key: "App/lib.rf"] = "module App\n\nrecord Helper\n  x: S32\n",
-            [key: "App/main.rf"] = "module App\n\nroutine start()\n  return\n"
+            [key: "App/lib.rf"] = "module App\n\nrecord Helper\n    x: S32\n",
+            [key: "App/main.rf"] = "module App\n\nroutine start()\n    return\n"
         });
         try
         {
@@ -120,8 +120,8 @@ public sealed class ManifestModuleIndexTests
         string root = CreateTempProject(files: new Dictionary<string, string>
         {
             [key: "config.toml"] = Manifest,
-            [key: "main1.rf"] = "module App\n\nroutine start()\n  return\n",
-            [key: "main2.rf"] = "module App\n\nroutine start()\n  return\n"
+            [key: "main1.rf"] = "module App\n\nroutine start()\n    return\n",
+            [key: "main2.rf"] = "module App\n\nroutine start()\n    return\n"
         });
         try
         {

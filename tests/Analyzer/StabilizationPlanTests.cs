@@ -22,21 +22,21 @@ public class StabilizationPlanTests
         // LookupMemberRoutine should substitute T -> S32 in parameter type
         string source = """
                         protocol Summable
-                          @readonly
-                          routine Me.sum(other: Me) -> Me
+                            @readonly
+                            routine Me.sum(other: Me) -> Me
 
                         record Total[T] obeys Summable
-                          value: T
+                            value: T
 
                         @readonly
                         routine Total[T].sum(other: Total[T]) -> Total[T]
-                          return me
+                            return me
 
                         routine test()
-                          var a = Total[S32](value: 1)
-                          var b = Total[S32](value: 2)
-                          var c: Total[S32] = a.sum(other: b)
-                          return
+                            var a = Total[S32](value: 1)
+                            var b = Total[S32](value: 2)
+                            var c: Total[S32] = a.sum(other: b)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -52,15 +52,15 @@ public class StabilizationPlanTests
         // Owner-level T and memberRoutine-level U should both resolve
         string source = """
                         record Store[T]
-                          item: T
+                            item: T
 
                         routine Store[T].transform[U](func_val: U) -> U
-                          return func_val
+                            return func_val
 
                         routine test()
-                          var s = Store[S32](item: 10)
-                          var r: Bool = s.transform[Bool](func_val: true)
-                          return
+                            var s = Store[S32](item: 10)
+                            var r: Bool = s.transform[Bool](func_val: true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -76,15 +76,15 @@ public class StabilizationPlanTests
         // Return type T should resolve to the owner's type argument
         string source = """
                         record Slot[T]
-                          data: T
+                            data: T
 
                         routine Slot[T].peek() -> T
-                          return me.data
+                            return me.data
 
                         routine test()
-                          var s = Slot[Bool](data: false)
-                          var v: Bool = s.peek()
-                          return
+                            var s = Slot[Bool](data: false)
+                            var v: Bool = s.peek()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -99,20 +99,20 @@ public class StabilizationPlanTests
     {
         string source = """
                         protocol Clonable
-                          @readonly
-                          routine Me.duplicate() -> Me
+                            @readonly
+                            routine Me.duplicate() -> Me
 
                         record Box[T] obeys Clonable
-                          value: T
+                            value: T
 
                         @readonly
                         routine Box[T].duplicate() -> Box[T]
-                          return Box[T](value: me.value)
+                            return Box[T](value: me.value)
 
                         routine test()
-                          var boxed = Box[Box[S32]](value: Box[S32](value: 7))
-                          var copy: Box[Box[S32]] = boxed.duplicate()
-                          return
+                            var boxed = Box[Box[S32]](value: Box[S32](value: 7))
+                            var copy: Box[Box[S32]] = boxed.duplicate()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -133,25 +133,25 @@ public class StabilizationPlanTests
         // so memberRoutine lookup on Pair[S32] can substitute T -> S32
         string source = """
                         protocol Showable
-                          @readonly
-                          routine Me.label() -> Text
+                            @readonly
+                            routine Me.label() -> Text
 
                         record Pair[T] obeys Showable
-                          first: T
-                          second: T
+                            first: T
+                            second: T
 
                         @readonly
                         routine Pair[T].label() -> Text
-                          return "pair"
+                            return "pair"
 
                         routine Pair[T].get_first() -> T
-                          return me.first
+                            return me.first
 
                         routine test()
-                          var p = Pair[S32](first: 1, second: 2)
-                          var v: S32 = p.get_first()
-                          var lbl: Text = p.label()
-                          return
+                            var p = Pair[S32](first: 1, second: 2)
+                            var v: S32 = p.get_first()
+                            var lbl: Text = p.label()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -167,24 +167,24 @@ public class StabilizationPlanTests
         // Same as above but for entity types
         string source = """
                         protocol Describable
-                          @readonly
-                          routine Me.describe() -> Text
+                            @readonly
+                            routine Me.describe() -> Text
 
                         entity Container[T] obeys Describable
-                          item: T
+                            item: T
 
                         @readonly
                         routine Container[T].describe() -> Text
-                          return "container"
+                            return "container"
 
                         routine Container[T].get_item() -> T
-                          return me.item
+                            return me.item
 
                         routine test()
-                          var c = Container[Bool](item: true)
-                          var v: Bool = c.get_item()
-                          var d: Text = c.describe()
-                          return
+                            var c = Container[Bool](item: true)
+                            var v: Bool = c.get_item()
+                            var d: Text = c.describe()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -204,19 +204,19 @@ public class StabilizationPlanTests
         // using on a generic Enterable type (self pass-through binds the resource itself)
         string source = """
                         record Guard[T] obeys Enterable
-                          resource: T
+                            resource: T
 
                         routine Guard[T].enter() -> Guard[T]
-                          return me
+                            return me
 
                         routine Guard[T].exit()
-                          return
+                            return
 
                         routine test()
-                          var g = Guard[S32](resource: 42)
-                          using g as val
-                            var x: S32 = val.resource
-                          return
+                            var g = Guard[S32](resource: 42)
+                            using g as val
+                                var x: S32 = val.resource
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -232,22 +232,22 @@ public class StabilizationPlanTests
     {
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         record Guard[T] obeys Enterable
-                          resource: T
+                            resource: T
 
                         routine Guard[T].enter() -> Guard[T]
-                          return me
+                            return me
 
                         routine Guard[T].exit()
-                          return
+                            return
 
                         routine test()
-                          var g = Guard[Box[S32]](resource: Box[S32](value: 42))
-                          using g as value_box
-                            var n: S32 = value_box.resource.value
-                          return
+                            var g = Guard[Box[S32]](resource: Box[S32](value: 42))
+                            using g as value_box
+                                var n: S32 = value_box.resource.value
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -267,19 +267,19 @@ public class StabilizationPlanTests
         // Zero-arg and one-arg overloads must each find their correct body
         string source = """
                         record Counter
-                          count: S32
+                            count: S32
 
                         routine Counter.reset() -> Counter
-                          return Counter(count: 0)
+                            return Counter(count: 0)
 
                         routine Counter.reset(to: S32) -> Counter
-                          return Counter(count: to)
+                            return Counter(count: to)
 
                         routine test()
-                          var c = Counter(count: 5)
-                          var a = c.reset()
-                          var b = c.reset(to: 10)
-                          return
+                            var c = Counter(count: 5)
+                            var a = c.reset()
+                            var b = c.reset(to: 10)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -296,22 +296,22 @@ public class StabilizationPlanTests
         // Three $create overloads with different types: S32, Bool, Text
         string source = """
                         record Value
-                          raw: S64
+                            raw: S64
 
                         routine Value.$create(from: S32) -> Value
-                          return Value(raw: from.S64())
+                            return Value(raw: from.S64())
 
                         routine Value.$create(from: Bool) -> Value
-                          return Value(raw: 1s64)
+                            return Value(raw: 1s64)
 
                         routine Value.$create(from: Text) -> Value
-                          return Value(raw: 0s64)
+                            return Value(raw: 0s64)
 
                         routine test()
-                          var a = Value(from: 42)
-                          var b = Value(from: true)
-                          var c = Value(from: "hi")
-                          return
+                            var a = Value(from: 42)
+                            var b = Value(from: true)
+                            var c = Value(from: "hi")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -328,19 +328,19 @@ public class StabilizationPlanTests
         // Body matching on generic owner should use resolved type names
         string source = """
                         record Stack[T]
-                          top: T
+                            top: T
 
                         routine Stack[T].push(item: T) -> Stack[T]
-                          return Stack[T](top: item)
+                            return Stack[T](top: item)
 
                         routine Stack[T].peek() -> T
-                          return me.top
+                            return me.top
 
                         routine test()
-                          var s = Stack[S32](top: 0)
-                          var s2 = s.push(item: 42)
-                          var v: S32 = s2.peek()
-                          return
+                            var s = Stack[S32](top: 0)
+                            var s2 = s.push(item: 42)
+                            var v: S32 = s2.peek()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -356,20 +356,20 @@ public class StabilizationPlanTests
     {
         string source = """
                         record Buffer[T]
-                          value: T
-                          ready: Bool
+                            value: T
+                            ready: Bool
 
                         routine Buffer[T].replace(next: T) -> Buffer[T]
-                          return Buffer[T](value: next, ready: me.ready)
+                            return Buffer[T](value: next, ready: me.ready)
 
                         routine Buffer[T].replace(flag: Bool) -> Buffer[T]
-                          return Buffer[T](value: me.value, ready: flag)
+                            return Buffer[T](value: me.value, ready: flag)
 
                         routine test()
-                          var b = Buffer[S32](value: 1, ready: false)
-                          var a = b.replace(next: 9)
-                          var c = b.replace(flag: true)
-                          return
+                            var b = Buffer[S32](value: 1, ready: false)
+                            var a = b.replace(next: 9)
+                            var c = b.replace(flag: true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -385,18 +385,18 @@ public class StabilizationPlanTests
     {
         string source = """
                         record Wrapper[T]
-                          value: T
+                            value: T
 
                         routine Wrapper[T].$create(from: T) -> Wrapper[T]
-                          return Wrapper[T](value: from)
+                            return Wrapper[T](value: from)
 
                         routine Wrapper[T].$create(copy: Wrapper[T]) -> Wrapper[T]
-                          return Wrapper[T](value: copy.value)
+                            return Wrapper[T](value: copy.value)
 
                         routine test()
-                          var a = Wrapper[S32](from: 12)
-                          var b = Wrapper[S32](copy: a)
-                          return
+                            var a = Wrapper[S32](from: 12)
+                            var b = Wrapper[S32](copy: a)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -418,15 +418,15 @@ public class StabilizationPlanTests
         // Codegen resolves via _typeSubstitutions
         string source = """
                         record Wrapper[T]
-                          value: T
+                            value: T
 
                         routine Wrapper[T].get() -> T
-                          return me.value
+                            return me.value
 
                         routine test()
-                          var w = Wrapper[S32](value: 99)
-                          var v: S32 = w.get()
-                          return
+                            var w = Wrapper[S32](value: 99)
+                            var v: S32 = w.get()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -447,17 +447,17 @@ public class StabilizationPlanTests
         // through GenericDefinition, not Name.Contains('[') heuristics
         string source = """
                         record Wrapper[T]
-                          inner: T
+                            inner: T
 
                         routine Wrapper[T].unwrap() -> T
-                          return me.inner
+                            return me.inner
 
                         routine test()
-                          var inner = Wrapper[S32](inner: 42)
-                          var outer = Wrapper[Wrapper[S32]](inner: inner)
-                          var result: Wrapper[S32] = outer.unwrap()
-                          var val: S32 = result.unwrap()
-                          return
+                            var inner = Wrapper[S32](inner: 42)
+                            var outer = Wrapper[Wrapper[S32]](inner: inner)
+                            var result: Wrapper[S32] = outer.unwrap()
+                            var val: S32 = result.unwrap()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -472,26 +472,26 @@ public class StabilizationPlanTests
     {
         string source = """
                         record Node[T]
-                          item: T
+                            item: T
 
                         @readonly
                         routine Node[T].hash() -> U64
-                          return 0u64
+                            return 0u64
 
                         record Holder[T]
-                          node: Node[T]
+                            node: Node[T]
 
                         @readonly
                         routine Holder[T].hash() -> U64
-                          return 0u64
+                            return 0u64
 
                         routine Holder[T].fetch() -> Node[T]
-                          return me.node
+                            return me.node
 
                         routine test()
-                          var h = Holder[S32](node: Node[S32](item: 4))
-                          var n: Node[S32] = h.fetch()
-                          return
+                            var h = Holder[S32](node: Node[S32](item: 4))
+                            var n: Node[S32] = h.fetch()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -512,27 +512,27 @@ public class StabilizationPlanTests
         // memberRoutine lookup + body matching + type substitution all must work together
         string source = """
                         protocol Clearable
-                          routine Me.clear() -> Me
+                            routine Me.clear() -> Me
 
                         record Buffer[T] obeys Clearable
-                          item: T
-                          size: S32
+                            item: T
+                            size: S32
 
                         routine Buffer[T].clear() -> Buffer[T]
-                          return Buffer[T](item: me.item, size: 0)
+                            return Buffer[T](item: me.item, size: 0)
 
                         routine Buffer[T].set(item: T) -> Buffer[T]
-                          return Buffer[T](item: item, size: me.size)
+                            return Buffer[T](item: item, size: me.size)
 
                         routine Buffer[T].resize(size: S32) -> Buffer[T]
-                          return Buffer[T](item: me.item, size: size)
+                            return Buffer[T](item: me.item, size: size)
 
                         routine test()
-                          var b = Buffer[S32](item: 0, size: 10)
-                          var c: Buffer[S32] = b.clear()
-                          var d = b.set(item: 42)
-                          var e = b.resize(size: 5)
-                          return
+                            var b = Buffer[S32](item: 0, size: 10)
+                            var c: Buffer[S32] = b.clear()
+                            var d = b.set(item: 42)
+                            var e = b.resize(size: 5)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

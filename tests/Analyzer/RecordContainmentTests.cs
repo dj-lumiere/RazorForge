@@ -20,8 +20,8 @@ public class RecordContainmentTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -36,9 +36,9 @@ public class RecordContainmentTests
     {
         string source = """
                         record Inner
-                          value: S32
+                            value: S32
                         record Outer
-                          inner: Inner
+                            inner: Inner
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -53,13 +53,13 @@ public class RecordContainmentTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         record Pixel
-                          x: S32
-                          y: S32
-                          color: Color
+                            x: S32
+                            y: S32
+                            color: Color
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -75,7 +75,7 @@ public class RecordContainmentTests
         // Generic type parameters are validated at instantiation time, not definition time
         string source = """
                         record Container[T]
-                          value: T
+                            value: T
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -90,8 +90,8 @@ public class RecordContainmentTests
     {
         string source = """
                         record Pair[K, V]
-                          key: K
-                          value: V
+                            key: K
+                            value: V
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -107,9 +107,9 @@ public class RecordContainmentTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
                         record Handle
-                          ref: Retained[Node]
+                            ref: Retained[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -125,9 +125,9 @@ public class RecordContainmentTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
                         record Handle
-                          ref: Guarded[Node]
+                            ref: Guarded[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -143,9 +143,9 @@ public class RecordContainmentTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
                         record RawHandle
-                          ptr: Hijacked[Node]
+                            ptr: Hijacked[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -161,12 +161,12 @@ public class RecordContainmentTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
                         record Inner
-                          ref: Retained[Node]
+                            ref: Retained[Node]
                         record Outer
-                          inner: Inner
-                          count: S32
+                            inner: Inner
+                            count: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -188,9 +188,9 @@ public class RecordContainmentTests
     {
         string source = """
                         entity User
-                          name: Text
+                            name: Text
                         record BadRecord
-                          user: User
+                            user: User
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -207,9 +207,9 @@ public class RecordContainmentTests
         // Scoped tokens are caught by S601 (TokenMemberVariableNotAllowed) before S412
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
                         record BadRecord
-                          view: Viewing[Node]
+                            view: Viewing[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -228,9 +228,9 @@ public class RecordContainmentTests
         // Scoped tokens are caught by S601 (TokenMemberVariableNotAllowed) before S412
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
                         record BadRecord
-                          modifying: Modifying[Node]
+                            modifying: Modifying[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -252,10 +252,10 @@ public class RecordContainmentTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
                         record BadRecord
-                          reader: Viewing[Node]
-                          writer: Modifying[Node]
+                            reader: Viewing[Node]
+                            writer: Modifying[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -275,12 +275,12 @@ public class RecordContainmentTests
     {
         string source = """
                         variant Status
-                          S32
-                          Text
+                            S32
+                            Text
 
                         record Result
-                          status: Status
-                          code: S32
+                            status: Status
+                            code: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -300,11 +300,11 @@ public class RecordContainmentTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         routine test(p: Point)
-                          var q = p with .z = 5
-                          return
+                            var q = p with .z = 5
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -319,12 +319,12 @@ public class RecordContainmentTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
-                          z: S32
+                            x: S32
+                            y: S32
+                            z: S32
                         routine test(p: Point)
-                          var q = p with .x = 1, .z = 3
-                          return
+                            var q = p with .x = 1, .z = 3
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -344,10 +344,10 @@ public class RecordContainmentTests
     {
         string source = """
                         entity Foo
-                          x: S32
+                            x: S32
                         routine test(f: Foo)
-                          var g = f with .x = 2
-                          return
+                            var g = f with .x = 2
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -362,11 +362,11 @@ public class RecordContainmentTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         routine test(p: Point)
-                          var q = p with .x = 2
-                          return
+                            var q = p with .x = 2
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -381,11 +381,11 @@ public class RecordContainmentTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         routine test(p: Point)
-                          var q = p with .x = 2, .y = 3
-                          return
+                            var q = p with .x = 2, .y = 3
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

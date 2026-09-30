@@ -21,9 +21,9 @@ public class MutabilityTests
         // var is mutable, so reassignment should succeed
         string source = """
                         routine test()
-                          var x = 42
-                          x = 10
-                          return
+                            var x = 42
+                            x = 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -43,9 +43,9 @@ public class MutabilityTests
         // var is mutable, so compound assignment should succeed
         string source = """
                         routine test()
-                          var x = 42
-                          x += 10
-                          return
+                            var x = 42
+                            x += 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -60,9 +60,9 @@ public class MutabilityTests
     {
         string source = """
                         routine test()
-                          var x = 42
-                          x = 10
-                          return
+                            var x = 42
+                            x = 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -82,11 +82,11 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         routine Counter.increment()
-                          me.count += 1
-                          return
+                            me.count += 1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -100,12 +100,12 @@ public class MutabilityTests
     {
         string source = """
                         entity User
-                          id: U64
-                          name: Text
+                            id: U64
+                            name: Text
 
                         routine User.set_id(new_id: U64)
-                          me.id = new_id
-                          return
+                            me.id = new_id
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -124,12 +124,12 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         @readonly
                         routine Counter.increment()
-                          me.count += 1
-                          return
+                            me.count += 1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -143,11 +143,11 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         @readonly
                         routine Counter.get_count() -> S32
-                          return me.count
+                            return me.count
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -161,11 +161,11 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         routine Counter.set_count(value: S32)
-                          me.count = value
-                          return
+                            me.count = value
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -184,13 +184,13 @@ public class MutabilityTests
     {
         string source = """
                         record Point
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         routine test()
-                          var p = Point(x: 1.0, y: 2.0)
-                          var x = p.x
-                          return
+                            var p = Point(x: 1.0, y: 2.0)
+                            var x = p.x
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -210,8 +210,8 @@ public class MutabilityTests
     {
         string source = """
                         routine test(x: S32)
-                          x = 10
-                          return
+                            x = 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -230,9 +230,9 @@ public class MutabilityTests
     {
         string source = """
                         routine test()
-                          var items = [1, 2, 3]
-                          items[0] = 42
-                          return
+                            var items = [1, 2, 3]
+                            items[0] = 42
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -253,17 +253,17 @@ public class MutabilityTests
         // You cannot modify a child of an already-modifying object
         string source = """
                         entity Child
-                          value: S64
+                            value: S64
 
                         entity Parent
-                          child: Child
+                            child: Child
 
                         routine test()
-                          var parent = Parent(child: Child(value: 0))
-                          using parent.modify() as p
-                            using p.child.modify() as c
-                              c.value = 10
-                          return
+                            var parent = Parent(child: Child(value: 0))
+                            using parent.modify() as p
+                                using p.child.modify() as c
+                                    c.value = 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -288,12 +288,12 @@ public class MutabilityTests
     {
         string source = """
                         entity Document
-                          title: Text
+                            title: Text
 
                         routine test()
-                          var doc1 = Document(title: "My Doc")
-                          var doc2 = doc1
-                          return
+                            var doc1 = Document(title: "My Doc")
+                            var doc2 = doc1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -308,12 +308,12 @@ public class MutabilityTests
     {
         string source = """
                         entity Document
-                          title: Text
+                            title: Text
 
                         routine test()
-                          var doc1 = Document(title: "My Doc")
-                          var doc2 = Document(title: "Other")
-                          return
+                            var doc1 = Document(title: "My Doc")
+                            var doc2 = Document(title: "Other")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -328,13 +328,13 @@ public class MutabilityTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine test()
-                          var p1 = Point(x: 1, y: 2)
-                          var p2 = p1
-                          return
+                            var p1 = Point(x: 1, y: 2)
+                            var p2 = p1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -354,16 +354,16 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         routine Counter.increment()
-                          me.count += 1
-                          return
+                            me.count += 1
+                            return
 
                         @readonly
                         routine Counter.try_increment()
-                          me.increment()
-                          return
+                            me.increment()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -378,15 +378,15 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         @readonly
                         routine Counter.get_count() -> S32
-                          return me.count
+                            return me.count
 
                         @readonly
                         routine Counter.display() -> S32
-                          return me.get_count()
+                            return me.get_count()
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -401,16 +401,16 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         routine Counter.increment()
-                          me.count += 1
-                          return
+                            me.count += 1
+                            return
 
                         @readonly
                         routine Counter.compare(other: Counter)
-                          other.increment()
-                          return
+                            other.increment()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -433,10 +433,10 @@ public class MutabilityTests
     {
         string source = """
                         routine test()
-                          var x = 1
-                          x = 2
-                          x = 3
-                          return
+                            var x = 1
+                            x = 2
+                            x = 3
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -456,11 +456,11 @@ public class MutabilityTests
     {
         string source = """
                         entity Doc
-                          title: Text
+                            title: Text
 
                         routine test(d: Doc)
-                          var d2 = d
-                          return
+                            var d2 = d
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -476,12 +476,12 @@ public class MutabilityTests
     {
         string source = """
                         entity Doc
-                          title: Text
+                            title: Text
 
                         routine test()
-                          var d1 = Doc(title: "one")
-                          var d2 = steal d1
-                          return
+                            var d1 = Doc(title: "one")
+                            var d2 = steal d1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -501,11 +501,11 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         @readonly
                         routine Counter.get_count() -> S32
-                          return me.count
+                            return me.count
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -521,15 +521,15 @@ public class MutabilityTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         @readonly
                         routine Counter.get_count() -> S32
-                          return me.count
+                            return me.count
 
                         routine Counter.increment_and_read() -> S32
-                          me.count += 1
-                          return me.get_count()
+                            me.count += 1
+                            return me.get_count()
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -550,11 +550,11 @@ public class MutabilityTests
         // Within the same module (null == null), writing to posted member variable is allowed
         string source = """
                         entity Config
-                          posted name: Text
+                            posted name: Text
 
                         routine Config.rename(new_name: Text)
-                          me.name = new_name
-                          return
+                            me.name = new_name
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -570,11 +570,11 @@ public class MutabilityTests
         // Reading a posted member variable is always allowed
         string source = """
                         entity Config
-                          posted name: Text
+                            posted name: Text
 
                         @readonly
                         routine Config.get_name() -> Text
-                          return me.name
+                            return me.name
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

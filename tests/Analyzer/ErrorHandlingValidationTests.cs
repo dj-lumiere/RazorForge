@@ -21,9 +21,9 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable BadError
-                          message: Text
+                            message: Text
                         routine test!() -> S32
-                          throw BadError(message: "oops")
+                            throw BadError(message: "oops")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -38,9 +38,9 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable MyError
-                          message: Text
+                            message: Text
                         routine test!() -> S32
-                          throw MyError(message: "oops")
+                            throw MyError(message: "oops")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -60,7 +60,7 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         routine useless!() -> S32
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -75,9 +75,9 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable MyError
-                          message: Text
+                            message: Text
                         routine useful!() -> S32
-                          throw MyError(message: "bad")
+                            throw MyError(message: "bad")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -92,8 +92,8 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         routine find!() -> S32
-                          absent
-                          return 0
+                            absent
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -114,7 +114,7 @@ public class ErrorHandlingValidationTests
         string source = """
                         @crash_only
                         routine safe_routine() -> S32
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -129,10 +129,10 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable MyError
-                          message: Text
+                            message: Text
                         @crash_only
                         routine crash_routine!() -> S32
-                          throw MyError(message: "fatal")
+                            throw MyError(message: "fatal")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -147,10 +147,10 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable MyError
-                          message: Text
+                            message: Text
                         @crash_only
                         routine crash_routine!() -> S32
-                          throw MyError(message: "fatal")
+                            throw MyError(message: "fatal")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -168,12 +168,12 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable MyError
-                          message: Text
+                            message: Text
                         routine normal_routine!() -> S32
-                          throw MyError(message: "error")
+                            throw MyError(message: "error")
 
                         routine trigger_variants() -> S32?
-                          return try normal_routine()
+                            return try normal_routine()
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -196,12 +196,12 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable ParseError
-                          message: Text
+                            message: Text
                         routine parse!(data: S32) -> S32
-                          throw ParseError(message: "bad")
+                            throw ParseError(message: "bad")
                         routine caller() -> S32
-                          parse(data: 1)
-                          return 0
+                            parse(data: 1)
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -216,12 +216,12 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable ParseError
-                          message: Text
+                            message: Text
                         routine parse!(data: S32) -> S32
-                          throw ParseError(message: "bad")
+                            throw ParseError(message: "bad")
                         routine caller!() -> S32
-                          parse(data: 1)
-                          return 0
+                            parse(data: 1)
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -237,22 +237,22 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable DbError
-                          message: Text
+                            message: Text
 
                         @readonly
                         routine DbError.crash_message() -> Text
-                          return me.message
+                            return me.message
 
                         routine get_value!(id: U64) -> S32
-                          if id == 0
-                            throw DbError(message: "bad")
-                          unless id == 1
-                            absent
-                          return 42
+                            if id == 0
+                                throw DbError(message: "bad")
+                            unless id == 1
+                                absent
+                            return 42
 
                         routine test()
-                          var pending = lookup get_value(id: 1)
-                          return
+                            var pending = lookup get_value(id: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -268,21 +268,21 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable ParseError
-                          message: Text
+                            message: Text
 
                         @readonly
                         routine ParseError.crash_message() -> Text
-                          return me.message
+                            return me.message
 
                         routine validate!(value: S32) -> S32
-                          if value < 0
-                            throw ParseError(message: "negative")
-                          return value
+                            if value < 0
+                                throw ParseError(message: "negative")
+                            return value
 
                         routine test()
-                          var first = grab validate(value: 1)
-                          var second = first
-                          return
+                            var first = grab validate(value: 1)
+                            var second = first
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -302,7 +302,7 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         routine test!() -> S32
-                          throw 42
+                            throw 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -318,13 +318,13 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable ErrA
-                          message: Text
+                            message: Text
                         crashable ErrB
-                          code: S32
+                            code: S32
                         routine test!(flag: Bool) -> S32
-                          if flag
-                            throw ErrA(message: "a")
-                          throw ErrB(code: 1)
+                            if flag
+                                throw ErrA(message: "a")
+                            throw ErrB(code: 1)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -342,13 +342,13 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         crashable MyErr
-                          message: Text
+                            message: Text
                         routine inner!(value: S32) -> S32
-                          if value < 0
-                            throw MyErr(message: "bad")
-                          return value
+                            if value < 0
+                                throw MyErr(message: "bad")
+                            return value
                         routine outer!(value: S32) -> S32
-                          return inner(value: value)
+                            return inner(value: value)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

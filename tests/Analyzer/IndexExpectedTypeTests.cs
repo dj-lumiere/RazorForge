@@ -19,15 +19,15 @@ public class IndexExpectedTypeTests
     {
         string source = """
                         protocol Indexable
-                          @readonly
-                          routine Me.$getitem(index: U64) -> S32
+                            @readonly
+                            routine Me.$getitem(index: U64) -> S32
                         entity Bin obeys Indexable
-                          size: S32
+                            size: S32
                         @readonly
                         routine Bin.$getitem(index: U64) -> S32
-                          return 0_s32
+                            return 0_s32
                         routine probe(b: Bin) -> S32
-                          return b[7]
+                            return b[7]
                         """;
 
         AnalysisResult result = AssertAnalyzesSa(source: source);
@@ -43,15 +43,15 @@ public class IndexExpectedTypeTests
     {
         string source = """
                         protocol Indexable
-                          @readonly
-                          routine Me.$getitem(slot: U32) -> S32
+                            @readonly
+                            routine Me.$getitem(slot: U32) -> S32
                         entity Reg obeys Indexable
-                          size: S32
+                            size: S32
                         @readonly
                         routine Reg.$getitem(slot: U32) -> S32
-                          return 0_s32
+                            return 0_s32
                         routine probe(r: Reg) -> S32
-                          return r[5]
+                            return r[5]
                         """;
 
         AnalysisResult result = AssertAnalyzesSa(source: source);
@@ -67,15 +67,15 @@ public class IndexExpectedTypeTests
     {
         string source = """
                         protocol Indexable
-                          @readonly
-                          routine Me.$getitem(slot: U8) -> S32
+                            @readonly
+                            routine Me.$getitem(slot: U8) -> S32
                         entity Tiny obeys Indexable
-                          size: S32
+                            size: S32
                         @readonly
                         routine Tiny.$getitem(slot: U8) -> S32
-                          return 0_s32
+                            return 0_s32
                         routine probe(t: Tiny) -> S32
-                          return t[300]
+                            return t[300]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -90,15 +90,15 @@ public class IndexExpectedTypeTests
     {
         string source = """
                         protocol Indexable
-                          @readonly
-                          routine Me.$getitem(index: U64) -> S32
+                            @readonly
+                            routine Me.$getitem(index: U64) -> S32
                         entity Bin obeys Indexable
-                          size: S32
+                            size: S32
                         @readonly
                         routine Bin.$getitem(index: U64) -> S32
-                          return 0_s32
+                            return 0_s32
                         routine probe(b: Bin) -> S32
-                          return b[0]
+                            return b[0]
                         """;
 
         AnalysisResult result = AssertAnalyzesSa(source: source);

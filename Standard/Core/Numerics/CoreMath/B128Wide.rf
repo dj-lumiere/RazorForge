@@ -13,314 +13,314 @@ module Core
 ### Builds a U128 from its high and low 64-bit words.
 @inline
 secret routine b128_wide_u128(hi: U64, lo: U64) -> U128
-  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+    return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
 
 ### The high 64-bit word of a U128.
 @inline
 secret routine b128_wide_hi(x: U128) -> U64
-  return LLVM::int_truncate[U128, U64](x >>> 64)
+    return LLVM::int_truncate[U128, U64](x >>> 64)
 
 ### The low 64-bit word of a U128.
 @inline
 secret routine b128_wide_lo(x: U128) -> U64
-  return LLVM::int_truncate[U128, U64](x)
+    return LLVM::int_truncate[U128, U64](x)
 
 ### The full 128-bit product of two 64-bit words.
 @inline
 secret routine b128_wide_muu(a: U64, b: U64) -> U128
-  return LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)
+    return LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)
 
 ### The high word of the unsigned 64x64-bit product.
 @inline
 secret routine b128_wide_mhuu(a: U64, b: U64) -> U64
-  return b128_wide_hi(x: b128_wide_muu(a: a, b: b))
+    return b128_wide_hi(x: b128_wide_muu(a: a, b: b))
 
 ### Approximate high part of the unsigned 128x128-bit product (the low x low product is dropped).
 @inline
 secret routine b128_wide_mhUU(a: U128, b: U128) -> U128
-  var a0 = b128_wide_lo(x: a)
-  var a1 = b128_wide_hi(x: a)
-  var b0 = b128_wide_lo(x: b)
-  var b1 = b128_wide_hi(x: b)
-  var a1b1 = b128_wide_muu(a: a1, b: b1)
-  a1b1 = a1b1 +% (b128_wide_muu(a: a1, b: b0) >>> 64)
-  return a1b1 +% (b128_wide_muu(a: a0, b: b1) >>> 64)
+    var a0 = b128_wide_lo(x: a)
+    var a1 = b128_wide_hi(x: a)
+    var b0 = b128_wide_lo(x: b)
+    var b1 = b128_wide_hi(x: b)
+    var a1b1 = b128_wide_muu(a: a1, b: b1)
+    a1b1 = a1b1 +% (b128_wide_muu(a: a1, b: b0) >>> 64)
+    return a1b1 +% (b128_wide_muu(a: a0, b: b1) >>> 64)
 
 ### High part of the 64x128-bit product: (a * b) >> 64.
 @inline
 secret routine b128_wide_mhuU(a: U64, b: U128) -> U128
-  var ab0 = b128_wide_muu(a: a, b: b128_wide_lo(x: b))
-  var ab1 = b128_wide_muu(a: a, b: b128_wide_hi(x: b))
-  return ab1 +% (ab0 >>> 64)
+    var ab0 = b128_wide_muu(a: a, b: b128_wide_lo(x: b))
+    var ab1 = b128_wide_muu(a: a, b: b128_wide_hi(x: b))
+    return ab1 +% (ab0 >>> 64)
 
 ### Full 256-bit product of two U128 values, as (high, low).
 secret routine b128_wide_mUU(a: U128, b: U128) -> (U128, U128)
-  var a0 = b128_wide_lo(x: a)
-  var a1 = b128_wide_hi(x: a)
-  var b0 = b128_wide_lo(x: b)
-  var b1 = b128_wide_hi(x: b)
-  var a1b0 = b128_wide_muu(a: a1, b: b0)
-  var a0b1 = b128_wide_muu(a: a0, b: b1)
-  var a1b1 = b128_wide_muu(a: a1, b: b1)
-  var a0b0 = b128_wide_muu(a: a0, b: b0)
-  var mid = a1b0 +% a0b1
-  var cmid = 0_u128
-  if mid < a1b0
-    cmid = 1_u128 << 64
-  var lo = a0b0 +% (mid << 64)
-  var clo = 0_u128
-  if lo < a0b0
-    clo = 1_u128
-  return (((a1b1 +% (mid >>> 64)) +% cmid) +% clo, lo)
+    var a0 = b128_wide_lo(x: a)
+    var a1 = b128_wide_hi(x: a)
+    var b0 = b128_wide_lo(x: b)
+    var b1 = b128_wide_hi(x: b)
+    var a1b0 = b128_wide_muu(a: a1, b: b0)
+    var a0b1 = b128_wide_muu(a: a0, b: b1)
+    var a1b1 = b128_wide_muu(a: a1, b: b1)
+    var a0b0 = b128_wide_muu(a: a0, b: b0)
+    var mid = a1b0 +% a0b1
+    var cmid = 0_u128
+    if mid < a1b0
+        cmid = 1_u128 << 64
+    var lo = a0b0 +% (mid << 64)
+    var clo = 0_u128
+    if lo < a0b0
+        clo = 1_u128
+    return (((a1b1 +% (mid >>> 64)) +% cmid) +% clo, lo)
 
 ### A shift amount as the U32 the shift operators take.
 @inline
 secret routine b128_wide_s(n: U64) -> U32
-  return LLVM::int_truncate[U64, U32](n)
+    return LLVM::int_truncate[U64, U32](n)
 
 ### Arithmetic right shift of two's-complement bits.
 @inline
 secret routine b128_wide_sar(x: U64, s: U64) -> U64
-  return LLVM::reinterpret_bits[S64, U64](LLVM::reinterpret_bits[U64, S64](x) >> LLVM::int_truncate[U64, U32](s))
+    return LLVM::reinterpret_bits[S64, U64](LLVM::reinterpret_bits[U64, S64](x) >> LLVM::int_truncate[U64, U32](s))
 
 ### (a * b) >> 64 for a 7-word a, truncated to 7 words.
 secret routine b128_wide_mul7w(a: Array[U64, 7], b: U64) -> Array[U64, 7]
-  var o = Array[U64, 7]()
-  var prev = b128_wide_mhuu(a: a[0], b: b)
-  var i = 1_u64
-  while i < 7
-    var p = b128_wide_muu(a: a[i], b: b)
-    var s = LLVM::zero_extend[U64, U128](b128_wide_lo(x: p)) +% LLVM::zero_extend[U64, U128](prev)
-    o[i -% 1] = b128_wide_lo(x: s)
-    prev = b128_wide_hi(x: p) +% b128_wide_hi(x: s)
-    i = i +% 1
-  o[6] = prev
-  return o
+    var o = Array[U64, 7]()
+    var prev = b128_wide_mhuu(a: a[0], b: b)
+    var i = 1_u64
+    while i < 7
+        var p = b128_wide_muu(a: a[i], b: b)
+        var s = LLVM::zero_extend[U64, U128](b128_wide_lo(x: p)) +% LLVM::zero_extend[U64, U128](prev)
+        o[i -% 1] = b128_wide_lo(x: s)
+        prev = b128_wide_hi(x: p) +% b128_wide_hi(x: s)
+        i = i +% 1
+    o[6] = prev
+    return o
 
 ### mhu7xu2: the words of the 7x2-word product a * b at or above word 2, as 7 words.
 secret routine b128_wide_mhu7xu2(a: Array[U64, 7], b: U128) -> Array[U64, 7]
-  var o = b128_wide_mul7w(a: a, b: b128_wide_hi(x: b))
-  var sh = Array[U64, 7]()
-  var i = 0_u64
-  while i < 6
-    sh[i] = a[i +% 1]
-    i = i +% 1
-  var t = b128_wide_mul7w(a: sh, b: b128_wide_lo(x: b))
-  var c = 0_u64
-  i = 0_u64
-  while i < 7
-    var s = (LLVM::zero_extend[U64, U128](o[i]) +% LLVM::zero_extend[U64, U128](t[i])) +% LLVM::zero_extend[U64, U128](c)
-    o[i] = b128_wide_lo(x: s)
-    c = b128_wide_hi(x: s)
-    i = i +% 1
-  return o
+    var o = b128_wide_mul7w(a: a, b: b128_wide_hi(x: b))
+    var sh = Array[U64, 7]()
+    var i = 0_u64
+    while i < 6
+        sh[i] = a[i +% 1]
+        i = i +% 1
+    var t = b128_wide_mul7w(a: sh, b: b128_wide_lo(x: b))
+    var c = 0_u64
+    i = 0_u64
+    while i < 7
+        var s = (LLVM::zero_extend[U64, U128](o[i]) +% LLVM::zero_extend[U64, U128](t[i])) +% LLVM::zero_extend[U64, U128](c)
+        o[i] = b128_wide_lo(x: s)
+        c = b128_wide_hi(x: s)
+        i = i +% 1
+    return o
 
 ### arsu7: arithmetic right shift of a 7-word number by n bits (n < 192).
 secret routine b128_wide_arsu7(x: Array[U64, 7], n: U64) -> Array[U64, 7]
-  var o = x
-  var rk = n & 63
-  var lk = (64 -% rk) & 63
-  var qk = n >>> 6
-  var i = 0_u64
-  if rk == 0
-    while qk +% i <= 5
-      o[i] = o[qk +% i]
-      i = i +% 1
-  else
-    while qk +% i <= 5
-      o[i] = (o[qk +% i +% 1] << b128_wide_s(n: lk)) | (o[qk +% i] >>> b128_wide_s(n: rk))
-      i = i +% 1
-  var h = o[6]
-  var k = 6 -% qk
-  o[k] = b128_wide_sar(x: h, s: rk)
-  k = k +% 1
-  var hs = b128_wide_sar(x: h, s: 63)
-  while k < 7
-    o[k] = hs
+    var o = x
+    var rk = n & 63
+    var lk = (64 -% rk) & 63
+    var qk = n >>> 6
+    var i = 0_u64
+    if rk == 0
+        while qk +% i <= 5
+            o[i] = o[qk +% i]
+            i = i +% 1
+    else
+        while qk +% i <= 5
+            o[i] = (o[qk +% i +% 1] << b128_wide_s(n: lk)) | (o[qk +% i] >>> b128_wide_s(n: rk))
+            i = i +% 1
+    var h = o[6]
+    var k = 6 -% qk
+    o[k] = b128_wide_sar(x: h, s: rk)
     k = k +% 1
-  return o
+    var hs = b128_wide_sar(x: h, s: 63)
+    while k < 7
+        o[k] = hs
+        k = k +% 1
+    return o
 
 ### mhu6u6u6: the approximate high 6 words of the 6x6-word product a * b (every partial-product half at or
 ### above word 6, summed exactly modulo 2^384).
 secret routine b128_wide_mhu6(b: Array[U64, 6], a: Array[U64, 6]) -> Array[U64, 6]
-  var o = Array[U64, 6]()
-  var carry = 0_u128
-  var w = 0_u64
-  while w < 6
-    var p = w +% 6
-    var s = carry
-    var i = 0_u64
-    while i < 6
-      # the high half of a_i * b_j lands in word i + j + 1, the low half in word i + j
-      if p >= i +% 1 and p -% i -% 1 <= 5
-        s = s +% (b128_wide_muu(a: a[i], b: b[p -% i -% 1]) >>> 64)
-      if p >= i and p -% i <= 5
-        s = s +% LLVM::zero_extend[U64, U128](b128_wide_lo(x: b128_wide_muu(a: a[i], b: b[p -% i])))
-      i = i +% 1
-    o[w] = b128_wide_lo(x: s)
-    carry = s >>> 64
-    w = w +% 1
-  return o
+    var o = Array[U64, 6]()
+    var carry = 0_u128
+    var w = 0_u64
+    while w < 6
+        var p = w +% 6
+        var s = carry
+        var i = 0_u64
+        while i < 6
+            # the high half of a_i * b_j lands in word i + j + 1, the low half in word i + j
+            if p >= i +% 1 and p -% i -% 1 <= 5
+                s = s +% (b128_wide_muu(a: a[i], b: b[p -% i -% 1]) >>> 64)
+            if p >= i and p -% i <= 5
+                s = s +% LLVM::zero_extend[U64, U128](b128_wide_lo(x: b128_wide_muu(a: a[i], b: b[p -% i])))
+            i = i +% 1
+        o[w] = b128_wide_lo(x: s)
+        carry = s >>> 64
+        w = w +% 1
+    return o
 
 ### mahu1u6u6: ((a * b) >> 64) + c over 6 words.
 secret routine b128_wide_mahu6(a: U64, b: Array[U64, 6], c: Array[U64, 6]) -> Array[U64, 6]
-  var o = Array[U64, 6]()
-  var prev = b128_wide_mhuu(a: a, b: b[0])
-  var cc = 0_u64
-  var i = 0_u64
-  while i < 6
-    var plo = 0_u64
-    var phi = 0_u64
-    if i < 5
-      var p = b128_wide_muu(a: a, b: b[i +% 1])
-      plo = b128_wide_lo(x: p)
-      phi = b128_wide_hi(x: p)
-    var s = LLVM::zero_extend[U64, U128](plo) +% LLVM::zero_extend[U64, U128](prev)
-    prev = phi +% b128_wide_hi(x: s)
-    var s2 = (LLVM::zero_extend[U64, U128](c[i]) +% (s & 0xFFFFFFFFFFFFFFFF_u128)) +% LLVM::zero_extend[U64, U128](cc)
-    o[i] = b128_wide_lo(x: s2)
-    cc = b128_wide_hi(x: s2)
-    i = i +% 1
-  return o
+    var o = Array[U64, 6]()
+    var prev = b128_wide_mhuu(a: a, b: b[0])
+    var cc = 0_u64
+    var i = 0_u64
+    while i < 6
+        var plo = 0_u64
+        var phi = 0_u64
+        if i < 5
+            var p = b128_wide_muu(a: a, b: b[i +% 1])
+            plo = b128_wide_lo(x: p)
+            phi = b128_wide_hi(x: p)
+        var s = LLVM::zero_extend[U64, U128](plo) +% LLVM::zero_extend[U64, U128](prev)
+        prev = phi +% b128_wide_hi(x: s)
+        var s2 = (LLVM::zero_extend[U64, U128](c[i]) +% (s & 0xFFFFFFFFFFFFFFFF_u128)) +% LLVM::zero_extend[U64, U128](cc)
+        o[i] = b128_wide_lo(x: s2)
+        cc = b128_wide_hi(x: s2)
+        i = i +% 1
+    return o
 
 ### addu6u6: a + b over 6 words.
 secret routine b128_wide_add6(a: Array[U64, 6], b: Array[U64, 6]) -> Array[U64, 6]
-  var o = Array[U64, 6]()
-  var c = 0_u64
-  var i = 0_u64
-  while i < 6
-    var s = (LLVM::zero_extend[U64, U128](a[i]) +% LLVM::zero_extend[U64, U128](b[i])) +% LLVM::zero_extend[U64, U128](c)
-    o[i] = b128_wide_lo(x: s)
-    c = b128_wide_hi(x: s)
-    i = i +% 1
-  return o
+    var o = Array[U64, 6]()
+    var c = 0_u64
+    var i = 0_u64
+    while i < 6
+        var s = (LLVM::zero_extend[U64, U128](a[i]) +% LLVM::zero_extend[U64, U128](b[i])) +% LLVM::zero_extend[U64, U128](c)
+        o[i] = b128_wide_lo(x: s)
+        c = b128_wide_hi(x: s)
+        i = i +% 1
+    return o
 
 ### mahu1u3u3: ((a * (b2, b1, b0)) >> 64) + (c2, c1, c0) over 3 words, returned as (w0, w1, w2).
 secret routine b128_wide_mahu3(a: U64, b0: U64, b1: U64, b2: U64, c0: U64, c1: U64, c2: U64) -> (U64, U64, U64)
-  var ab0 = b128_wide_muu(a: a, b: b0)
-  var ab1 = b128_wide_muu(a: a, b: b1)
-  var ab2 = b128_wide_muu(a: a, b: b2)
-  var t = LLVM::zero_extend[U64, U128](b128_wide_lo(x: ab1)) +% (ab0 >>> 64)
-  var s = LLVM::zero_extend[U64, U128](c0) +% (t & 0xFFFFFFFFFFFFFFFF_u128)
-  var o0 = b128_wide_lo(x: s)
-  t = (LLVM::zero_extend[U64, U128](b128_wide_lo(x: ab2)) +% (ab1 >>> 64)) +% (t >>> 64)
-  s = (LLVM::zero_extend[U64, U128](c1) +% (t & 0xFFFFFFFFFFFFFFFF_u128)) +% (s >>> 64)
-  var o1 = b128_wide_lo(x: s)
-  t = (ab2 >>> 64) +% (t >>> 64)
-  var o2 = (c2 +% b128_wide_lo(x: t)) +% b128_wide_hi(x: s)
-  return (o0, o1, o2)
+    var ab0 = b128_wide_muu(a: a, b: b0)
+    var ab1 = b128_wide_muu(a: a, b: b1)
+    var ab2 = b128_wide_muu(a: a, b: b2)
+    var t = LLVM::zero_extend[U64, U128](b128_wide_lo(x: ab1)) +% (ab0 >>> 64)
+    var s = LLVM::zero_extend[U64, U128](c0) +% (t & 0xFFFFFFFFFFFFFFFF_u128)
+    var o0 = b128_wide_lo(x: s)
+    t = (LLVM::zero_extend[U64, U128](b128_wide_lo(x: ab2)) +% (ab1 >>> 64)) +% (t >>> 64)
+    s = (LLVM::zero_extend[U64, U128](c1) +% (t & 0xFFFFFFFFFFFFFFFF_u128)) +% (s >>> 64)
+    var o1 = b128_wide_lo(x: s)
+    t = (ab2 >>> 64) +% (t >>> 64)
+    var o2 = (c2 +% b128_wide_lo(x: t)) +% b128_wide_hi(x: s)
+    return (o0, o1, o2)
 
 ### (a2, a1, a0) + (b2, b1, b0) over 3 words, returned as (w0, w1, w2).
 @inline
 secret routine b128_wide_add3(a0: U64, a1: U64, a2: U64, b0: U64, b1: U64, b2: U64) -> (U64, U64, U64)
-  var s = LLVM::zero_extend[U64, U128](a0) +% LLVM::zero_extend[U64, U128](b0)
-  var o0 = b128_wide_lo(x: s)
-  s = (LLVM::zero_extend[U64, U128](a1) +% LLVM::zero_extend[U64, U128](b1)) +% (s >>> 64)
-  var o1 = b128_wide_lo(x: s)
-  var o2 = (a2 +% b2) +% b128_wide_hi(x: s)
-  return (o0, o1, o2)
+    var s = LLVM::zero_extend[U64, U128](a0) +% LLVM::zero_extend[U64, U128](b0)
+    var o0 = b128_wide_lo(x: s)
+    s = (LLVM::zero_extend[U64, U128](a1) +% LLVM::zero_extend[U64, U128](b1)) +% (s >>> 64)
+    var o1 = b128_wide_lo(x: s)
+    var o2 = (a2 +% b2) +% b128_wide_hi(x: s)
+    return (o0, o1, o2)
 
 ### (a2, a1, a0) - (b2, b1, b0) over 3 words, returned as (w0, w1, w2).
 @inline
 secret routine b128_wide_sub3(a0: U64, a1: U64, a2: U64, b0: U64, b1: U64, b2: U64) -> (U64, U64, U64)
-  var o0 = a0 -% b0
-  var br = 0_u64
-  if a0 < b0
-    br = 1_u64
-  var o1 = (a1 -% b1) -% br
-  var br2 = 0_u64
-  if a1 < b1 or (a1 == b1 and br != 0)
-    br2 = 1_u64
-  var o2 = (a2 -% b2) -% br2
-  return (o0, o1, o2)
+    var o0 = a0 -% b0
+    var br = 0_u64
+    if a0 < b0
+        br = 1_u64
+    var o1 = (a1 -% b1) -% br
+    var br2 = 0_u64
+    if a1 < b1 or (a1 == b1 and br != 0)
+        br2 = 1_u64
+    var o2 = (a2 -% b2) -% br2
+    return (o0, o1, o2)
 
 ### One row of the 2^r polynomial (r < 2^-4) of the accurate exp-based steps's coefficient table, as 6 words.
 @inline
 secret routine b128_wide_rc(i: U64) -> Array[U64, 6]
-  var r = Array[U64, 6]()
-  var k = 0_u64
-  while k < 6
-    r[k] = B128_WIDE_EC[6 *% i +% k]
-    k = k +% 1
-  return r
+    var r = Array[U64, 6]()
+    var k = 0_u64
+    while k < 6
+        r[k] = B128_WIDE_EC[6 *% i +% k]
+        k = k +% 1
+    return r
 
 ### The 2^r polynomial (r < 2^-4) of the accurate exp-based steps on the top word x (Horner over all coefficient rows).
 secret routine b128_wide_pol6(x: U64) -> Array[U64, 6]
-  var a = b128_wide_mahu6(a: x, b: b128_wide_rc(i: 36), c: b128_wide_rc(i: 35))
-  var i = 35_u64
-  loop
-    i = i -% 1
-    a = b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: i))
-    if i <= 1
-      break
-  return b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: 0))
+    var a = b128_wide_mahu6(a: x, b: b128_wide_rc(i: 36), c: b128_wide_rc(i: 35))
+    var i = 35_u64
+    loop
+        i = i -% 1
+        a = b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: i))
+        if i <= 1
+            break
+    return b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: 0))
 
 ### The same polynomial on the second word x, keeping only the terms that still matter.
 secret routine b128_wide_pol6red(x: U64) -> Array[U64, 6]
-  var a = Array[U64, 6]()
-  var b = Array[U64, 6]()
-  b[0] = B128_WIDE_EC[6 *% 5 +% 5]
-  a = b128_wide_mahu6(a: x, b: a, c: b)
-  b[0] = B128_WIDE_EC[6 *% 4 +% 4]
-  b[1] = B128_WIDE_EC[6 *% 4 +% 5]
-  a = b128_wide_mahu6(a: x, b: a, c: b)
-  b[0] = B128_WIDE_EC[6 *% 3 +% 3]
-  b[1] = B128_WIDE_EC[6 *% 3 +% 4]
-  b[2] = B128_WIDE_EC[6 *% 3 +% 5]
-  a = b128_wide_mahu6(a: x, b: a, c: b)
-  b[0] = B128_WIDE_EC[6 *% 2 +% 2]
-  b[1] = B128_WIDE_EC[6 *% 2 +% 3]
-  b[2] = B128_WIDE_EC[6 *% 2 +% 4]
-  b[3] = B128_WIDE_EC[6 *% 2 +% 5]
-  a = b128_wide_mahu6(a: x, b: a, c: b)
-  b[0] = B128_WIDE_EC[6 *% 1 +% 1]
-  b[1] = B128_WIDE_EC[6 *% 1 +% 2]
-  b[2] = B128_WIDE_EC[6 *% 1 +% 3]
-  b[3] = B128_WIDE_EC[6 *% 1 +% 4]
-  b[4] = B128_WIDE_EC[6 *% 1 +% 5]
-  a = b128_wide_mahu6(a: x, b: a, c: b)
-  return b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: 0))
+    var a = Array[U64, 6]()
+    var b = Array[U64, 6]()
+    b[0] = B128_WIDE_EC[6 *% 5 +% 5]
+    a = b128_wide_mahu6(a: x, b: a, c: b)
+    b[0] = B128_WIDE_EC[6 *% 4 +% 4]
+    b[1] = B128_WIDE_EC[6 *% 4 +% 5]
+    a = b128_wide_mahu6(a: x, b: a, c: b)
+    b[0] = B128_WIDE_EC[6 *% 3 +% 3]
+    b[1] = B128_WIDE_EC[6 *% 3 +% 4]
+    b[2] = B128_WIDE_EC[6 *% 3 +% 5]
+    a = b128_wide_mahu6(a: x, b: a, c: b)
+    b[0] = B128_WIDE_EC[6 *% 2 +% 2]
+    b[1] = B128_WIDE_EC[6 *% 2 +% 3]
+    b[2] = B128_WIDE_EC[6 *% 2 +% 4]
+    b[3] = B128_WIDE_EC[6 *% 2 +% 5]
+    a = b128_wide_mahu6(a: x, b: a, c: b)
+    b[0] = B128_WIDE_EC[6 *% 1 +% 1]
+    b[1] = B128_WIDE_EC[6 *% 1 +% 2]
+    b[2] = B128_WIDE_EC[6 *% 1 +% 3]
+    b[3] = B128_WIDE_EC[6 *% 1 +% 4]
+    b[4] = B128_WIDE_EC[6 *% 1 +% 5]
+    a = b128_wide_mahu6(a: x, b: a, c: b)
+    return b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: 0))
 
 ### The polynomial's contribution from the low words of x (degree 2).
 secret routine b128_wide_pol6redred(x: Array[U64, 7]) -> Array[U64, 6]
-  var xs = Array[U64, 6]()
-  xs[2] = x[0]
-  xs[3] = x[1]
-  xs[4] = x[2]
-  xs[5] = x[3]
-  var f = b128_wide_mhu6(b: xs, a: b128_wide_rc(i: 2))
-  var g = Array[U64, 6]()
-  g[0] = f[2]
-  g[1] = f[3]
-  g[2] = f[4]
-  g[3] = f[5]
-  g = b128_wide_add6(a: g, b: b128_wide_rc(i: 1))
-  f = b128_wide_mhu6(b: xs, a: g)
-  g[0] = f[2]
-  g[1] = f[3]
-  g[2] = f[4]
-  g[3] = f[5]
-  g[4] = B128_WIDE_EC[4]
-  g[5] = B128_WIDE_EC[5]
-  return g
+    var xs = Array[U64, 6]()
+    xs[2] = x[0]
+    xs[3] = x[1]
+    xs[4] = x[2]
+    xs[5] = x[3]
+    var f = b128_wide_mhu6(b: xs, a: b128_wide_rc(i: 2))
+    var g = Array[U64, 6]()
+    g[0] = f[2]
+    g[1] = f[3]
+    g[2] = f[4]
+    g[3] = f[5]
+    g = b128_wide_add6(a: g, b: b128_wide_rc(i: 1))
+    f = b128_wide_mhu6(b: xs, a: g)
+    g[0] = f[2]
+    g[1] = f[3]
+    g[2] = f[4]
+    g[3] = f[5]
+    g[4] = B128_WIDE_EC[4]
+    g[5] = B128_WIDE_EC[5]
+    return g
 
 ### 2^f to about 380 bits for the fixed-point fraction f held in words 0..5 of x (bits 60..63 of word 5 select
 ### the 2^(j/16) table entry, the rest feed the polynomial), as 6 words.
 secret routine b128_wide_exp2_frac(x: Array[U64, 7]) -> Array[U64, 6]
-  var xw = x
-  var jt = xw[5] >>> 60
-  xw[5] = xw[5] & 0x0FFFFFFFFFFFFFFF_u64
-  var f = b128_wide_pol6(x: xw[5])
-  var f1 = b128_wide_pol6red(x: xw[4])
-  var f2 = b128_wide_pol6redred(x: xw)
-  var ft = b128_wide_mhu6(b: f, a: f1)
-  ft = b128_wide_mhu6(b: ft, a: f2)
-  var tb = Array[U64, 6]()
-  var i = 0_u64
-  while i < 6
-    tb[i] = B128_WIDE_ETBL[6 *% jt +% i]
-    i = i +% 1
-  return b128_wide_mhu6(b: ft, a: tb)
+    var xw = x
+    var jt = xw[5] >>> 60
+    xw[5] = xw[5] & 0x0FFFFFFFFFFFFFFF_u64
+    var f = b128_wide_pol6(x: xw[5])
+    var f1 = b128_wide_pol6red(x: xw[4])
+    var f2 = b128_wide_pol6redred(x: xw)
+    var ft = b128_wide_mhu6(b: f, a: f1)
+    ft = b128_wide_mhu6(b: ft, a: f2)
+    var tb = Array[U64, 6]()
+    var i = 0_u64
+    while i < 6
+        tb[i] = B128_WIDE_ETBL[6 *% jt +% i]
+        i = i +% 1
+    return b128_wide_mhu6(b: ft, a: tb)
 
 # 1/ln(2) to 448 bits
 secret preset B128_WIDE_ILN2: Array[U64, 7] = [0xEA90B9E60C4A90A0_u64, 0x24D92F75C16BE0B3_u64, 0xDE1C43F755176CD6_u64, 0x8B25166CD1A13247_u64, 0xEB577AA8DD695A58_u64, 0xBE87FED0691D3E88_u64, 0xB8AA3B295C17F0BB_u64]

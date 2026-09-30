@@ -20,53 +20,53 @@ secret preset B32_EXP10_EX: Array[U32, 10] = [0x41200000_u32, 0x42C80000_u32, 0x
 ### rounds to a subnormal or zero, `exp10(-infinity) == 0` and NaN maps to NaN.
 ### :returns: The correctly rounded base-10 exponential.
 routine B32.exp10_unchecked() -> B32
-  var tu = me.to_bits()
-  var z = B64(from: me)
-  var ux = tu << 1
-  if ux > 0x84344134_u32 or ux < 0x72ADF1C6_u32
-    # |x| > 0x1.344134p+5, x = NaN or |x| < 0x1.adf1c6p-13
-    if ux < 0x72ADF1C6_u32
-      return B32(from: 1.0 +! z *! (0x1.26bb1bbb55516p+1 +! z *! (0x1.53524c73cea69p+1 +! z *! 0x1.0470591de2ca4p+1)))
-    if ux >= 0xFF000000_u32
-      # x is infinity or NaN
-      if ux > 0xFF000000_u32
-        return me +! me
-      return if tu >>> 31 == 0 then B32.from_bits(bits: 0x7F800000_u32) else 0.0_b32
-    if tu > 0xC23369F4_u32
-      # x < -0x1.66d3e8p+5: the result underflows to a tiny subnormal or zero
-      var y = 0x1p-149 +! (z +! 0x1.66d3e7bd9a403p+5) *! 0x1.a934f0979a37p-149
-      y = y.fmax(you: 0x1p-151)
-      return B32(from: y)
-    if tu < 0x80000000_u32
-      # x > 0x1.344134p+5: overflow
-      return 0x1p+127_b32 *! 0x1p+127_b32
-  if (tu << 12) == 0
-    # exact powers of ten: x = n for n in 1..10
-    var k = (tu >>> 20) -% 1016_u32
-    if k <= 26
-      var bt = 1_u32 << k
-      var msk = 0x7551101_u32
-      if (bt & msk) != 0
-        return B32.from_bits(bits: B32_EXP10_EX[LLVM::zero_extend[U32, U64]((msk & (bt -% 1_u32)).count_ones())])
-  var a = 0x1.a934f0979a371p+6 *! z
-  var ia = a.rint()
-  var h = a -! ia
-  var ja = LLVM::float_to_signed[B64, S64](ia)
-  var jb = LLVM::reinterpret_bits[S64, U64](ja)
-  var sv = B64.from_bits(bits: B32_EXP10_TB[jb & 0x1F_u64] +% (LLVM::reinterpret_bits[S64, U64](ja >> 5) << 52))
-  var h2 = h *! h
-  var r = ((1.0 +! h *! 0x1.62e42fef4c4e7p-6) +! h2 *! (0x1.ebfd1b232f475p-13 +! h *! 0x1.c6b19384ecd93p-20)) *! sv
-  var ub = B32(from: r)
-  var lb = B32(from: r -! r *! 0x1.3edbbe4560327p-33)
-  if ub != lb
-    # the fast path cannot decide the rounding: redo it with a longer reduction and polynomial
-    h = (0x1.a934f09p+1 *! z -! ia *! 0.03125) +! 0x1.e68dc57f2496p-29 *! z
-    var s = sv
-    h2 = h *! h
-    var w = s *! h
-    var c01 = 0x1.62e42fefa39efp-1 +! h *! 0x1.ebfbdff82c58fp-3
-    var c23 = 0x1.c6b08d702e0edp-5 +! h *! 0x1.3b2ab6fb92e5ep-7
-    var c45 = 0x1.5d886e6d54203p-10 +! h *! 0x1.430976b8ce6efp-13
-    r = s +! w *! (c01 +! h2 *! (c23 +! h2 *! c45))
-    ub = B32(from: r)
-  return ub
+    var tu = me.to_bits()
+    var z = B64(from: me)
+    var ux = tu << 1
+    if ux > 0x84344134_u32 or ux < 0x72ADF1C6_u32
+        # |x| > 0x1.344134p+5, x = NaN or |x| < 0x1.adf1c6p-13
+        if ux < 0x72ADF1C6_u32
+            return B32(from: 1.0 +! z *! (0x1.26bb1bbb55516p+1 +! z *! (0x1.53524c73cea69p+1 +! z *! 0x1.0470591de2ca4p+1)))
+        if ux >= 0xFF000000_u32
+            # x is infinity or NaN
+            if ux > 0xFF000000_u32
+                return me +! me
+            return if tu >>> 31 == 0 then B32.from_bits(bits: 0x7F800000_u32) else 0.0_b32
+        if tu > 0xC23369F4_u32
+            # x < -0x1.66d3e8p+5: the result underflows to a tiny subnormal or zero
+            var y = 0x1p-149 +! (z +! 0x1.66d3e7bd9a403p+5) *! 0x1.a934f0979a37p-149
+            y = y.fmax(you: 0x1p-151)
+            return B32(from: y)
+        if tu < 0x80000000_u32
+            # x > 0x1.344134p+5: overflow
+            return 0x1p+127_b32 *! 0x1p+127_b32
+    if (tu << 12) == 0
+        # exact powers of ten: x = n for n in 1..10
+        var k = (tu >>> 20) -% 1016_u32
+        if k <= 26
+            var bt = 1_u32 << k
+            var msk = 0x7551101_u32
+            if (bt & msk) != 0
+                return B32.from_bits(bits: B32_EXP10_EX[LLVM::zero_extend[U32, U64]((msk & (bt -% 1_u32)).count_ones())])
+    var a = 0x1.a934f0979a371p+6 *! z
+    var ia = a.rint()
+    var h = a -! ia
+    var ja = LLVM::float_to_signed[B64, S64](ia)
+    var jb = LLVM::reinterpret_bits[S64, U64](ja)
+    var sv = B64.from_bits(bits: B32_EXP10_TB[jb & 0x1F_u64] +% (LLVM::reinterpret_bits[S64, U64](ja >> 5) << 52))
+    var h2 = h *! h
+    var r = ((1.0 +! h *! 0x1.62e42fef4c4e7p-6) +! h2 *! (0x1.ebfd1b232f475p-13 +! h *! 0x1.c6b19384ecd93p-20)) *! sv
+    var ub = B32(from: r)
+    var lb = B32(from: r -! r *! 0x1.3edbbe4560327p-33)
+    if ub != lb
+        # the fast path cannot decide the rounding: redo it with a longer reduction and polynomial
+        h = (0x1.a934f09p+1 *! z -! ia *! 0.03125) +! 0x1.e68dc57f2496p-29 *! z
+        var s = sv
+        h2 = h *! h
+        var w = s *! h
+        var c01 = 0x1.62e42fefa39efp-1 +! h *! 0x1.ebfbdff82c58fp-3
+        var c23 = 0x1.c6b08d702e0edp-5 +! h *! 0x1.3b2ab6fb92e5ep-7
+        var c45 = 0x1.5d886e6d54203p-10 +! h *! 0x1.430976b8ce6efp-13
+        r = s +! w *! (c01 +! h2 *! (c23 +! h2 *! c45))
+        ub = B32(from: r)
+    return ub

@@ -19,9 +19,9 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          var x = 42
-                          show(x)
-                          return
+                            var x = 42
+                            show(x)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -36,8 +36,8 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          show(undefined_var)
-                          return
+                            show(undefined_var)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -59,9 +59,9 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          show(x)
-                          var x = 42
-                          return
+                            show(x)
+                            var x = 42
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -80,10 +80,10 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          if true
-                            var x = 42
-                            show(x)
-                          return
+                            if true
+                                var x = 42
+                                show(x)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -97,10 +97,10 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          if true
-                            var x = 42
-                          show(x)
-                          return
+                            if true
+                                var x = 42
+                            show(x)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -114,13 +114,13 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          var x = 10
-                          if true
-                            var y = 20
+                            var x = 10
                             if true
-                              var z = 30
-                              show(x + y + z)
-                          return
+                                var y = 20
+                                if true
+                                    var z = 30
+                                    show(x + y + z)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -139,9 +139,9 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 10
-                            show(i)
-                          return
+                            each i in 0 til 10
+                                show(i)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -155,10 +155,10 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 10
+                            each i in 0 til 10
+                                show(i)
                             show(i)
-                          show(i)
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -172,11 +172,11 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          var i = 0
-                          while i < 10
-                            show(i)
-                            i += 1
-                          return
+                            var i = 0
+                            while i < 10
+                                show(i)
+                                i += 1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -195,8 +195,8 @@ public class ScopeTests
     {
         string source = """
                         routine greet(name: Text)
-                          show(name)
-                          return
+                            show(name)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -212,8 +212,8 @@ public class ScopeTests
                         var name = "global"
 
                         routine greet(name: Text)
-                          show(name)
-                          return
+                            show(name)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -233,12 +233,12 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          var x = 10
-                          if true
-                            var x = 20
+                            var x = 10
+                            if true
+                                var x = 20
+                                show(x)
                             show(x)
-                          show(x)
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -253,9 +253,9 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          var x = 10
-                          var x = 20
-                          return
+                            var x = 10
+                            var x = 20
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -274,14 +274,14 @@ public class ScopeTests
     {
         string source = """
                         variant Result
-                          SUCCESS: S32
-                          ERROR: Text
+                            SUCCESS: S32
+                            ERROR: Text
 
                         routine handle(r: Result)
-                          when r
-                            is SUCCESS value => show(value)
-                            is ERROR msg => show(msg)
-                          return
+                            when r
+                                is SUCCESS value => show(value)
+                                is ERROR msg => show(msg)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -295,15 +295,15 @@ public class ScopeTests
     {
         string source = """
                         variant Result
-                          SUCCESS: S32
-                          ERROR: Text
+                            SUCCESS: S32
+                            ERROR: Text
 
                         routine handle(r: Result)
-                          when r
-                            is SUCCESS value => show(value)
-                            is ERROR msg => pass
-                          show(value)
-                          return
+                            when r
+                                is SUCCESS value => show(value)
+                                is ERROR msg => pass
+                            show(value)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -322,12 +322,12 @@ public class ScopeTests
     {
         string source = """
                         entity Data
-                          value: S32
+                            value: S32
 
                         routine test(data: Data)
-                          viewing data as d
-                            show(d.value)
-                          return
+                            viewing data as d
+                                show(d.value)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -341,13 +341,13 @@ public class ScopeTests
     {
         string source = """
                         entity Data
-                          value: S32
+                            value: S32
 
                         routine test(data: Data)
-                          using data.view() as d
+                            using data.view() as d
+                                show(d.value)
                             show(d.value)
-                          show(d.value)
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -366,10 +366,10 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          var i = 0
-                          each i in 0 til 5
-                            show(i)
-                          return
+                            var i = 0
+                            each i in 0 til 5
+                                show(i)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -384,10 +384,10 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 3
-                            each j in 0 til 3
-                              show(i + j)
-                          return
+                            each i in 0 til 3
+                                each j in 0 til 3
+                                    show(i + j)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -406,11 +406,11 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          var a = 1
-                          var b = 2
-                          var f = (x) given a => x + a
-                          var g = (x) given b => x + b
-                          return
+                            var a = 1
+                            var b = 2
+                            var f = (x) given a => x + a
+                            var g = (x) given b => x + b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -425,10 +425,10 @@ public class ScopeTests
     {
         string source = """
                         routine test()
-                          var a = 10
-                          var b = 20
-                          var f = (x) given a, b => x + a + b
-                          return
+                            var a = 10
+                            var b = 20
+                            var f = (x) given a, b => x + a + b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -448,10 +448,10 @@ public class ScopeTests
         // Implicit capture of local variable without 'given' should now error
         string source = """
                         routine test()
-                          var multiplier = 10
-                          var scale = x => x * multiplier
-                          show(scale(5))
-                          return
+                            var multiplier = 10
+                            var scale = x => x * multiplier
+                            show(scale(5))
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -469,8 +469,8 @@ public class ScopeTests
         // Captured variable 'z' is not defined in scope
         string source = """
                         routine test()
-                          var f = (x, y) given z => x + y + z
-                          return
+                            var f = (x, y) given z => x + y + z
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -493,9 +493,9 @@ public class ScopeTests
         // Captured variable 'z' exists in outer scope and is declared in given
         string source = """
                         routine test()
-                          var z = 100
-                          var f = (x, y) given z => x + y + z
-                          return
+                            var z = 100
+                            var f = (x, y) given z => x + y + z
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -511,8 +511,8 @@ public class ScopeTests
         string source = """
                         preset MAX_VALUE = 100
                         routine test()
-                          var scale = x => x * MAX_VALUE
-                          return
+                            var scale = x => x * MAX_VALUE
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -528,8 +528,8 @@ public class ScopeTests
         string source = """
                         var global_val = 42
                         routine test()
-                          var scale = x => x + global_val
-                          return
+                            var scale = x => x + global_val
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -544,10 +544,10 @@ public class ScopeTests
         // Lambda has 'given' but captures a variable not listed in it
         string source = """
                         routine test()
-                          var a = 1
-                          var b = 2
-                          var f = (x) given a => x + a + b
-                          return
+                            var a = 1
+                            var b = 2
+                            var f = (x) given a => x + a + b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

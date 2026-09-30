@@ -22,175 +22,175 @@ secret preset B64_TANPI_DB: Array[U64, 147] = [0x3C8B44453E2404E7_u64, 0x3CA56A4
 ### ±infinity at half-integers; `tanpi(-x) == -tanpi(x)`, and ±infinity and NaN give NaN.
 ### :returns: The correctly rounded tangent of pi times this value.
 routine B64.tanpi() -> B64
-  var x = me
-  var ixu = x.to_bits()
-  var ax = ixu & 0x7FFFFFFFFFFFFFFF_u64
-  var zero: B64 = 0.0
-  var one: B64 = 1.0
-  var th = 0.0
-  var tl = 0.0
-  var res = 0.0
-  if ax >= 0x3F30000000000000_u64
-    # |x| >= 2^-12
-    if ax >= 0x42D0000000000000_u64
-      # |x| >= 2^46
-      if ax >= 0x7FF0000000000000_u64
-        if ax > 0x7FF0000000000000_u64
-          return x +! x
-        # infinity: the original's 0.0/0.0, which is the negative quiet NaN on x86-64
-        return B64.from_bits(bits: 0xFFF8000000000000_u64)
-      var sb = LLVM::int_truncate[U64, U32]((ax >>> 52) - 1069_u64)
-      if sb > 6_u32
-        return zero.copysign(sign: x)
-      var sm = ax
-      if (ixu >>> 63) == 1_u64
-        sm = 0_u64 -% ax
-      var iq = (sm << sb) & 127_u64
-      if (iq & 31_u64) == 0_u64
-        return b64_tanpi_exact(jq: iq >>> 5, neg: ixu >>> 63)
-      var j = iq & 31_u64
-      var nl = 0.0
-      var nh = 0.0
-      if (iq & 32_u64) != 0_u64
-        nl = -B64.from_bits(bits: B64_TANPI_T[2_u64 * (32_u64 - j)])
-        nh = -B64.from_bits(bits: B64_TANPI_T[2_u64 * (32_u64 - j) + 1_u64])
-      else
-        nl = B64.from_bits(bits: B64_TANPI_T[2_u64 * j])
-        nh = B64.from_bits(bits: B64_TANPI_T[2_u64 * j + 1_u64])
-      return nh +! nl
-    # now 2^-12 <= |x| < 2^46, so 1011 <= e <= 1068
-    var e = ax >>> 52
-    var s = LLVM::int_truncate[U64, U32](1068_u64 - e)
-    var s1 = LLVM::int_truncate[U64, U32](e - 1011_u64)
-    # m is the significand, 2^52 <= m < 2^53, and msb is the bit of weight 1/2 in |x|
-    var m = (ax & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
-    var msb = (m << s1) >>> 63
-    var neg = ixu >>> 63
-    var mm = m
-    if msb == 1_u64
-      mm = m.bitnot()
-    var iq = (mm >>> s) & 63_u64
-    iq = (iq + 1_u64) >>> 1
-    # flip: the sign applied to the table entry, set when the bit of weight 1/2 differs from the sign
-    var flip = msb ^ neg
-    # sm = sign(x) * m
-    var sm = m
-    if neg == 1_u64
-      sm = 0_u64 -% m
-    # k holds the bits of m of weight <= 2^-7
-    var k = sm << LLVM::int_truncate[U64, U32](e - 1005_u64)
-    var z = LLVM::signed_to_float[S64, B64](LLVM::reinterpret_bits[U64, S64](k))
-    if (k << 1) == 0_u64
-      # x mod 2^-8 = 0
-      if k == 0_u64
-        # x mod 2^-7 = 0
-        if (iq & 31_u64) == 0_u64
-          var jq = LLVM::reinterpret_bits[U64, S64](sm) >> (s + 6_u32)
-          return b64_tanpi_exact(jq: LLVM::reinterpret_bits[S64, U64](jq), neg: neg)
-        var kq = (m << s1) >>> 58
-        if kq == 0x10_u64
-          # |x| = 1/4 mod 1
-          return one.copysign(sign: x)
-        if kq == 0x30_u64
-          # |x| = 3/4 mod 1
-          return -one.copysign(sign: x)
-      z = one.copysign(sign: x) *! z
-    var z2 = z *! z
-    var z4 = z2 *! z2
-    var z3 = z *! z2
-    var c01 = 0x1.4abbce625be51p-207 +! z2 *! 0x1.466bc6776a9b1p-345
-    var c23 = 0x1.45fff6eb26045p-483 +! z2 *! 0x1.4627663861052p-621
-    var f = z3 *! (c01 +! z4 *! c23)
-    var tiny = 0x1p-104
-    var eps = z3 *! 0x1p-256 +! tiny.copysign(sign: z)
-    var p = b64_trigpi_mulddd(xh: 0x1.921fb54442d18p-69, xl: 0x1.1a62633145c07p-123, c: z)
-    p = b64_tanpi_fastsumddd(xh: p.item0, xl: p.item1, c: f)
-    p = b64_tanpi_combine(th: p.item0, tl: p.item1, iq: iq, flip: flip)
-    th = p.item0
-    tl = p.item1
-    eps = eps +! eps *! (th *! th)
-    var lb = th +! (tl -! eps)
-    var ub = th +! (tl +! eps)
-    if lb == ub
-      return lb
-    z = z *! 0x1p-63
-    z2 = z *! z
-    var dz2 = LLVM::fma[B64](a: z, b: z, c: -z2)
-    var cl = z2 *! (0x1.45f32f25dab7fp-66 +! z2 *! (0x1.45f3030c82af4p-78 +! z2 *! 0x1.464490600a978p-90))
-    var q = b64_trigpi_poly_start(c0: 0x1.45f472e3af011p-54, c1: 0x1.90612a0755449p-110, l: cl)
-    q = b64_trigpi_poly_step(xh: z2, xl: dz2, h: q.item0, l: q.item1, c0: 0x1.45fff9b48e95ep-42, c1: 0x1.b226b250d2cc3p-98)
-    q = b64_trigpi_poly_step(xh: z2, xl: dz2, h: q.item0, l: q.item1, c0: 0x1.466bc6775aae2p-30, c1: -0x1.6dc0d93fb2ecep-85)
-    q = b64_trigpi_poly_step(xh: z2, xl: dz2, h: q.item0, l: q.item1, c0: 0x1.4abbce625be53p-18, c1: -0x1.05511c6842515p-72)
-    q = b64_trigpi_poly_step(xh: z2, xl: dz2, h: q.item0, l: q.item1, c0: 0x1.921fb54442d18p-6, c1: 0x1.1a62633145c07p-60)
-    q = b64_trigpi_mulddd(xh: q.item0, xl: q.item1, c: z)
-    q = b64_tanpi_combine(th: q.item0, tl: q.item1, iq: iq, flip: flip)
-    q = b64_trigpi_fasttwosum(x: q.item0, y: q.item1)
-    th = q.item0
-    tl = q.item1
-    res = th
-  else
-    # |x| < 2^-12
-    if ax == 0_u64
-      return x
-    var pi0 = 0x1.921fb54442d18p+1
-    var pi1 = 0x1.1a62633145c07p-53
-    if ax < 0x3CA0000000000000_u64
-      # |x| < 2^-53
-      if ax < 0x06B0000000000000_u64
-        # |x| < 2^-916: scale up so that the double-double product stays exact
+    var x = me
+    var ixu = x.to_bits()
+    var ax = ixu & 0x7FFFFFFFFFFFFFFF_u64
+    var zero: B64 = 0.0
+    var one: B64 = 1.0
+    var th = 0.0
+    var tl = 0.0
+    var res = 0.0
+    if ax >= 0x3F30000000000000_u64
+        # |x| >= 2^-12
+        if ax >= 0x42D0000000000000_u64
+            # |x| >= 2^46
+            if ax >= 0x7FF0000000000000_u64
+                if ax > 0x7FF0000000000000_u64
+                    return x +! x
+                # infinity: the original's 0.0/0.0, which is the negative quiet NaN on x86-64
+                return B64.from_bits(bits: 0xFFF8000000000000_u64)
+            var sb = LLVM::int_truncate[U64, U32]((ax >>> 52) - 1069_u64)
+            if sb > 6_u32
+                return zero.copysign(sign: x)
+            var sm = ax
+            if (ixu >>> 63) == 1_u64
+                sm = 0_u64 -% ax
+            var iq = (sm << sb) & 127_u64
+            if (iq & 31_u64) == 0_u64
+                return b64_tanpi_exact(jq: iq >>> 5, neg: ixu >>> 63)
+            var j = iq & 31_u64
+            var nl = 0.0
+            var nh = 0.0
+            if (iq & 32_u64) != 0_u64
+                nl = -B64.from_bits(bits: B64_TANPI_T[2_u64 * (32_u64 - j)])
+                nh = -B64.from_bits(bits: B64_TANPI_T[2_u64 * (32_u64 - j) + 1_u64])
+            else
+                nl = B64.from_bits(bits: B64_TANPI_T[2_u64 * j])
+                nh = B64.from_bits(bits: B64_TANPI_T[2_u64 * j + 1_u64])
+            return nh +! nl
+        # now 2^-12 <= |x| < 2^46, so 1011 <= e <= 1068
         var e = ax >>> 52
-        var sc = B64.from_bits(bits: (2045_u64 - e) << 52)
-        var isc = B64.from_bits(bits: (1_u64 + e) << 52)
-        var r = b64_trigpi_mulddd(xh: pi0, xl: pi1, c: x *! sc)
-        th = r.item0
-        tl = r.item1
-        res = th *! isc
-        if res.abs() < 0x1p-1022
-          var o = B64.from_bits(bits: 0x0010000000000000_u64).copysign(sign: x)
-          var v0b = (o +! res) *! sc
-          var v0h = res *! sc
-          tl = tl +! (th -! v0h)
-          v0b = v0b +! tl
-          return v0b *! isc -! o
-      else
-        # 2^-916 <= |x| < 2^-53
-        var r = b64_trigpi_mulddd(xh: pi0, xl: pi1, c: x)
-        th = r.item0
-        tl = r.item1
+        var s = LLVM::int_truncate[U64, U32](1068_u64 - e)
+        var s1 = LLVM::int_truncate[U64, U32](e - 1011_u64)
+        # m is the significand, 2^52 <= m < 2^53, and msb is the bit of weight 1/2 in |x|
+        var m = (ax & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
+        var msb = (m << s1) >>> 63
+        var neg = ixu >>> 63
+        var mm = m
+        if msb == 1_u64
+            mm = m.bitnot()
+        var iq = (mm >>> s) & 63_u64
+        iq = (iq + 1_u64) >>> 1
+        # flip: the sign applied to the table entry, set when the bit of weight 1/2 differs from the sign
+        var flip = msb ^ neg
+        # sm = sign(x) * m
+        var sm = m
+        if neg == 1_u64
+            sm = 0_u64 -% m
+        # k holds the bits of m of weight <= 2^-7
+        var k = sm << LLVM::int_truncate[U64, U32](e - 1005_u64)
+        var z = LLVM::signed_to_float[S64, B64](LLVM::reinterpret_bits[U64, S64](k))
+        if (k << 1) == 0_u64
+            # x mod 2^-8 = 0
+            if k == 0_u64
+                # x mod 2^-7 = 0
+                if (iq & 31_u64) == 0_u64
+                    var jq = LLVM::reinterpret_bits[U64, S64](sm) >> (s + 6_u32)
+                    return b64_tanpi_exact(jq: LLVM::reinterpret_bits[S64, U64](jq), neg: neg)
+                var kq = (m << s1) >>> 58
+                if kq == 0x10_u64
+                    # |x| = 1/4 mod 1
+                    return one.copysign(sign: x)
+                if kq == 0x30_u64
+                    # |x| = 3/4 mod 1
+                    return -one.copysign(sign: x)
+            z = one.copysign(sign: x) *! z
+        var z2 = z *! z
+        var z4 = z2 *! z2
+        var z3 = z *! z2
+        var c01 = 0x1.4abbce625be51p-207 +! z2 *! 0x1.466bc6776a9b1p-345
+        var c23 = 0x1.45fff6eb26045p-483 +! z2 *! 0x1.4627663861052p-621
+        var f = z3 *! (c01 +! z4 *! c23)
+        var tiny = 0x1p-104
+        var eps = z3 *! 0x1p-256 +! tiny.copysign(sign: z)
+        var p = b64_trigpi_mulddd(xh: 0x1.921fb54442d18p-69, xl: 0x1.1a62633145c07p-123, c: z)
+        p = b64_tanpi_fastsumddd(xh: p.item0, xl: p.item1, c: f)
+        p = b64_tanpi_combine(th: p.item0, tl: p.item1, iq: iq, flip: flip)
+        th = p.item0
+        tl = p.item1
+        eps = eps +! eps *! (th *! th)
+        var lb = th +! (tl -! eps)
+        var ub = th +! (tl +! eps)
+        if lb == ub
+            return lb
+        z = z *! 0x1p-63
+        z2 = z *! z
+        var dz2 = LLVM::fma[B64](a: z, b: z, c: -z2)
+        var cl = z2 *! (0x1.45f32f25dab7fp-66 +! z2 *! (0x1.45f3030c82af4p-78 +! z2 *! 0x1.464490600a978p-90))
+        var q = b64_trigpi_poly_start(c0: 0x1.45f472e3af011p-54, c1: 0x1.90612a0755449p-110, l: cl)
+        q = b64_trigpi_poly_step(xh: z2, xl: dz2, h: q.item0, l: q.item1, c0: 0x1.45fff9b48e95ep-42, c1: 0x1.b226b250d2cc3p-98)
+        q = b64_trigpi_poly_step(xh: z2, xl: dz2, h: q.item0, l: q.item1, c0: 0x1.466bc6775aae2p-30, c1: -0x1.6dc0d93fb2ecep-85)
+        q = b64_trigpi_poly_step(xh: z2, xl: dz2, h: q.item0, l: q.item1, c0: 0x1.4abbce625be53p-18, c1: -0x1.05511c6842515p-72)
+        q = b64_trigpi_poly_step(xh: z2, xl: dz2, h: q.item0, l: q.item1, c0: 0x1.921fb54442d18p-6, c1: 0x1.1a62633145c07p-60)
+        q = b64_trigpi_mulddd(xh: q.item0, xl: q.item1, c: z)
+        q = b64_tanpi_combine(th: q.item0, tl: q.item1, iq: iq, flip: flip)
+        q = b64_trigpi_fasttwosum(x: q.item0, y: q.item1)
+        th = q.item0
+        tl = q.item1
         res = th
     else
-      var x2 = x *! x
-      var x3 = x *! x2
-      var f = x3 *! (0x1.4abbce625be53p+3 +! x2 *! (0x1.466bc6775aa2ap+5 +! x2 *! 0x1.46000158496c2p+7))
-      var px = b64_trigpi_mulddd(xh: pi0, xl: pi1, c: x)
-      var t = b64_tanpi_fastsumddd(xh: px.item0, xl: px.item1, c: f)
-      th = t.item0
-      tl = t.item1
-      var eps = x *! (x2 *! 0x1.1p-47 +! 0x1p-101)
-      var lb = th +! (tl -! eps)
-      var ub = th +! (tl +! eps)
-      if lb == ub
-        return lb
-      var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
-      var dx3 = LLVM::fma[B64](a: x2, b: x, c: -x3) +! dx2 *! x
-      var cl = x2 *! (0x1.45f472e3aed7dp+9 +! x2 *! 0x1.45f33be0e9598p+11)
-      var q = b64_trigpi_poly_start(c0: 0x1.45fff9b48e95ep+7, c1: 0x1.a5047910ae0efp-49, l: cl)
-      q = b64_trigpi_poly_step(xh: x2, xl: dx2, h: q.item0, l: q.item1, c0: 0x1.466bc6775aae2p+5, c1: -0x1.6dc0cbddc0e69p-50)
-      q = b64_trigpi_poly_step(xh: x2, xl: dx2, h: q.item0, l: q.item1, c0: 0x1.4abbce625be53p+3, c1: -0x1.05511c68476a8p-51)
-      q = b64_trigpi_muldd_acc(xh: x3, xl: dx3, ch: q.item0, cl: q.item1)
-      var sv = b64_trigpi_fasttwosum(x: px.item0, y: q.item0)
-      tl = (q.item1 +! px.item1) +! sv.item1
-      q = b64_trigpi_fasttwosum(x: sv.item0, y: tl)
-      th = q.item0
-      tl = q.item1
-      res = th
-  var ul = tl.to_bits()
-  var uh = th.to_bits()
-  var er = (ul +% 6_u64) & 0x000FFFFFFFFFFFFF_u64
-  var de = ((uh -% ul) >>> 52) & 0x7FF_u64
-  if er <= 12_u64 or de > 102_u64
-    return b64_tanpi_database(x: x, f: res)
-  return res
+        # |x| < 2^-12
+        if ax == 0_u64
+            return x
+        var pi0 = 0x1.921fb54442d18p+1
+        var pi1 = 0x1.1a62633145c07p-53
+        if ax < 0x3CA0000000000000_u64
+            # |x| < 2^-53
+            if ax < 0x06B0000000000000_u64
+                # |x| < 2^-916: scale up so that the double-double product stays exact
+                var e = ax >>> 52
+                var sc = B64.from_bits(bits: (2045_u64 - e) << 52)
+                var isc = B64.from_bits(bits: (1_u64 + e) << 52)
+                var r = b64_trigpi_mulddd(xh: pi0, xl: pi1, c: x *! sc)
+                th = r.item0
+                tl = r.item1
+                res = th *! isc
+                if res.abs() < 0x1p-1022
+                    var o = B64.from_bits(bits: 0x0010000000000000_u64).copysign(sign: x)
+                    var v0b = (o +! res) *! sc
+                    var v0h = res *! sc
+                    tl = tl +! (th -! v0h)
+                    v0b = v0b +! tl
+                    return v0b *! isc -! o
+            else
+                # 2^-916 <= |x| < 2^-53
+                var r = b64_trigpi_mulddd(xh: pi0, xl: pi1, c: x)
+                th = r.item0
+                tl = r.item1
+                res = th
+        else
+            var x2 = x *! x
+            var x3 = x *! x2
+            var f = x3 *! (0x1.4abbce625be53p+3 +! x2 *! (0x1.466bc6775aa2ap+5 +! x2 *! 0x1.46000158496c2p+7))
+            var px = b64_trigpi_mulddd(xh: pi0, xl: pi1, c: x)
+            var t = b64_tanpi_fastsumddd(xh: px.item0, xl: px.item1, c: f)
+            th = t.item0
+            tl = t.item1
+            var eps = x *! (x2 *! 0x1.1p-47 +! 0x1p-101)
+            var lb = th +! (tl -! eps)
+            var ub = th +! (tl +! eps)
+            if lb == ub
+                return lb
+            var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
+            var dx3 = LLVM::fma[B64](a: x2, b: x, c: -x3) +! dx2 *! x
+            var cl = x2 *! (0x1.45f472e3aed7dp+9 +! x2 *! 0x1.45f33be0e9598p+11)
+            var q = b64_trigpi_poly_start(c0: 0x1.45fff9b48e95ep+7, c1: 0x1.a5047910ae0efp-49, l: cl)
+            q = b64_trigpi_poly_step(xh: x2, xl: dx2, h: q.item0, l: q.item1, c0: 0x1.466bc6775aae2p+5, c1: -0x1.6dc0cbddc0e69p-50)
+            q = b64_trigpi_poly_step(xh: x2, xl: dx2, h: q.item0, l: q.item1, c0: 0x1.4abbce625be53p+3, c1: -0x1.05511c68476a8p-51)
+            q = b64_trigpi_muldd_acc(xh: x3, xl: dx3, ch: q.item0, cl: q.item1)
+            var sv = b64_trigpi_fasttwosum(x: px.item0, y: q.item0)
+            tl = (q.item1 +! px.item1) +! sv.item1
+            q = b64_trigpi_fasttwosum(x: sv.item0, y: tl)
+            th = q.item0
+            tl = q.item1
+            res = th
+    var ul = tl.to_bits()
+    var uh = th.to_bits()
+    var er = (ul +% 6_u64) & 0x000FFFFFFFFFFFFF_u64
+    var de = ((uh -% ul) >>> 52) & 0x7FF_u64
+    if er <= 12_u64 or de > 102_u64
+        return b64_tanpi_database(x: x, f: res)
+    return res
 
 ### The exact tangent at a multiple of 1/4 (the caller guarantees `jq` counts quarter turns of the
 ### argument, as a two's-complement bit pattern): ±infinity at half-integers, a signed zero at integers.
@@ -198,13 +198,13 @@ routine B64.tanpi() -> B64
 ### :param neg: The input's sign bit (0 or 1).
 ### :returns: ±infinity or ±0.
 secret routine b64_tanpi_exact(jq: U64, neg: U64) -> B64
-  if (jq & 1_u64) == 1_u64
-    if (jq & 2_u64) != 0_u64
-      return B64.from_bits(bits: 0xFFF0000000000000_u64)
-    return B64.from_bits(bits: 0x7FF0000000000000_u64)
-  if ((jq >>> 1) & 1_u64) != neg
-    return B64.from_bits(bits: 0x8000000000000000_u64)
-  return 0.0
+    if (jq & 1_u64) == 1_u64
+        if (jq & 2_u64) != 0_u64
+            return B64.from_bits(bits: 0xFFF0000000000000_u64)
+        return B64.from_bits(bits: 0x7FF0000000000000_u64)
+    if ((jq >>> 1) & 1_u64) != neg
+        return B64.from_bits(bits: 0x8000000000000000_u64)
+    return 0.0
 
 ### The exact sum `(xh + xl) + c` as (high, low), for |xh| >= |c|.
 ### :param xh: The high part of the first operand.
@@ -212,8 +212,8 @@ secret routine b64_tanpi_exact(jq: U64, neg: U64) -> B64
 ### :param c: The second operand.
 ### :returns: The sum as a (high, low) pair.
 secret routine b64_tanpi_fastsumddd(xh: B64, xl: B64, c: B64) -> (B64, B64)
-  var t = b64_trigpi_fasttwosum(x: xh, y: c)
-  return (t.item0, xl +! t.item1)
+    var t = b64_trigpi_fasttwosum(x: xh, y: c)
+    return (t.item0, xl +! t.item1)
 
 ### Combines tan(pi*z') = th + tl for the small residual angle with the table entry tan(pi*iq/64) by the
 ### tangent addition formula, in double-double arithmetic.
@@ -223,28 +223,28 @@ secret routine b64_tanpi_fastsumddd(xh: B64, xl: B64, c: B64) -> (B64, B64)
 ### :param flip: 1 when the table entry is negated.
 ### :returns: The tangent as a (high, low) pair.
 secret routine b64_tanpi_combine(th: B64, tl: B64, iq: U64, flip: U64) -> (B64, B64)
-  if iq == 32_u64
-    var ith = -1.0 /! th
-    var il = (LLVM::fma[B64](a: ith, b: th, c: 1.0) +! tl *! ith) *! ith
-    return (ith, il)
-  var nl = B64.from_bits(bits: B64_TANPI_T[2_u64 * iq])
-  var nh = B64.from_bits(bits: B64_TANPI_T[2_u64 * iq + 1_u64])
-  if flip == 1_u64
-    nh = -nh
-    nl = -nl
-  var mp = b64_trigpi_muldd_acc(xh: th, xl: tl, ch: nh, cl: nl)
-  # 1 - (th + tl) * n, the denominator
-  var mh = 1.0 -! mp.item0
-  var dm = (1.0 -! mh) -! mp.item0
-  var ml = dm -! mp.item1
-  # n + (th + tl), the numerator
-  var ns = b64_trigpi_fasttwosum(x: nh, y: th)
-  nh = ns.item0
-  nl = nl +! (ns.item1 +! tl)
-  var imh = 1.0 /! mh
-  var rh = nh *! imh
-  var rl = LLVM::fma[B64](a: nh, b: imh, c: -rh) +! (nl +! nh *! (LLVM::fma[B64](a: -mh, b: imh, c: 1.0) -! ml *! imh)) *! imh
-  return (rh, rl)
+    if iq == 32_u64
+        var ith = -1.0 /! th
+        var il = (LLVM::fma[B64](a: ith, b: th, c: 1.0) +! tl *! ith) *! ith
+        return (ith, il)
+    var nl = B64.from_bits(bits: B64_TANPI_T[2_u64 * iq])
+    var nh = B64.from_bits(bits: B64_TANPI_T[2_u64 * iq + 1_u64])
+    if flip == 1_u64
+        nh = -nh
+        nl = -nl
+    var mp = b64_trigpi_muldd_acc(xh: th, xl: tl, ch: nh, cl: nl)
+    # 1 - (th + tl) * n, the denominator
+    var mh = 1.0 -! mp.item0
+    var dm = (1.0 -! mh) -! mp.item0
+    var ml = dm -! mp.item1
+    # n + (th + tl), the numerator
+    var ns = b64_trigpi_fasttwosum(x: nh, y: th)
+    nh = ns.item0
+    nl = nl +! (ns.item1 +! tl)
+    var imh = 1.0 /! mh
+    var rh = nh *! imh
+    var rl = LLVM::fma[B64](a: nh, b: imh, c: -rh) +! (nl +! nh *! (LLVM::fma[B64](a: -mh, b: imh, c: 1.0) -! ml *! imh)) *! imh
+    return (rh, rl)
 
 ### Looks up an input whose correctly rounded tangent the fast path cannot decide, using the periodicity
 ### tan(pi*(x+1)) = tan(pi*x) and tan(pi*(1/2-x)) = 1/tan(pi*x) to reduce it to [0, 1/2).
@@ -252,24 +252,24 @@ secret routine b64_tanpi_combine(th: B64, tl: B64, iq: U64, flip: U64) -> (B64, 
 ### :param f: The result to return when the input is not in the table.
 ### :returns: The correctly rounded tangent.
 secret routine b64_tanpi_database(x: B64, f: B64) -> B64
-  var ixu = x.to_bits()
-  var aix = ixu & 0x7FFFFFFFFFFFFFFF_u64
-  var p = 0_u64
-  var ax = x.abs()
-  var e = LLVM::reinterpret_bits[U64, S64](aix >>> 52) - 1022
-  if e >= 0
-    # take into account the periodic structure of tan
-    var t = B64.from_bits(bits: aix & (0xFFFFFFFFFFFFFFFF_u64 >>> LLVM::int_truncate[S64, U32](12 + e)).bitnot())
-    ax = ax -! t
-    p = ((aix | 0x0010000000000000_u64) >>> LLVM::int_truncate[S64, U32](52 - e)) & 1_u64
-    if p == 1_u64
-      ax = 0.5 -! ax
-  var sgn: B64 = 1.0
-  if (p ^ (ixu >>> 63)) == 1_u64
-    sgn = -1.0
-  var i = 0_u64
-  while i < 49_u64
-    if B64.from_bits(bits: B64_TANPI_DB[3_u64 * i]) == ax
-      return sgn *! B64.from_bits(bits: B64_TANPI_DB[3_u64 * i + 1_u64]) +! sgn *! B64.from_bits(bits: B64_TANPI_DB[3_u64 * i + 2_u64])
-    i = i + 1_u64
-  return f
+    var ixu = x.to_bits()
+    var aix = ixu & 0x7FFFFFFFFFFFFFFF_u64
+    var p = 0_u64
+    var ax = x.abs()
+    var e = LLVM::reinterpret_bits[U64, S64](aix >>> 52) - 1022
+    if e >= 0
+        # take into account the periodic structure of tan
+        var t = B64.from_bits(bits: aix & (0xFFFFFFFFFFFFFFFF_u64 >>> LLVM::int_truncate[S64, U32](12 + e)).bitnot())
+        ax = ax -! t
+        p = ((aix | 0x0010000000000000_u64) >>> LLVM::int_truncate[S64, U32](52 - e)) & 1_u64
+        if p == 1_u64
+            ax = 0.5 -! ax
+    var sgn: B64 = 1.0
+    if (p ^ (ixu >>> 63)) == 1_u64
+        sgn = -1.0
+    var i = 0_u64
+    while i < 49_u64
+        if B64.from_bits(bits: B64_TANPI_DB[3_u64 * i]) == ax
+            return sgn *! B64.from_bits(bits: B64_TANPI_DB[3_u64 * i + 1_u64]) +! sgn *! B64.from_bits(bits: B64_TANPI_DB[3_u64 * i + 2_u64])
+        i = i + 1_u64
+    return f

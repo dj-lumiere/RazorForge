@@ -21,8 +21,8 @@ public class TupleTests
         // All tuples are inline structs regardless of element types
         string source = """
                         routine test()
-                          var tuple = (1_s32, 2_s32, 3_s32)
-                          return
+                            var tuple = (1_s32, 2_s32, 3_s32)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -37,13 +37,13 @@ public class TupleTests
         // Entity fields stored as ptr in the tuple struct
         string source = """
                         entity Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine test()
-                          var p = Point(x: 1, y: 2)
-                          var tuple = (1, steal p)
-                          return
+                            var p = Point(x: 1, y: 2)
+                            var tuple = (1, steal p)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -57,8 +57,8 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                          var nested = (1, (2, 3))
-                          return
+                            var nested = (1, (2, 3))
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -72,8 +72,8 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                          var single = (42,)
-                          return
+                            var single = (42,)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -94,8 +94,8 @@ public class TupleTests
         // This test verifies tuple analysis succeeds without errors
         string source = """
                         routine test()
-                          var tuple = (1s32, 2s32)
-                          return
+                            var tuple = (1s32, 2s32)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -114,8 +114,8 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                          var mixed = (1_s32, 2.5b64, true)
-                          return
+                            var mixed = (1_s32, 2.5b64, true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -129,12 +129,12 @@ public class TupleTests
     {
         string source = """
                         entity User
-                          id: S32
+                            id: S32
 
                         routine test()
-                          var user = User(id: 42s32)
-                          var tuple = (1, steal user)
-                          return
+                            var user = User(id: 42s32)
+                            var tuple = (1, steal user)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -154,9 +154,9 @@ public class TupleTests
         // Destructuring on non-tuple iterable (range produces integers, not tuples)
         string source = """
                         routine test()
-                          each (a, b) in 0 til 10
-                            var x = a
-                          return
+                            each (a, b) in 0 til 10
+                                var x = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -176,10 +176,10 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                          var a = 1
-                          var b = 2
-                          (a, b) = (1, 2, 3)
-                          return
+                            var a = 1
+                            var b = 2
+                            (a, b) = (1, 2, 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -195,11 +195,11 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                          var a = 1
-                          var b = 2
-                          var c = 3
-                          (a, b, c) = (1, 2)
-                          return
+                            var a = 1
+                            var b = 2
+                            var c = 3
+                            (a, b, c) = (1, 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -219,10 +219,10 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                          var a = 1
-                          var b = 2
-                          (a, b) = (b, a)
-                          return
+                            var a = 1
+                            var b = 2
+                            (a, b) = (b, a)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -236,9 +236,9 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                          var a = 1
-                          (a, 42) = (1, 2)
-                          return
+                            var a = 1
+                            (a, 42) = (1, 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

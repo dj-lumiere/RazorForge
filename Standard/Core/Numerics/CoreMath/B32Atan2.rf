@@ -26,55 +26,55 @@ secret preset B32_ATAN2_C: Array[U64, 64] = [0x3FF0000000000000_u64, 0xBA88C1DAC
 ### :param cl: Low part of the second factor.
 ### :returns: The product as (high, low).
 secret routine b32_atan2_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
-  var ahlh = ch *! xl
-  var alhh = cl *! xh
-  var ahhh = ch *! xh
-  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
-  ahhl = ahhl +! (alhh +! ahlh)
-  var hi = ahhh +! ahhl
-  return (hi, (ahhh -! hi) +! ahhl)
+    var ahlh = ch *! xl
+    var alhh = cl *! xh
+    var ahhh = ch *! xh
+    var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+    ahhl = ahhl +! (alhh +! ahlh)
+    var hi = ahhh +! ahhl
+    return (hi, (ahhh -! hi) +! ahhl)
 
 ### Evaluates the 32-term double-double polynomial of `B32_ATAN2_C` at xh + xl by Horner's rule.
 ### :param xh: High part of the argument.
 ### :param xl: Low part of the argument.
 ### :returns: The polynomial value as (high, low).
 secret routine b32_atan2_polydd(xh: B64, xl: B64) -> (B64, B64)
-  var i = 31_u64
-  var ch = B64.from_bits(bits: B32_ATAN2_C[2_u64 * i])
-  var cl = B64.from_bits(bits: B32_ATAN2_C[2_u64 * i + 1_u64])
-  while i > 0_u64
-    i = i - 1_u64
-    var (mh, ml) = b32_atan2_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
-    var c0 = B64.from_bits(bits: B32_ATAN2_C[2_u64 * i])
-    var c1 = B64.from_bits(bits: B32_ATAN2_C[2_u64 * i + 1_u64])
-    var th = mh +! c0
-    var tl = (c0 -! th) +! mh
-    ch = th
-    cl = ml +! (tl +! c1)
-  return (ch, cl)
+    var i = 31_u64
+    var ch = B64.from_bits(bits: B32_ATAN2_C[2_u64 * i])
+    var cl = B64.from_bits(bits: B32_ATAN2_C[2_u64 * i + 1_u64])
+    while i > 0_u64
+        i = i - 1_u64
+        var (mh, ml) = b32_atan2_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+        var c0 = B64.from_bits(bits: B32_ATAN2_C[2_u64 * i])
+        var c1 = B64.from_bits(bits: B32_ATAN2_C[2_u64 * i + 1_u64])
+        var th = mh +! c0
+        var tl = (c0 -! th) +! mh
+        ch = th
+        cl = ml +! (tl +! c1)
+    return (ch, cl)
 
 ### atan2 for a tiny ratio y/x, from the Taylor approximation z - z^3/3 with z = y/x.
 ### :param y: The y-coordinate.
 ### :param x: The x-coordinate.
 ### :returns: The correctly rounded arc tangent of y/x.
 secret routine b32_atan2_tiny(y: B32, x: B32) -> B32
-  var dy = B64(from: y)
-  var dx = B64(from: x)
-  var z = dy /! dx
-  var e = LLVM::fma[B64](a: -z, b: dx, c: dy)
-  # z * x + e = y thus y/x = z + e/x
-  var c = -0x1.5555555555555p-2
-  var zz = z *! z
-  var cz = c *! z
-  e = e /! dx +! cz *! zz
-  var t = z.to_bits()
-  if (t & 0xFFFFFFF_u64) == 0_u64
-    # boundary case: nudge the last bit toward e to avoid a double rounding when narrowing to B32
-    if z *! e > 0.0
-      t = t +% 1_u64
-    else
-      t = t -% 1_u64
-  return B32(from: B64.from_bits(bits: t))
+    var dy = B64(from: y)
+    var dx = B64(from: x)
+    var z = dy /! dx
+    var e = LLVM::fma[B64](a: -z, b: dx, c: dy)
+    # z * x + e = y thus y/x = z + e/x
+    var c = -0x1.5555555555555p-2
+    var zz = z *! z
+    var cz = c *! z
+    e = e /! dx +! cz *! zz
+    var t = z.to_bits()
+    if (t & 0xFFFFFFF_u64) == 0_u64
+        # boundary case: nudge the last bit toward e to avoid a double rounding when narrowing to B32
+        if z *! e > 0.0
+            t = t +% 1_u64
+        else
+            t = t -% 1_u64
+    return B32(from: B64.from_bits(bits: t))
 
 ### Two-argument arc tangent atan2(y, x), correctly rounded: the exact angle of the point (x, y) rounded
 ### to the nearest `B32` (ties to even), identical on every platform. Follows the C99 special cases for
@@ -83,113 +83,113 @@ secret routine b32_atan2_tiny(y: B32, x: B32) -> B32
 ### :param x: The x-coordinate.
 ### :returns: The correctly rounded angle, in [-pi, pi].
 routine atan2(y: B32, x: B32) -> B32
-  var ux = x.to_bits()
-  var uy = y.to_bits()
-  var ax = ux & 0x7FFFFFFF_u32
-  var ay = uy & 0x7FFFFFFF_u32
-  var sy = 1.0
-  if (uy >>> 31) != 0_u32
-    sy = -1.0
-  if ay >= 0x7F800000_u32 or ax >= 0x7F800000_u32
-    # x or y is NaN or infinity: a NaN x wins over a NaN y, and the result is quieted (as x86 x + y)
-    if ax > 0x7F800000_u32
-      return B32.from_bits(bits: ux | 0x00400000_u32)
-    if ay > 0x7F800000_u32
-      return B32.from_bits(bits: uy | 0x00400000_u32)
-    var yinf = ay == 0x7F800000_u32
-    var xinf = ax == 0x7F800000_u32
-    if yinf and xinf
-      if (ux >>> 31) != 0_u32
-        # +/-3pi/4
-        return B32(from: 0x1.2d97c7f3321d2p+1 *! sy)
-      # +/-pi/4
-      return B32(from: 0x1.921fb54442d18p-1 *! sy)
-    if xinf
-      if (ux >>> 31) != 0_u32
-        return B32(from: 0x1.921fb54442d18p+1 *! sy)
-      return B32(from: 0.0 *! sy)
-    return B32(from: 0x1.921fb54442d18p+0 *! sy)
-  if ay == 0_u32
-    if ax == 0_u32
-      var iz = LLVM::zero_extend[U32, U64]((uy >>> 31) * 4_u32 + (ux >>> 31) * 2_u32)
-      if (ux >>> 31) != 0_u32
-        return B32(from: B64.from_bits(bits: B32_ATAN2_OFF[iz]) +! B64.from_bits(bits: B32_ATAN2_OFFL[iz]))
-      return B32(from: B64.from_bits(bits: B32_ATAN2_OFF[iz]))
-    if (ux >>> 31) == 0_u32
-      return B32(from: 0.0 *! sy)
-  var gt = ay > ax
-  var gti = 0_u32
-  var mg = 0.0
-  var mng = 1.0
-  var sg = 1.0
-  if gt
-    gti = 1_u32
-    mg = 1.0
-    mng = 0.0
-    sg = -1.0
-  var i = LLVM::zero_extend[U32, U64]((uy >>> 31) * 4_u32 + (ux >>> 31) * 2_u32 + gti)
-  var off = B64.from_bits(bits: B32_ATAN2_OFF[i])
-  var zx = B64(from: x)
-  var zy = B64(from: y)
-  # z = x/y if |y| > |x|, and z = y/x otherwise
-  var z = (mg *! zx +! mng *! zy) /! (mg *! zy +! mng *! zx)
-  var r = 1.0
-  var close = false
-  if ax >= ay
-    close = ax - ay < 0x0D800000_u32
-  else
-    close = ay - ax < 0x0D800000_u32
-  if close
-    var z2 = z *! z
-    var z4 = z2 *! z2
-    var z8 = z4 *! z4
-    var cn0 = 0x1p+0 +! z2 *! 0x1.40e0698f94c35p+1
-    var cn2 = 0x1.248c5da347f0dp+1 +! z2 *! 0x1.d873386572976p-1
-    var cn4 = 0x1.46fa40b20f1dp-3 +! z2 *! 0x1.33f5e041eed0fp-7
-    var cn6 = 0x1.546bbf28667c5p-14
-    cn0 = cn0 +! z4 *! cn2
-    cn4 = cn4 +! z4 *! cn6
-    cn0 = cn0 +! z8 *! cn4
-    var cd0 = 0x1p+0 +! z2 *! 0x1.6b8b143a3f6dap+1
-    var cd2 = 0x1.8421201d18ed5p+1 +! z2 *! 0x1.8221d086914ebp+0
-    var cd4 = 0x1.670657e3a07bap-2 +! z2 *! 0x1.0f4951fd1e72dp-5
-    var cd6 = 0x1.b3874b8798286p-11
-    cd0 = cd0 +! z4 *! cd2
-    cd4 = cd4 +! z4 *! cd6
-    cd0 = cd0 +! z8 *! cd4
-    r = cn0 /! cd0
-  z = z *! sg
-  r = z *! r +! off
-  var resu = r.to_bits()
-  if ((resu +% 8_u64) & 0xFFFFFFF_u64) <= 16_u64
-    # check tiny y/x
-    if ay < ax and ((ax - ay) >>> 23) >= 25_u32
-      return b32_atan2_tiny(y: y, x: x)
-    var zh = 0.0
-    var zl = 0.0
-    if not gt
-      zh = zy /! zx
-      zl = LLVM::fma[B64](a: zh, b: -zx, c: zy) /! zx
+    var ux = x.to_bits()
+    var uy = y.to_bits()
+    var ax = ux & 0x7FFFFFFF_u32
+    var ay = uy & 0x7FFFFFFF_u32
+    var sy = 1.0
+    if (uy >>> 31) != 0_u32
+        sy = -1.0
+    if ay >= 0x7F800000_u32 or ax >= 0x7F800000_u32
+        # x or y is NaN or infinity: a NaN x wins over a NaN y, and the result is quieted (as x86 x + y)
+        if ax > 0x7F800000_u32
+            return B32.from_bits(bits: ux | 0x00400000_u32)
+        if ay > 0x7F800000_u32
+            return B32.from_bits(bits: uy | 0x00400000_u32)
+        var yinf = ay == 0x7F800000_u32
+        var xinf = ax == 0x7F800000_u32
+        if yinf and xinf
+            if (ux >>> 31) != 0_u32
+                # +/-3pi/4
+                return B32(from: 0x1.2d97c7f3321d2p+1 *! sy)
+            # +/-pi/4
+            return B32(from: 0x1.921fb54442d18p-1 *! sy)
+        if xinf
+            if (ux >>> 31) != 0_u32
+                return B32(from: 0x1.921fb54442d18p+1 *! sy)
+            return B32(from: 0.0 *! sy)
+        return B32(from: 0x1.921fb54442d18p+0 *! sy)
+    if ay == 0_u32
+        if ax == 0_u32
+            var iz = LLVM::zero_extend[U32, U64]((uy >>> 31) * 4_u32 + (ux >>> 31) * 2_u32)
+            if (ux >>> 31) != 0_u32
+                return B32(from: B64.from_bits(bits: B32_ATAN2_OFF[iz]) +! B64.from_bits(bits: B32_ATAN2_OFFL[iz]))
+            return B32(from: B64.from_bits(bits: B32_ATAN2_OFF[iz]))
+        if (ux >>> 31) == 0_u32
+            return B32(from: 0.0 *! sy)
+    var gt = ay > ax
+    var gti = 0_u32
+    var mg = 0.0
+    var mng = 1.0
+    var sg = 1.0
+    if gt
+        gti = 1_u32
+        mg = 1.0
+        mng = 0.0
+        sg = -1.0
+    var i = LLVM::zero_extend[U32, U64]((uy >>> 31) * 4_u32 + (ux >>> 31) * 2_u32 + gti)
+    var off = B64.from_bits(bits: B32_ATAN2_OFF[i])
+    var zx = B64(from: x)
+    var zy = B64(from: y)
+    # z = x/y if |y| > |x|, and z = y/x otherwise
+    var z = (mg *! zx +! mng *! zy) /! (mg *! zy +! mng *! zx)
+    var r = 1.0
+    var close = false
+    if ax >= ay
+        close = ax - ay < 0x0D800000_u32
     else
-      zh = zx /! zy
-      zl = LLVM::fma[B64](a: zh, b: -zy, c: zx) /! zy
-    var (z2h, z2l) = b32_atan2_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
-    var (ph0, pl0) = b32_atan2_polydd(xh: z2h, xl: z2l)
-    zh = zh *! sg
-    zl = zl *! sg
-    var (ph, pl) = b32_atan2_muldd(xh: zh, xl: zl, ch: ph0, cl: pl0)
-    var offl = B64.from_bits(bits: B32_ATAN2_OFFL[i])
-    var sh = ph +! off
-    var sl = (((off -! sh) +! ph) +! pl) +! offl
-    var th = B64(from: B32(from: sh))
-    var dh = sh -! th
-    var tm = dh +! sl
-    if th +! th *! 0x1p-60 == th -! th *! 0x1p-60
-      var tthu = th.to_bits() & (0x7FF_u64 << 52)
-      tthu = tthu -% (24_u64 << 52)
-      if tm.abs() > B64.from_bits(bits: tthu)
-        tm = tm *! 1.25
-      else
-        tm = tm *! 0.75
-    r = th +! tm
-  return B32(from: r)
+        close = ay - ax < 0x0D800000_u32
+    if close
+        var z2 = z *! z
+        var z4 = z2 *! z2
+        var z8 = z4 *! z4
+        var cn0 = 0x1p+0 +! z2 *! 0x1.40e0698f94c35p+1
+        var cn2 = 0x1.248c5da347f0dp+1 +! z2 *! 0x1.d873386572976p-1
+        var cn4 = 0x1.46fa40b20f1dp-3 +! z2 *! 0x1.33f5e041eed0fp-7
+        var cn6 = 0x1.546bbf28667c5p-14
+        cn0 = cn0 +! z4 *! cn2
+        cn4 = cn4 +! z4 *! cn6
+        cn0 = cn0 +! z8 *! cn4
+        var cd0 = 0x1p+0 +! z2 *! 0x1.6b8b143a3f6dap+1
+        var cd2 = 0x1.8421201d18ed5p+1 +! z2 *! 0x1.8221d086914ebp+0
+        var cd4 = 0x1.670657e3a07bap-2 +! z2 *! 0x1.0f4951fd1e72dp-5
+        var cd6 = 0x1.b3874b8798286p-11
+        cd0 = cd0 +! z4 *! cd2
+        cd4 = cd4 +! z4 *! cd6
+        cd0 = cd0 +! z8 *! cd4
+        r = cn0 /! cd0
+    z = z *! sg
+    r = z *! r +! off
+    var resu = r.to_bits()
+    if ((resu +% 8_u64) & 0xFFFFFFF_u64) <= 16_u64
+        # check tiny y/x
+        if ay < ax and ((ax - ay) >>> 23) >= 25_u32
+            return b32_atan2_tiny(y: y, x: x)
+        var zh = 0.0
+        var zl = 0.0
+        if not gt
+            zh = zy /! zx
+            zl = LLVM::fma[B64](a: zh, b: -zx, c: zy) /! zx
+        else
+            zh = zx /! zy
+            zl = LLVM::fma[B64](a: zh, b: -zy, c: zx) /! zy
+        var (z2h, z2l) = b32_atan2_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
+        var (ph0, pl0) = b32_atan2_polydd(xh: z2h, xl: z2l)
+        zh = zh *! sg
+        zl = zl *! sg
+        var (ph, pl) = b32_atan2_muldd(xh: zh, xl: zl, ch: ph0, cl: pl0)
+        var offl = B64.from_bits(bits: B32_ATAN2_OFFL[i])
+        var sh = ph +! off
+        var sl = (((off -! sh) +! ph) +! pl) +! offl
+        var th = B64(from: B32(from: sh))
+        var dh = sh -! th
+        var tm = dh +! sl
+        if th +! th *! 0x1p-60 == th -! th *! 0x1p-60
+            var tthu = th.to_bits() & (0x7FF_u64 << 52)
+            tthu = tthu -% (24_u64 << 52)
+            if tm.abs() > B64.from_bits(bits: tthu)
+                tm = tm *! 1.25
+            else
+                tm = tm *! 0.75
+        r = th +! tm
+    return B32(from: r)

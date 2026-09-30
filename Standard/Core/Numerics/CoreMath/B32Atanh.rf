@@ -14,63 +14,63 @@ module Core
 ### NaN) gives NaN, and ±0 maps to itself.
 ### :returns: The correctly rounded inverse hyperbolic tangent.
 routine B32.atanh_unchecked() -> B32
-  # atanh(x) = (log(1 + x) - log(1 - x)) / 2
-  var ux = me.to_bits()
-  var ax = ux << 1
-  if ax < 0x7A300000_u32 or ax >= 0x7F000000_u32
-    if ax >= 0x7F000000_u32
-      # |x| >= 1 or NaN
-      if ax == 0x7F000000_u32
-        return me /! 0.0_b32
-      if ax > 0xFF000000_u32
-        return me +! me
-      return B32.from_bits(bits: 0xFFC00000_u32)
-    if ax < 0x73713744_u32
-      # |x| < 0x1.f5a956p-12
-      if ax == 0
-        return me
-      return LLVM::fma[B32](a: me, b: 0x1p-25_b32, c: me)
-    var z = B64(from: me)
-    var z2 = z *! z
-    var z4 = z2 *! z2
-    var r = (0x1.5555555555527p-2 +! z2 *! 0x1.9999999ba4ee8p-3) +! z4 *! (0x1.24922c280990ap-3 +! z2 *! 0x1.c8236aae809c6p-4)
-    return B32(from: z +! (z *! z2) *! r)
-  var sgn = 1.0
-  if (ux >>> 31) == 1
-    sgn = -1.0
-  var e = ax >>> 24
-  var md = ((ux << 8) | 0x80000000_u32) >>> (126_u32 - e)
-  var mn = 0_u32 -% md
-  var nz = mn.leading_zeros() + 1
-  mn = mn << nz
-  var jn = LLVM::zero_extend[U32, U64](mn >>> 26)
-  var jd = LLVM::zero_extend[U32, U64](md >>> 26)
-  var tn = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](mn) << 20) | (1023_u64 << 52))
-  var td = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](md) << 20) | (1023_u64 << 52))
-  var zn = tn *! B64.from_bits(bits: B32_ATANH_TR[jn]) -! 1.0
-  var zd = td *! B64.from_bits(bits: B32_ATANH_TR[jd]) -! 1.0
-  var zn2 = zn *! zn
-  var zd2 = zd *! zd
-  var nzi = LLVM::zero_extend[U32, U64](nz)
-  var rn = ((B64.from_bits(bits: B32_ATANH_TL[jn]) -! B64.from_bits(bits: B32_ATANH_LN2N[nzi - 1])) +! zn *! 0x1.fffffffce5a6ap-2) +! zn2 *! (-0x1.0001f81ec0ab8p-2 +! zn *! 0x1.555a0f53d79a5p-3)
-  var rd = (B64.from_bits(bits: B32_ATANH_TL[jd]) +! zd *! 0x1.fffffffce5a6ap-2) +! zd2 *! (-0x1.0001f81ec0ab8p-2 +! zd *! 0x1.555a0f53d79a5p-3)
-  var r = sgn *! (rd -! rn)
-  var ub = B32(from: r)
-  var lb = B32(from: r +! sgn *! 0x1.f0fab08151146p-33)
-  if ub != lb
-    # too close to a rounding boundary: evaluate both logarithms with longer polynomials
-    var zn4 = zn2 *! zn2
-    var zd4 = zd2 *! zd2
-    var nzf = B64(from: nzi)
-    var fn = zn *! (((0x1p-1 +! zn *! -0x1.000000000001bp-2) +! zn2 *! (0x1.55555555555bap-3 +! zn *! -0x1.fffffff26d72ep-4)) +! zn4 *! ((0x1.99999989035p-4 +! zn *! -0x1.555c39cb9ee8p-4) +! zn2 *! 0x1.24992d8b014a1p-4))
-    fn = fn +! 0x1.0ca86c3898dp-50 *! nzf
-    fn = fn +! B64.from_bits(bits: B32_ATANH_TL[jn])
-    var en = nzf *! 0x1.62e42fefa3ap-2
-    var fd = zd *! (((0x1p-1 +! zd *! -0x1.000000000001bp-2) +! zd2 *! (0x1.55555555555bap-3 +! zd *! -0x1.fffffff26d72ep-4)) +! zd4 *! ((0x1.99999989035p-4 +! zd *! -0x1.555c39cb9ee8p-4) +! zd2 *! 0x1.24992d8b014a1p-4))
-    fd = fd +! B64.from_bits(bits: B32_ATANH_TL[jd])
-    r = (fd -! fn) +! en
-    ub = B32(from: sgn *! r)
-  return ub
+    # atanh(x) = (log(1 + x) - log(1 - x)) / 2
+    var ux = me.to_bits()
+    var ax = ux << 1
+    if ax < 0x7A300000_u32 or ax >= 0x7F000000_u32
+        if ax >= 0x7F000000_u32
+            # |x| >= 1 or NaN
+            if ax == 0x7F000000_u32
+                return me /! 0.0_b32
+            if ax > 0xFF000000_u32
+                return me +! me
+            return B32.from_bits(bits: 0xFFC00000_u32)
+        if ax < 0x73713744_u32
+            # |x| < 0x1.f5a956p-12
+            if ax == 0
+                return me
+            return LLVM::fma[B32](a: me, b: 0x1p-25_b32, c: me)
+        var z = B64(from: me)
+        var z2 = z *! z
+        var z4 = z2 *! z2
+        var r = (0x1.5555555555527p-2 +! z2 *! 0x1.9999999ba4ee8p-3) +! z4 *! (0x1.24922c280990ap-3 +! z2 *! 0x1.c8236aae809c6p-4)
+        return B32(from: z +! (z *! z2) *! r)
+    var sgn = 1.0
+    if (ux >>> 31) == 1
+        sgn = -1.0
+    var e = ax >>> 24
+    var md = ((ux << 8) | 0x80000000_u32) >>> (126_u32 - e)
+    var mn = 0_u32 -% md
+    var nz = mn.leading_zeros() + 1
+    mn = mn << nz
+    var jn = LLVM::zero_extend[U32, U64](mn >>> 26)
+    var jd = LLVM::zero_extend[U32, U64](md >>> 26)
+    var tn = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](mn) << 20) | (1023_u64 << 52))
+    var td = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](md) << 20) | (1023_u64 << 52))
+    var zn = tn *! B64.from_bits(bits: B32_ATANH_TR[jn]) -! 1.0
+    var zd = td *! B64.from_bits(bits: B32_ATANH_TR[jd]) -! 1.0
+    var zn2 = zn *! zn
+    var zd2 = zd *! zd
+    var nzi = LLVM::zero_extend[U32, U64](nz)
+    var rn = ((B64.from_bits(bits: B32_ATANH_TL[jn]) -! B64.from_bits(bits: B32_ATANH_LN2N[nzi - 1])) +! zn *! 0x1.fffffffce5a6ap-2) +! zn2 *! (-0x1.0001f81ec0ab8p-2 +! zn *! 0x1.555a0f53d79a5p-3)
+    var rd = (B64.from_bits(bits: B32_ATANH_TL[jd]) +! zd *! 0x1.fffffffce5a6ap-2) +! zd2 *! (-0x1.0001f81ec0ab8p-2 +! zd *! 0x1.555a0f53d79a5p-3)
+    var r = sgn *! (rd -! rn)
+    var ub = B32(from: r)
+    var lb = B32(from: r +! sgn *! 0x1.f0fab08151146p-33)
+    if ub != lb
+        # too close to a rounding boundary: evaluate both logarithms with longer polynomials
+        var zn4 = zn2 *! zn2
+        var zd4 = zd2 *! zd2
+        var nzf = B64(from: nzi)
+        var fn = zn *! (((0x1p-1 +! zn *! -0x1.000000000001bp-2) +! zn2 *! (0x1.55555555555bap-3 +! zn *! -0x1.fffffff26d72ep-4)) +! zn4 *! ((0x1.99999989035p-4 +! zn *! -0x1.555c39cb9ee8p-4) +! zn2 *! 0x1.24992d8b014a1p-4))
+        fn = fn +! 0x1.0ca86c3898dp-50 *! nzf
+        fn = fn +! B64.from_bits(bits: B32_ATANH_TL[jn])
+        var en = nzf *! 0x1.62e42fefa3ap-2
+        var fd = zd *! (((0x1p-1 +! zd *! -0x1.000000000001bp-2) +! zd2 *! (0x1.55555555555bap-3 +! zd *! -0x1.fffffff26d72ep-4)) +! zd4 *! ((0x1.99999989035p-4 +! zd *! -0x1.555c39cb9ee8p-4) +! zd2 *! 0x1.24992d8b014a1p-4))
+        fd = fd +! B64.from_bits(bits: B32_ATANH_TL[jd])
+        r = (fd -! fn) +! en
+        ub = B32(from: sgn *! r)
+    return ub
 
 ### Table of approximate reciprocals of 1 + j/64, for j in 0..63, as B64 bit patterns.
 secret preset B32_ATANH_TR: Array[U64, 64] = [0x3FEFC07F02000000_u64, 0x3FEF44659E000000_u64, 0x3FEECC07B3000000_u64, 0x3FEE573AC9000000_u64, 0x3FEDE5D6E4000000_u64, 0x3FED77B655000000_u64, 0x3FED0CB58F000000_u64, 0x3FECA4B305000000_u64, 0x3FEC3F8F02000000_u64, 0x3FEBDD2B8A000000_u64, 0x3FEB7D6C3E000000_u64, 0x3FEB203640000000_u64, 0x3FEAC5701B000000_u64, 0x3FEA6D01A7000000_u64, 0x3FEA16D3F9000000_u64, 0x3FE9C2D14F000000_u64, 0x3FE970E4F8000000_u64, 0x3FE920FB4A000000_u64, 0x3FE8D3018D000000_u64, 0x3FE886E5F1000000_u64, 0x3FE83C977B000000_u64, 0x3FE7F405FD000000_u64, 0x3FE7AD2209000000_u64, 0x3FE767DCE4000000_u64, 0x3FE724287F000000_u64, 0x3FE6E1F76B000000_u64, 0x3FE6A13CD1000000_u64, 0x3FE661EC6A000000_u64, 0x3FE623FA77000000_u64, 0x3FE5E75BB9000000_u64, 0x3FE5AC056B000000_u64, 0x3FE571ED3C000000_u64, 0x3FE5390949000000_u64, 0x3FE5015015000000_u64, 0x3FE4CAB887000000_u64, 0x3FE49539E4000000_u64, 0x3FE460CBC8000000_u64, 0x3FE42D6626000000_u64, 0x3FE3FB0140000000_u64, 0x3FE3C995A4000000_u64, 0x3FE3991C2C000000_u64, 0x3FE3698DF4000000_u64, 0x3FE33AE45B000000_u64, 0x3FE30D1901000000_u64, 0x3FE2E025C0000000_u64, 0x3FE2B404AD000000_u64, 0x3FE288B013000000_u64, 0x3FE25E2271000000_u64, 0x3FE2345679000000_u64, 0x3FE20B470C000000_u64, 0x3FE1E2EF3B000000_u64, 0x3FE1BB4A40000000_u64, 0x3FE1945381000000_u64, 0x3FE16E0689000000_u64, 0x3FE1485F0E000000_u64, 0x3FE12358E7000000_u64, 0x3FE0FEF011000000_u64, 0x3FE0DB20A9000000_u64, 0x3FE0B7E6EC000000_u64, 0x3FE0953F39000000_u64, 0x3FE073260A000000_u64, 0x3FE05197F8000000_u64, 0x3FE03091B5000000_u64, 0x3FE0101010000000_u64]

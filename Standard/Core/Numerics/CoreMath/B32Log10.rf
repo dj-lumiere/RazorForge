@@ -24,60 +24,60 @@ secret preset B32_LOG10_ST: Array[U32, 16] = [0x501502F9_u32, 0x41200000_u32, 0x
 ### to NaN.
 ### :returns: The correctly rounded base-10 logarithm.
 routine B32.log10_unchecked() -> B32
-  var ux = me.to_bits()
-  if ux >= 0x7F800000_u32
-    # <= -0, NaN, infinity
-    return b32_log10_special(x: me)
-  if ux == B32_LOG10_ST[LLVM::zero_extend[U32, U64]((ux >>> 24) & 0xF_u32)]
-    # x = 10^n: n = floor((e + 1) * log10(2)) for the biased exponent e
-    var je = (ux >>> 23) -% 126_u32
-    je = (je *% 0x4D104D4_u32) >>> 28
-    return B32(from: je)
-  if ux < 0x00800000_u32
-    if ux == 0
-      return b32_log10_special(x: me)
-    # subnormal: normalize
-    var n = ux.leading_zeros() - 8
-    ux = ux << n
-    ux = ux -% (n << 23)
-  var e = LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[U32, S32](ux) >> 23) - 127
-  var ed = B64(from: e)
-  var m = LLVM::zero_extend[U32, U64](ux & 0x7FFFFF_u32)
-  var j = (m + 0x10000_u64) >>> 17
-  var tz = B64.from_bits(bits: (m << 29) | 0x3FF0000000000000_u64)
-  var tlj = B64.from_bits(bits: B32_LOG10_TL[j])
-  var z = tz *! B64.from_bits(bits: B32_LOG10_TR[j]) -! 1.0
-  var z2 = z *! z
-  var r = ((ed *! 0x1.34413509f79ffp-2 +! tlj) +! z *! 0x1.bcb7b15d35067p-2) +! z2 *! (-0x1.bcbb1cd29cbafp-3 +! z *! 0x1.2870e2624ce4ep-3)
-  var ub = B32(from: r)
-  var lb = B32(from: r +! 0x1.af23fp-34)
-  if ub != lb
-    # the fast path cannot decide the rounding: a longer polynomial and a two-part log10(2)
-    var c01 = 0x1.bcb7b1526e50ep-2 -! z *! 0x1.bcb7b1526e53dp-3
-    var c23 = 0x1.287a7636f3fa2p-3 -! z *! 0x1.bcb7b146a14b3p-4
-    var c46 = (0x1.63c627d5219cbp-4 -! z *! 0x1.2880736c8762dp-4) +! z2 *! 0x1.fc1ecf913961ap-5
-    var f = z *! (c01 +! z2 *! (c23 +! z2 *! c46))
-    f = f -! 0x1.0cee0ed4ca7e9p-54 *! ed
-    f = f +! (tlj -! B64.from_bits(bits: B32_LOG10_TL[0]))
-    var el = ed *! 0x1.34413509f7ap-2
-    r = el +! f
-    ub = B32(from: r)
-    if (r.to_bits() & 0x0FFFFFFF_u64) == 0
-      # r lies on a B32 rounding boundary: nudge it by the rounding error of el + f
-      var dr = (el -! r) +! f
-      r = r +! dr *! 32.0
-      ub = B32(from: r)
-  return ub
+    var ux = me.to_bits()
+    if ux >= 0x7F800000_u32
+        # <= -0, NaN, infinity
+        return b32_log10_special(x: me)
+    if ux == B32_LOG10_ST[LLVM::zero_extend[U32, U64]((ux >>> 24) & 0xF_u32)]
+        # x = 10^n: n = floor((e + 1) * log10(2)) for the biased exponent e
+        var je = (ux >>> 23) -% 126_u32
+        je = (je *% 0x4D104D4_u32) >>> 28
+        return B32(from: je)
+    if ux < 0x00800000_u32
+        if ux == 0
+            return b32_log10_special(x: me)
+        # subnormal: normalize
+        var n = ux.leading_zeros() - 8
+        ux = ux << n
+        ux = ux -% (n << 23)
+    var e = LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[U32, S32](ux) >> 23) - 127
+    var ed = B64(from: e)
+    var m = LLVM::zero_extend[U32, U64](ux & 0x7FFFFF_u32)
+    var j = (m + 0x10000_u64) >>> 17
+    var tz = B64.from_bits(bits: (m << 29) | 0x3FF0000000000000_u64)
+    var tlj = B64.from_bits(bits: B32_LOG10_TL[j])
+    var z = tz *! B64.from_bits(bits: B32_LOG10_TR[j]) -! 1.0
+    var z2 = z *! z
+    var r = ((ed *! 0x1.34413509f79ffp-2 +! tlj) +! z *! 0x1.bcb7b15d35067p-2) +! z2 *! (-0x1.bcbb1cd29cbafp-3 +! z *! 0x1.2870e2624ce4ep-3)
+    var ub = B32(from: r)
+    var lb = B32(from: r +! 0x1.af23fp-34)
+    if ub != lb
+        # the fast path cannot decide the rounding: a longer polynomial and a two-part log10(2)
+        var c01 = 0x1.bcb7b1526e50ep-2 -! z *! 0x1.bcb7b1526e53dp-3
+        var c23 = 0x1.287a7636f3fa2p-3 -! z *! 0x1.bcb7b146a14b3p-4
+        var c46 = (0x1.63c627d5219cbp-4 -! z *! 0x1.2880736c8762dp-4) +! z2 *! 0x1.fc1ecf913961ap-5
+        var f = z *! (c01 +! z2 *! (c23 +! z2 *! c46))
+        f = f -! 0x1.0cee0ed4ca7e9p-54 *! ed
+        f = f +! (tlj -! B64.from_bits(bits: B32_LOG10_TL[0]))
+        var el = ed *! 0x1.34413509f7ap-2
+        r = el +! f
+        ub = B32(from: r)
+        if (r.to_bits() & 0x0FFFFFFF_u64) == 0
+            # r lies on a B32 rounding boundary: nudge it by the rounding error of el + f
+            var dr = (el -! r) +! f
+            r = r +! dr *! 32.0
+            ub = B32(from: r)
+    return ub
 
 ### log10 of ±0 (-infinity), +infinity (itself), NaN (itself) or a negative input (NaN).
 ### :param x: The special input.
 ### :returns: The special result.
 secret routine b32_log10_special(x: B32) -> B32
-  var ux = x.to_bits()
-  if (ux << 1) == 0
-    return B32.from_bits(bits: 0xFF800000_u32)
-  if ux == 0x7F800000_u32
-    return x
-  if (ux << 1) > 0xFF000000_u32
-    return x +! x
-  return B32.from_bits(bits: 0xFFC00000_u32)
+    var ux = x.to_bits()
+    if (ux << 1) == 0
+        return B32.from_bits(bits: 0xFF800000_u32)
+    if ux == 0x7F800000_u32
+        return x
+    if (ux << 1) > 0xFF000000_u32
+        return x +! x
+    return B32.from_bits(bits: 0xFFC00000_u32)

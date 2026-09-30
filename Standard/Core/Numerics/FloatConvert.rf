@@ -37,21 +37,21 @@ import Numerics.Integer
 
 ### Correctly-rounded decimal digits of a float, with the exponent of the leading digit.
 record FloatDigits
-  ### The significant digit string (exactly `sig` characters).
-  digits: Text
-  ### Decimal exponent E: the value equals d0.d1… × 10^E.
-  point_exp: S64
+    ### The significant digit string (exactly `sig` characters).
+    digits: Text
+    ### Decimal exponent E: the value equals d0.d1… × 10^E.
+    point_exp: S64
 
 ### A parsed decimal-float string: a finite magnitude equals digits × 10^dec_exp.
 record FloatParsed
-  ### 0 finite, 1 NaN, 2 infinity, 3 invalid (malformed input).
-  kind: S32
-  ### Whether a leading `-` was present.
-  is_neg: Bool
-  ### The significand as a decimal digit string (rebuilt into an `Integer` by the caller).
-  digits: Text
-  ### The base-10 exponent applied to the significand.
-  dec_exp: S64
+    ### 0 finite, 1 NaN, 2 infinity, 3 invalid (malformed input).
+    kind: S32
+    ### Whether a leading `-` was present.
+    is_neg: Bool
+    ### The significand as a decimal digit string (rebuilt into an `Integer` by the caller).
+    digits: Text
+    ### The base-10 exponent applied to the significand.
+    dec_exp: S64
 
 # ----------------------------------------------------------------------------
 # Big-integer helpers
@@ -59,28 +59,28 @@ record FloatParsed
 
 ### Returns 10^k as an Integer. `k` must be non-negative.
 routine pow10_int(k: S64) -> Integer
-  return Integer(value: 10u64).pow(exp: LLVM::int_truncate[S64, U32](k))
+    return Integer(value: 10u64).pow(exp: LLVM::int_truncate[S64, U32](k))
 
 ### Returns round-half-to-even of n/d for non-negative n and positive d.
 routine div_round_half_even(n: Integer, d: Integer) -> Integer
-  var qr = n.divmod(other: d)
-  var q = qr.item0
-  var r = qr.item1
-  var r2 = r.add(other: r)
-  var c = r2.cmp(you: d)
-  if c == ME_LARGE
-    return q.add(other: Integer.one())
-  if c == SAME
-    if q.is_odd()
-      return q.add(other: Integer.one())
+    var qr = n.divmod(other: d)
+    var q = qr.item0
+    var r = qr.item1
+    var r2 = r.add(other: r)
+    var c = r2.cmp(you: d)
+    if c == ME_LARGE
+        return q.add(other: Integer.one())
+    if c == SAME
+        if q.is_odd()
+            return q.add(other: Integer.one())
+        return q
     return q
-  return q
 
 ### True when num/den >= 2^k (k may be negative), an exact big-integer test.
 routine ratio_ge_pow2(num: Integer, den: Integer, k: S64) -> Bool
-  if k >= 0_s64
-    return num.cmp(you: den.shl(bits: LLVM::int_truncate[S64, S32](k))) != ME_SMALL
-  return num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - k)).cmp(you: den) != ME_SMALL
+    if k >= 0_s64
+        return num.cmp(you: den.shl(bits: LLVM::int_truncate[S64, S32](k))) != ME_SMALL
+    return num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - k)).cmp(you: den) != ME_SMALL
 
 # ----------------------------------------------------------------------------
 # Formatting: significant-digit extraction + %g layout
@@ -90,125 +90,125 @@ routine ratio_ge_pow2(num: Integer, den: Integer, k: S64) -> Bool
 ### value m·2^e2. Returns (digits, E) where the value equals d0.d1d2… × 10^E and
 ### `digits` is exactly `sig` characters long.
 routine binary_float_digits(m: U64, e2: S64, sig: U64) -> FloatDigits
-  var num = Integer(value: m)
-  var den = Integer.one()
-  if e2 >= 0_s64
-    num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
-  else
-    den = den.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - e2))
-  var sigi = LLVM::reinterpret_bits[U64, S64](sig)
-  var sigm1 = sigi - 1_s64
-  var lo = pow10_int(k: sigm1)
-  var hi = pow10_int(k: sigi)
-  # Decimal-exponent estimate: log10(value) ≈ (bitlen(num) - bitlen(den))·log10(2).
-  var bl = LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())
-  var ee = (bl * 30103_s64) // 100000_s64
-  var dd = Integer.zero()
-  var guard = 0_s64
-  var done = false
-  while not done
-    var pp = sigm1 - ee
-    var n2 = num
-    var d2 = den
-    if pp >= 0_s64
-      n2 = num.mul(other: pow10_int(k: pp))
+    var num = Integer(value: m)
+    var den = Integer.one()
+    if e2 >= 0_s64
+        num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
     else
-      d2 = den.mul(other: pow10_int(k: 0_s64 - pp))
-    dd = div_round_half_even(n: n2, d: d2)
-    if guard >= 6_s64
-      done = true
-    elseif dd.cmp(you: hi) != ME_SMALL
-      ee = ee + 1_s64
-      guard = guard + 1_s64
-    elseif dd.cmp(you: lo) == ME_SMALL
-      ee = ee - 1_s64
-      guard = guard + 1_s64
-    else
-      done = true
-  # Safety: if the guard tripped with a rounded-up extra digit, drop it.
-  if dd.cmp(you: hi) != ME_SMALL
-    dd = dd.floordiv(other: Integer(value: 10u64))
-    ee = ee + 1_s64
-  return FloatDigits(digits: dd.represent(), point_exp: ee)
+        den = den.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - e2))
+    var sigi = LLVM::reinterpret_bits[U64, S64](sig)
+    var sigm1 = sigi - 1_s64
+    var lo = pow10_int(k: sigm1)
+    var hi = pow10_int(k: sigi)
+    # Decimal-exponent estimate: log10(value) ≈ (bitlen(num) - bitlen(den))·log10(2).
+    var bl = LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())
+    var ee = (bl * 30103_s64) // 100000_s64
+    var dd = Integer.zero()
+    var guard = 0_s64
+    var done = false
+    while not done
+        var pp = sigm1 - ee
+        var n2 = num
+        var d2 = den
+        if pp >= 0_s64
+            n2 = num.mul(other: pow10_int(k: pp))
+        else
+            d2 = den.mul(other: pow10_int(k: 0_s64 - pp))
+        dd = div_round_half_even(n: n2, d: d2)
+        if guard >= 6_s64
+            done = true
+        elseif dd.cmp(you: hi) != ME_SMALL
+            ee = ee + 1_s64
+            guard = guard + 1_s64
+        elseif dd.cmp(you: lo) == ME_SMALL
+            ee = ee - 1_s64
+            guard = guard + 1_s64
+        else
+            done = true
+    # Safety: if the guard tripped with a rounded-up extra digit, drop it.
+    if dd.cmp(you: hi) != ME_SMALL
+        dd = dd.floordiv(other: Integer(value: 10u64))
+        ee = ee + 1_s64
+    return FloatDigits(digits: dd.represent(), point_exp: ee)
 
 ### Builds `n` copies of '0' as Text.
 routine zeros_text(n: U64) -> Text
-  var r = Text()
-  var i = 0u64
-  while i < n
-    r = r + "0"
-    i = i + 1u64
-  return r
+    var r = Text()
+    var i = 0u64
+    while i < n
+        r = r + "0"
+        i = i + 1u64
+    return r
 
 ### Lays out the significant digits with C `%g` rules. `digits` is the sig-digit
 ### string, `E` the exponent of the leading digit (value ≈ d0.d1… × 10^E).
 routine assemble_decimal(neg: Bool, digits: Text, ee: S64, sig: U64) -> Text
-  var k = digits.count()
-  while k > 1u64 and digits[k - 1u64] == Character(0x0030u32)
-    k = k - 1u64
-  var s = digits[0u64 til k]
-  var sigi = LLVM::reinterpret_bits[U64, S64](sig)
-  var body = Text()
-  if ee < -4_s64 or ee >= sigi
-    # Scientific: d[.ddd]e±XX
-    if k == 1u64
-      body = s
+    var k = digits.count()
+    while k > 1u64 and digits[k - 1u64] == Character(0x0030u32)
+        k = k - 1u64
+    var s = digits[0u64 til k]
+    var sigi = LLVM::reinterpret_bits[U64, S64](sig)
+    var body = Text()
+    if ee < -4_s64 or ee >= sigi
+        # Scientific: d[.ddd]e±XX
+        if k == 1u64
+            body = s
+        else
+            body = s[0u64 til 1u64] + "." + s[1u64 til k]
+        var ea = ee
+        var esign = "+"
+        if ee < 0_s64
+            ea = 0_s64 - ee
+            esign = "-"
+        var edig = int_to_text(mag: LLVM::reinterpret_bits[S64, U64](ea), negative: false)
+        if edig.count() < 2u64
+            edig = "0" + edig
+        body = body + "e" + esign + edig
+    elseif ee >= 0_s64
+        var iplen = LLVM::reinterpret_bits[S64, U64](ee + 1_s64)
+        if k <= iplen
+            body = s + zeros_text(n: iplen - k)
+        else
+            body = s[0u64 til iplen] + "." + s[iplen til k]
     else
-      body = s[0u64 til 1u64] + "." + s[1u64 til k]
-    var ea = ee
-    var esign = "+"
-    if ee < 0_s64
-      ea = 0_s64 - ee
-      esign = "-"
-    var edig = int_to_text(mag: LLVM::reinterpret_bits[S64, U64](ea), negative: false)
-    if edig.count() < 2u64
-      edig = "0" + edig
-    body = body + "e" + esign + edig
-  elseif ee >= 0_s64
-    var iplen = LLVM::reinterpret_bits[S64, U64](ee + 1_s64)
-    if k <= iplen
-      body = s + zeros_text(n: iplen - k)
-    else
-      body = s[0u64 til iplen] + "." + s[iplen til k]
-  else
-    var zc = LLVM::reinterpret_bits[S64, U64](0_s64 - ee - 1_s64)
-    body = "0." + zeros_text(n: zc) + s
-  if neg
-    return "-" + body
-  return body
+        var zc = LLVM::reinterpret_bits[S64, U64](0_s64 - ee - 1_s64)
+        body = "0." + zeros_text(n: zc) + s
+    if neg
+        return "-" + body
+    return body
 
 ### Renders a B64 to `sig` significant digits with `%g` layout. B16/B32 widen to
 ### B64 EXACTLY before calling here, so this single core serves all three.
 ### Specials: "NaN" / "inf" / "-inf"; zero renders as "0" / "-0".
 routine format_binary(value: B64, sig: U64) -> Text
-  if value.is_nan()
-    return "NaN"
-  if value.is_infinite()
-    if value.signbit()
-      return "-inf"
-    return "inf"
-  var neg = value.signbit()
-  if value.is_zero()
-    if neg
-      return "-0"
-    return "0"
-  var raw = value.to_bits()
-  var bits = LLVM::bit_and(a: raw, b: 0x7FFFFFFFFFFFFFFFu64)
-  var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 52u64), b: 0x7FFu64)
-  var mf = LLVM::bit_and(a: bits, b: 0xFFFFFFFFFFFFFu64)
-  var m = 0u64
-  var e2 = 0_s64
-  if LLVM::int_eq(a: ef, b: 0u64)
-    m = mf
-    e2 = -1074_s64
-  else
-    m = LLVM::bit_or(a: mf, b: 0x10000000000000u64)
-    e2 = LLVM::reinterpret_bits[U64, S64](ef) - 1075_s64
-  var (fast, txt) = b128t_sig_binary(neg: neg, c: LLVM::zero_extend[U64, U128](m), q: e2, sig: sig)
-  if fast
-    return txt
-  var pr = binary_float_digits(m: m, e2: e2, sig: sig)
-  return assemble_decimal(neg: neg, digits: pr.digits, ee: pr.point_exp, sig: sig)
+    if value.is_nan()
+        return "NaN"
+    if value.is_infinite()
+        if value.signbit()
+            return "-inf"
+        return "inf"
+    var neg = value.signbit()
+    if value.is_zero()
+        if neg
+            return "-0"
+        return "0"
+    var raw = value.to_bits()
+    var bits = LLVM::bit_and(a: raw, b: 0x7FFFFFFFFFFFFFFFu64)
+    var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 52u64), b: 0x7FFu64)
+    var mf = LLVM::bit_and(a: bits, b: 0xFFFFFFFFFFFFFu64)
+    var m = 0u64
+    var e2 = 0_s64
+    if LLVM::int_eq(a: ef, b: 0u64)
+        m = mf
+        e2 = -1074_s64
+    else
+        m = LLVM::bit_or(a: mf, b: 0x10000000000000u64)
+        e2 = LLVM::reinterpret_bits[U64, S64](ef) - 1075_s64
+    var (fast, txt) = b128t_sig_binary(neg: neg, c: LLVM::zero_extend[U64, U128](m), q: e2, sig: sig)
+    if fast
+        return txt
+    var pr = binary_float_digits(m: m, e2: e2, sig: sig)
+    return assemble_decimal(neg: neg, digits: pr.digits, ee: pr.point_exp, sig: sig)
 
 # ----------------------------------------------------------------------------
 # Shortest round-trip formatting (what `represent` prints)
@@ -229,86 +229,86 @@ routine format_binary(value: B64, sig: U64) -> Text
 ###   value is an exact power of two above the smallest normal exponent).
 ### :returns: The digit string and the exponent of its leading digit.
 routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatDigits
-  var inclusive = m.is_even()
-  var ten = Integer(value: 10u64)
-  var r = Integer.zero()
-  var s = Integer.one()
-  var m_plus = Integer.one()
-  var m_minus = Integer.one()
-  # Everything is scaled by 2 (by 4 when the lower gap is the narrow one) so the half-gaps stay integers.
-  if e2 >= 0_s64
-    var ulp = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](e2))
-    if lower_closer
-      r = m.mul(other: ulp).shl(bits: 2_s32)
-      s = Integer(value: 4u64)
-      m_plus = ulp.shl(bits: 1_s32)
-      m_minus = ulp
+    var inclusive = m.is_even()
+    var ten = Integer(value: 10u64)
+    var r = Integer.zero()
+    var s = Integer.one()
+    var m_plus = Integer.one()
+    var m_minus = Integer.one()
+    # Everything is scaled by 2 (by 4 when the lower gap is the narrow one) so the half-gaps stay integers.
+    if e2 >= 0_s64
+        var ulp = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](e2))
+        if lower_closer
+            r = m.mul(other: ulp).shl(bits: 2_s32)
+            s = Integer(value: 4u64)
+            m_plus = ulp.shl(bits: 1_s32)
+            m_minus = ulp
+        else
+            r = m.mul(other: ulp).shl(bits: 1_s32)
+            s = Integer(value: 2u64)
+            m_plus = ulp
+            m_minus = ulp
+    elseif lower_closer
+        r = m.shl(bits: 2_s32)
+        s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](2_s64 - e2))
+        m_plus = Integer(value: 2u64)
     else
-      r = m.mul(other: ulp).shl(bits: 1_s32)
-      s = Integer(value: 2u64)
-      m_plus = ulp
-      m_minus = ulp
-  elseif lower_closer
-    r = m.shl(bits: 2_s32)
-    s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](2_s64 - e2))
-    m_plus = Integer(value: 2u64)
-  else
-    r = m.shl(bits: 1_s32)
-    s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](1_s64 - e2))
-  # Find k with 10^(k-1) <= (upper interval end) < 10^k: estimate from the bit lengths, then settle
-  # it exactly in whichever direction the estimate was off.
-  var bl = LLVM::reinterpret_bits[U64, S64](r.bit_length()) - LLVM::reinterpret_bits[U64, S64](s.bit_length())
-  var k = (bl * 30103_s64) // 100000_s64
-  if k >= 0_s64
-    s = s.mul(other: pow10_int(k: k))
-  else
-    var scale = pow10_int(k: 0_s64 - k)
-    r = r.mul(other: scale)
-    m_plus = m_plus.mul(other: scale)
-    m_minus = m_minus.mul(other: scale)
-  var settled = false
-  while not settled
-    var top = r.add(other: m_plus).cmp(you: s)
-    if top == ME_LARGE or (inclusive and top == SAME)
-      s = s.mul(other: ten)
-      k = k + 1_s64
+        r = m.shl(bits: 1_s32)
+        s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](1_s64 - e2))
+    # Find k with 10^(k-1) <= (upper interval end) < 10^k: estimate from the bit lengths, then settle
+    # it exactly in whichever direction the estimate was off.
+    var bl = LLVM::reinterpret_bits[U64, S64](r.bit_length()) - LLVM::reinterpret_bits[U64, S64](s.bit_length())
+    var k = (bl * 30103_s64) // 100000_s64
+    if k >= 0_s64
+        s = s.mul(other: pow10_int(k: k))
     else
-      var below = r.add(other: m_plus).mul(other: ten).cmp(you: s)
-      if below == ME_SMALL or (not inclusive and below == SAME)
+        var scale = pow10_int(k: 0_s64 - k)
+        r = r.mul(other: scale)
+        m_plus = m_plus.mul(other: scale)
+        m_minus = m_minus.mul(other: scale)
+    var settled = false
+    while not settled
+        var top = r.add(other: m_plus).cmp(you: s)
+        if top == ME_LARGE or (inclusive and top == SAME)
+            s = s.mul(other: ten)
+            k = k + 1_s64
+        else
+            var below = r.add(other: m_plus).mul(other: ten).cmp(you: s)
+            if below == ME_SMALL or (not inclusive and below == SAME)
+                r = r.mul(other: ten)
+                m_plus = m_plus.mul(other: ten)
+                m_minus = m_minus.mul(other: ten)
+                k = k - 1_s64
+            else
+                settled = true
+    # Emit digits until the prefix alone (rounded down, or its last digit rounded up) lands inside
+    # the interval.
+    var digits = Text()
+    var done = false
+    while not done
         r = r.mul(other: ten)
         m_plus = m_plus.mul(other: ten)
         m_minus = m_minus.mul(other: ten)
-        k = k - 1_s64
-      else
-        settled = true
-  # Emit digits until the prefix alone (rounded down, or its last digit rounded up) lands inside
-  # the interval.
-  var digits = Text()
-  var done = false
-  while not done
-    r = r.mul(other: ten)
-    m_plus = m_plus.mul(other: ten)
-    m_minus = m_minus.mul(other: ten)
-    var qr = r.divmod(other: s)
-    var d = U64(from: qr.item0)
-    r = qr.item1
-    var low_c = r.cmp(you: m_minus)
-    var low = low_c == ME_SMALL or (inclusive and low_c == SAME)
-    var high_c = r.add(other: m_plus).cmp(you: s)
-    var high = high_c == ME_LARGE or (inclusive and high_c == SAME)
-    if low and high
-      # Both d and d + 1 read back correctly: keep the one closer to the exact value, even on a tie.
-      var half = r.shl(bits: 1_s32).cmp(you: s)
-      if half == ME_LARGE or (half == SAME and LLVM::int_ne(a: LLVM::bit_and(a: d, b: 1u64), b: 0u64))
-        d = d + 1u64
-      done = true
-    elseif high
-      d = d + 1u64
-      done = true
-    elseif low
-      done = true
-    digits = digits + int_to_text(mag: d, negative: false)
-  return FloatDigits(digits: digits, point_exp: k - 1_s64)
+        var qr = r.divmod(other: s)
+        var d = U64(from: qr.item0)
+        r = qr.item1
+        var low_c = r.cmp(you: m_minus)
+        var low = low_c == ME_SMALL or (inclusive and low_c == SAME)
+        var high_c = r.add(other: m_plus).cmp(you: s)
+        var high = high_c == ME_LARGE or (inclusive and high_c == SAME)
+        if low and high
+            # Both d and d + 1 read back correctly: keep the one closer to the exact value, even on a tie.
+            var half = r.shl(bits: 1_s32).cmp(you: s)
+            if half == ME_LARGE or (half == SAME and LLVM::int_ne(a: LLVM::bit_and(a: d, b: 1u64), b: 0u64))
+                d = d + 1u64
+            done = true
+        elseif high
+            d = d + 1u64
+            done = true
+        elseif low
+            done = true
+        digits = digits + int_to_text(mag: d, negative: false)
+    return FloatDigits(digits: digits, point_exp: k - 1_s64)
 
 ### Renders the shortest decimal that reads back as the same float, in `%g` layout: scientific when
 ### the leading digit's exponent is below -4 or at least `sci_from`, otherwise positional.
@@ -319,12 +319,12 @@ routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatD
 ### :param sci_from: The leading-digit exponent from which scientific form is used.
 ### :returns: The rendered `Text` ("0" / "-0" for zero).
 routine format_shortest(neg: Bool, m: Integer, e2: S64, lower_closer: Bool, sci_from: U64) -> Text
-  if m.is_zero()
-    if neg
-      return "-0"
-    return "0"
-  var pr = shortest_float_digits(m: m, e2: e2, lower_closer: lower_closer)
-  return assemble_decimal(neg: neg, digits: pr.digits, ee: pr.point_exp, sig: sci_from)
+    if m.is_zero()
+        if neg
+            return "-0"
+        return "0"
+    var pr = shortest_float_digits(m: m, e2: e2, lower_closer: lower_closer)
+    return assemble_decimal(neg: neg, digits: pr.digits, ee: pr.point_exp, sig: sci_from)
 
 # ----------------------------------------------------------------------------
 # Shortest digits by Schubfach (B16 / B32 / B64)
@@ -343,508 +343,508 @@ routine format_shortest(neg: Bool, m: Integer, e2: S64, lower_closer: Bool, sci_
 ### g(k) = floor(10^-k * 2^(125 - floor(log2(10^-k)))) + 1 for k = -324 .. 292, each as g1 * 2^63 + g0
 ### (entry 2(k + 324) is g1, the next g0).
 preset SCHUBFACH_G: Array[U64, 1234] = [
-  0x4F0CEDC95A718DD4_u64, 0x5B01E8B09AA0D1B5_u64, 0x7E7B160EF71C1621_u64, 0x119CA780F767B5EE_u64,
-  0x652F44D8C5B011B4_u64, 0x0E16EC672C52F7F2_u64, 0x50F29D7A37C00E29_u64, 0x581256B8F0425FF5_u64,
-  0x40C21794F96671BA_u64, 0x79A84560C0351991_u64, 0x679CF287F570B5F7_u64, 0x75DA089ACD21C281_u64,
-  0x52E3F5399126F7F9_u64, 0x44AE6D48A41B0201_u64, 0x424FF76140EBF994_u64, 0x36F1F106E9AF34CD_u64,
-  0x6A198BCECE465C20_u64, 0x57E981A4A918547B_u64, 0x54E13CA571D1E34D_u64, 0x2CBACE1D541376C9_u64,
-  0x43E763B78E4182A4_u64, 0x23C8A4E44342C56E_u64, 0x6CA56C58E39C043A_u64, 0x060DD4A06B9E08B0_u64,
-  0x56EABD13E9499CFB_u64, 0x1E7176E6BC7E6D59_u64, 0x458897432107B0C8_u64, 0x7EC12BEBC9FEBDE1_u64,
-  0x6F40F20501A5E7A7_u64, 0x7E01DFDFA9979635_u64, 0x5900C19D9AEB1FB9_u64, 0x4B34B319547944F7_u64,
-  0x4733CE17AF227FC7_u64, 0x55C3C27AA9FA9D93_u64, 0x71EC7CF2B1D0CC72_u64, 0x560603F7765DC8EA_u64,
-  0x5B2397288E40A38E_u64, 0x7804CFF92B7E3A55_u64, 0x48E945BA0B66E93F_u64, 0x13370CC755FE9511_u64,
-  0x74A86F90123E41FE_u64, 0x51F1AE0BBCCA881B_u64, 0x5D538C7341CB67FE_u64, 0x74C1580963D539AF_u64,
-  0x4AA93D29016F8665_u64, 0x43CDE0078310FAF3_u64, 0x77752EA8024C0A3C_u64, 0x0616333F381B2B1E_u64,
-  0x5F90F22001D66E96_u64, 0x3811C298F9AF55B1_u64, 0x4C73F4E667DEBEDE_u64, 0x600E35472E25DE28_u64,
-  0x7A532170A6313164_u64, 0x3349EED849D6303F_u64, 0x61DC1AC084F42783_u64, 0x42A18BE03B11C033_u64,
-  0x4E49AF006A5CEC69_u64, 0x1BB46FE695A7CCF5_u64, 0x7D42B19A43C7E0A8_u64, 0x2C53E63DBC3FAE55_u64,
-  0x64355AE1CFD31A20_u64, 0x237651CAFCFFBEAA_u64, 0x502AAF1B0CA8E1B3_u64, 0x35F8416F30CC9888_u64,
-  0x402225AF3D53E7C2_u64, 0x5E603458F3D6E06D_u64, 0x669D0918621FD937_u64, 0x4A3386F4B957CD7B_u64,
-  0x52173A79E8197A92_u64, 0x6E8F9F2A2DDFD796_u64, 0x41AC2EC7ECE12EDB_u64, 0x720C7F54F17FDFAB_u64,
-  0x69137E0CAE3517C6_u64, 0x1CE0CBBB1BFFCC45_u64, 0x540F980A24F74638_u64, 0x171A3C95AFFFD69E_u64,
-  0x433FACD4EA5F6B60_u64, 0x127B63AAF3331218_u64, 0x6B991487DD657899_u64, 0x6A5F05DE51EB5026_u64,
-  0x5614106CB11DFA14_u64, 0x5518D17EA7EF7352_u64, 0x44DCD9F08DB194DD_u64, 0x2A7A41321FF2C2A8_u64,
-  0x6E2E2980E2B5BAFB_u64, 0x5D906850331E043F_u64, 0x5824EE00B55E2F2F_u64, 0x647386A68F4B3699_u64,
-  0x4683F19A2AB1BF59_u64, 0x36C2D21ED908F87B_u64, 0x70D31C29DDE93228_u64, 0x579E1CFE280E5A5D_u64,
-  0x5A427CEE4B20F4ED_u64, 0x2C7E7D98200B7B7E_u64, 0x483530BEA280C3F1_u64, 0x09FECAE019A2C932_u64,
-  0x73884DFDD0CE064E_u64, 0x43314499C29E0EB6_u64, 0x5C6D0B3173D8050B_u64, 0x4F5A9D47CEE4D891_u64,
-  0x49F0D5C129799DA2_u64, 0x72AEE4397250AD41_u64, 0x764E22CEA8C295D1_u64, 0x377E39F583B44868_u64,
-  0x5EA4E8A553CEDE41_u64, 0x12CB61913629D387_u64, 0x4BB72084430BE500_u64, 0x756F8140F8217605_u64,
-  0x792500D39E796E67_u64, 0x6F18CECE59CF233C_u64, 0x60EA670FB1FABEB9_u64, 0x3F470BD847D8E8FD_u64,
-  0x4D885272F4C89894_u64, 0x329F3CAD064720CA_u64, 0x7C0D50B7EE0DC0ED_u64, 0x37652DE1A3A50143_u64,
-  0x633DDA2CBE716724_u64, 0x2C50F1814FB73436_u64, 0x4F64AE8A31F45283_u64, 0x3D0D8E010C92902B_u64,
-  0x7F077DA9E986EA6B_u64, 0x7B48E334E0EA8045_u64, 0x659F97BB2138BB89_u64, 0x49071C2A4D88669D_u64,
-  0x514C796280FA2FA1_u64, 0x20D27CEEA46D1EE4_u64, 0x4109FAB533FB594D_u64, 0x670ECA58838A7F1D_u64,
-  0x680FF788532BC216_u64, 0x0B4ADD5A6C10CB62_u64, 0x533FF939DC2301AB_u64, 0x22A24AAEBCDA3C4E_u64,
-  0x4299942E49B59AEF_u64, 0x354EA22563E1C9D8_u64, 0x6A8F537D42BC2B18_u64, 0x554A9D089FCFA95A_u64,
-  0x553F75FDCEFCEF46_u64, 0x776EE406E63FBAAE_u64, 0x4432C4CB0BFD8C38_u64, 0x5F8BE99F1E996225_u64,
-  0x6D1E07AB466279F4_u64, 0x327975CB64289D08_u64, 0x574B3955D1E86190_u64, 0x28612B091CED4A6D_u64,
-  0x45D5C777DB204E0D_u64, 0x06B4226DB0BDD524_u64, 0x6FBC72595E9A167B_u64, 0x24536A491AC95506_u64,
-  0x59638EADE54811FC_u64, 0x1D0F883A7BD44405_u64, 0x4782D88B1DD34196_u64, 0x4A72D361FCA9D004_u64,
-  0x726AF411C952028A_u64, 0x43EAEBCFFAA94CD3_u64, 0x5B88C3416DDB353B_u64, 0x4FEF230CC88770A9_u64,
-  0x493A35CDF17C2A96_u64, 0x0CBF4F3D6D3926EE_u64, 0x7529EFAFE8C6AA89_u64, 0x61321862485B717C_u64,
-  0x5DBB262653D22207_u64, 0x675B46B506AF8DFD_u64, 0x4AFC1E850FDB4E6C_u64, 0x52AF6BC405593E64_u64,
-  0x77F9CA6E7FC54A47_u64, 0x377F12D33BC1FD6D_u64, 0x5FFB085866376E9F_u64, 0x45FF42429634CABD_u64,
-  0x4CC8D379EB5F8BB2_u64, 0x6B329B68782A3BCB_u64, 0x7ADAEBF64565AC51_u64, 0x2B842BDA59DD2C77_u64,
-  0x6248BCC5045156A7_u64, 0x3C69BCAEAE4A89F9_u64, 0x4EA0970403744552_u64, 0x6387CA25583BA194_u64,
-  0x7DCDBE6CD253A21E_u64, 0x05A6103BC05F68ED_u64, 0x64A498570EA94E7E_u64, 0x37B80CFC99E5ED8A_u64,
-  0x5083AD1272210B98_u64, 0x2C933D96E184BE08_u64, 0x40695741F4E73C79_u64, 0x7075CADF1AD09807_u64,
-  0x670EF2032171FA5C_u64, 0x4D8944982AE759A4_u64, 0x52725B35B45B2EB0_u64, 0x3E076A135585E150_u64,
-  0x41F515C49048F226_u64, 0x64D2BB42AAD1810D_u64, 0x698822D41A0E503E_u64, 0x07B7920444826815_u64,
-  0x546CE8A9AE71D9CB_u64, 0x1FC60E69D0685344_u64, 0x438A53BAF1F4AE3C_u64, 0x196B3EBB0D20429D_u64,
-  0x6C1085F7E9877D2D_u64, 0x0F11FDF815006A94_u64, 0x56739E5FEE05FDBD_u64, 0x58DB319344005543_u64,
-  0x45294B7FF19E6497_u64, 0x60AF5ADC3666AA9C_u64, 0x6EA878CCB5CA3A8C_u64, 0x344BC4938A3DDDC7_u64,
-  0x5886C70A2B082ED6_u64, 0x5D096A0FA1CB17D2_u64, 0x46D238D4EF39BF12_u64, 0x173ABB3FB4A27975_u64,
-  0x71505AEE4B8F981D_u64, 0x0B912B992103F588_u64, 0x5AA6AF25093FACE4_u64, 0x0940EFADB4032AD3_u64,
-  0x488558EA6DCC8A50_u64, 0x07672624900288A9_u64, 0x74088E43E2E0DD4C_u64, 0x723EA36DB337410E_u64,
-  0x5CD3A5031BE71770_u64, 0x5B654F8AF5C5CDA5_u64, 0x4A42EA68E31F45F3_u64, 0x62B772D5916B0AEB_u64,
-  0x76D1770E38320986_u64, 0x0458B7BC1BDE77DD_u64, 0x5F0DF8D82CF4D46B_u64, 0x1D13C630164B9318_u64,
-  0x4C0B2D79BD90A9EF_u64, 0x30DC9E8CDEA2DC13_u64, 0x79AB7BF5FC1AA97F_u64, 0x0160FDAE31049351_u64,
-  0x6155FCC4C9AEEDFF_u64, 0x1AB3FE24F403A90E_u64, 0x4DDE63D0A158BE65_u64, 0x6229981D9002EDA5_u64,
-  0x7C97061A9BC130A2_u64, 0x69DC2695B337E2A1_u64, 0x63AC04E2163426E8_u64, 0x54B01EDE28F9821B_u64,
-  0x4FBCD0B4DE901F20_u64, 0x43C018B1BA6134E2_u64, 0x7F9481216419CB67_u64, 0x1F99C11C5D68549D_u64,
-  0x6610674DE9AE3C52_u64, 0x4C7B00E37DED107E_u64, 0x51A6B90B21583042_u64, 0x09FC00B5FE574065_u64,
-  0x41522DA2811359CE_u64, 0x3B3000919845CD1D_u64, 0x68837C3734EBC2E3_u64, 0x784CCDB5C06FAE95_u64,
-  0x539C635F5D8968B6_u64, 0x2D0A3E2B00595877_u64, 0x42E382B2B13ABA2B_u64, 0x3DA1CB5599E11393_u64,
-  0x6B059DEAB52AC378_u64, 0x629C7888F634EC1E_u64, 0x559E17EEF755692D_u64, 0x3549FA072B5D89B1_u64,
-  0x447E798BF91120F1_u64, 0x1107FB38EF7E07C1_u64, 0x6D9728DFF4E834B5_u64, 0x01A65EC17F300C68_u64,
-  0x57AC20B32A535D5D_u64, 0x4E1EB23465C009ED_u64, 0x46234D5C21DC4AB1_u64, 0x24E55B5D1E333B24_u64,
-  0x70387BC69C93AAB5_u64, 0x216EF894FD1EC506_u64, 0x59C6C96BB076222A_u64, 0x4DF2607730E56A6C_u64,
-  0x47D23ABC8D2B4E88_u64, 0x3E5B805F5A5121F0_u64, 0x72E9F79415121740_u64, 0x63C59A322A1B697F_u64,
-  0x5BEE5FA9AA74DF67_u64, 0x03047B5B54E2BACC_u64, 0x498B7FBAEEC3E5EC_u64, 0x0269FC4910B5623D_u64,
-  0x75ABFF917E063CAC_u64, 0x6A432D41B45569FB_u64, 0x5E2332DACB38308A_u64, 0x21CF5767C37787FC_u64,
-  0x4B4F5BE23C2CF3A1_u64, 0x67D912B9692C6CCA_u64, 0x787EF969F9E185CF_u64, 0x595B5128A8471476_u64,
-  0x60659454C7E79E3F_u64, 0x6115DA86ED05A9F8_u64, 0x4D1E1043D31FB1CC_u64, 0x4DAB1538BD9E2193_u64,
-  0x7B634D3951CC4FAD_u64, 0x62AB552795C9CF52_u64, 0x62B5D7610E3D0C8B_u64, 0x0222AA86116E3F75_u64,
-  0x4EF7DF80D830D6D5_u64, 0x4E822204DABE992A_u64, 0x7E59659AF38157BC_u64, 0x17369CD49130F510_u64,
-  0x65145148C2CDDFC9_u64, 0x5F5EE3DD40F3F740_u64, 0x50DD0DD3CF0B196E_u64, 0x1918B64A9A5CC5CD_u64,
-  0x40B0D7DCA5A27ABE_u64, 0x4746F83BAEB09E3E_u64, 0x678159610903F797_u64, 0x253E59F91780FD2F_u64,
-  0x52CDE11A6D9CC612_u64, 0x50FEAE60DF9A6426_u64, 0x423E4DAEBE1704DB_u64, 0x5A65584D7FAEB685_u64,
-  0x69FD4917968B3AF9_u64, 0x10A226E265E4573B_u64, 0x54CAA0DFABA29594_u64, 0x0D4E8581EB1D1295_u64,
-  0x43D54D7FBC821143_u64, 0x243ED134BC174211_u64, 0x6C887BFF94034ED2_u64, 0x06CAE85460253682_u64,
-  0x56D396661002A574_u64, 0x6BD586A9E6842B9B_u64, 0x457611EB40021DF7_u64, 0x09779EEE52035616_u64,
-  0x6F234FDECCD02FF1_u64, 0x5BF297E3B66BBCEF_u64, 0x58E90CB23D73598E_u64, 0x165BACB62B8963F3_u64,
-  0x4720D6F4FDF5E13E_u64, 0x451623C4EFA11CC2_u64, 0x71CE24BB2FEFCECA_u64, 0x3B569FA17F682E03_u64,
-  0x5B0B5095BFF30BD5_u64, 0x15DEE61ACC535803_u64, 0x48D5DA11665C0977_u64, 0x2B18B8157042ACCF_u64,
-  0x74895CE8A3C6758B_u64, 0x5E8DF355806AAE18_u64, 0x5D3AB0BA1C9EC46F_u64, 0x653E5C4466BBBE7A_u64,
-  0x4A955A2E7D4BD059_u64, 0x3765169D1EFC9861_u64, 0x77555D172EDFB3C2_u64, 0x256E8A94FE60F3CF_u64,
-  0x5F777DAC257FC301_u64, 0x6ABED543FEB3F63F_u64, 0x4C5F97BCEACC9C01_u64, 0x3BCBDDCFFEF65E99_u64,
-  0x7A328C6177ADC668_u64, 0x5FAC961997F0975B_u64, 0x61C209E792F16B86_u64, 0x7FBD44E1465A12AF_u64,
-  0x4E34D4B9425ABC6B_u64, 0x7FCA9D810514DBBF_u64, 0x7D21545B9D5DFA46_u64, 0x32DDC8CE6E87C5FF_u64,
-  0x641AA9E2E44B2E9E_u64, 0x5BE4A0A525396B32_u64, 0x501554B5836F587E_u64, 0x7CB6E6EA842DEF5C_u64,
-  0x4011109135F2AD32_u64, 0x30925255368B25E3_u64, 0x6681B41B89844850_u64, 0x4DB6EA21F0DEA304_u64,
-  0x52015CE2D469D373_u64, 0x57C5881B2718826A_u64, 0x419AB0B576BB0F8F_u64, 0x5FD139AF527A01EF_u64,
-  0x68F781225791B27F_u64, 0x4C81F5E550C3364A_u64, 0x53F9341B79415B99_u64, 0x239B2B1DDA35C508_u64,
-  0x432DC3492DCDE2E1_u64, 0x02E288E4AE916A6D_u64, 0x6B7C6BA849496B01_u64, 0x516A74A1174F10AE_u64,
-  0x55FD22ED076DEF34_u64, 0x4121F6E745D8DA25_u64, 0x44CA82573924BF5D_u64, 0x1A8192529E4714EB_u64,
-  0x6E10D08B8EA1322E_u64, 0x5D9C1D50FD3E87DD_u64, 0x580D73A2D880F4F2_u64, 0x17B01773FDCB9FE4_u64,
-  0x4671294F139A5D8E_u64, 0x4626792997D61984_u64, 0x70B50EE4EC2A2F4A_u64, 0x3D0A5B75BFBCF59F_u64,
-  0x5A2A7250BCEE8C3B_u64, 0x4A6EAF916630C47F_u64, 0x4821F50D63F209C9_u64, 0x21F2260DEB5A36CC_u64,
-  0x736988156CB6760E_u64, 0x69837016455D247A_u64, 0x5C546CDDF091F80B_u64, 0x6E02C011D1175062_u64,
-  0x49DD23E4C074C66F_u64, 0x719BCCDB0DAC404E_u64, 0x762E9FD467213D7F_u64, 0x68F947C4E2AD33B0_u64,
-  0x5E8BB3105280FDFF_u64, 0x6D94396A4EF0F627_u64, 0x4BA2F5A6A8673199_u64, 0x3E102DEEA58D91B9_u64,
-  0x7904BC3DDA3EB5C2_u64, 0x3019E3176F48E927_u64, 0x60D09697E1CBC49B_u64, 0x4014B5AC590720EC_u64,
-  0x4D73ABACB4A303AF_u64, 0x4CDD5E237A6C1A57_u64, 0x7BEC45E12104D2B2_u64, 0x47C8969F2A46908A_u64,
-  0x63236B1A80D0A88E_u64, 0x6CA0787F5505406F_u64, 0x4F4F88E200A6ED3F_u64, 0x0A19F9FF773766BF_u64,
-  0x7EE5A7D0010B1531_u64, 0x5CF65CCBF1F23DFE_u64, 0x6584864000D5AA8E_u64, 0x172B7D6FF4C1CB32_u64,
-  0x5136D1CCCD77BBA4_u64, 0x78EF978CC3CE3C28_u64, 0x40F8A7D70AC62FB7_u64, 0x13F2DFA3CFD83020_u64,
-  0x67F43FBE77A37F8B_u64, 0x398499061959E699_u64, 0x5329CC985FB5FFA2_u64, 0x6136E0D1ADE18548_u64,
-  0x4287D6E04C91994F_u64, 0x00F8B3DAF181376D_u64, 0x6A72F166E0E8F54B_u64, 0x1B27862B1C01F247_u64,
-  0x5528C11F1A53F76F_u64, 0x2F52D1BC1667F506_u64, 0x44209A7F48432C59_u64, 0x0C424163451FF738_u64,
-  0x6D00F7320D3846F4_u64, 0x7A039BD208332526_u64, 0x5733F8F4D76038C3_u64, 0x7B361641A028EA85_u64,
-  0x45C32D90AC4CFA36_u64, 0x2F5E78348020BB9E_u64, 0x6F9EAF4DE07B29F0_u64, 0x4BCA59ED99CDF8FC_u64,
-  0x594BBF71806287F3_u64, 0x563B7B247B0B2D96_u64, 0x476FCC5ACD1B9FF6_u64, 0x11C92F50626F57AC_u64,
-  0x724C7A2AE1C5CCBD_u64, 0x02DB7EE703E55912_u64, 0x5B7061BBE7D17097_u64, 0x1BE2CBEC031DE0DC_u64,
-  0x4926B496530DF3AC_u64, 0x164F09899C17E716_u64, 0x750ABA8A1E7CB913_u64, 0x3D4B4275C68CA4F0_u64,
-  0x5DA22ED4E530940F_u64, 0x4AA29B916BA3B726_u64, 0x4AE825771DC07672_u64, 0x6EE87C74561C9285_u64,
-  0x77D9D58B62CD8A51_u64, 0x3173FA53BCFA8408_u64, 0x5FE177A2B5713B74_u64, 0x278FFB7630C869A0_u64,
-  0x4CB45FB55DF42F90_u64, 0x1FA662C4F3D387B3_u64, 0x7ABA32BBC986B280_u64, 0x32A3D13B1FB8D91F_u64,
-  0x622E8EFCA1388ECD_u64, 0x0EE9742F4C93E0E6_u64, 0x4E8BA596E760723D_u64, 0x58BAC3590A0FE71E_u64,
-  0x7DAC3C24A5671D2F_u64, 0x412AD228101971C9_u64, 0x6489C9B6EAB8E426_u64, 0x00EF0E8673478E3B_u64,
-  0x506E3AF8BBC71CEB_u64, 0x1A58D86B8F6C71C9_u64, 0x40582F2D6305B0BC_u64, 0x1513E0560C56C16E_u64,
-  0x66F37EAF04D5E793_u64, 0x3B530089AD579BE2_u64, 0x525C6558D0AB1FA9_u64, 0x15DC006E2446164F_u64,
-  0x41E384470D55B2ED_u64, 0x5E4999F1B69E783F_u64, 0x696C06D81555EB15_u64, 0x7D428FE92430C065_u64,
-  0x54566BE0111188DE_u64, 0x31020CBA835A3384_u64, 0x4378564CDA746D7E_u64, 0x5A680A2ECF7B5C69_u64,
-  0x6BF3BD47C3ED7BFD_u64, 0x770CDD17B25EFA42_u64, 0x565C976C9CBDFCCB_u64, 0x1270B0DFC1E59502_u64,
-  0x4516DF8A16FE63D5_u64, 0x5B8D5A4C9B1E10CE_u64, 0x6E8AFF4357FD6C89_u64, 0x127BC3ADC4FCE7B0_u64,
-  0x586F329C466456D4_u64, 0x0EC96957D0CA52F3_u64, 0x46BF5BB038504576_u64, 0x3F07877973D50F29_u64,
-  0x71322C4D26E6D58A_u64, 0x31A5A58F1FBB4B75_u64, 0x5A8E89D75252446E_u64, 0x5AEAEAD8E62F6F91_u64,
-  0x487207DF750E9D25_u64, 0x2F22557A51BF8C74_u64, 0x73E9A63254E42EA2_u64, 0x1836EF2A1C65AD86_u64,
-  0x5CBAEB5B771CF21B_u64, 0x2CF8BF54E3848AD2_u64, 0x4A2F22AF927D8E7C_u64, 0x23FA32AA4F9D3BDB_u64,
-  0x76B1D118EA627D93_u64, 0x5329EAAA18FB92F8_u64, 0x5EF4A74721E86476_u64, 0x0F54BBBB472FA8C6_u64,
-  0x4BF6EC38E7ED1D2B_u64, 0x25DD62FC38F2ED6C_u64, 0x798B138E3FE1C845_u64, 0x22FBD1938E517BDF_u64,
-  0x613C0FA4FFE7D36A_u64, 0x4F2FDADC71DAC97F_u64, 0x4DC9A61D998642BB_u64, 0x58F3157D27E23ACC_u64,
-  0x7C75D695C2706AC5_u64, 0x74B82261D969F7AD_u64, 0x63917877CEC0556B_u64, 0x10934EB4ADEE5FBE_u64,
-  0x4FA793930BCD1122_u64, 0x4075D8908B251965_u64, 0x7F7285B812E1B504_u64, 0x00BC8DB411D4F56E_u64,
-  0x65F537C675815D9C_u64, 0x66FD3E29A7DD9125_u64, 0x5190F96B91344AE3_u64, 0x6BFDCB54864ADA84_u64,
-  0x4140C78940F6A24F_u64, 0x6FFE3C439EA2486A_u64, 0x6867A5A867F103B2_u64, 0x7FFD2D38FDD073DC_u64,
-  0x53861E2053273628_u64, 0x6664242D97D9F64A_u64, 0x42D1B1B375B8F820_u64, 0x51E9B68ADFE191D5_u64,
-  0x6AE91C5255F4C034_u64, 0x1CA924116635B621_u64, 0x558749DB77F70029_u64, 0x63BA83411E915E81_u64,
-  0x446C3B15F9926687_u64, 0x6962029A7EDAB201_u64, 0x6D79F82328EA3DA6_u64, 0x0F03375D97C45001_u64,
-  0x5794C6828721CAEB_u64, 0x259C2C4ADFD04001_u64, 0x46109ECED2816F22_u64, 0x5149BD08B30D0001_u64,
-  0x701A97B150CF1837_u64, 0x3542C80DEB480001_u64, 0x59AEDFC10D7279C5_u64, 0x7768A00B22A00001_u64,
-  0x47BF19673DF52E37_u64, 0x79208008E8800001_u64, 0x72CB5BD86321E38C_u64, 0x5B67334174000001_u64,
-  0x5BD5E313828182D6_u64, 0x7C528F6790000001_u64, 0x4977E8DC68679BDF_u64, 0x16A872B940000001_u64,
-  0x758CA7C70D7292FE_u64, 0x5773EAC200000001_u64, 0x5E0A1FD271287598_u64, 0x45F6556800000001_u64,
-  0x4B3B4CA85A86C47A_u64, 0x04C5112000000001_u64, 0x785EE10D5DA46D90_u64, 0x07A1B50000000001_u64,
-  0x604BE73DE4838AD9_u64, 0x52E7C40000000001_u64, 0x4D0985CB1D3608AE_u64, 0x0F1FD00000000001_u64,
-  0x7B426FAB61F00DE3_u64, 0x31CC800000000001_u64, 0x629B8C891B267182_u64, 0x5B0A000000000001_u64,
-  0x4EE2D6D415B85ACE_u64, 0x7C08000000000001_u64, 0x7E37BE2022C0914B_u64, 0x1340000000000001_u64,
-  0x64F964E68233A76F_u64, 0x2900000000000001_u64, 0x50C783EB9B5C85F2_u64, 0x5400000000000001_u64,
-  0x409F9CBC7C4A04C2_u64, 0x1000000000000001_u64, 0x6765C793FA10079D_u64, 0x0000000000000001_u64,
-  0x52B7D2DCC80CD2E4_u64, 0x0000000000000001_u64, 0x422CA8B0A00A4250_u64, 0x0000000000000001_u64,
-  0x69E10DE76676D080_u64, 0x0000000000000001_u64, 0x54B40B1F852BDA00_u64, 0x0000000000000001_u64,
-  0x43C33C1937564800_u64, 0x0000000000000001_u64, 0x6C6B935B8BBD4000_u64, 0x0000000000000001_u64,
-  0x56BC75E2D6310000_u64, 0x0000000000000001_u64, 0x4563918244F40000_u64, 0x0000000000000001_u64,
-  0x6F05B59D3B200000_u64, 0x0000000000000001_u64, 0x58D15E1762800000_u64, 0x0000000000000001_u64,
-  0x470DE4DF82000000_u64, 0x0000000000000001_u64, 0x71AFD498D0000000_u64, 0x0000000000000001_u64,
-  0x5AF3107A40000000_u64, 0x0000000000000001_u64, 0x48C2739500000000_u64, 0x0000000000000001_u64,
-  0x746A528800000000_u64, 0x0000000000000001_u64, 0x5D21DBA000000000_u64, 0x0000000000000001_u64,
-  0x4A817C8000000000_u64, 0x0000000000000001_u64, 0x7735940000000000_u64, 0x0000000000000001_u64,
-  0x5F5E100000000000_u64, 0x0000000000000001_u64, 0x4C4B400000000000_u64, 0x0000000000000001_u64,
-  0x7A12000000000000_u64, 0x0000000000000001_u64, 0x61A8000000000000_u64, 0x0000000000000001_u64,
-  0x4E20000000000000_u64, 0x0000000000000001_u64, 0x7D00000000000000_u64, 0x0000000000000001_u64,
-  0x6400000000000000_u64, 0x0000000000000001_u64, 0x5000000000000000_u64, 0x0000000000000001_u64,
-  0x4000000000000000_u64, 0x0000000000000001_u64, 0x6666666666666666_u64, 0x3333333333333334_u64,
-  0x51EB851EB851EB85_u64, 0x0F5C28F5C28F5C29_u64, 0x4189374BC6A7EF9D_u64, 0x5916872B020C49BB_u64,
-  0x68DB8BAC710CB295_u64, 0x74F0D844D013A92B_u64, 0x53E2D6238DA3C211_u64, 0x43F3E0370CDC8755_u64,
-  0x431BDE82D7B634DA_u64, 0x698FE69270B06C44_u64, 0x6B5FCA6AF2BD215E_u64, 0x0F4CA41D811A46D4_u64,
-  0x55E63B88C230E77E_u64, 0x3F70834ACDAE9F10_u64, 0x44B82FA09B5A52CB_u64, 0x4C5A02A23E254C0D_u64,
-  0x6DF37F675EF6EADF_u64, 0x2D5CD10396A21347_u64, 0x57F5FF85E592557F_u64, 0x3DE3DA69454E75D3_u64,
-  0x465E6604B7A84465_u64, 0x7E4FE1EDD10B9175_u64, 0x709709A125DA0709_u64, 0x4A19697C81AC1BEF_u64,
-  0x5A126E1A84AE6C07_u64, 0x54E1213067BCE326_u64, 0x480EBE7B9D58566C_u64, 0x43E74DC052FD8285_u64,
-  0x734ACA5F6226F0AD_u64, 0x530BAF9A1E626A6D_u64, 0x5C3BD5191B525A24_u64, 0x426FBFAE7EB521F1_u64,
-  0x49C97747490EAE83_u64, 0x4EBFCC8B9890E7F4_u64, 0x760F253EDB4AB0D2_u64, 0x4ACC7A78F41B0CBA_u64,
-  0x5E72843249088D75_u64, 0x223D2EC729AF3D62_u64, 0x4B8ED0283A6D3DF7_u64, 0x34FDBF05BAF29781_u64,
-  0x78E480405D7B9658_u64, 0x54C931A2C4B758CF_u64, 0x60B6CD004AC94513_u64, 0x5D6DC14F03C5E0A5_u64,
-  0x4D5F0A66A23A9DA9_u64, 0x31249AA59C9E4D51_u64, 0x7BCB43D769F762A8_u64, 0x4EA0F76F60FD4882_u64,
-  0x63090312BB2C4EED_u64, 0x254D92BF80CAA068_u64, 0x4F3A68DBC8F03F24_u64, 0x1DD7A89933D54D20_u64,
-  0x7EC3DAF941806506_u64, 0x62F2A75B86221500_u64, 0x65697BFA9ACD1D9F_u64, 0x025BB91604E810CD_u64,
-  0x51212FFBAF0A7E18_u64, 0x684960DE6A5340A4_u64, 0x40E7599625A1FE7A_u64, 0x203AB3E521DC33B6_u64,
-  0x67D88F56A29CCA5D_u64, 0x19F7863B696052BD_u64, 0x5313A5DEE87D6EB0_u64, 0x7B2C6B62BAB37564_u64,
-  0x42761E4BED31255A_u64, 0x2F56BC4EFBC2C450_u64, 0x6A5696DFE1E83BC3_u64, 0x655793B192D13A1A_u64,
-  0x5512124CB4B9C969_u64, 0x377942F475742E7B_u64, 0x440E750A2A2E3ABA_u64, 0x5F9435905DF68B96_u64,
-  0x6CE3EE76A9E3912A_u64, 0x65B9EF4D63241289_u64, 0x571CBEC554B60DBB_u64, 0x6AFB25D782834207_u64,
-  0x45B0989DDD5E7163_u64, 0x08C8EB12CECF6806_u64, 0x6F80F42FC8971BD1_u64, 0x5ADB11B7B14BD9A3_u64,
-  0x5933F68CA078E30E_u64, 0x157C0E2C8DD647B5_u64, 0x475CC53D4D2D8271_u64, 0x5DFCD823A4AB6C91_u64,
-  0x722E086215159D82_u64, 0x632E269F6DDF141B_u64, 0x5B5806B4DDAAE468_u64, 0x4F581EE5F17F4349_u64,
-  0x49133890B1558386_u64, 0x72ACE584C1329C3B_u64, 0x74EB8DB44EEF38D7_u64, 0x6AAE3C079B842D2A_u64,
-  0x5D893E29D8BF60AC_u64, 0x5558300616035755_u64, 0x4AD431BB13CC4D56_u64, 0x7779C004DE6912AB_u64,
-  0x77B9E92B52E07BBE_u64, 0x258F99A163DB5111_u64, 0x5FC7EDBC424D2FCB_u64, 0x37A614811CAF740D_u64,
-  0x4C9FF163683DBFD5_u64, 0x7951AA00E3BF900B_u64, 0x7A998238A6C932EF_u64, 0x754F7667D2CC19AB_u64,
-  0x6214682D523A8F26_u64, 0x2AA5F8530F09AE22_u64, 0x4E76B9BDDB620C1E_u64, 0x55519375A5A1581B_u64,
-  0x7D8AC2C95F034697_u64, 0x3BB5B8BC3C3559C5_u64, 0x646F023AB2690545_u64, 0x7C9160969691149E_u64,
-  0x5058CE955B87376B_u64, 0x16DAB3ABABA743B2_u64, 0x40470BAAAF9F5F88_u64, 0x78AEF622EFB902F5_u64,
-  0x66D812AAB29898DB_u64, 0x0DE4BD04B2C19E54_u64, 0x524675555BAD4715_u64, 0x57EA30D08F014B76_u64,
-  0x41D1F7777C8A9F44_u64, 0x4654F3DA0C01092C_u64, 0x694FF258C7443207_u64, 0x23BB1FC346680EAC_u64,
-  0x543FF513D29CF4D2_u64, 0x4FC8E635D1ECD88A_u64, 0x43665DA9754A5D75_u64, 0x263A51C4A7F0AD3B_u64,
-  0x6BD6FC425543C8BB_u64, 0x56C3B607731AAEC4_u64, 0x5645969B77696D62_u64, 0x789C919F8F488BD0_u64,
-  0x4504787C5F878AB5_u64, 0x46E3A7B2D906D640_u64, 0x6E6D8D93CC0C1122_u64, 0x3E390C515B3E239A_u64,
-  0x5857A4763CD6741B_u64, 0x4B60D6A77C31B615_u64, 0x46AC8391CA4529AF_u64, 0x55E7121F968E2B44_u64,
-  0x711405B6106EA919_u64, 0x0971B698F0E3786D_u64, 0x5A766AF80D255414_u64, 0x078E2BAD8D82C6BD_u64,
-  0x485EBBF9A41DDCDC_u64, 0x6C71BC8AD79BD231_u64, 0x73CAC65C39C96161_u64, 0x2D82C7448C2C8382_u64,
-  0x5CA23849C7D44DE7_u64, 0x3E023903A356CF9B_u64, 0x4A1B603B06437185_u64, 0x7E682D9C82ABD949_u64,
-  0x76923391A39F1C09_u64, 0x4A4048FA6AAC8EDB_u64, 0x5EDB5C7482E5B007_u64, 0x55003A61EEF07249_u64,
-  0x4BE2B05D35848CD2_u64, 0x773361E7F259F507_u64, 0x796AB3C855A0E151_u64, 0x3EB89CA6508FEE71_u64,
-  0x6122296D114D810D_u64, 0x7EFA16EB73A6585B_u64, 0x4DB4EDF0DAA4673E_u64, 0x3261ABEF8FB846AF_u64,
-  0x7C54AFE7C43A3ECA_u64, 0x1D691318E5F3A44B_u64, 0x6376F31FD02E98A1_u64, 0x64540F471E5C836F_u64,
-  0x4F925C1973587A1B_u64, 0x0376729F4B7D35F3_u64, 0x7F50935BEBC0C35E_u64, 0x38BD84321261EFEB_u64,
-  0x65DA0F7CBC9A35E5_u64, 0x13CAD0280EB4BFEF_u64, 0x517B3F96FD482B1D_u64, 0x5CA240200BC3CCBF_u64,
-  0x412F66126439BC17_u64, 0x63B50019A3030A33_u64, 0x684BD683D38F9359_u64, 0x1F88002904D1A9EA_u64,
-  0x536FDECFDC72DC47_u64, 0x32D3335403DAEE55_u64, 0x42BFE57316C249D2_u64, 0x5BDC291003158B77_u64,
-  0x6ACCA251BE03A951_u64, 0x12F9DB4CD1BC1258_u64, 0x557081DAFE695440_u64, 0x7594AF70A7C9A847_u64,
-  0x445A017BFEBAA9CD_u64, 0x4476F2C0863AED06_u64, 0x6D5CCF2CCAC442E2_u64, 0x3A57EACDA3917B3C_u64,
-  0x577D728A3BD03581_u64, 0x7B7988A482DAC8FD_u64, 0x45FDF53B630CF79B_u64, 0x15FAD3B6CF156D97_u64,
-  0x6FFCBB923814BF5E_u64, 0x565E1F8AE4EF15BE_u64, 0x5996FC74F9AA32B2_u64, 0x11E4E608B725AAFF_u64,
-  0x47ABFD2A6154F55B_u64, 0x27EA51A0928488CC_u64, 0x72ACC843CEEE555E_u64, 0x7310829A84074146_u64,
-  0x5BBD6D030BF1DDE5_u64, 0x42739BAED005CDD2_u64, 0x49645735A327E4B7_u64, 0x4EC2E2F24004A4A8_u64,
-  0x756D5855D1D96DF2_u64, 0x4AD16B1D333AA10C_u64, 0x5DF11377DB1457F5_u64, 0x2241227DC2954DA3_u64,
-  0x4B2742C648DD132A_u64, 0x4E9A81FE35443E1C_u64, 0x783ED13D4161B844_u64, 0x175D9CC9EED39694_u64,
-  0x603240FDCDE7C69C_u64, 0x7917B0A18BDC7876_u64, 0x4CF500CB0B1FD217_u64, 0x1412F3B46FE39392_u64,
-  0x7B219ADE7832E9BE_u64, 0x535185ED7FD285B6_u64, 0x628148B1F9C25498_u64, 0x42A79E57997537C5_u64,
-  0x4ECDD3C1949B76E0_u64, 0x3552E512E12A9304_u64, 0x7E161F9C20F8BE33_u64, 0x6EEB081E3510EB39_u64,
-  0x64DE7FB01A609829_u64, 0x3F226CE4F740BC2E_u64, 0x50B1FFC0151A1354_u64, 0x3281F0B72C33C9BE_u64,
-  0x408E66334414DC43_u64, 0x42018D5F568FD498_u64, 0x674A3D1ED354939F_u64, 0x1CCF48988A7FBA8D_u64,
-  0x52A1CA7F0F76DC7F_u64, 0x30A5D3AD3B99620B_u64, 0x421B0865A5F8B065_u64, 0x73B7DC8A96144E6F_u64,
-  0x69C4DA3C3CC11A3C_u64, 0x52BFC7442353B0B1_u64, 0x549D7B6363CDAE96_u64, 0x756639034F7626F4_u64,
-  0x43B12F82B63E2545_u64, 0x4451C735D92B525D_u64, 0x6C4EB26ABD303BA2_u64, 0x3A1C71EFC1DEEA2E_u64,
-  0x56A55B889759C94E_u64, 0x61B05B2634B254F2_u64, 0x45511606DF7B0772_u64, 0x1AF37C1E908EAA5B_u64,
-  0x6EE8233E325E7250_u64, 0x2B1F2CFDB41776F8_u64, 0x58B9B5CB5B7EC1D9_u64, 0x6F4C23FE29AC5F2D_u64,
-  0x46FAF7D5E2CBCE47_u64, 0x72A34FFE87BD18F1_u64, 0x71918C896ADFB073_u64, 0x04387FFDA5FB5B1B_u64,
-  0x5ADAD6D4557FC05C_u64, 0x0360666484C915AF_u64, 0x48AF1243779966B0_u64, 0x02B3851D3707448C_u64,
-  0x744B506BF28F0AB3_u64, 0x1DEC082EBE720746_u64, 0x5D090D2328726EF5_u64, 0x64BCD358985B3905_u64,
-  0x4A6DA41C205B8BF7_u64, 0x6A30A913AD15C738_u64, 0x7715D36033C5ACBF_u64, 0x5D1AA81F7B560B8C_u64,
-  0x5F44A919C3048A32_u64, 0x7DAEECE5FC44D609_u64, 0x4C36EDAE359D3B5B_u64, 0x7E258A51969D7808_u64,
-  0x79F17C49EF61F893_u64, 0x16A276E8F0FBF33F_u64, 0x618DFD07F2B4C6DC_u64, 0x121B9253F3FCC299_u64,
-  0x4E0B30D328909F16_u64, 0x41AFA84329970214_u64, 0x7CDEB4850DB431BD_u64, 0x4F7F739EA8F19CED_u64,
-  0x63E55D373E29C164_u64, 0x3F99294BBA5AE3F1_u64, 0x4FEAB0F8FE87CDE9_u64, 0x7FADBAA2FB7BE98D_u64,
-  0x7FDDE7F4CA72E30F_u64, 0x7F7C5DD1925FDC15_u64, 0x664B1FF7085BE8D9_u64, 0x4C637E4141E649AB_u64,
-  0x51D5B32C06AFED7A_u64, 0x704F983434B83AEF_u64, 0x4177C2899EF32462_u64, 0x26A6135CF6F9C8BF_u64,
-  0x68BF9DA8FE51D3D0_u64, 0x3DD685618B294132_u64, 0x53CC7E20CB74A973_u64, 0x4B12044E08EDCDC2_u64,
-  0x4309FE80A2C3BAC2_u64, 0x6F419D0B3A57D7CE_u64, 0x6B4330CDD1392AD1_u64, 0x320294DEC3BFBFB0_u64,
-  0x55CF5A3E40FA88A7_u64, 0x419BAA4BCFCC995A_u64, 0x44A5E1CB672ED3B9_u64, 0x1AE2EEA30CA3ADE1_u64,
-  0x6DD636123EB152C1_u64, 0x77D17DD1ADD2AFCF_u64, 0x57DE91A832277567_u64, 0x797464A7BE42263F_u64,
-  0x464BA7B9C1B92AB9_u64, 0x4790508631CE84FF_u64, 0x70790C5C6928445C_u64, 0x0C1A1A704FB0D4CC_u64,
-  0x59FA7049EDB9D049_u64, 0x567B4859D95A43D6_u64, 0x47FB8D07F161736E_u64, 0x11FC39E17AAE9CAB_u64,
-  0x732C14D98235857D_u64, 0x032D2968C44A9445_u64, 0x5C2343E134F79DFD_u64, 0x4F575453D03BA9D1_u64,
-  0x49B5CFE75D92E4CA_u64, 0x72AC4376402FBB0E_u64, 0x75EFB30BC8EB07AB_u64, 0x0446D256CD192B49_u64,
-  0x5E595C096D88D2EF_u64, 0x1D0575123DADBC3A_u64, 0x4B7AB0078AD3DBF2_u64, 0x4A6AC40E97BE302F_u64,
-  0x78C44CD8DE1FC650_u64, 0x771139B0F2C9E6B1_u64, 0x609D0A4718196B73_u64, 0x78DA948D8F07EBC1_u64,
-  0x4D4A6E9F467ABC5C_u64, 0x60AEDD3E0C065634_u64, 0x7BAA4A9870C46094_u64, 0x344AFB9679A3BD20_u64,
-  0x62EEA2138D69E6DD_u64, 0x103BFC78614FCA80_u64, 0x4F254E760ABB1F17_u64, 0x26966393810CA200_u64,
-  0x7EA21723445E9825_u64, 0x2423D2859B476999_u64, 0x654E78E9037EE01D_u64, 0x69B642047C392148_u64,
-  0x510B93ED9C658017_u64, 0x6E2B680396941AA0_u64, 0x40D60FF149EACCDF_u64, 0x71BC53361210154D_u64,
-  0x67BCE64EDCAAE166_u64, 0x1C6085235019BBAE_u64, 0x52FD850BE3BBE784_u64, 0x7D1A041C40149625_u64,
-  0x42646A6FE9631F9D_u64, 0x4A7B367D0010781D_u64, 0x6A3A43E642383295_u64, 0x5D91F0C8001A59C8_u64,
-  0x54FB698501C68EDE_u64, 0x17A7F3D3334847D4_u64, 0x43FC546A67D20BE4_u64, 0x79532975C2A03976_u64,
-  0x6CC6ED770C83463B_u64, 0x0EEB75893766C256_u64, 0x57058AC5A39C382F_u64, 0x25892AD42C523512_u64,
-  0x459E089E1C7CF9BF_u64, 0x37A0EF102374F742_u64, 0x6F6340FCFA618F98_u64, 0x59017E8038BB2536_u64,
-  0x591C33FD951AD946_u64, 0x7A67986693C8EA91_u64, 0x4749C33144157A9F_u64, 0x151FAD1EDCA0BBA8_u64,
-  0x720F9EB539BBF765_u64, 0x0832AE97C76792A5_u64, 0x5B3FB22A94965F84_u64, 0x068EF21305EC7551_u64,
-  0x48FFC1BBAA11E603_u64, 0x1ED8C1A8D189F774_u64, 0x74CC692C434FD66B_u64, 0x4AF4690E1C0FF253_u64,
-  0x5D705423690CAB89_u64, 0x225D20D816732843_u64, 0x4AC0434F873D5607_u64, 0x35174D79AB8F5369_u64,
-  0x779A054C0B955672_u64, 0x21BEE25C45B21F0E_u64, 0x5FAE6AA33C77785B_u64, 0x3498B5169E2818D8_u64,
-  0x4C8B888296C5F9E2_u64, 0x5D46F7454B534713_u64, 0x7A78DA6A8AD65C9D_u64, 0x7BA4BED545520B52_u64,
-  0x61FA48553BDEB07E_u64, 0x2FB6FF110441A2A8_u64, 0x4E61D37763188D31_u64, 0x72F8CC0D9D014EED_u64,
-  0x7D6952589E8DAEB6_u64, 0x1E5AE015C80217E1_u64, 0x645441E07ED7BEF8_u64, 0x1848B344A001ACB4_u64,
-  0x504367E6CBDFCBF9_u64, 0x603A2903B3348A2A_u64, 0x4035ECB8A3196FFB_u64, 0x002E873628F6D4EE_u64,
-  0x66BCADF43828B32B_u64, 0x19E40B89DB2487E3_u64, 0x52308B29C686F5BC_u64, 0x14B66FA17C1D3983_u64,
-  0x41C06F549ED25E30_u64, 0x1091F2E7967DC79C_u64, 0x6933E554315096B3_u64, 0x341CB7D8F0C93F5F_u64,
-  0x542984435AA6DEF5_u64, 0x767D5FE0C0A0FF80_u64, 0x435469CF7BB8B25E_u64, 0x2B977FE70080CC66_u64,
-  0x6BBA42E592C11D63_u64, 0x5F58CCA4CD9AE0A3_u64, 0x562E9BEADBCDB11C_u64, 0x4C470A1D7148B3B6_u64,
-  0x44F216557CA48DB0_u64, 0x3D05A1B1276D5C92_u64, 0x6E5023BBFAA0E2B3_u64, 0x7B3C35E83F1560E9_u64,
-  0x58401C96621A4EF6_u64, 0x2F635E5365AAB3ED_u64, 0x4699B0784E7B725E_u64, 0x591C4B75EAEEF658_u64,
-  0x70F5E726E3F8B6FD_u64, 0x74FA125644B18A26_u64, 0x5A5E5285832D5F31_u64, 0x43FB41DE9D5AD4EB_u64,
-  0x484B75379C244C27_u64, 0x4FFC34B2177BDD89_u64, 0x73ABEEBF603A1372_u64, 0x4CC6BAB68BF96274_u64,
-  0x5C898BCC4CFB42C2_u64, 0x0A38955ED6611B90_u64, 0x4A07A309D72F689B_u64, 0x21C6DDE5784DAFA7_u64,
-  0x76729E762518A75E_u64, 0x693E2FD58D49190B_u64, 0x5EC2185E8413B918_u64, 0x5431BFDE0AA0E0D5_u64,
-  0x4BCE79E536762DAD_u64, 0x29C1664B3BB3E711_u64, 0x794A5CA1F0BD15E2_u64, 0x0F9BD6DEC5ECA4E8_u64,
-  0x61084A1B26FDAB1B_u64, 0x2616457F04BD50BA_u64, 0x4DA03B48EBFE227C_u64, 0x1E783798D09773C8_u64,
-  0x7C33920E46636A60_u64, 0x30C058F480F252D9_u64, 0x635C74D8384F884D_u64, 0x0D66AD9067284247_u64,
-  0x4F7D2A469372D370_u64, 0x711EF14052869B6C_u64, 0x7F2EAA0A85848581_u64, 0x34FE4ECD50D75F14_u64,
-  0x65BEEE6ED136D134_u64, 0x2A650BD773DF7F43_u64, 0x51658B8BDA9240F6_u64, 0x551DA312C319329C_u64,
-  0x411E093CAEDB672B_u64, 0x5DB14F4235ADC217_u64, 0x68300EC77E2BD845_u64, 0x7C4EE536BC49368A_u64,
-  0x5359A56C64EFE037_u64, 0x7D0BEA92303A9208_u64, 0x42AE1DF050BFE693_u64, 0x173CBBA8269541A0_u64,
-  0x6AB02FE6E79970EB_u64, 0x3EC792A6A422029A_u64, 0x5559BFEBEC7AC0BC_u64, 0x3239421EE9B4CEE1_u64,
-  0x4447CCBCBD2F0096_u64, 0x5B6101B25490A581_u64, 0x6D3FADFAC84B3424_u64, 0x2BCE691D541AA268_u64,
-  0x576624C8A03C29B6_u64, 0x563EBA7DDCE21B87_u64, 0x45EB50A08030215E_u64, 0x78322ECB171B4939_u64,
-  0x6FDEE76733803564_u64, 0x59E9E47824F87527_u64, 0x597F1F85C2CCF783_u64, 0x6187E9F9B72D2A86_u64,
-  0x4798E6049BD72C69_u64, 0x346CBB2E2C242205_u64, 0x728E3CD42C8B7A42_u64, 0x20ADF849E039D007_u64,
-  0x5BA4FD768A092E9B_u64, 0x33BE603B19C7D99F_u64, 0x4950CAC53B3A8BAF_u64, 0x42FEB3627B0647B3_u64,
-  0x754E113B91F745E5_u64, 0x5197856A5E7072B8_u64, 0x5DD80DC941929E51_u64, 0x27AC6ABB7EC05BC6_u64,
-  0x4B133E3A9ADBB1DA_u64, 0x52F05562CBCD1638_u64, 0x781EC9F75E2C4FC4_u64, 0x1E4D556ADFAE89F3_u64,
-  0x6018A192B1BD0C9C_u64, 0x7EA444557FBED4C3_u64, 0x4CE0814227CA707D_u64, 0x4BB69D1132FF109C_u64,
-  0x7B00CED03FAA4D95_u64, 0x5F8A94E851981A93_u64, 0x62670BD9CC883E11_u64, 0x32D543ED0E134875_u64,
-  0x4EB8D647D6D364DA_u64, 0x5BDDCFF0D80F6D2B_u64, 0x7DF48A0C8AEBD491_u64, 0x12FC7FE7C018AEAB_u64,
-  0x64C3A1A3A25643A7_u64, 0x28C9FFEC99AD5889_u64, 0x509C814FB511CFB9_u64, 0x0707FFF07AF113A1_u64,
-  0x407D343FC40E3FC7_u64, 0x1F39998D2F2742E7_u64, 0x672EB9FFA016CC71_u64, 0x7EC28F484B7204A4_u64,
-  0x528BC7FFB345705B_u64, 0x189BA5D36F8E6A1D_u64, 0x42096CCC8F6AC048_u64, 0x7A161E42BFA521B1_u64,
-  0x69A8AE1418AACD41_u64, 0x435696D132A1CF81_u64, 0x5486F1A9AD557101_u64, 0x1C454574288172CE_u64,
-  0x439F27BAF1112734_u64, 0x169DD129BA0128A5_u64, 0x6C31D92B1B4EA520_u64, 0x242FB50F9001DAA1_u64,
-  0x568E4755AF721DB3_u64, 0x368C90D940017BB4_u64, 0x453E9F77BF8E7E29_u64, 0x120A0D7A999AC95D_u64,
-  0x6ECA98BF98E3FD0E_u64, 0x50101590F5C47561_u64, 0x58A213CC7A4FFDA5_u64, 0x26734473F7D05DE8_u64,
-  0x46E80FD6C83FFE1D_u64, 0x6B8F69F65FD9E4B9_u64, 0x71734C8AD9FFFCFC_u64, 0x45B24323CC8FD45C_u64,
-  0x5AC2A3A247FFFD96_u64, 0x6AF502830A0CA9E3_u64, 0x489BB61B6CCCCADF_u64, 0x08C402026E7087E9_u64,
-  0x742C569247AE1164_u64, 0x746CD003E3E73FDB_u64, 0x5CF04541D2F1A783_u64, 0x76BD73364FEC3315_u64,
-  0x4A59D101758E1F9C_u64, 0x5EFDF5C50CBCF5AB_u64, 0x76F61B3588E365C7_u64, 0x4B2FEFA1ADFB22AB_u64,
-  0x5F2B48F7A0B5EB06_u64, 0x08F3261AF195B555_u64, 0x4C22A0C61A2B226B_u64, 0x20C284E25ADE2AAB_u64,
-  0x79D1013CF6AB6A45_u64, 0x1AD0D49D5E304444_u64, 0x617400FD9222BB6A_u64, 0x48A7107DE4F369D0_u64,
-  0x4DF6673141B562BB_u64, 0x53B8D9FE50C2BB0D_u64, 0x7CBD71E869223792_u64, 0x52C15CCA1AD12B48_u64,
-  0x63CAC186BA81C60E_u64, 0x75677D6E7BDA8906_u64, 0x4FD5679EFB9B04D8_u64, 0x5DEC645863153A6C_u64,
-  0x7FBBD8FE5F5E6E27_u64, 0x497A3A2704EEC3DF_u64
+    0x4F0CEDC95A718DD4_u64, 0x5B01E8B09AA0D1B5_u64, 0x7E7B160EF71C1621_u64, 0x119CA780F767B5EE_u64,
+    0x652F44D8C5B011B4_u64, 0x0E16EC672C52F7F2_u64, 0x50F29D7A37C00E29_u64, 0x581256B8F0425FF5_u64,
+    0x40C21794F96671BA_u64, 0x79A84560C0351991_u64, 0x679CF287F570B5F7_u64, 0x75DA089ACD21C281_u64,
+    0x52E3F5399126F7F9_u64, 0x44AE6D48A41B0201_u64, 0x424FF76140EBF994_u64, 0x36F1F106E9AF34CD_u64,
+    0x6A198BCECE465C20_u64, 0x57E981A4A918547B_u64, 0x54E13CA571D1E34D_u64, 0x2CBACE1D541376C9_u64,
+    0x43E763B78E4182A4_u64, 0x23C8A4E44342C56E_u64, 0x6CA56C58E39C043A_u64, 0x060DD4A06B9E08B0_u64,
+    0x56EABD13E9499CFB_u64, 0x1E7176E6BC7E6D59_u64, 0x458897432107B0C8_u64, 0x7EC12BEBC9FEBDE1_u64,
+    0x6F40F20501A5E7A7_u64, 0x7E01DFDFA9979635_u64, 0x5900C19D9AEB1FB9_u64, 0x4B34B319547944F7_u64,
+    0x4733CE17AF227FC7_u64, 0x55C3C27AA9FA9D93_u64, 0x71EC7CF2B1D0CC72_u64, 0x560603F7765DC8EA_u64,
+    0x5B2397288E40A38E_u64, 0x7804CFF92B7E3A55_u64, 0x48E945BA0B66E93F_u64, 0x13370CC755FE9511_u64,
+    0x74A86F90123E41FE_u64, 0x51F1AE0BBCCA881B_u64, 0x5D538C7341CB67FE_u64, 0x74C1580963D539AF_u64,
+    0x4AA93D29016F8665_u64, 0x43CDE0078310FAF3_u64, 0x77752EA8024C0A3C_u64, 0x0616333F381B2B1E_u64,
+    0x5F90F22001D66E96_u64, 0x3811C298F9AF55B1_u64, 0x4C73F4E667DEBEDE_u64, 0x600E35472E25DE28_u64,
+    0x7A532170A6313164_u64, 0x3349EED849D6303F_u64, 0x61DC1AC084F42783_u64, 0x42A18BE03B11C033_u64,
+    0x4E49AF006A5CEC69_u64, 0x1BB46FE695A7CCF5_u64, 0x7D42B19A43C7E0A8_u64, 0x2C53E63DBC3FAE55_u64,
+    0x64355AE1CFD31A20_u64, 0x237651CAFCFFBEAA_u64, 0x502AAF1B0CA8E1B3_u64, 0x35F8416F30CC9888_u64,
+    0x402225AF3D53E7C2_u64, 0x5E603458F3D6E06D_u64, 0x669D0918621FD937_u64, 0x4A3386F4B957CD7B_u64,
+    0x52173A79E8197A92_u64, 0x6E8F9F2A2DDFD796_u64, 0x41AC2EC7ECE12EDB_u64, 0x720C7F54F17FDFAB_u64,
+    0x69137E0CAE3517C6_u64, 0x1CE0CBBB1BFFCC45_u64, 0x540F980A24F74638_u64, 0x171A3C95AFFFD69E_u64,
+    0x433FACD4EA5F6B60_u64, 0x127B63AAF3331218_u64, 0x6B991487DD657899_u64, 0x6A5F05DE51EB5026_u64,
+    0x5614106CB11DFA14_u64, 0x5518D17EA7EF7352_u64, 0x44DCD9F08DB194DD_u64, 0x2A7A41321FF2C2A8_u64,
+    0x6E2E2980E2B5BAFB_u64, 0x5D906850331E043F_u64, 0x5824EE00B55E2F2F_u64, 0x647386A68F4B3699_u64,
+    0x4683F19A2AB1BF59_u64, 0x36C2D21ED908F87B_u64, 0x70D31C29DDE93228_u64, 0x579E1CFE280E5A5D_u64,
+    0x5A427CEE4B20F4ED_u64, 0x2C7E7D98200B7B7E_u64, 0x483530BEA280C3F1_u64, 0x09FECAE019A2C932_u64,
+    0x73884DFDD0CE064E_u64, 0x43314499C29E0EB6_u64, 0x5C6D0B3173D8050B_u64, 0x4F5A9D47CEE4D891_u64,
+    0x49F0D5C129799DA2_u64, 0x72AEE4397250AD41_u64, 0x764E22CEA8C295D1_u64, 0x377E39F583B44868_u64,
+    0x5EA4E8A553CEDE41_u64, 0x12CB61913629D387_u64, 0x4BB72084430BE500_u64, 0x756F8140F8217605_u64,
+    0x792500D39E796E67_u64, 0x6F18CECE59CF233C_u64, 0x60EA670FB1FABEB9_u64, 0x3F470BD847D8E8FD_u64,
+    0x4D885272F4C89894_u64, 0x329F3CAD064720CA_u64, 0x7C0D50B7EE0DC0ED_u64, 0x37652DE1A3A50143_u64,
+    0x633DDA2CBE716724_u64, 0x2C50F1814FB73436_u64, 0x4F64AE8A31F45283_u64, 0x3D0D8E010C92902B_u64,
+    0x7F077DA9E986EA6B_u64, 0x7B48E334E0EA8045_u64, 0x659F97BB2138BB89_u64, 0x49071C2A4D88669D_u64,
+    0x514C796280FA2FA1_u64, 0x20D27CEEA46D1EE4_u64, 0x4109FAB533FB594D_u64, 0x670ECA58838A7F1D_u64,
+    0x680FF788532BC216_u64, 0x0B4ADD5A6C10CB62_u64, 0x533FF939DC2301AB_u64, 0x22A24AAEBCDA3C4E_u64,
+    0x4299942E49B59AEF_u64, 0x354EA22563E1C9D8_u64, 0x6A8F537D42BC2B18_u64, 0x554A9D089FCFA95A_u64,
+    0x553F75FDCEFCEF46_u64, 0x776EE406E63FBAAE_u64, 0x4432C4CB0BFD8C38_u64, 0x5F8BE99F1E996225_u64,
+    0x6D1E07AB466279F4_u64, 0x327975CB64289D08_u64, 0x574B3955D1E86190_u64, 0x28612B091CED4A6D_u64,
+    0x45D5C777DB204E0D_u64, 0x06B4226DB0BDD524_u64, 0x6FBC72595E9A167B_u64, 0x24536A491AC95506_u64,
+    0x59638EADE54811FC_u64, 0x1D0F883A7BD44405_u64, 0x4782D88B1DD34196_u64, 0x4A72D361FCA9D004_u64,
+    0x726AF411C952028A_u64, 0x43EAEBCFFAA94CD3_u64, 0x5B88C3416DDB353B_u64, 0x4FEF230CC88770A9_u64,
+    0x493A35CDF17C2A96_u64, 0x0CBF4F3D6D3926EE_u64, 0x7529EFAFE8C6AA89_u64, 0x61321862485B717C_u64,
+    0x5DBB262653D22207_u64, 0x675B46B506AF8DFD_u64, 0x4AFC1E850FDB4E6C_u64, 0x52AF6BC405593E64_u64,
+    0x77F9CA6E7FC54A47_u64, 0x377F12D33BC1FD6D_u64, 0x5FFB085866376E9F_u64, 0x45FF42429634CABD_u64,
+    0x4CC8D379EB5F8BB2_u64, 0x6B329B68782A3BCB_u64, 0x7ADAEBF64565AC51_u64, 0x2B842BDA59DD2C77_u64,
+    0x6248BCC5045156A7_u64, 0x3C69BCAEAE4A89F9_u64, 0x4EA0970403744552_u64, 0x6387CA25583BA194_u64,
+    0x7DCDBE6CD253A21E_u64, 0x05A6103BC05F68ED_u64, 0x64A498570EA94E7E_u64, 0x37B80CFC99E5ED8A_u64,
+    0x5083AD1272210B98_u64, 0x2C933D96E184BE08_u64, 0x40695741F4E73C79_u64, 0x7075CADF1AD09807_u64,
+    0x670EF2032171FA5C_u64, 0x4D8944982AE759A4_u64, 0x52725B35B45B2EB0_u64, 0x3E076A135585E150_u64,
+    0x41F515C49048F226_u64, 0x64D2BB42AAD1810D_u64, 0x698822D41A0E503E_u64, 0x07B7920444826815_u64,
+    0x546CE8A9AE71D9CB_u64, 0x1FC60E69D0685344_u64, 0x438A53BAF1F4AE3C_u64, 0x196B3EBB0D20429D_u64,
+    0x6C1085F7E9877D2D_u64, 0x0F11FDF815006A94_u64, 0x56739E5FEE05FDBD_u64, 0x58DB319344005543_u64,
+    0x45294B7FF19E6497_u64, 0x60AF5ADC3666AA9C_u64, 0x6EA878CCB5CA3A8C_u64, 0x344BC4938A3DDDC7_u64,
+    0x5886C70A2B082ED6_u64, 0x5D096A0FA1CB17D2_u64, 0x46D238D4EF39BF12_u64, 0x173ABB3FB4A27975_u64,
+    0x71505AEE4B8F981D_u64, 0x0B912B992103F588_u64, 0x5AA6AF25093FACE4_u64, 0x0940EFADB4032AD3_u64,
+    0x488558EA6DCC8A50_u64, 0x07672624900288A9_u64, 0x74088E43E2E0DD4C_u64, 0x723EA36DB337410E_u64,
+    0x5CD3A5031BE71770_u64, 0x5B654F8AF5C5CDA5_u64, 0x4A42EA68E31F45F3_u64, 0x62B772D5916B0AEB_u64,
+    0x76D1770E38320986_u64, 0x0458B7BC1BDE77DD_u64, 0x5F0DF8D82CF4D46B_u64, 0x1D13C630164B9318_u64,
+    0x4C0B2D79BD90A9EF_u64, 0x30DC9E8CDEA2DC13_u64, 0x79AB7BF5FC1AA97F_u64, 0x0160FDAE31049351_u64,
+    0x6155FCC4C9AEEDFF_u64, 0x1AB3FE24F403A90E_u64, 0x4DDE63D0A158BE65_u64, 0x6229981D9002EDA5_u64,
+    0x7C97061A9BC130A2_u64, 0x69DC2695B337E2A1_u64, 0x63AC04E2163426E8_u64, 0x54B01EDE28F9821B_u64,
+    0x4FBCD0B4DE901F20_u64, 0x43C018B1BA6134E2_u64, 0x7F9481216419CB67_u64, 0x1F99C11C5D68549D_u64,
+    0x6610674DE9AE3C52_u64, 0x4C7B00E37DED107E_u64, 0x51A6B90B21583042_u64, 0x09FC00B5FE574065_u64,
+    0x41522DA2811359CE_u64, 0x3B3000919845CD1D_u64, 0x68837C3734EBC2E3_u64, 0x784CCDB5C06FAE95_u64,
+    0x539C635F5D8968B6_u64, 0x2D0A3E2B00595877_u64, 0x42E382B2B13ABA2B_u64, 0x3DA1CB5599E11393_u64,
+    0x6B059DEAB52AC378_u64, 0x629C7888F634EC1E_u64, 0x559E17EEF755692D_u64, 0x3549FA072B5D89B1_u64,
+    0x447E798BF91120F1_u64, 0x1107FB38EF7E07C1_u64, 0x6D9728DFF4E834B5_u64, 0x01A65EC17F300C68_u64,
+    0x57AC20B32A535D5D_u64, 0x4E1EB23465C009ED_u64, 0x46234D5C21DC4AB1_u64, 0x24E55B5D1E333B24_u64,
+    0x70387BC69C93AAB5_u64, 0x216EF894FD1EC506_u64, 0x59C6C96BB076222A_u64, 0x4DF2607730E56A6C_u64,
+    0x47D23ABC8D2B4E88_u64, 0x3E5B805F5A5121F0_u64, 0x72E9F79415121740_u64, 0x63C59A322A1B697F_u64,
+    0x5BEE5FA9AA74DF67_u64, 0x03047B5B54E2BACC_u64, 0x498B7FBAEEC3E5EC_u64, 0x0269FC4910B5623D_u64,
+    0x75ABFF917E063CAC_u64, 0x6A432D41B45569FB_u64, 0x5E2332DACB38308A_u64, 0x21CF5767C37787FC_u64,
+    0x4B4F5BE23C2CF3A1_u64, 0x67D912B9692C6CCA_u64, 0x787EF969F9E185CF_u64, 0x595B5128A8471476_u64,
+    0x60659454C7E79E3F_u64, 0x6115DA86ED05A9F8_u64, 0x4D1E1043D31FB1CC_u64, 0x4DAB1538BD9E2193_u64,
+    0x7B634D3951CC4FAD_u64, 0x62AB552795C9CF52_u64, 0x62B5D7610E3D0C8B_u64, 0x0222AA86116E3F75_u64,
+    0x4EF7DF80D830D6D5_u64, 0x4E822204DABE992A_u64, 0x7E59659AF38157BC_u64, 0x17369CD49130F510_u64,
+    0x65145148C2CDDFC9_u64, 0x5F5EE3DD40F3F740_u64, 0x50DD0DD3CF0B196E_u64, 0x1918B64A9A5CC5CD_u64,
+    0x40B0D7DCA5A27ABE_u64, 0x4746F83BAEB09E3E_u64, 0x678159610903F797_u64, 0x253E59F91780FD2F_u64,
+    0x52CDE11A6D9CC612_u64, 0x50FEAE60DF9A6426_u64, 0x423E4DAEBE1704DB_u64, 0x5A65584D7FAEB685_u64,
+    0x69FD4917968B3AF9_u64, 0x10A226E265E4573B_u64, 0x54CAA0DFABA29594_u64, 0x0D4E8581EB1D1295_u64,
+    0x43D54D7FBC821143_u64, 0x243ED134BC174211_u64, 0x6C887BFF94034ED2_u64, 0x06CAE85460253682_u64,
+    0x56D396661002A574_u64, 0x6BD586A9E6842B9B_u64, 0x457611EB40021DF7_u64, 0x09779EEE52035616_u64,
+    0x6F234FDECCD02FF1_u64, 0x5BF297E3B66BBCEF_u64, 0x58E90CB23D73598E_u64, 0x165BACB62B8963F3_u64,
+    0x4720D6F4FDF5E13E_u64, 0x451623C4EFA11CC2_u64, 0x71CE24BB2FEFCECA_u64, 0x3B569FA17F682E03_u64,
+    0x5B0B5095BFF30BD5_u64, 0x15DEE61ACC535803_u64, 0x48D5DA11665C0977_u64, 0x2B18B8157042ACCF_u64,
+    0x74895CE8A3C6758B_u64, 0x5E8DF355806AAE18_u64, 0x5D3AB0BA1C9EC46F_u64, 0x653E5C4466BBBE7A_u64,
+    0x4A955A2E7D4BD059_u64, 0x3765169D1EFC9861_u64, 0x77555D172EDFB3C2_u64, 0x256E8A94FE60F3CF_u64,
+    0x5F777DAC257FC301_u64, 0x6ABED543FEB3F63F_u64, 0x4C5F97BCEACC9C01_u64, 0x3BCBDDCFFEF65E99_u64,
+    0x7A328C6177ADC668_u64, 0x5FAC961997F0975B_u64, 0x61C209E792F16B86_u64, 0x7FBD44E1465A12AF_u64,
+    0x4E34D4B9425ABC6B_u64, 0x7FCA9D810514DBBF_u64, 0x7D21545B9D5DFA46_u64, 0x32DDC8CE6E87C5FF_u64,
+    0x641AA9E2E44B2E9E_u64, 0x5BE4A0A525396B32_u64, 0x501554B5836F587E_u64, 0x7CB6E6EA842DEF5C_u64,
+    0x4011109135F2AD32_u64, 0x30925255368B25E3_u64, 0x6681B41B89844850_u64, 0x4DB6EA21F0DEA304_u64,
+    0x52015CE2D469D373_u64, 0x57C5881B2718826A_u64, 0x419AB0B576BB0F8F_u64, 0x5FD139AF527A01EF_u64,
+    0x68F781225791B27F_u64, 0x4C81F5E550C3364A_u64, 0x53F9341B79415B99_u64, 0x239B2B1DDA35C508_u64,
+    0x432DC3492DCDE2E1_u64, 0x02E288E4AE916A6D_u64, 0x6B7C6BA849496B01_u64, 0x516A74A1174F10AE_u64,
+    0x55FD22ED076DEF34_u64, 0x4121F6E745D8DA25_u64, 0x44CA82573924BF5D_u64, 0x1A8192529E4714EB_u64,
+    0x6E10D08B8EA1322E_u64, 0x5D9C1D50FD3E87DD_u64, 0x580D73A2D880F4F2_u64, 0x17B01773FDCB9FE4_u64,
+    0x4671294F139A5D8E_u64, 0x4626792997D61984_u64, 0x70B50EE4EC2A2F4A_u64, 0x3D0A5B75BFBCF59F_u64,
+    0x5A2A7250BCEE8C3B_u64, 0x4A6EAF916630C47F_u64, 0x4821F50D63F209C9_u64, 0x21F2260DEB5A36CC_u64,
+    0x736988156CB6760E_u64, 0x69837016455D247A_u64, 0x5C546CDDF091F80B_u64, 0x6E02C011D1175062_u64,
+    0x49DD23E4C074C66F_u64, 0x719BCCDB0DAC404E_u64, 0x762E9FD467213D7F_u64, 0x68F947C4E2AD33B0_u64,
+    0x5E8BB3105280FDFF_u64, 0x6D94396A4EF0F627_u64, 0x4BA2F5A6A8673199_u64, 0x3E102DEEA58D91B9_u64,
+    0x7904BC3DDA3EB5C2_u64, 0x3019E3176F48E927_u64, 0x60D09697E1CBC49B_u64, 0x4014B5AC590720EC_u64,
+    0x4D73ABACB4A303AF_u64, 0x4CDD5E237A6C1A57_u64, 0x7BEC45E12104D2B2_u64, 0x47C8969F2A46908A_u64,
+    0x63236B1A80D0A88E_u64, 0x6CA0787F5505406F_u64, 0x4F4F88E200A6ED3F_u64, 0x0A19F9FF773766BF_u64,
+    0x7EE5A7D0010B1531_u64, 0x5CF65CCBF1F23DFE_u64, 0x6584864000D5AA8E_u64, 0x172B7D6FF4C1CB32_u64,
+    0x5136D1CCCD77BBA4_u64, 0x78EF978CC3CE3C28_u64, 0x40F8A7D70AC62FB7_u64, 0x13F2DFA3CFD83020_u64,
+    0x67F43FBE77A37F8B_u64, 0x398499061959E699_u64, 0x5329CC985FB5FFA2_u64, 0x6136E0D1ADE18548_u64,
+    0x4287D6E04C91994F_u64, 0x00F8B3DAF181376D_u64, 0x6A72F166E0E8F54B_u64, 0x1B27862B1C01F247_u64,
+    0x5528C11F1A53F76F_u64, 0x2F52D1BC1667F506_u64, 0x44209A7F48432C59_u64, 0x0C424163451FF738_u64,
+    0x6D00F7320D3846F4_u64, 0x7A039BD208332526_u64, 0x5733F8F4D76038C3_u64, 0x7B361641A028EA85_u64,
+    0x45C32D90AC4CFA36_u64, 0x2F5E78348020BB9E_u64, 0x6F9EAF4DE07B29F0_u64, 0x4BCA59ED99CDF8FC_u64,
+    0x594BBF71806287F3_u64, 0x563B7B247B0B2D96_u64, 0x476FCC5ACD1B9FF6_u64, 0x11C92F50626F57AC_u64,
+    0x724C7A2AE1C5CCBD_u64, 0x02DB7EE703E55912_u64, 0x5B7061BBE7D17097_u64, 0x1BE2CBEC031DE0DC_u64,
+    0x4926B496530DF3AC_u64, 0x164F09899C17E716_u64, 0x750ABA8A1E7CB913_u64, 0x3D4B4275C68CA4F0_u64,
+    0x5DA22ED4E530940F_u64, 0x4AA29B916BA3B726_u64, 0x4AE825771DC07672_u64, 0x6EE87C74561C9285_u64,
+    0x77D9D58B62CD8A51_u64, 0x3173FA53BCFA8408_u64, 0x5FE177A2B5713B74_u64, 0x278FFB7630C869A0_u64,
+    0x4CB45FB55DF42F90_u64, 0x1FA662C4F3D387B3_u64, 0x7ABA32BBC986B280_u64, 0x32A3D13B1FB8D91F_u64,
+    0x622E8EFCA1388ECD_u64, 0x0EE9742F4C93E0E6_u64, 0x4E8BA596E760723D_u64, 0x58BAC3590A0FE71E_u64,
+    0x7DAC3C24A5671D2F_u64, 0x412AD228101971C9_u64, 0x6489C9B6EAB8E426_u64, 0x00EF0E8673478E3B_u64,
+    0x506E3AF8BBC71CEB_u64, 0x1A58D86B8F6C71C9_u64, 0x40582F2D6305B0BC_u64, 0x1513E0560C56C16E_u64,
+    0x66F37EAF04D5E793_u64, 0x3B530089AD579BE2_u64, 0x525C6558D0AB1FA9_u64, 0x15DC006E2446164F_u64,
+    0x41E384470D55B2ED_u64, 0x5E4999F1B69E783F_u64, 0x696C06D81555EB15_u64, 0x7D428FE92430C065_u64,
+    0x54566BE0111188DE_u64, 0x31020CBA835A3384_u64, 0x4378564CDA746D7E_u64, 0x5A680A2ECF7B5C69_u64,
+    0x6BF3BD47C3ED7BFD_u64, 0x770CDD17B25EFA42_u64, 0x565C976C9CBDFCCB_u64, 0x1270B0DFC1E59502_u64,
+    0x4516DF8A16FE63D5_u64, 0x5B8D5A4C9B1E10CE_u64, 0x6E8AFF4357FD6C89_u64, 0x127BC3ADC4FCE7B0_u64,
+    0x586F329C466456D4_u64, 0x0EC96957D0CA52F3_u64, 0x46BF5BB038504576_u64, 0x3F07877973D50F29_u64,
+    0x71322C4D26E6D58A_u64, 0x31A5A58F1FBB4B75_u64, 0x5A8E89D75252446E_u64, 0x5AEAEAD8E62F6F91_u64,
+    0x487207DF750E9D25_u64, 0x2F22557A51BF8C74_u64, 0x73E9A63254E42EA2_u64, 0x1836EF2A1C65AD86_u64,
+    0x5CBAEB5B771CF21B_u64, 0x2CF8BF54E3848AD2_u64, 0x4A2F22AF927D8E7C_u64, 0x23FA32AA4F9D3BDB_u64,
+    0x76B1D118EA627D93_u64, 0x5329EAAA18FB92F8_u64, 0x5EF4A74721E86476_u64, 0x0F54BBBB472FA8C6_u64,
+    0x4BF6EC38E7ED1D2B_u64, 0x25DD62FC38F2ED6C_u64, 0x798B138E3FE1C845_u64, 0x22FBD1938E517BDF_u64,
+    0x613C0FA4FFE7D36A_u64, 0x4F2FDADC71DAC97F_u64, 0x4DC9A61D998642BB_u64, 0x58F3157D27E23ACC_u64,
+    0x7C75D695C2706AC5_u64, 0x74B82261D969F7AD_u64, 0x63917877CEC0556B_u64, 0x10934EB4ADEE5FBE_u64,
+    0x4FA793930BCD1122_u64, 0x4075D8908B251965_u64, 0x7F7285B812E1B504_u64, 0x00BC8DB411D4F56E_u64,
+    0x65F537C675815D9C_u64, 0x66FD3E29A7DD9125_u64, 0x5190F96B91344AE3_u64, 0x6BFDCB54864ADA84_u64,
+    0x4140C78940F6A24F_u64, 0x6FFE3C439EA2486A_u64, 0x6867A5A867F103B2_u64, 0x7FFD2D38FDD073DC_u64,
+    0x53861E2053273628_u64, 0x6664242D97D9F64A_u64, 0x42D1B1B375B8F820_u64, 0x51E9B68ADFE191D5_u64,
+    0x6AE91C5255F4C034_u64, 0x1CA924116635B621_u64, 0x558749DB77F70029_u64, 0x63BA83411E915E81_u64,
+    0x446C3B15F9926687_u64, 0x6962029A7EDAB201_u64, 0x6D79F82328EA3DA6_u64, 0x0F03375D97C45001_u64,
+    0x5794C6828721CAEB_u64, 0x259C2C4ADFD04001_u64, 0x46109ECED2816F22_u64, 0x5149BD08B30D0001_u64,
+    0x701A97B150CF1837_u64, 0x3542C80DEB480001_u64, 0x59AEDFC10D7279C5_u64, 0x7768A00B22A00001_u64,
+    0x47BF19673DF52E37_u64, 0x79208008E8800001_u64, 0x72CB5BD86321E38C_u64, 0x5B67334174000001_u64,
+    0x5BD5E313828182D6_u64, 0x7C528F6790000001_u64, 0x4977E8DC68679BDF_u64, 0x16A872B940000001_u64,
+    0x758CA7C70D7292FE_u64, 0x5773EAC200000001_u64, 0x5E0A1FD271287598_u64, 0x45F6556800000001_u64,
+    0x4B3B4CA85A86C47A_u64, 0x04C5112000000001_u64, 0x785EE10D5DA46D90_u64, 0x07A1B50000000001_u64,
+    0x604BE73DE4838AD9_u64, 0x52E7C40000000001_u64, 0x4D0985CB1D3608AE_u64, 0x0F1FD00000000001_u64,
+    0x7B426FAB61F00DE3_u64, 0x31CC800000000001_u64, 0x629B8C891B267182_u64, 0x5B0A000000000001_u64,
+    0x4EE2D6D415B85ACE_u64, 0x7C08000000000001_u64, 0x7E37BE2022C0914B_u64, 0x1340000000000001_u64,
+    0x64F964E68233A76F_u64, 0x2900000000000001_u64, 0x50C783EB9B5C85F2_u64, 0x5400000000000001_u64,
+    0x409F9CBC7C4A04C2_u64, 0x1000000000000001_u64, 0x6765C793FA10079D_u64, 0x0000000000000001_u64,
+    0x52B7D2DCC80CD2E4_u64, 0x0000000000000001_u64, 0x422CA8B0A00A4250_u64, 0x0000000000000001_u64,
+    0x69E10DE76676D080_u64, 0x0000000000000001_u64, 0x54B40B1F852BDA00_u64, 0x0000000000000001_u64,
+    0x43C33C1937564800_u64, 0x0000000000000001_u64, 0x6C6B935B8BBD4000_u64, 0x0000000000000001_u64,
+    0x56BC75E2D6310000_u64, 0x0000000000000001_u64, 0x4563918244F40000_u64, 0x0000000000000001_u64,
+    0x6F05B59D3B200000_u64, 0x0000000000000001_u64, 0x58D15E1762800000_u64, 0x0000000000000001_u64,
+    0x470DE4DF82000000_u64, 0x0000000000000001_u64, 0x71AFD498D0000000_u64, 0x0000000000000001_u64,
+    0x5AF3107A40000000_u64, 0x0000000000000001_u64, 0x48C2739500000000_u64, 0x0000000000000001_u64,
+    0x746A528800000000_u64, 0x0000000000000001_u64, 0x5D21DBA000000000_u64, 0x0000000000000001_u64,
+    0x4A817C8000000000_u64, 0x0000000000000001_u64, 0x7735940000000000_u64, 0x0000000000000001_u64,
+    0x5F5E100000000000_u64, 0x0000000000000001_u64, 0x4C4B400000000000_u64, 0x0000000000000001_u64,
+    0x7A12000000000000_u64, 0x0000000000000001_u64, 0x61A8000000000000_u64, 0x0000000000000001_u64,
+    0x4E20000000000000_u64, 0x0000000000000001_u64, 0x7D00000000000000_u64, 0x0000000000000001_u64,
+    0x6400000000000000_u64, 0x0000000000000001_u64, 0x5000000000000000_u64, 0x0000000000000001_u64,
+    0x4000000000000000_u64, 0x0000000000000001_u64, 0x6666666666666666_u64, 0x3333333333333334_u64,
+    0x51EB851EB851EB85_u64, 0x0F5C28F5C28F5C29_u64, 0x4189374BC6A7EF9D_u64, 0x5916872B020C49BB_u64,
+    0x68DB8BAC710CB295_u64, 0x74F0D844D013A92B_u64, 0x53E2D6238DA3C211_u64, 0x43F3E0370CDC8755_u64,
+    0x431BDE82D7B634DA_u64, 0x698FE69270B06C44_u64, 0x6B5FCA6AF2BD215E_u64, 0x0F4CA41D811A46D4_u64,
+    0x55E63B88C230E77E_u64, 0x3F70834ACDAE9F10_u64, 0x44B82FA09B5A52CB_u64, 0x4C5A02A23E254C0D_u64,
+    0x6DF37F675EF6EADF_u64, 0x2D5CD10396A21347_u64, 0x57F5FF85E592557F_u64, 0x3DE3DA69454E75D3_u64,
+    0x465E6604B7A84465_u64, 0x7E4FE1EDD10B9175_u64, 0x709709A125DA0709_u64, 0x4A19697C81AC1BEF_u64,
+    0x5A126E1A84AE6C07_u64, 0x54E1213067BCE326_u64, 0x480EBE7B9D58566C_u64, 0x43E74DC052FD8285_u64,
+    0x734ACA5F6226F0AD_u64, 0x530BAF9A1E626A6D_u64, 0x5C3BD5191B525A24_u64, 0x426FBFAE7EB521F1_u64,
+    0x49C97747490EAE83_u64, 0x4EBFCC8B9890E7F4_u64, 0x760F253EDB4AB0D2_u64, 0x4ACC7A78F41B0CBA_u64,
+    0x5E72843249088D75_u64, 0x223D2EC729AF3D62_u64, 0x4B8ED0283A6D3DF7_u64, 0x34FDBF05BAF29781_u64,
+    0x78E480405D7B9658_u64, 0x54C931A2C4B758CF_u64, 0x60B6CD004AC94513_u64, 0x5D6DC14F03C5E0A5_u64,
+    0x4D5F0A66A23A9DA9_u64, 0x31249AA59C9E4D51_u64, 0x7BCB43D769F762A8_u64, 0x4EA0F76F60FD4882_u64,
+    0x63090312BB2C4EED_u64, 0x254D92BF80CAA068_u64, 0x4F3A68DBC8F03F24_u64, 0x1DD7A89933D54D20_u64,
+    0x7EC3DAF941806506_u64, 0x62F2A75B86221500_u64, 0x65697BFA9ACD1D9F_u64, 0x025BB91604E810CD_u64,
+    0x51212FFBAF0A7E18_u64, 0x684960DE6A5340A4_u64, 0x40E7599625A1FE7A_u64, 0x203AB3E521DC33B6_u64,
+    0x67D88F56A29CCA5D_u64, 0x19F7863B696052BD_u64, 0x5313A5DEE87D6EB0_u64, 0x7B2C6B62BAB37564_u64,
+    0x42761E4BED31255A_u64, 0x2F56BC4EFBC2C450_u64, 0x6A5696DFE1E83BC3_u64, 0x655793B192D13A1A_u64,
+    0x5512124CB4B9C969_u64, 0x377942F475742E7B_u64, 0x440E750A2A2E3ABA_u64, 0x5F9435905DF68B96_u64,
+    0x6CE3EE76A9E3912A_u64, 0x65B9EF4D63241289_u64, 0x571CBEC554B60DBB_u64, 0x6AFB25D782834207_u64,
+    0x45B0989DDD5E7163_u64, 0x08C8EB12CECF6806_u64, 0x6F80F42FC8971BD1_u64, 0x5ADB11B7B14BD9A3_u64,
+    0x5933F68CA078E30E_u64, 0x157C0E2C8DD647B5_u64, 0x475CC53D4D2D8271_u64, 0x5DFCD823A4AB6C91_u64,
+    0x722E086215159D82_u64, 0x632E269F6DDF141B_u64, 0x5B5806B4DDAAE468_u64, 0x4F581EE5F17F4349_u64,
+    0x49133890B1558386_u64, 0x72ACE584C1329C3B_u64, 0x74EB8DB44EEF38D7_u64, 0x6AAE3C079B842D2A_u64,
+    0x5D893E29D8BF60AC_u64, 0x5558300616035755_u64, 0x4AD431BB13CC4D56_u64, 0x7779C004DE6912AB_u64,
+    0x77B9E92B52E07BBE_u64, 0x258F99A163DB5111_u64, 0x5FC7EDBC424D2FCB_u64, 0x37A614811CAF740D_u64,
+    0x4C9FF163683DBFD5_u64, 0x7951AA00E3BF900B_u64, 0x7A998238A6C932EF_u64, 0x754F7667D2CC19AB_u64,
+    0x6214682D523A8F26_u64, 0x2AA5F8530F09AE22_u64, 0x4E76B9BDDB620C1E_u64, 0x55519375A5A1581B_u64,
+    0x7D8AC2C95F034697_u64, 0x3BB5B8BC3C3559C5_u64, 0x646F023AB2690545_u64, 0x7C9160969691149E_u64,
+    0x5058CE955B87376B_u64, 0x16DAB3ABABA743B2_u64, 0x40470BAAAF9F5F88_u64, 0x78AEF622EFB902F5_u64,
+    0x66D812AAB29898DB_u64, 0x0DE4BD04B2C19E54_u64, 0x524675555BAD4715_u64, 0x57EA30D08F014B76_u64,
+    0x41D1F7777C8A9F44_u64, 0x4654F3DA0C01092C_u64, 0x694FF258C7443207_u64, 0x23BB1FC346680EAC_u64,
+    0x543FF513D29CF4D2_u64, 0x4FC8E635D1ECD88A_u64, 0x43665DA9754A5D75_u64, 0x263A51C4A7F0AD3B_u64,
+    0x6BD6FC425543C8BB_u64, 0x56C3B607731AAEC4_u64, 0x5645969B77696D62_u64, 0x789C919F8F488BD0_u64,
+    0x4504787C5F878AB5_u64, 0x46E3A7B2D906D640_u64, 0x6E6D8D93CC0C1122_u64, 0x3E390C515B3E239A_u64,
+    0x5857A4763CD6741B_u64, 0x4B60D6A77C31B615_u64, 0x46AC8391CA4529AF_u64, 0x55E7121F968E2B44_u64,
+    0x711405B6106EA919_u64, 0x0971B698F0E3786D_u64, 0x5A766AF80D255414_u64, 0x078E2BAD8D82C6BD_u64,
+    0x485EBBF9A41DDCDC_u64, 0x6C71BC8AD79BD231_u64, 0x73CAC65C39C96161_u64, 0x2D82C7448C2C8382_u64,
+    0x5CA23849C7D44DE7_u64, 0x3E023903A356CF9B_u64, 0x4A1B603B06437185_u64, 0x7E682D9C82ABD949_u64,
+    0x76923391A39F1C09_u64, 0x4A4048FA6AAC8EDB_u64, 0x5EDB5C7482E5B007_u64, 0x55003A61EEF07249_u64,
+    0x4BE2B05D35848CD2_u64, 0x773361E7F259F507_u64, 0x796AB3C855A0E151_u64, 0x3EB89CA6508FEE71_u64,
+    0x6122296D114D810D_u64, 0x7EFA16EB73A6585B_u64, 0x4DB4EDF0DAA4673E_u64, 0x3261ABEF8FB846AF_u64,
+    0x7C54AFE7C43A3ECA_u64, 0x1D691318E5F3A44B_u64, 0x6376F31FD02E98A1_u64, 0x64540F471E5C836F_u64,
+    0x4F925C1973587A1B_u64, 0x0376729F4B7D35F3_u64, 0x7F50935BEBC0C35E_u64, 0x38BD84321261EFEB_u64,
+    0x65DA0F7CBC9A35E5_u64, 0x13CAD0280EB4BFEF_u64, 0x517B3F96FD482B1D_u64, 0x5CA240200BC3CCBF_u64,
+    0x412F66126439BC17_u64, 0x63B50019A3030A33_u64, 0x684BD683D38F9359_u64, 0x1F88002904D1A9EA_u64,
+    0x536FDECFDC72DC47_u64, 0x32D3335403DAEE55_u64, 0x42BFE57316C249D2_u64, 0x5BDC291003158B77_u64,
+    0x6ACCA251BE03A951_u64, 0x12F9DB4CD1BC1258_u64, 0x557081DAFE695440_u64, 0x7594AF70A7C9A847_u64,
+    0x445A017BFEBAA9CD_u64, 0x4476F2C0863AED06_u64, 0x6D5CCF2CCAC442E2_u64, 0x3A57EACDA3917B3C_u64,
+    0x577D728A3BD03581_u64, 0x7B7988A482DAC8FD_u64, 0x45FDF53B630CF79B_u64, 0x15FAD3B6CF156D97_u64,
+    0x6FFCBB923814BF5E_u64, 0x565E1F8AE4EF15BE_u64, 0x5996FC74F9AA32B2_u64, 0x11E4E608B725AAFF_u64,
+    0x47ABFD2A6154F55B_u64, 0x27EA51A0928488CC_u64, 0x72ACC843CEEE555E_u64, 0x7310829A84074146_u64,
+    0x5BBD6D030BF1DDE5_u64, 0x42739BAED005CDD2_u64, 0x49645735A327E4B7_u64, 0x4EC2E2F24004A4A8_u64,
+    0x756D5855D1D96DF2_u64, 0x4AD16B1D333AA10C_u64, 0x5DF11377DB1457F5_u64, 0x2241227DC2954DA3_u64,
+    0x4B2742C648DD132A_u64, 0x4E9A81FE35443E1C_u64, 0x783ED13D4161B844_u64, 0x175D9CC9EED39694_u64,
+    0x603240FDCDE7C69C_u64, 0x7917B0A18BDC7876_u64, 0x4CF500CB0B1FD217_u64, 0x1412F3B46FE39392_u64,
+    0x7B219ADE7832E9BE_u64, 0x535185ED7FD285B6_u64, 0x628148B1F9C25498_u64, 0x42A79E57997537C5_u64,
+    0x4ECDD3C1949B76E0_u64, 0x3552E512E12A9304_u64, 0x7E161F9C20F8BE33_u64, 0x6EEB081E3510EB39_u64,
+    0x64DE7FB01A609829_u64, 0x3F226CE4F740BC2E_u64, 0x50B1FFC0151A1354_u64, 0x3281F0B72C33C9BE_u64,
+    0x408E66334414DC43_u64, 0x42018D5F568FD498_u64, 0x674A3D1ED354939F_u64, 0x1CCF48988A7FBA8D_u64,
+    0x52A1CA7F0F76DC7F_u64, 0x30A5D3AD3B99620B_u64, 0x421B0865A5F8B065_u64, 0x73B7DC8A96144E6F_u64,
+    0x69C4DA3C3CC11A3C_u64, 0x52BFC7442353B0B1_u64, 0x549D7B6363CDAE96_u64, 0x756639034F7626F4_u64,
+    0x43B12F82B63E2545_u64, 0x4451C735D92B525D_u64, 0x6C4EB26ABD303BA2_u64, 0x3A1C71EFC1DEEA2E_u64,
+    0x56A55B889759C94E_u64, 0x61B05B2634B254F2_u64, 0x45511606DF7B0772_u64, 0x1AF37C1E908EAA5B_u64,
+    0x6EE8233E325E7250_u64, 0x2B1F2CFDB41776F8_u64, 0x58B9B5CB5B7EC1D9_u64, 0x6F4C23FE29AC5F2D_u64,
+    0x46FAF7D5E2CBCE47_u64, 0x72A34FFE87BD18F1_u64, 0x71918C896ADFB073_u64, 0x04387FFDA5FB5B1B_u64,
+    0x5ADAD6D4557FC05C_u64, 0x0360666484C915AF_u64, 0x48AF1243779966B0_u64, 0x02B3851D3707448C_u64,
+    0x744B506BF28F0AB3_u64, 0x1DEC082EBE720746_u64, 0x5D090D2328726EF5_u64, 0x64BCD358985B3905_u64,
+    0x4A6DA41C205B8BF7_u64, 0x6A30A913AD15C738_u64, 0x7715D36033C5ACBF_u64, 0x5D1AA81F7B560B8C_u64,
+    0x5F44A919C3048A32_u64, 0x7DAEECE5FC44D609_u64, 0x4C36EDAE359D3B5B_u64, 0x7E258A51969D7808_u64,
+    0x79F17C49EF61F893_u64, 0x16A276E8F0FBF33F_u64, 0x618DFD07F2B4C6DC_u64, 0x121B9253F3FCC299_u64,
+    0x4E0B30D328909F16_u64, 0x41AFA84329970214_u64, 0x7CDEB4850DB431BD_u64, 0x4F7F739EA8F19CED_u64,
+    0x63E55D373E29C164_u64, 0x3F99294BBA5AE3F1_u64, 0x4FEAB0F8FE87CDE9_u64, 0x7FADBAA2FB7BE98D_u64,
+    0x7FDDE7F4CA72E30F_u64, 0x7F7C5DD1925FDC15_u64, 0x664B1FF7085BE8D9_u64, 0x4C637E4141E649AB_u64,
+    0x51D5B32C06AFED7A_u64, 0x704F983434B83AEF_u64, 0x4177C2899EF32462_u64, 0x26A6135CF6F9C8BF_u64,
+    0x68BF9DA8FE51D3D0_u64, 0x3DD685618B294132_u64, 0x53CC7E20CB74A973_u64, 0x4B12044E08EDCDC2_u64,
+    0x4309FE80A2C3BAC2_u64, 0x6F419D0B3A57D7CE_u64, 0x6B4330CDD1392AD1_u64, 0x320294DEC3BFBFB0_u64,
+    0x55CF5A3E40FA88A7_u64, 0x419BAA4BCFCC995A_u64, 0x44A5E1CB672ED3B9_u64, 0x1AE2EEA30CA3ADE1_u64,
+    0x6DD636123EB152C1_u64, 0x77D17DD1ADD2AFCF_u64, 0x57DE91A832277567_u64, 0x797464A7BE42263F_u64,
+    0x464BA7B9C1B92AB9_u64, 0x4790508631CE84FF_u64, 0x70790C5C6928445C_u64, 0x0C1A1A704FB0D4CC_u64,
+    0x59FA7049EDB9D049_u64, 0x567B4859D95A43D6_u64, 0x47FB8D07F161736E_u64, 0x11FC39E17AAE9CAB_u64,
+    0x732C14D98235857D_u64, 0x032D2968C44A9445_u64, 0x5C2343E134F79DFD_u64, 0x4F575453D03BA9D1_u64,
+    0x49B5CFE75D92E4CA_u64, 0x72AC4376402FBB0E_u64, 0x75EFB30BC8EB07AB_u64, 0x0446D256CD192B49_u64,
+    0x5E595C096D88D2EF_u64, 0x1D0575123DADBC3A_u64, 0x4B7AB0078AD3DBF2_u64, 0x4A6AC40E97BE302F_u64,
+    0x78C44CD8DE1FC650_u64, 0x771139B0F2C9E6B1_u64, 0x609D0A4718196B73_u64, 0x78DA948D8F07EBC1_u64,
+    0x4D4A6E9F467ABC5C_u64, 0x60AEDD3E0C065634_u64, 0x7BAA4A9870C46094_u64, 0x344AFB9679A3BD20_u64,
+    0x62EEA2138D69E6DD_u64, 0x103BFC78614FCA80_u64, 0x4F254E760ABB1F17_u64, 0x26966393810CA200_u64,
+    0x7EA21723445E9825_u64, 0x2423D2859B476999_u64, 0x654E78E9037EE01D_u64, 0x69B642047C392148_u64,
+    0x510B93ED9C658017_u64, 0x6E2B680396941AA0_u64, 0x40D60FF149EACCDF_u64, 0x71BC53361210154D_u64,
+    0x67BCE64EDCAAE166_u64, 0x1C6085235019BBAE_u64, 0x52FD850BE3BBE784_u64, 0x7D1A041C40149625_u64,
+    0x42646A6FE9631F9D_u64, 0x4A7B367D0010781D_u64, 0x6A3A43E642383295_u64, 0x5D91F0C8001A59C8_u64,
+    0x54FB698501C68EDE_u64, 0x17A7F3D3334847D4_u64, 0x43FC546A67D20BE4_u64, 0x79532975C2A03976_u64,
+    0x6CC6ED770C83463B_u64, 0x0EEB75893766C256_u64, 0x57058AC5A39C382F_u64, 0x25892AD42C523512_u64,
+    0x459E089E1C7CF9BF_u64, 0x37A0EF102374F742_u64, 0x6F6340FCFA618F98_u64, 0x59017E8038BB2536_u64,
+    0x591C33FD951AD946_u64, 0x7A67986693C8EA91_u64, 0x4749C33144157A9F_u64, 0x151FAD1EDCA0BBA8_u64,
+    0x720F9EB539BBF765_u64, 0x0832AE97C76792A5_u64, 0x5B3FB22A94965F84_u64, 0x068EF21305EC7551_u64,
+    0x48FFC1BBAA11E603_u64, 0x1ED8C1A8D189F774_u64, 0x74CC692C434FD66B_u64, 0x4AF4690E1C0FF253_u64,
+    0x5D705423690CAB89_u64, 0x225D20D816732843_u64, 0x4AC0434F873D5607_u64, 0x35174D79AB8F5369_u64,
+    0x779A054C0B955672_u64, 0x21BEE25C45B21F0E_u64, 0x5FAE6AA33C77785B_u64, 0x3498B5169E2818D8_u64,
+    0x4C8B888296C5F9E2_u64, 0x5D46F7454B534713_u64, 0x7A78DA6A8AD65C9D_u64, 0x7BA4BED545520B52_u64,
+    0x61FA48553BDEB07E_u64, 0x2FB6FF110441A2A8_u64, 0x4E61D37763188D31_u64, 0x72F8CC0D9D014EED_u64,
+    0x7D6952589E8DAEB6_u64, 0x1E5AE015C80217E1_u64, 0x645441E07ED7BEF8_u64, 0x1848B344A001ACB4_u64,
+    0x504367E6CBDFCBF9_u64, 0x603A2903B3348A2A_u64, 0x4035ECB8A3196FFB_u64, 0x002E873628F6D4EE_u64,
+    0x66BCADF43828B32B_u64, 0x19E40B89DB2487E3_u64, 0x52308B29C686F5BC_u64, 0x14B66FA17C1D3983_u64,
+    0x41C06F549ED25E30_u64, 0x1091F2E7967DC79C_u64, 0x6933E554315096B3_u64, 0x341CB7D8F0C93F5F_u64,
+    0x542984435AA6DEF5_u64, 0x767D5FE0C0A0FF80_u64, 0x435469CF7BB8B25E_u64, 0x2B977FE70080CC66_u64,
+    0x6BBA42E592C11D63_u64, 0x5F58CCA4CD9AE0A3_u64, 0x562E9BEADBCDB11C_u64, 0x4C470A1D7148B3B6_u64,
+    0x44F216557CA48DB0_u64, 0x3D05A1B1276D5C92_u64, 0x6E5023BBFAA0E2B3_u64, 0x7B3C35E83F1560E9_u64,
+    0x58401C96621A4EF6_u64, 0x2F635E5365AAB3ED_u64, 0x4699B0784E7B725E_u64, 0x591C4B75EAEEF658_u64,
+    0x70F5E726E3F8B6FD_u64, 0x74FA125644B18A26_u64, 0x5A5E5285832D5F31_u64, 0x43FB41DE9D5AD4EB_u64,
+    0x484B75379C244C27_u64, 0x4FFC34B2177BDD89_u64, 0x73ABEEBF603A1372_u64, 0x4CC6BAB68BF96274_u64,
+    0x5C898BCC4CFB42C2_u64, 0x0A38955ED6611B90_u64, 0x4A07A309D72F689B_u64, 0x21C6DDE5784DAFA7_u64,
+    0x76729E762518A75E_u64, 0x693E2FD58D49190B_u64, 0x5EC2185E8413B918_u64, 0x5431BFDE0AA0E0D5_u64,
+    0x4BCE79E536762DAD_u64, 0x29C1664B3BB3E711_u64, 0x794A5CA1F0BD15E2_u64, 0x0F9BD6DEC5ECA4E8_u64,
+    0x61084A1B26FDAB1B_u64, 0x2616457F04BD50BA_u64, 0x4DA03B48EBFE227C_u64, 0x1E783798D09773C8_u64,
+    0x7C33920E46636A60_u64, 0x30C058F480F252D9_u64, 0x635C74D8384F884D_u64, 0x0D66AD9067284247_u64,
+    0x4F7D2A469372D370_u64, 0x711EF14052869B6C_u64, 0x7F2EAA0A85848581_u64, 0x34FE4ECD50D75F14_u64,
+    0x65BEEE6ED136D134_u64, 0x2A650BD773DF7F43_u64, 0x51658B8BDA9240F6_u64, 0x551DA312C319329C_u64,
+    0x411E093CAEDB672B_u64, 0x5DB14F4235ADC217_u64, 0x68300EC77E2BD845_u64, 0x7C4EE536BC49368A_u64,
+    0x5359A56C64EFE037_u64, 0x7D0BEA92303A9208_u64, 0x42AE1DF050BFE693_u64, 0x173CBBA8269541A0_u64,
+    0x6AB02FE6E79970EB_u64, 0x3EC792A6A422029A_u64, 0x5559BFEBEC7AC0BC_u64, 0x3239421EE9B4CEE1_u64,
+    0x4447CCBCBD2F0096_u64, 0x5B6101B25490A581_u64, 0x6D3FADFAC84B3424_u64, 0x2BCE691D541AA268_u64,
+    0x576624C8A03C29B6_u64, 0x563EBA7DDCE21B87_u64, 0x45EB50A08030215E_u64, 0x78322ECB171B4939_u64,
+    0x6FDEE76733803564_u64, 0x59E9E47824F87527_u64, 0x597F1F85C2CCF783_u64, 0x6187E9F9B72D2A86_u64,
+    0x4798E6049BD72C69_u64, 0x346CBB2E2C242205_u64, 0x728E3CD42C8B7A42_u64, 0x20ADF849E039D007_u64,
+    0x5BA4FD768A092E9B_u64, 0x33BE603B19C7D99F_u64, 0x4950CAC53B3A8BAF_u64, 0x42FEB3627B0647B3_u64,
+    0x754E113B91F745E5_u64, 0x5197856A5E7072B8_u64, 0x5DD80DC941929E51_u64, 0x27AC6ABB7EC05BC6_u64,
+    0x4B133E3A9ADBB1DA_u64, 0x52F05562CBCD1638_u64, 0x781EC9F75E2C4FC4_u64, 0x1E4D556ADFAE89F3_u64,
+    0x6018A192B1BD0C9C_u64, 0x7EA444557FBED4C3_u64, 0x4CE0814227CA707D_u64, 0x4BB69D1132FF109C_u64,
+    0x7B00CED03FAA4D95_u64, 0x5F8A94E851981A93_u64, 0x62670BD9CC883E11_u64, 0x32D543ED0E134875_u64,
+    0x4EB8D647D6D364DA_u64, 0x5BDDCFF0D80F6D2B_u64, 0x7DF48A0C8AEBD491_u64, 0x12FC7FE7C018AEAB_u64,
+    0x64C3A1A3A25643A7_u64, 0x28C9FFEC99AD5889_u64, 0x509C814FB511CFB9_u64, 0x0707FFF07AF113A1_u64,
+    0x407D343FC40E3FC7_u64, 0x1F39998D2F2742E7_u64, 0x672EB9FFA016CC71_u64, 0x7EC28F484B7204A4_u64,
+    0x528BC7FFB345705B_u64, 0x189BA5D36F8E6A1D_u64, 0x42096CCC8F6AC048_u64, 0x7A161E42BFA521B1_u64,
+    0x69A8AE1418AACD41_u64, 0x435696D132A1CF81_u64, 0x5486F1A9AD557101_u64, 0x1C454574288172CE_u64,
+    0x439F27BAF1112734_u64, 0x169DD129BA0128A5_u64, 0x6C31D92B1B4EA520_u64, 0x242FB50F9001DAA1_u64,
+    0x568E4755AF721DB3_u64, 0x368C90D940017BB4_u64, 0x453E9F77BF8E7E29_u64, 0x120A0D7A999AC95D_u64,
+    0x6ECA98BF98E3FD0E_u64, 0x50101590F5C47561_u64, 0x58A213CC7A4FFDA5_u64, 0x26734473F7D05DE8_u64,
+    0x46E80FD6C83FFE1D_u64, 0x6B8F69F65FD9E4B9_u64, 0x71734C8AD9FFFCFC_u64, 0x45B24323CC8FD45C_u64,
+    0x5AC2A3A247FFFD96_u64, 0x6AF502830A0CA9E3_u64, 0x489BB61B6CCCCADF_u64, 0x08C402026E7087E9_u64,
+    0x742C569247AE1164_u64, 0x746CD003E3E73FDB_u64, 0x5CF04541D2F1A783_u64, 0x76BD73364FEC3315_u64,
+    0x4A59D101758E1F9C_u64, 0x5EFDF5C50CBCF5AB_u64, 0x76F61B3588E365C7_u64, 0x4B2FEFA1ADFB22AB_u64,
+    0x5F2B48F7A0B5EB06_u64, 0x08F3261AF195B555_u64, 0x4C22A0C61A2B226B_u64, 0x20C284E25ADE2AAB_u64,
+    0x79D1013CF6AB6A45_u64, 0x1AD0D49D5E304444_u64, 0x617400FD9222BB6A_u64, 0x48A7107DE4F369D0_u64,
+    0x4DF6673141B562BB_u64, 0x53B8D9FE50C2BB0D_u64, 0x7CBD71E869223792_u64, 0x52C15CCA1AD12B48_u64,
+    0x63CAC186BA81C60E_u64, 0x75677D6E7BDA8906_u64, 0x4FD5679EFB9B04D8_u64, 0x5DEC645863153A6C_u64,
+    0x7FBBD8FE5F5E6E27_u64, 0x497A3A2704EEC3DF_u64
 ]
 
 ### floor(q * log10(2)) for |q| <= 5456721.
 @inline
 routine schubfach_flog10pow2(q: S64) -> S64
-  return (q *% 661971961083_s64) >> 41
+    return (q *% 661971961083_s64) >> 41
 
 ### floor(q * log10(2) + log10(3/4)) for |q| <= 5456721.
 @inline
 routine schubfach_flog10_three_quarters_pow2(q: S64) -> S64
-  return (q *% 661971961083_s64 -% 274743187321_s64) >> 41
+    return (q *% 661971961083_s64 -% 274743187321_s64) >> 41
 
 ### floor(e * log2(10)) for |e| <= 6432162.
 @inline
 routine schubfach_flog2pow10(e: S64) -> S64
-  return (e *% 913124641741_s64) >> 38
+    return (e *% 913124641741_s64) >> 38
 
 ### (g1 * 2^63 + g0) * cp / 2^127 rounded to odd: the integer part, with its lowest bit set when a
 ### fraction was dropped.
 @inline
 routine schubfach_rop(g1: U64, g0: U64, cp: U64) -> U64
-  var x1 = LLVM::int_truncate[U128, U64]((LLVM::zero_extend[U64, U128](g0) *% LLVM::zero_extend[U64, U128](cp)) >>> 64_u32)
-  var p = LLVM::zero_extend[U64, U128](g1) *% LLVM::zero_extend[U64, U128](cp)
-  var y0 = LLVM::int_truncate[U128, U64](p)
-  var y1 = LLVM::int_truncate[U128, U64](p >>> 64_u32)
-  var z = (y0 >>> 1_u32) +% x1
-  var vbp = y1 +% (z >>> 63_u32)
-  return vbp | (((z & 0x7FFFFFFFFFFFFFFF_u64) +% 0x7FFFFFFFFFFFFFFF_u64) >>> 63_u32)
+    var x1 = LLVM::int_truncate[U128, U64]((LLVM::zero_extend[U64, U128](g0) *% LLVM::zero_extend[U64, U128](cp)) >>> 64_u32)
+    var p = LLVM::zero_extend[U64, U128](g1) *% LLVM::zero_extend[U64, U128](cp)
+    var y0 = LLVM::int_truncate[U128, U64](p)
+    var y1 = LLVM::int_truncate[U128, U64](p >>> 64_u32)
+    var z = (y0 >>> 1_u32) +% x1
+    var vbp = y1 +% (z >>> 63_u32)
+    return vbp | (((z & 0x7FFFFFFFFFFFFFFF_u64) +% 0x7FFFFFFFFFFFFFFF_u64) >>> 63_u32)
 
 ### The shortest decimal f * 10^e inside the rounding interval of the positive value c * 2^q (the closest
 ### to the value among the shortest, ties to even), for a format whose normal significands start at c_min
 ### and whose smallest exponent is q_min. An interval end counts as inside when c is even.
 routine schubfach_decimal(q: S64, c: U64, c_min: U64, q_min: S64) -> (U64, S64)
-  var out = c & 1_u64
-  var cb = c << 2_u32
-  var cbr = cb +% 2_u64
-  var cbl = cb -% 2_u64
-  var k = schubfach_flog10pow2(q: q)
-  if c == c_min and q != q_min
-    # the float below is half as far away: the interval is lopsided
-    cbl = cb -% 1_u64
-    k = schubfach_flog10_three_quarters_pow2(q: q)
-  var h = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](q +% schubfach_flog2pow10(e: 0_s64 -% k) +% 2_s64))
-  var idx = LLVM::reinterpret_bits[S64, U64](k +% 324_s64) *% 2_u64
-  var g1 = SCHUBFACH_G[idx]
-  var g0 = SCHUBFACH_G[idx +% 1_u64]
-  var vb = schubfach_rop(g1: g1, g0: g0, cp: cb << h)
-  var vbl = schubfach_rop(g1: g1, g0: g0, cp: cbl << h)
-  var vbr = schubfach_rop(g1: g1, g0: g0, cp: cbr << h)
-  var s = vb >>> 2_u32
-  if s >= 10_u64
-    # one digit shorter: the interval spans less than ten units, so at most one of the two neighbouring
-    # multiples of ten fits in it (Java looks here only from s = 100, since it always prints two digits)
-    var sp10 = (s // 10_u64) *% 10_u64
-    var tp10 = sp10 +% 10_u64
-    var upin = vbl +% out <= (sp10 << 2_u32)
-    var wpin = (tp10 << 2_u32) +% out <= vbr
-    if upin and not wpin
-      return (sp10, k)
-    if wpin and not upin
-      return (tp10, k)
-  var t = s +% 1_u64
-  var uin = vbl +% out <= (s << 2_u32)
-  var win = (t << 2_u32) +% out <= vbr
-  if uin and not win
-    return (s, k)
-  if win and not uin
+    var out = c & 1_u64
+    var cb = c << 2_u32
+    var cbr = cb +% 2_u64
+    var cbl = cb -% 2_u64
+    var k = schubfach_flog10pow2(q: q)
+    if c == c_min and q != q_min
+        # the float below is half as far away: the interval is lopsided
+        cbl = cb -% 1_u64
+        k = schubfach_flog10_three_quarters_pow2(q: q)
+    var h = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](q +% schubfach_flog2pow10(e: 0_s64 -% k) +% 2_s64))
+    var idx = LLVM::reinterpret_bits[S64, U64](k +% 324_s64) *% 2_u64
+    var g1 = SCHUBFACH_G[idx]
+    var g0 = SCHUBFACH_G[idx +% 1_u64]
+    var vb = schubfach_rop(g1: g1, g0: g0, cp: cb << h)
+    var vbl = schubfach_rop(g1: g1, g0: g0, cp: cbl << h)
+    var vbr = schubfach_rop(g1: g1, g0: g0, cp: cbr << h)
+    var s = vb >>> 2_u32
+    if s >= 10_u64
+        # one digit shorter: the interval spans less than ten units, so at most one of the two neighbouring
+        # multiples of ten fits in it (Java looks here only from s = 100, since it always prints two digits)
+        var sp10 = (s // 10_u64) *% 10_u64
+        var tp10 = sp10 +% 10_u64
+        var upin = vbl +% out <= (sp10 << 2_u32)
+        var wpin = (tp10 << 2_u32) +% out <= vbr
+        if upin and not wpin
+            return (sp10, k)
+        if wpin and not upin
+            return (tp10, k)
+    var t = s +% 1_u64
+    var uin = vbl +% out <= (s << 2_u32)
+    var win = (t << 2_u32) +% out <= vbr
+    if uin and not win
+        return (s, k)
+    if win and not uin
+        return (t, k)
+    # both fit: the closer one, the even one on a tie
+    var cmp = LLVM::reinterpret_bits[U64, S64](vb) -% LLVM::reinterpret_bits[U64, S64]((s +% t) << 1_u32)
+    if cmp < 0_s64 or (cmp == 0_s64 and (s & 1_u64) == 0_u64)
+        return (s, k)
     return (t, k)
-  # both fit: the closer one, the even one on a tie
-  var cmp = LLVM::reinterpret_bits[U64, S64](vb) -% LLVM::reinterpret_bits[U64, S64]((s +% t) << 1_u32)
-  if cmp < 0_s64 or (cmp == 0_s64 and (s & 1_u64) == 0_u64)
-    return (s, k)
-  return (t, k)
 
 ### The decimal f * 10^e (f > 0, below 10^38) in `%g` layout (as assemble_decimal lays it out) with scientific form
 ### from a leading-digit exponent of sci_from, written straight into one character buffer. A nonempty wrap
 ### (a type name) is written around it as `wrap(...)`, the diagnose form.
 routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: Text) -> Text
-  var ee = e
-  danger
-    # the digits of f, least significant first (f = hi * 10^19 + lo, one wide division at most)
-    var raw = Array[U32, 40]()
-    var nraw = 0_s64
-    var hi = 0_u64
-    var lo = LLVM::int_truncate[U128, U64](f)
-    if (f >>> 64_u32) != 0_u128
-      var hq = f // 10000000000000000000_u128
-      hi = LLVM::int_truncate[U128, U64](hq)
-      lo = LLVM::int_truncate[U128, U64](f -% hq *% 10000000000000000000_u128)
-      while nraw < 19_s64
-        raw[LLVM::reinterpret_bits[S64, U64](nraw)] = 0x30_u32 +% LLVM::int_truncate[U64, U32](lo % 10_u64)
-        lo = lo // 10_u64
-        nraw = nraw +% 1_s64
-      lo = hi
-    while lo != 0_u64
-      raw[LLVM::reinterpret_bits[S64, U64](nraw)] = 0x30_u32 +% LLVM::int_truncate[U64, U32](lo % 10_u64)
-      lo = lo // 10_u64
-      nraw = nraw +% 1_s64
-    # drop the trailing zeros (the lowest digits)
-    var z = 0_s64
-    while raw[LLVM::reinterpret_bits[S64, U64](z)] == 0x30_u32
-      z = z +% 1_s64
-    ee = ee +% z
-    var dig = Array[U32, 40]()
-    var k = 0_s64
-    while z +% k < nraw
-      dig[LLVM::reinterpret_bits[S64, U64](k)] = raw[LLVM::reinterpret_bits[S64, U64](z +% k)]
-      k = k +% 1_s64
-    var pe = ee +% k -% 1_s64
-    var buf = Array[Character, 96]()
-    var p = LLVM::reinterpret_bits[Hijacked[Array[Character, 96]], Hijacked[Character]](buf.hijack())
-    var n = 0_s64
-    var wn = LLVM::reinterpret_bits[U64, S64](wrap.count())
-    if wn > 0_s64
-      while n < wn
-        p.stride(count: n).poke(value: wrap[LLVM::reinterpret_bits[S64, U64](n)])
-        n = n +% 1_s64
-      p.stride(count: n).poke(value: Character(0x28_u32))
-      n = n +% 1_s64
-    if neg
-      p.stride(count: n).poke(value: Character(0x2D_u32))
-      n = n +% 1_s64
-    if pe < -4_s64 or pe >= LLVM::reinterpret_bits[U64, S64](sci_from)
-      # d[.ddd]e+-XX
-      p.stride(count: n).poke(value: Character(dig[LLVM::reinterpret_bits[S64, U64](k -% 1_s64)]))
-      n = n +% 1_s64
-      if k > 1_s64
-        p.stride(count: n).poke(value: Character(0x2E_u32))
-        n = n +% 1_s64
-        var i = k -% 2_s64
-        while i >= 0_s64
-          p.stride(count: n).poke(value: Character(dig[LLVM::reinterpret_bits[S64, U64](i)]))
-          n = n +% 1_s64
-          i = i -% 1_s64
-      p.stride(count: n).poke(value: Character(0x65_u32))
-      n = n +% 1_s64
-      var ea = pe
-      if pe < 0_s64
-        ea = 0_s64 -% pe
-        p.stride(count: n).poke(value: Character(0x2D_u32))
-      else
-        p.stride(count: n).poke(value: Character(0x2B_u32))
-      n = n +% 1_s64
-      # at least two exponent digits
-      var nd = 2_s64
-      if ea >= 1000_s64
-        nd = 4_s64
-      elseif ea >= 100_s64
-        nd = 3_s64
-      var j = nd -% 1_s64
-      while j >= 0_s64
-        p.stride(count: n +% j).poke(value: Character(0x30_u32 +% LLVM::int_truncate[S64, U32](ea % 10_s64)))
-        ea = ea // 10_s64
-        j = j -% 1_s64
-      n = n +% nd
-    elseif pe >= 0_s64
-      # the integer part, then the fraction if any digits are left
-      var i = k -% 1_s64
-      var pos = 0_s64
-      while pos <= pe
-        var c = 0x30_u32
-        if i >= 0_s64
-          c = dig[LLVM::reinterpret_bits[S64, U64](i)]
-        p.stride(count: n).poke(value: Character(c))
-        n = n +% 1_s64
-        i = i -% 1_s64
-        pos = pos +% 1_s64
-      if i >= 0_s64
-        p.stride(count: n).poke(value: Character(0x2E_u32))
-        n = n +% 1_s64
-        while i >= 0_s64
-          p.stride(count: n).poke(value: Character(dig[LLVM::reinterpret_bits[S64, U64](i)]))
-          n = n +% 1_s64
-          i = i -% 1_s64
-    else
-      # 0.000ddd
-      p.stride(count: n).poke(value: Character(0x30_u32))
-      p.stride(count: n +% 1_s64).poke(value: Character(0x2E_u32))
-      n = n +% 2_s64
-      var pad = 0_s64
-      while pad < 0_s64 -% pe -% 1_s64
-        p.stride(count: n).poke(value: Character(0x30_u32))
-        n = n +% 1_s64
-        pad = pad +% 1_s64
-      var i = k -% 1_s64
-      while i >= 0_s64
-        p.stride(count: n).poke(value: Character(dig[LLVM::reinterpret_bits[S64, U64](i)]))
-        n = n +% 1_s64
-        i = i -% 1_s64
-    if wn > 0_s64
-      p.stride(count: n).poke(value: Character(0x29_u32))
-      n = n +% 1_s64
-    return Text(from_span: p, count: LLVM::reinterpret_bits[S64, U64](n))
+    var ee = e
+    danger
+        # the digits of f, least significant first (f = hi * 10^19 + lo, one wide division at most)
+        var raw = Array[U32, 40]()
+        var nraw = 0_s64
+        var hi = 0_u64
+        var lo = LLVM::int_truncate[U128, U64](f)
+        if (f >>> 64_u32) != 0_u128
+            var hq = f // 10000000000000000000_u128
+            hi = LLVM::int_truncate[U128, U64](hq)
+            lo = LLVM::int_truncate[U128, U64](f -% hq *% 10000000000000000000_u128)
+            while nraw < 19_s64
+                raw[LLVM::reinterpret_bits[S64, U64](nraw)] = 0x30_u32 +% LLVM::int_truncate[U64, U32](lo % 10_u64)
+                lo = lo // 10_u64
+                nraw = nraw +% 1_s64
+            lo = hi
+        while lo != 0_u64
+            raw[LLVM::reinterpret_bits[S64, U64](nraw)] = 0x30_u32 +% LLVM::int_truncate[U64, U32](lo % 10_u64)
+            lo = lo // 10_u64
+            nraw = nraw +% 1_s64
+        # drop the trailing zeros (the lowest digits)
+        var z = 0_s64
+        while raw[LLVM::reinterpret_bits[S64, U64](z)] == 0x30_u32
+            z = z +% 1_s64
+        ee = ee +% z
+        var dig = Array[U32, 40]()
+        var k = 0_s64
+        while z +% k < nraw
+            dig[LLVM::reinterpret_bits[S64, U64](k)] = raw[LLVM::reinterpret_bits[S64, U64](z +% k)]
+            k = k +% 1_s64
+        var pe = ee +% k -% 1_s64
+        var buf = Array[Character, 96]()
+        var p = LLVM::reinterpret_bits[Hijacked[Array[Character, 96]], Hijacked[Character]](buf.hijack())
+        var n = 0_s64
+        var wn = LLVM::reinterpret_bits[U64, S64](wrap.count())
+        if wn > 0_s64
+            while n < wn
+                p.stride(count: n).poke(value: wrap[LLVM::reinterpret_bits[S64, U64](n)])
+                n = n +% 1_s64
+            p.stride(count: n).poke(value: Character(0x28_u32))
+            n = n +% 1_s64
+        if neg
+            p.stride(count: n).poke(value: Character(0x2D_u32))
+            n = n +% 1_s64
+        if pe < -4_s64 or pe >= LLVM::reinterpret_bits[U64, S64](sci_from)
+            # d[.ddd]e+-XX
+            p.stride(count: n).poke(value: Character(dig[LLVM::reinterpret_bits[S64, U64](k -% 1_s64)]))
+            n = n +% 1_s64
+            if k > 1_s64
+                p.stride(count: n).poke(value: Character(0x2E_u32))
+                n = n +% 1_s64
+                var i = k -% 2_s64
+                while i >= 0_s64
+                    p.stride(count: n).poke(value: Character(dig[LLVM::reinterpret_bits[S64, U64](i)]))
+                    n = n +% 1_s64
+                    i = i -% 1_s64
+            p.stride(count: n).poke(value: Character(0x65_u32))
+            n = n +% 1_s64
+            var ea = pe
+            if pe < 0_s64
+                ea = 0_s64 -% pe
+                p.stride(count: n).poke(value: Character(0x2D_u32))
+            else
+                p.stride(count: n).poke(value: Character(0x2B_u32))
+            n = n +% 1_s64
+            # at least two exponent digits
+            var nd = 2_s64
+            if ea >= 1000_s64
+                nd = 4_s64
+            elseif ea >= 100_s64
+                nd = 3_s64
+            var j = nd -% 1_s64
+            while j >= 0_s64
+                p.stride(count: n +% j).poke(value: Character(0x30_u32 +% LLVM::int_truncate[S64, U32](ea % 10_s64)))
+                ea = ea // 10_s64
+                j = j -% 1_s64
+            n = n +% nd
+        elseif pe >= 0_s64
+            # the integer part, then the fraction if any digits are left
+            var i = k -% 1_s64
+            var pos = 0_s64
+            while pos <= pe
+                var c = 0x30_u32
+                if i >= 0_s64
+                    c = dig[LLVM::reinterpret_bits[S64, U64](i)]
+                p.stride(count: n).poke(value: Character(c))
+                n = n +% 1_s64
+                i = i -% 1_s64
+                pos = pos +% 1_s64
+            if i >= 0_s64
+                p.stride(count: n).poke(value: Character(0x2E_u32))
+                n = n +% 1_s64
+                while i >= 0_s64
+                    p.stride(count: n).poke(value: Character(dig[LLVM::reinterpret_bits[S64, U64](i)]))
+                    n = n +% 1_s64
+                    i = i -% 1_s64
+        else
+            # 0.000ddd
+            p.stride(count: n).poke(value: Character(0x30_u32))
+            p.stride(count: n +% 1_s64).poke(value: Character(0x2E_u32))
+            n = n +% 2_s64
+            var pad = 0_s64
+            while pad < 0_s64 -% pe -% 1_s64
+                p.stride(count: n).poke(value: Character(0x30_u32))
+                n = n +% 1_s64
+                pad = pad +% 1_s64
+            var i = k -% 1_s64
+            while i >= 0_s64
+                p.stride(count: n).poke(value: Character(dig[LLVM::reinterpret_bits[S64, U64](i)]))
+                n = n +% 1_s64
+                i = i -% 1_s64
+        if wn > 0_s64
+            p.stride(count: n).poke(value: Character(0x29_u32))
+            n = n +% 1_s64
+        return Text(from_span: p, count: LLVM::reinterpret_bits[S64, U64](n))
 
 ### Renders the raw bits of a B16/B32/B64 as the shortest decimal that reads back as the same value.
 ### The shortest digits depend on the SOURCE format's spacing, so the bits are decoded in that format
@@ -853,72 +853,72 @@ routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: T
 ### :param fmt: 0 = B64, 1 = B32, 2 = B16.
 ### :returns: The rendered `Text`. Specials: "NaN" / "inf" / "-inf".
 routine format_binary_shortest(raw: U64, fmt: S32) -> Text
-  return format_binary_shortest_wrapped(raw: raw, fmt: fmt, wrap: "")
+    return format_binary_shortest_wrapped(raw: raw, fmt: fmt, wrap: "")
 
 ### format_binary_shortest written as `wrap(...)` when wrap is nonempty (a type name, for diagnose).
 routine format_binary_shortest_wrapped(raw: U64, fmt: S32, wrap: Text) -> Text
-  # mant_bits = stored fraction bits, exp_bits = exponent field width, sci_from = the leading-digit
-  # exponent where scientific form starts (the format's DIG + 1, as C's %g at DIG + 1 digits would).
-  var mant_bits = 52u64
-  var exp_bits = 11u64
-  var sci_from = 16u64
-  if fmt == 1_s32
-    mant_bits = 23u64
-    exp_bits = 8u64
-    sci_from = 7u64
-  elseif fmt == 2_s32
-    mant_bits = 10u64
-    exp_bits = 5u64
-    sci_from = 4u64
-  elseif fmt == 3_s32
-    # bfloat16: B32's exponent with 7 fraction bits
-    mant_bits = 7u64
-    exp_bits = 8u64
-    sci_from = 3u64
-  var exp_all_ones = LLVM::sub(a: LLVM::shift_left(1u64, exp_bits), b: 1u64)
-  var bias = LLVM::reinterpret_bits[U64, S64](LLVM::shift_right_unsigned(exp_all_ones, 1u64))
-  var neg = LLVM::int_ne(a: LLVM::shift_right_unsigned(raw, LLVM::add(a: mant_bits, b: exp_bits)), b: 0u64)
-  var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(raw, mant_bits), b: exp_all_ones)
-  var mf = LLVM::bit_and(a: raw, b: LLVM::sub(a: LLVM::shift_left(1u64, mant_bits), b: 1u64))
-  var mbits = LLVM::reinterpret_bits[U64, S64](mant_bits)
-  if LLVM::int_eq(a: ef, b: exp_all_ones)
-    var sp = "inf"
-    if LLVM::int_ne(a: mf, b: 0u64)
-      sp = "NaN"
-    elseif neg
-      sp = "-inf"
-    if wrap.count() > 0u64
-      return wrap + "(" + sp + ")"
-    return sp
-  var c_min = 1_u64 << LLVM::int_truncate[U64, U32](mant_bits)
-  var q_min = 1_s64 -% bias -% mbits
-  if ef == 0_u64
-    if mf == 0_u64
-      var zt = "0"
-      if neg
-        zt = "-0"
-      if wrap.count() > 0u64
-        return wrap + "(" + zt + ")"
-      return zt
-    var (fs, es) = schubfach_decimal(q: q_min, c: mf, c_min: c_min, q_min: q_min)
-    return shortest_decimal_text(neg: neg, f: LLVM::zero_extend[U64, U128](fs), e: es, sci_from: sci_from, wrap: wrap)
-  var c = mf | c_min
-  var q = LLVM::reinterpret_bits[U64, S64](ef) -% bias -% mbits
-  # an integer below 2^(mant_bits + 1) is its own shortest decimal
-  var mq = 0_s64 -% q
-  if mq > 0_s64 and mq <= mbits
-    var fi = c >>> LLVM::int_truncate[S64, U32](mq)
-    if (fi << LLVM::int_truncate[S64, U32](mq)) == c
-      return shortest_decimal_text(neg: neg, f: LLVM::zero_extend[U64, U128](fi), e: 0_s64, sci_from: sci_from, wrap: wrap)
-  var (f, e) = schubfach_decimal(q: q, c: c, c_min: c_min, q_min: q_min)
-  return shortest_decimal_text(neg: neg, f: LLVM::zero_extend[U64, U128](f), e: e, sci_from: sci_from, wrap: wrap)
+    # mant_bits = stored fraction bits, exp_bits = exponent field width, sci_from = the leading-digit
+    # exponent where scientific form starts (the format's DIG + 1, as C's %g at DIG + 1 digits would).
+    var mant_bits = 52u64
+    var exp_bits = 11u64
+    var sci_from = 16u64
+    if fmt == 1_s32
+        mant_bits = 23u64
+        exp_bits = 8u64
+        sci_from = 7u64
+    elseif fmt == 2_s32
+        mant_bits = 10u64
+        exp_bits = 5u64
+        sci_from = 4u64
+    elseif fmt == 3_s32
+        # bfloat16: B32's exponent with 7 fraction bits
+        mant_bits = 7u64
+        exp_bits = 8u64
+        sci_from = 3u64
+    var exp_all_ones = LLVM::sub(a: LLVM::shift_left(1u64, exp_bits), b: 1u64)
+    var bias = LLVM::reinterpret_bits[U64, S64](LLVM::shift_right_unsigned(exp_all_ones, 1u64))
+    var neg = LLVM::int_ne(a: LLVM::shift_right_unsigned(raw, LLVM::add(a: mant_bits, b: exp_bits)), b: 0u64)
+    var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(raw, mant_bits), b: exp_all_ones)
+    var mf = LLVM::bit_and(a: raw, b: LLVM::sub(a: LLVM::shift_left(1u64, mant_bits), b: 1u64))
+    var mbits = LLVM::reinterpret_bits[U64, S64](mant_bits)
+    if LLVM::int_eq(a: ef, b: exp_all_ones)
+        var sp = "inf"
+        if LLVM::int_ne(a: mf, b: 0u64)
+            sp = "NaN"
+        elseif neg
+            sp = "-inf"
+        if wrap.count() > 0u64
+            return wrap + "(" + sp + ")"
+        return sp
+    var c_min = 1_u64 << LLVM::int_truncate[U64, U32](mant_bits)
+    var q_min = 1_s64 -% bias -% mbits
+    if ef == 0_u64
+        if mf == 0_u64
+            var zt = "0"
+            if neg
+                zt = "-0"
+            if wrap.count() > 0u64
+                return wrap + "(" + zt + ")"
+            return zt
+        var (fs, es) = schubfach_decimal(q: q_min, c: mf, c_min: c_min, q_min: q_min)
+        return shortest_decimal_text(neg: neg, f: LLVM::zero_extend[U64, U128](fs), e: es, sci_from: sci_from, wrap: wrap)
+    var c = mf | c_min
+    var q = LLVM::reinterpret_bits[U64, S64](ef) -% bias -% mbits
+    # an integer below 2^(mant_bits + 1) is its own shortest decimal
+    var mq = 0_s64 -% q
+    if mq > 0_s64 and mq <= mbits
+        var fi = c >>> LLVM::int_truncate[S64, U32](mq)
+        if (fi << LLVM::int_truncate[S64, U32](mq)) == c
+            return shortest_decimal_text(neg: neg, f: LLVM::zero_extend[U64, U128](fi), e: 0_s64, sci_from: sci_from, wrap: wrap)
+    var (f, e) = schubfach_decimal(q: q, c: c, c_min: c_min, q_min: q_min)
+    return shortest_decimal_text(neg: neg, f: LLVM::zero_extend[U64, U128](f), e: e, sci_from: sci_from, wrap: wrap)
 
 ### Renders a B128 as the shortest decimal that reads back as the same value (scientific from a
 ### leading-digit exponent of 34, FLT128_DIG + 1). Specials: "NaN" / "inf" / "-inf".
 ### :param value: The value to render.
 ### :returns: The rendered `Text`.
 routine format_b128_shortest(value: B128) -> Text
-  return format_b128_shortest_wrapped(value: value, wrap: "")
+    return format_b128_shortest_wrapped(value: value, wrap: "")
 
 # ----------------------------------------------------------------------------
 # Fixed-point formatting: exactly `places` digits after the point
@@ -931,134 +931,134 @@ routine format_b128_shortest(value: B128) -> Text
 ### Renders `scaled` (the value times 10^places, already an integer) with `places` digits after the
 ### point and a leading `-` when `neg`.
 routine fixed_from_scaled(neg: Bool, scaled: Integer, places: U64) -> Text
-  var digits = scaled.represent()
-  if digits.count() <= places
-    digits = zeros_text(n: places + 1u64 - digits.count()) + digits
-  var body = digits
-  if places > 0u64
-    var point = digits.count() - places
-    body = digits[0u64 til point] + "." + digits[point til digits.count()]
-  if neg
-    return "-" + body
-  return body
+    var digits = scaled.represent()
+    if digits.count() <= places
+        digits = zeros_text(n: places + 1u64 - digits.count()) + digits
+    var body = digits
+    if places > 0u64
+        var point = digits.count() - places
+        body = digits[0u64 til point] + "." + digits[point til digits.count()]
+    if neg
+        return "-" + body
+    return body
 
 ### The exact non-negative value `num / den` rendered with `places` digits after the point, rounded
 ### half to even.
 routine fixed_from_ratio(neg: Bool, num: Integer, den: Integer, places: U64) -> Text
-  var scaled = div_round_half_even(n: num.mul(other: pow10_int(k: LLVM::reinterpret_bits[U64, S64](places))), d: den)
-  return fixed_from_scaled(neg: neg, scaled: scaled, places: places)
+    var scaled = div_round_half_even(n: num.mul(other: pow10_int(k: LLVM::reinterpret_bits[U64, S64](places))), d: den)
+    return fixed_from_scaled(neg: neg, scaled: scaled, places: places)
 
 ### The exact value m · 2^e2 (m non-negative) with `places` digits after the point.
 routine fixed_from_binary(neg: Bool, m: Integer, e2: S64, places: U64) -> Text
-  var num = m
-  var den = Integer.one()
-  if e2 >= 0_s64
-    num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
-  else
-    den = den.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - e2))
-  return fixed_from_ratio(neg: neg, num: num, den: den, places: places)
+    var num = m
+    var den = Integer.one()
+    if e2 >= 0_s64
+        num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
+    else
+        den = den.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - e2))
+    return fixed_from_ratio(neg: neg, num: num, den: den, places: places)
 
 ### Renders a B64 with exactly `places` digits after the point (B16/B32 widen to B64 exactly first).
 ### Specials: "NaN" / "inf" / "-inf".
 routine format_binary_fixed(value: B64, places: U64) -> Text
-  if value.is_nan()
-    return "NaN"
-  if value.is_infinite()
-    if value.signbit()
-      return "-inf"
-    return "inf"
-  var raw = value.to_bits()
-  var bits = LLVM::bit_and(a: raw, b: 0x7FFFFFFFFFFFFFFFu64)
-  var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 52u64), b: 0x7FFu64)
-  var mf = LLVM::bit_and(a: bits, b: 0xFFFFFFFFFFFFFu64)
-  var m = mf
-  var e2 = -1074_s64
-  if LLVM::int_ne(a: ef, b: 0u64)
-    m = LLVM::bit_or(a: mf, b: 0x10000000000000u64)
-    e2 = LLVM::reinterpret_bits[U64, S64](ef) - 1075_s64
-  if m != 0u64
-    var (fast, txt) = b128t_fixed_binary(neg: value.signbit(), c: LLVM::zero_extend[U64, U128](m), q: e2, places: places)
-    if fast
-      return txt
-  return fixed_from_binary(neg: value.signbit(), m: Integer(value: m), e2: e2, places: places)
+    if value.is_nan()
+        return "NaN"
+    if value.is_infinite()
+        if value.signbit()
+            return "-inf"
+        return "inf"
+    var raw = value.to_bits()
+    var bits = LLVM::bit_and(a: raw, b: 0x7FFFFFFFFFFFFFFFu64)
+    var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 52u64), b: 0x7FFu64)
+    var mf = LLVM::bit_and(a: bits, b: 0xFFFFFFFFFFFFFu64)
+    var m = mf
+    var e2 = -1074_s64
+    if LLVM::int_ne(a: ef, b: 0u64)
+        m = LLVM::bit_or(a: mf, b: 0x10000000000000u64)
+        e2 = LLVM::reinterpret_bits[U64, S64](ef) - 1075_s64
+    if m != 0u64
+        var (fast, txt) = b128t_fixed_binary(neg: value.signbit(), c: LLVM::zero_extend[U64, U128](m), q: e2, places: places)
+        if fast
+            return txt
+    return fixed_from_binary(neg: value.signbit(), m: Integer(value: m), e2: e2, places: places)
 
 ### Renders the raw bits of a B128 with exactly `places` digits after the point.
 routine format_b128_fixed(value: B128, places: U64) -> Text
-  if value.is_nan()
-    return "NaN"
-  if value.is_infinite()
-    if value.signbit()
-      return "-inf"
-    return "inf"
-  var bits = value.to_bits()
-  var ef = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, LLVM::zero_extend[U64, U128](112u64)), b: LLVM::zero_extend[U64, U128](0x7FFFu64)))
-  var mf = LLVM::bit_and(a: bits, b: LLVM::sub(a: LLVM::shift_left(LLVM::zero_extend[U64, U128](1u64), LLVM::zero_extend[U64, U128](112u64)), b: LLVM::zero_extend[U64, U128](1u64)))
-  var m = mf
-  var e2 = -16494_s64
-  if LLVM::int_ne(a: ef, b: 0u64)
-    m = LLVM::bit_or(a: mf, b: LLVM::shift_left(LLVM::zero_extend[U64, U128](1u64), LLVM::zero_extend[U64, U128](112u64)))
-    e2 = LLVM::reinterpret_bits[U64, S64](ef) - 16495_s64
-  if m != 0_u128
-    var (fast, txt) = b128t_fixed_binary(neg: value.signbit(), c: m, q: e2, places: places)
-    if fast
-      return txt
-  return fixed_from_binary(neg: value.signbit(), m: Integer(from: m), e2: e2, places: places)
+    if value.is_nan()
+        return "NaN"
+    if value.is_infinite()
+        if value.signbit()
+            return "-inf"
+        return "inf"
+    var bits = value.to_bits()
+    var ef = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, LLVM::zero_extend[U64, U128](112u64)), b: LLVM::zero_extend[U64, U128](0x7FFFu64)))
+    var mf = LLVM::bit_and(a: bits, b: LLVM::sub(a: LLVM::shift_left(LLVM::zero_extend[U64, U128](1u64), LLVM::zero_extend[U64, U128](112u64)), b: LLVM::zero_extend[U64, U128](1u64)))
+    var m = mf
+    var e2 = -16494_s64
+    if LLVM::int_ne(a: ef, b: 0u64)
+        m = LLVM::bit_or(a: mf, b: LLVM::shift_left(LLVM::zero_extend[U64, U128](1u64), LLVM::zero_extend[U64, U128](112u64)))
+        e2 = LLVM::reinterpret_bits[U64, S64](ef) - 16495_s64
+    if m != 0_u128
+        var (fast, txt) = b128t_fixed_binary(neg: value.signbit(), c: m, q: e2, places: places)
+        if fast
+            return txt
+    return fixed_from_binary(neg: value.signbit(), m: Integer(from: m), e2: e2, places: places)
 
 ### Renders decoded decimal-float parts (c · 10^e) with exactly `places` digits after the point.
 ### Specials: "NaN" / "sNaN" / "inf" / "-inf".
 routine format_decimal_fixed(p: D128Parts, places: U64) -> Text
-  if LLVM::int_eq(a: p.special, b: 1_u64)
-    return if p.sign then "-inf" else "inf"
-  if LLVM::int_eq(a: p.special, b: 3_u64)
-    return "sNaN"
-  if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-    return "NaN"
-  var (fast, txt) = decimal_fixed_fast(p: p, places: places)
-  if fast
-    return txt
-  var num = Integer(from: p.coeff)
-  var den = Integer.one()
-  if p.exp >= 0_s64
-    num = num.mul(other: pow10_int(k: p.exp))
-  else
-    den = pow10_int(k: 0_s64 - p.exp)
-  return fixed_from_ratio(neg: p.sign, num: num, den: den, places: places)
+    if LLVM::int_eq(a: p.special, b: 1_u64)
+        return if p.sign then "-inf" else "inf"
+    if LLVM::int_eq(a: p.special, b: 3_u64)
+        return "sNaN"
+    if LLVM::unsigned_ge(a: p.special, b: 2_u64)
+        return "NaN"
+    var (fast, txt) = decimal_fixed_fast(p: p, places: places)
+    if fast
+        return txt
+    var num = Integer(from: p.coeff)
+    var den = Integer.one()
+    if p.exp >= 0_s64
+        num = num.mul(other: pow10_int(k: p.exp))
+    else
+        den = pow10_int(k: 0_s64 - p.exp)
+    return fixed_from_ratio(neg: p.sign, num: num, den: den, places: places)
 
 ### coeff * 10^exp with `places` digits after the point, exactly in U128 arithmetic when the scaled value
 ### stays below 10^37 (places up to 40), or false.
 routine decimal_fixed_fast(p: D128Parts, places: U64) -> (Bool, Text)
-  if places > 40_u64
-    return (false, "")
-  var sh = p.exp +% LLVM::reinterpret_bits[U64, S64](places)
-  var n = p.coeff
-  if n == 0_u128
-    return (true, b128t_fixed_text(neg: p.sign, n: 0_u128, places: places))
-  if sh >= 0_s64
-    # n * 10^sh must stay below 10^37
-    var j = 0_s64
-    while j < sh
-      if n >= 1000000000000000000000000000000000000_u128
+    if places > 40_u64
         return (false, "")
-      n = n *% 10_u128
-      j = j +% 1_s64
-  elseif sh > -39_s64
-    var d = 1_u128
-    var j2 = 0_s64
-    while j2 < 0_s64 -% sh
-      d = d *% 10_u128
-      j2 = j2 +% 1_s64
-    var q = n // d
-    var r = n -% q *% d
-    var twice = r +% r
-    if twice > d or (twice == d and (q & 1_u128) == 1_u128)
-      q = q +% 1_u128
-    n = q
-  elseif n >= 10000000000000000000000000000000000000_u128
-    return (false, "")
-  else
-    # the coefficient is below 10^37, so below half a unit of 10^-38 and more: it rounds to 0
-    n = 0_u128
-  return (true, b128t_fixed_text(neg: p.sign, n: n, places: places))
+    var sh = p.exp +% LLVM::reinterpret_bits[U64, S64](places)
+    var n = p.coeff
+    if n == 0_u128
+        return (true, b128t_fixed_text(neg: p.sign, n: 0_u128, places: places))
+    if sh >= 0_s64
+        # n * 10^sh must stay below 10^37
+        var j = 0_s64
+        while j < sh
+            if n >= 1000000000000000000000000000000000000_u128
+                return (false, "")
+            n = n *% 10_u128
+            j = j +% 1_s64
+    elseif sh > -39_s64
+        var d = 1_u128
+        var j2 = 0_s64
+        while j2 < 0_s64 -% sh
+            d = d *% 10_u128
+            j2 = j2 +% 1_s64
+        var q = n // d
+        var r = n -% q *% d
+        var twice = r +% r
+        if twice > d or (twice == d and (q & 1_u128) == 1_u128)
+            q = q +% 1_u128
+        n = q
+    elseif n >= 10000000000000000000000000000000000000_u128
+        return (false, "")
+    else
+        # the coefficient is below 10^37, so below half a unit of 10^-38 and more: it rounds to 0
+        n = 0_u128
+    return (true, b128t_fixed_text(neg: p.sign, n: n, places: places))
 
 # ----------------------------------------------------------------------------
 # Parsing: decimal text -> nearest binary float (rounded straight to target)
@@ -1070,159 +1070,159 @@ routine decimal_fixed_fast(p: D128Parts, places: U64) -> (Bool, Text)
 ### here — no aggregate carries a managed value across the routine boundary.
 ### `fmt` selects the format's field widths: 0 = B64, 1 = B32, 2 = B16.
 routine round_and_pack(neg: Bool, num_in: Integer, den_in: Integer, fmt: S32) -> U64
-  # Format constants: p = significand bits, min_lsb = smallest representable bit-
-  # exponent, emin/emax = unbiased normal-exponent range, bias, mant_bits = p-1,
-  # exp_bits = exponent field width. Defaults are B64; narrower formats override.
-  var p = 53_s64
-  var min_lsb = -1074_s64
-  var emin = -1022_s64
-  var emax = 1023_s64
-  var bias = 1023_s64
-  var mant_bits = 52u64
-  var exp_bits = 11u64
-  if fmt == 1_s32
-    p = 24_s64
-    min_lsb = -149_s64
-    emin = -126_s64
-    emax = 127_s64
-    bias = 127_s64
-    mant_bits = 23u64
-    exp_bits = 8u64
-  elseif fmt == 2_s32
-    p = 11_s64
-    min_lsb = -24_s64
-    emin = -14_s64
-    emax = 15_s64
-    bias = 15_s64
-    mant_bits = 10u64
-    exp_bits = 5u64
-  elseif fmt == 3_s32
-    p = 8_s64
-    min_lsb = -133_s64
-    emin = -126_s64
-    emax = 127_s64
-    bias = 127_s64
-    mant_bits = 7u64
-    exp_bits = 8u64
-  var num = num_in
-  var den = den_in
-  # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
-  var ee = (LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())) - 1_s64
-  while ratio_ge_pow2(num: num, den: den, k: ee + 1_s64)
-    ee = ee + 1_s64
-  while not ratio_ge_pow2(num: num, den: den, k: ee)
-    ee = ee - 1_s64
-  var lsb = ee - (p - 1_s64)
-  if lsb < min_lsb
-    lsb = min_lsb
-  var n2 = num
-  var d2 = den
-  if lsb >= 0_s64
-    d2 = den.shl(bits: LLVM::int_truncate[S64, S32](lsb))
-  else
-    n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - lsb))
-  var q = div_round_half_even(n: n2, d: d2)
-  # A round-up can carry to 2^p; renormalize one bit.
-  var pbits = Integer(value: 1u64).shl(bits: LLVM::int_truncate[S64, S32](p))
-  if q.cmp(you: pbits) != ME_SMALL
-    q = q.shr(bits: 1_s32)
-    lsb = lsb + 1_s64
-  # Pack the IEEE fields (generic over the format's widths).
-  var sign = 0u64
-  if neg
-    sign = LLVM::shift_left(1u64, LLVM::add(a: mant_bits, b: exp_bits))
-  if q.is_zero()
-    return sign
-  var leading = LLVM::reinterpret_bits[U64, S64](q.bit_length())
-  var efinal = lsb + leading - 1_s64
-  var exp_all_ones = LLVM::sub(a: LLVM::shift_left(1u64, exp_bits), b: 1u64)
-  if efinal > emax
-    return LLVM::bit_or(a: sign, b: LLVM::shift_left(exp_all_ones, mant_bits))
-  var qbits = U64(from: q)
-  var mant_mask = LLVM::sub(a: LLVM::shift_left(1u64, mant_bits), b: 1u64)
-  if leading == p and efinal >= emin
-    var biased = LLVM::reinterpret_bits[S64, U64](efinal + bias)
-    var mant = LLVM::bit_and(a: qbits, b: mant_mask)
-    return LLVM::bit_or(a: sign, b: LLVM::bit_or(a: LLVM::shift_left(biased, mant_bits), b: mant))
-  return LLVM::bit_or(a: sign, b: qbits)
+    # Format constants: p = significand bits, min_lsb = smallest representable bit-
+    # exponent, emin/emax = unbiased normal-exponent range, bias, mant_bits = p-1,
+    # exp_bits = exponent field width. Defaults are B64; narrower formats override.
+    var p = 53_s64
+    var min_lsb = -1074_s64
+    var emin = -1022_s64
+    var emax = 1023_s64
+    var bias = 1023_s64
+    var mant_bits = 52u64
+    var exp_bits = 11u64
+    if fmt == 1_s32
+        p = 24_s64
+        min_lsb = -149_s64
+        emin = -126_s64
+        emax = 127_s64
+        bias = 127_s64
+        mant_bits = 23u64
+        exp_bits = 8u64
+    elseif fmt == 2_s32
+        p = 11_s64
+        min_lsb = -24_s64
+        emin = -14_s64
+        emax = 15_s64
+        bias = 15_s64
+        mant_bits = 10u64
+        exp_bits = 5u64
+    elseif fmt == 3_s32
+        p = 8_s64
+        min_lsb = -133_s64
+        emin = -126_s64
+        emax = 127_s64
+        bias = 127_s64
+        mant_bits = 7u64
+        exp_bits = 8u64
+    var num = num_in
+    var den = den_in
+    # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
+    var ee = (LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())) - 1_s64
+    while ratio_ge_pow2(num: num, den: den, k: ee + 1_s64)
+        ee = ee + 1_s64
+    while not ratio_ge_pow2(num: num, den: den, k: ee)
+        ee = ee - 1_s64
+    var lsb = ee - (p - 1_s64)
+    if lsb < min_lsb
+        lsb = min_lsb
+    var n2 = num
+    var d2 = den
+    if lsb >= 0_s64
+        d2 = den.shl(bits: LLVM::int_truncate[S64, S32](lsb))
+    else
+        n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - lsb))
+    var q = div_round_half_even(n: n2, d: d2)
+    # A round-up can carry to 2^p; renormalize one bit.
+    var pbits = Integer(value: 1u64).shl(bits: LLVM::int_truncate[S64, S32](p))
+    if q.cmp(you: pbits) != ME_SMALL
+        q = q.shr(bits: 1_s32)
+        lsb = lsb + 1_s64
+    # Pack the IEEE fields (generic over the format's widths).
+    var sign = 0u64
+    if neg
+        sign = LLVM::shift_left(1u64, LLVM::add(a: mant_bits, b: exp_bits))
+    if q.is_zero()
+        return sign
+    var leading = LLVM::reinterpret_bits[U64, S64](q.bit_length())
+    var efinal = lsb + leading - 1_s64
+    var exp_all_ones = LLVM::sub(a: LLVM::shift_left(1u64, exp_bits), b: 1u64)
+    if efinal > emax
+        return LLVM::bit_or(a: sign, b: LLVM::shift_left(exp_all_ones, mant_bits))
+    var qbits = U64(from: q)
+    var mant_mask = LLVM::sub(a: LLVM::shift_left(1u64, mant_bits), b: 1u64)
+    if leading == p and efinal >= emin
+        var biased = LLVM::reinterpret_bits[S64, U64](efinal + bias)
+        var mant = LLVM::bit_and(a: qbits, b: mant_mask)
+        return LLVM::bit_or(a: sign, b: LLVM::bit_or(a: LLVM::shift_left(biased, mant_bits), b: mant))
+    return LLVM::bit_or(a: sign, b: qbits)
 
 ### Validates a decimal float string and extracts (kind, neg, significand, dec_exp)
 ### where a finite magnitude equals significand × 10^dec_exp. kind: 0 finite,
 ### 1 NaN, 2 infinity. Throws {InvalidValueError} on malformed input.
 routine parse_float_components(from_text: Text, target: Text) -> FloatParsed
-  var len = from_text.count()
-  if len == 0u64
-    return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
-  var i = 0u64
-  var neg = false
-  var first = from_text[0u64]
-  if first == Character(0x002Bu32) or first == Character(0x002Du32)
-    neg = first == Character(0x002Du32)
-    i = 1u64
-    if i >= len
-      return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
-  var rest = len - i
-  if rest >= 3u64
-    var c0 = from_text[i].to_lowercase()
-    var c1 = from_text[i + 1u64].to_lowercase()
-    var c2 = from_text[i + 2u64].to_lowercase()
-    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
-      return FloatParsed(kind: 1_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
-    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      return FloatParsed(kind: 2_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
-    if rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      var c3 = from_text[i + 3u64].to_lowercase()
-      var c4 = from_text[i + 4u64].to_lowercase()
-      var c5 = from_text[i + 5u64].to_lowercase()
-      var c6 = from_text[i + 6u64].to_lowercase()
-      var c7 = from_text[i + 7u64].to_lowercase()
-      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
-        return FloatParsed(kind: 2_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
-  var m = Integer.zero()
-  var ten = Integer(value: 10u64)
-  var frac_digits = 0_s64
-  var seen_dot = false
-  var has_digit = false
-  var has_exp = false
-  var exp_val = 0_s64
-  var exp_neg = false
-  var exp_has_digit = false
-  while i < len
-    var ch = from_text[i]
-    if ch.is_numeric()
-      if has_exp
-        exp_has_digit = true
-        if exp_val < 1000000_s64
-          exp_val = exp_val * 10_s64 + S64(from: ch.digit_value())
-      else
-        has_digit = true
-        m = m.mul(other: ten).add(other: Integer(from: ch.digit_value()))
-        if seen_dot
-          frac_digits = frac_digits + 1_s64
-    elseif ch == Character(0x002Eu32)
-      if seen_dot or has_exp
+    var len = from_text.count()
+    if len == 0u64
         return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
-      seen_dot = true
-    elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
-      if has_exp or not has_digit
+    var i = 0u64
+    var neg = false
+    var first = from_text[0u64]
+    if first == Character(0x002Bu32) or first == Character(0x002Du32)
+        neg = first == Character(0x002Du32)
+        i = 1u64
+        if i >= len
+            return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+    var rest = len - i
+    if rest >= 3u64
+        var c0 = from_text[i].to_lowercase()
+        var c1 = from_text[i + 1u64].to_lowercase()
+        var c2 = from_text[i + 2u64].to_lowercase()
+        if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
+            return FloatParsed(kind: 1_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
+        if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+            return FloatParsed(kind: 2_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
+        if rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+            var c3 = from_text[i + 3u64].to_lowercase()
+            var c4 = from_text[i + 4u64].to_lowercase()
+            var c5 = from_text[i + 5u64].to_lowercase()
+            var c6 = from_text[i + 6u64].to_lowercase()
+            var c7 = from_text[i + 7u64].to_lowercase()
+            if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
+                return FloatParsed(kind: 2_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
+    var m = Integer.zero()
+    var ten = Integer(value: 10u64)
+    var frac_digits = 0_s64
+    var seen_dot = false
+    var has_digit = false
+    var has_exp = false
+    var exp_val = 0_s64
+    var exp_neg = false
+    var exp_has_digit = false
+    while i < len
+        var ch = from_text[i]
+        if ch.is_numeric()
+            if has_exp
+                exp_has_digit = true
+                if exp_val < 1000000_s64
+                    exp_val = exp_val * 10_s64 + S64(from: ch.digit_value())
+            else
+                has_digit = true
+                m = m.mul(other: ten).add(other: Integer(from: ch.digit_value()))
+                if seen_dot
+                    frac_digits = frac_digits + 1_s64
+        elseif ch == Character(0x002Eu32)
+            if seen_dot or has_exp
+                return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+            seen_dot = true
+        elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
+            if has_exp or not has_digit
+                return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+            has_exp = true
+            if i + 1u64 < len
+                var next_ch = from_text[i + 1u64]
+                if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
+                    exp_neg = next_ch == Character(0x002Du32)
+                    i = i + 1u64
+        else
+            return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+        i = i + 1u64
+    if not has_digit
         return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
-      has_exp = true
-      if i + 1u64 < len
-        var next_ch = from_text[i + 1u64]
-        if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
-          exp_neg = next_ch == Character(0x002Du32)
-          i = i + 1u64
-    else
-      return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
-    i = i + 1u64
-  if not has_digit
-    return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
-  if has_exp and not exp_has_digit
-    return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
-  var signed_exp = exp_val
-  if exp_neg
-    signed_exp = 0_s64 - exp_val
-  return FloatParsed(kind: 0_s32, is_neg: neg, digits: m.represent(), dec_exp: signed_exp - frac_digits)
+    if has_exp and not exp_has_digit
+        return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+    var signed_exp = exp_val
+    if exp_neg
+        signed_exp = 0_s64 - exp_val
+    return FloatParsed(kind: 0_s32, is_neg: neg, digits: m.represent(), dec_exp: signed_exp - frac_digits)
 
 # ----------------------------------------------------------------------------
 # Per-type entry points: rational -> IEEE 754 bit pattern (via round_and_pack)
@@ -1230,170 +1230,170 @@ routine parse_float_components(from_text: Text, target: Text) -> FloatParsed
 
 ### Rounds significand × 10^dec_exp to the nearest B64.
 routine b64_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B64
-  var m = Integer.from_literal(text: digits)
-  if m.is_zero()
-    var z = 0u64
-    if neg
-      z = 0x8000000000000000u64
-    return B64.from_bits(bits: z)
-  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
-  if mag > 320_s64
-    var big = 0x7FF0000000000000u64
-    if neg
-      big = 0xFFF0000000000000u64
-    return B64.from_bits(bits: big)
-  if mag < -330_s64
-    var zz = 0u64
-    if neg
-      zz = 0x8000000000000000u64
-    return B64.from_bits(bits: zz)
-  var num = m
-  var den = Integer.one()
-  if dec_exp >= 0_s64
-    num = m.mul(other: pow10_int(k: dec_exp))
-  else
-    den = pow10_int(k: 0_s64 - dec_exp)
-  var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 0_s32)
-  return B64.from_bits(bits: bits)
+    var m = Integer.from_literal(text: digits)
+    if m.is_zero()
+        var z = 0u64
+        if neg
+            z = 0x8000000000000000u64
+        return B64.from_bits(bits: z)
+    var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+    if mag > 320_s64
+        var big = 0x7FF0000000000000u64
+        if neg
+            big = 0xFFF0000000000000u64
+        return B64.from_bits(bits: big)
+    if mag < -330_s64
+        var zz = 0u64
+        if neg
+            zz = 0x8000000000000000u64
+        return B64.from_bits(bits: zz)
+    var num = m
+    var den = Integer.one()
+    if dec_exp >= 0_s64
+        num = m.mul(other: pow10_int(k: dec_exp))
+    else
+        den = pow10_int(k: 0_s64 - dec_exp)
+    var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 0_s32)
+    return B64.from_bits(bits: bits)
 
 ### Rounds significand × 10^dec_exp to the nearest B32 (single rounding).
 routine b32_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B32
-  var m = Integer.from_literal(text: digits)
-  if m.is_zero()
-    var z = 0u32
-    if neg
-      z = 0x80000000u32
-    return B32.from_bits(bits: z)
-  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
-  if mag > 320_s64
-    var big = 0x7F800000u32
-    if neg
-      big = 0xFF800000u32
-    return B32.from_bits(bits: big)
-  if mag < -330_s64
-    var zz = 0u32
-    if neg
-      zz = 0x80000000u32
-    return B32.from_bits(bits: zz)
-  var num = m
-  var den = Integer.one()
-  if dec_exp >= 0_s64
-    num = m.mul(other: pow10_int(k: dec_exp))
-  else
-    den = pow10_int(k: 0_s64 - dec_exp)
-  var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 1_s32)
-  return B32.from_bits(bits: LLVM::int_truncate[U64, U32](bits))
+    var m = Integer.from_literal(text: digits)
+    if m.is_zero()
+        var z = 0u32
+        if neg
+            z = 0x80000000u32
+        return B32.from_bits(bits: z)
+    var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+    if mag > 320_s64
+        var big = 0x7F800000u32
+        if neg
+            big = 0xFF800000u32
+        return B32.from_bits(bits: big)
+    if mag < -330_s64
+        var zz = 0u32
+        if neg
+            zz = 0x80000000u32
+        return B32.from_bits(bits: zz)
+    var num = m
+    var den = Integer.one()
+    if dec_exp >= 0_s64
+        num = m.mul(other: pow10_int(k: dec_exp))
+    else
+        den = pow10_int(k: 0_s64 - dec_exp)
+    var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 1_s32)
+    return B32.from_bits(bits: LLVM::int_truncate[U64, U32](bits))
 
 ### Rounds significand × 10^dec_exp to the nearest B16 (single rounding).
 routine b16_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B16
-  var m = Integer.from_literal(text: digits)
-  if m.is_zero()
-    var z = 0u16
-    if neg
-      z = 0x8000u16
-    return B16.from_bits(bits: z)
-  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
-  if mag > 320_s64
-    var big = 0x7C00u16
-    if neg
-      big = 0xFC00u16
-    return B16.from_bits(bits: big)
-  if mag < -330_s64
-    var zz = 0u16
-    if neg
-      zz = 0x8000u16
-    return B16.from_bits(bits: zz)
-  var num = m
-  var den = Integer.one()
-  if dec_exp >= 0_s64
-    num = m.mul(other: pow10_int(k: dec_exp))
-  else
-    den = pow10_int(k: 0_s64 - dec_exp)
-  var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 2_s32)
-  return B16.from_bits(bits: LLVM::int_truncate[U64, U16](bits))
+    var m = Integer.from_literal(text: digits)
+    if m.is_zero()
+        var z = 0u16
+        if neg
+            z = 0x8000u16
+        return B16.from_bits(bits: z)
+    var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+    if mag > 320_s64
+        var big = 0x7C00u16
+        if neg
+            big = 0xFC00u16
+        return B16.from_bits(bits: big)
+    if mag < -330_s64
+        var zz = 0u16
+        if neg
+            zz = 0x8000u16
+        return B16.from_bits(bits: zz)
+    var num = m
+    var den = Integer.one()
+    if dec_exp >= 0_s64
+        num = m.mul(other: pow10_int(k: dec_exp))
+    else
+        den = pow10_int(k: 0_s64 - dec_exp)
+    var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 2_s32)
+    return B16.from_bits(bits: LLVM::int_truncate[U64, U16](bits))
 
 ### Rounds significand × 10^dec_exp to the nearest BF16 (single rounding, ties to even).
 routine bf16_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> BF16
-  var m = Integer.from_literal(text: digits)
-  if m.is_zero()
-    var z = 0u16
-    if neg
-      z = 0x8000u16
-    return BF16.from_bits(bits: z)
-  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
-  if mag > 320_s64
-    var big = 0x7F80u16
-    if neg
-      big = 0xFF80u16
-    return BF16.from_bits(bits: big)
-  if mag < -330_s64
-    var zz = 0u16
-    if neg
-      zz = 0x8000u16
-    return BF16.from_bits(bits: zz)
-  var num = m
-  var den = Integer.one()
-  if dec_exp >= 0_s64
-    num = m.mul(other: pow10_int(k: dec_exp))
-  else
-    den = pow10_int(k: 0_s64 - dec_exp)
-  var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 3_s32)
-  return BF16.from_bits(bits: LLVM::int_truncate[U64, U16](bits))
+    var m = Integer.from_literal(text: digits)
+    if m.is_zero()
+        var z = 0u16
+        if neg
+            z = 0x8000u16
+        return BF16.from_bits(bits: z)
+    var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+    if mag > 320_s64
+        var big = 0x7F80u16
+        if neg
+            big = 0xFF80u16
+        return BF16.from_bits(bits: big)
+    if mag < -330_s64
+        var zz = 0u16
+        if neg
+            zz = 0x8000u16
+        return BF16.from_bits(bits: zz)
+    var num = m
+    var den = Integer.one()
+    if dec_exp >= 0_s64
+        num = m.mul(other: pow10_int(k: dec_exp))
+    else
+        den = pow10_int(k: 0_s64 - dec_exp)
+    var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 3_s32)
+    return BF16.from_bits(bits: LLVM::int_truncate[U64, U16](bits))
 
 ### Rounds significand × 10^dec_exp to the nearest B128 (single rounding, ties to even) and packs
 ### the IEEE 754 binary128 bit pattern: 113 significand bits, normal exponents -16382..16383,
 ### subnormals down to 2^-16494, overflow to infinity.
 routine b128_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B128
-  var sign = 0u64
-  if neg
-    sign = 1u64
-  var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  var m = Integer.from_literal(text: digits)
-  if m.is_zero()
-    return B128.from_bits(bits: sign_bit)
-  # value < 10^mag, so mag bounds the magnitude cheaply before any big power of ten is built.
-  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
-  if mag > 4940_s64
-    return B128.from_bits(bits: b128_inf(sign: sign))
-  if mag < -4970_s64
-    return B128.from_bits(bits: sign_bit)
-  var num = m
-  var den = Integer.one()
-  if dec_exp >= 0_s64
-    num = m.mul(other: pow10_int(k: dec_exp))
-  else
-    den = pow10_int(k: 0_s64 - dec_exp)
-  # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
-  var ee = (LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())) - 1_s64
-  while ratio_ge_pow2(num: num, den: den, k: ee + 1_s64)
-    ee = ee + 1_s64
-  while not ratio_ge_pow2(num: num, den: den, k: ee)
-    ee = ee - 1_s64
-  var lsb = ee - 112_s64
-  if lsb < -16494_s64
-    lsb = -16494_s64
-  var n2 = num
-  var d2 = den
-  if lsb >= 0_s64
-    d2 = den.shl(bits: LLVM::int_truncate[S64, S32](lsb))
-  else
-    n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - lsb))
-  var q = div_round_half_even(n: n2, d: d2)
-  # A round-up can carry to 2^113; renormalize one bit.
-  if q.cmp(you: Integer(value: 1u64).shl(bits: 113_s32)) != ME_SMALL
-    q = q.shr(bits: 1_s32)
-    lsb = lsb + 1_s64
-  if q.is_zero()
-    return B128.from_bits(bits: sign_bit)
-  var leading = LLVM::reinterpret_bits[U64, S64](q.bit_length())
-  var efinal = lsb + leading - 1_s64
-  if efinal > 16383_s64
-    return B128.from_bits(bits: b128_inf(sign: sign))
-  var q_hi = q.shr(bits: 64_s32)
-  var q_lo = q.sub(other: q_hi.shl(bits: 64_s32))
-  var qbits = LLVM::bit_or(a: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](U64(from: q_hi)), bits: 64_u128), b: LLVM::zero_extend[U64, U128](U64(from: q_lo)))
-  if leading == 113_s64 and efinal >= -16382_s64
-    var biased = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](efinal + 16383_s64))
-    var mant = LLVM::bit_and(a: qbits, b: LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: 112_u128), b: 1_u128))
-    qbits = LLVM::bit_or(a: LLVM::shift_left(value: biased, bits: 112_u128), b: mant)
-  return B128.from_bits(bits: LLVM::bit_or(a: sign_bit, b: qbits))
+    var sign = 0u64
+    if neg
+        sign = 1u64
+    var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    var m = Integer.from_literal(text: digits)
+    if m.is_zero()
+        return B128.from_bits(bits: sign_bit)
+    # value < 10^mag, so mag bounds the magnitude cheaply before any big power of ten is built.
+    var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+    if mag > 4940_s64
+        return B128.from_bits(bits: b128_inf(sign: sign))
+    if mag < -4970_s64
+        return B128.from_bits(bits: sign_bit)
+    var num = m
+    var den = Integer.one()
+    if dec_exp >= 0_s64
+        num = m.mul(other: pow10_int(k: dec_exp))
+    else
+        den = pow10_int(k: 0_s64 - dec_exp)
+    # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
+    var ee = (LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())) - 1_s64
+    while ratio_ge_pow2(num: num, den: den, k: ee + 1_s64)
+        ee = ee + 1_s64
+    while not ratio_ge_pow2(num: num, den: den, k: ee)
+        ee = ee - 1_s64
+    var lsb = ee - 112_s64
+    if lsb < -16494_s64
+        lsb = -16494_s64
+    var n2 = num
+    var d2 = den
+    if lsb >= 0_s64
+        d2 = den.shl(bits: LLVM::int_truncate[S64, S32](lsb))
+    else
+        n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - lsb))
+    var q = div_round_half_even(n: n2, d: d2)
+    # A round-up can carry to 2^113; renormalize one bit.
+    if q.cmp(you: Integer(value: 1u64).shl(bits: 113_s32)) != ME_SMALL
+        q = q.shr(bits: 1_s32)
+        lsb = lsb + 1_s64
+    if q.is_zero()
+        return B128.from_bits(bits: sign_bit)
+    var leading = LLVM::reinterpret_bits[U64, S64](q.bit_length())
+    var efinal = lsb + leading - 1_s64
+    if efinal > 16383_s64
+        return B128.from_bits(bits: b128_inf(sign: sign))
+    var q_hi = q.shr(bits: 64_s32)
+    var q_lo = q.sub(other: q_hi.shl(bits: 64_s32))
+    var qbits = LLVM::bit_or(a: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](U64(from: q_hi)), bits: 64_u128), b: LLVM::zero_extend[U64, U128](U64(from: q_lo)))
+    if leading == 113_s64 and efinal >= -16382_s64
+        var biased = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](efinal + 16383_s64))
+        var mant = LLVM::bit_and(a: qbits, b: LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: 112_u128), b: 1_u128))
+        qbits = LLVM::bit_or(a: LLVM::shift_left(value: biased, bits: 112_u128), b: mant)
+    return B128.from_bits(bits: LLVM::bit_or(a: sign_bit, b: qbits))

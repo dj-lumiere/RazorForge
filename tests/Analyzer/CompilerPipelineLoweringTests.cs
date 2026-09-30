@@ -28,8 +28,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                          var pair = (1_s32, 2_s32)
-                          return
+                            var pair = (1_s32, 2_s32)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -48,10 +48,10 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine helper(value: S32) -> S32
-                          return value
+                            return value
 
                         routine test() -> S32
-                          return helper(1_s32)
+                            return helper(1_s32)
                         """;
 
         Program program = Parse(source: source);
@@ -72,10 +72,10 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine helper(value: S32) -> S32
-                          return value
+                            return value
 
                         routine test() -> S32
-                          return helper(1_s32)
+                            return helper(1_s32)
                         """;
 
         Program program = Parse(source: source);
@@ -99,8 +99,8 @@ public class CompilerPipelineLoweringTests
                         import Collections.BitList
 
                         routine test()
-                          var bits = BitList()
-                          return
+                            var bits = BitList()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -121,8 +121,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                          var maybe = Maybe[S32](present: true, value: 1_s32)
-                          return
+                            var maybe = Maybe[S32](present: true, value: 1_s32)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -144,8 +144,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                          var ptr = hijacked_none[S32]()
-                          return
+                            var ptr = hijacked_none[S32]()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -172,14 +172,14 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].fetch() -> T
-                          return me.value
+                            return me.value
 
                         routine start() -> S32
-                          var box = Box[S32](value: 7_s32)
-                          return box.fetch()
+                            var box = Box[S32](value: 7_s32)
+                            return box.fetch()
                         """;
 
         Program program = Parse(source: source);
@@ -208,14 +208,14 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].none_ptr() -> Box[T]
-                          return Box[T](value: me.value)
+                            return Box[T](value: me.value)
 
                         routine start() -> Box[S32]
-                          var box = Box[S32](value: 7_s32)
-                          return box.none_ptr()
+                            var box = Box[S32](value: 7_s32)
+                            return box.none_ptr()
                         """;
 
         Program program = Parse(source: source);
@@ -245,17 +245,17 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].peek() -> T
-                          return me.value
+                            return me.value
 
                         routine Box[T].copy_value() -> T
-                          return me.peek()
+                            return me.peek()
 
                         routine start() -> S32
-                          var box = Box[S32](value: 7_s32)
-                          return box.copy_value()
+                            var box = Box[S32](value: 7_s32)
+                            return box.copy_value()
                         """;
 
         Program program = Parse(source: source);
@@ -280,12 +280,12 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test(value: S32) -> S32
-                          var result = when value
-                            == 1 =>
-                              var doubled = value * 2_s32
-                              becomes doubled
-                            else => 0_s32
-                          return result
+                            var result = when value
+                                == 1 =>
+                                    var doubled = value * 2_s32
+                                    becomes doubled
+                                else => 0_s32
+                            return result
                         """;
 
         Program program = Parse(source: source);
@@ -306,8 +306,8 @@ public class CompilerPipelineLoweringTests
         // back-infer a lambda parameter's type from its body (RF-S638). Annotate `x`.
         string source = """
                         routine test() -> S32
-                          var double_it = (x: S32) => x * 2_s32
-                          return 0_s32
+                            var double_it = (x: S32) => x * 2_s32
+                            return 0_s32
                         """;
 
         Program program = Parse(source: source);
@@ -326,8 +326,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                          var pair = (1_s32, 2_s32)
-                          return
+                            var pair = (1_s32, 2_s32)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -358,8 +358,8 @@ public class CompilerPipelineLoweringTests
         string source = """
                         import Collections
                         routine test()
-                          var items: PriorityQueue[S64, Text] = {1: "high", 10: "low"}
-                          return
+                            var items: PriorityQueue[S64, Text] = {1: "high", 10: "low"}
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -389,12 +389,12 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                          var items = [[1_s64, 2_s64, 3_s64], [4_s64, 5_s64], [6_s64], []]
-                          return
+                            var items = [[1_s64, 2_s64, 3_s64], [4_s64, 5_s64], [6_s64], []]
+                            return
 
                         routine start()
-                          test()
-                          return
+                            test()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -446,12 +446,12 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         record T
-                          a: S32
+                            a: S32
 
                         routine start()
-                          var s = T(a: 9_s32).represent()
-                          var e = (1.0_d128).erf()
-                          return
+                            var s = T(a: 9_s32).represent()
+                            var e = (1.0_d128).erf()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -487,8 +487,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine start()
-                          var value = try 7_s32.floordiv(2_s32)
-                          return
+                            var value = try 7_s32.floordiv(2_s32)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -533,9 +533,9 @@ public class CompilerPipelineLoweringTests
         // param with a `given` capture must be parenthesized.
         string source = """
                         routine test() -> S32
-                          var factor = 100_s32
-                          var scale = (x: S32) given factor => x * factor
-                          return 0_s32
+                            var factor = 100_s32
+                            var scale = (x: S32) given factor => x * factor
+                            return 0_s32
                         """;
 
         Program program = Parse(source: source);
@@ -568,13 +568,13 @@ public class CompilerPipelineLoweringTests
                         import Collections.BitList
 
                         routine test()
-                          var bits = BitList()
-                          bits.add_last(true)
-                          return
+                            var bits = BitList()
+                            bits.add_last(true)
+                            return
 
                         routine start()
-                          test()
-                          return
+                            test()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -605,8 +605,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine start()
-                          var items = List[S64]()
-                          return
+                            var items = List[S64]()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -645,11 +645,11 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> S64
-                          return 1_s64 +% 2_s64
+                            return 1_s64 +% 2_s64
 
                         routine start()
-                          discard test()
-                          return
+                            discard test()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -682,11 +682,11 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> Array[Byte, 8]
-                          return 1_u64.to_bytes_le()
+                            return 1_u64.to_bytes_le()
 
                         routine start()
-                          discard test()
-                          return
+                            discard test()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -725,10 +725,10 @@ public class CompilerPipelineLoweringTests
                         import IO/Console
 
                         routine start()
-                          var grid = Array[Array[Text, 2], 2]()
-                          grid[1][0] = "hi"
-                          show(grid[1][0])
-                          return
+                            var grid = Array[Array[Text, 2], 2]()
+                            grid[1][0] = "hi"
+                            show(grid[1][0])
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -765,16 +765,16 @@ public class CompilerPipelineLoweringTests
                         import Collections.BitList
 
                         routine test(bits: BitList) -> U8!
-                          return bits.to_u8()
+                            return bits.to_u8()
 
                         routine trigger(bits: BitList) -> U8
-                          discard try bits.to_u8()
-                          return 0u8
+                            discard try bits.to_u8()
+                            return 0u8
 
                         routine start()
-                          var bits = BitList()
-                          discard trigger(bits: steal bits)
-                          return
+                            var bits = BitList()
+                            discard trigger(bits: steal bits)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -813,7 +813,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                          return
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -867,10 +867,10 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         dangerous routine wrap[T](value: T) -> Hijacked[T]
-                          return value.hijack()
+                            return value.hijack()
 
                         dangerous routine start(value: S64) -> Hijacked[S64]
-                          return wrap[S64](value)
+                            return wrap[S64](value)
                         """;
 
         Program program = Parse(source: source);
@@ -901,7 +901,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         dangerous routine start() -> Hijacked[S64]
-                          return hijacked_from[S64](0_addr)
+                            return hijacked_from[S64](0_addr)
                         """;
 
         Program program = Parse(source: source);
@@ -936,16 +936,16 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].peek() -> T
-                          return me.value
+                            return me.value
 
                         routine make_box() -> Box[S32]
-                          return Box[S32](value: 7_s32)
+                            return Box[S32](value: 7_s32)
 
                         routine test() -> S32
-                          return make_box().peek()
+                            return make_box().peek()
                         """;
 
         Program program = Parse(source: source);
@@ -978,7 +978,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         dangerous routine test(ptr: Hijacked[S64]) -> S64
-                          return ptr.peek()
+                            return ptr.peek()
                         """;
 
         Program program = Parse(source: source);
@@ -1014,14 +1014,14 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine helper(value: S32) -> S32
-                          return value
+                            return value
 
                         routine test(text: Text) -> S32
-                          return helper(text.count().S32())
+                            return helper(text.count().S32())
 
                         routine start()
-                          discard test(text: "")
-                          return
+                            discard test(text: "")
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -1056,7 +1056,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> None
-                          return
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -1114,10 +1114,10 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine helper(value: S32) -> S32
-                          return value
+                            return value
 
                         routine test!(text: Text) -> S32
-                          return helper(text.count().S32())
+                            return helper(text.count().S32())
                         """;
 
         Program program = Parse(source: source);
@@ -1168,7 +1168,7 @@ public class CompilerPipelineLoweringTests
                         preset LIMIT: S64 = 10_s64
 
                         routine test() -> S64
-                          return LIMIT
+                            return LIMIT
                         """;
 
         Program program = Parse(source: source);
@@ -1198,7 +1198,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> Character
-                          return Character(65_u32)
+                            return Character(65_u32)
                         """;
 
         Program program = Parse(source: source);
@@ -1234,7 +1234,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> None
-                          return
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -1265,7 +1265,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test(dict: Dict[S64, S64], key: S64) -> S64
-                          return dict[key]
+                            return dict[key]
                         """;
 
         Program program = Parse(source: source);
@@ -1299,10 +1299,10 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine helper(value: S32) -> S32
-                          return value
+                            return value
 
                         routine test() -> S32
-                          return helper(1_s32)
+                            return helper(1_s32)
                         """;
 
         Program program = Parse(source: source);
@@ -1339,18 +1339,18 @@ public class CompilerPipelineLoweringTests
 
                         entity Buffer[T, N]
                         needs Address N
-                          data: T
+                            data: T
 
                         routine Buffer[T, N].first() -> T
-                          return me.data
+                            return me.data
 
                         routine test(buf: Buffer[U8, WIDTH]) -> U8
-                          return buf.first()
+                            return buf.first()
 
                         routine start()
-                          var buf = Buffer[U8, WIDTH](data: 1u8)
-                          test(steal buf)
-                          return
+                            var buf = Buffer[U8, WIDTH](data: 1u8)
+                            test(steal buf)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -1396,7 +1396,7 @@ public class CompilerPipelineLoweringTests
                         import BuilderQuery
 
                         routine start() -> ByteSize
-                          return S64.data_size()
+                            return S64.data_size()
                         """;
 
         Program program = Parse(source: source);
@@ -1433,10 +1433,10 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         dangerous routine wrap_addr[T](addr: Address) -> Hijacked[T]
-                          return hijacked_from[T](addr)
+                            return hijacked_from[T](addr)
 
                         dangerous routine start() -> Hijacked[S64]
-                          return wrap_addr[S64](0_addr)
+                            return wrap_addr[S64](0_addr)
                         """;
 
         Program program = Parse(source: source);
@@ -1473,7 +1473,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         dangerous routine start(value: S64) -> Hijacked[S64]
-                          return value.hijack()
+                            return value.hijack()
                         """;
 
         Program program = Parse(source: source);

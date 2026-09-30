@@ -12,15 +12,15 @@ import Collections
 @overridable
 routine T.represent() -> Text
 needs AnyType T
-  var result = me.type_name() + "("
-  var first = true
-  expand m in openmemvarof(T)
-    if not first
-      result = result + ", "
-    result = result + nameof(m) + ": " + me.$nameof(m).represent()
-    first = false
-  result = result + ")"
-  return result
+    var result = me.type_name() + "("
+    var first = true
+    expand m in openmemvarof(T)
+        if not first
+            result = result + ", "
+        result = result + nameof(m) + ": " + me.$nameof(m).represent()
+        first = false
+    result = result + ")"
+    return result
 
 ### The form a value takes as a CONTAINER ELEMENT: stringy leaves are quoted (Text/Bytes in `"…"`,
 ### Character/Byte in `'…'`) so nested strings print delimited (`["a", "b"]` / `['a', 'b']`), while
@@ -30,12 +30,12 @@ needs AnyType T
 ### on every element; the top-level `represent()` stays bare.
 routine nested_repr(value: T) -> Text
 needs AnyType T
-  when T
-    is Text => return "\"" + value.represent() + "\""
-    is Bytes => return "\"" + value.represent() + "\""
-    is Character => return "'" + value.represent() + "'"
-    is Byte => return "'" + value.represent() + "'"
-    else => return value.represent()
+    when T
+        is Text => return "\"" + value.represent() + "\""
+        is Bytes => return "\"" + value.represent() + "\""
+        is Character => return "'" + value.represent() + "'"
+        is Byte => return "'" + value.represent() + "'"
+        else => return value.represent()
 
 ### Variant `represent()`: TYPE-dispatch on the live arm — `TypeName(payload_repr)`, or `TypeName(none)`
 ### for the absent arm. The `@override needs VariantType T` gate makes the wired synthesizer pick this
@@ -44,10 +44,10 @@ needs AnyType T
 @override
 routine T.represent() -> Text
 needs VariantType T
-  when me
-    is None => return me.type_name() + "(none)"
-    expand m in branchof(T)
-      is $typeof(m) v => return me.type_name() + "(" + v.represent() + ")"
+    when me
+        is None => return me.type_name() + "(none)"
+        expand m in branchof(T)
+            is $typeof(m) v => return me.type_name() + "(" + v.represent() + ")"
 
 ### Variant `diagnose()`: `Module.Variant(type_id: <arm id>, <arm diagnose>)` — TAG-dispatch via
 ### `branchof`; the live arm's `typeidof(m)` (its stable type id) and the payload's `diagnose()`. The absent
@@ -56,10 +56,10 @@ needs VariantType T
 @override
 routine T.diagnose() -> Text
 needs VariantType T
-  when me
-    is None => return me.full_type_name() + "(type_id: 0, none)"
-    expand m in branchof(T)
-      is $typeof(m) v => return me.full_type_name() + "(type_id: " + typeidof(m).represent() + ", " + v.diagnose() + ")"
+    when me
+        is None => return me.full_type_name() + "(type_id: 0, none)"
+        expand m in branchof(T)
+            is $typeof(m) v => return me.full_type_name() + "(type_id: " + typeidof(m).represent() + ", " + v.diagnose() + ")"
 
 ### Choice `represent()`: VALUE-dispatch on the S32 discriminant via `caseof`, returning the bare case
 ### name (`READ`). `S32(from: me)` reads the discriminant; `$valueof(c)` is each case's constant. The
@@ -67,19 +67,19 @@ needs VariantType T
 @override
 routine T.represent() -> Text
 needs ChoiceType T
-  expand c in caseof(T)
-    if S32(from: me) == $valueof(c)
-      return nameof(c)
-  pierce LogicBreachedError()
+    expand c in caseof(T)
+        if S32(from: me) == $valueof(c)
+            return nameof(c)
+    pierce LogicBreachedError()
 
 ### Choice `diagnose()`: `Module.ChoiceName(id: <discriminant>, CaseName)`, matching the C# builder.
 @override
 routine T.diagnose() -> Text
 needs ChoiceType T
-  expand c in caseof(T)
-    if S32(from: me) == $valueof(c)
-      return me.full_type_name() + "(id: " + S32(from: me).represent() + ", " + nameof(c) + ")"
-  pierce LogicBreachedError()
+    expand c in caseof(T)
+        if S32(from: me) == $valueof(c)
+            return me.full_type_name() + "(id: " + S32(from: me).represent() + ", " + nameof(c) + ")"
+    pierce LogicBreachedError()
 
 ### Flags `represent()`: the ON members joined by `" and "` (`READ and WRITE`), or `<none>` if the
 ### bitmask is empty. A flags value is a COMBINATION, so `caseof` ACCUMULATES (no `when`): a SUBSET
@@ -87,40 +87,40 @@ needs ChoiceType T
 @override
 routine T.represent() -> Text
 needs FlagsType T
-  var result = ""
-  var first = true
-  expand c in caseof(T)
-    if (U64(from: me) & $valueof(c)) != 0u64
-      if first
-        result = nameof(c)
-      else
-        result = result + " and " + nameof(c)
-      first = false
-  if first
-    result = "<none>"
-  return result
+    var result = ""
+    var first = true
+    expand c in caseof(T)
+        if (U64(from: me) & $valueof(c)) != 0u64
+            if first
+                result = nameof(c)
+            else
+                result = result + " and " + nameof(c)
+            first = false
+    if first
+        result = "<none>"
+    return result
 
 ### Flags `diagnose()`: `Module.FlagsName(value: %<bits>, <members>)` — `<bits>` is LSB-first, one
 ### digit per declared member in declaration order ('1' if set), matching the C# builder.
 @override
 routine T.diagnose() -> Text
 needs FlagsType T
-  var result = ""
-  var first = true
-  var bits = "%"
-  expand c in caseof(T)
-    if (U64(from: me) & $valueof(c)) != 0u64
-      if first
-        result = nameof(c)
-      else
-        result = result + " and " + nameof(c)
-      first = false
-      bits = bits + "1"
-    else
-      bits = bits + "0"
-  if first
-    result = "<none>"
-  return me.full_type_name() + "(value: " + bits + ", " + result + ")"
+    var result = ""
+    var first = true
+    var bits = "%"
+    expand c in caseof(T)
+        if (U64(from: me) & $valueof(c)) != 0u64
+            if first
+                result = nameof(c)
+            else
+                result = result + " and " + nameof(c)
+            first = false
+            bits = bits + "1"
+        else
+            bits = bits + "0"
+    if first
+        result = "<none>"
+    return me.full_type_name() + "(value: " + bits + ", " + result + ")"
 
 ### Choice `all_cases()`: every declared case value, in declaration order. `caseof` yields each case;
 ### `$valueof(c)` is its S32 discriminant, reinterpreted back to `Me` inline. This is the SAFE reverse: the
@@ -130,20 +130,20 @@ needs FlagsType T
 @overridable
 routine T.all_cases() -> List[Me]
 needs ChoiceType T
-  var result = List[Me]()
-  expand c in caseof(T)
-    result.add_last(value: LLVM::reinterpret_bits[S32, Me]($valueof(c)))
-  return result
+    var result = List[Me]()
+    expand c in caseof(T)
+        result.add_last(value: LLVM::reinterpret_bits[S32, Me]($valueof(c)))
+    return result
 
 ### Flags `all_cases()`: every declared single-bit member value; `$valueof(c)` is its U64 bit, reinterpreted
 ### back to `Me` inline (safe — a declared member bit).
 @overridable
 routine T.all_cases() -> List[Me]
 needs FlagsType T
-  var result = List[Me]()
-  expand c in caseof(T)
-    result.add_last(value: LLVM::reinterpret_bits[U64, Me]($valueof(c)))
-  return result
+    var result = List[Me]()
+    expand c in caseof(T)
+        result.add_last(value: LLVM::reinterpret_bits[U64, Me]($valueof(c)))
+    return result
 
 ### Choice/Flags `count()`: the number of declared cases/members. `caseof` unrolls at buildtime into one
 ### `n +% 1` per declared case, so the sum constant-folds to the case count — no runtime iteration remains.
@@ -152,18 +152,18 @@ needs FlagsType T
 @overridable
 routine T.count() -> U64
 needs ChoiceType T
-  var n = 0u64
-  expand c in caseof(T)
-    n = n +% 1u64
-  return n
+    var n = 0u64
+    expand c in caseof(T)
+        n = n +% 1u64
+    return n
 
 @overridable
 routine T.count() -> U64
 needs FlagsType T
-  var n = 0u64
-  expand c in caseof(T)
-    n = n +% 1u64
-  return n
+    var n = 0u64
+    expand c in caseof(T)
+        n = n +% 1u64
+    return n
 
 ### Tuple `represent()`: the SPECIAL tuple format `(v0, v1, …)` — no type name, no field names, each
 ### element via its own `represent`. Distinct from the record `TypeName(field: value)` shape, hence the
@@ -171,28 +171,28 @@ needs FlagsType T
 @override
 routine T.represent() -> Text
 needs TupleType T
-  var result = "("
-  var first = true
-  expand m in allmemvarof(T)
-    if not first
-      result = result + ", "
-    result = result + me.$nameof(m).represent()
-    first = false
-  return result + ")"
+    var result = "("
+    var first = true
+    expand m in allmemvarof(T)
+        if not first
+            result = result + ", "
+        result = result + me.$nameof(m).represent()
+        first = false
+    return result + ")"
 
 ### Tuple `diagnose()`: `Module.Tuple[…](v0, v1, …)` — the qualified type name prefixed onto the same
 ### element walk (elements still render via `represent`, not `diagnose`, matching the C# builder).
 @override
 routine T.diagnose() -> Text
 needs TupleType T
-  var result = me.full_type_name() + "("
-  var first = true
-  expand m in allmemvarof(T)
-    if not first
-      result = result + ", "
-    result = result + me.$nameof(m).represent()
-    first = false
-  return result + ")"
+    var result = me.full_type_name() + "("
+    var first = true
+    expand m in allmemvarof(T)
+        if not first
+            result = result + ", "
+        result = result + me.$nameof(m).represent()
+        first = false
+    return result + ")"
 
 ### Routine values: `represent`/`diagnose` show the SIGNATURE (the routine type's name, e.g.
 ### `Routine[(S32,), S32]`) — executable code has no field structure to walk. `serialize` boxes that same
@@ -202,17 +202,17 @@ needs TupleType T
 @override
 routine T.represent() -> Text
 needs RoutineType T
-  return me.type_name()
+    return me.type_name()
 
 @override
 routine T.diagnose() -> Text
 needs RoutineType T
-  return me.full_type_name()
+    return me.full_type_name()
 
 @override
 routine T.serialize() -> SerialValue
 needs RoutineType T
-  return SerialValue(from: me.represent())
+    return SerialValue(from: me.represent())
 
 ### Default `crash_title()` for a crashable that declares none: the bare type name. Overridable — a
 ### user `@override crash_title` wins. A `needs CrashableType T` derive (not a hand-written wired body)
@@ -221,14 +221,14 @@ needs RoutineType T
 @overridable
 routine T.crash_title() -> Text
 needs CrashableType T
-  return me.type_name()
+    return me.type_name()
 
 ### Default `crash_message()` for a crashable that declares none: falls back to the title (matching the
 ### deleted WiredRoutinePass default). Overridable — a user `@override crash_message` wins.
 @overridable
 routine T.crash_message() -> Text
 needs CrashableType T
-  return me.crash_title()
+    return me.crash_title()
 
 ### Crashable `represent()`: the human-readable message (`crash_message()`), NOT the record field walk — a
 ### crashable is surfaced to users, logs and `f"{err}"` by its message. The `needs CrashableType T` kind gate
@@ -237,7 +237,7 @@ needs CrashableType T
 @override
 routine T.represent() -> Text
 needs CrashableType T
-  return me.crash_message()
+    return me.crash_message()
 
 ### Crashable `diagnose()`: `Module.CrashableName(<crash_message>[, field: value, …])` — the qualified type
 ### name, the message as the first element, then each declared field via its own `represent` (matching the
@@ -245,10 +245,10 @@ needs CrashableType T
 @override
 routine T.diagnose() -> Text
 needs CrashableType T
-  var result = me.full_type_name() + "(" + me.crash_message()
-  expand m in allmemvarof(T)
-    result = result + ", " + nameof(m) + ": " + me.$nameof(m).represent()
-  return result + ")"
+    var result = me.full_type_name() + "(" + me.crash_message()
+    expand m in allmemvarof(T)
+        result = result + ", " + nameof(m) + ": " + me.$nameof(m).represent()
+    return result + ")"
 
 ### A routine VALUE (`{ptr fn, ptr bound}`) owns no heap resource that a holding field is responsible for —
 ### a captureless function pointer, or a bound word managed elsewhere — so its teardown is a no-op. The
@@ -258,7 +258,7 @@ needs CrashableType T
 @override
 routine T.destroy()
 needs RoutineType T
-  return
+    return
 
 ### The auto-derived default `diagnose()` for any record: `Module.TypeName(field: value, …)`. Uses the
 ### fully-qualified name and shows ALL fields (secret ones prefixed `[secret] ` via `visibilityof`); each
@@ -266,17 +266,17 @@ needs RoutineType T
 @overridable
 routine T.diagnose() -> Text
 needs AnyType T
-  var result = me.full_type_name() + "("
-  var first = true
-  expand m in allmemvarof(T)
-    if not first
-      result = result + ", "
-    if visibilityof(m) == SECRET
-      result = result + "[secret] "
-    result = result + nameof(m) + ": " + me.$nameof(m).represent()
-    first = false
-  result = result + ")"
-  return result
+    var result = me.full_type_name() + "("
+    var first = true
+    expand m in allmemvarof(T)
+        if not first
+            result = result + ", "
+        if visibilityof(m) == SECRET
+            result = result + "[secret] "
+        result = result + nameof(m) + ": " + me.$nameof(m).represent()
+        first = false
+    result = result + ")"
+    return result
 
 ### The auto-derived default `eq()` for any record/entity/tuple: equal when every member variable is
 ### equal. Written as the universal `@overridable routine T.eq()`; `ne` is derived from this by the
@@ -285,10 +285,10 @@ needs AnyType T
 @overridable
 routine T.eq(you: T) -> Bool
 needs T obeys Equatable
-  expand m in allmemvarof(T)
-    if me.$nameof(m) != you.$nameof(m)
-      return false
-  return true
+    expand m in allmemvarof(T)
+        if me.$nameof(m) != you.$nameof(m)
+            return false
+    return true
 
 ### The auto-derived default `cmp()` for any record/entity/tuple: lexicographic comparison in
 ### declaration order, returning at the first non-`SAME` member. Written as the universal
@@ -297,10 +297,10 @@ needs T obeys Equatable
 @overridable
 routine T.cmp(you: T) -> ComparisonSign
 needs T obeys Comparable
-  expand m in allmemvarof(T)
-    if me.$nameof(m).cmp(you: you.$nameof(m)) != SAME
-      return me.$nameof(m).cmp(you: you.$nameof(m))
-  return SAME
+    expand m in allmemvarof(T)
+        if me.$nameof(m).cmp(you: you.$nameof(m)) != SAME
+            return me.$nameof(m).cmp(you: you.$nameof(m))
+    return SAME
 
 ### A choice value IS its S32 discriminant and a flags value IS its U64 bitmask (both are the raw backing
 ### scalar at the machine level), so `S32(from: choice)` / `U64(from: flags)` are pure representation
@@ -310,11 +310,11 @@ needs T obeys Comparable
 ### lowering, read the discriminant/bitmask through these.
 routine S32(from: T) -> S32
 needs ChoiceType T
-  return LLVM::reinterpret_bits[T, S32](from)
+    return LLVM::reinterpret_bits[T, S32](from)
 
 routine U64(from: T) -> U64
 needs FlagsType T
-  return LLVM::reinterpret_bits[T, U64](from)
+    return LLVM::reinterpret_bits[T, U64](from)
 
 ### Choice `eq`/`cmp`: a choice holds EXACTLY ONE case, so equality and ordering are just a compare of
 ### the S32 discriminant — NOT the record field-walk above (a choice has no member variables, so
@@ -324,12 +324,12 @@ needs FlagsType T
 @override
 routine T.eq(you: T) -> Bool
 needs ChoiceType T
-  return S32(from: me) == S32(from: you)
+    return S32(from: me) == S32(from: you)
 
 @override
 routine T.cmp(you: T) -> ComparisonSign
 needs ChoiceType T
-  return S32(from: me).cmp(you: S32(from: you))
+    return S32(from: me).cmp(you: S32(from: you))
 
 ### Choice `hash`: a choice IS its S32 discriminant, so hashing reinterprets to the integral identity
 ### (`S64(from: me)`, the ChoiceType conversion) and defers to the hand-written `S64` keyed hash. Without
@@ -337,7 +337,7 @@ needs ChoiceType T
 @override
 routine T.hash(k0: U64, k1: U64) -> U64
 needs ChoiceType T
-  return S64(from: me).hash(k0: k0, k1: k1)
+    return S64(from: me).hash(k0: k0, k1: k1)
 
 ### Flags `eq`: EXACT bitmask equality (`perms == READ` means "exactly READ, nothing else"). A flags value
 ### is a SET of bits, so membership/subset ("is READ on?") is the separate `in` operator, never `==`. Like
@@ -346,7 +346,7 @@ needs ChoiceType T
 @override
 routine T.eq(you: T) -> Bool
 needs FlagsType T
-  return U64(from: me) == U64(from: you)
+    return U64(from: me) == U64(from: you)
 
 ### Flags bitwise combinators: `a and b` (union) lowers to `bitor`, `a but b` (intersection) to `bitand`;
 ### `bitxor` for symmetry. A flags value IS its U64 bitmask, so each reads both operands as U64, applies the
@@ -356,31 +356,31 @@ needs FlagsType T
 @override
 routine T.bitor(you: T) -> Me
 needs FlagsType T
-  return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitor(you: U64(from: you)))
+    return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitor(you: U64(from: you)))
 
 @override
 routine T.bitand(you: T) -> Me
 needs FlagsType T
-  return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitand(you: U64(from: you)))
+    return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitand(you: U64(from: you)))
 
 @override
 routine T.bitxor(you: T) -> Me
 needs FlagsType T
-  return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitxor(you: U64(from: you)))
+    return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitxor(you: U64(from: you)))
 
 ### Flags `all_off` (empty mask) / `all_on` (union of every declared member bit, folded over `caseof`).
 @override
 routine T.all_off() -> Me
 needs FlagsType T
-  return LLVM::reinterpret_bits[U64, Me](0u64)
+    return LLVM::reinterpret_bits[U64, Me](0u64)
 
 @override
 routine T.all_on() -> Me
 needs FlagsType T
-  var mask = 0u64
-  expand c in caseof(T)
-    mask = mask.bitor(you: $valueof(c))
-  return LLVM::reinterpret_bits[U64, Me](mask)
+    var mask = 0u64
+    expand c in caseof(T)
+        mask = mask.bitor(you: $valueof(c))
+    return LLVM::reinterpret_bits[U64, Me](mask)
 
 ### The auto-derived ordering helpers `lt`/`le`/`gt`/`ge` for any Comparable type, derived from `cmp`
 ### (`me.cmp(you)` is `ME_SMALL`/`SAME`/`ME_LARGE`). These used to be emitted by the C# DerivedOperatorPass,
@@ -389,19 +389,19 @@ needs FlagsType T
 ### so `a < b` (-> `a.lt(b)`) resolves for Character, numerics, records, collections uniformly.
 routine T.lt(you: T) -> Bool
 needs T obeys Comparable
-  return me.cmp(you: you) == ME_SMALL
+    return me.cmp(you: you) == ME_SMALL
 
 routine T.le(you: T) -> Bool
 needs T obeys Comparable
-  return me.cmp(you: you) != ME_LARGE
+    return me.cmp(you: you) != ME_LARGE
 
 routine T.gt(you: T) -> Bool
 needs T obeys Comparable
-  return me.cmp(you: you) == ME_LARGE
+    return me.cmp(you: you) == ME_LARGE
 
 routine T.ge(you: T) -> Bool
 needs T obeys Comparable
-  return me.cmp(you: you) != ME_SMALL
+    return me.cmp(you: you) != ME_SMALL
 
 ### The auto-derived fast `hash()` for any record/entity/tuple: XOR-fold each member variable's fast
 ### hash. Seeded at `0` (the XOR identity), so a single-field type hashes to exactly that field's hash
@@ -409,20 +409,20 @@ needs T obeys Comparable
 @overridable
 routine T.hash() -> U64
 needs T obeys Hashable
-  var acc = 0u64
-  expand m in allmemvarof(T)
-    acc = acc.bitxor(you: me.$nameof(m).hash())
-  return acc
+    var acc = 0u64
+    expand m in allmemvarof(T)
+        acc = acc.bitxor(you: me.$nameof(m).hash())
+    return acc
 
 ### The auto-derived keyed `hash(k0, k1)`: same XOR-fold, threading the seed keys through each member
 ### variable's keyed hash.
 @overridable
 routine T.hash(k0: U64, k1: U64) -> U64
 needs T obeys Hashable
-  var acc = 0u64
-  expand m in allmemvarof(T)
-    acc = acc.bitxor(you: me.$nameof(m).hash(k0: k0, k1: k1))
-  return acc
+    var acc = 0u64
+    expand m in allmemvarof(T)
+        acc = acc.bitxor(you: me.$nameof(m).hash(k0: k0, k1: k1))
+    return acc
 
 ### The auto-derived default `serialize()` for a composite record/entity: field-walk into a
 ### `Dict[Text, SerialValue]` arm over the publicly-readable (`openmemvarof`) members, keyed by field
@@ -436,33 +436,33 @@ needs T obeys Hashable
 @overridable
 routine T.serialize() -> SerialValue
 needs AnyType T
-  when T
-    is Bool => return SerialValue(from: me)
-    is S8 => return SerialValue(from: me)
-    is S16 => return SerialValue(from: me)
-    is S32 => return SerialValue(from: me)
-    is S64 => return SerialValue(from: me)
-    is U8 => return SerialValue(from: me)
-    is U16 => return SerialValue(from: me)
-    is U32 => return SerialValue(from: me)
-    is U64 => return SerialValue(from: me)
-    is B32 => return SerialValue(from: me)
-    is B64 => return SerialValue(from: me)
-    is Moment => return SerialValue(from: me)
-    is Bytes => return SerialValue(from: me)
-    is Text => return SerialValue(from: me)
-    else =>
-      var __sv = Dict[Text, SerialValue]()
-      expand m in openmemvarof(T)
-        discard __sv.add(key: nameof(m), value: me.$nameof(m).serialize())
-      return SerialValue(steal __sv)
+    when T
+        is Bool => return SerialValue(from: me)
+        is S8 => return SerialValue(from: me)
+        is S16 => return SerialValue(from: me)
+        is S32 => return SerialValue(from: me)
+        is S64 => return SerialValue(from: me)
+        is U8 => return SerialValue(from: me)
+        is U16 => return SerialValue(from: me)
+        is U32 => return SerialValue(from: me)
+        is U64 => return SerialValue(from: me)
+        is B32 => return SerialValue(from: me)
+        is B64 => return SerialValue(from: me)
+        is Moment => return SerialValue(from: me)
+        is Bytes => return SerialValue(from: me)
+        is Text => return SerialValue(from: me)
+        else =>
+            var __sv = Dict[Text, SerialValue]()
+            expand m in openmemvarof(T)
+                discard __sv.add(key: nameof(m), value: me.$nameof(m).serialize())
+            return SerialValue(steal __sv)
 
 ### The auto-derived deep `copy()` (Copyable): forwards to `store` — a bitwise copy for a pure value
 ### type, or the retaining store for a managed-leaf / retaining-field record. Same as the C# builder.
 @overridable
 routine T.duplicate() -> Me
 needs T obeys Copyable
-  return me.assign()
+    return me.assign()
 
 ### Variant `copy()`: TAG-dispatch DEEP copy — reconstruct the live arm with a copied payload, so a
 ### heap arm (a collection, a managed leaf) is NOT bitwise-aliased (which would double-free). `branchof`
@@ -472,12 +472,12 @@ needs T obeys Copyable
 routine T.duplicate() -> Me
 needs VariantType T
 needs T obeys Copyable
-  when me
-    is None => return me
-    expand m in branchof(T)
-      is $typeof(m) v =>
-        return T(from: v.duplicate())
-    else => return me
+    when me
+        is None => return me
+        expand m in branchof(T)
+            is $typeof(m) v =>
+                return T(from: v.duplicate())
+        else => return me
 
 ### The auto-derived `destroy()`: tear down each member (unconditionally — every type has a `destroy`,
 ### a no-op for a raw-pointer / scalar / borrow leaf). Records/tuples stop here (stack values); an ENTITY
@@ -486,18 +486,18 @@ needs T obeys Copyable
 @overridable
 routine T.destroy()
 needs RecordType T
-  expand m in allmemvarof(T)
-    me.$nameof(m).destroy()
-  return
+    expand m in allmemvarof(T)
+        me.$nameof(m).destroy()
+    return
 
 @override
 routine T.destroy()
 needs EntityType T
-  expand m in allmemvarof(T)
-    me.$nameof(m).destroy()
-  danger
-    me.hijack().invalidate()
-  return
+    expand m in allmemvarof(T)
+        me.$nameof(m).destroy()
+    danger
+        me.hijack().invalidate()
+    return
 
 ### Variant `destroy()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,
 ### one arm live at a time). `branchof` generates one `is $typeof(m) v =>` clause per payload arm; the
@@ -505,13 +505,13 @@ needs EntityType T
 @override
 routine T.destroy()
 needs VariantType T
-  when me
-    is None => return
-    expand m in branchof(T)
-      is $typeof(m) v =>
-        v.destroy()
-        return
-    else => return
+    when me
+        is None => return
+        expand m in branchof(T)
+            is $typeof(m) v =>
+                v.destroy()
+                return
+        else => return
 
 ### The auto-derived cycle-collector TRACE hook `roam_trace()`: reports this value's strong
 ### (`Roamed`) edges to the collector. The universal default walks every member, delegating to each
@@ -523,22 +523,22 @@ needs VariantType T
 @overridable
 dangerous routine T.roam_trace()
 needs AnyType T
-  expand m in allmemvarof(T)
-    me.$nameof(m).roam_trace()
-  return
+    expand m in allmemvarof(T)
+        me.$nameof(m).roam_trace()
+    return
 
 ### Variant `roam_trace()`: descend ONLY into the live arm's payload (a variant is a union). The
 ### `None` / void arms own no edge.
 @override
 dangerous routine T.roam_trace()
 needs VariantType T
-  when me
-    is None => return
-    expand m in branchof(T)
-      is $typeof(m) v =>
-        v.roam_trace()
-        return
-    else => return
+    when me
+        is None => return
+        expand m in branchof(T)
+            is $typeof(m) v =>
+                v.roam_trace()
+                return
+        else => return
 
 ### The auto-derived cycle-collector FREE hook `roam_free()`: tears down this value's OWNED
 ### resources but NOT its `Roamed` edges — the collector frees the whole white cycle directly, so
@@ -548,31 +548,31 @@ needs VariantType T
 @overridable
 dangerous routine T.roam_free()
 needs AnyType T
-  me.destroy()
-  return
+    me.destroy()
+    return
 
 ### Entity `roam_free()`: walk each member's `roam_free` (so a `Roamed` member is SKIPPED via
 ### its no-op override, while an owned member is torn down) then free this entity's own heap box.
 @override
 dangerous routine T.roam_free()
 needs EntityType T
-  expand m in allmemvarof(T)
-    me.$nameof(m).roam_free()
-  danger
-    me.hijack().invalidate()
-  return
+    expand m in allmemvarof(T)
+        me.$nameof(m).roam_free()
+    danger
+        me.hijack().invalidate()
+    return
 
 ### Variant `roam_free()`: tear down ONLY the live arm's payload, skipping its `Roamed` edges.
 @override
 dangerous routine T.roam_free()
 needs VariantType T
-  when me
-    is None => return
-    expand m in branchof(T)
-      is $typeof(m) v =>
-        v.roam_free()
-        return
-    else => return
+    when me
+        is None => return
+        expand m in branchof(T)
+            is $typeof(m) v =>
+                v.roam_free()
+                return
+        else => return
 
 ### The auto-derived `assign()` (Assignable — the shallow store / alias-safe verb): a shallow `var result
 ### = me` (the compiler does NOT re-enter `store` on this self-copy — no recursion), then re-store each
@@ -585,10 +585,10 @@ needs VariantType T
 routine T.assign() -> Me
 needs T obeys Assignable
 needs Assignable everywhere
-  var result = me
-  expand m in allmemvarof(T)
-    result.$nameof(m) = me.$nameof(m).assign()
-  return result
+    var result = me
+    expand m in allmemvarof(T)
+        result.$nameof(m) = me.$nameof(m).assign()
+    return result
 
 ### Variant `assign()`: TAG-dispatch shallow store — reconstruct the live arm with a RE-STORED payload,
 ### so a retaining arm (managed leaf) gets its refcount bumped rather than bitwise-aliased. Mirrors the
@@ -599,9 +599,9 @@ needs Assignable everywhere
 routine T.assign() -> Me
 needs VariantType T
 needs T obeys Assignable
-  when me
-    is None => return me
-    expand m in branchof(T)
-      is $typeof(m) v =>
-        return T(from: v.assign())
-    else => return me
+    when me
+        is None => return me
+        expand m in branchof(T)
+            is $typeof(m) v =>
+                return T(from: v.assign())
+        else => return me

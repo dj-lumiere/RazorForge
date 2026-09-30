@@ -20,9 +20,9 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -39,13 +39,13 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test(perms: Permissions)
-                          var result = perms is READ
-                          return
+                            var result = perms is READ
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -62,13 +62,13 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test(perms: Permissions)
-                          var result = perms isnot WRITE
-                          return
+                            var result = perms isnot WRITE
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -83,13 +83,13 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test(perms: Permissions)
-                          var result = perms == (Permissions.READ and Permissions.WRITE)
-                          return
+                            var result = perms == (Permissions.READ and Permissions.WRITE)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -103,13 +103,13 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test(a: Permissions, b: Permissions)
-                          var result = a but b
-                          return
+                            var result = a but b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -124,13 +124,13 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test(a: Permissions, b: Permissions)
-                          var combined = a and b
-                          return
+                            var combined = a and b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -147,16 +147,16 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Perms
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         flags Roles
-                          ADMIN
-                          USER
+                            ADMIN
+                            USER
 
                         routine test(p: Perms, r: Roles)
-                          var combined = p and r
-                          return
+                            var combined = p and r
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -171,14 +171,14 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test()
-                          var all = Permissions.all_on()
-                          var none = Permissions.all_off()
-                          return
+                            var all = Permissions.all_on()
+                            var none = Permissions.all_off()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -196,12 +196,12 @@ public class FlagsValidationTests
     [Fact]
     public void Flags_MoreThan64Members_ReportsError()
     {
-        string members = string.Join(separator: "\n  ",
+        string members = string.Join(separator: "\n    ",
             values: Enumerable.Range(start: 0, count: 65)
                               .Select(selector: i => $"FLAG_{i}"));
         string source = $$"""
                           flags TooMany
-                            {{members}}
+                              {{members}}
                           """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -214,12 +214,12 @@ public class FlagsValidationTests
     [Fact]
     public void Flags_Exactly64Members_NoError()
     {
-        string members = string.Join(separator: "\n  ",
+        string members = string.Join(separator: "\n    ",
             values: Enumerable.Range(start: 0, count: 64)
                               .Select(selector: i => $"FLAG_{i}"));
         string source = $$"""
                           flags Max64
-                            {{members}}
+                              {{members}}
                           """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -239,9 +239,9 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Perms
-                          READ
-                          WRITE
-                          READ
+                            READ
+                            WRITE
+                            READ
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -261,12 +261,12 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         routine test(a: Permissions, b: Permissions)
-                          var combined = a or b
-                          return
+                            var combined = a or b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -286,14 +286,14 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         routine test(perms: Permissions)
-                          var desc = when perms
-                            is READ => "read"
-                            is WRITE => "write"
-                          return
+                            var desc = when perms
+                                is READ => "read"
+                                is WRITE => "write"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -308,14 +308,14 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         routine test(perms: Permissions)
-                          var desc = when perms
-                            is READ => "read"
-                            else => "other"
-                          return
+                            var desc = when perms
+                                is READ => "read"
+                                else => "other"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -336,12 +336,12 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         routine test(a: Permissions, b: Permissions)
-                          var result = a + b
-                          return
+                            var result = a + b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -361,12 +361,12 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         @readonly
                         routine Permissions.$add(you: Permissions) -> Permissions
-                          return me
+                            return me
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -386,12 +386,12 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         routine test(perms: Permissions)
-                          var result = perms have READ or EXECUTE
-                          return
+                            var result = perms have READ or EXECUTE
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -406,8 +406,8 @@ public class FlagsValidationTests
     {
         string source = """
                         routine test(x: S32)
-                          var result = x is READ
-                          return
+                            var result = x is READ
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -423,16 +423,16 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Perms
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         flags Roles
-                          ADMIN
-                          USER
+                            ADMIN
+                            USER
 
                         routine test(p: Perms, r: Roles)
-                          var result = p but r
-                          return
+                            var result = p but r
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -452,7 +452,7 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Flag
-                          ONLY_ONE
+                            ONLY_ONE
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -470,13 +470,13 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test(perms: Permissions)
-                          var result = perms == (Permissions.READ and Permissions.WRITE and Permissions.EXECUTE)
-                          return
+                            var result = perms == (Permissions.READ and Permissions.WRITE and Permissions.EXECUTE)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -491,13 +491,13 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test(perms: Permissions)
-                          var result = perms is READ and WRITE
-                          return
+                            var result = perms is READ and WRITE
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -517,13 +517,13 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine test()
-                          var f = Permissions.READ
-                          return
+                            var f = Permissions.READ
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -542,12 +542,12 @@ public class FlagsValidationTests
     {
         string source = """
                         flags Permissions
-                          READ
-                          WRITE
+                            READ
+                            WRITE
 
                         routine test()
-                          var f = Permissions.EXECUTE
-                          return
+                            var f = Permissions.EXECUTE
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

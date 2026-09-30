@@ -21,13 +21,13 @@ public class UsingStatementTests
         // Token path: using with .view() binds to the Viewing token type
         string source = """
                         entity Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine test(p: Point)
-                          using p.view() as v
-                            var a: S32 = v.x
-                          return
+                            using p.view() as v
+                                var a: S32 = v.x
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -47,19 +47,19 @@ public class UsingStatementTests
         // When $enter returns None (void), the bound variable should have the resource type
         string source = """
                         record Lock obeys Enterable
-                          id: S32
+                            id: S32
 
                         routine Lock.enter() -> Lock
-                          return me
+                            return me
 
                         routine Lock.exit()
-                          return
+                            return
 
                         routine test()
-                          var lk = Lock(id: 1)
-                          using lk as l
-                            var a: S32 = l.id
-                          return
+                            var lk = Lock(id: 1)
+                            using lk as l
+                                var a: S32 = l.id
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -80,19 +80,19 @@ public class UsingStatementTests
         // bound variable has the entity type and its members resolve.
         string source = """
                         entity Connection obeys Enterable
-                          tag: S32
+                            tag: S32
 
                         routine Connection.enter() -> Connection
-                          return me
+                            return me
 
                         routine Connection.exit()
-                          return
+                            return
 
                         routine test()
-                          var conn = Connection(tag: 1)
-                          using conn as h
-                            var a: S32 = h.tag
-                          return
+                            var conn = Connection(tag: 1)
+                            using conn as h
+                                var a: S32 = h.tag
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -112,13 +112,13 @@ public class UsingStatementTests
         // A non-token type without $enter/$exit should produce an error
         string source = """
                         record PlainResource
-                          value: S32
+                            value: S32
 
                         routine test()
-                          var r = PlainResource(value: 42)
-                          using r as res
-                            var a: S32 = res.value
-                          return
+                            var r = PlainResource(value: 42)
+                            using r as res
+                                var a: S32 = res.value
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -134,16 +134,16 @@ public class UsingStatementTests
         // Having only $enter without $exit should still report error
         string source = """
                         record HalfResource
-                          value: S32
+                            value: S32
 
                         routine HalfResource.enter()
-                          return
+                            return
 
                         routine test()
-                          var r = HalfResource(value: 42)
-                          using r as res
-                            var a: S32 = res.value
-                          return
+                            var r = HalfResource(value: 42)
+                            using r as res
+                                var a: S32 = res.value
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -163,16 +163,16 @@ public class UsingStatementTests
     {
         string source = """
                         record HalfResource
-                          value: S32
+                            value: S32
 
                         routine HalfResource.exit()
-                          return
+                            return
 
                         routine test()
-                          var r = HalfResource(value: 42)
-                          using r as res
-                            var a: S32 = res.value
-                          return
+                            var r = HalfResource(value: 42)
+                            using r as res
+                                var a: S32 = res.value
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -192,20 +192,20 @@ public class UsingStatementTests
     {
         string source = """
                         record Token obeys Enterable
-                          id: S32
+                            id: S32
 
                         routine Token.enter() -> Token
-                          return me
+                            return me
                         routine Token.exit()
-                          return
+                            return
 
                         routine test()
-                          var t1 = Token(id: 1)
-                          var t2 = Token(id: 2)
-                          using t1 as a
-                            using t2 as b
-                              var sum: S32 = a.id + b.id
-                          return
+                            var t1 = Token(id: 1)
+                            var t2 = Token(id: 2)
+                            using t1 as a
+                                using t2 as b
+                                    var sum: S32 = a.id + b.id
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -224,13 +224,13 @@ public class UsingStatementTests
     {
         string source = """
                         entity Data
-                          value: S32
+                            value: S32
 
                         routine test(d: Data)
-                          using d.view() as v
+                            using d.view() as v
+                                show(v.value)
                             show(v.value)
-                          show(v.value)
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -251,23 +251,23 @@ public class UsingStatementTests
         // (self pass-through), and member access through it resolves.
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         entity Container[T] obeys Enterable
-                          item: T
+                            item: T
 
                         routine Container[T].enter() -> Container[T]
-                          return me
+                            return me
 
                         routine Container[T].exit()
-                          return
+                            return
 
                         routine test()
-                          var c = Container[Point](item: Point(x: 1, y: 2))
-                          using c as p
-                            var a: S32 = p.item.x
-                          return
+                            var c = Container[Point](item: Point(x: 1, y: 2))
+                            using c as p
+                                var a: S32 = p.item.x
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

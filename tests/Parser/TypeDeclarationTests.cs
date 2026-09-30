@@ -19,8 +19,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Point
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
                         """;
 
         Program program = AssertParses(source: source);
@@ -37,7 +37,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Container[T]
-                          value: T
+                            value: T
                         """;
 
         Program program = AssertParses(source: source);
@@ -57,7 +57,7 @@ public class TypeDeclarationTests
         string source = """
                         record Wrapper[T]
                         needs T obeys Comparable
-                          value: T
+                            value: T
                         """;
 
         Program program = AssertParses(source: source);
@@ -78,7 +78,7 @@ public class TypeDeclarationTests
                         needs T obeys Protocol1,
                         Protocol2,
                         Protocol3
-                          value: T
+                            value: T
                         """;
 
         Program program = AssertParses(source: source);
@@ -103,8 +103,8 @@ public class TypeDeclarationTests
         string source = """
                         record Pair[T, U]
                         needs T obeys Equatable, U obeys Equatable
-                          a: T
-                          b: U
+                            a: T
+                            b: U
                         """;
 
         Program program = AssertParses(source: source);
@@ -125,7 +125,7 @@ public class TypeDeclarationTests
         string source = """
                         routine pair[T, U](a: T, b: U) -> Bool
                         needs T obeys Equatable, U obeys Equatable
-                          return true
+                            return true
                         """;
 
         Program program = AssertParses(source: source);
@@ -145,8 +145,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Version obeys Comparable
-                          major: S32
-                          minor: S32
+                            major: S32
+                            minor: S32
                         """;
 
         Program program = AssertParses(source: source);
@@ -165,7 +165,7 @@ public class TypeDeclarationTests
                         record Address
                         obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable,
                         WrappingMultiplicable, FloorDivisible
-                          pass
+                            pass
                         """;
 
         Program program = AssertParses(source: source);
@@ -188,8 +188,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Pair[K, V]
-                          key: K
-                          value: V
+                            key: K
+                            value: V
                         """;
 
         Program program = AssertParses(source: source);
@@ -213,8 +213,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         entity User
-                          name: Text
-                          age: U32
+                            name: Text
+                            age: U32
                         """;
 
         Program program = AssertParses(source: source);
@@ -231,7 +231,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         entity Stack[T]
-                          items: List[T]
+                            items: List[T]
                         """;
 
         Program program = AssertParses(source: source);
@@ -252,7 +252,7 @@ public class TypeDeclarationTests
                         needs K obeys Comparable
                         needs K obeys Hashable
                         needs EntityType V
-                          entries: Dict[K, V]
+                            entries: Dict[K, V]
                         """;
 
         Program program = AssertParses(source: source);
@@ -276,10 +276,10 @@ public class TypeDeclarationTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         """;
 
         Program program = AssertParses(source: source);
@@ -297,9 +297,9 @@ public class TypeDeclarationTests
     {
         string source = """
                         choice HttpStatus
-                          OK: 200
-                          NOT_FOUND: 404
-                          ERROR: 500
+                            OK: 200
+                            NOT_FOUND: 404
+                            ERROR: 500
                         """;
 
         Program program = AssertParses(source: source);
@@ -321,8 +321,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         variant NetworkEvent
-                          S32
-                          Text
+                            S32
+                            Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -339,8 +339,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         variant ParseResult
-                          S32
-                          Text
+                            S32
+                            Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -358,9 +358,9 @@ public class TypeDeclarationTests
     {
         string source = """
                         variant Event
-                          S32
-                          Text
-                          None
+                            S32
+                            Text
+                            None
                         """;
 
         Program program = AssertParses(source: source);
@@ -384,8 +384,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -402,11 +402,11 @@ public class TypeDeclarationTests
     {
         string source = """
                         protocol Container
-                          @readonly
-                          routine Me.count() -> uaddr
+                            @readonly
+                            routine Me.count() -> uaddr
 
-                          @readonly
-                          routine Me.is_empty() -> bool
+                            @readonly
+                            routine Me.is_empty() -> bool
                         """;
 
         Program program = AssertParses(source: source);
@@ -422,8 +422,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         protocol Iterable[T]
-                          @readonly
-                          routine Me.iterate() -> Iterator[T]
+                            @readonly
+                            routine Me.iterate() -> Iterator[T]
                         """;
 
         Program program = AssertParses(source: source);
@@ -441,8 +441,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         protocol Ordered obeys Comparable
-                          @readonly
-                          routine Me.$cmp(other: Me) -> ComparisonSign
+                            @readonly
+                            routine Me.$cmp(other: Me) -> ComparisonSign
                         """;
 
         Program program = AssertParses(source: source);
@@ -463,7 +463,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         secret record InternalData
-                          value: S32
+                            value: S32
                         """;
 
         Program program = AssertParses(source: source);
@@ -479,7 +479,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         secret entity CacheEntry
-                          data: Text
+                            data: Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -500,7 +500,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         routine greet(name: Text) -> Text
-                          return name
+                            return name
                         """;
 
         Program program = AssertParses(source: source);
@@ -517,7 +517,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         routine get_value!() -> S32
-                          return 42
+                            return 42
                         """;
 
         Program program = AssertParses(source: source);
@@ -539,7 +539,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Percentage
-                          posted value: B64
+                            posted value: B64
                         """;
 
         Program program = AssertParses(source: source);
@@ -556,9 +556,9 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Config
-                          posted name: Text
-                          secret hidden: Text
-                          value: S32
+                            posted name: Text
+                            secret hidden: Text
+                            value: S32
                         """;
 
         Program program = AssertParses(source: source);
@@ -579,9 +579,9 @@ public class TypeDeclarationTests
     {
         string source = """
                         flags Permission
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
                         """;
 
         Program program = AssertParses(source: source);
@@ -602,7 +602,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         flags OnOff
-                          ON
+                            ON
                         """;
 
         Program program = AssertParses(source: source);
@@ -621,8 +621,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         secret flags InternalMode
-                          FAST
-                          SAFE
+                            FAST
+                            SAFE
                         """;
 
         Program program = AssertParses(source: source);
@@ -645,8 +645,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         crashable FileError
-                          path: Text
-                          reason: Text
+                            path: Text
+                            reason: Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -664,7 +664,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         crashable ParseError
-                          message: Text
+                            message: Text
                         """;
 
         Program program = AssertParses(source: source);
@@ -682,7 +682,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         secret crashable InternalError
-                          code: S32
+                            code: S32
                         """;
 
         Program program = AssertParses(source: source);

@@ -23,21 +23,21 @@ public sealed class LspServerTests
         "import IO/Console\n" +
         "\n" +
         "record Point\n" +
-        "  x: S32\n" +
-        "  y: S32\n" +
+        "    x: S32\n" +
+        "    y: S32\n" +
         "\n" +
-        "  routine magnitude(me) -> S32\n" +
-        "    return me.x * me.x + me.y * me.y\n" +
+        "    routine magnitude(me) -> S32\n" +
+        "        return me.x * me.x + me.y * me.y\n" +
         "\n" +
         "routine add(a: S32, b: S32) -> S32\n" +
-        "  return a + b\n" +
+        "    return a + b\n" +
         "\n" +
         "routine start()\n" +
-        "  var total = add(a: 1_s32, b: 2_s32)\n" +
-        "  var p = Point(x: 3_s32, y: 4_s32)\n" +
-        "  var m = p.magnitude()\n" +
-        "  show(f\"total={total} mag={m}\")\n" +
-        "  return\n";
+        "    var total = add(a: 1_s32, b: 2_s32)\n" +
+        "    var p = Point(x: 3_s32, y: 4_s32)\n" +
+        "    var m = p.magnitude()\n" +
+        "    show(f\"total={total} mag={m}\")\n" +
+        "    return\n";
 
     private static string Initialize(int id = 0)
     {
@@ -93,8 +93,8 @@ public sealed class LspServerTests
         const string bad =
             "module Test/Bad\n" +
             "routine start()\n" +
-            "  var x = undefined_symbol_here\n" +
-            "  return\n";
+            "    var x = undefined_symbol_here\n" +
+            "    return\n";
 
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
             LspTestHarness.DidOpen(uri: "file:///bad.rf", text: bad), Exit);
@@ -401,10 +401,10 @@ public sealed class LspServerTests
             "import IO/Console\n" +
             "\n" +
             "routine start()\n" +
-            "  var x = 41\n" +
-            "  var y = x + 1\n" +
-            "  show(f\"{y}\")\n" +
-            "  return\n";
+            "    var x = 41\n" +
+            "    var y = x + 1\n" +
+            "    show(f\"{y}\")\n" +
+            "    return\n";
 
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
             LspTestHarness.DidOpen(uri: "file:///test/Sample.sf", text: sf, languageId: "suflae"),

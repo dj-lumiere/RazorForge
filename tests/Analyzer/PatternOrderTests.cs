@@ -20,13 +20,13 @@ public class PatternOrderTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         routine test(c: Color) -> S32
-                          return when c
-                            else => 0_s32
-                            is Color.RED => 1_s32
+                            return when c
+                                else => 0_s32
+                                is Color.RED => 1_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -41,14 +41,14 @@ public class PatternOrderTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         routine test(c: Color) -> S32
-                          return when c
-                            is Color.RED => 1_s32
-                            is Color.GREEN => 2_s32
-                            else => 0_s32
+                            return when c
+                                is Color.RED => 1_s32
+                                is Color.GREEN => 2_s32
+                                else => 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -64,13 +64,13 @@ public class PatternOrderTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         routine test(c: Color) -> S32
-                          return when c
-                            _ => 0_s32
-                            is Color.RED => 1_s32
+                            return when c
+                                _ => 0_s32
+                                is Color.RED => 1_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -90,10 +90,10 @@ public class PatternOrderTests
     {
         string source = """
                         routine test(x: S32) -> S32
-                          return when x
-                            == 1 => 10_s32
-                            == 2 => 20_s32
-                            _ => 0_s32
+                            return when x
+                                == 1 => 10_s32
+                                == 2 => 20_s32
+                                _ => 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -109,10 +109,10 @@ public class PatternOrderTests
     {
         string source = """
                         routine test(x: S32) -> S32
-                          return when x
-                            == 1 => 10_s32
-                            _ => 0_s32
-                            _ => 99_s32
+                            return when x
+                                == 1 => 10_s32
+                                _ => 0_s32
+                                _ => 99_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -127,10 +127,10 @@ public class PatternOrderTests
     {
         string source = """
                         routine test(x: S32) -> S32
-                          return when x
-                            == 1 => 10_s32
-                            else => 0_s32
-                            else => 99_s32
+                            return when x
+                                == 1 => 10_s32
+                                else => 0_s32
+                                else => 99_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -149,10 +149,10 @@ public class PatternOrderTests
     {
         string source = """
                         routine test(x: S32) -> S32
-                          return when x
-                            42 => 1_s32
-                            42 => 2_s32
-                            else => 0_s32
+                            return when x
+                                42 => 1_s32
+                                42 => 2_s32
+                                else => 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -167,14 +167,14 @@ public class PatternOrderTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         routine test(c: Color) -> S32
-                          return when c
-                            is Color.RED => 1_s32
-                            is Color.RED => 2_s32
-                            else => 0_s32
+                            return when c
+                                is Color.RED => 1_s32
+                                is Color.RED => 2_s32
+                                else => 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -189,14 +189,14 @@ public class PatternOrderTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         routine test(c: Color) -> S32
-                          return when c
-                            is Color.RED => 1_s32
-                            is Color.GREEN => 2_s32
-                            is Color.BLUE => 3_s32
+                            return when c
+                                is Color.RED => 1_s32
+                                is Color.GREEN => 2_s32
+                                is Color.BLUE => 3_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

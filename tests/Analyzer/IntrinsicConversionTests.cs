@@ -14,12 +14,12 @@ public class IntrinsicConversionTests
     {
         AssertAnalyzes(source: """
                                routine start()
-                                 var a = LLVM::int_truncate[U64, U32](9_u64)
-                                 var b = LLVM::zero_extend[U32, U64](7_u32)
-                                 var c = LLVM::sign_extend[S8, S64](-1_s8)
-                                 var d = LLVM::reinterpret_bits[B64, U64](1.5_b64)
-                                 var e = LLVM::float_extend[B32, B64](1.5_b32)
-                                 return
+                                   var a = LLVM::int_truncate[U64, U32](9_u64)
+                                   var b = LLVM::zero_extend[U32, U64](7_u32)
+                                   var c = LLVM::sign_extend[S8, S64](-1_s8)
+                                   var d = LLVM::reinterpret_bits[B64, U64](1.5_b64)
+                                   var e = LLVM::float_extend[B32, B64](1.5_b32)
+                                   return
                                """);
     }
 
@@ -28,8 +28,8 @@ public class IntrinsicConversionTests
     {
         AssertHasError(source: """
                                routine start()
-                                 var a = LLVM::int_truncate[U32, U64](7_u32)
-                                 return
+                                   var a = LLVM::int_truncate[U32, U64](7_u32)
+                                   return
                                """,
             expectedErrorSubstring: "is not narrower than");
     }
@@ -39,8 +39,8 @@ public class IntrinsicConversionTests
     {
         AssertHasError(source: """
                                routine start()
-                                 var a = LLVM::zero_extend[U32, U32](7_u32)
-                                 return
+                                   var a = LLVM::zero_extend[U32, U32](7_u32)
+                                   return
                                """,
             expectedErrorSubstring: "is not wider than");
     }
@@ -50,8 +50,8 @@ public class IntrinsicConversionTests
     {
         AssertHasError(source: """
                                routine start()
-                                 var a = LLVM::reinterpret_bits[U32, U64](7_u32)
-                                 return
+                                   var a = LLVM::reinterpret_bits[U32, U64](7_u32)
+                                   return
                                """,
             expectedErrorSubstring: "the same size");
     }
@@ -61,8 +61,8 @@ public class IntrinsicConversionTests
     {
         AssertHasError(source: """
                                routine start()
-                                 var a = LLVM::float_extend[U32, B64](7_u32)
-                                 return
+                                   var a = LLVM::float_extend[U32, B64](7_u32)
+                                   return
                                """,
             expectedErrorSubstring: "takes a floating-point source");
     }

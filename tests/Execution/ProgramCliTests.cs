@@ -31,12 +31,12 @@ public sealed class ProgramCliTests : IDisposable
             "import IO/Console\n" +
             "\n" +
             "routine sum_ints(a: S32, b: S32) -> S32\n" +
-            "  return a + b\n" +
+            "    return a + b\n" +
             "\n" +
             "routine start()\n" +
-            "  var total = sum_ints(a: 1_s32, b: 2_s32)\n" +
-            "  show(f\"{total}\")\n" +
-            "  return\n");
+            "    var total = sum_ints(a: 1_s32, b: 2_s32)\n" +
+            "    show(f\"{total}\")\n" +
+            "    return\n");
     }
 
     public void Dispose()
@@ -168,8 +168,8 @@ public sealed class ProgramCliTests : IDisposable
             contents:
             "module Test/Bad\n" +
             "routine start()\n" +
-            "  var x = undefined_symbol_here\n" +
-            "  return\n");
+            "    var x = undefined_symbol_here\n" +
+            "    return\n");
         (int code, _) = RunMain("check", bad);
         Assert.NotEqual(expected: 0, actual: code);
     }

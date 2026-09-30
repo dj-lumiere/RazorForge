@@ -35,8 +35,8 @@ import BuilderQuery
 @llvm("[{N} x {T}]")
 record Array[AnyType T, U64 N] obeys Comparable, Iterable[T], MutableIndexable[T], Sized, Container
 relates ArrayEmittable[T, N] as Iter
-  # N elements of T stored inline by compiler - no explicit member variables needed
-  pass
+    # N elements of T stored inline by compiler - no explicit member variables needed
+    pass
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -49,11 +49,11 @@ relates ArrayEmittable[T, N] as Iter
 @readonly
 @inline
 routine Array[T, N].getitem!(index: U64) -> T
-  if index >= N
-    throw IndexOutOfBoundsError(index: index, count: me.count())
-  # Read in place through the storage pointer — no whole-array copy.
-  danger
-    return LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
+    if index >= N
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    # Read in place through the storage pointer — no whole-array copy.
+    danger
+        return LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
 
 ### Replaces the element at `index` with `value`, mutating this `Array` in place.
 ### `me` is received by reference (struct-record `setitem!`), so the single-element write through
@@ -63,11 +63,11 @@ routine Array[T, N].getitem!(index: U64) -> T
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @inline
 routine Array[T, N].setitem!(index: U64, value: T)
-  if index >= N
-    throw IndexOutOfBoundsError(index: index, count: me.count())
-  danger
-    LLVM::store_element_ref[Array[T, N], T](me.hijack(), index, value)
-  return
+    if index >= N
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        LLVM::store_element_ref[Array[T, N], T](me.hijack(), index, value)
+    return
 
 ### Returns a `List[T]` holding independent copies of the elements in `range` — the slice form of
 ### indexing (`array[a til b]`). Unlike scalar indexing this returns a `List`, NOT an `Array[T, M]`: the
@@ -80,11 +80,11 @@ routine Array[T, N].setitem!(index: U64, value: T)
 @readonly
 routine Array[T, N].getitem(range: Range[U64]) -> List[T]
 needs T obeys Copyable
-  var result = List[T]()
-  each i in range
-    if i < N
-      result.add_last(value: me[i].duplicate())
-  return steal result
+    var result = List[T]()
+    each i in range
+        if i < N
+            result.add_last(value: me[i].duplicate())
+    return steal result
 
 ### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
 ### entity elements. Invoked through an owning entity's generated `destroy` field-recursion when
@@ -92,32 +92,32 @@ needs T obeys Copyable
 ### (`Array` is a value record, so it has no separate allocation of its own to free.)
 @override
 dangerous routine Array[T, N].destroy()
-  var i = 0u64
-  while i < N
-    # Read element i in place through the storage pointer (element_at's by-VALUE form copies the whole
-    # array — which also draws a spurious retaining `me.assign()` at the copy-lowering pass; the pointer
-    # form is what getitem/setitem use). The routine is already `dangerous`, so no nested `danger` block.
-    LLVM::load_element_ref[Array[T, N], T](me.hijack(), i).destroy()
-    i = i + 1u64
-  return
+    var i = 0u64
+    while i < N
+        # Read element i in place through the storage pointer (element_at's by-VALUE form copies the whole
+        # array — which also draws a spurious retaining `me.assign()` at the copy-lowering pass; the pointer
+        # form is what getitem/setitem use). The routine is already `dangerous`, so no nested `danger` block.
+        LLVM::load_element_ref[Array[T, N], T](me.hijack(), i).destroy()
+        i = i + 1u64
+    return
 
 ### Cycle-collector TRACE: report every inline slot to the collector (a `Roamed` element reports its
 ### controller; a value element is a no-op). Overrides the universal member-walk — `Array` is `@llvm`
 ### storage with no named members, so the generic walk sees nothing.
 @override
 dangerous routine Array[T, N].roam_trace()
-  var i = 0u64
-  while i < N
-    LLVM::load_element_ref[Array[T, N], T](me.hijack(), i).cyclic_visit()
-    i = i + 1u64
-  return
+    var i = 0u64
+    while i < N
+        LLVM::load_element_ref[Array[T, N], T](me.hijack(), i).cyclic_visit()
+        i = i + 1u64
+    return
 
 ### Cycle-collector FREE: a NO-OP. `Array` is a value record with no allocation of its own, and its
 ### elements are freed by the collector as part of the white cycle — the default `roam_free` forwards to
 ### `destroy`, which WOULD tear down every element (a double-free here), so it must be overridden.
 @override
 dangerous routine Array[T, N].roam_free()
-  return
+    return
 
 ### Returns a copy with each element STORED (refcount-bumped for managed element types like `Text`; a
 ### plain bitwise duplicate for trivially-copyable elements). Element-wise so the per-element `destroy`
@@ -126,24 +126,24 @@ dangerous routine Array[T, N].roam_free()
 @readonly
 routine Array[T, N].assign() -> Array[T, N]
 needs T obeys Assignable
-  var result = Array[T, N]()
-  var i = 0u64
-  while i < N
-    result[i] = me[i].assign()
-    i = i + 1u64
-  return result
+    var result = Array[T, N]()
+    var i = 0u64
+    while i < N
+        result[i] = me[i].assign()
+        i = i + 1u64
+    return result
 
 ### Returns a deep, independent copy — each element deep-copied via its own `copy`. Copyability
 ### cascades: `Array[T, N]` is copyable iff `T` is.
 @readonly
 routine Array[T, N].duplicate() -> Array[T, N]
 needs T obeys Copyable
-  var result = Array[T, N]()
-  var i = 0u64
-  while i < N
-    result[i] = me[i].duplicate()
-    i = i + 1u64
-  return result
+    var result = Array[T, N]()
+    var i = 0u64
+    while i < N
+        result[i] = me[i].duplicate()
+        i = i + 1u64
+    return result
 
 # ============================================================================
 # Query Operations
@@ -154,33 +154,33 @@ needs T obeys Copyable
 ### :returns: The element count `N`.
 @readonly
 routine Array[T, N].count() -> U64
-  return N
+    return N
 
 ### Returns true when the compile-time size is zero.
 ### :returns: `true` if `N == 0`.
 @readonly
 routine Array[T, N].is_empty() -> Bool
-  return N == 0u64
+    return N == 0u64
 
 ### Returns the first element of the array.
 ### :returns: The element at index `0`.
 ### :absent: The array has zero elements (`N == 0`).
 @readonly
 routine Array[T, N].first!() -> T
-  if N == 0u64
-    absent
-  danger
-    return LLVM::load_element_ref[Array[T, N], T](me.hijack(), 0u64)
+    if N == 0u64
+        absent
+    danger
+        return LLVM::load_element_ref[Array[T, N], T](me.hijack(), 0u64)
 
 ### Returns the last element of the array.
 ### :returns: The element at index `N - 1`.
 ### :absent: The array has zero elements (`N == 0`).
 @readonly
 routine Array[T, N].last!() -> T
-  if N == 0u64
-    absent
-  danger
-    return LLVM::load_element_ref[Array[T, N], T](me.hijack(), N - 1u64)
+    if N == 0u64
+        absent
+    danger
+        return LLVM::load_element_ref[Array[T, N], T](me.hijack(), N - 1u64)
 
 ### Returns true if any element equals `value`.
 ### Scans from index 0 to N - 1 using the element type's equality operator.
@@ -189,10 +189,10 @@ routine Array[T, N].last!() -> T
 @readonly
 routine Array[T, N].contains(value: T) -> Bool
 needs T obeys Equatable
-  each i in 0u64 til N
-    if me[i] == value
-      return true
-  return false
+    each i in 0u64 til N
+        if me[i] == value
+            return true
+    return false
 
 ### Returns the index of the first element equal to `value`.
 ### :param value: The value to search for.
@@ -201,10 +201,10 @@ needs T obeys Equatable
 @readonly
 routine Array[T, N].index_of!(value: T) -> U64
 needs T obeys Equatable
-  each i in 0u64 til N
-    if me[i] == value
-      return i
-  absent
+    each i in 0u64 til N
+        if me[i] == value
+            return i
+    absent
 
 # ============================================================================
 # Iteration Support
@@ -215,24 +215,24 @@ needs T obeys Equatable
 ### :typeparam T: The element type yielded by the iterator.
 ### :typeparam N: The compile-time element count.
 entity ArrayEmittable[AnyType T, U64 N] obeys Emittable[T]
-  ### Stores the array being iterated.
-  list: Array[T, N]
-  ### Stores the next logical index to read.
-  index: U64
+    ### Stores the array being iterated.
+    list: Array[T, N]
+    ### Stores the next logical index to read.
+    index: U64
 
 @readonly
 routine Array[T, N].iter() -> ArrayEmittable[T, N]
-  return ArrayEmittable[T, N](list: me, index: 0u64)
+    return ArrayEmittable[T, N](list: me, index: 0u64)
 
 ### Returns the next element from the iterator in ascending index order.
 ### :returns: The element at the current index.
 ### :absent: All `N` elements have been yielded.
 routine ArrayEmittable[T, N].emit!() -> T
-  if me.index >= U64(N)
-    absent
-  var value = me.list[me.index]
-  me.index = me.index + 1u64
-  return value
+    if me.index >= U64(N)
+        absent
+    var value = me.list[me.index]
+    me.index = me.index + 1u64
+    return value
 
 # ============================================================================
 # Display
@@ -240,23 +240,23 @@ routine ArrayEmittable[T, N].emit!() -> T
 
 @[readonly, override]
 routine Array[T, N].represent() -> Text
-  var result = "Array(["
-  each i in 0u64 til N
-    if i > 0u64
-      result = result + ", "
-    result = result + nested_repr(me[i])
-  result = result + "])"
-  return result
+    var result = "Array(["
+    each i in 0u64 til N
+        if i > 0u64
+            result = result + ", "
+        result = result + nested_repr(me[i])
+    result = result + "])"
+    return result
 
 @[readonly, override]
 routine Array[T, N].diagnose() -> Text
-  var result = me.full_type_name() + "(["
-  each i in 0u64 til N
-    if i > 0u64
-      result = result + ", "
-    result = result + nested_repr(me[i])
-  result = result + "])"
-  return result
+    var result = me.full_type_name() + "(["
+    each i in 0u64 til N
+        if i > 0u64
+            result = result + ", "
+        result = result + nested_repr(me[i])
+    result = result + "])"
+    return result
 
 ### Returns true when both arrays contain equal elements in the same order.
 ### :param you: The other array to compare against.
@@ -267,10 +267,10 @@ routine Array[T, N].diagnose() -> Text
 @readonly
 routine Array[T, N].eq(you: Array[T, N]) -> Bool
 needs T obeys Equatable
-  each i in 0u64 til N
-    if me[i] != you[i]
-      return false
-  return true
+    each i in 0u64 til N
+        if me[i] != you[i]
+            return false
+    return true
 
 ### Lexicographic comparison of two arrays of equal length.
 ### Compares element by element from index 0 using `T.cmp`; returns at the
@@ -281,8 +281,8 @@ needs T obeys Equatable
 @readonly
 routine Array[T, N].cmp(you: Array[T, N]) -> ComparisonSign
 needs T obeys Comparable
-  each i in 0u64 til N
-    var sign = me[i].cmp(you[i])
-    if sign != SAME
-      return sign
-  return SAME
+    each i in 0u64 til N
+        var sign = me[i].cmp(you[i])
+        if sign != SAME
+            return sign
+    return SAME

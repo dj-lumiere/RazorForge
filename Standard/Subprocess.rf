@@ -8,38 +8,38 @@ module Subprocess
 
 ### The outcome of running an external command.
 record ProcessResult
-  ### The child's exit code. Meaningful when `signal` is absent. (S64 holds POSIX 0–255 and the full
-  ### Windows DWORD, including crash codes, without loss.)
-  exit_code: S64
-  ### The signal that killed the child (POSIX), or absent if it exited normally. Always absent on
-  ### Windows, which has no signals.
-  signal: S32?
-  ### The captured stdout ("show" stream), decoded as lossy UTF-8.
-  output: Text
-  ### The captured stderr ("alert" stream), decoded as lossy UTF-8.
-  errors: Text
+    ### The child's exit code. Meaningful when `signal` is absent. (S64 holds POSIX 0–255 and the full
+    ### Windows DWORD, including crash codes, without loss.)
+    exit_code: S64
+    ### The signal that killed the child (POSIX), or absent if it exited normally. Always absent on
+    ### Windows, which has no signals.
+    signal: S32?
+    ### The captured stdout ("show" stream), decoded as lossy UTF-8.
+    output: Text
+    ### The captured stderr ("alert" stream), decoded as lossy UTF-8.
+    errors: Text
 
 ### Whether the command finished cleanly: exited normally (no signal) with exit code 0.
 ### :returns: true if not signalled and `exit_code == 0`.
 routine ProcessResult.succeeded() -> Bool
-  return (not me.signal.is_present()) and me.exit_code == 0
+    return (not me.signal.is_present()) and me.exit_code == 0
 
 ### Maps the runtime's term-signal convention (0 = not signalled) to a `Maybe`: absent when 0,
 ### otherwise the signal number. `try`-recovering it yields the `S32?` that ProcessResult carries.
 routine term_signal_value!(raw: S32) -> S32
-  if raw == 0
-    absent
-  return raw
+    if raw == 0
+        absent
+    return raw
 
 ### Assembles a `ProcessResult` from the just-run child's exit code plus the runtime's captured-stream
 ### and signal accessors. Guarded by both `run_process` forms.
 ### :param code: The child's exit code, as returned by the native run.
 ### :returns: The assembled `ProcessResult`.
 routine proc_result_of(code: S64) -> ProcessResult
-  var output = Bytes(ptr: rf_proc_output(), count: rf_proc_output_len()).decode_as_utf8_lossy()
-  var errors = Bytes(ptr: rf_proc_errors(), count: rf_proc_errors_len()).decode_as_utf8_lossy()
-  var signal = try term_signal_value(raw: rf_proc_term_signal())
-  return ProcessResult(exit_code: code, signal: signal, output: output, errors: errors)
+    var output = Bytes(ptr: rf_proc_output(), count: rf_proc_output_len()).decode_as_utf8_lossy()
+    var errors = Bytes(ptr: rf_proc_errors(), count: rf_proc_errors_len()).decode_as_utf8_lossy()
+    var signal = try term_signal_value(raw: rf_proc_term_signal())
+    return ProcessResult(exit_code: code, signal: signal, output: output, errors: errors)
 
 ### Runs `command` through the platform shell (`/bin/sh -c` on POSIX, `cmd /c` on Windows), capturing
 ### its stdout and stderr, and returns the result. The shell form is convenient for pipes and globs,
@@ -49,8 +49,8 @@ routine proc_result_of(code: S64) -> ProcessResult
 ### :param command: The command line to run.
 ### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
 routine run_process(command: Text) -> ProcessResult
-  var cstr = CStr(from: command)
-  return proc_result_of(code: rf_proc_run(command: cstr, command_len: cstr.count().S32()))
+    var cstr = CStr(from: command)
+    return proc_result_of(code: rf_proc_run(command: cstr, command_len: cstr.count().S32()))
 
 ### Runs `file` directly with an explicit argument vector — NO shell, so there is no quoting or
 ### injection hazard (the safe form for untrusted arguments). Optionally runs in `cwd` (empty =
@@ -64,16 +64,16 @@ routine run_process(command: Text) -> ProcessResult
 ### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
 routine run_program(file: Text, args: Accessing[List[Text]], cwd: Text = "",
                     env: Dict[Text, Text] = {:}) -> ProcessResult
-  var fcstr = CStr(from: file)
-  var builder = rf_proc_begin(file: fcstr, file_len: fcstr.count().S32())
-  each arg in args
-    var acstr = CStr(from: arg)
-    rf_proc_add_arg(builder: builder, arg: acstr, arg_len: acstr.count().S32())
-  var ccstr = CStr(from: cwd)
-  rf_proc_set_cwd(builder: builder, cwd: ccstr, cwd_len: ccstr.count().S32())
-  each entry in env
-    var kcstr = CStr(from: entry.key)
-    var vcstr = CStr(from: entry.value)
-    rf_proc_add_env(builder: builder, key: kcstr, key_len: kcstr.count().S32(),
-                    val: vcstr, val_len: vcstr.count().S32())
-  return proc_result_of(code: rf_proc_run_built(builder: builder))
+    var fcstr = CStr(from: file)
+    var builder = rf_proc_begin(file: fcstr, file_len: fcstr.count().S32())
+    each arg in args
+        var acstr = CStr(from: arg)
+        rf_proc_add_arg(builder: builder, arg: acstr, arg_len: acstr.count().S32())
+    var ccstr = CStr(from: cwd)
+    rf_proc_set_cwd(builder: builder, cwd: ccstr, cwd_len: ccstr.count().S32())
+    each entry in env
+        var kcstr = CStr(from: entry.key)
+        var vcstr = CStr(from: entry.value)
+        rf_proc_add_env(builder: builder, key: kcstr, key_len: kcstr.count().S32(),
+                        val: vcstr, val_len: vcstr.count().S32())
+    return proc_result_of(code: rf_proc_run_built(builder: builder))

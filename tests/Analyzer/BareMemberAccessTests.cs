@@ -23,13 +23,13 @@ public class BareMemberAccessTests
     {
         string source = """
                         record Widget
-                          size: S32
+                            size: S32
                         @readonly
                         routine Widget.tag() -> S32
-                          return 7_s32
+                            return 7_s32
                         routine test() -> S32
-                          var w = Widget(size: 1_s32)
-                          return w.tag
+                            var w = Widget(size: 1_s32)
+                            return w.tag
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -45,13 +45,13 @@ public class BareMemberAccessTests
     {
         string source = """
                         record Widget
-                          size: S32
+                            size: S32
                         @readonly
                         routine Widget.tag() -> S32
-                          return 7_s32
+                            return 7_s32
                         routine test() -> S32
-                          var w = Widget(size: 1_s32)
-                          return w.tag()
+                            var w = Widget(size: 1_s32)
+                            return w.tag()
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -67,10 +67,10 @@ public class BareMemberAccessTests
     {
         string source = """
                         record Widget
-                          size: S32
+                            size: S32
                         routine test() -> S32
-                          var w = Widget(size: 1_s32)
-                          return w.size
+                            var w = Widget(size: 1_s32)
+                            return w.size
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

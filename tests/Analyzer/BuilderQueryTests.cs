@@ -20,13 +20,13 @@ public class BuilderQueryTests
     {
         string source = """
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine test()
-                          var p = Point(x: 1, y: 2)
-                          var name = p.type_name()
-                          return
+                            var p = Point(x: 1, y: 2)
+                            var name = p.type_name()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -43,13 +43,13 @@ public class BuilderQueryTests
                         import BuilderQuery
 
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine test()
-                          var p = Point(x: 1, y: 2)
-                          var name = p.type_name()
-                          return
+                            var p = Point(x: 1, y: 2)
+                            var name = p.type_name()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -64,13 +64,13 @@ public class BuilderQueryTests
     {
         string source = """
                         record Pair
-                          a: S64
-                          b: S64
+                            a: S64
+                            b: S64
 
                         routine test()
-                          var p = Pair(a: 1, b: 2)
-                          var sz = p.data_size()
-                          return
+                            var p = Pair(a: 1, b: 2)
+                            var sz = p.data_size()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -87,13 +87,13 @@ public class BuilderQueryTests
                         import BuilderQuery
 
                         record Pair
-                          a: S64
-                          b: S64
+                            a: S64
+                            b: S64
 
                         routine test()
-                          var p = Pair(a: 1, b: 2)
-                          var sz = p.data_size()
-                          return
+                            var p = Pair(a: 1, b: 2)
+                            var sz = p.data_size()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -113,8 +113,8 @@ public class BuilderQueryTests
     {
         string source = """
                         routine test()
-                          var f = source_file()
-                          return
+                            var f = source_file()
+                            return
                         """;
 
         // Standalone BuilderQuery routines are plain `module BuilderQuery` members: a missing
@@ -133,8 +133,8 @@ public class BuilderQueryTests
                         import BuilderQuery
 
                         routine test()
-                          var f = source_file()
-                          return
+                            var f = source_file()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -149,8 +149,8 @@ public class BuilderQueryTests
     {
         string source = """
                         routine test()
-                          var ln = source_line()
-                          return
+                            var ln = source_line()
+                            return
                         """;
 
         // See SourceFile_WithoutImport_ReportsError: standalone routine → plain UnknownIdentifier.
@@ -166,8 +166,8 @@ public class BuilderQueryTests
     {
         string source = """
                         routine test()
-                          var f = caller_file()
-                          return
+                            var f = caller_file()
+                            return
                         """;
 
         // See SourceFile_WithoutImport_ReportsError: standalone routine → plain UnknownIdentifier.
@@ -188,13 +188,13 @@ public class BuilderQueryTests
     {
         string source = """
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine test()
-                          var p = Point(x: 1, y: 2)
-                          var s = f"{p}"
-                          return
+                            var p = Point(x: 1, y: 2)
+                            var s = f"{p}"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -209,14 +209,14 @@ public class BuilderQueryTests
     {
         string source = """
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine test()
-                          var a = Point(x: 1, y: 2)
-                          var b = Point(x: 3, y: 4)
-                          var eq = a == b
-                          return
+                            var a = Point(x: 1, y: 2)
+                            var b = Point(x: 3, y: 4)
+                            var eq = a == b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -238,19 +238,19 @@ public class BuilderQueryTests
                         import BuilderQuery
 
                         record Pair
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine test()
-                          var p = Pair(x: 1, y: 2)
-                          var name = p.type_name()
-                          var kind = p.type_kind()
-                          var tid = p.type_id()
-                          var mod = p.module_name()
-                          var gen = p.is_generic()
-                          var sz = p.data_size()
-                          var cnt = p.member_variable_count()
-                          return
+                            var p = Pair(x: 1, y: 2)
+                            var name = p.type_name()
+                            var kind = p.type_kind()
+                            var tid = p.type_id()
+                            var mod = p.module_name()
+                            var gen = p.is_generic()
+                            var sz = p.data_size()
+                            var cnt = p.member_variable_count()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -267,17 +267,17 @@ public class BuilderQueryTests
                         import BuilderQuery
 
                         record Pair
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine test()
-                          var p = Pair(x: 1, y: 2)
-                          var protos = p.protocols()
-                          var names = p.routine_names()
-                          var annots = p.annotations()
-                          var gargs = p.generic_args()
-                          var deps = p.dependencies()
-                          return
+                            var p = Pair(x: 1, y: 2)
+                            var protos = p.protocols()
+                            var names = p.routine_names()
+                            var annots = p.annotations()
+                            var gargs = p.generic_args()
+                            var deps = p.dependencies()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -294,12 +294,12 @@ public class BuilderQueryTests
                         import BuilderQuery
 
                         routine test()
-                          var f = source_file()
-                          var r = source_routine()
-                          var m = source_module()
-                          var ln = source_line()
-                          var col = source_column()
-                          return
+                            var f = source_file()
+                            var r = source_routine()
+                            var m = source_module()
+                            var ln = source_line()
+                            var col = source_column()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

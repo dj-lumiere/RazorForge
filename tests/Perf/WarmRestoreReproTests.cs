@@ -48,10 +48,10 @@ public sealed class WarmRestoreReproTests
                             import IO/Console
                             import Collections.CircularList
                             routine start()
-                              var d: CircularList[S32] = [1, 2, 3]
-                              each v in d
-                                show(f"{v}")
-                              return
+                                var d: CircularList[S32] = [1, 2, 3]
+                                each v in d
+                                    show(f"{v}")
+                                return
                             """;
 
         // The daemon serves many compiles from one snapshot — run several to catch cross-compile mutation.

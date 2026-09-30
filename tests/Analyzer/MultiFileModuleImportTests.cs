@@ -29,18 +29,18 @@ public sealed class MultiFileModuleImportTests
         ("Shapes/Alpha.rf", """
                             module Shapes
                             record Alpha
-                              secret value: S32
+                                secret value: S32
 
                             routine Alpha.doubled() -> S32
-                              return me.value * 2
+                                return me.value * 2
                             """),
         ("Shapes/Beta.rf", """
                            module Shapes
                            record Beta
-                             secret value: S32
+                               secret value: S32
 
                            routine Beta.tripled() -> S32
-                             return me.value * 3
+                               return me.value * 3
                            """)
     ];
 
@@ -57,10 +57,10 @@ public sealed class MultiFileModuleImportTests
                                                              import Shapes
 
                                                              routine start()
-                                                               var a = Alpha(value: 5)
-                                                               var b = Beta(value: 5)
-                                                               show(f"{a.doubled()} {b.tripled()}")
-                                                               return
+                                                                 var a = Alpha(value: 5)
+                                                                 var b = Beta(value: 5)
+                                                                 show(f"{a.doubled()} {b.tripled()}")
+                                                                 return
                                                              """,
             moduleFiles: SharedModuleFiles);
 
@@ -80,10 +80,10 @@ public sealed class MultiFileModuleImportTests
                                                              import Shapes.[Alpha, Beta]
 
                                                              routine start()
-                                                               var a = Alpha(value: 5)
-                                                               var b = Beta(value: 5)
-                                                               show(f"{a.doubled()} {b.tripled()}")
-                                                               return
+                                                                 var a = Alpha(value: 5)
+                                                                 var b = Beta(value: 5)
+                                                                 show(f"{a.doubled()} {b.tripled()}")
+                                                                 return
                                                              """,
             moduleFiles: SharedModuleFiles);
 
@@ -103,9 +103,9 @@ public sealed class MultiFileModuleImportTests
                                                              import Shapes.Alpha
 
                                                              routine start()
-                                                               var a = Alpha(value: 5)
-                                                               show(f"{a.doubled()}")
-                                                               return
+                                                                 var a = Alpha(value: 5)
+                                                                 show(f"{a.doubled()}")
+                                                                 return
                                                              """,
             moduleFiles: SharedModuleFiles);
 
@@ -126,10 +126,10 @@ public sealed class MultiFileModuleImportTests
                                                              import Shapes.Beta
 
                                                              routine start()
-                                                               var a = Alpha(value: 5)
-                                                               var b = Beta(value: 5)
-                                                               show(f"{a.doubled()} {b.tripled()}")
-                                                               return
+                                                                 var a = Alpha(value: 5)
+                                                                 var b = Beta(value: 5)
+                                                                 show(f"{a.doubled()} {b.tripled()}")
+                                                                 return
                                                              """,
             moduleFiles: SharedModuleFiles);
 
@@ -148,7 +148,7 @@ public sealed class MultiFileModuleImportTests
                                                              import NoSuchModule
 
                                                              routine start()
-                                                               return
+                                                                 return
                                                              """,
             moduleFiles: SharedModuleFiles);
 
@@ -169,19 +169,19 @@ public sealed class MultiFileModuleImportTests
                                                              import GenLib
 
                                                              routine start()
-                                                               var a = gen_id[S32](7)
-                                                               var b = con_id(5)
-                                                               return
+                                                                 var a = gen_id[S32](7)
+                                                                 var b = con_id(5)
+                                                                 return
                                                              """,
             moduleFiles:
             [
                 ("GenLib/Lib.rf", """
                                   module GenLib
                                   routine con_id(x: S32) -> S32
-                                    return x
+                                      return x
 
                                   routine gen_id[T](x: T) -> T
-                                    return x
+                                      return x
                                   """)
             ]);
 
@@ -195,19 +195,19 @@ public sealed class MultiFileModuleImportTests
         ("SameMod/Aaa.rf", """
                            module SameMod
                            record Aaa
-                             secret value: S32
+                               secret value: S32
 
                            routine Aaa.combined() -> S32
-                             var b = Bbb(value: 10)
-                             return me.value + b.tripled()
+                               var b = Bbb(value: 10)
+                               return me.value + b.tripled()
                            """),
         ("SameMod/Bbb.rf", """
                            module SameMod
                            record Bbb
-                             secret value: S32
+                               secret value: S32
 
                            routine Bbb.tripled() -> S32
-                             return me.value * 3
+                               return me.value * 3
                            """)
     ];
 
@@ -223,9 +223,9 @@ public sealed class MultiFileModuleImportTests
                                                              import IO/Console
 
                                                              routine start()
-                                                               var a = Aaa(value: 5)
-                                                               show(f"{a.combined()}")
-                                                               return
+                                                                 var a = Aaa(value: 5)
+                                                                 show(f"{a.combined()}")
+                                                                 return
                                                              """,
             moduleFiles: SameModuleSiblingFiles,
             entryRelPath: "SameMod/Main.rf");
@@ -246,10 +246,10 @@ public sealed class MultiFileModuleImportTests
             ("SameMod/Other.rf", """
                                  module OtherMod
                                  record Zzz
-                                   secret value: S32
+                                     secret value: S32
 
                                  routine Zzz.broken() -> S32
-                                   return NonExistentType.nope()
+                                     return NonExistentType.nope()
                                  """)
         };
 
@@ -258,9 +258,9 @@ public sealed class MultiFileModuleImportTests
                                                              import IO/Console
 
                                                              routine start()
-                                                               var a = Aaa(value: 5)
-                                                               show(f"{a.combined()}")
-                                                               return
+                                                                 var a = Aaa(value: 5)
+                                                                 show(f"{a.combined()}")
+                                                                 return
                                                              """,
             moduleFiles: files,
             entryRelPath: "SameMod/Main.rf");
@@ -291,8 +291,8 @@ public sealed class MultiFileModuleImportTests
                 ("Helper.rf", """
                               import IO/Console
                               routine greet()
-                                show("hi")
-                                return
+                                  show("hi")
+                                  return
                               show("stray")
                               """)
             ]);
@@ -318,7 +318,7 @@ public sealed class MultiFileModuleImportTests
             [
                 ("tools/text utils.rf", """
                                         routine shout(t: Text) -> Text
-                                          return t + "!"
+                                            return t + "!"
                                         """)
             ]);
 
@@ -338,16 +338,16 @@ public sealed class MultiFileModuleImportTests
                                                              import IO/Console
                                                              import Mathx
                                                              routine add(n: S64) -> S64
-                                                               return n + 1
+                                                                 return n + 1
                                                              routine start()
-                                                               show(f"{add(n: 1)} {sub(n: 1)}")
-                                                               return
+                                                                 show(f"{add(n: 1)} {sub(n: 1)}")
+                                                                 return
                                                              """,
             moduleFiles:
             [
                 ("Mathx.rf", """
                              routine sub(n: S64) -> S64
-                               return n - 1
+                                 return n - 1
                              """)
             ]);
 

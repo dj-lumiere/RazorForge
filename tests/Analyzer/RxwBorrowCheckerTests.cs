@@ -18,7 +18,7 @@ public class RxwBorrowCheckerTests
                                    import BuilderQuery
 
                                    entity Counter
-                                     value: S64
+                                       value: S64
 
                                    """;
 
@@ -27,11 +27,11 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.amend() as c1
-                                      using s.amend() as c2
-                                        show("nested")
-                                    return
+                                      var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      using s.amend() as c1
+                                          using s.amend() as c2
+                                              show("nested")
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -45,11 +45,11 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.amend() as c
-                                      using s.consult() as v
-                                        show("nested")
-                                    return
+                                      var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      using s.amend() as c
+                                          using s.consult() as v
+                                              show("nested")
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -63,11 +63,11 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.consult() as v
-                                      using s.amend() as c
-                                        show("nested")
-                                    return
+                                      var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      using s.consult() as v
+                                          using s.amend() as c
+                                              show("nested")
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -82,11 +82,11 @@ public class RxwBorrowCheckerTests
         // Readers coexist — multiple consult holds on the same handle are allowed.
         string source = Prelude + """
                                   routine start()
-                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.consult() as v1
-                                      using s.consult() as v2
-                                        show(f"{v1.value} {v2.value}")
-                                    return
+                                      var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      using s.consult() as v1
+                                          using s.consult() as v2
+                                              show(f"{v1.value} {v2.value}")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -99,12 +99,12 @@ public class RxwBorrowCheckerTests
         // Distinct handles do not conflict (name-based).
         string source = Prelude + """
                                   routine start()
-                                    var s1 = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    var s2 = Guarded[Counter, MultiRead](from: Counter(value: 2))
-                                    using s1.amend() as c1
-                                      using s2.amend() as c2
-                                        show("two handles")
-                                    return
+                                      var s1 = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      var s2 = Guarded[Counter, MultiRead](from: Counter(value: 2))
+                                      using s1.amend() as c1
+                                          using s2.amend() as c2
+                                              show("two handles")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -117,16 +117,16 @@ public class RxwBorrowCheckerTests
         // Non-overlapping scopes — the first amend is released before the second opens.
         string source = Prelude + """
                                   routine Counter.bump(inc: S64)
-                                    me.value = me.value + inc
-                                    return
+                                      me.value = me.value + inc
+                                      return
 
                                   routine start()
-                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.amend() as c1
-                                      c1.bump(inc: 1)
-                                    using s.amend() as c2
-                                      c2.bump(inc: 1)
-                                    return
+                                      var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      using s.amend() as c1
+                                          c1.bump(inc: 1)
+                                      using s.amend() as c2
+                                          c2.bump(inc: 1)
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -141,12 +141,12 @@ public class RxwBorrowCheckerTests
         // the handle names differ.
         string source = Prelude + """
                                   routine start()
-                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    var s2 = s.share()
-                                    using s.amend() as c1
-                                      using s2.amend() as c2
-                                        show("aliased")
-                                    return
+                                      var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      var s2 = s.share()
+                                      using s.amend() as c1
+                                          using s2.amend() as c2
+                                              show("aliased")
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -161,12 +161,12 @@ public class RxwBorrowCheckerTests
         // A reader on a clone still conflicts with a writer on the original (same controller).
         string source = Prelude + """
                                   routine start()
-                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    var s2 = s.share()
-                                    using s.amend() as c
-                                      using s2.consult() as v
-                                        show("aliased reader")
-                                    return
+                                      var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      var s2 = s.share()
+                                      using s.amend() as c
+                                          using s2.consult() as v
+                                              show("aliased reader")
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -181,12 +181,12 @@ public class RxwBorrowCheckerTests
         // Two readers coexist even on the same controller — readers-XOR-writer permits shared reads.
         string source = Prelude + """
                                   routine start()
-                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                    var s2 = s.share()
-                                    using s.consult() as v1
-                                      using s2.consult() as v2
-                                        show("two readers, one controller")
-                                    return
+                                      var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      var s2 = s.share()
+                                      using s.consult() as v1
+                                          using s2.consult() as v2
+                                              show("two readers, one controller")
+                                      return
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);

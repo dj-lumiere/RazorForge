@@ -24,12 +24,12 @@ public class UnwrapOperatorTests
         // Verify that failable routines produce try_ variants with error handling return types
         string source = """
                         routine get!(flag: Bool) -> S64
-                          if flag
-                            absent
-                          return 42
+                            if flag
+                                absent
+                            return 42
 
                         routine trigger_variants(flag: Bool) -> S64?
-                          return try get(flag: flag)
+                            return try get(flag: flag)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -50,12 +50,12 @@ public class UnwrapOperatorTests
         // already unwraps in failable context.
         string source = """
                         routine get!(flag: Bool) -> S64
-                          if flag
-                            absent
-                          return 42
+                            if flag
+                                absent
+                            return 42
                         routine test!() -> S64
-                          var x = get(flag: true)!!
-                          return x
+                            var x = get(flag: true)!!
+                            return x
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -74,12 +74,12 @@ public class UnwrapOperatorTests
         // ?? on S64 should report TypeDoesNotSupportOperator.
         string source = """
                         routine get!(flag: Bool) -> S64
-                          if flag
-                            absent
-                          return 42
+                            if flag
+                                absent
+                            return 42
                         routine test!() -> S64
-                          var x = get(flag: true) ?? 0
-                          return x
+                            var x = get(flag: true) ?? 0
+                            return x
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -99,8 +99,8 @@ public class UnwrapOperatorTests
     {
         string source = """
                         routine test()
-                          var x = 42!!
-                          return
+                            var x = 42!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -116,8 +116,8 @@ public class UnwrapOperatorTests
     {
         string source = """
                         routine test()
-                          var x = true!!
-                          return
+                            var x = true!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -133,12 +133,12 @@ public class UnwrapOperatorTests
     {
         string source = """
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
                         routine test()
-                          var p = Point(x: 1, y: 2)
-                          var q = p!!
-                          return
+                            var p = Point(x: 1, y: 2)
+                            var q = p!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -154,11 +154,11 @@ public class UnwrapOperatorTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
                         routine test()
-                          var n = Node(value: 1)
-                          var m = n!!
-                          return
+                            var n = Node(value: 1)
+                            var m = n!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -174,8 +174,8 @@ public class UnwrapOperatorTests
     {
         string source = """
                         routine test()
-                          var t = "hello"!!
-                          return
+                            var t = "hello"!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -195,8 +195,8 @@ public class UnwrapOperatorTests
     {
         string source = """
                         routine test()
-                          var x = 42 ?? 0
-                          return
+                            var x = 42 ?? 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -212,8 +212,8 @@ public class UnwrapOperatorTests
     {
         string source = """
                         routine test()
-                          var x = true ?? false
-                          return
+                            var x = true ?? false
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -229,13 +229,13 @@ public class UnwrapOperatorTests
     {
         string source = """
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
                         routine test()
-                          var p = Point(x: 1, y: 2)
-                          var q = Point(x: 0, y: 0)
-                          var r = p ?? q
-                          return
+                            var p = Point(x: 1, y: 2)
+                            var q = Point(x: 0, y: 0)
+                            var r = p ?? q
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -255,14 +255,14 @@ public class UnwrapOperatorTests
     {
         string source = """
                         record Wrapper
-                          value: S64
+                            value: S64
                         @readonly
                         routine Wrapper.unwrap() -> S64
-                          return me.value
+                            return me.value
                         routine test()
-                          var w = Wrapper(value: 42)
-                          var x = w!!
-                          return
+                            var w = Wrapper(value: 42)
+                            var x = w!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -278,14 +278,14 @@ public class UnwrapOperatorTests
     {
         string source = """
                         entity Box
-                          value: S64
+                            value: S64
                         @readonly
                         routine Box.unwrap() -> S64
-                          return me.value
+                            return me.value
                         routine test()
-                          var b = Box(value: 99)
-                          var x = b!!
-                          return
+                            var b = Box(value: 99)
+                            var x = b!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -305,14 +305,14 @@ public class UnwrapOperatorTests
     {
         string source = """
                         record Wrapper
-                          value: S64
+                            value: S64
                         @readonly
                         routine Wrapper.$unwrap_or(default: S64) -> S64
-                          return me.value
+                            return me.value
                         routine test()
-                          var w = Wrapper(value: 42)
-                          var x = w ?? 0
-                          return
+                            var w = Wrapper(value: 42)
+                            var x = w ?? 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -328,14 +328,14 @@ public class UnwrapOperatorTests
     {
         string source = """
                         entity Box
-                          value: S64
+                            value: S64
                         @readonly
                         routine Box.$unwrap_or(default: S64) -> S64
-                          return me.value
+                            return me.value
                         routine test()
-                          var b = Box(value: 99)
-                          var x = b ?? 0
-                          return
+                            var b = Box(value: 99)
+                            var x = b ?? 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -355,13 +355,13 @@ public class UnwrapOperatorTests
     {
         string source = """
                         record Wrapper
-                          value: S64
+                            value: S64
                         @readonly
                         routine Wrapper.unwrap() -> S64
-                          return me.value
+                            return me.value
                         @readonly
                         routine Wrapper.$unwrap_or(default: S64) -> S64
-                          return me.value
+                            return me.value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -382,10 +382,10 @@ public class UnwrapOperatorTests
         // A regular routine returns S64, !! on S64 is invalid
         string source = """
                         routine get_value() -> S64
-                          return 42
+                            return 42
                         routine test()
-                          var x = get_value()!!
-                          return
+                            var x = get_value()!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -402,10 +402,10 @@ public class UnwrapOperatorTests
         // A regular routine returns S64, ?? on S64 is invalid
         string source = """
                         routine get_value() -> S64
-                          return 42
+                            return 42
                         routine test()
-                          var x = get_value() ?? 0
-                          return
+                            var x = get_value() ?? 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -425,12 +425,12 @@ public class UnwrapOperatorTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
+                            NORTH
+                            SOUTH
                         routine test()
-                          var d = NORTH
-                          var x = d!!
-                          return
+                            var d = NORTH
+                            var x = d!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -448,13 +448,13 @@ public class UnwrapOperatorTests
         // before reaching the NoneCoalesce handler -> correct behavior
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
+                            NORTH
+                            SOUTH
                         routine test()
-                          var d = NORTH
-                          var e = SOUTH
-                          var x = d ?? e
-                          return
+                            var d = NORTH
+                            var e = SOUTH
+                            var x = d ?? e
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -470,12 +470,12 @@ public class UnwrapOperatorTests
     {
         string source = """
                         flags Permission
-                          READ
-                          WRITE
+                            READ
+                            WRITE
                         routine test()
-                          var p = READ
-                          var x = p!!
-                          return
+                            var p = READ
+                            var x = p!!
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -21,8 +21,8 @@ public class ParserErrorTests
     {
         string source = """
                         record Point
-                          x B32
-                          y: B32
+                            x B32
+                            y: B32
                         """;
 
         // Parser either throws on the malformed member or recovers and reports errors — both are acceptable.
@@ -43,8 +43,8 @@ public class ParserErrorTests
     {
         string source = """
                         record Point
-                          x:
-                          y: B32
+                            x:
+                            y: B32
                         """;
 
         // Should not parse cleanly - missing type after colon: either throw or recover with errors.
@@ -67,8 +67,8 @@ public class ParserErrorTests
         // 'var' should not be allowed in record member variables
         string source = """
                         record Point
-                          var x: B32
-                          y: B32
+                            var x: B32
+                            y: B32
                         """;
 
         // This tests that var in record member variable is either rejected or ignored
@@ -85,10 +85,10 @@ public class ParserErrorTests
     {
         string source = """
                         record Point
-                          x: S32
+                            x: S32
 
-                          routine distance() -> S32
-                            return me.x
+                            routine distance() -> S32
+                                return me.x
                         """;
 
         AssertParseError(source: source);
@@ -107,7 +107,7 @@ public class ParserErrorTests
         // Entity member variables use 'name: Type' syntax without var keyword
         string source = """
                         entity User
-                          name: Text
+                            name: Text
                         """;
 
         AssertParses(source: source);
@@ -121,7 +121,7 @@ public class ParserErrorTests
         // var keyword are no longer allowed in entity bodies
         string source = """
                         entity User
-                          var name: Text
+                            var name: Text
                         """;
 
         AssertParseError(source: source);
@@ -134,7 +134,7 @@ public class ParserErrorTests
     {
         string source = """
                         entity
-                          name: Text
+                            name: Text
                         """;
 
         // Parser uses error recovery, check for errors instead of exception
@@ -148,10 +148,10 @@ public class ParserErrorTests
     {
         string source = """
                         entity User
-                          name: Text
+                            name: Text
 
-                          routine display() -> Text
-                            return me.name
+                            routine display() -> Text
+                                return me.name
                         """;
 
         AssertParseError(source: source);
@@ -170,9 +170,9 @@ public class ParserErrorTests
         // Choice cases must be all-or-nothing for values
         string source = """
                         choice Status
-                          OK: 200
-                          PENDING
-                          ERROR: 500
+                            OK: 200
+                            PENDING
+                            ERROR: 500
                         """;
 
         // This should be rejected - can't mix valued and non-valued cases
@@ -189,8 +189,8 @@ public class ParserErrorTests
         // Choice cases can use any case convention - no forcing required
         string source = """
                         choice Direction
-                          north
-                          south
+                            north
+                            south
                         """;
 
         Program program = Parse(source: source);
@@ -204,11 +204,11 @@ public class ParserErrorTests
     {
         string source = """
                         choice Status
-                          OK
-                          ERROR
+                            OK
+                            ERROR
 
-                          routine is_ok() -> Bool
-                            return me is OK
+                            routine is_ok() -> Bool
+                                return me is OK
                         """;
 
         AssertParseError(source: source);
@@ -245,8 +245,8 @@ public class ParserErrorTests
     {
         string source = """
                         variant Shape obeys Equatable
-                          Circle: B32
-                          Rect: B32
+                            Circle: B32
+                            Rect: B32
                         """;
 
         // Variants cannot obey protocols — parser does not support 'obeys' on variants: expect throw or parse error.
@@ -272,9 +272,9 @@ public class ParserErrorTests
         // Protocol member routines are signatures only - no body allowed
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
-                            return "hello"
+                            @readonly
+                            routine Me.display() -> Text
+                                return "hello"
                         """;
 
         // Should reject a member routine with a body in a protocol
@@ -289,8 +289,8 @@ public class ParserErrorTests
         // Protocol member routines must have Me. prefix
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine display() -> Text
+                            @readonly
+                            routine display() -> Text
                         """;
 
         // Should reject - member routines need Me. prefix
@@ -306,8 +306,8 @@ public class ParserErrorTests
     {
         string source = """
                         protocol Displayable
-                          label: Text
-                          routine Me.display() -> Text
+                            label: Text
+                            routine Me.display() -> Text
                         """;
 
         AssertParseError(source: source);
@@ -320,8 +320,8 @@ public class ParserErrorTests
     {
         string source = """
                         protocol Displayable
-                          return
-                          routine Me.display() -> Text
+                            return
+                            routine Me.display() -> Text
                         """;
 
         AssertParseError(source: source);
@@ -340,7 +340,7 @@ public class ParserErrorTests
         string source = """
                         record Container[T]
                         needs X obeys Comparable
-                          value: T
+                            value: T
                         """;
 
         // X is not a type parameter - should be rejected
@@ -357,7 +357,7 @@ public class ParserErrorTests
         string source = """
                         record Container[T]
                         needs T banana Comparable
-                          value: T
+                            value: T
                         """;
 
         // "banana" is not a valid constraint kind (should be 'obeys' or 'is')
@@ -402,8 +402,8 @@ public class ParserErrorTests
     {
         string source = """
                         routine foo()
-                          if true
-                          return 1
+                            if true
+                            return 1
                         """;
 
         // `if true` has no indented body: parser should throw or recover with errors.
@@ -423,7 +423,7 @@ public class ParserErrorTests
     {
         string source = """
                         routine foo()
-                          return bar(1, 2
+                            return bar(1, 2
                         """;
 
         // Missing closing paren for call: parser should throw or recover with errors.
@@ -449,9 +449,9 @@ public class ParserErrorTests
         // Nested routine declarations should be rejected
         string source = """
                         routine outer()
-                          routine inner()
-                            pass
-                          return
+                            routine inner()
+                                pass
+                            return
                         """;
 
         AssertParseError(source: source);
@@ -465,10 +465,10 @@ public class ParserErrorTests
         // Nested routines should be rejected even in control flow blocks
         string source = """
                         routine outer()
-                          if true
-                            routine inner()
-                              pass
-                          return
+                            if true
+                                routine inner()
+                                    pass
+                            return
                         """;
 
         AssertParseError(source: source);
@@ -489,7 +489,7 @@ public class ParserErrorTests
         // Use when/match or regular if statements for complex conditionals
         string source = """
                         routine classify(n: S32) -> Text
-                          return if n > 0 then "positive" else if n < 0 then "negative" else "zero"
+                            return if n > 0 then "positive" else if n < 0 then "negative" else "zero"
                         """;
 
         // Parser rejects nested inline conditionals
@@ -510,8 +510,8 @@ public class ParserErrorTests
         // parser always accepts the name regardless.
         string source = """
                         routine try_something()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -525,8 +525,8 @@ public class ParserErrorTests
     {
         string source = """
                         routine check_something()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -540,8 +540,8 @@ public class ParserErrorTests
     {
         string source = """
                         routine find_something()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -560,8 +560,8 @@ public class ParserErrorTests
     {
         string source = """
                         common variant Shape
-                          Circle: B32
-                          Rect: B32
+                            Circle: B32
+                            Rect: B32
                         """;
 
         AssertParseError(source: source);
@@ -574,8 +574,8 @@ public class ParserErrorTests
     {
         string source = """
                         common record Point
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
                         """;
 
         AssertParseError(source: source);

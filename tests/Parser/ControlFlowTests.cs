@@ -19,9 +19,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          if x > 0
-                            show("positive")
-                          return
+                            if x > 0
+                                show("positive")
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -42,11 +42,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          if x > 0
-                            show("positive")
-                          else
-                            show("non-positive")
-                          return
+                            if x > 0
+                                show("positive")
+                            else
+                                show("non-positive")
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -67,13 +67,13 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          if x > 0
-                            show("positive")
-                          elseif x < 0
-                            show("negative")
-                          else
-                            show("zero")
-                          return
+                            if x > 0
+                                show("positive")
+                            elseif x < 0
+                                show("negative")
+                            else
+                                show("zero")
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -95,14 +95,14 @@ public class ControlFlowTests
     {
         string source = """
                         routine test(n: S32) -> Text
-                          if n == 1
-                            return "one"
-                          elseif n == 2
-                            return "two"
-                          elseif n == 3
-                            return "three"
-                          else
-                            return "other"
+                            if n == 1
+                                return "one"
+                            elseif n == 2
+                                return "two"
+                            elseif n == 3
+                                return "three"
+                            else
+                                return "other"
                         """;
 
         AssertParses(source: source);
@@ -115,10 +115,10 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          if x > 0
-                            if y > 0
-                              show("both positive")
-                          return
+                            if x > 0
+                                if y > 0
+                                    show("both positive")
+                            return
                         """;
 
         AssertParses(source: source);
@@ -136,8 +136,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          unless x.is_valid()
-                            return
+                            unless x.is_valid()
+                                return
                         """;
 
         Program program = AssertParses(source: source);
@@ -158,11 +158,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          unless condition
-                            show("condition is false")
-                          else
-                            show("condition is true")
-                          return
+                            unless condition
+                                show("condition is false")
+                            else
+                                show("condition is true")
+                            return
                         """;
 
         AssertParses(source: source);
@@ -175,10 +175,10 @@ public class ControlFlowTests
     {
         string source = """
                         routine process!(data: Text)
-                          unless data.length() > 0
-                            absent
-                          show(data)
-                          return
+                            unless data.length() > 0
+                                absent
+                            show(data)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -196,7 +196,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine min(a: S32, b: S32) -> S32
-                          return if a < b then a else b
+                            return if a < b then a else b
                         """;
 
         Program program = AssertParses(source: source);
@@ -211,8 +211,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          var sign = if x >= 0 then 1 else -1
-                          return
+                            var sign = if x >= 0 then 1 else -1
+                            return
                         """;
 
         AssertParses(source: source);
@@ -233,11 +233,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine run()
-                          loop
-                            process()
-                            if should_stop()
-                              break
-                          return
+                            loop
+                                process()
+                                if should_stop()
+                                    break
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -258,9 +258,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          loop
-                            break
-                          return
+                            loop
+                                break
+                            return
                         """;
 
         AssertParses(source: source);
@@ -273,11 +273,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          loop
-                            if skip_this()
-                              continue
-                            process()
-                          return
+                            loop
+                                if skip_this()
+                                    continue
+                                process()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -295,9 +295,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          while condition
-                            process()
-                          return
+                            while condition
+                                process()
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -317,11 +317,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine count_up()
-                          var count = 0
-                          while count < 10
-                            show(count)
-                            count += 1
-                          return
+                            var count = 0
+                            while count < 10
+                                show(count)
+                                count += 1
+                            return
                         """;
 
         AssertParses(source: source);
@@ -334,11 +334,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine search()
-                          while has_more()
-                            if found_target()
-                              break
-                            advance()
-                          return
+                            while has_more()
+                                if found_target()
+                                    break
+                                advance()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -351,12 +351,12 @@ public class ControlFlowTests
     {
         string source = """
                         routine process_items()
-                          while has_items()
-                            var item = next_item()
-                            if item.skip()
-                              continue
-                            process(item)
-                          return
+                            while has_items()
+                                var item = next_item()
+                                if item.skip()
+                                    continue
+                                process(item)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -374,9 +374,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 10
-                            show(i)
-                          return
+                            each i in 0 til 10
+                                show(i)
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -396,9 +396,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 100 by 5
-                            show(i)
-                          return
+                            each i in 0 til 100 by 5
+                                show(i)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -411,10 +411,10 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          var items = [1, 2, 3, 4, 5]
-                          each item in items
-                            show(item)
-                          return
+                            var items = [1, 2, 3, 4, 5]
+                            each item in items
+                                show(item)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -427,10 +427,10 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          var items = ["a", "b", "c"]
-                          each (index, item) in items.enumerate()
-                            show(f"{index}: {item}")
-                          return
+                            var items = ["a", "b", "c"]
+                            each (index, item) in items.enumerate()
+                                show(f"{index}: {item}")
+                            return
                         """;
 
         AssertParses(source: source);
@@ -443,11 +443,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine find_first(items: List[S32], target: S32)
-                          each item in items
-                            if item == target
-                              show("Found!")
-                              break
-                          return
+                            each item in items
+                                if item == target
+                                    show("Found!")
+                                    break
+                            return
                         """;
 
         AssertParses(source: source);
@@ -460,11 +460,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine process_valid(items: List[S32])
-                          each item in items
-                            if item < 0
-                              continue
-                            process(item)
-                          return
+                            each item in items
+                                if item < 0
+                                    continue
+                                process(item)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -477,10 +477,10 @@ public class ControlFlowTests
     {
         string source = """
                         routine matrix()
-                          each i in 0 til 10
-                            each j in 0 til 10
-                              show(f"{i},{j}")
-                          return
+                            each i in 0 til 10
+                                each j in 0 til 10
+                                    show(f"{i},{j}")
+                            return
                         """;
 
         AssertParses(source: source);
@@ -498,7 +498,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a + b
+                            return a + b
                         """;
 
         Program program = AssertParses(source: source);
@@ -519,8 +519,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine log(msg: Text)
-                          show(msg)
-                          return
+                            show(msg)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -533,9 +533,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine process(x: S32) -> S32
-                          if x < 0
-                            return 0
-                          return x * 2
+                            if x < 0
+                                return 0
+                            return x * 2
                         """;
 
         AssertParses(source: source);
@@ -553,8 +553,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine empty()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AssertParses(source: source);
@@ -567,11 +567,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          if condition
-                            pass
-                          else
-                            do_something()
-                          return
+                            if condition
+                                pass
+                            else
+                                do_something()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -589,9 +589,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine divide!(a: S32, b: S32) -> S32
-                          if b == 0
-                            stop("Division by zero")
-                          return a // b
+                            if b == 0
+                                stop("Division by zero")
+                            return a // b
                         """;
 
         AssertParses(source: source);
@@ -604,9 +604,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine process(data: List[S32])
-                          verify(data.length() > 0, "Data cannot be empty")
-                          do_process(data)
-                          return
+                            verify(data.length() > 0, "Data cannot be empty")
+                            do_process(data)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -619,9 +619,9 @@ public class ControlFlowTests
     {
         string source = """
                         routine test(x: S32)
-                          verify(x >= 0)
-                          process(x)
-                          return
+                            verify(x >= 0)
+                            process(x)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -634,8 +634,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine unreachable()
-                          breach("Should never reach here")
-                          return
+                            breach("Should never reach here")
+                            return
                         """;
 
         AssertParses(source: source);
@@ -648,8 +648,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                          breach()
-                          return
+                            breach()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -667,15 +667,15 @@ public class ControlFlowTests
     {
         string source = """
                         routine process_matrix(matrix: List[List[S32]])
-                          each row in matrix
-                            each cell in row
-                              if cell < 0
-                                continue
-                              if cell > 100
-                                break
-                              while cell > 0
-                                cell -= 1
-                          return
+                            each row in matrix
+                                each cell in row
+                                    if cell < 0
+                                        continue
+                                    if cell > 100
+                                        break
+                                    while cell > 0
+                                        cell -= 1
+                            return
                         """;
 
         AssertParses(source: source);
@@ -688,11 +688,11 @@ public class ControlFlowTests
     {
         string source = """
                         routine search!(items: List[S32], target: S32) -> S32
-                          each (index, item) in items.enumerate()
-                            if item == target
-                              return index
-                          absent
-                          return
+                            each (index, item) in items.enumerate()
+                                if item == target
+                                    return index
+                            absent
+                            return
                         """;
 
         AssertParses(source: source);

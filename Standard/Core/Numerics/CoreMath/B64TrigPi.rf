@@ -27,9 +27,9 @@ secret preset B64_SINCOSPI_CM2: Array[U64, 64] = [0x0000000000000000_u64, 0x0000
 ### :param y: The smaller addend.
 ### :returns: The rounded sum and its rounding error.
 secret routine b64_trigpi_fasttwosum(x: B64, y: B64) -> (B64, B64)
-  var s = x +! y
-  var z = s -! x
-  return (s, y -! z)
+    var s = x +! y
+    var z = s -! x
+    return (s, y -! z)
 
 ### The double-double sum `(xh + xl) + (ch + cl)`, returned as (high, low).
 ### :param xh: The high part of the first operand.
@@ -38,10 +38,10 @@ secret routine b64_trigpi_fasttwosum(x: B64, y: B64) -> (B64, B64)
 ### :param cl: The low part of the second operand.
 ### :returns: The sum as a (high, low) pair.
 secret routine b64_trigpi_adddd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
-  var s = xh +! ch
-  var d = s -! xh
-  var l = ((ch -! d) +! (xh +! (d -! s))) +! (xl +! cl)
-  return (s, l)
+    var s = xh +! ch
+    var d = s -! xh
+    var l = ((ch -! d) +! (xh +! (d -! s))) +! (xl +! cl)
+    return (s, l)
 
 ### The double-double product `(xh + xl) * (ch + cl)`, returned as (high, low).
 ### :param xh: The high part of the first factor.
@@ -50,12 +50,12 @@ secret routine b64_trigpi_adddd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64
 ### :param cl: The low part of the second factor.
 ### :returns: The product as a (high, low) pair.
 secret routine b64_trigpi_muldd_acc(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
-  var ahlh = ch *! xl
-  var alhh = cl *! xh
-  var ahhh = ch *! xh
-  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
-  ahhl = ahhl +! (alhh +! ahlh)
-  return b64_trigpi_fasttwosum(x: ahhh, y: ahhl)
+    var ahlh = ch *! xl
+    var alhh = cl *! xh
+    var ahhh = ch *! xh
+    var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+    ahhl = ahhl +! (alhh +! ahlh)
+    return b64_trigpi_fasttwosum(x: ahhh, y: ahhl)
 
 ### The product of the double-double `xh + xl` and the double `c`, returned as (high, low).
 ### :param xh: The high part of the first factor.
@@ -63,12 +63,12 @@ secret routine b64_trigpi_muldd_acc(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64,
 ### :param c: The second factor.
 ### :returns: The product as a (high, low) pair.
 secret routine b64_trigpi_mulddd(xh: B64, xl: B64, c: B64) -> (B64, B64)
-  var ahlh = c *! xl
-  var ahhh = c *! xh
-  var ahhl = LLVM::fma[B64](a: c, b: xh, c: -ahhh)
-  ahhl = ahhl +! ahlh
-  var h = ahhh +! ahhl
-  return (h, (ahhh -! h) +! ahhl)
+    var ahlh = c *! xl
+    var ahhh = c *! xh
+    var ahhl = LLVM::fma[B64](a: c, b: xh, c: -ahhh)
+    ahhl = ahhl +! ahlh
+    var h = ahhh +! ahhl
+    return (h, (ahhh -! h) +! ahhl)
 
 ### The first step of a double-double Horner evaluation: the top coefficient `c0 + c1` plus the tail `l`
 ### already evaluated in double precision.
@@ -77,8 +77,8 @@ secret routine b64_trigpi_mulddd(xh: B64, xl: B64, c: B64) -> (B64, B64)
 ### :param l: The tail.
 ### :returns: The running value as a (high, low) pair.
 secret routine b64_trigpi_poly_start(c0: B64, c1: B64, l: B64) -> (B64, B64)
-  var h = c0 +! l
-  return (h, ((c0 -! h) +! l) +! c1)
+    var h = c0 +! l
+    return (h, ((c0 -! h) +! l) +! c1)
 
 ### One double-double Horner step: `(h + l) * (xh + xl) + (c0 + c1)`.
 ### :param xh: The high part of the variable.
@@ -89,94 +89,94 @@ secret routine b64_trigpi_poly_start(c0: B64, c1: B64, l: B64) -> (B64, B64)
 ### :param c1: The low part of the next coefficient.
 ### :returns: The new running value as a (high, low) pair.
 secret routine b64_trigpi_poly_step(xh: B64, xl: B64, h: B64, l: B64, c0: B64, c1: B64) -> (B64, B64)
-  var p = b64_trigpi_muldd_acc(xh: xh, xl: xl, ch: h, cl: l)
-  var th = p.item0 +! c0
-  var tl = (c0 -! th) +! p.item0
-  return (th, p.item1 +! (tl +! c1))
+    var p = b64_trigpi_muldd_acc(xh: xh, xl: xl, ch: h, cl: l)
+    var th = p.item0 +! c0
+    var tl = (c0 -! th) +! p.item0
+    return (th, p.item1 +! (tl +! c1))
 
 ### sin(pi*s/2048) and cos(pi*s/2048) to about 2^-75, from the angle index `s` (only its low 12 bits
 ### matter).
 ### :param s: The angle index.
 ### :returns: (sin high, sin low, cos high, cos low).
 secret routine b64_trigpi_sincosn(s: U64) -> (B64, B64, B64, B64)
-  var j = s & 0x3FF_u64
-  if ((s >>> 10) & 1_u64) == 1_u64
-    j = 1024_u64 - j
-  var ks = j >>> 5
-  var kc = 32_u64 - ks
-  var jm = j & 0x1F_u64
-  var ss = (s >>> 11) & 1_u64
-  var sc = ((s +% 1024_u64) >>> 11) & 1_u64
-  var sbh = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * ks])
-  var sbl = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * ks + 1_u64])
-  var cbh = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * kc])
-  var cbl = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * kc + 1_u64])
-  var slh = B64.from_bits(bits: B64_SINCOSPI_SM[2_u64 * jm])
-  var sll = B64.from_bits(bits: B64_SINCOSPI_SM[2_u64 * jm + 1_u64])
-  var clh = B64.from_bits(bits: B64_SINCOSPI_CM[2_u64 * jm])
-  var cll = B64.from_bits(bits: B64_SINCOSPI_CM[2_u64 * jm + 1_u64])
-  var sb = sbh +! sbl
-  var cb = cbh +! cbl
-  var bch = (cbh *! clh) -! (sbh *! slh)
-  var bcl = (((clh *! cbl) -! (slh *! sbl)) +! (cb *! cll)) -! (sb *! sll)
-  var bsh = (sbh *! clh) +! (cbh *! slh)
-  var bsl = (((slh *! cbl) +! (clh *! sbl)) +! (cb *! sll)) +! (sb *! cll)
-  var tch = bch +! bcl
-  var tcl = (bch -! tch) +! bcl
-  var tsh = bsh +! bsl
-  var tsl = (bsh -! tsh) +! bsl
-  if sc == 1_u64
-    tch = -tch
-    tcl = -tcl
-  if ss == 1_u64
-    tsh = -tsh
-    tsl = -tsl
-  return (tsh, tsl, tch, tcl)
+    var j = s & 0x3FF_u64
+    if ((s >>> 10) & 1_u64) == 1_u64
+        j = 1024_u64 - j
+    var ks = j >>> 5
+    var kc = 32_u64 - ks
+    var jm = j & 0x1F_u64
+    var ss = (s >>> 11) & 1_u64
+    var sc = ((s +% 1024_u64) >>> 11) & 1_u64
+    var sbh = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * ks])
+    var sbl = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * ks + 1_u64])
+    var cbh = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * kc])
+    var cbl = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * kc + 1_u64])
+    var slh = B64.from_bits(bits: B64_SINCOSPI_SM[2_u64 * jm])
+    var sll = B64.from_bits(bits: B64_SINCOSPI_SM[2_u64 * jm + 1_u64])
+    var clh = B64.from_bits(bits: B64_SINCOSPI_CM[2_u64 * jm])
+    var cll = B64.from_bits(bits: B64_SINCOSPI_CM[2_u64 * jm + 1_u64])
+    var sb = sbh +! sbl
+    var cb = cbh +! cbl
+    var bch = (cbh *! clh) -! (sbh *! slh)
+    var bcl = (((clh *! cbl) -! (slh *! sbl)) +! (cb *! cll)) -! (sb *! sll)
+    var bsh = (sbh *! clh) +! (cbh *! slh)
+    var bsl = (((slh *! cbl) +! (clh *! sbl)) +! (cb *! sll)) +! (sb *! cll)
+    var tch = bch +! bcl
+    var tcl = (bch -! tch) +! bcl
+    var tsh = bsh +! bsl
+    var tsl = (bsh -! tsh) +! bsl
+    if sc == 1_u64
+        tch = -tch
+        tcl = -tcl
+    if ss == 1_u64
+        tsh = -tsh
+        tsl = -tsl
+    return (tsh, tsl, tch, tcl)
 
 ### sin(pi*s/2048) and cos(pi*s/2048) to double-double accuracy, from the angle index `s` (only its low 12
 ### bits matter).
 ### :param s: The angle index.
 ### :returns: (sin high, sin low, cos high, cos low).
 secret routine b64_trigpi_sincosn2(s: U64) -> (B64, B64, B64, B64)
-  var j = s & 0x3FF_u64
-  if ((s >>> 10) & 1_u64) == 1_u64
-    j = 1024_u64 - j
-  var ks = j >>> 5
-  var kc = 32_u64 - ks
-  var jm = j & 0x1F_u64
-  var ss = (s >>> 11) & 1_u64
-  var sc = ((s +% 1024_u64) >>> 11) & 1_u64
-  var sbh = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * ks])
-  var sbl = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * ks + 1_u64])
-  var cbh = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * kc])
-  var cbl = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * kc + 1_u64])
-  var slh = B64.from_bits(bits: B64_SINCOSPI_SM2[2_u64 * jm])
-  var sll = B64.from_bits(bits: B64_SINCOSPI_SM2[2_u64 * jm + 1_u64])
-  var clh = B64.from_bits(bits: B64_SINCOSPI_CM2[2_u64 * jm])
-  var cll = B64.from_bits(bits: B64_SINCOSPI_CM2[2_u64 * jm + 1_u64])
-  var cc = b64_trigpi_muldd_acc(xh: clh, xl: cll, ch: cbh, cl: cbl)
-  var sn = b64_trigpi_muldd_acc(xh: slh, xl: sll, ch: sbh, cl: sbl)
-  var cs = b64_trigpi_muldd_acc(xh: clh, xl: cll, ch: sbh, cl: sbl)
-  var scp = b64_trigpi_muldd_acc(xh: slh, xl: sll, ch: cbh, cl: cbl)
-  var tc = b64_trigpi_fasttwosum(x: sn.item0, y: cc.item0)
-  var tch = tc.item0
-  var tcl = tc.item1 +! (cc.item1 +! sn.item1)
-  var ts = b64_trigpi_fasttwosum(x: -scp.item0, y: cs.item0)
-  var tsh = ts.item0
-  var tsl = ts.item1 +! (cs.item1 -! scp.item1)
-  var tc2 = b64_trigpi_fasttwosum(x: cbh, y: -tch)
-  tch = tc2.item0
-  tcl = (cbl -! tcl) +! tc2.item1
-  var ts2 = b64_trigpi_fasttwosum(x: sbh, y: -tsh)
-  tsh = ts2.item0
-  tsl = (sbl -! tsl) +! ts2.item1
-  if sc == 1_u64
-    tch = -tch
-    tcl = -tcl
-  if ss == 1_u64
-    tsh = -tsh
-    tsl = -tsl
-  return (tsh, tsl, tch, tcl)
+    var j = s & 0x3FF_u64
+    if ((s >>> 10) & 1_u64) == 1_u64
+        j = 1024_u64 - j
+    var ks = j >>> 5
+    var kc = 32_u64 - ks
+    var jm = j & 0x1F_u64
+    var ss = (s >>> 11) & 1_u64
+    var sc = ((s +% 1024_u64) >>> 11) & 1_u64
+    var sbh = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * ks])
+    var sbl = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * ks + 1_u64])
+    var cbh = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * kc])
+    var cbl = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * kc + 1_u64])
+    var slh = B64.from_bits(bits: B64_SINCOSPI_SM2[2_u64 * jm])
+    var sll = B64.from_bits(bits: B64_SINCOSPI_SM2[2_u64 * jm + 1_u64])
+    var clh = B64.from_bits(bits: B64_SINCOSPI_CM2[2_u64 * jm])
+    var cll = B64.from_bits(bits: B64_SINCOSPI_CM2[2_u64 * jm + 1_u64])
+    var cc = b64_trigpi_muldd_acc(xh: clh, xl: cll, ch: cbh, cl: cbl)
+    var sn = b64_trigpi_muldd_acc(xh: slh, xl: sll, ch: sbh, cl: sbl)
+    var cs = b64_trigpi_muldd_acc(xh: clh, xl: cll, ch: sbh, cl: sbl)
+    var scp = b64_trigpi_muldd_acc(xh: slh, xl: sll, ch: cbh, cl: cbl)
+    var tc = b64_trigpi_fasttwosum(x: sn.item0, y: cc.item0)
+    var tch = tc.item0
+    var tcl = tc.item1 +! (cc.item1 +! sn.item1)
+    var ts = b64_trigpi_fasttwosum(x: -scp.item0, y: cs.item0)
+    var tsh = ts.item0
+    var tsl = ts.item1 +! (cs.item1 -! scp.item1)
+    var tc2 = b64_trigpi_fasttwosum(x: cbh, y: -tch)
+    tch = tc2.item0
+    tcl = (cbl -! tcl) +! tc2.item1
+    var ts2 = b64_trigpi_fasttwosum(x: sbh, y: -tsh)
+    tsh = ts2.item0
+    tsl = (sbl -! tsl) +! ts2.item1
+    if sc == 1_u64
+        tch = -tch
+        tcl = -tcl
+    if ss == 1_u64
+        tsh = -tsh
+        tsl = -tsl
+    return (tsh, tsl, tch, tcl)
 
 ### The accurate phase shared by sinpi and cospi: the sine of the angle `iq/2048 + z*2^-75` half turns, as
 ### an unevaluated (high, low) sum.
@@ -184,33 +184,33 @@ secret routine b64_trigpi_sincosn2(s: U64) -> (B64, B64, B64, B64)
 ### :param z: The scaled residual angle.
 ### :returns: The (high, low) pair.
 secret routine b64_trigpi_refine(iq: U64, z: B64) -> (B64, B64)
-  var x = z *! 0x1p-63
-  var x2 = x *! x
-  var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
-  var sll: B64 = -0x1.32d2cc920dcb4p-73 *! x2
-  var sp = b64_trigpi_poly_start(c0: 0x1.466bc6775aae1p-47, c1: -0x1.9c3c168d990ap-114, l: sll)
-  sp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: sp.item0, l: sp.item1, c0: -0x1.4abbce625be53p-22, c1: 0x1.05511cbc65743p-76)
-  sp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: sp.item0, l: sp.item1, c0: 0x1.921fb54442d18p+1, c1: 0x1.1a62633145c06p-53)
-  var sl = b64_trigpi_mulddd(xh: sp.item0, xl: sp.item1, c: x *! 0x1p-12)
-  var cll = x2 *! (-0x1.55d3c7e3cbff9p-72 +! 0x1.e1f50604fa0ffp-99 *! x2)
-  var cp = b64_trigpi_poly_start(c0: 0x1.03c1f081b5ac4p-46, c1: -0x1.32b33fda9113cp-100, l: cll)
-  cp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: cp.item0, l: cp.item1, c0: -0x1.3bd3cc9be45dep-22, c1: -0x1.692b71366cc04p-76)
-  var cl = b64_trigpi_muldd_acc(xh: cp.item0, xl: cp.item1, ch: x2, cl: dx2)
-  var b = b64_trigpi_sincosn2(s: iq)
-  var cs = b64_trigpi_muldd_acc(xh: cl.item0, xl: cl.item1, ch: b.item0, cl: b.item1)
-  var sc = b64_trigpi_muldd_acc(xh: sl.item0, xl: sl.item1, ch: b.item2, cl: b.item3)
-  var ts = b64_trigpi_fasttwosum(x: sc.item0, y: cs.item0)
-  var tsl = ts.item1 +! (cs.item1 +! sc.item1)
-  var ts2 = b64_trigpi_fasttwosum(x: b.item0, y: ts.item0)
-  tsl = (b.item1 +! tsl) +! ts2.item1
-  return (ts2.item0, tsl)
+    var x = z *! 0x1p-63
+    var x2 = x *! x
+    var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
+    var sll: B64 = -0x1.32d2cc920dcb4p-73 *! x2
+    var sp = b64_trigpi_poly_start(c0: 0x1.466bc6775aae1p-47, c1: -0x1.9c3c168d990ap-114, l: sll)
+    sp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: sp.item0, l: sp.item1, c0: -0x1.4abbce625be53p-22, c1: 0x1.05511cbc65743p-76)
+    sp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: sp.item0, l: sp.item1, c0: 0x1.921fb54442d18p+1, c1: 0x1.1a62633145c06p-53)
+    var sl = b64_trigpi_mulddd(xh: sp.item0, xl: sp.item1, c: x *! 0x1p-12)
+    var cll = x2 *! (-0x1.55d3c7e3cbff9p-72 +! 0x1.e1f50604fa0ffp-99 *! x2)
+    var cp = b64_trigpi_poly_start(c0: 0x1.03c1f081b5ac4p-46, c1: -0x1.32b33fda9113cp-100, l: cll)
+    cp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: cp.item0, l: cp.item1, c0: -0x1.3bd3cc9be45dep-22, c1: -0x1.692b71366cc04p-76)
+    var cl = b64_trigpi_muldd_acc(xh: cp.item0, xl: cp.item1, ch: x2, cl: dx2)
+    var b = b64_trigpi_sincosn2(s: iq)
+    var cs = b64_trigpi_muldd_acc(xh: cl.item0, xl: cl.item1, ch: b.item0, cl: b.item1)
+    var sc = b64_trigpi_muldd_acc(xh: sl.item0, xl: sl.item1, ch: b.item2, cl: b.item3)
+    var ts = b64_trigpi_fasttwosum(x: sc.item0, y: cs.item0)
+    var tsl = ts.item1 +! (cs.item1 +! sc.item1)
+    var ts2 = b64_trigpi_fasttwosum(x: b.item0, y: ts.item0)
+    tsl = (b.item1 +! tsl) +! ts2.item1
+    return (ts2.item0, tsl)
 
 ### Whether the low part of the accurate phase has a mantissa of all zeros or all ones: the only case where
 ### `high + low` may round wrongly, so the table of exceptions must be consulted.
 ### :param tsl: The low part.
 ### :returns: True when the table of exceptions must be consulted.
 secret routine b64_trigpi_refine_suspect(tsl: B64) -> Bool
-  var t = tsl.to_bits()
-  if (t | 0xFFF0000000000000_u64) == 0xFFFFFFFFFFFFFFFF_u64
-    return true
-  return (t << 12) == 0_u64
+    var t = tsl.to_bits()
+    if (t | 0xFFF0000000000000_u64) == 0xFFFFFFFFFFFFFFFF_u64
+        return true
+    return (t << 12) == 0_u64

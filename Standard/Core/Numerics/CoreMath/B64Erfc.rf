@@ -19,39 +19,39 @@ module Core
 ### `erfc(+infinity) == +0`, and NaN maps to NaN.
 ### :returns: The correctly rounded complementary error function.
 routine B64.erfc() -> B64
-  var tu = me.to_bits()
-  var at = tu & 0x7FFFFFFFFFFFFFFF_u64
-  if tu >= 0x8000000000000000_u64
-    # x = -NaN or x <= 0 (excluding +0)
-    # for x <= -0x1.7744f8f74e94bp+2, erfc(x) rounds to 2
-    if tu >= 0xC017744F8F74E94B_u64
-      if tu >= 0xFFF0000000000000_u64
-        if tu == 0xFFF0000000000000_u64
-          return 2.0
-        return me +! me
-      return 2.0 -! 0x1p-54
-    # for -0x1.c5bf891b4ef6ap-54 <= x <= 0, erfc(x) rounds to 1
-    if -0x1.c5bf891b4ef6ap-54 <= me
-      return LLVM::fma[B64](a: -me, b: 0x1p-54, c: 1.0)
-  else
-    # x = +NaN or x >= 0 (excluding -0)
-    # for x >= 0x1.b39dc41e48bfdp+4, erfc(x) < 2^-1075 rounds to 0
-    if at >= 0x403B39DC41E48BFD_u64
-      if at >= 0x7FF0000000000000_u64
-        if at == 0x7FF0000000000000_u64
-          return 0.0
-        return me +! me
-      return 0x1p-1074 *! 0.25
-    # for 0 <= x <= 0x1.c5bf891b4ef6ap-55, erfc(x) rounds to 1
-    if me <= 0x1.c5bf891b4ef6ap-55
-      return LLVM::fma[B64](a: -me, b: 0x1p-54, c: 1.0)
-  # now -0x1.7744f8f74e94bp+2 < x < -0x1.c5bf891b4ef6ap-54 or 0x1.c5bf891b4ef6ap-55 < x < 0x1.b39dc41e48bfdp+4
-  var f = b64_erfc_fast(x: me)
-  var left = f.item0 +! (f.item1 -! f.item2)
-  var right = f.item0 +! (f.item1 +! f.item2)
-  if left == right
-    return left
-  return b64_erfc_accurate(x: me)
+    var tu = me.to_bits()
+    var at = tu & 0x7FFFFFFFFFFFFFFF_u64
+    if tu >= 0x8000000000000000_u64
+        # x = -NaN or x <= 0 (excluding +0)
+        # for x <= -0x1.7744f8f74e94bp+2, erfc(x) rounds to 2
+        if tu >= 0xC017744F8F74E94B_u64
+            if tu >= 0xFFF0000000000000_u64
+                if tu == 0xFFF0000000000000_u64
+                    return 2.0
+                return me +! me
+            return 2.0 -! 0x1p-54
+        # for -0x1.c5bf891b4ef6ap-54 <= x <= 0, erfc(x) rounds to 1
+        if -0x1.c5bf891b4ef6ap-54 <= me
+            return LLVM::fma[B64](a: -me, b: 0x1p-54, c: 1.0)
+    else
+        # x = +NaN or x >= 0 (excluding -0)
+        # for x >= 0x1.b39dc41e48bfdp+4, erfc(x) < 2^-1075 rounds to 0
+        if at >= 0x403B39DC41E48BFD_u64
+            if at >= 0x7FF0000000000000_u64
+                if at == 0x7FF0000000000000_u64
+                    return 0.0
+                return me +! me
+            return 0x1p-1074 *! 0.25
+        # for 0 <= x <= 0x1.c5bf891b4ef6ap-55, erfc(x) rounds to 1
+        if me <= 0x1.c5bf891b4ef6ap-55
+            return LLVM::fma[B64](a: -me, b: 0x1p-54, c: 1.0)
+    # now -0x1.7744f8f74e94bp+2 < x < -0x1.c5bf891b4ef6ap-54 or 0x1.c5bf891b4ef6ap-55 < x < 0x1.b39dc41e48bfdp+4
+    var f = b64_erfc_fast(x: me)
+    var left = f.item0 +! (f.item1 -! f.item2)
+    var right = f.item0 +! (f.item1 +! f.item2)
+    if left == right
+        return left
+    return b64_erfc_accurate(x: me)
 
 # ---------------------------------------------------------------------------
 # Double-double helpers
@@ -63,8 +63,8 @@ routine B64.erfc() -> B64
 ### :param bl: The low part of the double-double factor.
 ### :returns: The product.
 secret routine b64_erfc_s_mul(a: B64, bh: B64, bl: B64) -> DD
-  var p = b64_erf_a_mul(a: a, b: bh)
-  return DD(hi: p.hi, lo: LLVM::fma[B64](a: a, b: bl, c: p.lo))
+    var p = b64_erf_a_mul(a: a, b: bh)
+    return DD(hi: p.hi, lo: LLVM::fma[B64](a: a, b: bl, c: p.lo))
 
 ### `(ah + al) * (bh + bl) - al * bl` as a double-double.
 ### :param ah: The high part of the first factor.
@@ -73,31 +73,31 @@ secret routine b64_erfc_s_mul(a: B64, bh: B64, bl: B64) -> DD
 ### :param bl: The low part of the second factor.
 ### :returns: The product.
 secret routine b64_erfc_d_mul(ah: B64, al: B64, bh: B64, bl: B64) -> DD
-  var p = b64_erf_a_mul(a: ah, b: bh)
-  var lo = LLVM::fma[B64](a: ah, b: bl, c: p.lo)
-  return DD(hi: p.hi, lo: LLVM::fma[B64](a: al, b: bh, c: lo))
+    var p = b64_erf_a_mul(a: ah, b: bh)
+    var lo = LLVM::fma[B64](a: ah, b: bl, c: p.lo)
+    return DD(hi: p.hi, lo: LLVM::fma[B64](a: al, b: bh, c: lo))
 
 ### `x * 2^n` with a single rounding (C `ldexp`), for -2044 <= n <= 2046.
 ### :param x: The value to scale.
 ### :param n: The power of two.
 ### :returns: The correctly rounded `x * 2^n`.
 secret routine b64_erfc_ldexp(x: B64, n: S64) -> B64
-  var y = x
-  var k = n
-  if k > 1023
-    y = y *! 0x1p1023
-    k = k - 1023
-  if k < -1022
-    # scale into the normal range first (exact), so that the last multiplication is the only rounding
-    y = y *! b64_erfc_pow2(k: k + 1022)
-    k = -1022
-  return y *! b64_erfc_pow2(k: k)
+    var y = x
+    var k = n
+    if k > 1023
+        y = y *! 0x1p1023
+        k = k - 1023
+    if k < -1022
+        # scale into the normal range first (exact), so that the last multiplication is the only rounding
+        y = y *! b64_erfc_pow2(k: k + 1022)
+        k = -1022
+    return y *! b64_erfc_pow2(k: k)
 
 ### `2^k` for a normal exponent -1022 <= k <= 1023.
 ### :param k: The exponent.
 ### :returns: `2^k`.
 secret routine b64_erfc_pow2(k: S64) -> B64
-  return B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](k + 1023) << 52)
+    return B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](k + 1023) << 52)
 
 # ---------------------------------------------------------------------------
 # Fast path
@@ -107,76 +107,76 @@ secret routine b64_erfc_pow2(k: S64) -> B64
 ### :param x: The argument.
 ### :returns: `(h, l, err)`: `h + l` approximates erfc(x) with absolute error bounded by `err`.
 secret routine b64_erfc_fast(x: B64) -> (B64, B64, B64)
-  if x < 0.0
-    # erfc(x) = 1 + erf(-x)
-    var f = b64_erf_fast(z: -x)
-    # convert the relative error bound into an absolute one
-    var err = b64_erf_fast_err(z: -x) *! f.hi
-    var s = b64_erf_fast_two_sum(a: 1.0, b: f.hi)
-    return (s.hi, s.lo +! f.lo, err +! 0x1.4p-102)
-  if x <= 0x1.713786d9c7c09p+1
-    var f = b64_erf_fast(z: x)
-    var err = b64_erf_fast_err(z: x) *! f.hi
-    var s = b64_erf_fast_two_sum(a: 1.0, b: -f.hi)
-    var l = s.lo -! f.lo
-    # for x >= 0x1.e861fbb24c00ap-2, erf(x) >= 1/2, so 1 - h is exact
-    if x >= 0x1.e861fbb24c00ap-2
-      return (s.hi, l, err)
-    return (s.hi, l, err +! 0x1.4p-104)
-  # now 0x1.713786d9c7c09p+1 < x < 0x1.b39dc41e48bfdp+4, thus erfc(x) < 0.000046
-  return b64_erfc_asympt_fast(x: x)
+    if x < 0.0
+        # erfc(x) = 1 + erf(-x)
+        var f = b64_erf_fast(z: -x)
+        # convert the relative error bound into an absolute one
+        var err = b64_erf_fast_err(z: -x) *! f.hi
+        var s = b64_erf_fast_two_sum(a: 1.0, b: f.hi)
+        return (s.hi, s.lo +! f.lo, err +! 0x1.4p-102)
+    if x <= 0x1.713786d9c7c09p+1
+        var f = b64_erf_fast(z: x)
+        var err = b64_erf_fast_err(z: x) *! f.hi
+        var s = b64_erf_fast_two_sum(a: 1.0, b: -f.hi)
+        var l = s.lo -! f.lo
+        # for x >= 0x1.e861fbb24c00ap-2, erf(x) >= 1/2, so 1 - h is exact
+        if x >= 0x1.e861fbb24c00ap-2
+            return (s.hi, l, err)
+        return (s.hi, l, err +! 0x1.4p-104)
+    # now 0x1.713786d9c7c09p+1 < x < 0x1.b39dc41e48bfdp+4, thus erfc(x) < 0.000046
+    return b64_erfc_asympt_fast(x: x)
 
 ### The fast path for 0x1.713786d9c7c09p+1 < x < 0x1.b39dc41e48bfdp+4, using the asymptotic formula
 ### erfc(x) = exp(-x^2) * p(1/x).
 ### :param x: The argument.
 ### :returns: `(h, l, err)`: `h + l` approximates erfc(x) with absolute error bounded by `err`.
 secret routine b64_erfc_asympt_fast(x: B64) -> (B64, B64, B64)
-  # for x >= 0x1.9db1bb14e15cap+4, erfc(x) < 2^-970: delegate to the accurate path
-  if x >= 0x1.9db1bb14e15cap+4
-    return (0.0, 0.0, 1.0)
-  # approximate exp(-x^2)
-  var u = b64_erf_a_mul(a: x, b: x)
-  var e = b64_erfc_exp_1(xh: -u.hi, xl: -u.lo)
-  # 1/x as a double-double (one Newton step)
-  var yh = 1.0 /! x
-  var yl = yh *! LLVM::fma[B64](a: -x, b: yh, c: 1.0)
-  # the interval of yh
-  var i = 0_u64
-  while yh > B64.from_bits(bits: B64_ERFC_ASYMPT_THRESHOLD[i])
-    i = i + 1
-  var p = i * 13
-  u = b64_erf_a_mul(a: yh, b: yh)
-  var uh = u.hi
-  var ul = LLVM::fma[B64](a: 2.0 *! yh, b: yl, c: u.lo)
-  # evaluate p(uh + ul): degrees 23, 21, 19 in double
-  var zh = B64.from_bits(bits: B64_ERFC_T[p + 12])
-  zh = LLVM::fma[B64](a: zh, b: uh, c: B64.from_bits(bits: B64_ERFC_T[p + 11]))
-  zh = LLVM::fma[B64](a: zh, b: uh, c: B64.from_bits(bits: B64_ERFC_T[p + 10]))
-  # degree 17: zh*(uh + ul) + T[p+9]
-  var m = b64_erfc_s_mul(a: zh, bh: uh, bl: ul)
-  var z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p + 9]), b: m.hi)
-  zh = z.hi
-  var zl = z.lo +! m.lo
-  var j = 15_u64
-  while j >= 3
-    m = b64_erfc_d_mul(ah: zh, al: zl, bh: uh, bl: ul)
-    z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p + (j + 1) // 2]), b: m.hi)
+    # for x >= 0x1.9db1bb14e15cap+4, erfc(x) < 2^-970: delegate to the accurate path
+    if x >= 0x1.9db1bb14e15cap+4
+        return (0.0, 0.0, 1.0)
+    # approximate exp(-x^2)
+    var u = b64_erf_a_mul(a: x, b: x)
+    var e = b64_erfc_exp_1(xh: -u.hi, xl: -u.lo)
+    # 1/x as a double-double (one Newton step)
+    var yh = 1.0 /! x
+    var yl = yh *! LLVM::fma[B64](a: -x, b: yh, c: 1.0)
+    # the interval of yh
+    var i = 0_u64
+    while yh > B64.from_bits(bits: B64_ERFC_ASYMPT_THRESHOLD[i])
+        i = i + 1
+    var p = i * 13
+    u = b64_erf_a_mul(a: yh, b: yh)
+    var uh = u.hi
+    var ul = LLVM::fma[B64](a: 2.0 *! yh, b: yl, c: u.lo)
+    # evaluate p(uh + ul): degrees 23, 21, 19 in double
+    var zh = B64.from_bits(bits: B64_ERFC_T[p + 12])
+    zh = LLVM::fma[B64](a: zh, b: uh, c: B64.from_bits(bits: B64_ERFC_T[p + 11]))
+    zh = LLVM::fma[B64](a: zh, b: uh, c: B64.from_bits(bits: B64_ERFC_T[p + 10]))
+    # degree 17: zh*(uh + ul) + T[p+9]
+    var m = b64_erfc_s_mul(a: zh, bh: uh, bl: ul)
+    var z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p + 9]), b: m.hi)
     zh = z.hi
-    zl = z.lo +! m.lo
-    j = j - 2
-  # degree 1: (zh + zl)*(uh + ul) + T[p+0] + T[p+1]
-  m = b64_erfc_d_mul(ah: zh, al: zl, bh: uh, bl: ul)
-  z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p]), b: m.hi)
-  zh = z.hi
-  zl = z.lo +! (m.lo +! B64.from_bits(bits: B64_ERFC_T[p + 1]))
-  # multiply by yh + yl: p(1/x)
-  var q = b64_erfc_d_mul(ah: zh, al: zl, bh: yh, bl: yl)
-  # multiply by eh + el
-  var r = b64_erfc_d_mul(ah: q.hi, al: q.lo, bh: e.hi, bl: e.lo)
-  # the relative error bound is 2^-67.115 < 0x1.d9p-68, and 0x1.d9p-68 * h must not underflow
-  if r.hi >= 0x1.151b9a3fdd5c9p-955
-    return (r.hi, r.lo, 0x1.d9p-68 *! r.hi)
-  return (r.hi, r.lo, 0x1p-1022)
+    var zl = z.lo +! m.lo
+    var j = 15_u64
+    while j >= 3
+        m = b64_erfc_d_mul(ah: zh, al: zl, bh: uh, bl: ul)
+        z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p + (j + 1) // 2]), b: m.hi)
+        zh = z.hi
+        zl = z.lo +! m.lo
+        j = j - 2
+    # degree 1: (zh + zl)*(uh + ul) + T[p+0] + T[p+1]
+    m = b64_erfc_d_mul(ah: zh, al: zl, bh: uh, bl: ul)
+    z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p]), b: m.hi)
+    zh = z.hi
+    zl = z.lo +! (m.lo +! B64.from_bits(bits: B64_ERFC_T[p + 1]))
+    # multiply by yh + yl: p(1/x)
+    var q = b64_erfc_d_mul(ah: zh, al: zl, bh: yh, bl: yl)
+    # multiply by eh + el
+    var r = b64_erfc_d_mul(ah: q.hi, al: q.lo, bh: e.hi, bl: e.lo)
+    # the relative error bound is 2^-67.115 < 0x1.d9p-68, and 0x1.d9p-68 * h must not underflow
+    if r.hi >= 0x1.151b9a3fdd5c9p-955
+        return (r.hi, r.lo, 0x1.d9p-68 *! r.hi)
+    return (r.hi, r.lo, 0x1p-1022)
 
 ### `exp(xh + xl)` as a double-double, with relative error below 2^-74.139, assuming |xl/xh| < 2^-23.89
 ### and |xl| < 2^-14.3486 (the fast exponential of CORE-MATH's pow).
@@ -184,35 +184,35 @@ secret routine b64_erfc_asympt_fast(x: B64) -> (B64, B64, B64)
 ### :param xl: The low part of the argument.
 ### :returns: `hi + lo` approximating exp(xh + xl).
 secret routine b64_erfc_exp_1(xh: B64, xl: B64) -> DD
-  # INVLOG2 approximates 2^12/log(2)
-  var k = LLVM::rint[B64](value: xh *! 0x1.71547652b82fep+12)
-  # LOG2H + LOG2L approximates log(2)/2^12
-  var kk = b64_erfc_s_mul(a: k, bh: 0x1.62e42fefa39efp-13, bl: 0x1.abc9e3b39803fp-68)
-  var y = b64_erf_fast_two_sum(a: xh -! kk.hi, b: xl)
-  var yl = y.lo -! kk.lo
-  var bk = LLVM::float_to_signed[B64, S64](k)
-  var ku = LLVM::reinterpret_bits[S64, U64](bk)
-  var m = (bk >> 12) + 0x3FF
-  var i2 = (ku >>> 6) & 0x3F_u64
-  var i1 = ku & 0x3F_u64
-  var t = b64_erfc_d_mul(ah: B64.from_bits(bits: B64_ERFC_T2[2 * i1]), al: B64.from_bits(bits: B64_ERFC_T2[2 * i1 + 1]), bh: B64.from_bits(bits: B64_ERFC_T1[2 * i2]), bl: B64.from_bits(bits: B64_ERFC_T1[2 * i2 + 1]))
-  var q = b64_erfc_q_1(zh: y.hi, zl: yl)
-  var r = b64_erfc_d_mul(ah: t.hi, al: t.lo, bh: q.hi, bl: q.lo)
-  var scale = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](m) << 52)
-  return DD(hi: r.hi *! scale, lo: r.lo *! scale)
+    # INVLOG2 approximates 2^12/log(2)
+    var k = LLVM::rint[B64](value: xh *! 0x1.71547652b82fep+12)
+    # LOG2H + LOG2L approximates log(2)/2^12
+    var kk = b64_erfc_s_mul(a: k, bh: 0x1.62e42fefa39efp-13, bl: 0x1.abc9e3b39803fp-68)
+    var y = b64_erf_fast_two_sum(a: xh -! kk.hi, b: xl)
+    var yl = y.lo -! kk.lo
+    var bk = LLVM::float_to_signed[B64, S64](k)
+    var ku = LLVM::reinterpret_bits[S64, U64](bk)
+    var m = (bk >> 12) + 0x3FF
+    var i2 = (ku >>> 6) & 0x3F_u64
+    var i1 = ku & 0x3F_u64
+    var t = b64_erfc_d_mul(ah: B64.from_bits(bits: B64_ERFC_T2[2 * i1]), al: B64.from_bits(bits: B64_ERFC_T2[2 * i1 + 1]), bh: B64.from_bits(bits: B64_ERFC_T1[2 * i2]), bl: B64.from_bits(bits: B64_ERFC_T1[2 * i2 + 1]))
+    var q = b64_erfc_q_1(zh: y.hi, zl: yl)
+    var r = b64_erfc_d_mul(ah: t.hi, al: t.lo, bh: q.hi, bl: q.lo)
+    var scale = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](m) << 52)
+    return DD(hi: r.hi *! scale, lo: r.lo *! scale)
 
 ### `exp(zh + zl)` as a double-double for |zh + zl| < 2^-12.88 and |zl| < 2^-42.6 (a degree-4 polynomial).
 ### :param zh: The high part of the argument.
 ### :param zl: The low part of the argument.
 ### :returns: `hi + lo` approximating exp(zh + zl).
 secret routine b64_erfc_q_1(zh: B64, zl: B64) -> DD
-  var z = zh +! zl
-  var q = LLVM::fma[B64](a: 0x1.55555558489dcp-5, b: zh, c: 0x1.5555555995d37p-3)
-  q = LLVM::fma[B64](a: q, b: z, c: 0.5)
-  var s = b64_erf_fast_two_sum(a: 1.0, b: q *! z)
-  var d = b64_erfc_d_mul(ah: zh, al: zl, bh: s.hi, bl: s.lo)
-  var r = b64_erf_fast_two_sum(a: 1.0, b: d.hi)
-  return DD(hi: r.hi, lo: r.lo +! d.lo)
+    var z = zh +! zl
+    var q = LLVM::fma[B64](a: 0x1.55555558489dcp-5, b: zh, c: 0x1.5555555995d37p-3)
+    q = LLVM::fma[B64](a: q, b: z, c: 0.5)
+    var s = b64_erf_fast_two_sum(a: 1.0, b: q *! z)
+    var d = b64_erfc_d_mul(ah: zh, al: zl, bh: s.hi, bl: s.lo)
+    var r = b64_erf_fast_two_sum(a: 1.0, b: d.hi)
+    return DD(hi: r.hi, lo: r.lo +! d.lo)
 
 # ---------------------------------------------------------------------------
 # Accurate path
@@ -222,145 +222,145 @@ secret routine b64_erfc_q_1(zh: B64, zl: B64) -> DD
 ### :param x: The argument, -0x1.7744f8f74e94bp+2 < x < 0x1.b39dc41e48bfdp+4.
 ### :returns: The correctly rounded erfc(x).
 secret routine b64_erfc_accurate(x: B64) -> B64
-  if x < 0.0
-    var k = 0_u64
-    while k < 17
-      if x == B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k])
-        return B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k + 2])
-      k = k + 1
-    var a = b64_erf_accurate(z: -x)
-    var s = b64_erf_fast_two_sum(a: 1.0, b: a.hi)
-    return s.hi +! (s.lo +! a.lo)
-  if x <= 0x1.b59ffb450828cp+0
-    # erfc(x) >= 2^-6
-    var k = 0_u64
-    while k < 29
-      if x == B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k])
-        return B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k + 2])
-      k = k + 1
-    var a = b64_erf_accurate(z: x)
-    var s = b64_erf_fast_two_sum(a: 1.0, b: -a.hi)
-    return s.hi +! (s.lo -! a.lo)
-  # now 0x1.b59ffb450828cp+0 < x < 0x1.b39dc41e48bfdp+4
-  return b64_erfc_asympt_accurate(x: x)
+    if x < 0.0
+        var k = 0_u64
+        while k < 17
+            if x == B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k])
+                return B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k + 2])
+            k = k + 1
+        var a = b64_erf_accurate(z: -x)
+        var s = b64_erf_fast_two_sum(a: 1.0, b: a.hi)
+        return s.hi +! (s.lo +! a.lo)
+    if x <= 0x1.b59ffb450828cp+0
+        # erfc(x) >= 2^-6
+        var k = 0_u64
+        while k < 29
+            if x == B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k])
+                return B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k + 2])
+            k = k + 1
+        var a = b64_erf_accurate(z: x)
+        var s = b64_erf_fast_two_sum(a: 1.0, b: -a.hi)
+        return s.hi +! (s.lo -! a.lo)
+    # now 0x1.b59ffb450828cp+0 < x < 0x1.b39dc41e48bfdp+4
+    return b64_erfc_asympt_accurate(x: x)
 
 ### The accurate asymptotic path erfc(x) = exp(-x^2) * p(1/x), for 0x1.b59ffb450828cp+0 < x <
 ### 0x1.b39dc41e48bfdp+4.
 ### :param x: The argument.
 ### :returns: The correctly rounded erfc(x).
 secret routine b64_erfc_asympt_accurate(x: B64) -> B64
-  var k = 0_u64
-  while k < 22
-    if x == B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k])
-      return B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k + 2])
-    k = k + 1
-  # a hard case with a subnormal result that the table above cannot hold
-  if x == 0x1.a8f7bfbd15495p+4
-    return LLVM::fma[B64](a: 0x1p-1074, b: -0.25, c: 0x1.99ef5883f656cp-1024)
-  # approximate exp(-x^2) as 2^e * (eh + el)
-  var u = b64_erf_a_mul(a: x, b: x)
-  var ex = b64_erfc_exp_accurate(xh: -u.hi, xl: -u.lo)
-  # 1/x as a double-double (one Newton step)
-  var yh = 1.0 /! x
-  var yl = yh *! LLVM::fma[B64](a: -x, b: yh, c: 1.0)
-  var i = 0_u64
-  while yh > B64.from_bits(bits: B64_ERFC_ACC_THRESHOLD[i])
-    i = i + 1
-  # 0 <= i <= 9
-  var p = i * 30
-  u = b64_erf_a_mul(a: yh, b: yh)
-  var uh = u.hi
-  var ul = LLVM::fma[B64](a: 2.0 *! yh, b: yl, c: u.lo)
-  # the polynomial has degree 29+2i, its coefficient of largest degree is Tacc[p + 20 + i]
-  var zh = B64.from_bits(bits: B64_ERFC_TACC[p + 20 + i])
-  var zl: B64 = 0.0
-  var j = 27 + 2 * i
-  while j >= 13
-    # degree j: (zh + zl)*(uh + ul) + Tacc[p + (j-1)/2 + 6]
-    var m = b64_erf_a_mul(a: zh, b: uh)
-    var l = LLVM::fma[B64](a: zh, b: ul, c: m.lo)
-    l = LLVM::fma[B64](a: zl, b: uh, c: l)
-    var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERFC_TACC[p + (j - 1) // 2 + 6]), b: m.hi)
-    zh = s.hi
-    zl = s.lo +! l
-    j = j - 2
-  # degrees 11 down to 1 have double-double coefficients Tacc[p+j-1] + Tacc[p+j]
-  loop
-    var m = b64_erf_a_mul(a: zh, b: uh)
-    var l = LLVM::fma[B64](a: zh, b: ul, c: m.lo)
-    l = LLVM::fma[B64](a: zl, b: uh, c: l)
-    var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERFC_TACC[p + j - 1]), b: m.hi)
-    zh = s.hi
-    zl = s.lo +! (l +! B64.from_bits(bits: B64_ERFC_TACC[p + j]))
-    if j == 1
-      break
-    j = j - 2
-  # multiply by yh + yl: p(1/x), i.e. erfc(x)*exp(x^2)
-  var q = b64_erf_a_mul(a: zh, b: yh)
-  var ql = LLVM::fma[B64](a: zh, b: yl, c: q.lo)
-  ql = LLVM::fma[B64](a: zl, b: yh, c: ql)
-  # normalize, then multiply by eh + el
-  var n = b64_erf_fast_two_sum(a: q.hi, b: ql)
-  var r = b64_erf_a_mul(a: n.hi, b: ex.item0)
-  var l = LLVM::fma[B64](a: n.hi, b: ex.item1, c: r.lo)
-  l = LLVM::fma[B64](a: n.lo, b: ex.item0, c: l)
-  # multiply by 2^e
-  var e = ex.item2
-  var res = b64_erfc_ldexp(x: r.hi +! l, n: e)
-  if res < 0x1p-1022
-    # a subnormal erfc(x) needs a special rounding
-    var corr = r.hi -! b64_erfc_ldexp(x: res, n: -e)
-    corr = corr +! l
-    res = res +! b64_erfc_ldexp(x: corr, n: e)
-  return res
+    var k = 0_u64
+    while k < 22
+        if x == B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k])
+            return B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k + 2])
+        k = k + 1
+    # a hard case with a subnormal result that the table above cannot hold
+    if x == 0x1.a8f7bfbd15495p+4
+        return LLVM::fma[B64](a: 0x1p-1074, b: -0.25, c: 0x1.99ef5883f656cp-1024)
+    # approximate exp(-x^2) as 2^e * (eh + el)
+    var u = b64_erf_a_mul(a: x, b: x)
+    var ex = b64_erfc_exp_accurate(xh: -u.hi, xl: -u.lo)
+    # 1/x as a double-double (one Newton step)
+    var yh = 1.0 /! x
+    var yl = yh *! LLVM::fma[B64](a: -x, b: yh, c: 1.0)
+    var i = 0_u64
+    while yh > B64.from_bits(bits: B64_ERFC_ACC_THRESHOLD[i])
+        i = i + 1
+    # 0 <= i <= 9
+    var p = i * 30
+    u = b64_erf_a_mul(a: yh, b: yh)
+    var uh = u.hi
+    var ul = LLVM::fma[B64](a: 2.0 *! yh, b: yl, c: u.lo)
+    # the polynomial has degree 29+2i, its coefficient of largest degree is Tacc[p + 20 + i]
+    var zh = B64.from_bits(bits: B64_ERFC_TACC[p + 20 + i])
+    var zl: B64 = 0.0
+    var j = 27 + 2 * i
+    while j >= 13
+        # degree j: (zh + zl)*(uh + ul) + Tacc[p + (j-1)/2 + 6]
+        var m = b64_erf_a_mul(a: zh, b: uh)
+        var l = LLVM::fma[B64](a: zh, b: ul, c: m.lo)
+        l = LLVM::fma[B64](a: zl, b: uh, c: l)
+        var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERFC_TACC[p + (j - 1) // 2 + 6]), b: m.hi)
+        zh = s.hi
+        zl = s.lo +! l
+        j = j - 2
+    # degrees 11 down to 1 have double-double coefficients Tacc[p+j-1] + Tacc[p+j]
+    loop
+        var m = b64_erf_a_mul(a: zh, b: uh)
+        var l = LLVM::fma[B64](a: zh, b: ul, c: m.lo)
+        l = LLVM::fma[B64](a: zl, b: uh, c: l)
+        var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERFC_TACC[p + j - 1]), b: m.hi)
+        zh = s.hi
+        zl = s.lo +! (l +! B64.from_bits(bits: B64_ERFC_TACC[p + j]))
+        if j == 1
+            break
+        j = j - 2
+    # multiply by yh + yl: p(1/x), i.e. erfc(x)*exp(x^2)
+    var q = b64_erf_a_mul(a: zh, b: yh)
+    var ql = LLVM::fma[B64](a: zh, b: yl, c: q.lo)
+    ql = LLVM::fma[B64](a: zl, b: yh, c: ql)
+    # normalize, then multiply by eh + el
+    var n = b64_erf_fast_two_sum(a: q.hi, b: ql)
+    var r = b64_erf_a_mul(a: n.hi, b: ex.item0)
+    var l = LLVM::fma[B64](a: n.hi, b: ex.item1, c: r.lo)
+    l = LLVM::fma[B64](a: n.lo, b: ex.item0, c: l)
+    # multiply by 2^e
+    var e = ex.item2
+    var res = b64_erfc_ldexp(x: r.hi +! l, n: e)
+    if res < 0x1p-1022
+        # a subnormal erfc(x) needs a special rounding
+        var corr = r.hi -! b64_erfc_ldexp(x: res, n: -e)
+        corr = corr +! l
+        res = res +! b64_erfc_ldexp(x: corr, n: e)
+    return res
 
 ### `exp(xh + xl)` as `2^e * (h + l)` with about 104 bits of accuracy, for -742 <= xh + xl <= -2.92.
 ### :param xh: The high part of the argument.
 ### :param xl: The low part of the argument.
 ### :returns: `(h, l, e)`.
 secret routine b64_erfc_exp_accurate(xh: B64, xl: B64) -> (B64, B64, S64)
-  # reduce the argument: xh + xl ~ k*log(2) + yh + yl
-  var kd = LLVM::rint[B64](value: xh *! 0x1.71547652b82fep+0)
-  var k = LLVM::float_to_signed[B64, S64](kd)
-  # LOG2H + LOG2L + LOG2tiny approximates log(2), and k*LOG2L is exact; yh is exact by Sterbenz
-  var yh = LLVM::fma[B64](a: -kd, b: 0x1.62e42fefa39efp-1, c: xh)
-  var t = b64_erf_two_sum(a: -kd *! 0x1.abc9e3b398p-56, b: xl)
-  var y = b64_erf_fast_two_sum(a: yh, b: t.hi)
-  yh = y.hi
-  var yl = LLVM::fma[B64](a: -kd, b: 0x1.f97b57a079a19p-103, c: y.lo +! t.lo)
-  # degree 19 down to 16 in double (yl is negligible there)
-  var h = B64.from_bits(bits: B64_ERFC_E2[27])
-  var i = 18_u64
-  while i >= 16
-    h = LLVM::fma[B64](a: h, b: yh, c: B64.from_bits(bits: B64_ERFC_E2[i + 8]))
-    i = i - 1
-  # degree 15: h*(yh + yl) + E2[23]
-  var m = b64_erf_a_mul(a: h, b: yh)
-  var tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
-  var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[23]), b: m.hi)
-  h = s.hi
-  var l = s.lo +! tl
-  i = 14
-  while i >= 8
-    # degree i: (h + l)*(yh + yl) + E2[i+8]
-    m = b64_erf_a_mul(a: h, b: yh)
-    tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
-    tl = LLVM::fma[B64](a: l, b: yh, c: tl)
-    s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[i + 8]), b: m.hi)
+    # reduce the argument: xh + xl ~ k*log(2) + yh + yl
+    var kd = LLVM::rint[B64](value: xh *! 0x1.71547652b82fep+0)
+    var k = LLVM::float_to_signed[B64, S64](kd)
+    # LOG2H + LOG2L + LOG2tiny approximates log(2), and k*LOG2L is exact; yh is exact by Sterbenz
+    var yh = LLVM::fma[B64](a: -kd, b: 0x1.62e42fefa39efp-1, c: xh)
+    var t = b64_erf_two_sum(a: -kd *! 0x1.abc9e3b398p-56, b: xl)
+    var y = b64_erf_fast_two_sum(a: yh, b: t.hi)
+    yh = y.hi
+    var yl = LLVM::fma[B64](a: -kd, b: 0x1.f97b57a079a19p-103, c: y.lo +! t.lo)
+    # degree 19 down to 16 in double (yl is negligible there)
+    var h = B64.from_bits(bits: B64_ERFC_E2[27])
+    var i = 18_u64
+    while i >= 16
+        h = LLVM::fma[B64](a: h, b: yh, c: B64.from_bits(bits: B64_ERFC_E2[i + 8]))
+        i = i - 1
+    # degree 15: h*(yh + yl) + E2[23]
+    var m = b64_erf_a_mul(a: h, b: yh)
+    var tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
+    var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[23]), b: m.hi)
     h = s.hi
-    l = s.lo +! tl
-    i = i - 1
-  # degrees 7 down to 0 have double-double coefficients E2[2i] + E2[2i+1]
-  i = 8
-  while i > 0
-    i = i - 1
-    m = b64_erf_a_mul(a: h, b: yh)
-    tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
-    tl = LLVM::fma[B64](a: l, b: yh, c: tl)
-    s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[2 * i]), b: m.hi)
-    h = s.hi
-    l = s.lo +! (tl +! B64.from_bits(bits: B64_ERFC_E2[2 * i + 1]))
-  return (h, l, k)
+    var l = s.lo +! tl
+    i = 14
+    while i >= 8
+        # degree i: (h + l)*(yh + yl) + E2[i+8]
+        m = b64_erf_a_mul(a: h, b: yh)
+        tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
+        tl = LLVM::fma[B64](a: l, b: yh, c: tl)
+        s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[i + 8]), b: m.hi)
+        h = s.hi
+        l = s.lo +! tl
+        i = i - 1
+    # degrees 7 down to 0 have double-double coefficients E2[2i] + E2[2i+1]
+    i = 8
+    while i > 0
+        i = i - 1
+        m = b64_erf_a_mul(a: h, b: yh)
+        tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
+        tl = LLVM::fma[B64](a: l, b: yh, c: tl)
+        s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[2 * i]), b: m.hi)
+        h = s.hi
+        l = s.lo +! (tl +! B64.from_bits(bits: B64_ERFC_E2[2 * i + 1]))
+    return (h, l, k)
 
 # ---------------------------------------------------------------------------
 # Tables

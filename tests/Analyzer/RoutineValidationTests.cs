@@ -20,11 +20,11 @@ public class RoutineValidationTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         @readonly
                         routine Point.get_x() -> S32
-                          return me.x
+                            return me.x
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -39,13 +39,13 @@ public class RoutineValidationTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         @readonly
                         @reshaping
                         routine Point.set_x(new_x: S32)
-                          me.x = new_x
-                          return
+                            me.x = new_x
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -65,12 +65,12 @@ public class RoutineValidationTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         @reshaping
                         routine Counter.reset(value: S32)
-                          me.count = value
-                          return
+                            me.count = value
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -86,12 +86,12 @@ public class RoutineValidationTests
     {
         string source = """
                         entity Counter
-                          count: S32
+                            count: S32
 
                         @reshaping
                         @readonly
                         routine Counter.peek() -> S32
-                          return me.count
+                            return me.count
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -111,14 +111,14 @@ public class RoutineValidationTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
 
                         common routine Node.empty() -> Node
-                          return Node(value: 0)
+                            return Node(value: 0)
 
                         routine test()
-                          var n = Node.empty()
-                          return
+                            var n = Node.empty()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -138,14 +138,14 @@ public class RoutineValidationTests
     {
         string source = """
                         record Counter
-                          value: S32
+                            value: S32
                         common routine Counter.make() -> Counter
-                          return Counter(value: 0)
+                            return Counter(value: 0)
 
                         routine test()
-                          var c = Counter(value: 0)
-                          var d = c.make()
-                          return
+                            var c = Counter(value: 0)
+                            var d = c.make()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -160,13 +160,13 @@ public class RoutineValidationTests
     {
         string source = """
                         record Counter
-                          value: S32
+                            value: S32
                         common routine Counter.create() -> Counter
-                          return Counter(value: 0)
+                            return Counter(value: 0)
 
                         routine test()
-                          var c = Counter.create()
-                          return
+                            var c = Counter.create()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -183,14 +183,14 @@ public class RoutineValidationTests
     {
         string source = """
                         record Folder
-                          path: Text
+                            path: Text
                         routine Folder.create() -> Bool
-                          return true
+                            return true
 
                         routine test()
-                          var f = Folder(path: "x")
-                          var made = f.create()
-                          return
+                            var f = Folder(path: "x")
+                            var made = f.create()
+                            return
                         """;
 
         AssertAnalyzesSa(source: source);

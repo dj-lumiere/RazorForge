@@ -20,10 +20,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine greet(name: Text) -> Text
-                          return name
+                            return name
                         routine main()
-                          greet(unknown: "Alice")
-                          return
+                            greet(unknown: "Alice")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -38,10 +38,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine greet(name: Text) -> Text
-                          return name
+                            return name
                         routine main()
-                          greet(name: "Alice")
-                          return
+                            greet(name: "Alice")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -56,10 +56,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(a: 1, c: 2)
-                          return
+                            add(a: 1, c: 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -79,10 +79,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(a: 1, a: 2)
-                          return
+                            add(a: 1, a: 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -97,10 +97,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(1, a: 2)
-                          return
+                            add(1, a: 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -115,10 +115,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(a: 1, b: 2)
-                          return
+                            add(a: 1, b: 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -140,10 +140,10 @@ public class NamedArgumentTests
         // (MixedPositionalAndNamedArguments), which subsumes the old S507 PositionalAfterNamed.
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(a: 1, 2)
-                          return
+                            add(a: 1, 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -160,10 +160,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(a: 1, b: 2)
-                          return
+                            add(a: 1, b: 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -178,10 +178,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(b: 2, a: 1)
-                          return
+                            add(b: 2, a: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -207,10 +207,10 @@ public class NamedArgumentTests
         // only 3+ non-defaulted params is a hard S510 error.
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(1, 2)
-                          return
+                            add(1, 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -227,10 +227,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(a: 1, b: 2)
-                          return
+                            add(a: 1, b: 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -247,10 +247,10 @@ public class NamedArgumentTests
         // 2 params where all-positional would only warn.
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(1, b: 2)
-                          return
+                            add(1, b: 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -265,10 +265,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine greet(name: Text) -> Text
-                          return name
+                            return name
                         routine main()
-                          greet("Alice")
-                          return
+                            greet("Alice")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -283,10 +283,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine noop() -> S32
-                          return 0
+                            return 0
                         routine main()
-                          noop()
-                          return
+                            noop()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -301,19 +301,19 @@ public class NamedArgumentTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine Point.get_x() -> S32
-                          return me.x
+                            return me.x
 
                         routine Point.offset_x(dx: S32) -> S32
-                          return me.x
+                            return me.x
 
                         routine main()
-                          var p = Point(x: 1, y: 2)
-                          p.offset_x(5)
-                          return
+                            var p = Point(x: 1, y: 2)
+                            p.offset_x(5)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -329,16 +329,16 @@ public class NamedArgumentTests
         // `me` is excluded from the param count; 3 explicit positional args trip S510.
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine Point.offset(dx: S32, dy: S32, dz: S32) -> S32
-                          return me.x
+                            return me.x
 
                         routine main()
-                          var p = Point(x: 1, y: 2)
-                          p.offset(3, 4, 5)
-                          return
+                            var p = Point(x: 1, y: 2)
+                            p.offset(3, 4, 5)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -353,10 +353,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          add(b: 2, a: 1)
-                          return
+                            add(b: 2, a: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -377,10 +377,10 @@ public class NamedArgumentTests
         string source = """
                         @positional
                         routine make(a: S32, b: S32, c: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          make(1, 2, 3)
-                          return
+                            make(1, 2, 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -398,10 +398,10 @@ public class NamedArgumentTests
         string source = """
                         @positional
                         routine make(a: S32, b: S32, c: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          make(a: 1, b: 2, c: 3)
-                          return
+                            make(a: 1, b: 2, c: 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -419,10 +419,10 @@ public class NamedArgumentTests
         string source = """
                         @positional
                         routine make(a: S32, b: S32, c: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          make(1, b: 2, c: 3)
-                          return
+                            make(1, b: 2, c: 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -440,10 +440,10 @@ public class NamedArgumentTests
     {
         string source = """
                         routine make(a: S32, b: S32, c: S32) -> S32
-                          return a
+                            return a
                         routine main()
-                          make(1, 2, 3)
-                          return
+                            make(1, 2, 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -461,8 +461,8 @@ public class NamedArgumentTests
         string source = """
                         routine C::sdl_make(a: S32, b: S32, c: S32) -> S32
                         routine main()
-                          C::sdl_make(1, 2, 3)
-                          return
+                            C::sdl_make(1, 2, 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

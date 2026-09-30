@@ -61,8 +61,8 @@ module Hello
 import IO/Console
 
 routine start()
-  show("Hello from RazorForge!")
-  return
+    show("Hello from RazorForge!")
+    return
 ```
 
 Build and run it:

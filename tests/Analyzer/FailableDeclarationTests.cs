@@ -15,9 +15,9 @@ public class FailableDeclarationTests
         string source = """
                         module L/Test
                         routine risky(n: S64) -> S64
-                          if n == 0
-                            throw DivisionByZeroError()
-                          return n
+                            if n == 0
+                                throw DivisionByZeroError()
+                            return n
                         """;
         AssertHasErrorSa(source: source, expectedErrorSubstring: "its declaration needs '!'");
     }
@@ -29,9 +29,9 @@ public class FailableDeclarationTests
         string source = """
                         module L/Test
                         routine find(n: S64) -> S64
-                          if n == 0
-                            absent
-                          return n
+                            if n == 0
+                                absent
+                            return n
                         """;
         AssertHasErrorSa(source: source, expectedErrorSubstring: "its declaration needs '!'");
     }
@@ -43,13 +43,13 @@ public class FailableDeclarationTests
         string source = """
                         module L/Test
                         routine risky!(n: S64) -> S64
-                          if n == 0
-                            throw DivisionByZeroError()
-                          return n
+                            if n == 0
+                                throw DivisionByZeroError()
+                            return n
                         routine start()
-                          var a = risky(n: 1)
-                          var b = try risky(n: 0)
-                          return
+                            var a = risky(n: 1)
+                            var b = try risky(n: 0)
+                            return
                         """;
         AssertAnalyzesSa(source: source);
     }
@@ -61,12 +61,12 @@ public class FailableDeclarationTests
         string source = """
                         module L/Test
                         routine start()
-                          var x = 10
-                          if 0 to 10 have x
-                            pass
-                          if 0 til 10 lack x
-                            pass
-                          return
+                            var x = 10
+                            if 0 to 10 have x
+                                pass
+                            if 0 til 10 lack x
+                                pass
+                            return
                         """;
         AssertAnalyzesSa(source: source);
     }

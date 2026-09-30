@@ -30,8 +30,8 @@ public sealed partial class WarmCompileBenchmark
                                    module Bench
                                    import IO/Console
                                    routine start()
-                                     show("hi")
-                                     return
+                                       show("hi")
+                                       return
                                    """;
 
     private static Program ParseTrivial()
@@ -237,10 +237,10 @@ public sealed partial class WarmCompileBenchmark
                       module Bench2
                       import IO/Console
                       routine start()
-                        var xs = List[S32]()
-                        xs.add_last(value: 7)
-                        show(f"n={xs.count()}")
-                        return
+                          var xs = List[S32]()
+                          xs.add_last(value: 7)
+                          show(f"n={xs.count()}")
+                          return
                       """;
 
         Program ParseB()

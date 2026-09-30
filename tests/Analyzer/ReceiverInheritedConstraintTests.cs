@@ -22,18 +22,18 @@ public class ReceiverInheritedConstraintTests
 
     private const string GeneralPrelude = """
                                           record Alpha
-                                            pass
+                                              pass
                                           record Beta
-                                            pass
+                                              pass
                                           record Gamma
-                                            pass
+                                              pass
 
                                           record Box[T]
-                                            pass
+                                              pass
 
                                           routine Box[T].only_ab()
                                           needs T in [Alpha, Beta]
-                                            return
+                                              return
 
                                           """;
 
@@ -42,8 +42,8 @@ public class ReceiverInheritedConstraintTests
     {
         string source = GeneralPrelude + """
                                          routine use_alpha(b: Box[Alpha])
-                                           b.only_ab()
-                                           return
+                                             b.only_ab()
+                                             return
                                          """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -55,8 +55,8 @@ public class ReceiverInheritedConstraintTests
     {
         string source = GeneralPrelude + """
                                          routine use_gamma(b: Box[Gamma])
-                                           b.only_ab()
-                                           return
+                                             b.only_ab()
+                                             return
                                          """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -74,7 +74,7 @@ public class ReceiverInheritedConstraintTests
                                        import BuilderQuery
 
                                        entity Counter
-                                         value: S64
+                                           value: S64
 
                                        """;
 
@@ -83,10 +83,10 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
-                                        using s.amend() as c
-                                          show("nope")
-                                        return
+                                          var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
+                                          using s.amend() as c
+                                              show("nope")
+                                          return
                                       """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -100,10 +100,10 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
-                                        using s.consult() as v
-                                          show("nope")
-                                        return
+                                          var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
+                                          using s.consult() as v
+                                              show("nope")
+                                          return
                                       """;
 
         AssertHasErrorSa(source: source,
@@ -115,16 +115,16 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine Counter.bump(inc: S64)
-                                        me.value = me.value + inc
-                                        return
+                                          me.value = me.value + inc
+                                          return
 
                                       routine start()
-                                        var s = Guarded[Counter, MultiRead](from: Counter(value: 10))
-                                        using s.consult() as v
-                                          show(f"value: {v.value}")
-                                        using s.amend() as c
-                                          c.bump(inc: 5)
-                                        return
+                                          var s = Guarded[Counter, MultiRead](from: Counter(value: 10))
+                                          using s.consult() as v
+                                              show(f"value: {v.value}")
+                                          using s.amend() as c
+                                              c.bump(inc: 5)
+                                          return
                                       """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -136,14 +136,14 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine Counter.bump(inc: S64)
-                                        me.value = me.value + inc
-                                        return
+                                          me.value = me.value + inc
+                                          return
 
                                       routine start()
-                                        var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
-                                        using s.amend() as c
-                                          c.bump(inc: 1)
-                                        return
+                                          var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
+                                          using s.amend() as c
+                                              c.bump(inc: 1)
+                                          return
                                       """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -155,10 +155,10 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
-                                        using s.consult() as v
-                                          show(f"{v.value}")
-                                        return
+                                          var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
+                                          using s.consult() as v
+                                              show(f"{v.value}")
+                                          return
                                       """;
 
         AnalysisResult result = AnalyzeSa(source: source);

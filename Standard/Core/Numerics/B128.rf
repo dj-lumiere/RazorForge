@@ -22,7 +22,7 @@ import Collections
 ### platform without relying on compiler-rt `__*tf*` libcalls.
 @llvm("i128")
 record B128 obeys Numeric, Ordered, Assignable, Copyable, Splittable
-  pass
+    pass
 
 # ============================================================================
 # Raw bit access
@@ -31,23 +31,23 @@ record B128 obeys Numeric, Ordered, Assignable, Copyable, Splittable
 ### Reinterprets this value as its raw IEEE 754 bit pattern.
 ### :returns: The underlying 128-bit encoding.
 routine B128.to_bits() -> U128
-  return LLVM::reinterpret_bits[B128, U128](me)
+    return LLVM::reinterpret_bits[B128, U128](me)
 
 ### Builds a value directly from a raw IEEE 754 bit pattern.
 ### :param bits: The exact 128-bit encoding.
 ### :returns: The decoded `B128`.
 common routine B128.from_bits(bits: U128) -> B128
-  return LLVM::reinterpret_bits[U128, B128](bits)
+    return LLVM::reinterpret_bits[U128, B128](bits)
 
 ### Returns the raw biased exponent field (0..32767).
 ### :returns: The 15-bit exponent field.
 routine B128.raw_exponent() -> U64
-  return LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(me.to_bits(), 112_u128), b: 32767_u128))
+    return LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(me.to_bits(), 112_u128), b: 32767_u128))
 
 ### Returns the raw 112-bit mantissa field (no implicit bit).
 ### :returns: The stored fraction bits.
 routine B128.raw_mantissa() -> U128
-  return LLVM::bit_and(a: me.to_bits(), b: b128_mant_mask())
+    return LLVM::bit_and(a: me.to_bits(), b: b128_mant_mask())
 
 # ============================================================================
 # Classification (pure bit inspection)
@@ -56,63 +56,63 @@ routine B128.raw_mantissa() -> U128
 ### Returns `true` when the value is negative (sign bit set).
 ### :returns: Whether the sign bit is set.
 routine B128.is_negative() -> Bool
-  return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()), b: 0_u128)
+    return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()), b: 0_u128)
 
 ### Returns `true` when the value is strictly positive.
 ### :returns: Whether the value is greater than zero.
 routine B128.is_positive() -> Bool
-  return not me.is_negative() and not me.is_zero()
+    return not me.is_negative() and not me.is_zero()
 
 ### Returns `true` when the value encodes a NaN.
 ### :returns: Whether the bit pattern is not-a-number.
 routine B128.is_nan() -> Bool
-  return me.raw_exponent() == 0x7FFF_u64 and LLVM::int_ne(a: me.raw_mantissa(), b: 0_u128)
+    return me.raw_exponent() == 0x7FFF_u64 and LLVM::int_ne(a: me.raw_mantissa(), b: 0_u128)
 
 ### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
 routine B128.is_signaling() -> Bool
-  return me.is_nan() and LLVM::int_eq(a: LLVM::bit_and(a: me.raw_mantissa(), b: LLVM::shift_left(value: 1_u128, bits: 111_u128)), b: 0_u128)
+    return me.is_nan() and LLVM::int_eq(a: LLVM::bit_and(a: me.raw_mantissa(), b: LLVM::shift_left(value: 1_u128, bits: 111_u128)), b: 0_u128)
 
 ### Returns `true` when the value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern is an infinity.
 routine B128.is_infinite() -> Bool
-  return me.raw_exponent() == 0x7FFF_u64 and LLVM::int_eq(a: me.raw_mantissa(), b: 0_u128)
+    return me.raw_exponent() == 0x7FFF_u64 and LLVM::int_eq(a: me.raw_mantissa(), b: 0_u128)
 
 ### Returns `true` when the value is neither NaN nor infinity.
 ### :returns: Whether the value is finite.
 routine B128.is_finite() -> Bool
-  return me.raw_exponent() != 0x7FFF_u64
+    return me.raw_exponent() != 0x7FFF_u64
 
 ### Returns `true` when the value is zero (either sign).
 ### :returns: Whether the value is +0 or -0.
 routine B128.is_zero() -> Bool
-  return me.raw_exponent() == 0_u64 and LLVM::int_eq(a: me.raw_mantissa(), b: 0_u128)
+    return me.raw_exponent() == 0_u64 and LLVM::int_eq(a: me.raw_mantissa(), b: 0_u128)
 
 ### Returns `true` when the value is subnormal (denormalized, nonzero).
 ### :returns: Whether the value is subnormal.
 routine B128.is_subnormal() -> Bool
-  return me.raw_exponent() == 0_u64 and LLVM::int_ne(a: me.raw_mantissa(), b: 0_u128)
+    return me.raw_exponent() == 0_u64 and LLVM::int_ne(a: me.raw_mantissa(), b: 0_u128)
 
 ### Returns `true` when the sign bit is set (C `signbit`; true for -0 and -NaN too).
 routine B128.signbit() -> Bool
-  return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()), b: 0_u128)
+    return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()), b: 0_u128)
 
 ### Returns `true` for a finite, normal value (nonzero and not subnormal).
 routine B128.is_normal() -> Bool
-  return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+    return me.is_finite() and not me.is_zero() and not me.is_subnormal()
 
 ### C `fpclassify`: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
 routine B128.fpclassify() -> FpClass
-  if me.is_signaling()
-    return SIGNALING_NAN
-  if me.is_nan()
-    return NAN
-  if me.is_infinite()
-    return INFINITE
-  if me.is_zero()
-    return ZERO
-  if me.is_subnormal()
-    return SUBNORMAL
-  return NORMAL
+    if me.is_signaling()
+        return SIGNALING_NAN
+    if me.is_nan()
+        return NAN
+    if me.is_infinite()
+        return INFINITE
+    if me.is_zero()
+        return ZERO
+    if me.is_subnormal()
+        return SUBNORMAL
+    return NORMAL
 
 # ============================================================================
 # IEEE 754 Tier 1 — total ordering predicates
@@ -121,22 +121,22 @@ routine B128.fpclassify() -> FpClass
 ### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
 ### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
 routine b128_order_key(bits: U128) -> U128
-  if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: b128_sign_mask()), b: 0_u128)
-    return LLVM::bit_xor(a: bits, b: LLVM::bit_or(a: b128_sign_mask(), b: b128_abs_mask()))
-  return LLVM::bit_or(a: bits, b: b128_sign_mask())
+    if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: b128_sign_mask()), b: 0_u128)
+        return LLVM::bit_xor(a: bits, b: LLVM::bit_or(a: b128_sign_mask(), b: b128_abs_mask()))
+    return LLVM::bit_or(a: bits, b: b128_sign_mask())
 
 ### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
 routine B128.total_order(you: B128) -> Bool
-  return b128_order_key(bits: me.to_bits()) <= b128_order_key(bits: you.to_bits())
+    return b128_order_key(bits: me.to_bits()) <= b128_order_key(bits: you.to_bits())
 
 ### IEEE 754 totalOrderMag: `total_order` applied to the magnitudes (sign bit cleared).
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine B128.total_order_mag(you: B128) -> Bool
-  return LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask()) <= LLVM::bit_and(a: you.to_bits(), b: b128_abs_mask())
+    return LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask()) <= LLVM::bit_and(a: you.to_bits(), b: b128_abs_mask())
 
 # ============================================================================
 # IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding
@@ -145,129 +145,129 @@ routine B128.total_order_mag(you: B128) -> Bool
 ### IEEE 754 nextUp: the least value greater than `me`. Propagating; never crashes.
 ### :returns: The next representable value toward +infinity.
 routine B128.next_up() -> B128
-  return me.nextafter(you: B128.from_bits(bits: b128_inf(sign: 0_u64)))
+    return me.nextafter(you: B128.from_bits(bits: b128_inf(sign: 0_u64)))
 
 ### IEEE 754 nextDown: the greatest value less than `me`. Never crashes.
 ### :returns: The next representable value toward -infinity.
 routine B128.next_down() -> B128
-  return me.nextafter(you: B128.from_bits(bits: b128_inf(sign: 1_u64)))
+    return me.nextafter(you: B128.from_bits(bits: b128_inf(sign: 1_u64)))
 
 ### IEEE 754 logb: the unbiased exponent of `me` as a floating value (logb(0)=-inf,
 ### logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
 ### :returns: The radix-2 exponent of `me`.
 routine B128.logb() -> B128
-  if me.is_nan()
-    return me
-  if me.is_infinite()
-    return B128.from_bits(bits: b128_inf(sign: 0_u64))
-  if me.is_zero()
-    return B128.from_bits(bits: b128_inf(sign: 1_u64))
-  return B128(from: b128_ilogb(v: me))
+    if me.is_nan()
+        return me
+    if me.is_infinite()
+        return B128.from_bits(bits: b128_inf(sign: 0_u64))
+    if me.is_zero()
+        return B128.from_bits(bits: b128_inf(sign: 1_u64))
+    return B128(from: b128_ilogb(v: me))
 
 ### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
 routine B128.scaleb!(n: S64) -> B128
-  var r = me.scalbn(n: n)
-  if r.is_finite() or not me.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.scalbn(n: n)
+    if r.is_finite() or not me.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
 routine B128.scaleb_unchecked(n: S64) -> B128
-  return me.scalbn(n: n)
+    return me.scalbn(n: n)
 
 ### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, ignoring NaN.
 routine B128.min_num(you: B128) -> B128
-  if me.is_nan()
-    return you
-  if you.is_nan()
-    return me
-  if me == you
-    if me.is_zero()
-      return if me.signbit() then me else you
-    return me
-  return if me < you then me else you
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if me == you
+        if me.is_zero()
+            return if me.signbit() then me else you
+        return me
+    return if me < you then me else you
 
 ### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, ignoring NaN.
 routine B128.max_num(you: B128) -> B128
-  if me.is_nan()
-    return you
-  if you.is_nan()
-    return me
-  if me == you
-    if me.is_zero()
-      return if me.signbit() then you else me
-    return me
-  return if me > you then me else you
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if me == you
+        if me.is_zero()
+            return if me.signbit() then you else me
+        return me
+    return if me > you then me else you
 
 ### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, NaN if either is NaN.
 routine B128.minimum(you: B128) -> B128
-  if me.is_nan()
-    return me
-  if you.is_nan()
-    return you
-  if me == you
-    if me.is_zero()
-      return if me.signbit() then me else you
-    return me
-  return if me < you then me else you
+    if me.is_nan()
+        return me
+    if you.is_nan()
+        return you
+    if me == you
+        if me.is_zero()
+            return if me.signbit() then me else you
+        return me
+    return if me < you then me else you
 
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, NaN if either is NaN.
 routine B128.maximum(you: B128) -> B128
-  if me.is_nan()
-    return me
-  if you.is_nan()
-    return you
-  if me == you
-    if me.is_zero()
-      return if me.signbit() then you else me
-    return me
-  return if me > you then me else you
+    if me.is_nan()
+        return me
+    if you.is_nan()
+        return you
+    if me == you
+        if me.is_zero()
+            return if me.signbit() then you else me
+        return me
+    return if me > you then me else you
 
 ### C `fmax`: the larger operand, treating NaN as missing (alias of `max_num`). Provided for
 ### parity with B16/B32/B64 and the decimal types. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, ignoring NaN.
 routine B128.fmax(you: B128) -> B128
-  return me.max_num(you: you)
+    return me.max_num(you: you)
 
 ### C `fmin`: the smaller operand, treating NaN as missing (alias of `min_num`). Provided for
 ### parity with B16/B32/B64 and the decimal types. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, ignoring NaN.
 routine B128.fmin(you: B128) -> B128
-  return me.min_num(you: you)
+    return me.min_num(you: you)
 
 ### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero.
 ### :returns: `me` rounded to an integral value with ties away from zero.
 routine B128.round_ties_away() -> B128
-  if not me.is_finite()
-    return me
-  var a = me.abs()
-  var t = a.trunc()
-  var rounded = if a - t >= 0.5_b128 then t + 1.0_b128 else t
-  return rounded.copysign(sign: me)
+    if not me.is_finite()
+        return me
+    var a = me.abs()
+    var t = a.trunc()
+    var rounded = if a - t >= 0.5_b128 then t + 1.0_b128 else t
+    return rounded.copysign(sign: me)
 
 ### Returns the fractional part `me - trunc(me)`, preserving sign (frac(±inf) = ±0).
 routine B128.frac() -> B128
-  if me.is_nan()
-    return me
-  if me.is_infinite()
-    return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
-  return me - me.trunc()
+    if me.is_nan()
+        return me
+    if me.is_infinite()
+        return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
+    return me - me.trunc()
 
 # ============================================================================
 # Sign operations (pure bit manipulation)
@@ -277,21 +277,21 @@ routine B128.frac() -> B128
 ### :returns: The negated value.
 @inline
 routine B128.neg() -> B128
-  return B128.from_bits(bits: LLVM::bit_xor(a: me.to_bits(), b: b128_sign_mask()))
+    return B128.from_bits(bits: LLVM::bit_xor(a: me.to_bits(), b: b128_sign_mask()))
 
 ### Returns the absolute value (sign bit cleared).
 ### :returns: The magnitude of this value.
 @inline
 routine B128.abs() -> B128
-  return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask()))
+    return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask()))
 
 ### Returns this magnitude carrying the sign of `sign`.
 ### :param sign: The value supplying the sign bit.
 ### :returns: A value combining this magnitude with the sign of `sign`.
 routine B128.copysign(sign: B128) -> B128
-  var mag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
-  var sgn = LLVM::bit_and(a: sign.to_bits(), b: b128_sign_mask())
-  return B128.from_bits(bits: LLVM::bit_or(a: mag, b: sgn))
+    var mag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
+    var sgn = LLVM::bit_and(a: sign.to_bits(), b: b128_sign_mask())
+    return B128.from_bits(bits: LLVM::bit_or(a: mag, b: sgn))
 
 # ============================================================================
 # Ordered comparison (pure — sign-magnitude bit logic, no native delegation)
@@ -301,27 +301,27 @@ routine B128.copysign(sign: B128) -> B128
 ### :param you: The value to compare against.
 ### :returns: Whether the values are ordered-equal.
 routine B128.eq(you: B128) -> Bool
-  if me.is_nan() or you.is_nan()
-    return false
-  if me.is_zero() and you.is_zero()
-    return true
-  return LLVM::int_eq(a: me.to_bits(), b: you.to_bits())
+    if me.is_nan() or you.is_nan()
+        return false
+    if me.is_zero() and you.is_zero()
+        return true
+    return LLVM::int_eq(a: me.to_bits(), b: you.to_bits())
 
 ### Compares this value with `you` under IEEE ordered semantics (pure bit logic).
 ### :param you: The value to compare against.
 ### :returns: The comparison sign (SAME for unordered/NaN).
 routine B128.cmp(you: B128) -> ComparisonSign
-  if me.is_nan() or you.is_nan()
+    if me.is_nan() or you.is_nan()
+        return SAME
+    if me.is_zero() and you.is_zero()
+        return SAME
+    var ka = b128_order_key(bits: me.to_bits())
+    var kb = b128_order_key(bits: you.to_bits())
+    if LLVM::unsigned_lt(a: ka, b: kb)
+        return ME_SMALL
+    if LLVM::unsigned_gt(a: ka, b: kb)
+        return ME_LARGE
     return SAME
-  if me.is_zero() and you.is_zero()
-    return SAME
-  var ka = b128_order_key(bits: me.to_bits())
-  var kb = b128_order_key(bits: you.to_bits())
-  if LLVM::unsigned_lt(a: ka, b: kb)
-    return ME_SMALL
-  if LLVM::unsigned_gt(a: ka, b: kb)
-    return ME_LARGE
-  return SAME
 
 # ============================================================================
 # Software arithmetic
@@ -336,64 +336,64 @@ routine B128.cmp(you: B128) -> ComparisonSign
 ### :param you: The addend.
 ### :returns: The sum (always finite).
 routine B128.add!(you: B128) -> B128
-  var r = B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: you.to_bits()))
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: you.to_bits()))
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me - you` (software IEEE 754). Checked: crashes if the result is non-finite.
 ### Use `sub_unchecked` for raw IEEE 754 propagation.
 ### :param you: The value to subtract.
 ### :returns: The difference (always finite).
 routine B128.sub!(you: B128) -> B128
-  var yb = LLVM::bit_xor(a: you.to_bits(), b: b128_sign_mask())
-  var r = B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: yb))
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var yb = LLVM::bit_xor(a: you.to_bits(), b: b128_sign_mask())
+    var r = B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: yb))
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me + you`, promoting the real `me` to complex (imaginary part 0). Only `+`/`-` allow
 ### real↔complex mixing; the component width must match (B128 pairs with C256).
 ### :param you: The complex addend.
 ### :returns: The complex sum.
 routine B128.add(you: C256) -> C256
-  return C256(from: me).add(you)
+    return C256(from: me).add(you)
 
 ### Returns `me - you`, promoting the real `me` to complex (imaginary part 0).
 ### :param you: The complex value to subtract.
 ### :returns: The complex difference.
 routine B128.sub(you: C256) -> C256
-  return C256(from: me).sub(you)
+    return C256(from: me).sub(you)
 
 ### Returns `me * you` (software IEEE 754). Checked: crashes if the result is non-finite.
 ### Use `mul_unchecked` for raw IEEE 754 propagation.
 ### :param you: The multiplier.
 ### :returns: The product (always finite).
 routine B128.mul!(you: B128) -> B128
-  var r = B128.from_bits(bits: b128_mul_bits(a: me.to_bits(), b: you.to_bits()))
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = B128.from_bits(bits: b128_mul_bits(a: me.to_bits(), b: you.to_bits()))
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me / you` (software IEEE 754). Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain,
 ### overflow -> overflow. Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 ### :param you: The divisor.
 ### :returns: The quotient (always finite).
 routine B128.truediv!(you: B128) -> B128
-  var r = B128.from_bits(bits: b128_div_bits(a: me.to_bits(), b: you.to_bits()))
-  if r.is_finite()
-    return r
-  if you.is_zero() and not me.is_zero()
-    throw DivisionByZeroError()
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = B128.from_bits(bits: b128_div_bits(a: me.to_bits(), b: you.to_bits()))
+    if r.is_finite()
+        return r
+    if you.is_zero() and not me.is_zero()
+        throw DivisionByZeroError()
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 # ============================================================================
 # Rounding to integer and value selection (exact, on packed bits — no rounding
@@ -403,171 +403,171 @@ routine B128.truediv!(you: B128) -> B128
 ### Truncates toward zero to an integer value (C `trunc`).
 ### :returns: The integer part, preserving sign (NaN/inf returned unchanged).
 routine B128.trunc() -> B128
-  if not me.is_finite()
-    return me
-  var e = me.raw_exponent()
-  if e == 0_u64
-    return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
-  var eu = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16383_s64)
-  if LLVM::signed_ge(a: eu, b: 112_s64)
-    return me
-  if LLVM::signed_lt(a: eu, b: 0_s64)
-    return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
-  var fbu = LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](LLVM::sub(a: 112_s64, b: eu)))
-  var fracmask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: fbu), b: 1_u128)
-  var keepmask = LLVM::bit_xor(a: fracmask, b: LLVM::sub(a: 0_u128, b: 1_u128))
-  return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: keepmask))
+    if not me.is_finite()
+        return me
+    var e = me.raw_exponent()
+    if e == 0_u64
+        return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
+    var eu = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16383_s64)
+    if LLVM::signed_ge(a: eu, b: 112_s64)
+        return me
+    if LLVM::signed_lt(a: eu, b: 0_s64)
+        return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
+    var fbu = LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](LLVM::sub(a: 112_s64, b: eu)))
+    var fracmask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: fbu), b: 1_u128)
+    var keepmask = LLVM::bit_xor(a: fracmask, b: LLVM::sub(a: 0_u128, b: 1_u128))
+    return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: keepmask))
 
 ### Rounds toward negative infinity (C `floor`).
 ### :returns: The largest integer not greater than this value.
 routine B128.floor() -> B128
-  if not me.is_finite()
-    return me
-  var t = me.trunc()
-  if me.is_negative() and not t.eq(me)
-    return t - b128_from_int(1_u64)
-  return t
+    if not me.is_finite()
+        return me
+    var t = me.trunc()
+    if me.is_negative() and not t.eq(me)
+        return t - b128_from_int(1_u64)
+    return t
 
 ### Rounds toward positive infinity (C `ceil`).
 ### :returns: The smallest integer not less than this value.
 routine B128.ceil() -> B128
-  if not me.is_finite()
-    return me
-  var t = me.trunc()
-  if me.is_positive() and not t.eq(me)
-    return t + b128_from_int(1_u64)
-  return t
+    if not me.is_finite()
+        return me
+    var t = me.trunc()
+    if me.is_positive() and not t.eq(me)
+        return t + b128_from_int(1_u64)
+    return t
 
 ### Rounds to nearest integer, ties away from zero (C `round`).
 ### :returns: The rounded integer value.
 routine B128.round() -> B128
-  if not me.is_finite()
-    return me
-  return B128.from_bits(bits: b128_round_to_int(bits: me.to_bits(), half_even: false))
+    if not me.is_finite()
+        return me
+    return B128.from_bits(bits: b128_round_to_int(bits: me.to_bits(), half_even: false))
 
 ### Rounds to nearest integer, ties to even (C `rint` under the default mode).
 ### :returns: The rounded integer value.
 routine B128.rint() -> B128
-  if not me.is_finite()
-    return me
-  return B128.from_bits(bits: b128_round_to_int(bits: me.to_bits(), half_even: true))
+    if not me.is_finite()
+        return me
+    return B128.from_bits(bits: b128_round_to_int(bits: me.to_bits(), half_even: true))
 
 ### Guarded round-to-integer core for round/rint over packed (finite) bits.
 ### :param bits: The raw encoding (assumed finite).
 ### :param half_even: Break ties to even when `true`, else away from zero.
 ### :returns: The rounded encoding.
 routine b128_round_to_int(bits: U128, half_even: Bool) -> U128
-  var sign_bit = LLVM::bit_and(a: bits, b: b128_sign_mask())
-  var e = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
-  var frac0 = LLVM::bit_and(a: bits, b: b128_mant_mask())
-  if e == 0_u64
-    return sign_bit
-  var eu = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16383_s64)
-  if LLVM::signed_ge(a: eu, b: 112_s64)
-    return bits
-  var one_mag = LLVM::shift_left(value: 16383_u128, bits: 112_u128)
-  if LLVM::signed_lt(a: eu, b: 0_s64)
-    if eu == -1_s64
-      if half_even and LLVM::int_eq(a: frac0, b: 0_u128)
+    var sign_bit = LLVM::bit_and(a: bits, b: b128_sign_mask())
+    var e = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
+    var frac0 = LLVM::bit_and(a: bits, b: b128_mant_mask())
+    if e == 0_u64
         return sign_bit
-      return LLVM::bit_or(a: sign_bit, b: one_mag)
-    return sign_bit
-  var fbu = LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](LLVM::sub(a: 112_s64, b: eu)))
-  var sig = LLVM::bit_or(a: frac0, b: b128_implicit())
-  var fracmask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: fbu), b: 1_u128)
-  var frac = LLVM::bit_and(a: sig, b: fracmask)
-  var half = LLVM::shift_left(value: 1_u128, bits: LLVM::sub(a: fbu, b: 1_u128))
-  var intsig = LLVM::bit_and(a: sig, b: LLVM::bit_xor(a: fracmask, b: LLVM::sub(a: 0_u128, b: 1_u128)))
-  var roundup = false
-  if LLVM::unsigned_gt(a: frac, b: half)
-    roundup = true
-  elseif LLVM::int_eq(a: frac, b: half)
-    if half_even
-      roundup = LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(sig, fbu), b: 1_u128), b: 0_u128)
-    else
-      roundup = true
-  if roundup
-    intsig = LLVM::add(a: intsig, b: LLVM::shift_left(value: 1_u128, bits: fbu))
-  if LLVM::int_ne(a: LLVM::bit_and(a: intsig, b: LLVM::shift_left(value: 1_u128, bits: 113_u128)), b: 0_u128)
-    intsig = LLVM::shift_right_unsigned(intsig, 1_u128)
-    e = LLVM::add(a: e, b: 1_u64)
-  var packed = LLVM::bit_or(a: sign_bit, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](e), bits: 112_u128))
-  return LLVM::bit_or(a: packed, b: LLVM::bit_and(a: intsig, b: b128_mant_mask()))
+    var eu = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16383_s64)
+    if LLVM::signed_ge(a: eu, b: 112_s64)
+        return bits
+    var one_mag = LLVM::shift_left(value: 16383_u128, bits: 112_u128)
+    if LLVM::signed_lt(a: eu, b: 0_s64)
+        if eu == -1_s64
+            if half_even and LLVM::int_eq(a: frac0, b: 0_u128)
+                return sign_bit
+            return LLVM::bit_or(a: sign_bit, b: one_mag)
+        return sign_bit
+    var fbu = LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](LLVM::sub(a: 112_s64, b: eu)))
+    var sig = LLVM::bit_or(a: frac0, b: b128_implicit())
+    var fracmask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: fbu), b: 1_u128)
+    var frac = LLVM::bit_and(a: sig, b: fracmask)
+    var half = LLVM::shift_left(value: 1_u128, bits: LLVM::sub(a: fbu, b: 1_u128))
+    var intsig = LLVM::bit_and(a: sig, b: LLVM::bit_xor(a: fracmask, b: LLVM::sub(a: 0_u128, b: 1_u128)))
+    var roundup = false
+    if LLVM::unsigned_gt(a: frac, b: half)
+        roundup = true
+    elseif LLVM::int_eq(a: frac, b: half)
+        if half_even
+            roundup = LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(sig, fbu), b: 1_u128), b: 0_u128)
+        else
+            roundup = true
+    if roundup
+        intsig = LLVM::add(a: intsig, b: LLVM::shift_left(value: 1_u128, bits: fbu))
+    if LLVM::int_ne(a: LLVM::bit_and(a: intsig, b: LLVM::shift_left(value: 1_u128, bits: 113_u128)), b: 0_u128)
+        intsig = LLVM::shift_right_unsigned(intsig, 1_u128)
+        e = LLVM::add(a: e, b: 1_u64)
+    var packed = LLVM::bit_or(a: sign_bit, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](e), bits: 112_u128))
+    return LLVM::bit_or(a: packed, b: LLVM::bit_and(a: intsig, b: b128_mant_mask()))
 
 ### Returns the smaller of two values (C `fmin`: NaN-agnostic, -0 < +0).
 ### :param you: The value to compare against.
 ### :returns: The minimum.
 routine B128.min(you: B128) -> B128
-  if me.is_nan()
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if me.is_zero() and you.is_zero()
+        if me.is_negative()
+            return me
+        return you
+    if me < you
+        return me
     return you
-  if you.is_nan()
-    return me
-  if me.is_zero() and you.is_zero()
-    if me.is_negative()
-      return me
-    return you
-  if me < you
-    return me
-  return you
 
 ### Returns the larger of two values (C `fmax`: NaN-agnostic, -0 < +0).
 ### :param you: The value to compare against.
 ### :returns: The maximum.
 routine B128.max(you: B128) -> B128
-  if me.is_nan()
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if me.is_zero() and you.is_zero()
+        if me.is_negative()
+            return you
+        return me
+    if me > you
+        return me
     return you
-  if you.is_nan()
-    return me
-  if me.is_zero() and you.is_zero()
-    if me.is_negative()
-      return you
-    return me
-  if me > you
-    return me
-  return you
 
 ### Returns the positive difference `max(me - you, 0)` (C `fdim`).
 ### :param you: The value to subtract.
 ### :returns: The positive difference, or +0.
 routine B128.fdim(you: B128) -> B128
-  if me.is_nan() or you.is_nan()
-    return B128.from_bits(bits: b128_qnan())
-  if me > you
-    return me - you
-  return b128_from_int(0_u64)
+    if me.is_nan() or you.is_nan()
+        return B128.from_bits(bits: b128_qnan())
+    if me > you
+        return me - you
+    return b128_from_int(0_u64)
 
 ### Multiplies by `2^n` exactly when representable (C `scalbn` / `ldexp`).
 ### :param n: The power-of-two exponent adjustment.
 ### :returns: `me * 2^n`, with overflow to infinity and underflow to subnormal/zero.
 routine B128.scalbn(n: S64) -> B128
-  if not me.is_finite()
-    return me
-  if me.is_zero()
-    return me
-  var e = me.raw_exponent()
-  var sig = me.raw_mantissa()
-  var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(me.to_bits(), 127_u128))
-  var eu = 0_s64
-  if e == 0_u64
-    eu = -16382_s64
-    while LLVM::int_eq(a: LLVM::bit_and(a: sig, b: b128_implicit()), b: 0_u128)
-      sig = LLVM::shift_left(value: sig, bits: 1_u128)
-      eu = LLVM::sub(a: eu, b: 1_s64)
-  else
-    sig = LLVM::bit_or(a: sig, b: b128_implicit())
-    eu = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16383_s64)
-  var biased = LLVM::add(a: LLVM::add(a: eu, b: n), b: 16383_s64)
-  if LLVM::signed_ge(a: biased, b: 32767_s64)
-    return B128.from_bits(bits: b128_inf(sign: sign))
-  if LLVM::signed_lt(a: biased, b: 1_s64)
-    return B128.from_bits(bits: b128_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub(a: 1_s64, b: biased)))
-  return B128.from_bits(bits: b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig))
+    if not me.is_finite()
+        return me
+    if me.is_zero()
+        return me
+    var e = me.raw_exponent()
+    var sig = me.raw_mantissa()
+    var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(me.to_bits(), 127_u128))
+    var eu = 0_s64
+    if e == 0_u64
+        eu = -16382_s64
+        while LLVM::int_eq(a: LLVM::bit_and(a: sig, b: b128_implicit()), b: 0_u128)
+            sig = LLVM::shift_left(value: sig, bits: 1_u128)
+            eu = LLVM::sub(a: eu, b: 1_s64)
+    else
+        sig = LLVM::bit_or(a: sig, b: b128_implicit())
+        eu = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16383_s64)
+    var biased = LLVM::add(a: LLVM::add(a: eu, b: n), b: 16383_s64)
+    if LLVM::signed_ge(a: biased, b: 32767_s64)
+        return B128.from_bits(bits: b128_inf(sign: sign))
+    if LLVM::signed_lt(a: biased, b: 1_s64)
+        return B128.from_bits(bits: b128_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub(a: 1_s64, b: biased)))
+    return B128.from_bits(bits: b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig))
 
 ### Alias of `scalbn` (C `ldexp`).
 ### :param n: The power-of-two exponent adjustment.
 ### :returns: `me * 2^n`.
 routine B128.ldexp(n: S64) -> B128
-  return me.scalbn(n: n)
+    return me.scalbn(n: n)
 
 # ============================================================================
 # Bit-pattern constants (built via shifts to avoid 128-bit literal typos)
@@ -575,48 +575,48 @@ routine B128.ldexp(n: S64) -> B128
 
 ### The implicit-bit mask `1 << 112`.
 routine b128_implicit() -> U128
-  return LLVM::shift_left(value: 1_u128, bits: 112_u128)
+    return LLVM::shift_left(value: 1_u128, bits: 112_u128)
 
 ### The 112-bit mantissa mask `(1 << 112) - 1`.
 routine b128_mant_mask() -> U128
-  return LLVM::sub(a: b128_implicit(), b: 1_u128)
+    return LLVM::sub(a: b128_implicit(), b: 1_u128)
 
 ### The sign-bit mask `1 << 127`.
 routine b128_sign_mask() -> U128
-  return LLVM::shift_left(value: 1_u128, bits: 127_u128)
+    return LLVM::shift_left(value: 1_u128, bits: 127_u128)
 
 ### The magnitude mask `~(1 << 127)` (all but the sign bit).
 routine b128_abs_mask() -> U128
-  return LLVM::sub(a: b128_sign_mask(), b: 1_u128)
+    return LLVM::sub(a: b128_sign_mask(), b: 1_u128)
 
 ### The infinity encoding `0x7FFF << 112` for the given sign bit.
 routine b128_inf(sign: U64) -> U128
-  var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  var e = LLVM::shift_left(value: 32767_u128, bits: 112_u128)
-  return LLVM::bit_or(a: s, b: e)
+    var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    var e = LLVM::shift_left(value: 32767_u128, bits: 112_u128)
+    return LLVM::bit_or(a: s, b: e)
 
 ### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
 routine b128_qnan() -> U128
-  var e = LLVM::shift_left(value: 32767_u128, bits: 112_u128)
-  var q = LLVM::shift_left(value: 1_u128, bits: 111_u128)
-  return LLVM::bit_or(a: e, b: q)
+    var e = LLVM::shift_left(value: 32767_u128, bits: 112_u128)
+    var q = LLVM::shift_left(value: 1_u128, bits: 111_u128)
+    return LLVM::bit_or(a: e, b: q)
 
 ### Forces the quiet bit on a NaN encoding (top mantissa bit).
 routine b128_quiet(bits: U128) -> U128
-  return LLVM::bit_or(a: bits, b: LLVM::shift_left(value: 1_u128, bits: 111_u128))
+    return LLVM::bit_or(a: bits, b: LLVM::shift_left(value: 1_u128, bits: 111_u128))
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
 common routine B128.signaling_nan() -> B128
-  return B128.from_bits(bits: LLVM::bit_or(a: LLVM::shift_left(value: 32767_u128, bits: 112_u128), b: 1_u128))
+    return B128.from_bits(bits: LLVM::bit_or(a: LLVM::shift_left(value: 32767_u128, bits: 112_u128), b: 1_u128))
 
 ### Sign-magnitude total-order key for comparison: negatives are bit-inverted,
 ### non-negatives get the sign bit set, so an unsigned compare orders the floats.
 ### :param bits: The raw encoding.
 ### :returns: The order key.
 routine b128_order_key(bits: U128) -> U128
-  if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: b128_sign_mask()), b: 0_u128)
-    return LLVM::bit_xor(a: bits, b: LLVM::sub(a: 0_u128, b: 1_u128))
-  return LLVM::bit_or(a: bits, b: b128_sign_mask())
+    if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: b128_sign_mask()), b: 0_u128)
+        return LLVM::bit_xor(a: bits, b: LLVM::sub(a: 0_u128, b: 1_u128))
+    return LLVM::bit_or(a: bits, b: b128_sign_mask())
 
 # ============================================================================
 # U256 helpers (wide intermediates for mul / div)
@@ -624,27 +624,27 @@ routine b128_order_key(bits: U128) -> U128
 
 ### Widens a `U128` into a `U256`.
 routine b128_u256(x: U128) -> U256
-  return LLVM::zero_extend[U128, U256](x)
+    return LLVM::zero_extend[U128, U256](x)
 
 ### Narrows a `U256` to its low 128 bits.
 routine b128_u256_to128(x: U256) -> U128
-  return LLVM::int_truncate[U256, U128](x)
+    return LLVM::int_truncate[U256, U128](x)
 
 ### Logical left shift of a `U256` by a `U128` amount.
 routine b128_u256_shl(v: U256, n: U128) -> U256
-  return LLVM::shift_left(value: v, bits: LLVM::zero_extend[U128, U256](n))
+    return LLVM::shift_left(value: v, bits: LLVM::zero_extend[U128, U256](n))
 
 ### Logical right shift of a `U256` by a `U128` amount.
 routine b128_u256_shr(v: U256, n: U128) -> U256
-  return LLVM::shift_right_unsigned(v, LLVM::zero_extend[U128, U256](n))
+    return LLVM::shift_right_unsigned(v, LLVM::zero_extend[U128, U256](n))
 
 ### The wide bit mask `1 << n` as a `U256`.
 routine b128_u256_bit(n: U128) -> U256
-  return b128_u256_shl(v: b128_u256(1_u128), n: n)
+    return b128_u256_shl(v: b128_u256(1_u128), n: n)
 
 ### The wide low mask `(1 << n) - 1` as a `U256`.
 routine b128_u256_lowmask(n: U128) -> U256
-  return LLVM::sub(a: b128_u256_bit(n), b: b128_u256(1_u128))
+    return LLVM::sub(a: b128_u256_bit(n), b: b128_u256(1_u128))
 
 # ============================================================================
 # Soft-float kernels
@@ -656,18 +656,18 @@ routine b128_u256_lowmask(n: U128) -> U256
 ### :param amount: The right-shift distance.
 ### :returns: The shifted significand with sticky bit folded in.
 routine b128_shr_sticky(value: U128, amount: U128) -> U128
-  if LLVM::int_eq(a: amount, b: 0_u128)
-    return value
-  if LLVM::unsigned_ge(a: amount, b: 128_u128)
-    if LLVM::int_ne(a: value, b: 0_u128)
-      return 1_u128
-    return 0_u128
-  var mask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: amount), b: 1_u128)
-  var lost = LLVM::bit_and(a: value, b: mask)
-  var shifted = LLVM::shift_right_unsigned(value, amount)
-  if LLVM::int_ne(a: lost, b: 0_u128)
-    shifted = LLVM::bit_or(a: shifted, b: 1_u128)
-  return shifted
+    if LLVM::int_eq(a: amount, b: 0_u128)
+        return value
+    if LLVM::unsigned_ge(a: amount, b: 128_u128)
+        if LLVM::int_ne(a: value, b: 0_u128)
+            return 1_u128
+        return 0_u128
+    var mask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: amount), b: 1_u128)
+    var lost = LLVM::bit_and(a: value, b: mask)
+    var shifted = LLVM::shift_right_unsigned(value, amount)
+    if LLVM::int_ne(a: lost, b: 0_u128)
+        shifted = LLVM::bit_or(a: shifted, b: 1_u128)
+    return shifted
 
 ### Packs a sign / 113-bit significand (implicit at bit 112) / biased exponent into
 ### a final binary128 encoding, applying overflow and the normal vs. subnormal rule.
@@ -676,188 +676,188 @@ routine b128_shr_sticky(value: U128, amount: U128) -> U128
 ### :param sig: The 113-bit significand (no guard bits).
 ### :returns: The packed encoding.
 routine b128_pack(sign: U64, biased: U64, sig: U128) -> U128
-  var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: b128_implicit()), b: 0_u128)
-    if biased >= 0x7FFF_u64
-      return b128_inf(sign: sign)
-    var frac = LLVM::bit_and(a: sig, b: b128_mant_mask())
-    var packed = LLVM::bit_or(a: sign_bit, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](biased), bits: 112_u128))
-    return LLVM::bit_or(a: packed, b: frac)
-  return LLVM::bit_or(a: sign_bit, b: LLVM::bit_and(a: sig, b: b128_mant_mask()))
+    var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: b128_implicit()), b: 0_u128)
+        if biased >= 0x7FFF_u64
+            return b128_inf(sign: sign)
+        var frac = LLVM::bit_and(a: sig, b: b128_mant_mask())
+        var packed = LLVM::bit_or(a: sign_bit, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](biased), bits: 112_u128))
+        return LLVM::bit_or(a: packed, b: frac)
+    return LLVM::bit_or(a: sign_bit, b: LLVM::bit_and(a: sig, b: b128_mant_mask()))
 
 ### Software binary128 addition over raw encodings.
 routine b128_add_bits(a: U128, b: U128) -> U128
-  var sa = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(a, 127_u128))
-  var sb = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(b, 127_u128))
-  var ea = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(a, 112_u128), b: 32767_u128))
-  var eb = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(b, 112_u128), b: 32767_u128))
-  var fa = LLVM::bit_and(a: a, b: b128_mant_mask())
-  var fb = LLVM::bit_and(a: b, b: b128_mant_mask())
-  if ea == 0x7FFF_u64
-    if LLVM::int_ne(a: fa, b: 0_u128)
-      return b128_quiet(bits: a)
-    if eb == 0x7FFF_u64
-      if LLVM::int_ne(a: fb, b: 0_u128)
-        return b128_quiet(bits: b)
-      if sa == sb
+    var sa = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(a, 127_u128))
+    var sb = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(b, 127_u128))
+    var ea = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(a, 112_u128), b: 32767_u128))
+    var eb = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(b, 112_u128), b: 32767_u128))
+    var fa = LLVM::bit_and(a: a, b: b128_mant_mask())
+    var fb = LLVM::bit_and(a: b, b: b128_mant_mask())
+    if ea == 0x7FFF_u64
+        if LLVM::int_ne(a: fa, b: 0_u128)
+            return b128_quiet(bits: a)
+        if eb == 0x7FFF_u64
+            if LLVM::int_ne(a: fb, b: 0_u128)
+                return b128_quiet(bits: b)
+            if sa == sb
+                return a
+            return b128_qnan()
         return a
-      return b128_qnan()
-    return a
-  if eb == 0x7FFF_u64
-    if LLVM::int_ne(a: fb, b: 0_u128)
-      return b128_quiet(bits: b)
-    return b
-  var a_zero = ea == 0_u64 and LLVM::int_eq(a: fa, b: 0_u128)
-  var b_zero = eb == 0_u64 and LLVM::int_eq(a: fb, b: 0_u128)
-  if a_zero and b_zero
-    if sa == 1_u64 and sb == 1_u64
-      return b128_sign_mask()
-    return 0_u128
-  if a_zero
-    return b
-  if b_zero
-    return a
-  var ma = fa
-  var ea_w = ea
-  if ea == 0_u64
-    ea_w = 1_u64
-  else
-    ma = LLVM::bit_or(a: ma, b: b128_implicit())
-  var mb = fb
-  var eb_w = eb
-  if eb == 0_u64
-    eb_w = 1_u64
-  else
-    mb = LLVM::bit_or(a: mb, b: b128_implicit())
-  ma = LLVM::shift_left(value: ma, bits: 3_u128)
-  mb = LLVM::shift_left(value: mb, bits: 3_u128)
-  var large_sig = ma
-  var small_sig = mb
-  var large_sign = sa
-  var small_sign = sb
-  var large_exp = ea_w
-  var small_exp = eb_w
-  if ea_w < eb_w
-    large_sig = mb
-    small_sig = ma
-    large_sign = sb
-    small_sign = sa
-    large_exp = eb_w
-    small_exp = ea_w
-  var diff = LLVM::zero_extend[U64, U128](LLVM::sub(a: large_exp, b: small_exp))
-  small_sig = b128_shr_sticky(value: small_sig, amount: diff)
-  var exp = large_exp
-  var sign = large_sign
-  var m = 0_u128
-  var carry_mask = LLVM::shift_left(value: 1_u128, bits: 116_u128)
-  var implicit_grs = LLVM::shift_left(value: 1_u128, bits: 115_u128)
-  if large_sign == small_sign
-    m = LLVM::add(a: large_sig, b: small_sig)
-    if LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: m, b: carry_mask), b: 0_u128)
-      var carry_lost = LLVM::bit_and[U128](a: m, b: 1_u128)
-      m = LLVM::shift_right_unsigned[U128](m, 1_u128)
-      m = LLVM::bit_or[U128](a: m, b: carry_lost)
-      exp = LLVM::add(a: exp, b: 1_u64)
-  else
-    if LLVM::unsigned_ge(a: large_sig, b: small_sig)
-      m = LLVM::sub(a: large_sig, b: small_sig)
-      sign = large_sign
+    if eb == 0x7FFF_u64
+        if LLVM::int_ne(a: fb, b: 0_u128)
+            return b128_quiet(bits: b)
+        return b
+    var a_zero = ea == 0_u64 and LLVM::int_eq(a: fa, b: 0_u128)
+    var b_zero = eb == 0_u64 and LLVM::int_eq(a: fb, b: 0_u128)
+    if a_zero and b_zero
+        if sa == 1_u64 and sb == 1_u64
+            return b128_sign_mask()
+        return 0_u128
+    if a_zero
+        return b
+    if b_zero
+        return a
+    var ma = fa
+    var ea_w = ea
+    if ea == 0_u64
+        ea_w = 1_u64
     else
-      m = LLVM::sub(a: small_sig, b: large_sig)
-      sign = small_sign
-    if LLVM::int_eq[U128](a: m, b: 0_u128)
-      return 0_u128
-    while LLVM::int_eq[U128](a: LLVM::bit_and[U128](a: m, b: implicit_grs), b: 0_u128) and exp > 1_u64
-      m = LLVM::shift_left[U128](value: m, bits: 1_u128)
-      exp = LLVM::sub(a: exp, b: 1_u64)
-  var guard = LLVM::bit_and[U128](a: m, b: 4_u128)
-  var roundbit = LLVM::bit_and[U128](a: m, b: 2_u128)
-  var sticky = LLVM::bit_and[U128](a: m, b: 1_u128)
-  var sig = LLVM::shift_right_unsigned[U128](m, 3_u128)
-  if LLVM::int_ne(a: guard, b: 0_u128)
-    var lsb = LLVM::bit_and(a: sig, b: 1_u128)
-    if LLVM::int_ne(a: roundbit, b: 0_u128) or LLVM::int_ne(a: sticky, b: 0_u128) or LLVM::int_ne(a: lsb, b: 0_u128)
-      sig = LLVM::add(a: sig, b: 1_u128)
-  var round_carry = LLVM::shift_left(value: 1_u128, bits: 113_u128)
-  if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: round_carry), b: 0_u128)
-    sig = LLVM::shift_right_unsigned(sig, 1_u128)
-    exp = LLVM::add(a: exp, b: 1_u64)
-  return b128_pack(sign: sign, biased: exp, sig: sig)
+        ma = LLVM::bit_or(a: ma, b: b128_implicit())
+    var mb = fb
+    var eb_w = eb
+    if eb == 0_u64
+        eb_w = 1_u64
+    else
+        mb = LLVM::bit_or(a: mb, b: b128_implicit())
+    ma = LLVM::shift_left(value: ma, bits: 3_u128)
+    mb = LLVM::shift_left(value: mb, bits: 3_u128)
+    var large_sig = ma
+    var small_sig = mb
+    var large_sign = sa
+    var small_sign = sb
+    var large_exp = ea_w
+    var small_exp = eb_w
+    if ea_w < eb_w
+        large_sig = mb
+        small_sig = ma
+        large_sign = sb
+        small_sign = sa
+        large_exp = eb_w
+        small_exp = ea_w
+    var diff = LLVM::zero_extend[U64, U128](LLVM::sub(a: large_exp, b: small_exp))
+    small_sig = b128_shr_sticky(value: small_sig, amount: diff)
+    var exp = large_exp
+    var sign = large_sign
+    var m = 0_u128
+    var carry_mask = LLVM::shift_left(value: 1_u128, bits: 116_u128)
+    var implicit_grs = LLVM::shift_left(value: 1_u128, bits: 115_u128)
+    if large_sign == small_sign
+        m = LLVM::add(a: large_sig, b: small_sig)
+        if LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: m, b: carry_mask), b: 0_u128)
+            var carry_lost = LLVM::bit_and[U128](a: m, b: 1_u128)
+            m = LLVM::shift_right_unsigned[U128](m, 1_u128)
+            m = LLVM::bit_or[U128](a: m, b: carry_lost)
+            exp = LLVM::add(a: exp, b: 1_u64)
+    else
+        if LLVM::unsigned_ge(a: large_sig, b: small_sig)
+            m = LLVM::sub(a: large_sig, b: small_sig)
+            sign = large_sign
+        else
+            m = LLVM::sub(a: small_sig, b: large_sig)
+            sign = small_sign
+        if LLVM::int_eq[U128](a: m, b: 0_u128)
+            return 0_u128
+        while LLVM::int_eq[U128](a: LLVM::bit_and[U128](a: m, b: implicit_grs), b: 0_u128) and exp > 1_u64
+            m = LLVM::shift_left[U128](value: m, bits: 1_u128)
+            exp = LLVM::sub(a: exp, b: 1_u64)
+    var guard = LLVM::bit_and[U128](a: m, b: 4_u128)
+    var roundbit = LLVM::bit_and[U128](a: m, b: 2_u128)
+    var sticky = LLVM::bit_and[U128](a: m, b: 1_u128)
+    var sig = LLVM::shift_right_unsigned[U128](m, 3_u128)
+    if LLVM::int_ne(a: guard, b: 0_u128)
+        var lsb = LLVM::bit_and(a: sig, b: 1_u128)
+        if LLVM::int_ne(a: roundbit, b: 0_u128) or LLVM::int_ne(a: sticky, b: 0_u128) or LLVM::int_ne(a: lsb, b: 0_u128)
+            sig = LLVM::add(a: sig, b: 1_u128)
+    var round_carry = LLVM::shift_left(value: 1_u128, bits: 113_u128)
+    if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: round_carry), b: 0_u128)
+        sig = LLVM::shift_right_unsigned(sig, 1_u128)
+        exp = LLVM::add(a: exp, b: 1_u64)
+    return b128_pack(sign: sign, biased: exp, sig: sig)
 
 ### Software binary128 multiplication over raw encodings (U256 product).
 routine b128_mul_bits(a: U128, b: U128) -> U128
-  var sa = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(a, 127_u128))
-  var sb = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(b, 127_u128))
-  var sign = LLVM::bit_xor(a: sa, b: sb)
-  var ea = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(a, 112_u128), b: 32767_u128))
-  var eb = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(b, 112_u128), b: 32767_u128))
-  var fa = LLVM::bit_and(a: a, b: b128_mant_mask())
-  var fb = LLVM::bit_and(a: b, b: b128_mant_mask())
-  if ea == 0x7FFF_u64
-    if LLVM::int_ne(a: fa, b: 0_u128)
-      return b128_quiet(bits: a)
-    if eb == 0x7FFF_u64 and LLVM::int_ne(a: fb, b: 0_u128)
-      return b128_quiet(bits: b)
-    if eb == 0_u64 and LLVM::int_eq(a: fb, b: 0_u128)
-      return b128_qnan()
-    return b128_inf(sign: sign)
-  if eb == 0x7FFF_u64
-    if LLVM::int_ne(a: fb, b: 0_u128)
-      return b128_quiet(bits: b)
+    var sa = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(a, 127_u128))
+    var sb = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(b, 127_u128))
+    var sign = LLVM::bit_xor(a: sa, b: sb)
+    var ea = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(a, 112_u128), b: 32767_u128))
+    var eb = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(b, 112_u128), b: 32767_u128))
+    var fa = LLVM::bit_and(a: a, b: b128_mant_mask())
+    var fb = LLVM::bit_and(a: b, b: b128_mant_mask())
+    if ea == 0x7FFF_u64
+        if LLVM::int_ne(a: fa, b: 0_u128)
+            return b128_quiet(bits: a)
+        if eb == 0x7FFF_u64 and LLVM::int_ne(a: fb, b: 0_u128)
+            return b128_quiet(bits: b)
+        if eb == 0_u64 and LLVM::int_eq(a: fb, b: 0_u128)
+            return b128_qnan()
+        return b128_inf(sign: sign)
+    if eb == 0x7FFF_u64
+        if LLVM::int_ne(a: fb, b: 0_u128)
+            return b128_quiet(bits: b)
+        if ea == 0_u64 and LLVM::int_eq(a: fa, b: 0_u128)
+            return b128_qnan()
+        return b128_inf(sign: sign)
     if ea == 0_u64 and LLVM::int_eq(a: fa, b: 0_u128)
-      return b128_qnan()
-    return b128_inf(sign: sign)
-  if ea == 0_u64 and LLVM::int_eq(a: fa, b: 0_u128)
-    return LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  if eb == 0_u64 and LLVM::int_eq(a: fb, b: 0_u128)
-    return LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  var ma = fa
-  var ea_unb = 0_s64
-  if ea == 0_u64
-    ea_unb = -16382_s64
-    while LLVM::int_eq(a: LLVM::bit_and(a: ma, b: b128_implicit()), b: 0_u128)
-      ma = LLVM::shift_left(value: ma, bits: 1_u128)
-      ea_unb = LLVM::sub(a: ea_unb, b: 1_s64)
-  else
-    ma = LLVM::bit_or(a: ma, b: b128_implicit())
-    ea_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](ea), b: 16383_s64)
-  var mb = fb
-  var eb_unb = 0_s64
-  if eb == 0_u64
-    eb_unb = -16382_s64
-    while LLVM::int_eq(a: LLVM::bit_and(a: mb, b: b128_implicit()), b: 0_u128)
-      mb = LLVM::shift_left(value: mb, bits: 1_u128)
-      eb_unb = LLVM::sub(a: eb_unb, b: 1_s64)
-  else
-    mb = LLVM::bit_or(a: mb, b: b128_implicit())
-    eb_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](eb), b: 16383_s64)
-  var prod = LLVM::mul(a: b128_u256(ma), b: b128_u256(mb))
-  var exp = LLVM::add(a: ea_unb, b: eb_unb)
-  var topadj = 224_s64
-  var shu = 112_u128
-  if LLVM::int_ne(a: LLVM::bit_and(a: prod, b: b128_u256_bit(225_u128)), b: b128_u256(0_u128))
-    topadj = 225_s64
-    shu = 113_u128
-  var biased = LLVM::add(a: LLVM::add(a: LLVM::sub(a: exp, b: 224_s64), b: topadj), b: 16383_s64)
-  var biased0 = biased
-  var sig = b128_u256_to128(b128_u256_shr(v: prod, n: shu))
-  var rem = LLVM::bit_and(a: prod, b: b128_u256_lowmask(shu))
-  var half = b128_u256_bit(LLVM::sub(a: shu, b: 1_u128))
-  if LLVM::unsigned_gt(a: rem, b: half)
-    sig = LLVM::add(a: sig, b: 1_u128)
-  elseif LLVM::int_eq(a: rem, b: half) and LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
-    sig = LLVM::add(a: sig, b: 1_u128)
-  var round_carry = LLVM::shift_left(value: 1_u128, bits: 113_u128)
-  if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: round_carry), b: 0_u128)
-    sig = LLVM::shift_right_unsigned(sig, 1_u128)
-    biased = LLVM::add(a: biased, b: 1_s64)
-  if biased >= 32767_s64
-    return b128_inf(sign: sign)
-  if biased <= 0_s64
-    # one rounding at the subnormal position from the exact product (rounding to 113 bits first and then
-    # shifting rounded twice); a result the 113-bit rounding carried to the smallest normal needs none
-    return b128_round_subnormal(sign: sign, v: prod, sh: LLVM::int_truncate[U128, S64](shu) +% 1_s64 -% biased0, sticky: false)
-  return b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig)
+        return LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    if eb == 0_u64 and LLVM::int_eq(a: fb, b: 0_u128)
+        return LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    var ma = fa
+    var ea_unb = 0_s64
+    if ea == 0_u64
+        ea_unb = -16382_s64
+        while LLVM::int_eq(a: LLVM::bit_and(a: ma, b: b128_implicit()), b: 0_u128)
+            ma = LLVM::shift_left(value: ma, bits: 1_u128)
+            ea_unb = LLVM::sub(a: ea_unb, b: 1_s64)
+    else
+        ma = LLVM::bit_or(a: ma, b: b128_implicit())
+        ea_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](ea), b: 16383_s64)
+    var mb = fb
+    var eb_unb = 0_s64
+    if eb == 0_u64
+        eb_unb = -16382_s64
+        while LLVM::int_eq(a: LLVM::bit_and(a: mb, b: b128_implicit()), b: 0_u128)
+            mb = LLVM::shift_left(value: mb, bits: 1_u128)
+            eb_unb = LLVM::sub(a: eb_unb, b: 1_s64)
+    else
+        mb = LLVM::bit_or(a: mb, b: b128_implicit())
+        eb_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](eb), b: 16383_s64)
+    var prod = LLVM::mul(a: b128_u256(ma), b: b128_u256(mb))
+    var exp = LLVM::add(a: ea_unb, b: eb_unb)
+    var topadj = 224_s64
+    var shu = 112_u128
+    if LLVM::int_ne(a: LLVM::bit_and(a: prod, b: b128_u256_bit(225_u128)), b: b128_u256(0_u128))
+        topadj = 225_s64
+        shu = 113_u128
+    var biased = LLVM::add(a: LLVM::add(a: LLVM::sub(a: exp, b: 224_s64), b: topadj), b: 16383_s64)
+    var biased0 = biased
+    var sig = b128_u256_to128(b128_u256_shr(v: prod, n: shu))
+    var rem = LLVM::bit_and(a: prod, b: b128_u256_lowmask(shu))
+    var half = b128_u256_bit(LLVM::sub(a: shu, b: 1_u128))
+    if LLVM::unsigned_gt(a: rem, b: half)
+        sig = LLVM::add(a: sig, b: 1_u128)
+    elseif LLVM::int_eq(a: rem, b: half) and LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
+        sig = LLVM::add(a: sig, b: 1_u128)
+    var round_carry = LLVM::shift_left(value: 1_u128, bits: 113_u128)
+    if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: round_carry), b: 0_u128)
+        sig = LLVM::shift_right_unsigned(sig, 1_u128)
+        biased = LLVM::add(a: biased, b: 1_s64)
+    if biased >= 32767_s64
+        return b128_inf(sign: sign)
+    if biased <= 0_s64
+        # one rounding at the subnormal position from the exact product (rounding to 113 bits first and then
+        # shifting rounded twice); a result the 113-bit rounding carried to the smallest normal needs none
+        return b128_round_subnormal(sign: sign, v: prod, sh: LLVM::int_truncate[U128, S64](shu) +% 1_s64 -% biased0, sticky: false)
+    return b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig)
 
 ### One Knuth (Algorithm D) quotient digit for a two-limb normalized divisor v = (v1:v0) (v1's top bit set): the
 ### digit of (r:x) / v, where r < v is the running remainder and x the next dividend limb, and the new remainder.
@@ -865,138 +865,138 @@ routine b128_mul_bits(a: U128, b: U128) -> U128
 ### product is subtracted with one add-back when qhat was still one too big (D4-D6).
 @inline
 secret routine b128_knuth_digit(r: U128, x: U64, v: U128, vrec: U64) -> (U64, U128)
-  var v1 = LLVM::int_truncate[U128, U64](v >>> 64_u32)
-  var v0 = LLVM::int_truncate[U128, U64](v)
-  var r1 = LLVM::int_truncate[U128, U64](r >>> 64_u32)
-  var r0 = LLVM::int_truncate[U128, U64](r)
-  var qhat = U64_MAX
-  var rhat = r0 +% v1
-  var rhat_ok = rhat >= r0
-  if r1 != v1
-    var dr = div2by1(u1: r1, u0: r0, d: v1, v: vrec)
-    qhat = dr.q
-    rhat = dr.r
-    rhat_ok = true
-  while rhat_ok and LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v0) > ((LLVM::zero_extend[U64, U128](rhat) << 64_u32) | LLVM::zero_extend[U64, U128](x))
-    qhat = qhat -% 1_u64
-    var rnew = rhat +% v1
-    rhat_ok = rnew >= rhat
-    rhat = rnew
-  # (r:x) - qhat v over three limbs: the low limb, then the upper two as a U128
-  var p = LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v0)
-  var p0 = LLVM::int_truncate[U128, U64](p)
-  var ph = LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v1) +% (p >>> 64_u32)
-  var t0 = x -% p0
-  var need = ph
-  if x < p0
-    need = ph +% 1_u128
-  var t = ((r -% need) << 64_u32) | LLVM::zero_extend[U64, U128](t0)
-  if r < need
-    # qhat was one too big: add the divisor back (the true remainder lies in [0, v))
-    return (qhat -% 1_u64, t +% v)
-  return (qhat, t)
+    var v1 = LLVM::int_truncate[U128, U64](v >>> 64_u32)
+    var v0 = LLVM::int_truncate[U128, U64](v)
+    var r1 = LLVM::int_truncate[U128, U64](r >>> 64_u32)
+    var r0 = LLVM::int_truncate[U128, U64](r)
+    var qhat = U64_MAX
+    var rhat = r0 +% v1
+    var rhat_ok = rhat >= r0
+    if r1 != v1
+        var dr = div2by1(u1: r1, u0: r0, d: v1, v: vrec)
+        qhat = dr.q
+        rhat = dr.r
+        rhat_ok = true
+    while rhat_ok and LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v0) > ((LLVM::zero_extend[U64, U128](rhat) << 64_u32) | LLVM::zero_extend[U64, U128](x))
+        qhat = qhat -% 1_u64
+        var rnew = rhat +% v1
+        rhat_ok = rnew >= rhat
+        rhat = rnew
+    # (r:x) - qhat v over three limbs: the low limb, then the upper two as a U128
+    var p = LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v0)
+    var p0 = LLVM::int_truncate[U128, U64](p)
+    var ph = LLVM::zero_extend[U64, U128](qhat) *% LLVM::zero_extend[U64, U128](v1) +% (p >>> 64_u32)
+    var t0 = x -% p0
+    var need = ph
+    if x < p0
+        need = ph +% 1_u128
+    var t = ((r -% need) << 64_u32) | LLVM::zero_extend[U64, U128](t0)
+    if r < need
+        # qhat was one too big: add the divisor back (the true remainder lies in [0, v))
+        return (qhat -% 1_u64, t +% v)
+    return (qhat, t)
 
 ### floor(a 2^115 / b) and whether the division is inexact, for a and b in [2^112, 2^113), by Knuth's Algorithm D
 ### on 64-bit limbs: b normalized to v = b 2^15 (top bit set) and a 2^115 to a 2^130, whose top two limbs a 2^2 are
 ### already below v, so the quotient is the two digits of (a 2^2 : 0 : 0) / v.
 secret routine b128_div_mant(a: U128, b: U128) -> (U128, Bool)
-  var v = b << 15_u32
-  var vrec = reciprocal_word(LLVM::int_truncate[U128, U64](v >>> 64_u32))
-  var (q1, r1) = b128_knuth_digit(r: a << 2_u32, x: 0_u64, v: v, vrec: vrec)
-  var (q0, r0) = b128_knuth_digit(r: r1, x: 0_u64, v: v, vrec: vrec)
-  return ((LLVM::zero_extend[U64, U128](q1) << 64_u32) | LLVM::zero_extend[U64, U128](q0), r0 != 0_u128)
+    var v = b << 15_u32
+    var vrec = reciprocal_word(LLVM::int_truncate[U128, U64](v >>> 64_u32))
+    var (q1, r1) = b128_knuth_digit(r: a << 2_u32, x: 0_u64, v: v, vrec: vrec)
+    var (q0, r0) = b128_knuth_digit(r: r1, x: 0_u64, v: v, vrec: vrec)
+    return ((LLVM::zero_extend[U64, U128](q1) << 64_u32) | LLVM::zero_extend[U64, U128](q0), r0 != 0_u128)
 
 ### Software binary128 division over raw encodings (U256 numerator).
 routine b128_div_bits(a: U128, b: U128) -> U128
-  var sa = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(a, 127_u128))
-  var sb = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(b, 127_u128))
-  var sign = LLVM::bit_xor(a: sa, b: sb)
-  var ea = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(a, 112_u128), b: 32767_u128))
-  var eb = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(b, 112_u128), b: 32767_u128))
-  var fa = LLVM::bit_and(a: a, b: b128_mant_mask())
-  var fb = LLVM::bit_and(a: b, b: b128_mant_mask())
-  if ea == 0x7FFF_u64
-    if LLVM::int_ne(a: fa, b: 0_u128)
-      return b128_quiet(bits: a)
-    if eb == 0x7FFF_u64 and LLVM::int_ne(a: fb, b: 0_u128)
-      return b128_quiet(bits: b)
+    var sa = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(a, 127_u128))
+    var sb = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(b, 127_u128))
+    var sign = LLVM::bit_xor(a: sa, b: sb)
+    var ea = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(a, 112_u128), b: 32767_u128))
+    var eb = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(b, 112_u128), b: 32767_u128))
+    var fa = LLVM::bit_and(a: a, b: b128_mant_mask())
+    var fb = LLVM::bit_and(a: b, b: b128_mant_mask())
+    if ea == 0x7FFF_u64
+        if LLVM::int_ne(a: fa, b: 0_u128)
+            return b128_quiet(bits: a)
+        if eb == 0x7FFF_u64 and LLVM::int_ne(a: fb, b: 0_u128)
+            return b128_quiet(bits: b)
+        if eb == 0x7FFF_u64
+            return b128_qnan()
+        return b128_inf(sign: sign)
     if eb == 0x7FFF_u64
-      return b128_qnan()
-    return b128_inf(sign: sign)
-  if eb == 0x7FFF_u64
-    if LLVM::int_ne(a: fb, b: 0_u128)
-      return b128_quiet(bits: b)
-    return LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  if eb == 0_u64 and LLVM::int_eq(a: fb, b: 0_u128)
+        if LLVM::int_ne(a: fb, b: 0_u128)
+            return b128_quiet(bits: b)
+        return LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    if eb == 0_u64 and LLVM::int_eq(a: fb, b: 0_u128)
+        if ea == 0_u64 and LLVM::int_eq(a: fa, b: 0_u128)
+            return b128_qnan()
+        return b128_inf(sign: sign)
     if ea == 0_u64 and LLVM::int_eq(a: fa, b: 0_u128)
-      return b128_qnan()
-    return b128_inf(sign: sign)
-  if ea == 0_u64 and LLVM::int_eq(a: fa, b: 0_u128)
-    return LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  var ma = fa
-  var ea_unb = 0_s64
-  if ea == 0_u64
-    ea_unb = -16382_s64
-    while LLVM::int_eq(a: LLVM::bit_and(a: ma, b: b128_implicit()), b: 0_u128)
-      ma = LLVM::shift_left(value: ma, bits: 1_u128)
-      ea_unb = LLVM::sub(a: ea_unb, b: 1_s64)
-  else
-    ma = LLVM::bit_or(a: ma, b: b128_implicit())
-    ea_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](ea), b: 16383_s64)
-  var mb = fb
-  var eb_unb = 0_s64
-  if eb == 0_u64
-    eb_unb = -16382_s64
-    while LLVM::int_eq(a: LLVM::bit_and(a: mb, b: b128_implicit()), b: 0_u128)
-      mb = LLVM::shift_left(value: mb, bits: 1_u128)
-      eb_unb = LLVM::sub(a: eb_unb, b: 1_s64)
-  else
-    mb = LLVM::bit_or(a: mb, b: b128_implicit())
-    eb_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](eb), b: 16383_s64)
-  var (q, inexact) = b128_div_mant(a: ma, b: mb)
-  var topadj = 114_s64
-  var shu = 2_u128
-  if LLVM::int_ne(a: LLVM::bit_and(a: q, b: LLVM::shift_left(value: 1_u128, bits: 115_u128)), b: 0_u128)
-    topadj = 115_s64
-    shu = 3_u128
-  var biased = LLVM::add(a: LLVM::add(a: LLVM::sub(a: LLVM::sub(a: ea_unb, b: eb_unb), b: 115_s64), b: topadj), b: 16383_s64)
-  if biased <= 0_s64
-    return b128_round_subnormal(sign: sign, v: LLVM::zero_extend[U128, U256](q), sh: LLVM::int_truncate[U128, S64](shu) +% 1_s64 -% biased, sticky: inexact)
-  var sig = LLVM::shift_right_unsigned(q, shu)
-  var mask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: shu), b: 1_u128)
-  var rem_low = LLVM::bit_and(a: q, b: mask)
-  var half = LLVM::shift_left(value: 1_u128, bits: LLVM::sub(a: shu, b: 1_u128))
-  if LLVM::unsigned_gt(a: rem_low, b: half)
-    sig = LLVM::add(a: sig, b: 1_u128)
-  elseif LLVM::int_eq(a: rem_low, b: half)
-    if inexact or LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
-      sig = LLVM::add(a: sig, b: 1_u128)
-  var round_carry = LLVM::shift_left(value: 1_u128, bits: 113_u128)
-  if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: round_carry), b: 0_u128)
-    sig = LLVM::shift_right_unsigned(sig, 1_u128)
-    biased = LLVM::add(a: biased, b: 1_s64)
-  if biased >= 32767_s64
-    return b128_inf(sign: sign)
-  if biased <= 0_s64
-    return b128_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub(a: 1_s64, b: biased))
-  return b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig)
+        return LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    var ma = fa
+    var ea_unb = 0_s64
+    if ea == 0_u64
+        ea_unb = -16382_s64
+        while LLVM::int_eq(a: LLVM::bit_and(a: ma, b: b128_implicit()), b: 0_u128)
+            ma = LLVM::shift_left(value: ma, bits: 1_u128)
+            ea_unb = LLVM::sub(a: ea_unb, b: 1_s64)
+    else
+        ma = LLVM::bit_or(a: ma, b: b128_implicit())
+        ea_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](ea), b: 16383_s64)
+    var mb = fb
+    var eb_unb = 0_s64
+    if eb == 0_u64
+        eb_unb = -16382_s64
+        while LLVM::int_eq(a: LLVM::bit_and(a: mb, b: b128_implicit()), b: 0_u128)
+            mb = LLVM::shift_left(value: mb, bits: 1_u128)
+            eb_unb = LLVM::sub(a: eb_unb, b: 1_s64)
+    else
+        mb = LLVM::bit_or(a: mb, b: b128_implicit())
+        eb_unb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](eb), b: 16383_s64)
+    var (q, inexact) = b128_div_mant(a: ma, b: mb)
+    var topadj = 114_s64
+    var shu = 2_u128
+    if LLVM::int_ne(a: LLVM::bit_and(a: q, b: LLVM::shift_left(value: 1_u128, bits: 115_u128)), b: 0_u128)
+        topadj = 115_s64
+        shu = 3_u128
+    var biased = LLVM::add(a: LLVM::add(a: LLVM::sub(a: LLVM::sub(a: ea_unb, b: eb_unb), b: 115_s64), b: topadj), b: 16383_s64)
+    if biased <= 0_s64
+        return b128_round_subnormal(sign: sign, v: LLVM::zero_extend[U128, U256](q), sh: LLVM::int_truncate[U128, S64](shu) +% 1_s64 -% biased, sticky: inexact)
+    var sig = LLVM::shift_right_unsigned(q, shu)
+    var mask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: shu), b: 1_u128)
+    var rem_low = LLVM::bit_and(a: q, b: mask)
+    var half = LLVM::shift_left(value: 1_u128, bits: LLVM::sub(a: shu, b: 1_u128))
+    if LLVM::unsigned_gt(a: rem_low, b: half)
+        sig = LLVM::add(a: sig, b: 1_u128)
+    elseif LLVM::int_eq(a: rem_low, b: half)
+        if inexact or LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
+            sig = LLVM::add(a: sig, b: 1_u128)
+    var round_carry = LLVM::shift_left(value: 1_u128, bits: 113_u128)
+    if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: round_carry), b: 0_u128)
+        sig = LLVM::shift_right_unsigned(sig, 1_u128)
+        biased = LLVM::add(a: biased, b: 1_s64)
+    if biased >= 32767_s64
+        return b128_inf(sign: sign)
+    if biased <= 0_s64
+        return b128_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub(a: 1_s64, b: biased))
+    return b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig)
 
 ### A subnormal (or zero, or the smallest normal) result v 2^-sh of the minimum exponent's unit, rounded once to
 ### nearest even: `sticky` says the true value lies above v by less than one of v's units.
 routine b128_round_subnormal(sign: U64, v: U256, sh: S64, sticky: Bool) -> U128
-  var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  var k = sh
-  if k > 240_s64
-    k = 240_s64
-  var ku = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](k))
-  var d = b128_u256_to128(b128_u256_shr(v: v, n: ku))
-  var rem = LLVM::bit_and(a: v, b: b128_u256_lowmask(ku))
-  var half = b128_u256_bit(LLVM::sub(a: ku, b: 1_u128))
-  if LLVM::unsigned_gt(a: rem, b: half) or (rem == half and (sticky or (d & 1_u128) != 0_u128))
-    d = d +% 1_u128
-  if LLVM::int_ne(a: LLVM::bit_and(a: d, b: b128_implicit()), b: 0_u128)
-    return sign_bit | (1_u128 << 112_u128) | (d & b128_mant_mask())
-  return sign_bit | d
+    var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    var k = sh
+    if k > 240_s64
+        k = 240_s64
+    var ku = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](k))
+    var d = b128_u256_to128(b128_u256_shr(v: v, n: ku))
+    var rem = LLVM::bit_and(a: v, b: b128_u256_lowmask(ku))
+    var half = b128_u256_bit(LLVM::sub(a: ku, b: 1_u128))
+    if LLVM::unsigned_gt(a: rem, b: half) or (rem == half and (sticky or (d & 1_u128) != 0_u128))
+        d = d +% 1_u128
+    if LLVM::int_ne(a: LLVM::bit_and(a: d, b: b128_implicit()), b: 0_u128)
+        return sign_bit | (1_u128 << 112_u128) | (d & b128_mant_mask())
+    return sign_bit | d
 
 ### Denormalizes a normalized significand into the subnormal range by shifting right
 ### `under` places with round-to-nearest-even, then packs the result.
@@ -1005,22 +1005,22 @@ routine b128_round_subnormal(sign: U64, v: U256, sh: S64, sticky: Bool) -> U128
 ### :param under: The number of right shifts needed (>= 1).
 ### :returns: The packed subnormal (or zero) encoding.
 routine b128_finish_subnormal(sign: U64, sig: U128, under: S64) -> U128
-  var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
-  if under >= 114_s64
-    return sign_bit
-  var shiftu = LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](under))
-  var mask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: shiftu), b: 1_u128)
-  var rem = LLVM::bit_and(a: sig, b: mask)
-  var sigd = LLVM::shift_right_unsigned(sig, shiftu)
-  var half = LLVM::shift_left(value: 1_u128, bits: LLVM::sub(a: shiftu, b: 1_u128))
-  if LLVM::unsigned_gt(a: rem, b: half)
-    sigd = LLVM::add(a: sigd, b: 1_u128)
-  elseif LLVM::int_eq(a: rem, b: half) and LLVM::int_ne(a: LLVM::bit_and(a: sigd, b: 1_u128), b: 0_u128)
-    sigd = LLVM::add(a: sigd, b: 1_u128)
-  if LLVM::int_ne(a: LLVM::bit_and(a: sigd, b: b128_implicit()), b: 0_u128)
-    var packed = LLVM::bit_or(a: sign_bit, b: LLVM::shift_left(value: 1_u128, bits: 112_u128))
-    return LLVM::bit_or(a: packed, b: LLVM::bit_and(a: sigd, b: b128_mant_mask()))
-  return LLVM::bit_or(a: sign_bit, b: LLVM::bit_and(a: sigd, b: b128_mant_mask()))
+    var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+    if under >= 114_s64
+        return sign_bit
+    var shiftu = LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](under))
+    var mask = LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: shiftu), b: 1_u128)
+    var rem = LLVM::bit_and(a: sig, b: mask)
+    var sigd = LLVM::shift_right_unsigned(sig, shiftu)
+    var half = LLVM::shift_left(value: 1_u128, bits: LLVM::sub(a: shiftu, b: 1_u128))
+    if LLVM::unsigned_gt(a: rem, b: half)
+        sigd = LLVM::add(a: sigd, b: 1_u128)
+    elseif LLVM::int_eq(a: rem, b: half) and LLVM::int_ne(a: LLVM::bit_and(a: sigd, b: 1_u128), b: 0_u128)
+        sigd = LLVM::add(a: sigd, b: 1_u128)
+    if LLVM::int_ne(a: LLVM::bit_and(a: sigd, b: b128_implicit()), b: 0_u128)
+        var packed = LLVM::bit_or(a: sign_bit, b: LLVM::shift_left(value: 1_u128, bits: 112_u128))
+        return LLVM::bit_or(a: packed, b: LLVM::bit_and(a: sigd, b: b128_mant_mask()))
+    return LLVM::bit_or(a: sign_bit, b: LLVM::bit_and(a: sigd, b: b128_mant_mask()))
 
 # ============================================================================
 # Integer square root of a U256 (B128 hypot of three, D128 sqrt and hypot).
@@ -1028,25 +1028,25 @@ routine b128_finish_subnormal(sign: U64, sig: U128, under: S64) -> U128
 
 ### A nonzero U256 as a B128, truncated to 113 bits.
 secret routine b128_of_u256_trunc(n: U256) -> B128
-  var top = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(n))
-  var m = n
-  if top > 112_s64
-    m = LLVM::shift_right_unsigned(n, U256.to_width(s: top -% 112_s64))
-  else
-    m = LLVM::shift_left(value: n, bits: U256.to_width(s: 112_s64 -% top))
-  var frac = LLVM::int_truncate[U256, U128](m) & ((1_u128 << 112_u32) -% 1_u128)
-  return B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](top +% 16383_s64)) << 112_u32) | frac)
+    var top = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(n))
+    var m = n
+    if top > 112_s64
+        m = LLVM::shift_right_unsigned(n, U256.to_width(s: top -% 112_s64))
+    else
+        m = LLVM::shift_left(value: n, bits: U256.to_width(s: 112_s64 -% top))
+    var frac = LLVM::int_truncate[U256, U128](m) & ((1_u128 << 112_u32) -% 1_u128)
+    return B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](top +% 16383_s64)) << 112_u32) | frac)
 
 ### The integer part of a finite nonnegative B128 below 2^256.
 secret routine b128_floor_u256(v: B128) -> U256
-  var vb = v.to_bits()
-  var ve = LLVM::int_truncate[U128, S64](vb >>> 112_u32) -% 16383_s64
-  if ve < 0_s64
-    return 0_u256
-  var mant = LLVM::zero_extend[U128, U256]((vb & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32))
-  if ve >= 112_s64
-    return LLVM::shift_left(value: mant, bits: U256.to_width(s: ve -% 112_s64))
-  return LLVM::shift_right_unsigned(mant, U256.to_width(s: 112_s64 -% ve))
+    var vb = v.to_bits()
+    var ve = LLVM::int_truncate[U128, S64](vb >>> 112_u32) -% 16383_s64
+    if ve < 0_s64
+        return 0_u256
+    var mant = LLVM::zero_extend[U128, U256]((vb & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32))
+    if ve >= 112_s64
+        return LLVM::shift_left(value: mant, bits: U256.to_width(s: ve -% 112_s64))
+    return LLVM::shift_right_unsigned(mant, U256.to_width(s: 112_s64 -% ve))
 
 ### floor(sqrt(n)) for n below 2^240 (the callers stay below 2^238: B128 hypot of three, D128 sqrt and hypot). The
 ### B128 square root of n truncated to 113 bits is within s 2^-111 + 1 of the root s (at most 2^9 units, 3 below
@@ -1055,37 +1055,37 @@ secret routine b128_floor_u256(v: B128) -> U256
 ### :param n: The radicand.
 ### :returns: floor(sqrt(n)).
 routine b128_isqrt256(n: U256) -> U256
-  if n == 0_u256
-    return 0_u256
-  var x = b128_floor_u256(v: b128_of_u256_trunc(n: n).sqrt_unchecked())
-  if x == 0_u256
-    x = 1_u256
-  # the Newton step only when the root is more than 4 units off (|n - x^2| above 8x), past 2^113
-  var sq = x *% x
-  var eight = x << 3_u32
-  if sq > n and sq -% n > eight
-    x = x -% b128_floor_u256(v: b128_of_u256_trunc(n: sq -% n) /! b128_of_u256_trunc(n: x *% 2_u256))
-  elseif sq < n and n -% sq > eight
-    x = x +% b128_floor_u256(v: b128_of_u256_trunc(n: n -% sq) /! b128_of_u256_trunc(n: x *% 2_u256))
-  while x *% x > n
-    x = x -% 1_u256
-  var x1 = x +% 1_u256
-  while x1 *% x1 <= n
-    x = x1
-    x1 = x1 +% 1_u256
-  return x
+    if n == 0_u256
+        return 0_u256
+    var x = b128_floor_u256(v: b128_of_u256_trunc(n: n).sqrt_unchecked())
+    if x == 0_u256
+        x = 1_u256
+    # the Newton step only when the root is more than 4 units off (|n - x^2| above 8x), past 2^113
+    var sq = x *% x
+    var eight = x << 3_u32
+    if sq > n and sq -% n > eight
+        x = x -% b128_floor_u256(v: b128_of_u256_trunc(n: sq -% n) /! b128_of_u256_trunc(n: x *% 2_u256))
+    elseif sq < n and n -% sq > eight
+        x = x +% b128_floor_u256(v: b128_of_u256_trunc(n: n -% sq) /! b128_of_u256_trunc(n: x *% 2_u256))
+    while x *% x > n
+        x = x -% 1_u256
+    var x1 = x +% 1_u256
+    while x1 *% x1 <= n
+        x = x1
+        x1 = x1 +% 1_u256
+    return x
 
 ### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` ->
 ### NaN).
 ### Use `sqrt_unchecked` for raw IEEE 754 propagation.
 ### :returns: The quadruple-precision square root (always finite for finite non-negative input).
 routine B128.sqrt!() -> B128
-  var r = me.sqrt_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.sqrt_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 # ============================================================================
 # Remainder operators — fmod (truncated) and IEEE remainder (round-to-even),
@@ -1099,19 +1099,19 @@ routine B128.sqrt!() -> B128
 ### :param exp_lsb: The binary exponent of `sig`'s least-significant bit.
 ### :returns: The packed `B128` encoding.
 routine b128_norm_pack(sign: U64, sig: U128, exp_lsb: S64) -> U128
-  var msbi = LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(sig))
-  var biased = LLVM::add(a: LLVM::add(a: exp_lsb, b: LLVM::int_truncate[U128, S64](msbi)), b: 16383_s64)
-  var shift = LLVM::sub(a: 112_s64, b: LLVM::int_truncate[U128, S64](msbi))
-  var nsig = sig
-  if LLVM::signed_ge(a: shift, b: 0_s64)
-    nsig = LLVM::shift_left(value: sig, bits: LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](shift)))
-  else
-    nsig = LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](LLVM::sub(a: 0_s64, b: shift))))
-  if LLVM::signed_ge(a: biased, b: 32767_s64)
-    return b128_inf(sign: sign)
-  if LLVM::signed_lt(a: biased, b: 1_s64)
-    return b128_finish_subnormal(sign: sign, sig: nsig, under: LLVM::sub(a: 1_s64, b: biased))
-  return b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: nsig)
+    var msbi = LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(sig))
+    var biased = LLVM::add(a: LLVM::add(a: exp_lsb, b: LLVM::int_truncate[U128, S64](msbi)), b: 16383_s64)
+    var shift = LLVM::sub(a: 112_s64, b: LLVM::int_truncate[U128, S64](msbi))
+    var nsig = sig
+    if LLVM::signed_ge(a: shift, b: 0_s64)
+        nsig = LLVM::shift_left(value: sig, bits: LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](shift)))
+    else
+        nsig = LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](LLVM::sub(a: 0_s64, b: shift))))
+    if LLVM::signed_ge(a: biased, b: 32767_s64)
+        return b128_inf(sign: sign)
+    if LLVM::signed_lt(a: biased, b: 1_s64)
+        return b128_finish_subnormal(sign: sign, sig: nsig, under: LLVM::sub(a: 1_s64, b: biased))
+    return b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: nsig)
 
 ### Long-division core: for nonzero finite magnitudes, returns the truncated
 ### remainder `|a| mod |b|` (as packed bits) and the parity of `floor(|a|/|b|)`.
@@ -1119,96 +1119,96 @@ routine b128_norm_pack(sign: U64, sig: U128, exp_lsb: S64) -> U128
 ### :param bbits: Magnitude bits of the divisor.
 ### :returns: A pair `(remainder-bits, quotient-is-odd)`.
 routine b128_fmod_core(abits: U128, bbits: U128) -> (U128, Bool)
-  var ea = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(abits, 112_u128), b: 32767_u128))
-  var ma = LLVM::bit_and(a: abits, b: b128_mant_mask())
-  var emsba = 0_s64
-  if ea == 0_u64
-    emsba = -16382_s64
-    while LLVM::int_eq(a: LLVM::bit_and(a: ma, b: b128_implicit()), b: 0_u128)
-      ma = LLVM::shift_left(value: ma, bits: 1_u128)
-      emsba = LLVM::sub(a: emsba, b: 1_s64)
-  else
-    ma = LLVM::bit_or(a: ma, b: b128_implicit())
-    emsba = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](ea), b: 16383_s64)
-  var eb = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bbits, 112_u128), b: 32767_u128))
-  var mb = LLVM::bit_and(a: bbits, b: b128_mant_mask())
-  var emsbb = 0_s64
-  if eb == 0_u64
-    emsbb = -16382_s64
-    while LLVM::int_eq(a: LLVM::bit_and(a: mb, b: b128_implicit()), b: 0_u128)
-      mb = LLVM::shift_left(value: mb, bits: 1_u128)
-      emsbb = LLVM::sub(a: emsbb, b: 1_s64)
-  else
-    mb = LLVM::bit_or(a: mb, b: b128_implicit())
-    emsbb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](eb), b: 16383_s64)
-  if LLVM::signed_lt(a: emsba, b: emsbb) or (emsba == emsbb and LLVM::unsigned_lt(a: ma, b: mb))
-    return (abits, false)
-  var ed = LLVM::sub(a: emsba, b: emsbb)
-  var x = ma
-  var i = 0_s64
-  while LLVM::signed_lt(a: i, b: ed)
+    var ea = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(abits, 112_u128), b: 32767_u128))
+    var ma = LLVM::bit_and(a: abits, b: b128_mant_mask())
+    var emsba = 0_s64
+    if ea == 0_u64
+        emsba = -16382_s64
+        while LLVM::int_eq(a: LLVM::bit_and(a: ma, b: b128_implicit()), b: 0_u128)
+            ma = LLVM::shift_left(value: ma, bits: 1_u128)
+            emsba = LLVM::sub(a: emsba, b: 1_s64)
+    else
+        ma = LLVM::bit_or(a: ma, b: b128_implicit())
+        emsba = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](ea), b: 16383_s64)
+    var eb = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bbits, 112_u128), b: 32767_u128))
+    var mb = LLVM::bit_and(a: bbits, b: b128_mant_mask())
+    var emsbb = 0_s64
+    if eb == 0_u64
+        emsbb = -16382_s64
+        while LLVM::int_eq(a: LLVM::bit_and(a: mb, b: b128_implicit()), b: 0_u128)
+            mb = LLVM::shift_left(value: mb, bits: 1_u128)
+            emsbb = LLVM::sub(a: emsbb, b: 1_s64)
+    else
+        mb = LLVM::bit_or(a: mb, b: b128_implicit())
+        emsbb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](eb), b: 16383_s64)
+    if LLVM::signed_lt(a: emsba, b: emsbb) or (emsba == emsbb and LLVM::unsigned_lt(a: ma, b: mb))
+        return (abits, false)
+    var ed = LLVM::sub(a: emsba, b: emsbb)
+    var x = ma
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: ed)
+        if LLVM::unsigned_ge(a: x, b: mb)
+            x = LLVM::sub(a: x, b: mb)
+        x = LLVM::shift_left(value: x, bits: 1_u128)
+        i = LLVM::add(a: i, b: 1_s64)
+    var qodd = false
     if LLVM::unsigned_ge(a: x, b: mb)
-      x = LLVM::sub(a: x, b: mb)
-    x = LLVM::shift_left(value: x, bits: 1_u128)
-    i = LLVM::add(a: i, b: 1_s64)
-  var qodd = false
-  if LLVM::unsigned_ge(a: x, b: mb)
-    x = LLVM::sub(a: x, b: mb)
-    qodd = true
-  if LLVM::int_eq(a: x, b: 0_u128)
-    return (0_u128, qodd)
-  return (b128_norm_pack(sign: 0_u64, sig: x, exp_lsb: LLVM::sub(a: emsbb, b: 112_s64)), qodd)
+        x = LLVM::sub(a: x, b: mb)
+        qodd = true
+    if LLVM::int_eq(a: x, b: 0_u128)
+        return (0_u128, qodd)
+    return (b128_norm_pack(sign: 0_u64, sig: x, exp_lsb: LLVM::sub(a: emsbb, b: 112_s64)), qodd)
 
 ### Returns `me mod you` truncated toward zero (C `fmod`): result has the sign of
 ### `me` and magnitude strictly less than `|you|`.
 ### :param you: The divisor.
 ### :returns: The truncated remainder.
 routine B128.fmod(you: B128) -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if you.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
-  if me.is_infinite() or you.is_zero()
-    return B128.from_bits(bits: b128_qnan())
-  if you.is_infinite() or me.is_zero()
-    return me
-  var amag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
-  var bmag = LLVM::bit_and(a: you.to_bits(), b: b128_abs_mask())
-  var pr = b128_fmod_core(abits: amag, bbits: bmag)
-  var rbits = pr.item0
-  if me.is_negative()
-    rbits = LLVM::bit_or(a: rbits, b: b128_sign_mask())
-  return B128.from_bits(bits: rbits)
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if you.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
+    if me.is_infinite() or you.is_zero()
+        return B128.from_bits(bits: b128_qnan())
+    if you.is_infinite() or me.is_zero()
+        return me
+    var amag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
+    var bmag = LLVM::bit_and(a: you.to_bits(), b: b128_abs_mask())
+    var pr = b128_fmod_core(abits: amag, bbits: bmag)
+    var rbits = pr.item0
+    if me.is_negative()
+        rbits = LLVM::bit_or(a: rbits, b: b128_sign_mask())
+    return B128.from_bits(bits: rbits)
 
 ### Returns the IEEE 754 remainder `me - n*you` where `n` is `me/you` rounded to
 ### the nearest integer, ties to even (C `remainder`).
 ### :param you: The divisor.
 ### :returns: The remainder in `[-|you|/2, |you|/2]`.
 routine B128.remainder(you: B128) -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if you.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
-  if me.is_infinite() or you.is_zero()
-    return B128.from_bits(bits: b128_qnan())
-  if you.is_infinite() or me.is_zero()
-    return me
-  var amag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
-  var bmag = LLVM::bit_and(a: you.to_bits(), b: b128_abs_mask())
-  var pr = b128_fmod_core(abits: amag, bbits: bmag)
-  var r = B128.from_bits(bits: pr.item0)
-  var b = you.abs()
-  var two_r = r + r
-  var sub_b = false
-  if two_r > b
-    sub_b = true
-  elseif two_r == b and pr.item1
-    sub_b = true
-  if sub_b
-    r = r - b
-  if me.is_negative()
-    r = r.neg()
-  return r
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if you.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
+    if me.is_infinite() or you.is_zero()
+        return B128.from_bits(bits: b128_qnan())
+    if you.is_infinite() or me.is_zero()
+        return me
+    var amag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
+    var bmag = LLVM::bit_and(a: you.to_bits(), b: b128_abs_mask())
+    var pr = b128_fmod_core(abits: amag, bbits: bmag)
+    var r = B128.from_bits(bits: pr.item0)
+    var b = you.abs()
+    var two_r = r + r
+    var sub_b = false
+    if two_r > b
+        sub_b = true
+    elseif two_r == b and pr.item1
+        sub_b = true
+    if sub_b
+        r = r - b
+    if me.is_negative()
+        r = r.neg()
+    return r
 
 # ============================================================================
 # Decimal text conversion — exact, on the raw bits (FloatConvert.rf). No native delegation.
@@ -1219,9 +1219,9 @@ routine B128.remainder(you: B128) -> B128
 ### :returns: The formatted representation.
 @override
 routine B128.represent() -> Text
-  if me.is_signaling()
-    return "snan"
-  return format_b128_shortest(value: me)
+    if me.is_signaling()
+        return "snan"
+    return format_b128_shortest(value: me)
 
 ### Renders this value with exactly `places` digits after the point, rounded half to even from its
 ### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
@@ -1230,42 +1230,42 @@ routine B128.represent() -> Text
 ### :returns: The rendered `Text`.
 @readonly
 routine B128.fixed(places: U64) -> Text
-  return format_b128_fixed(value: me, places: places)
+    return format_b128_fixed(value: me, places: places)
 
 ### Returns a diagnostic representation tagged with the type name.
 ### :returns: The formatted representation.
 @override
 routine B128.diagnose() -> Text
-  if me.is_signaling()
-    return "B128(snan)"
-  return format_b128_shortest_wrapped(value: me, wrap: "B128")
+    if me.is_signaling()
+        return "B128(snan)"
+    return format_b128_shortest_wrapped(value: me, wrap: "B128")
 
 ### Builds the `B128` value of a small non-negative integer (castFromInt).
 ### :param n: The integer to convert.
 ### :returns: The corresponding `B128`.
 routine b128_from_int(n: U64) -> B128
-  if n == 0_u64
-    return B128.from_bits(bits: 0_u128)
-  var p = LLVM::sub(a: 63_u64, b: LLVM::leading_zeros(n))
-  var biased = LLVM::add(a: p, b: 16383_u64)
-  var n128 = LLVM::zero_extend[U64, U128](n)
-  var sig = LLVM::shift_left(value: n128, bits: LLVM::zero_extend[U64, U128](LLVM::sub(a: 112_u64, b: p)))
-  var frac = LLVM::bit_and(a: sig, b: b128_mant_mask())
-  var packed = LLVM::bit_or(a: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](biased), bits: 112_u128), b: frac)
-  return B128.from_bits(bits: packed)
+    if n == 0_u64
+        return B128.from_bits(bits: 0_u128)
+    var p = LLVM::sub(a: 63_u64, b: LLVM::leading_zeros(n))
+    var biased = LLVM::add(a: p, b: 16383_u64)
+    var n128 = LLVM::zero_extend[U64, U128](n)
+    var sig = LLVM::shift_left(value: n128, bits: LLVM::zero_extend[U64, U128](LLVM::sub(a: 112_u64, b: p)))
+    var frac = LLVM::bit_and(a: sig, b: b128_mant_mask())
+    var packed = LLVM::bit_or(a: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](biased), bits: 112_u128), b: frac)
+    return B128.from_bits(bits: packed)
 
 ### Returns the unbiased binary exponent (floor log2 |v|), TLFloat's `ilogb`.
 ### :param v: The value (assumed nonzero).
 ### :returns: The binary exponent.
 routine b128_ilogb(v: B128) -> S64
-  var e = v.raw_exponent()
-  if e == 0_u64
-    var m = v.raw_mantissa()
-    if LLVM::int_eq[U128](a: m, b: 0_u128)
-      return 0_s64
-    var msb = LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(m))
-    return LLVM::sub(a: LLVM::int_truncate[U128, S64](msb), b: 16494_s64)
-  return LLVM::sub(a: LLVM::sign_extend[S32, S64](LLVM::int_truncate[U64, S32](e)), b: 16383_s64)
+    var e = v.raw_exponent()
+    if e == 0_u64
+        var m = v.raw_mantissa()
+        if LLVM::int_eq[U128](a: m, b: 0_u128)
+            return 0_s64
+        var msb = LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(m))
+        return LLVM::sub(a: LLVM::int_truncate[U128, S64](msb), b: 16494_s64)
+    return LLVM::sub(a: LLVM::sign_extend[S32, S64](LLVM::int_truncate[U64, S32](e)), b: 16383_s64)
 
 # ============================================================================
 # More exact members: nextafter, modf, frexp
@@ -1273,50 +1273,50 @@ routine b128_ilogb(v: B128) -> S64
 
 ### Returns the next representable value after `me` toward `you` (C `nextafter`).
 routine B128.nextafter(you: B128) -> B128
-  if me.is_nan() or you.is_nan()
-    return B128.from_bits(bits: b128_qnan())
-  if me == you
-    return you
-  if me.is_zero()
-    var ys = LLVM::bit_and(a: you.to_bits(), b: b128_sign_mask())
-    return B128.from_bits(bits: LLVM::bit_or(a: ys, b: 1_u128))
-  var mag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
-  var ispos = not me.is_negative()
-  var valup = me < you
-  if ispos == valup
-    mag = LLVM::add(a: mag, b: 1_u128)
-  else
-    mag = LLVM::sub(a: mag, b: 1_u128)
-  var sgn = LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask())
-  return B128.from_bits(bits: LLVM::bit_or(a: sgn, b: mag))
+    if me.is_nan() or you.is_nan()
+        return B128.from_bits(bits: b128_qnan())
+    if me == you
+        return you
+    if me.is_zero()
+        var ys = LLVM::bit_and(a: you.to_bits(), b: b128_sign_mask())
+        return B128.from_bits(bits: LLVM::bit_or(a: ys, b: 1_u128))
+    var mag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
+    var ispos = not me.is_negative()
+    var valup = me < you
+    if ispos == valup
+        mag = LLVM::add(a: mag, b: 1_u128)
+    else
+        mag = LLVM::sub(a: mag, b: 1_u128)
+    var sgn = LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask())
+    return B128.from_bits(bits: LLVM::bit_or(a: sgn, b: mag))
 
 ### Splits into integer and fractional parts (C `modf`): returns (intpart, fracpart).
 routine B128.modf() -> (B128, B128)
-  if me.is_nan()
-    return (me, me)
-  if me.is_infinite()
-    var z = B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
-    return (me, z)
-  var ip = me.trunc()
-  var fp = me - ip
-  return (ip, fp)
+    if me.is_nan()
+        return (me, me)
+    if me.is_infinite()
+        var z = B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
+        return (me, z)
+    var ip = me.trunc()
+    var fp = me - ip
+    return (ip, fp)
 
 ### Splits into a fraction in [0.5,1) and a power-of-two exponent (C `frexp`).
 routine B128.frexp() -> (B128, S64)
-  if me.is_zero() or me.is_infinite() or me.is_nan()
-    var asis = B128.from_bits(bits: me.to_bits())
-    return (asis, 0_s64)
-  var bits = me.to_bits()
-  var sign = bits & (1_u128 << 127_u32)
-  var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
-  var f = bits & ((1_u128 << 112_u32) -% 1_u128)
-  var k = be -% 16382_s64
-  if be == 0_s64
-    # subnormal: f * 2^-16494 with its leading bit at msb
-    var msb = 127_s64 -% b128_trig_clz128(x: f)
-    f = (f << b128_trig_sh(n: 112_s64 -% msb)) & ((1_u128 << 112_u32) -% 1_u128)
-    k = msb -% 16493_s64
-  return (B128.from_bits(bits: sign | (0x3FFE_u128 << 112_u32) | f), k)
+    if me.is_zero() or me.is_infinite() or me.is_nan()
+        var asis = B128.from_bits(bits: me.to_bits())
+        return (asis, 0_s64)
+    var bits = me.to_bits()
+    var sign = bits & (1_u128 << 127_u32)
+    var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
+    var f = bits & ((1_u128 << 112_u32) -% 1_u128)
+    var k = be -% 16382_s64
+    if be == 0_s64
+        # subnormal: f * 2^-16494 with its leading bit at msb
+        var msb = 127_s64 -% b128_trig_clz128(x: f)
+        f = (f << b128_trig_sh(n: 112_s64 -% msb)) & ((1_u128 << 112_u32) -% 1_u128)
+        k = msb -% 16493_s64
+    return (B128.from_bits(bits: sign | (0x3FFE_u128 << 112_u32) | f), k)
 
 # ============================================================================
 # Public surface — creators / presets / parser / hash / bytes
@@ -1341,91 +1341,91 @@ preset B128_LN_10: B128 = 2.302585092994045684017991454684364208_b128
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `B128` value.
 routine B128(from: S8) -> B128
-  return B128(from: LLVM::sign_extend[S8, S64](from))
+    return B128(from: LLVM::sign_extend[S8, S64](from))
 
 ### Converts an `S16` into quadruple-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `B128` value.
 routine B128(from: S16) -> B128
-  return B128(from: LLVM::sign_extend[S16, S64](from))
+    return B128(from: LLVM::sign_extend[S16, S64](from))
 
 ### Converts an `S32` into quadruple-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The corresponding `B128` value.
 routine B128(from: S32) -> B128
-  return B128(from: LLVM::sign_extend[S32, S64](from))
+    return B128(from: LLVM::sign_extend[S32, S64](from))
 
 ### Converts an `S64` into quadruple-precision floating-point form.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `B128` value.
 routine B128(from: S64) -> B128
-  var u = LLVM::reinterpret_bits[S64, U64](from)
-  if from < 0_s64
-    return B128(from: 0_u64 -% u).neg()
-  return B128(from: u)
+    var u = LLVM::reinterpret_bits[S64, U64](from)
+    if from < 0_s64
+        return B128(from: 0_u64 -% u).neg()
+    return B128(from: u)
 
 ### Converts an `S128` into quadruple-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `B128` value.
 routine B128(from: S128) -> B128
-  var neg = LLVM::signed_lt(a: from, b: 0_s128)
-  var mag = if neg then LLVM::reinterpret_bits[S128, U128](0_s128 - from) else LLVM::reinterpret_bits[S128, U128](from)
-  var r = B128(from: mag)
-  return if neg then r.neg() else r
+    var neg = LLVM::signed_lt(a: from, b: 0_s128)
+    var mag = if neg then LLVM::reinterpret_bits[S128, U128](0_s128 - from) else LLVM::reinterpret_bits[S128, U128](from)
+    var r = B128(from: mag)
+    return if neg then r.neg() else r
 
 ### Converts an `S256` into quadruple-precision floating-point form.
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `B128` value.
 routine B128(from: S256) -> B128
-  var neg = LLVM::signed_lt(a: from, b: 0_s256)
-  var mag = if neg then LLVM::reinterpret_bits[S256, U256](0_s256 - from) else LLVM::reinterpret_bits[S256, U256](from)
-  var r = B128(from: mag)
-  return if neg then r.neg() else r
+    var neg = LLVM::signed_lt(a: from, b: 0_s256)
+    var mag = if neg then LLVM::reinterpret_bits[S256, U256](0_s256 - from) else LLVM::reinterpret_bits[S256, U256](from)
+    var r = B128(from: mag)
+    return if neg then r.neg() else r
 
 ### Converts a `U8` into quadruple-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `B128` value.
 routine B128(from: U8) -> B128
-  return B128(from: LLVM::zero_extend[U8, U64](from))
+    return B128(from: LLVM::zero_extend[U8, U64](from))
 
 ### Converts a `U16` into quadruple-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `B128` value.
 routine B128(from: U16) -> B128
-  return B128(from: LLVM::zero_extend[U16, U64](from))
+    return B128(from: LLVM::zero_extend[U16, U64](from))
 
 ### Converts a `U32` into quadruple-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The corresponding `B128` value.
 routine B128(from: U32) -> B128
-  return B128(from: LLVM::zero_extend[U32, U64](from))
+    return B128(from: LLVM::zero_extend[U32, U64](from))
 
 ### Converts a `U64` into quadruple-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `B128` value.
 routine B128(from: U64) -> B128
-  if from == 0_u64
-    return B128.from_bits(bits: 0_u128)
-  var msb = 63_s64 -% LLVM::reinterpret_bits[U64, S64](from.leading_zeros())
-  var f = (LLVM::zero_extend[U64, U128](from) << b128_trig_sh(n: 112_s64 -% msb)) & ((1_u128 << 112_u32) -% 1_u128)
-  return B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](16383_s64 +% msb)) << 112_u32) | f)
+    if from == 0_u64
+        return B128.from_bits(bits: 0_u128)
+    var msb = 63_s64 -% LLVM::reinterpret_bits[U64, S64](from.leading_zeros())
+    var f = (LLVM::zero_extend[U64, U128](from) << b128_trig_sh(n: 112_s64 -% msb)) & ((1_u128 << 112_u32) -% 1_u128)
+    return B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](16383_s64 +% msb)) << 112_u32) | f)
 
 ### Converts a `U128` into quadruple-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `B128` value.
 routine B128(from: U128) -> B128
-  # value = hi * 2^64 + lo, evaluated in correctly-rounded B128 arithmetic
-  # (2^64 = 2^63 * 2, since 2^64 itself does not fit a U64 literal).
-  var hi = LLVM::int_truncate[U128, U64](from >>> 64u32)
-  var lo = LLVM::int_truncate[U128, U64](from)
-  var fhi = B128(from: hi)
-  var flo = B128(from: lo)
-  var two63 = B128(from: 9223372036854775808_u64)
-  var two = B128(from: 2_s64)
-  var two64 = two63 * two
-  var hipart = fhi * two64
-  var result = hipart + flo
-  return result
+    # value = hi * 2^64 + lo, evaluated in correctly-rounded B128 arithmetic
+    # (2^64 = 2^63 * 2, since 2^64 itself does not fit a U64 literal).
+    var hi = LLVM::int_truncate[U128, U64](from >>> 64u32)
+    var lo = LLVM::int_truncate[U128, U64](from)
+    var fhi = B128(from: hi)
+    var flo = B128(from: lo)
+    var two63 = B128(from: 9223372036854775808_u64)
+    var two = B128(from: 2_s64)
+    var two64 = two63 * two
+    var hipart = fhi * two64
+    var result = hipart + flo
+    return result
 
 ### Converts a `U256` into quadruple-precision floating-point form.
 ### value = hi * 2^128 + lo, evaluated in correctly-rounded B128 arithmetic (2^256 is
@@ -1433,25 +1433,25 @@ routine B128(from: U128) -> B128
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `B128` value.
 routine B128(from: U256) -> B128
-  var hi = LLVM::int_truncate[U256, U128](from >>> 128u32)
-  var lo = LLVM::int_truncate[U256, U128](from)
-  var two63 = B128(from: 9223372036854775808_u64)
-  var two = B128(from: 2_s64)
-  var two64 = two63 * two
-  var two128 = two64 * two64
-  return B128(from: hi) * two128 + B128(from: lo)
+    var hi = LLVM::int_truncate[U256, U128](from >>> 128u32)
+    var lo = LLVM::int_truncate[U256, U128](from)
+    var two63 = B128(from: 9223372036854775808_u64)
+    var two = B128(from: 2_s64)
+    var two64 = two63 * two
+    var two128 = two64 * two64
+    return B128(from: hi) * two128 + B128(from: lo)
 
 ### Widens a half-precision float to quadruple precision.
 ### :param from: The `B16` value to widen.
 ### :returns: An `B128` carrying the same numeric value when representable.
 routine B128(from: B16) -> B128
-  return B128(from: LLVM::float_extend[B32, B64](LLVM::float_extend[B16, B32](from)))
+    return B128(from: LLVM::float_extend[B32, B64](LLVM::float_extend[B16, B32](from)))
 
 ### Widens a single-precision float to quadruple precision.
 ### :param from: The `B32` value to widen.
 ### :returns: An `B128` carrying the same numeric value when representable.
 routine B128(from: B32) -> B128
-  return B128(from: LLVM::float_extend[B32, B64](from))
+    return B128(from: LLVM::float_extend[B32, B64](from))
 
 ### Widens a double-precision float to quadruple precision (exact, pure bit surgery).
 ### B64 (1+11+52, bias 1023) re-encodes into B128 (1+15+112, bias 16383). Widening is
@@ -1459,52 +1459,52 @@ routine B128(from: B32) -> B128
 ### :param from: The `B64` value to widen.
 ### :returns: An `B128` carrying the same numeric value.
 routine B128(from: B64) -> B128
-  var bits = LLVM::reinterpret_bits[B64, U64](from)
-  var sign = LLVM::shift_right_unsigned(bits, 63_u64)
-  var e = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 52_u64), b: 0x7FF_u64)
-  var f = LLVM::bit_and(a: bits, b: 0x000F_FFFF_FFFF_FFFF_u64)
-  var sign128 = LLVM::shift_left(LLVM::zero_extend[U64, U128](sign), 127_u128)
-  # inf / nan: exponent all ones; carry the 52-bit payload up (quiet bit preserved).
-  if e == 0x7FF_u64
-    var m = LLVM::shift_left(LLVM::zero_extend[U64, U128](f), 60_u128)
-    var ew = LLVM::shift_left(32767_u128, 112_u128)
-    return B128.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sign128, b: ew), b: m))
-  # signed zero.
-  if e == 0_u64 and f == 0_u64
-    return B128.from_bits(bits: sign128)
-  lateinit var e128: U64
-  lateinit var mant52: U64
-  if e == 0_u64
-    # subnormal B64: value = f * 2^-1074. Normalize so the implicit bit lands at bit 52.
-    var msb = LLVM::sub(a: 63_u64, b: LLVM::leading_zeros(f))
-    var shift = LLVM::sub(a: 52_u64, b: msb)
-    mant52 = LLVM::bit_and(a: LLVM::shift_left(f, shift), b: 0x000F_FFFF_FFFF_FFFF_u64)
-    e128 = LLVM::add(a: msb, b: 15309_u64)
-  else
-    mant52 = f
-    e128 = LLVM::add(a: e, b: 15360_u64)
-  var ew = LLVM::shift_left(LLVM::zero_extend[U64, U128](e128), 112_u128)
-  var mw = LLVM::shift_left(LLVM::zero_extend[U64, U128](mant52), 60_u128)
-  return B128.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sign128, b: ew), b: mw))
+    var bits = LLVM::reinterpret_bits[B64, U64](from)
+    var sign = LLVM::shift_right_unsigned(bits, 63_u64)
+    var e = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 52_u64), b: 0x7FF_u64)
+    var f = LLVM::bit_and(a: bits, b: 0x000F_FFFF_FFFF_FFFF_u64)
+    var sign128 = LLVM::shift_left(LLVM::zero_extend[U64, U128](sign), 127_u128)
+    # inf / nan: exponent all ones; carry the 52-bit payload up (quiet bit preserved).
+    if e == 0x7FF_u64
+        var m = LLVM::shift_left(LLVM::zero_extend[U64, U128](f), 60_u128)
+        var ew = LLVM::shift_left(32767_u128, 112_u128)
+        return B128.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sign128, b: ew), b: m))
+    # signed zero.
+    if e == 0_u64 and f == 0_u64
+        return B128.from_bits(bits: sign128)
+    lateinit var e128: U64
+    lateinit var mant52: U64
+    if e == 0_u64
+        # subnormal B64: value = f * 2^-1074. Normalize so the implicit bit lands at bit 52.
+        var msb = LLVM::sub(a: 63_u64, b: LLVM::leading_zeros(f))
+        var shift = LLVM::sub(a: 52_u64, b: msb)
+        mant52 = LLVM::bit_and(a: LLVM::shift_left(f, shift), b: 0x000F_FFFF_FFFF_FFFF_u64)
+        e128 = LLVM::add(a: msb, b: 15309_u64)
+    else
+        mant52 = f
+        e128 = LLVM::add(a: e, b: 15360_u64)
+    var ew = LLVM::shift_left(LLVM::zero_extend[U64, U128](e128), 112_u128)
+    var mw = LLVM::shift_left(LLVM::zero_extend[U64, U128](mant52), 60_u128)
+    return B128.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sign128, b: ew), b: mw))
 
 ### Returns an existing `B128` unchanged.
 ### :param from: The quadruple-precision value to forward.
 ### :returns: `from`.
 routine B128(from: B128) -> B128
-  return from
+    return from
 
 ### Converts a decimal32 value to quadruple-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B128` value.
 routine B128(from: D32) -> B128
-  var d = from.decode()
-  return B128.from_bits(bits: decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 113_s64, emin: -16382_s64, emax: 16383_s64))
+    var d = from.decode()
+    return B128.from_bits(bits: decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 113_s64, emin: -16382_s64, emax: 16383_s64))
 
 ### Converts a decimal64 value to quadruple-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B128` value.
 routine B128(from: D64) -> B128
-  return d64_to_b128(x: from)
+    return d64_to_b128(x: from)
 
 ### Converts a decimal128 value to quadruple-precision binary floating point, correctly rounded: the exact
 ### value when c * 10^q is an integer below 2^384 or a binary fraction (the only cases that can be exact or
@@ -1512,17 +1512,17 @@ routine B128(from: D64) -> B128
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B128` value.
 routine B128(from: D128) -> B128
-  var p = from.decode()
-  if p.special >= 2_u64
-    return B128.from_bits(bits: b128_qnan())
-  var zb = 0_u128
-  if p.sign
-    zb = 1_u128 << 127_u32
-  if p.special == 1_u64
-    return B128.from_bits(bits: zb | (0x7FFF_u128 << 112_u32))
-  if p.coeff == 0_u128
-    return B128.from_bits(bits: zb)
-  return wx_to_b128(w: wx_of_d128(p: p), force: true).item1
+    var p = from.decode()
+    if p.special >= 2_u64
+        return B128.from_bits(bits: b128_qnan())
+    var zb = 0_u128
+    if p.sign
+        zb = 1_u128 << 127_u32
+    if p.special == 1_u64
+        return B128.from_bits(bits: zb | (0x7FFF_u128 << 112_u32))
+    if p.coeff == 0_u128
+        return B128.from_bits(bits: zb)
+    return wx_to_b128(w: wx_of_d128(p: p), force: true).item1
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
@@ -1533,9 +1533,9 @@ routine B128(from: D128) -> B128
 ### :returns: `me`, when finite.
 ### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
 routine B128.finite!() -> B128
-  if not me.is_finite()
-    throw NumericOverflowError(description: f"B128 value is non-finite: {me}")
-  return me
+    if not me.is_finite()
+        throw NumericOverflowError(description: f"B128 value is non-finite: {me}")
+    return me
 
 # Unchecked variants — raw IEEE 754 propagation. They call the software engine DIRECTLY (not the
 # checked `+ - * /` operators, which would crash), so `x/0` -> ±inf and `0/0` -> NaN instead of a
@@ -1544,19 +1544,19 @@ routine B128.finite!() -> B128
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
 routine B128.truediv_unchecked(you: B128) -> B128
-  return B128.from_bits(bits: b128_div_bits(a: me.to_bits(), b: you.to_bits()))
+    return B128.from_bits(bits: b128_div_bits(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine B128.add_unchecked(you: B128) -> B128
-  return B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: you.to_bits()))
+    return B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine B128.sub_unchecked(you: B128) -> B128
-  return B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: LLVM::bit_xor(a: you.to_bits(), b: b128_sign_mask())))
+    return B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: LLVM::bit_xor(a: you.to_bits(), b: b128_sign_mask())))
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine B128.mul_unchecked(you: B128) -> B128
-  return B128.from_bits(bits: b128_mul_bits(a: me.to_bits(), b: you.to_bits()))
+    return B128.from_bits(bits: b128_mul_bits(a: me.to_bits(), b: you.to_bits()))
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -1569,7 +1569,7 @@ routine B128.mul_unchecked(you: B128) -> B128
 ### Discards the fractional part of this value toward zero.
 ### :returns: The truncated result in quadruple precision.
 routine B128.int_truncate() -> B128
-  return me.trunc()
+    return me.trunc()
 
 # ============================================================================
 # Convenience (recip / angle conversion / integer power / midpoint)
@@ -1578,48 +1578,48 @@ routine B128.int_truncate() -> B128
 ### Returns the reciprocal `1 / me` (`±∞` for `±0`, following IEEE rules).
 ### :returns: The multiplicative inverse.
 routine B128.recip() -> B128
-  return B128_ONE.truediv_unchecked(me)
+    return B128_ONE.truediv_unchecked(me)
 
 ### Returns `me` converted from radians to degrees (`me × 180 / π`).
 ### :returns: The angle in degrees.
 routine B128.to_degrees() -> B128
-  return me.mul_unchecked(180.0_b128).truediv_unchecked(B128_PI)
+    return me.mul_unchecked(180.0_b128).truediv_unchecked(B128_PI)
 
 ### Returns `me` converted from degrees to radians (`me × π / 180`).
 ### :returns: The angle in radians.
 routine B128.to_radians() -> B128
-  return me.mul_unchecked(B128_PI).truediv_unchecked(180.0_b128)
+    return me.mul_unchecked(B128_PI).truediv_unchecked(180.0_b128)
 
 ### Returns `me` raised to the integer power `n` via exponentiation by squaring.
 ### A negative `n` inverts the result. Exact for small exponents, unlike `pow` with a float exponent.
 ### :param n: The integer exponent.
 ### :returns: `me ** n`.
 routine B128.powi(n: S32) -> B128
-  var base = if n < 0_s32 then B128_ONE.truediv_unchecked(me) else me
-  var count = n.unsigned_abs()
-  var result = B128_ONE
-  while count > 0_u32
-    if count.bitand(1_u32) == 1_u32
-      result = result.mul_unchecked(base)
-    base = base.mul_unchecked(base)
-    count = count.lshr(1_u32)
-  return result
+    var base = if n < 0_s32 then B128_ONE.truediv_unchecked(me) else me
+    var count = n.unsigned_abs()
+    var result = B128_ONE
+    while count > 0_u32
+        if count.bitand(1_u32) == 1_u32
+            result = result.mul_unchecked(base)
+        base = base.mul_unchecked(base)
+        count = count.lshr(1_u32)
+    return result
 
 ### Returns `(me + you) / 2`, computed without intermediate overflow.
 ### :param you: The other value.
 ### :returns: The arithmetic midpoint of `me` and `you`.
 routine B128.midpoint(you: B128) -> B128
-  var lo = B128_MIN_POSITIVE.mul_unchecked(2.0_b128)
-  var hi = B128_MAX.truediv_unchecked(2.0_b128)
-  var aa = me.abs()
-  var ab = you.abs()
-  if aa <= hi and ab <= hi
-    return me.add_unchecked(you).truediv_unchecked(2.0_b128)
-  if aa < lo
-    return me.add_unchecked(you.truediv_unchecked(2.0_b128))
-  if ab < lo
-    return me.truediv_unchecked(2.0_b128).add_unchecked(you)
-  return me.truediv_unchecked(2.0_b128).add_unchecked(you.truediv_unchecked(2.0_b128))
+    var lo = B128_MIN_POSITIVE.mul_unchecked(2.0_b128)
+    var hi = B128_MAX.truediv_unchecked(2.0_b128)
+    var aa = me.abs()
+    var ab = you.abs()
+    if aa <= hi and ab <= hi
+        return me.add_unchecked(you).truediv_unchecked(2.0_b128)
+    if aa < lo
+        return me.add_unchecked(you.truediv_unchecked(2.0_b128))
+    if ab < lo
+        return me.truediv_unchecked(2.0_b128).add_unchecked(you)
+    return me.truediv_unchecked(2.0_b128).add_unchecked(you.truediv_unchecked(2.0_b128))
 
 # ============================================================================
 # Utility Methods
@@ -1631,25 +1631,25 @@ routine B128.midpoint(you: B128) -> B128
 ### :returns: `me` if already in range, otherwise the nearest bound.
 @positional
 routine B128.clamp(min_val: B128, max_val: B128) -> B128
-  return me.min(max_val).max(min_val)
+    return me.min(max_val).max(min_val)
 
 ### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
 ### :returns: A unit-sign value describing the sign of `me`.
 routine B128.signum() -> B128
-  return when
-    me > 0.0_b128 => 1.0_b128
-    me < 0.0_b128 => -1.0_b128
-    else => 0.0_b128
+    return when
+        me > 0.0_b128 => 1.0_b128
+        me < 0.0_b128 => -1.0_b128
+        else => 0.0_b128
 
 ### Returns the low 64 bits of the raw `B128` encoding.
 ### :returns: The least-significant half of the bit pattern.
 routine B128.low_bits() -> U64
-  return LLVM::int_truncate[U128, U64](me.to_bits())
+    return LLVM::int_truncate[U128, U64](me.to_bits())
 
 ### Returns the high 64 bits of the raw `B128` encoding.
 ### :returns: The most-significant half of the bit pattern.
 routine B128.high_bits() -> U64
-  return LLVM::int_truncate[U128, U64](me.to_bits() >>> 64u32)
+    return LLVM::int_truncate[U128, U64](me.to_bits() >>> 64u32)
 
 # ============================================================================
 # Classification
@@ -1663,13 +1663,13 @@ routine B128.high_bits() -> U64
 ### Values outside the `S64` range or non-finite inputs produce unspecified results.
 ### :returns: The truncated `S64` value.
 routine B128.S64!() -> S64
-  return me.B64().S64()
+    return me.B64().S64()
 
 ### Converts this value to `S128` by first narrowing to `B64`, then truncating toward zero.
 ### Values outside the `S128` range or non-finite inputs produce unspecified results.
 ### :returns: The truncated `S128` value.
 routine B128.S128!() -> S128
-  return me.B64().S128()
+    return me.B64().S128()
 
 # ============================================================================
 # Float Precision Conversions
@@ -1681,70 +1681,70 @@ routine B128.S128!() -> S128
 ### :param drop: The count of low bits to discard.
 ### :returns: The rounded, right-shifted magnitude.
 routine b128_rshift_rne(sig: U128, drop: U64) -> U64
-  if drop == 0_u64
-    return LLVM::int_truncate[U128, U64](sig)
-  if drop >= 128_u64
-    return 0_u64
-  var dm1 = LLVM::zero_extend[U64, U128](LLVM::sub(a: drop, b: 1_u64))
-  var keep = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U128](drop)))
-  var roundbit = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(sig, dm1), b: 1_u128))
-  var stickymask = LLVM::sub(a: LLVM::shift_left(1_u128, dm1), b: 1_u128)
-  var sticky = LLVM::int_ne(a: LLVM::bit_and(a: sig, b: stickymask), b: 0_u128)
-  if roundbit == 1_u64 and (sticky or LLVM::bit_and(a: keep, b: 1_u64) == 1_u64)
-    return LLVM::add(a: keep, b: 1_u64)
-  return keep
+    if drop == 0_u64
+        return LLVM::int_truncate[U128, U64](sig)
+    if drop >= 128_u64
+        return 0_u64
+    var dm1 = LLVM::zero_extend[U64, U128](LLVM::sub(a: drop, b: 1_u64))
+    var keep = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U128](drop)))
+    var roundbit = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(sig, dm1), b: 1_u128))
+    var stickymask = LLVM::sub(a: LLVM::shift_left(1_u128, dm1), b: 1_u128)
+    var sticky = LLVM::int_ne(a: LLVM::bit_and(a: sig, b: stickymask), b: 0_u128)
+    if roundbit == 1_u64 and (sticky or LLVM::bit_and(a: keep, b: 1_u64) == 1_u64)
+        return LLVM::add(a: keep, b: 1_u64)
+    return keep
 
 ### Narrows this quadruple-precision value to single precision.
 ### :returns: The nearest representable `B32` value.
 routine B32(from: B128) -> B32
-  # B128 -> B64 (correctly rounded) -> B32 (native fptrunc). The wide B64 slack
-  # makes the second rounding faithful for all but pathological double-round ties.
-  return LLVM::float_narrow[B64, B32](B64(from: from))
+    # B128 -> B64 (correctly rounded) -> B32 (native fptrunc). The wide B64 slack
+    # makes the second rounding faithful for all but pathological double-round ties.
+    return LLVM::float_narrow[B64, B32](B64(from: from))
 
 ### Narrows this quadruple-precision value to double precision (correctly rounded,
 ### pure bit surgery — B128 is an i128 carrier, so no LLVM `fptrunc` is available).
 ### Handles inf/NaN, overflow to ±inf, the B64 subnormal range, and underflow to ±0.
 ### :returns: The nearest representable `B64` value (round-to-nearest-ties-to-even).
 routine B64(from: B128) -> B64
-  var raw = from.to_bits()
-  var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(raw, 127_u128))
-  var E = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(raw, 112_u128), b: 32767_u128))
-  var M = LLVM::bit_and(a: raw, b: LLVM::sub(a: LLVM::shift_left(1_u128, 112_u128), b: 1_u128))
-  var sbit = LLVM::shift_left(sign, 63_u64)
-  var inf64 = LLVM::bit_or(a: sbit, b: 0x7FF0000000000000_u64)
-  # inf / NaN: exponent all ones.
-  if E == 0x7FFF_u64
-    if LLVM::int_eq[U128](a: M, b: 0_u128)
-      return LLVM::reinterpret_bits[U64, B64](inf64)
-    return LLVM::reinterpret_bits[U64, B64](LLVM::bit_or(a: sbit, b: 0x7FF8000000000000_u64))
-  # B128 zero or B128-subnormal: far below the B64 minimum -> signed zero.
-  if E == 0_u64
-    return LLVM::reinterpret_bits[U64, B64](sbit)
-  var sig = LLVM::bit_or(a: LLVM::shift_left(1_u128, 112_u128), b: M)
-  var e64s = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](E), b: 15360_s64)
-  # overflow.
-  if LLVM::signed_ge(a: e64s, b: 2047_s64)
-    return LLVM::reinterpret_bits[U64, B64](inf64)
-  # normal B64 result.
-  if LLVM::signed_ge(a: e64s, b: 1_s64)
-    var r = b128_rshift_rne(sig: sig, drop: 60_u64)
-    var exp = LLVM::reinterpret_bits[S64, U64](e64s)
-    if r >= LLVM::shift_left(1_u64, 53_u64)
-      exp = LLVM::add(a: exp, b: 1_u64)
-      r = LLVM::shift_right_unsigned(r, 1_u64)
-      if exp >= 2047_u64
+    var raw = from.to_bits()
+    var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(raw, 127_u128))
+    var E = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(raw, 112_u128), b: 32767_u128))
+    var M = LLVM::bit_and(a: raw, b: LLVM::sub(a: LLVM::shift_left(1_u128, 112_u128), b: 1_u128))
+    var sbit = LLVM::shift_left(sign, 63_u64)
+    var inf64 = LLVM::bit_or(a: sbit, b: 0x7FF0000000000000_u64)
+    # inf / NaN: exponent all ones.
+    if E == 0x7FFF_u64
+        if LLVM::int_eq[U128](a: M, b: 0_u128)
+            return LLVM::reinterpret_bits[U64, B64](inf64)
+        return LLVM::reinterpret_bits[U64, B64](LLVM::bit_or(a: sbit, b: 0x7FF8000000000000_u64))
+    # B128 zero or B128-subnormal: far below the B64 minimum -> signed zero.
+    if E == 0_u64
+        return LLVM::reinterpret_bits[U64, B64](sbit)
+    var sig = LLVM::bit_or(a: LLVM::shift_left(1_u128, 112_u128), b: M)
+    var e64s = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](E), b: 15360_s64)
+    # overflow.
+    if LLVM::signed_ge(a: e64s, b: 2047_s64)
         return LLVM::reinterpret_bits[U64, B64](inf64)
-    var mant = LLVM::bit_and(a: r, b: LLVM::sub(a: LLVM::shift_left(1_u64, 52_u64), b: 1_u64))
-    return LLVM::reinterpret_bits[U64, B64](LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: LLVM::shift_left(exp, 52_u64)), b: mant))
-  # subnormal B64 result or underflow to zero.
-  var drop = LLVM::sub(a: 61_s64, b: e64s)
-  var rs = b128_rshift_rne(sig: sig, drop: LLVM::reinterpret_bits[S64, U64](drop))
-  if rs == 0_u64
-    return LLVM::reinterpret_bits[U64, B64](sbit)
-  # rounding up across the subnormal/normal boundary yields the smallest normal.
-  if rs >= LLVM::shift_left(1_u64, 52_u64)
-    return LLVM::reinterpret_bits[U64, B64](LLVM::bit_or(a: sbit, b: LLVM::shift_left(1_u64, 52_u64)))
-  return LLVM::reinterpret_bits[U64, B64](LLVM::bit_or(a: sbit, b: rs))
+    # normal B64 result.
+    if LLVM::signed_ge(a: e64s, b: 1_s64)
+        var r = b128_rshift_rne(sig: sig, drop: 60_u64)
+        var exp = LLVM::reinterpret_bits[S64, U64](e64s)
+        if r >= LLVM::shift_left(1_u64, 53_u64)
+            exp = LLVM::add(a: exp, b: 1_u64)
+            r = LLVM::shift_right_unsigned(r, 1_u64)
+            if exp >= 2047_u64
+                return LLVM::reinterpret_bits[U64, B64](inf64)
+        var mant = LLVM::bit_and(a: r, b: LLVM::sub(a: LLVM::shift_left(1_u64, 52_u64), b: 1_u64))
+        return LLVM::reinterpret_bits[U64, B64](LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: LLVM::shift_left(exp, 52_u64)), b: mant))
+    # subnormal B64 result or underflow to zero.
+    var drop = LLVM::sub(a: 61_s64, b: e64s)
+    var rs = b128_rshift_rne(sig: sig, drop: LLVM::reinterpret_bits[S64, U64](drop))
+    if rs == 0_u64
+        return LLVM::reinterpret_bits[U64, B64](sbit)
+    # rounding up across the subnormal/normal boundary yields the smallest normal.
+    if rs >= LLVM::shift_left(1_u64, 52_u64)
+        return LLVM::reinterpret_bits[U64, B64](LLVM::bit_or(a: sbit, b: LLVM::shift_left(1_u64, 52_u64)))
+    return LLVM::reinterpret_bits[U64, B64](LLVM::bit_or(a: sbit, b: rs))
 
 # ============================================================================
 # Diagnostics and Hashing
@@ -1755,16 +1755,16 @@ routine B64(from: B128) -> B64
 ### identically under RazorForge's equality rules.
 ### :returns: The hash code for this value.
 routine B128.hash() -> U64
-  var bits = me.to_bits()
-  var lo = LLVM::int_truncate[U128, U64](bits)
-  var hi = LLVM::int_truncate[U128, U64](bits >>> 64u32)
-  if me.is_nan()
-    lo = 0u64
-    hi = 0x7FFF800000000000u64
-  if bits == LLVM::shift_left(LLVM::zero_extend[U64, U128](0x8000000000000000u64), 64_u128)
-    lo = 0u64
-    hi = 0u64
-  return LLVM::bit_xor(lo, LLVM::mul(a: hi, b: 1099511628211_u64))
+    var bits = me.to_bits()
+    var lo = LLVM::int_truncate[U128, U64](bits)
+    var hi = LLVM::int_truncate[U128, U64](bits >>> 64u32)
+    if me.is_nan()
+        lo = 0u64
+        hi = 0x7FFF800000000000u64
+    if bits == LLVM::shift_left(LLVM::zero_extend[U64, U128](0x8000000000000000u64), 64_u128)
+        lo = 0u64
+        hi = 0u64
+    return LLVM::bit_xor(lo, LLVM::mul(a: hi, b: 1099511628211_u64))
 
 # ============================================================================
 # Text Representation and Parsing
@@ -1778,17 +1778,17 @@ routine B128.hash() -> U64
 ### :returns: The correctly-rounded `B128` value.
 ### :throws: {InvalidValueError} on malformed input.
 routine B128!(from_text: Text) -> B128
-  var pc = parse_float_components(from_text: from_text, target: "B128")
-  if pc.kind == 3_s32
-    throw InvalidValueError(input: from_text, target: "B128")
-  if pc.kind == 1_s32
-    return B128.from_bits(bits: b128_qnan())
-  if pc.kind == 2_s32
-    var sign = 0u64
-    if pc.is_neg
-      sign = 1u64
-    return B128.from_bits(bits: b128_inf(sign: sign))
-  return b128_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
+    var pc = parse_float_components(from_text: from_text, target: "B128")
+    if pc.kind == 3_s32
+        throw InvalidValueError(input: from_text, target: "B128")
+    if pc.kind == 1_s32
+        return B128.from_bits(bits: b128_qnan())
+    if pc.kind == 2_s32
+        var sign = 0u64
+        if pc.is_neg
+            sign = 1u64
+        return B128.from_bits(bits: b128_inf(sign: sign))
+    return b128_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
 
 # ============================================================================
 # Hashing
@@ -1801,59 +1801,59 @@ routine B128!(from_text: Text) -> B128
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `Array[Byte, 16]` value.
 routine B128.to_bytes_le() -> Array[Byte, 16]
-  var raw = LLVM::reinterpret_bits[B128, U128](me)
-  var lo = LLVM::int_truncate[U128, U64](raw)
-  var hi = LLVM::int_truncate[U128, U64](raw >>> 64u32)
-  var result = Array[Byte, 16]()
-  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](lo))
-  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 8_u64)))
-  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 16_u64)))
-  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 24_u64)))
-  result = LLVM::set_byte_at(array: result, index: 4_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 32_u64)))
-  result = LLVM::set_byte_at(array: result, index: 5_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 40u64)))
-  result = LLVM::set_byte_at(array: result, index: 6_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 48_u64)))
-  result = LLVM::set_byte_at(array: result, index: 7_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 56_u64)))
-  result = LLVM::set_byte_at(array: result, index: 8_u64, value: LLVM::int_truncate[U64, U8](hi))
-  result = LLVM::set_byte_at(array: result, index: 9_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 8_u64)))
-  result = LLVM::set_byte_at(array: result, index: 10u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 16_u64)))
-  result = LLVM::set_byte_at(array: result, index: 11_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 24_u64)))
-  result = LLVM::set_byte_at(array: result, index: 12_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 32_u64)))
-  result = LLVM::set_byte_at(array: result, index: 13_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 40u64)))
-  result = LLVM::set_byte_at(array: result, index: 14_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 48_u64)))
-  result = LLVM::set_byte_at(array: result, index: 15_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 56_u64)))
-  return result
+    var raw = LLVM::reinterpret_bits[B128, U128](me)
+    var lo = LLVM::int_truncate[U128, U64](raw)
+    var hi = LLVM::int_truncate[U128, U64](raw >>> 64u32)
+    var result = Array[Byte, 16]()
+    result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](lo))
+    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 8_u64)))
+    result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 16_u64)))
+    result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 24_u64)))
+    result = LLVM::set_byte_at(array: result, index: 4_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 32_u64)))
+    result = LLVM::set_byte_at(array: result, index: 5_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 40u64)))
+    result = LLVM::set_byte_at(array: result, index: 6_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 48_u64)))
+    result = LLVM::set_byte_at(array: result, index: 7_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 56_u64)))
+    result = LLVM::set_byte_at(array: result, index: 8_u64, value: LLVM::int_truncate[U64, U8](hi))
+    result = LLVM::set_byte_at(array: result, index: 9_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 8_u64)))
+    result = LLVM::set_byte_at(array: result, index: 10u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 16_u64)))
+    result = LLVM::set_byte_at(array: result, index: 11_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 24_u64)))
+    result = LLVM::set_byte_at(array: result, index: 12_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 32_u64)))
+    result = LLVM::set_byte_at(array: result, index: 13_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 40u64)))
+    result = LLVM::set_byte_at(array: result, index: 14_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 48_u64)))
+    result = LLVM::set_byte_at(array: result, index: 15_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 56_u64)))
+    return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 16]` value.
 routine B128.to_bytes_be() -> Array[Byte, 16]
-  var raw = LLVM::reinterpret_bits[B128, U128](me)
-  var lo = LLVM::int_truncate[U128, U64](raw >>> 64u32)
-  var hi = LLVM::int_truncate[U128, U64](raw)
-  lo = LLVM::byte_swap(lo)
-  hi = LLVM::byte_swap(hi)
-  var result = Array[Byte, 16]()
-  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](lo))
-  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 8_u64)))
-  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 16_u64)))
-  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 24_u64)))
-  result = LLVM::set_byte_at(array: result, index: 4_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 32_u64)))
-  result = LLVM::set_byte_at(array: result, index: 5_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 40u64)))
-  result = LLVM::set_byte_at(array: result, index: 6_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 48_u64)))
-  result = LLVM::set_byte_at(array: result, index: 7_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 56_u64)))
-  result = LLVM::set_byte_at(array: result, index: 8_u64, value: LLVM::int_truncate[U64, U8](hi))
-  result = LLVM::set_byte_at(array: result, index: 9_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 8_u64)))
-  result = LLVM::set_byte_at(array: result, index: 10u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 16_u64)))
-  result = LLVM::set_byte_at(array: result, index: 11_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 24_u64)))
-  result = LLVM::set_byte_at(array: result, index: 12_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 32_u64)))
-  result = LLVM::set_byte_at(array: result, index: 13_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 40u64)))
-  result = LLVM::set_byte_at(array: result, index: 14_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 48_u64)))
-  result = LLVM::set_byte_at(array: result, index: 15_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 56_u64)))
-  return result
+    var raw = LLVM::reinterpret_bits[B128, U128](me)
+    var lo = LLVM::int_truncate[U128, U64](raw >>> 64u32)
+    var hi = LLVM::int_truncate[U128, U64](raw)
+    lo = LLVM::byte_swap(lo)
+    hi = LLVM::byte_swap(hi)
+    var result = Array[Byte, 16]()
+    result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](lo))
+    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 8_u64)))
+    result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 16_u64)))
+    result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 24_u64)))
+    result = LLVM::set_byte_at(array: result, index: 4_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 32_u64)))
+    result = LLVM::set_byte_at(array: result, index: 5_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 40u64)))
+    result = LLVM::set_byte_at(array: result, index: 6_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 48_u64)))
+    result = LLVM::set_byte_at(array: result, index: 7_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 56_u64)))
+    result = LLVM::set_byte_at(array: result, index: 8_u64, value: LLVM::int_truncate[U64, U8](hi))
+    result = LLVM::set_byte_at(array: result, index: 9_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 8_u64)))
+    result = LLVM::set_byte_at(array: result, index: 10u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 16_u64)))
+    result = LLVM::set_byte_at(array: result, index: 11_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 24_u64)))
+    result = LLVM::set_byte_at(array: result, index: 12_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 32_u64)))
+    result = LLVM::set_byte_at(array: result, index: 13_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 40u64)))
+    result = LLVM::set_byte_at(array: result, index: 14_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 48_u64)))
+    result = LLVM::set_byte_at(array: result, index: 15_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 56_u64)))
+    return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine B128.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u128(v: LLVM::reinterpret_bits[B128, U128](me), k0: k0, k1: k1)
+    return __secure_hash_u128(v: LLVM::reinterpret_bits[B128, U128](me), k0: k0, k1: k1)
 
