@@ -1507,7 +1507,7 @@ public sealed partial class SemanticVerifier
         // U32, not the target type, so they keep their own inference.
         bool isShift = compound.Operator is BinaryOperator.ArithmeticLeftShift
             or BinaryOperator.ArithmeticRightShift or BinaryOperator.LogicalRightShift;
-        AnalyzeExpression(expression: compound.Value,
+        TypeSymbol valueType = AnalyzeExpression(expression: compound.Value,
             expectedType: isShift
                 ? null
                 : targetType);
@@ -1563,6 +1563,16 @@ public sealed partial class SemanticVerifier
 
         string? inPlaceMemberRoutine = compound.Operator.GetInPlaceMemberRoutineName();
         string? regularMemberRoutine = compound.Operator.GetMemberRoutineName();
+
+        if (!isShift && valueType.Category != TypeCategory.Error &&
+            TryReportCompoundOperandMismatch(compound: compound,
+                targetType: targetType,
+                valueType: valueType,
+                inPlaceMemberRoutine: inPlaceMemberRoutine,
+                regularMemberRoutine: regularMemberRoutine))
+        {
+            return ErrorTypeSymbol.Instance;
+        }
 
         // Step 1: Try in-place wired (iadd, etc.)
         if (inPlaceMemberRoutine != null)
@@ -1624,6 +1634,60 @@ public sealed partial class SemanticVerifier
             $"Define in-place operator '{inPlaceMemberRoutine}' or regular operator '{regularMemberRoutine}'.",
             location: compound.Location);
         return ErrorTypeSymbol.Instance;
+    }
+
+    /// <summary>
+    /// Checks the right-hand side of a compound assignment against the operator it dispatches to, with the
+    /// same rules as the binary form: <c>t += v</c> must be rejected exactly when <c>t = t + v</c> is. Two
+    /// fixed-width types of different width are RF-S767, and a value no in-place or regular overload
+    /// accepts (a Suflae <c>Integer += S64</c>) is a conversion error. Without this check the operator is
+    /// resolved by name alone and the emitter passes the wrong value representation to it. Returns true
+    /// when a violation was reported.
+    /// </summary>
+    private bool TryReportCompoundOperandMismatch(CompoundAssignmentExpression compound,
+        TypeSymbol targetType, TypeSymbol valueType, string? inPlaceMemberRoutine,
+        string? regularMemberRoutine)
+    {
+        string opSymbol = $"{compound.Operator.ToStringRepresentation()}=";
+        if (targetType.Name != valueType.Name && IsFixedWidthNumericType(type: targetType) &&
+            IsFixedWidthNumericType(type: valueType))
+        {
+            ReportError(code: SemanticDiagnosticCode.FixedWidthTypeMismatch,
+                message:
+                $"Fixed-width type mismatch: '{targetType.Name}' {opSymbol} '{valueType.Name}'. Explicit conversion required.",
+                location: compound.Location);
+            return true;
+        }
+
+        // Judge only operators the target declares by name. A target with neither routine falls through
+        // to the "does not support compound assignment" diagnostics below, which name the missing routine.
+        bool hasInPlace = inPlaceMemberRoutine != null &&
+                          _registry.LookupRoutine(fullName: $"{targetType.Name}.{inPlaceMemberRoutine}") !=
+                          null;
+        bool hasRegular = regularMemberRoutine != null &&
+                          _registry.LookupRoutine(fullName: $"{targetType.Name}.{regularMemberRoutine}") !=
+                          null;
+        if (!hasInPlace && !hasRegular)
+        {
+            return false;
+        }
+
+        bool accepted =
+            (hasInPlace && _registry.LookupMemberRoutineOverload(type: targetType,
+                memberRoutineName: inPlaceMemberRoutine!,
+                argTypes: [valueType]) != null) ||
+            (hasRegular && _registry.LookupMemberRoutineOverload(type: targetType,
+                memberRoutineName: regularMemberRoutine!,
+                argTypes: [valueType]) != null);
+        if (accepted)
+        {
+            return false;
+        }
+
+        ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
+            message: $"Operator '{opSymbol}': cannot convert '{valueType.Name}' to '{targetType.Name}'.",
+            location: compound.Location);
+        return true;
     }
 
     /// <summary>

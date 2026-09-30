@@ -125,6 +125,8 @@ public partial class LlvmEmitter
         // callback slot / struct field), and a captureless value never leaks. See [[cabi-callback-ffi]].
         // (The demand collector discovers a routine used as a VALUE via the same IdentifierExpression the
         // walk visits, so its body is materialized upstream — codegen no longer tracks references itself.)
+        // The declare is still needed: in a resident-JIT delta the body lives in the base dylib.
+        GenerateRoutineDeclaration(routine: routine);
         string sym = $"@{MangleRoutineName(routine: routine)}";
         string t0 = NextTemp();
         EmitLine(sb: sb, line: $"  {t0} = insertvalue {{ ptr, ptr }} undef, ptr {sym}, 0");
@@ -855,6 +857,9 @@ public partial class LlvmEmitter
     {
         if (preResolved.Name is "roam_trace" or "roam_free")
         {
+            // Declare it like a call target: in a resident-JIT delta the body lives in the base dylib, so
+            // without the declare the bare `@sym` reference is an undefined value at IR parse.
+            GenerateRoutineDeclaration(routine: preResolved);
             return $"@{MangleRoutineName(routine: preResolved)}";
         }
 
