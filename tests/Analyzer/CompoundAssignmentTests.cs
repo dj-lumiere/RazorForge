@@ -23,17 +23,17 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceAddable
-                          routine Me.$iadd(from: Me) -> None
+                            routine Me.$iadd(from: Me) -> None
 
                         record Counter obeys InPlaceAddable
-                          value: S32
+                            value: S32
 
                         routine Counter.$iadd(from: Counter) -> None
 
                         routine test()
-                          var c = Counter(value: 0)
-                          c += Counter(value: 1)
-                          return
+                            var c = Counter(value: 0)
+                            c += Counter(value: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -48,17 +48,17 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceAddable
-                          routine Me.$iadd(from: Me) -> None
+                            routine Me.$iadd(from: Me) -> None
 
                         entity Accumulator obeys InPlaceAddable
-                          value: S32
+                            value: S32
 
                         routine Accumulator.$iadd(from: Accumulator) -> None
 
                         routine test()
-                          var acc = Accumulator(value: 0)
-                          acc += Accumulator(value: 1)
-                          return
+                            var acc = Accumulator(value: 0)
+                            acc += Accumulator(value: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -78,21 +78,21 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
+                            @readonly
+                            routine Me.$add(you: Me) -> Me
 
                         record Vector obeys Addable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Vector.$add(you: Vector) -> Vector
-                          return Vector(x: me.x, y: me.y)
+                            return Vector(x: me.x, y: me.y)
 
                         routine test()
-                          var v = Vector(x: 1, y: 2)
-                          v += Vector(x: 3, y: 4)
-                          return
+                            var v = Vector(x: 1, y: 2)
+                            v += Vector(x: 3, y: 4)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -112,20 +112,20 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
+                            @readonly
+                            routine Me.$add(you: Me) -> Me
 
                         entity Counter obeys Addable
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine Counter.$add(you: Counter) -> Counter
-                          return Counter(value: me.value)
+                            return Counter(value: me.value)
 
                         routine test()
-                          var c = Counter(value: 0)
-                          c += Counter(value: 1)
-                          return
+                            var c = Counter(value: 0)
+                            c += Counter(value: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -145,13 +145,13 @@ public class CompoundAssignmentTests
     {
         string source = """
                         record Pair
-                          a: S32
-                          b: S32
+                            a: S32
+                            b: S32
 
                         routine test()
-                          var p = Pair(a: 1, b: 2)
-                          p += Pair(a: 3, b: 4)
-                          return
+                            var p = Pair(a: 1, b: 2)
+                            p += Pair(a: 3, b: 4)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -172,17 +172,17 @@ public class CompoundAssignmentTests
         // var is mutable, so compound assignment should not produce immutable errors
         string source = """
                         protocol InPlaceAddable
-                          routine Me.$iadd(from: Me) -> None
+                            routine Me.$iadd(from: Me) -> None
 
                         record Counter obeys InPlaceAddable
-                          value: S32
+                            value: S32
 
                         routine Counter.$iadd(from: Counter) -> None
 
                         routine test()
-                          var c = Counter(value: 0)
-                          c += Counter(value: 1)
-                          return
+                            var c = Counter(value: 0)
+                            c += Counter(value: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -202,14 +202,14 @@ public class CompoundAssignmentTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
 
                         routine test()
-                          var c = RED
-                          c += GREEN
-                          return
+                            var c = RED
+                            c += GREEN
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -229,17 +229,17 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceSubtractable
-                          routine Me.$isub(from: Me) -> None
+                            routine Me.$isub(from: Me) -> None
 
                         record Counter obeys InPlaceSubtractable
-                          value: S32
+                            value: S32
 
                         routine Counter.$isub(from: Counter) -> None
 
                         routine test()
-                          var c = Counter(value: 10)
-                          c -= Counter(value: 1)
-                          return
+                            var c = Counter(value: 10)
+                            c -= Counter(value: 1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -254,18 +254,18 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceBitwiseable
-                          routine Me.$ibitand(from: Me) -> None
+                            routine Me.$ibitand(from: Me) -> None
 
                         record Flags obeys InPlaceBitwiseable
-                          bits: S32
+                            bits: S32
 
                         routine Flags.$ibitand(from: Flags) -> None
-                          pass
+                            pass
 
                         routine test()
-                          var f = Flags(bits: 255)
-                          f &= Flags(bits: 15)
-                          return
+                            var f = Flags(bits: 255)
+                            f &= Flags(bits: 15)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -285,17 +285,17 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceMultiplicable
-                          routine Me.$imul(from: Me) -> None
+                            routine Me.$imul(from: Me) -> None
 
                         record Scale obeys InPlaceMultiplicable
-                          factor: S32
+                            factor: S32
 
                         routine Scale.$imul(from: Scale) -> None
 
                         routine test()
-                          var s = Scale(factor: 2)
-                          s *= Scale(factor: 3)
-                          return
+                            var s = Scale(factor: 2)
+                            s *= Scale(factor: 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -311,20 +311,20 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceBitwiseable
-                          routine Me.$ibitand(from: Me) -> None
+                            routine Me.$ibitand(from: Me) -> None
 
                         record Mask obeys InPlaceBitwiseable
-                          bits: S32
+                            bits: S32
 
                         routine Mask.$ibitand(from: Mask) -> None
-                          pass
+                            pass
                         routine Mask.$ibitor(from: Mask) -> None
-                          pass
+                            pass
 
                         routine test()
-                          var m = Mask(bits: 0)
-                          m |= Mask(bits: 8)
-                          return
+                            var m = Mask(bits: 0)
+                            m |= Mask(bits: 8)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -340,20 +340,20 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceFloorDivisible
-                          routine Me.$ifloordiv(from: Me) -> None
+                            routine Me.$ifloordiv(from: Me) -> None
 
                         record Bucket obeys InPlaceFloorDivisible
-                          size: S32
+                            size: S32
 
                         routine Bucket.$ifloordiv(from: Bucket) -> None
-                          pass
+                            pass
                         routine Bucket.$imod(from: Bucket) -> None
-                          pass
+                            pass
 
                         routine test()
-                          var b = Bucket(size: 10)
-                          b %= Bucket(size: 3)
-                          return
+                            var b = Bucket(size: 10)
+                            b %= Bucket(size: 3)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -369,19 +369,19 @@ public class CompoundAssignmentTests
     {
         string source = """
                         record Vector
-                          x: S32
+                            x: S32
 
                         routine Vector.$iadd(from: Vector) -> None
-                          pass
+                            pass
 
                         @readonly
                         routine Vector.$add(you: Vector) -> Vector
-                          return Vector(x: me.x)
+                            return Vector(x: me.x)
 
                         routine test()
-                          var v = Vector(x: 1)
-                          v += Vector(x: 2)
-                          return
+                            var v = Vector(x: 1)
+                            v += Vector(x: 2)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -403,9 +403,9 @@ public class CompoundAssignmentTests
         // but the test verifies parsing and analysis don't crash.
         string source = """
                         routine test()
-                          var x = 42
-                          x += 10
-                          return
+                            var x = 42
+                            x += 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -420,14 +420,78 @@ public class CompoundAssignmentTests
         // var is mutable, so compound assignment should not produce immutable errors
         string source = """
                         routine test()
-                          var x = 42
-                          x += 10
-                          return
+                            var x = 42
+                            x += 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should not produce immutable-related errors
+    }
+
+    #endregion
+
+    #region Operand type checking
+
+    /// <summary>
+    /// A compound assignment is rejected exactly when its binary form is: <c>t += v</c> with a
+    /// different fixed-width type is RF-S767, like <c>t = t + v</c>.
+    /// </summary>
+    [Fact]
+    public void Analyze_MixedFixedWidthCompoundAssignment_ReportsError()
+    {
+        string source = """
+                        routine test(v: S32)
+                            var t: S64 = 0
+                            t += v
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
+    }
+
+    /// <summary>
+    /// Verifies a same-width compound assignment and a bare literal RHS stay accepted.
+    /// </summary>
+    [Fact]
+    public void Analyze_SameFixedWidthCompoundAssignment_NoError()
+    {
+        string source = """
+                        routine test(v: S64)
+                            var t: S64 = 0
+                            t += v
+                            t -= 1
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code is SemanticDiagnosticCode.FixedWidthTypeMismatch
+                or SemanticDiagnosticCode.ArgumentTypeMismatch);
+    }
+
+    /// <summary>
+    /// A Suflae <c>Integer += S64</c> needs an explicit conversion. Unchecked, the emitter passed the raw
+    /// <c>i64</c> where <c>Integer.add</c> takes an <c>Integer</c> record and the program crashed.
+    /// </summary>
+    [Fact]
+    public void Analyze_SuflaeIntegerPlusFixedWidthCompoundAssignment_ReportsError()
+    {
+        string source = """
+                        import Numerics
+
+                        routine accumulate(start_value: Integer, v: S64)
+                            var t = start_value
+                            t += v
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSaSuflae(source: source);
+        Assert.Single(collection: result.Errors,
+            predicate: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
     }
 
     #endregion
