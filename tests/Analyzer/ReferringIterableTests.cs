@@ -28,7 +28,7 @@ public class ReferringIterableTests
                         module L/Test
                         import IO/Console
                         routine consume_iterable[T](xs: Accessing[Iterable[T]])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -45,7 +45,7 @@ public class ReferringIterableTests
                         module L/Test
                         import IO/Console
                         routine consume_mut[T](xs: Controlling[Iterable[T]])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -68,10 +68,10 @@ public class ReferringIterableTests
                         module L/Test
                         import IO/Console
                         routine sum_it(xs: Accessing[Iterable[S64]]) -> S64
-                          var total = 0_s64
-                          each x in xs
-                            total = total + x
-                          return total
+                            var total = 0_s64
+                            each x in xs
+                                total = total + x
+                            return total
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -89,10 +89,10 @@ public class ReferringIterableTests
                         module L/Test
                         import IO/Console
                         routine count_it(xs: Iterable[S64]) -> S64
-                          var n = 0_s64
-                          each x in xs
-                            n = n + 1_s64
-                          return n
+                            var n = 0_s64
+                            each x in xs
+                                n = n + 1_s64
+                            return n
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -20,8 +20,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          show("hello")
-                          return
+                            show("hello")
+                            return
                         """;
 
         AssertParses(source: source);
@@ -34,8 +34,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          compute(1, 2, 3)
-                          return
+                            compute(1, 2, 3)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -48,8 +48,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          create_user(name: "Alice", age: 30)
-                          return
+                            create_user(name: "Alice", age: 30)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -62,8 +62,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          data.where().select().to_list()
-                          return
+                            data.where().select().to_list()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -76,8 +76,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var len = "hello".length()
-                          return
+                            var len = "hello".length()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -90,8 +90,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = "42".S32()
-                          return
+                            var result = "42".S32()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -104,8 +104,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var pi = Math.pi()
-                          return
+                            var pi = Math.pi()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -120,8 +120,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var v = UnpackedFloat[M, L, W].zero(sign: me.sign)
-                          return
+                            var v = UnpackedFloat[M, L, W].zero(sign: me.sign)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -135,8 +135,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var v = Pair[A, B].default
-                          return
+                            var v = Pair[A, B].default
+                            return
                         """;
 
         AssertParses(source: source);
@@ -154,8 +154,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var x = point.x
-                          return
+                            var x = point.x
+                            return
                         """;
 
         AssertParses(source: source);
@@ -168,8 +168,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var city = user.address.city
-                          return
+                            var city = user.address.city
+                            return
                         """;
 
         AssertParses(source: source);
@@ -182,8 +182,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = user.name.to_upper().length()
-                          return
+                            var result = user.name.to_upper().length()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -197,7 +197,7 @@ public class ExpressionTests
         string source = """
                         @readonly
                         routine Point.get_x() -> B32
-                          return me.x
+                            return me.x
                         """;
 
         AssertParses(source: source);
@@ -215,8 +215,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var first = items[0]
-                          return
+                            var first = items[0]
+                            return
                         """;
 
         AssertParses(source: source);
@@ -229,8 +229,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var cell = matrix[i][j]
-                          return
+                            var cell = matrix[i][j]
+                            return
                         """;
 
         AssertParses(source: source);
@@ -243,8 +243,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var value = dict["key"]
-                          return
+                            var value = dict["key"]
+                            return
                         """;
 
         AssertParses(source: source);
@@ -257,9 +257,9 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var items = [1, 2, 3]
-                          items[0] = 42
-                          return
+                            var items = [1, 2, 3]
+                            items[0] = 42
+                            return
                         """;
 
         AssertParses(source: source);
@@ -277,8 +277,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var point = Point(x: 10.0, y: 20.0)
-                          return
+                            var point = Point(x: 10.0, y: 20.0)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -291,8 +291,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var user = User(name: "Alice", age: 30)
-                          return
+                            var user = User(name: "Alice", age: 30)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -305,8 +305,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var circle = Circle(center: Point(x: 0.0, y: 0.0), radius: 10.0)
-                          return
+                            var circle = Circle(center: Point(x: 0.0, y: 0.0), radius: 10.0)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -319,8 +319,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var container = Container[S32](value: 42)
-                          return
+                            var container = Container[S32](value: 42)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -338,8 +338,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var add = (a, b) => a + b
-                          return
+                            var add = (a, b) => a + b
+                            return
                         """;
 
         AssertParses(source: source);
@@ -352,8 +352,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var double = x => x * 2
-                          return
+                            var double = x => x * 2
+                            return
                         """;
 
         AssertParses(source: source);
@@ -366,8 +366,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          items.select(x => x * 2)
-                          return
+                            items.select(x => x * 2)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -382,9 +382,9 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var multiplier = 10
-                          var scale = x => x * multiplier
-                          return
+                            var multiplier = 10
+                            var scale = x => x * multiplier
+                            return
                         """;
 
         AssertParses(source: source);
@@ -398,10 +398,10 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var lo = 0
-                          var hi = 100
-                          var in_range = x given lo => lo <= x
-                          return
+                            var lo = 0
+                            var hi = 100
+                            var in_range = x given lo => lo <= x
+                            return
                         """;
 
         AssertParses(source: source);
@@ -414,10 +414,10 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var lo = 0
-                          var hi = 100
-                          var in_range = x given (lo, hi) => lo <= x and x < hi
-                          return
+                            var lo = 0
+                            var hi = 100
+                            var in_range = x given (lo, hi) => lo <= x and x < hi
+                            return
                         """;
 
         AssertParses(source: source);
@@ -430,9 +430,9 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var value = 42
-                          var getter = () given value => value
-                          return
+                            var value = 42
+                            var getter = () given value => value
+                            return
                         """;
 
         AssertParses(source: source);
@@ -445,9 +445,9 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var scale = 2
-                          var multiply = (x, y) given scale => (x + y) * scale
-                          return
+                            var scale = 2
+                            var multiply = (x, y) given scale => (x + y) * scale
+                            return
                         """;
 
         AssertParses(source: source);
@@ -461,8 +461,8 @@ public class ExpressionTests
         // x, given y => x + y - invalid, comma before 'given' breaks parsing
         string source = """
                         routine test()
-                          var f = x, given y => x + y
-                          return
+                            var f = x, given y => x + y
+                            return
                         """;
 
         AssertParseError(source: source);
@@ -476,8 +476,8 @@ public class ExpressionTests
         // x given y, => x + y - invalid, trailing comma after capture
         string source = """
                         routine test()
-                          var f = x given y, => x + y
-                          return
+                            var f = x given y, => x + y
+                            return
                         """;
 
         AssertParseError(source: source);
@@ -491,8 +491,8 @@ public class ExpressionTests
         // x given y,z => x+y+z - invalid, multiple captures need parentheses
         string source = """
                         routine test()
-                          var f = x given y,z => x + y + z
-                          return
+                            var f = x given y,z => x + y + z
+                            return
                         """;
 
         AssertParseError(source: source);
@@ -506,8 +506,8 @@ public class ExpressionTests
         // x, y given z => x+y+z - invalid, multiple params need parentheses
         string source = """
                         routine test()
-                          var f = x, y given z => x + y + z
-                          return
+                            var f = x, y given z => x + y + z
+                            return
                         """;
 
         AssertParseError(source: source);
@@ -525,8 +525,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"Hello, {name}!"
-                          return
+                            var msg = f"Hello, {name}!"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -539,8 +539,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"Sum: {a + b}"
-                          return
+                            var msg = f"Sum: {a + b}"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -553,8 +553,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"{first} + {second} = {first + second}"
-                          return
+                            var msg = f"{first} + {second} = {first + second}"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -567,8 +567,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"Name: {user.name.to_upper()}"
-                          return
+                            var msg = f"Name: {user.name.to_upper()}"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -581,8 +581,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"Value: {value:0.2f}"
-                          return
+                            var msg = f"Value: {value:0.2f}"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -612,8 +612,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"Hello, {name}!"
-                          return
+                            var msg = f"Hello, {name}!"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -635,8 +635,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"{a} + {b} = {a + b}"
-                          return
+                            var msg = f"{a} + {b} = {a + b}"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -660,8 +660,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"Set: {{1, 2}}"
-                          return
+                            var msg = f"Set: {{1, 2}}"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -677,8 +677,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"{value:D2}"
-                          return
+                            var msg = f"{value:D2}"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -694,8 +694,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"{list[0]}"
-                          return
+                            var msg = f"{list[0]}"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -711,8 +711,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"{compute(x, y)}"
-                          return
+                            var msg = f"{compute(x, y)}"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -728,8 +728,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"plain text"
-                          return
+                            var msg = f"plain text"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -745,8 +745,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = f"{x}{y}"
-                          return
+                            var msg = f"{x}{y}"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -762,8 +762,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = rf"path: {dir}\file"
-                          return
+                            var msg = rf"path: {dir}\file"
+                            return
                         """;
 
         InsertedTextExpression expr = GetInsertedText(source: source);
@@ -790,8 +790,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var x = value.S64()
-                          return
+                            var x = value.S64()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -804,8 +804,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var x = 42.B64()
-                          return
+                            var x = 42.B64()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -823,8 +823,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = (a + b) * c
-                          return
+                            var result = (a + b) * c
+                            return
                         """;
 
         AssertParses(source: source);
@@ -837,8 +837,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = ((a + b) * (c - d)) / e
-                          return
+                            var result = ((a + b) * (c - d)) / e
+                            return
                         """;
 
         AssertParses(source: source);
@@ -856,8 +856,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var range = 0 til 10
-                          return
+                            var range = 0 til 10
+                            return
                         """;
 
         AssertParses(source: source);
@@ -870,8 +870,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var range = 0 til 100 by 5
-                          return
+                            var range = 0 til 100 by 5
+                            return
                         """;
 
         AssertParses(source: source);
@@ -889,12 +889,12 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = items
-                          .where(x => x > 0)
-                          .select(x => x * 2)
-                          .take(10)
-                          .to_list()
-                          return
+                            var result = items
+                            .where(x => x > 0)
+                            .select(x => x * 2)
+                            .take(10)
+                            .to_list()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -907,8 +907,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var value = if condition then compute_a() else compute_b()
-                          return
+                            var value = if condition then compute_a() else compute_b()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -921,11 +921,11 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var description = when status
-                            is PENDING => "Waiting"
-                            is ACTIVE => "Running"
-                            else => "Unknown"
-                          return
+                            var description = when status
+                                is PENDING => "Waiting"
+                                is ACTIVE => "Running"
+                                else => "Unknown"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -938,8 +938,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var value = first_option() ?? second_option() ?? default_value
-                          return
+                            var value = first_option() ?? second_option() ?? default_value
+                            return
                         """;
 
         AssertParses(source: source);
@@ -957,8 +957,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = Message.TEXT("Hello")
-                          return
+                            var msg = Message.TEXT("Hello")
+                            return
                         """;
 
         AssertParses(source: source);
@@ -971,8 +971,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var msg = Message.QUIT
-                          return
+                            var msg = Message.QUIT
+                            return
                         """;
 
         AssertParses(source: source);
@@ -990,8 +990,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var status = Status.ACTIVE
-                          return
+                            var status = Status.ACTIVE
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1009,8 +1009,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = 3 - 2
-                          return
+                            var result = 3 - 2
+                            return
                         """;
 
         Program ast = Parse(source: source);
@@ -1046,8 +1046,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = -2
-                          return
+                            var result = -2
+                            return
                         """;
 
         Program ast = Parse(source: source);
@@ -1072,8 +1072,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = 3 - 2i
-                          return
+                            var result = 3 - 2i
+                            return
                         """;
 
         Program ast = Parse(source: source);
@@ -1108,8 +1108,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = -3 - 2
-                          return
+                            var result = -3 - 2
+                            return
                         """;
 
         Program ast = Parse(source: source);
@@ -1144,8 +1144,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = 3 + 2
-                          return
+                            var result = 3 + 2
+                            return
                         """;
 
         Program ast = Parse(source: source);
@@ -1184,8 +1184,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var data = b"hello"
-                          return
+                            var data = b"hello"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1198,8 +1198,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var ch = b'A'
-                          return
+                            var ch = b'A'
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1212,8 +1212,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var data = b"\x48\x65\x6C\x6C\x6F"
-                          return
+                            var data = b"\x48\x65\x6C\x6C\x6F"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1226,8 +1226,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var data = br"no escapes here \n"
-                          return
+                            var data = br"no escapes here \n"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1331,8 +1331,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var p2 = p1 with .x = 5.0
-                          return
+                            var p2 = p1 with .x = 5.0
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1345,8 +1345,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var p2 = p1 with .x = 5.0, .y = 3.0
-                          return
+                            var p2 = p1 with .x = 5.0, .y = 3.0
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1359,8 +1359,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var c2 = coords with [0] = 5.0
-                          return
+                            var c2 = coords with [0] = 5.0
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1373,8 +1373,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var p2 = person with .address.city = "Shelbyville"
-                          return
+                            var p2 = person with .address.city = "Shelbyville"
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1387,8 +1387,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var p2 = data with .name = "test", [0] = 42
-                          return
+                            var p2 = data with .name = "test", [0] = 42
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1401,8 +1401,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var p2 = p1 with .x = 5.0, .y = 3.0
-                          return
+                            var p2 = p1 with .x = 5.0, .y = 3.0
+                            return
                         """;
 
         Program ast = Parse(source: source);
@@ -1432,8 +1432,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var p2 = person with .address.city = "NYC"
-                          return
+                            var p2 = person with .address.city = "NYC"
+                            return
                         """;
 
         Program ast = Parse(source: source);
@@ -1462,8 +1462,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var c2 = coords with [0] = 5.0
-                          return
+                            var c2 = coords with [0] = 5.0
+                            return
                         """;
 
         Program ast = Parse(source: source);
@@ -1494,12 +1494,12 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = BitList(
-                            data: 0u64,
-                            count: 0u64,
-                            capacity: 0u64
-                          )
-                          return
+                            var result = BitList(
+                                data: 0u64,
+                                count: 0u64,
+                                capacity: 0u64
+                            )
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1512,12 +1512,12 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = compute(
-                            1,
-                            2,
-                            3
-                          )
-                          return
+                            var result = compute(
+                                1,
+                                2,
+                                3
+                            )
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1530,12 +1530,12 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = f(
-                            g(
-                              x
+                            var result = f(
+                                g(
+                                  x
+                                )
                             )
-                          )
-                          return
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1548,12 +1548,12 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var items = [
-                            1,
-                            2,
-                            3
-                          ]
-                          return
+                            var items = [
+                                1,
+                                2,
+                                3
+                            ]
+                            return
                         """;
 
         AssertParses(source: source);
@@ -1566,11 +1566,11 @@ public class ExpressionTests
     {
         string source = """
                         routine create() -> S32
-                          return BitList(
-                            data: 0u64,
-                            count: 0u64,
-                            capacity: 0u64
-                          )
+                            return BitList(
+                                data: 0u64,
+                                count: 0u64,
+                                capacity: 0u64
+                            )
                         """;
 
         AssertParses(source: source);
@@ -1583,11 +1583,11 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var x = f(
-                            1,
-                            2
-                          )
-                          return
+                            var x = f(
+                                1,
+                                2
+                            )
+                            return
                         """;
 
         List<Token> tokens = Tokenize(source: source);
@@ -1621,8 +1621,8 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var item = list[5]
-                          return
+                            var item = list[5]
+                            return
                         """;
 
         Program ast = Parse(source: source);

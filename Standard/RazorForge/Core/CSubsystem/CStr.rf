@@ -24,7 +24,7 @@ module Core
 ### :see: {Bytes}, {C-Subsystem}
 @llvm("ptr")
 record CStr
-  pass
+    pass
 
 ### The null C string — a null `char*`. A `common routine` factory (not a `preset`): its value is a
 ### `reinterpret_bits` of a `hijacked_none()` construction, not a compile-time scalar constant, so
@@ -32,149 +32,149 @@ record CStr
 ### null-pointer literal could make this a real `preset` again.)
 ### :returns: The null `CStr` value.
 common routine CStr.null() -> CStr
-  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](hijacked_none[Byte]())
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](hijacked_none[Byte]())
 
 ### Returns the raw null-terminated byte pointer backing this C string.
 ### :returns: The underlying `Hijacked[Byte]` pointer.
 @readonly
 routine CStr.ptr() -> Hijacked[Byte]
-  return LLVM::reinterpret_bits[CStr, Hijacked[Byte]](me)
+    return LLVM::reinterpret_bits[CStr, Hijacked[Byte]](me)
 
 ### Wraps an existing null-terminated byte pointer as `CStr`.
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The pointer to wrap.
 ### :returns: The resulting `CStr` value.
 routine CStr(from_ptr: Hijacked[Byte]) -> CStr
-  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
 
 ### Wraps an existing raw address as `CStr`.
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The address to wrap.
 ### :returns: The resulting `CStr` value.
 routine CStr(from_ptr: Address) -> CStr
-  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
 
 ### Creates a null-terminated C string by copying raw bytes and appending a trailing null byte.
 ### :param from: The byte sequence to copy.
 ### :returns: The resulting `CStr` value.
 routine CStr(from: Bytes) -> CStr
-  var len = from.count()
-  danger
-    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
+    var len = from.count()
+    danger
+        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
 
-    var i: U64 = 0u64
-    loop
-      if i >= len
-        break
-      buffer.offset(ByteSize(bytes: i)).poke(from[i])
-      i = i + 1u64
-    buffer.offset(ByteSize(bytes: len)).poke(BYTE_NULL)
+        var i: U64 = 0u64
+        loop
+            if i >= len
+                break
+            buffer.offset(ByteSize(bytes: i)).poke(from[i])
+            i = i + 1u64
+        buffer.offset(ByteSize(bytes: len)).poke(BYTE_NULL)
 
-    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
+        return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Creates a UTF-8 encoded null-terminated C string from `Text`.
 ### :param from: The text value to encode and copy.
 ### :returns: The resulting `CStr` value.
 routine CStr(from: Text) -> CStr
-  var len = from.count()
-  danger
-    if len == 0u64
-      var empty_buffer = Hijacked[Byte](C::rf_allocate_dynamic(1u64))
-      empty_buffer.poke(BYTE_NULL)
-      return LLVM::reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
+    var len = from.count()
+    danger
+        if len == 0u64
+            var empty_buffer = Hijacked[Byte](C::rf_allocate_dynamic(1u64))
+            empty_buffer.poke(BYTE_NULL)
+            return LLVM::reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
 
-    var max_bytes = len * 4u64 + 1u64
-    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(max_bytes))
-    var write_pos: U64 = 0u64
-    var i: U64 = 0u64
+        var max_bytes = len * 4u64 + 1u64
+        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(max_bytes))
+        var write_pos: U64 = 0u64
+        var i: U64 = 0u64
 
-    while i < len
-      var cp = from[i].codepoint()
+        while i < len
+            var cp = from[i].codepoint()
 
-      if cp <= 0x7Fu32
-        buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(cp)))
-        write_pos = write_pos + 1u64
-      elseif cp <= 0x7FFu32
-        buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xC0u32 | (cp >> 6u32))))
-        buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
-        write_pos = write_pos + 2u64
-      elseif cp <= 0xFFFFu32
-        buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xE0u32 | (cp >> 12u32))))
-        buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-        buffer.offset(ByteSize(bytes: write_pos + 2u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
-        write_pos = write_pos + 3u64
-      else
-        buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xF0u32 | (cp >> 18u32))))
-        buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
-        buffer.offset(ByteSize(bytes: write_pos + 2u64)).poke(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-        buffer.offset(ByteSize(bytes: write_pos + 3u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
-        write_pos = write_pos + 4u64
+            if cp <= 0x7Fu32
+                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(cp)))
+                write_pos = write_pos + 1u64
+            elseif cp <= 0x7FFu32
+                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xC0u32 | (cp >> 6u32))))
+                buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+                write_pos = write_pos + 2u64
+            elseif cp <= 0xFFFFu32
+                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xE0u32 | (cp >> 12u32))))
+                buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+                buffer.offset(ByteSize(bytes: write_pos + 2u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+                write_pos = write_pos + 3u64
+            else
+                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(U8(0xF0u32 | (cp >> 18u32))))
+                buffer.offset(ByteSize(bytes: write_pos + 1u64)).poke(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
+                buffer.offset(ByteSize(bytes: write_pos + 2u64)).poke(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+                buffer.offset(ByteSize(bytes: write_pos + 3u64)).poke(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+                write_pos = write_pos + 4u64
 
-      i = i + 1u64
+            i = i + 1u64
 
-    buffer.offset(ByteSize(bytes: write_pos)).poke(BYTE_NULL)
-    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
+        buffer.offset(ByteSize(bytes: write_pos)).poke(BYTE_NULL)
+        return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Returns the length of this C string in bytes, excluding the trailing null.
 ### :returns: The byte count, not including the null terminator.
 routine CStr.count() -> U64
-  return C::rf_cstr_count(me)
+    return C::rf_cstr_count(me)
 
 ### Returns `true` when this wrapper does not reference any C string.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_null() -> Bool
-  danger
-    return me.ptr().is_none()
+    danger
+        return me.ptr().is_none()
 
 ### Returns `true` when this C string is null or has zero length.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_empty() -> Bool
-  return me.is_null() or me.count() == 0u64
+    return me.is_null() or me.count() == 0u64
 
 ### Returns the byte at `index` in the referenced C string.
 ### This does not copy the string and assumes the caller stays within bounds.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 dangerous routine CStr.getitem(index: U64) -> Byte
-  return me.ptr().offset(ByteSize(bytes: index)).peek()
+    return me.ptr().offset(ByteSize(bytes: index)).peek()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine CStr.eq(you: CStr) -> Bool
-  return C::rf_cstr_compare(a: me, b: you) == 0s32
+    return C::rf_cstr_compare(a: me, b: you) == 0s32
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine CStr.cmp(you: CStr) -> ComparisonSign
-  var cmp = C::rf_cstr_compare(a: me, b: you)
-  if cmp < 0s32
-    return ME_SMALL
-  if cmp > 0s32
-    return ME_LARGE
-  return SAME
+    var cmp = C::rf_cstr_compare(a: me, b: you)
+    if cmp < 0s32
+        return ME_SMALL
+    if cmp > 0s32
+        return ME_LARGE
+    return SAME
 
 ### Returns an owning copy of this C string.
 ### The copied string receives a newly allocated null-terminated buffer.
 ### :returns: The resulting `CStr` value.
 routine CStr.duplicate() -> CStr
-  var len = me.count()
-  danger
-    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
-    C::rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
-    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
+    var len = me.count()
+    danger
+        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
+        C::rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
+        return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Returns a new `CStr` view offset by `n` bytes into the same underlying
 ### buffer.
 ### :param n: The number of bytes to skip.
 ### :returns: The resulting `CStr` value.
 dangerous routine CStr.offset(n: U64) -> CStr
-  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: n)))
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: n)))
 
 ### Returns a `CStr` view starting at `start` bytes from the current pointer.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `CStr` value.
 dangerous routine CStr.from_index(start: U64) -> CStr
-  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: start)))
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: start)))
 

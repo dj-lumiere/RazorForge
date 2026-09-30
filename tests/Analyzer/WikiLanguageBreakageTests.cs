@@ -18,9 +18,9 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine outer()
-                          routine inner()
+                            routine inner()
+                                return
                             return
-                          return
                         """;
 
         AssertParseError(source: source);
@@ -34,11 +34,11 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
-                          routine distance_to(other: Point) -> S32
-                            return 0
+                            routine distance_to(other: Point) -> S32
+                                return 0
                         """;
 
         AssertParseError(source: source);
@@ -52,8 +52,8 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         record Point
-                          var x: S32
-                          y: S32
+                            var x: S32
+                            y: S32
                         """;
 
         AssertParseError(source: source);
@@ -67,7 +67,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         record NativeShape
-                          external handle: Address
+                            external handle: Address
                         """;
 
         AssertParseError(source: source);
@@ -81,7 +81,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         record Box[T: Hashable]
-                          value: T
+                            value: T
                         """;
 
         AssertParseError(source: source);
@@ -95,8 +95,8 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         record Box[T]
-                          needs T obeys Hashable
-                          value: T
+                            needs T obeys Hashable
+                            value: T
                         """;
 
         AssertParseError(source: source);
@@ -110,10 +110,10 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test()
-                          var process = (data) =>
-                            var result = data
-                            result
-                          return
+                            var process = (data) =>
+                                var result = data
+                                result
+                            return
                         """;
 
         AssertParseError(source: source);
@@ -127,10 +127,10 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         crashable SampleError
-                          message: Text
+                            message: Text
 
                         routine test()
-                          throw SampleError(message: "boom")
+                            throw SampleError(message: "boom")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -147,7 +147,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test() -> S32
-                          absent
+                            absent
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -164,7 +164,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test!() -> S32
-                          return 1
+                            return 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -182,7 +182,7 @@ public class WikiLanguageBreakageTests
         string source = """
                         @crash_only
                         routine test()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -199,11 +199,11 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         dangerous routine read_raw() -> S32
-                          return 1
+                            return 1
 
                         routine test()
-                          var value = read_raw()
-                          return
+                            var value = read_raw()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -220,12 +220,12 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         dangerous routine read_raw() -> S32
-                          return 1
+                            return 1
 
                         routine test()
-                          danger
-                            var value = read_raw()
-                          return
+                            danger
+                                var value = read_raw()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -242,7 +242,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test() -> Maybe[S32]
-                          return none
+                            return none
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -262,7 +262,7 @@ public class WikiLanguageBreakageTests
     {
         string source = $"""
                          routine test(value: {typeName})
-                           return
+                             return
                          """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -282,7 +282,7 @@ public class WikiLanguageBreakageTests
     {
         string source = $"""
                          entity Holder
-                           value: {typeName}
+                             value: {typeName}
                          """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -300,10 +300,10 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
 
                         record BadRecord
-                          node: Node
+                            node: Node
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -320,7 +320,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         record BadRecord
-                          view: Viewing[S32]
+                            view: Viewing[S32]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -338,10 +338,10 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
 
                         routine get_view(node: Node) -> Viewing[Node]
-                          return node.view()
+                            return node.view()
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -358,9 +358,9 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test()
-                          var threshold = 100
-                          var f = x => x > threshold
-                          return
+                            var threshold = 100
+                            var f = x => x > threshold
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -389,11 +389,11 @@ public class WikiLanguageBreakageTests
         // with parse!'s exact signature — the hand-written routine below collides with it.
         string source = $"""
                          routine parse!(x: S32) -> S32
-                           if x < 0
-                             {failStatement}
-                           return x
+                             if x < 0
+                                 {failStatement}
+                             return x
                          routine {routineName}(x: S32) -> S32
-                           return x
+                             return x
                          """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -416,7 +416,7 @@ public class WikiLanguageBreakageTests
     {
         string source = $"""
                          routine {routineName}() -> S32
-                           return 1
+                             return 1
                          """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -434,7 +434,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test()
-                          break
+                            break
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -451,7 +451,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test()
-                          continue
+                            continue
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -468,7 +468,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test() -> S32
-                          return me.value
+                            return me.value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

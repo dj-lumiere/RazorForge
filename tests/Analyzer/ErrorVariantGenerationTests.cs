@@ -23,21 +23,21 @@ public class ErrorVariantGenerationTests
         // - try_get() -> T?
         string source = """
                         routine get!(id: U64) -> User
-                          unless has_user(id)
-                            absent
-                          return fetch_user(id)
+                            unless has_user(id)
+                                absent
+                            return fetch_user(id)
 
                         entity User
-                          name: Text
+                            name: Text
 
                         routine has_user(id: U64) -> bool
-                          return true
+                            return true
 
                         routine fetch_user(id: U64) -> User
-                          return User(name: "test")
+                            return User(name: "test")
 
                         routine trigger_variants(id: U64) -> User?
-                          return try get(id: id)
+                            return try get(id: id)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -63,24 +63,24 @@ public class ErrorVariantGenerationTests
         // - try_validate() -> T?
         string source = """
                         crashable ValidationError
-                          message: Text
+                            message: Text
 
                         @readonly
                         routine ValidationError.crash_message() -> Text
-                          return me.message
+                            return me.message
 
                         protocol Crashable
-                          @readonly
-                          routine Me.crash_message() -> Text
+                            @readonly
+                            routine Me.crash_message() -> Text
 
                         routine validate!(value: S32) -> S32
-                          if value < 0
-                            throw ValidationError(message: "negative")
-                          return value
+                            if value < 0
+                                throw ValidationError(message: "negative")
+                            return value
 
                         routine trigger_variants(value: S32) -> S32?
-                          discard grab validate(value: value)
-                          return try validate(value: value)
+                            discard grab validate(value: value)
+                            return try validate(value: value)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -109,35 +109,35 @@ public class ErrorVariantGenerationTests
         // - try_get_user() -> T?
         string source = """
                         crashable DatabaseError
-                          code: S32
+                            code: S32
 
                         @readonly
                         routine DatabaseError.crash_message() -> Text
-                          return "db error"
+                            return "db error"
 
                         protocol Crashable
-                          @readonly
-                          routine Me.crash_message() -> Text
+                            @readonly
+                            routine Me.crash_message() -> Text
 
                         entity User
-                          name: Text
+                            name: Text
 
                         routine get_user!(id: U64) -> User
-                          if id == 0
-                            throw DatabaseError(code: 1)
-                          unless user_exists(id)
-                            absent
-                          return fetch_user(id)
+                            if id == 0
+                                throw DatabaseError(code: 1)
+                            unless user_exists(id)
+                                absent
+                            return fetch_user(id)
 
                         routine user_exists(id: U64) -> bool
-                          return true
+                            return true
 
                         routine fetch_user(id: U64) -> User
-                          return User(name: "test")
+                            return User(name: "test")
 
                         routine trigger_variants(id: U64) -> User?
-                          lookup get_user(id: id)
-                          return try get_user(id: id)
+                            lookup get_user(id: id)
+                            return try get_user(id: id)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -163,15 +163,15 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         entity Cache
-                          data: Dict[Text, S32]
+                            data: Dict[Text, S32]
 
                         routine Cache.get!(key: Text) -> S32
-                          unless me.data.has(key)
-                            absent
-                          return me.data.get(key)
+                            unless me.data.has(key)
+                                absent
+                            return me.data.get(key)
 
                         routine Cache.trigger(key: Text) -> S32?
-                          return try me.get(key: key)
+                            return try me.get(key: key)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -193,7 +193,7 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a + b
+                            return a + b
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -212,7 +212,7 @@ public class ErrorVariantGenerationTests
         // Failable routine that never throws or returns absent
         string source = """
                         routine get_value!() -> S32
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -233,18 +233,18 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         crashable SomeError
-                          msg: Text
+                            msg: Text
 
                         @readonly
                         routine SomeError.crash_message() -> Text
-                          return me.msg
+                            return me.msg
 
                         protocol Crashable
-                          @readonly
-                          routine Me.crash_message() -> Text
+                            @readonly
+                            routine Me.crash_message() -> Text
 
                         routine will_fail() -> S32
-                          throw SomeError(msg: "error")
+                            throw SomeError(msg: "error")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -259,8 +259,8 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         routine might_fail() -> S32
-                          absent
-                          return
+                            absent
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -275,14 +275,14 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         protocol Crashable
-                          @readonly
-                          routine Me.crash_message() -> Text
+                            @readonly
+                            routine Me.crash_message() -> Text
 
                         record NotAnError
-                          value: S32
+                            value: S32
 
                         routine fail!()
-                          throw NotAnError(value: 42)
+                            throw NotAnError(value: 42)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -304,22 +304,22 @@ public class ErrorVariantGenerationTests
     {
         string source = """
                         crashable SomeError
-                          msg: Text
+                            msg: Text
 
                         @readonly
                         routine SomeError.crash_message() -> Text
-                          return me.msg
+                            return me.msg
 
                         protocol Crashable
-                          @readonly
-                          routine Me.crash_message() -> Text
+                            @readonly
+                            routine Me.crash_message() -> Text
 
                         routine parse_number!(text: Text) -> S32
-                          throw SomeError(msg: "parse failed")
+                            throw SomeError(msg: "parse failed")
 
                         routine trigger_variants(text: Text) -> S32?
-                          discard grab parse_number(text: text)
-                          return try parse_number(text: text)
+                            discard grab parse_number(text: text)
+                            return try parse_number(text: text)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -346,11 +346,11 @@ public class ErrorVariantGenerationTests
         // It is an internal type for error handling flow, not a first-class type
         string source = """
                         entity User
-                          name: Text
+                            name: Text
 
                         routine handle_result(result: Check[User])
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -372,11 +372,11 @@ public class ErrorVariantGenerationTests
         // It is an internal type for error handling flow, not a first-class type
         string source = """
                         entity User
-                          name: Text
+                            name: Text
 
                         routine handle_lookup(result: Lookup[User])
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -86,7 +86,7 @@ public sealed class ScriptModeTests
         (Program _, Builder.Parser.Parser parser) = ParseWithErrors(source: """
             show("loose")
             routine start()
-              return
+                return
             """);
 
         Assert.True(condition: parser.HasErrors);
@@ -100,8 +100,8 @@ public sealed class ScriptModeTests
         AnalysisResult result = AssertHasError(source: """
                                                       var total = 0
                                                       routine bump(n: S64)
-                                                        total = total + n
-                                                        return
+                                                          total = total + n
+                                                          return
                                                       bump(n: 3)
                                                       """,
             expectedErrorSubstring: "RazorForge has no module-level mutable state");
@@ -117,8 +117,8 @@ public sealed class ScriptModeTests
         AssertHasErrorSuflae(source: """
                                      var total = 0
                                      routine bump(n: Integer)
-                                       total = total + n
-                                       return
+                                         total = total + n
+                                         return
                                      bump(n: 3)
                                      """,
             expectedErrorSubstring: "global total");
@@ -153,8 +153,8 @@ public sealed class ScriptModeTests
         Program program = ParseSuflae(source: """
                                               module Test/Mod
                                               routine start()
-                                                show("hi")
-                                                return
+                                                  show("hi")
+                                                  return
                                               """);
 
         Assert.DoesNotContain(collection: program.Declarations, filter: d => d is Statement);
@@ -171,7 +171,7 @@ public sealed class ScriptModeTests
         (Program _, Builder.Parser.Parser parser) = ParseSuflaeWithErrors(source: """
             show("loose")
             routine start()
-              return
+                return
             """);
 
         Assert.True(condition: parser.HasErrors);

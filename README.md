@@ -50,35 +50,35 @@ import IO/Console
 
 # A routine that can `throw` is declared with `!`; call sites don't write it.
 routine get_text!(n: S64) -> Text
-  when n
-    == 0 => throw DivisionByZeroError()
-    == 1 => return "hello"
-    else => return "world"
+    when n
+        == 0 => throw DivisionByZeroError()
+        == 1 => return "hello"
+        else => return "world"
 
 routine start()
-  var m = try get_text(n: 0)   # `try` recovers -> Maybe[Text]
-  when m
-    is None => show("absent")
-    else v  => show(f"present: {v}")
-  show(get_text(n: 1))         # a bare call crashes loudly if it fails
-  return
+    var m = try get_text(n: 0)   # `try` recovers -> Maybe[Text]
+    when m
+        is None => show("absent")
+        else v  => show(f"present: {v}")
+    show(get_text(n: 1))         # a bare call crashes loudly if it fails
+    return
 ```
 
 ### Ownership is explicit
 
 ```razorforge
 entity Resource
-  tag: S64
+    tag: S64
 
 routine consume(r: Resource)
-  show(f"consuming tag={r.tag}")
-  return
-  # r is destroyed here — exactly once, deterministically
+    show(f"consuming tag={r.tag}")
+    return
+    # r is destroyed here — exactly once, deterministically
 
 routine start()
-  var b = Resource(tag: 7)
-  consume(r: steal b)   # ownership transferred; using `b` afterwards is a compile error
-  return
+    var b = Resource(tag: 7)
+    consume(r: steal b)   # ownership transferred; using `b` afterwards is a compile error
+    return
 ```
 
 An entity has a single owner, and handing it over requires `steal` (otherwise you get `RF-S413`).
@@ -119,8 +119,8 @@ dotnet test         # optional: run the test suite
 import IO/Console
 
 routine start()
-  show("Hello from RazorForge!")
-  return
+    show("Hello from RazorForge!")
+    return
 ```
 
 ```bash
@@ -237,8 +237,8 @@ library with the low-level machinery hidden, and the same builder handles `.sf` 
 
 ```suflae
 entity Point
-  x: Integer
-  y: Integer
+    x: Integer
+    y: Integer
 
 var p = Point(x: 3, y: 4)
 var q = p                 # both names refer to the same Point — no `steal`

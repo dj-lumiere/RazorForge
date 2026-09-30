@@ -20,9 +20,9 @@ public class RoutineDeclarationTests
     {
         string source = """
                         routine foo() -> S32
-                          return 1
+                            return 1
                         routine foo() -> S32
-                          return 2
+                            return 2
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -37,9 +37,9 @@ public class RoutineDeclarationTests
     {
         string source = """
                         routine foo() -> S32
-                          return 1
+                            return 1
                         routine bar() -> S32
-                          return 2
+                            return 2
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -59,7 +59,7 @@ public class RoutineDeclarationTests
     {
         string source = """
                         routine add(a: S32, b: S32) -> S32
-                          return a
+                            return a
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -79,7 +79,7 @@ public class RoutineDeclarationTests
     {
         string source = """
                         routine get_text() -> Text
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -95,8 +95,8 @@ public class RoutineDeclarationTests
     {
         string source = """
                         routine do_work()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -116,16 +116,16 @@ public class RoutineDeclarationTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Point.area() -> S32
-                          return me.x * me.y
+                            return me.x * me.y
 
                         @readonly
                         routine Point.area() -> S32
-                          return 0_s32
+                            return 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -62,7 +62,7 @@ When unsure, consult ground truth in the repo/package:
    Out-of-range literals are compile errors (RF-S010): `-1` never fits an
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
 9. **Ignored Bool returns need `discard`**: `discard seen.add(value: v)` (RF-W007).
-10. **Indentation is 2 spaces and blocks are indentation-delimited.** No braces.
+10. **Indentation is 4 spaces and blocks are indentation-delimited.** No braces.
 11. **Chained comparisons are one expression**: `0 <= x <= 10` works.
 12. **Printing is `show(...)`** (after `import IO/Console`), not print/println.
 13. **The entry point is `routine start()`**, not `main`.
@@ -112,8 +112,8 @@ module My/Module/Path
 import IO/Console
 
 routine start()
-  show("Hello from RazorForge!")
-  return
+    show("Hello from RazorForge!")
+    return
 ```
 
 A single-file program may skip `routine start()` (script mode): loose top-level
@@ -125,7 +125,7 @@ import IO/Console
 
 var total = 0
 each n in 1 to 5
-  total += n
+    total += n
 show(f"total = {total}")
 ```
 
@@ -230,58 +230,58 @@ declare their own `i`.
 
 ```razorforge
 if x == 3
-  show("three")
+    show("three")
 
 each x in 1 to 5          # range iteration
-  if x == 3
-    continue
-  if x > 4
-    break
-  show(f"x={x}")
+    if x == 3
+        continue
+    if x > 4
+        break
+    show(f"x={x}")
 
 while i < 10_s64
-  i = i + 1_s64
+    i = i + 1_s64
 
 loop                      # infinite loop, exit with break
-  n = n + 1
-  if n >= 3
-    break
+    n = n + 1
+    if n >= 3
+        break
 ```
 
 `when` is the pattern match:
 
 ```razorforge
 when m
-  is None => show("absent")
-  else p  => show(f"present: x={p.x}")   # else with binding
+    is None => show("absent")
+    else p  => show(f"present: x={p.x}")   # else with binding
 
 when n
-  == 0 => throw DivisionByZeroError()
-  == 1 => return "one"
-  else => return "many"
+    == 0 => throw DivisionByZeroError()
+    == 1 => return "one"
+    else => return "many"
 
 when v
-  is Crashable e => show("failed")
-  is S64 x       => show(f"ok: {x}")     # type pattern with binding
+    is Crashable e => show("failed")
+    is S64 x       => show(f"ok: {x}")     # type pattern with binding
 ```
 
 ## 6. Routines
 
 ```razorforge
 routine add(a: S64, b: S64) -> S64
-  return a + b
+    return a + b
 
 routine Point.magnitude() -> B64        # method: Type.name, receiver is `me`
-  return B64(me.x * me.x + me.y * me.y).sqrt()
+    return B64(me.x * me.x + me.y * me.y).sqrt()
 
 routine get_text!(n: S64) -> Text      # `!` = failable
-  when n
-    == 0 => throw DivisionByZeroError()
-    else => return "ok"
+    when n
+        == 0 => throw DivisionByZeroError()
+        else => return "ok"
 
 dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
-  ...
-  return
+    ...
+    return
 ```
 
 - Call with named args: `add(a: 1, b: 2)`. Recover a failable call with a keyword:
@@ -308,13 +308,13 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
 
 ```razorforge
 record Point          # VALUE type: copied, no identity, no destructor
-  x: S64
-  y: S64
+    x: S64
+    y: S64
 # construct memberwise, strictly named:
 var p = Point(x: 3, y: 4)
 
 entity Resource       # HEAP type: single owner, deterministic destroy
-  tag: S64
+    tag: S64
 
 var b = Resource(tag: 7s32)
 consume(r: steal b)   # ownership moves; using b afterwards = compile error
@@ -359,9 +359,9 @@ consume(r: steal b)   # ownership moves; using b afterwards = compile error
 
 ```razorforge
 using c.view() as v          # Viewing[Counter], read-only, dead at block end
-  show(f"count = {v.value}")
+    show(f"count = {v.value}")
 using c.modify() as m        # Modifying[Counter], write intent
-  m.increment()
+    m.increment()
 ```
 
 - **Identity comparison `===` / `!==`** — "are these two the SAME object?", distinct
@@ -401,15 +401,15 @@ show(a === make_other())    # false — different objects
 
 ```razorforge
 routine largest[T obeys Comparable](items: Viewing[List[T]]) -> T
-  ...
+    ...
 
 record Pair[A, B]
-  first: A
-  second: B
+    first: A
+    second: B
 
 protocol Iterable[T]
 relates Iter obeys Iterator[T]        # associated type slot
-  routine iter() -> Me/Iter          # `/` projects an associated type
+    routine iter() -> Me/Iter          # `/` projects an associated type
 
 entity List[T] obeys Iterable[T]
 relates ListEmitter[T] as Iter        # associated type binding
@@ -610,7 +610,7 @@ warning. Frequent ones when porting habits from other languages:
 | RF-S753      | failable call left unhandled          | recover with `try`/`grab`/`lookup` + `when`        |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-W007      | ignored Bool return                   | `discard expr`                                     |
-| RF-G055/G112 | brace-style or inline-`if` habits     | 2-space indent blocks; conditionals top-level only |
+| RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 
 ## 13. A complete worked example
 
@@ -619,27 +619,27 @@ module Demo/Inventory
 import IO/Console
 
 record Item
-  name: Text
-  qty: S64
+    name: Text
+    qty: S64
 
 routine find_qty!(items: Viewing[List[Item]], name: Text) -> S64
-  each item in items
-    if item.name == name
-      return item.qty
-  absent
+    each item in items
+        if item.name == name
+            return item.qty
+    absent
 
 routine start()
-  var items = List[Item]()
-  items.add_last(value: Item(name: "bolt", qty: 40))
-  items.add_last(value: Item(name: "nut", qty: 0))
+    var items = List[Item]()
+    items.add_last(value: Item(name: "bolt", qty: 40))
+    items.add_last(value: Item(name: "nut", qty: 0))
 
-  var q = try find_qty(items: items.view(), name: "bolt")
-  when q
-    is None => show("not found")
-    else n  => show(f"bolt qty: {n}")
+    var q = try find_qty(items: items.view(), name: "bolt")
+    when q
+        is None => show("not found")
+        else n  => show(f"bolt qty: {n}")
 
-  show("DONE")
-  return
+    show("DONE")
+    return
 ```
 
 ## 14. Concurrency
@@ -658,13 +658,13 @@ handle** (not the value) — there is no separate `spawn`/`async` keyword:
 import IO/Console
 
 suspended routine fetch(id: S64) -> S64
-  waitfor(50ms)                  # parks this coroutine; siblings run meanwhile
-  return id * 10
+    waitfor(50ms)                  # parks this coroutine; siblings run meanwhile
+    return id * 10
 
 routine start()
-  var a = fetch(id: 1)           # call = start NOW + get an Agent[S64]
-  show(f"result => {a.retrieve!()}")   # drive to completion, get the value
-  return
+    var a = fetch(id: 1)           # call = start NOW + get an Agent[S64]
+    show(f"result => {a.retrieve!()}")   # drive to completion, get the value
+    return
 ```
 
 Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
@@ -709,7 +709,7 @@ tx.send(item: 10)
 tx.send(item: 20)
 tx.close()
 each n in rx
-  show(f"{n}")
+    show(f"{n}")
 ```
 
 **Not implemented yet** (do not generate these — they do not exist): async networking
@@ -723,14 +723,14 @@ each n in rx
 import Signals
 
 routine on_stop()                    # a NAMED routine — lambdas are expression-only,
-  show("cleaning up")                # so a multi-statement handler cannot be a lambda
-  return
+    show("cleaning up")                # so a multi-statement handler cannot be a lambda
+    return
 
 routine start()
-  when_interrupted(handler: on_stop)   # Ctrl-C / SIGINT
-  when_terminated(handler: on_stop)    # SIGTERM / console-close
-  ...                                  # your own loop — see below
-  return
+    when_interrupted(handler: on_stop)   # Ctrl-C / SIGINT
+    when_terminated(handler: on_stop)    # SIGTERM / console-close
+    ...                                  # your own loop — see below
+    return
 ```
 
 - **Registering a handler SUPPRESSES the default termination.** The process no longer
@@ -750,7 +750,7 @@ routine start()
 
   ```razorforge
   routine on_stop(box: Guarded[Flags, Exclusive])   # or Roamed[T]
-    ...
+      ...
   when_interrupted(handler: on_stop, context: flags.share())   # .share() / (Roamed) .share()
   ```
 

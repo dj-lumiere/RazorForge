@@ -21,7 +21,7 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine test(x: Bool) -> S32
-                          return if x then 1_s32 else 0_s32
+                            return if x then 1_s32 else 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -36,7 +36,7 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine classify(x: S32) -> Text
-                          return if x > 0_s32 then "positive" else "non-positive"
+                            return if x > 0_s32 then "positive" else "non-positive"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -56,8 +56,8 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine test(x: Bool)
-                          var result = if x then 1_s32 else 0_s32
-                          return
+                            var result = if x then 1_s32 else 0_s32
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -73,9 +73,9 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine test(a: Bool, b: Bool) -> S32
-                          var x = if a then 1_s32 else 0_s32
-                          var y = if b then 2_s32 else 0_s32
-                          return x
+                            var x = if a then 1_s32 else 0_s32
+                            var y = if b then 2_s32 else 0_s32
+                            return x
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -91,7 +91,7 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine test(x: S32, y: S32) -> Text
-                          return if x > y then "greater" else "not greater"
+                            return if x > y then "greater" else "not greater"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

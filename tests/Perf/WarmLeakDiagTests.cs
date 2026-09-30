@@ -73,11 +73,11 @@ public sealed class WarmLeakDiagTests
                             module Bench
                             import IO/Console
                             routine start()
-                              var total: U64 = 0u64
-                              each i in 0u64 til 5u64
-                                total = total + i
-                              show(f"{total}")
-                              return
+                                var total: U64 = 0u64
+                                each i in 0u64 til 5u64
+                                    total = total + i
+                                show(f"{total}")
+                                return
                             """;
 
         var sets = new List<HashSet<string>>();

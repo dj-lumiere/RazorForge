@@ -18,37 +18,37 @@ module Core
 ### -infinity, `log(+infinity)` is +infinity, and a negative argument or NaN gives NaN.
 ### :returns: The correctly rounded natural logarithm.
 routine B64.log_unchecked() -> B64
-  var x = me
-  var u = x.to_bits()
-  var e = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 0x3FF
-  # x <= 0, NaN, infinity or subnormal
-  if e >= 0x400 or e == -0x3FF
-    # +infinity or NaN (of either sign)
-    if e == 0x400 or (e == 0xC00 and u != 0xFFF0000000000000_u64)
-      return x +! x
-    if x <= 0.0
-      # negative: the default NaN of 0/0
-      if x < 0.0
-        return B64.from_bits(bits: 0xFFF8000000000000_u64)
-      # ±0: pole
-      return B64.from_bits(bits: 0xFFF0000000000000_u64)
-    # subnormal: scale into the normal range
-    u = (x *! 0x1p52).to_bits()
-    e = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 0x3FF - 52
-  # now x = m*2^e with 1 <= m < 2 and -1074 <= e <= 1023
-  var mbits = u & 0x000FFFFFFFFFFFFF_u64
-  if mbits == 0 and e == 0
-    return 0.0
-  var hl = b64_log_fast(e: e, mbits: mbits)
-  # maximal absolute error of the fast path
-  var err = 0x1.b6p-69
-  var left = hl.item0 +! (hl.item1 -! err)
-  var right = hl.item0 +! (hl.item1 +! err)
-  if left == right
-    return left
-  # the fast path fails with probability about 2^-11.5
-  var y = b64_log_dint_log_of(x: x)
-  return b64_log_dint_to_b64(m: y.item0, ex: y.item1, sgn: y.item2)
+    var x = me
+    var u = x.to_bits()
+    var e = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 0x3FF
+    # x <= 0, NaN, infinity or subnormal
+    if e >= 0x400 or e == -0x3FF
+        # +infinity or NaN (of either sign)
+        if e == 0x400 or (e == 0xC00 and u != 0xFFF0000000000000_u64)
+            return x +! x
+        if x <= 0.0
+            # negative: the default NaN of 0/0
+            if x < 0.0
+                return B64.from_bits(bits: 0xFFF8000000000000_u64)
+            # ±0: pole
+            return B64.from_bits(bits: 0xFFF0000000000000_u64)
+        # subnormal: scale into the normal range
+        u = (x *! 0x1p52).to_bits()
+        e = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 0x3FF - 52
+    # now x = m*2^e with 1 <= m < 2 and -1074 <= e <= 1023
+    var mbits = u & 0x000FFFFFFFFFFFFF_u64
+    if mbits == 0 and e == 0
+        return 0.0
+    var hl = b64_log_fast(e: e, mbits: mbits)
+    # maximal absolute error of the fast path
+    var err = 0x1.b6p-69
+    var left = hl.item0 +! (hl.item1 -! err)
+    var right = hl.item0 +! (hl.item1 +! err)
+    if left == right
+        return left
+    # the fast path fails with probability about 2^-11.5
+    var y = b64_log_dint_log_of(x: x)
+    return b64_log_dint_to_b64(m: y.item0, ex: y.item1, sgn: y.item2)
 
 ### The fast path of `log`: a double-double approximation of log(2^e * m) with absolute error below
 ### 0x1.b6p-69, where m = 1 + mbits/2^52.
@@ -56,61 +56,61 @@ routine B64.log_unchecked() -> B64
 ### :param mbits: The 52 fraction bits of m.
 ### :returns: (h, l) with h + l approximating the logarithm.
 secret routine b64_log_fast(e: S64, mbits: U64) -> (B64, B64)
-  var m = 0x0010000000000000_u64 + mbits
-  var yf = B64.from_bits(bits: 0x3FF0000000000000_u64 | mbits)
-  var ee = e
-  var i = m >>> 43
-  var y = yf
-  # if m > sqrt(2), divide it by 2 to avoid cancellation
-  if m >= 0x16A09E667F3BCD_u64
-    ee = ee + 1
-    i = m >>> 44
-    y = yf *! 0.5
-  var k = i - 362
-  var r = B64_LOG_INVERSE[k]
-  var l1 = B64_LOG_LOG_INV[2_u64 * k]
-  var l2 = B64_LOG_LOG_INV[2_u64 * k + 1_u64]
-  # exact
-  var z = LLVM::fma[B64](a: r, b: y, c: -1.0)
-  # P(z) - z, for |z| < 0.00212097167968735
-  var z2 = z *! z
-  var p45 = LLVM::fma[B64](a: -0x1.55362255e0f63p-3, b: z, c: 0x1.999a14758b084p-3)
-  var p23 = LLVM::fma[B64](a: -0x1.0000000537df6p-2, b: z, c: 0x1.555555554f4d8p-2)
-  var ph = LLVM::fma[B64](a: p45, b: z2, c: p23)
-  ph = LLVM::fma[B64](a: ph, b: z, c: -0x1.ffffffffffffap-2)
-  ph = ph *! z2
-  # add e*log(2): log2_h is an integer multiple of 2^-42, so e*log2_h + l1 is exact
-  var eed = B64(from: ee)
-  var hi = LLVM::fma[B64](a: eed, b: 0x1.62e42fefa38p-1, c: l1)
-  var h = hi +! z
-  var lo = z -! (h -! hi)
-  lo = ph +! (lo +! l2)
-  lo = LLVM::fma[B64](a: eed, b: 0x1.ef35793c7673p-45, c: lo)
-  return (h, lo)
+    var m = 0x0010000000000000_u64 + mbits
+    var yf = B64.from_bits(bits: 0x3FF0000000000000_u64 | mbits)
+    var ee = e
+    var i = m >>> 43
+    var y = yf
+    # if m > sqrt(2), divide it by 2 to avoid cancellation
+    if m >= 0x16A09E667F3BCD_u64
+        ee = ee + 1
+        i = m >>> 44
+        y = yf *! 0.5
+    var k = i - 362
+    var r = B64_LOG_INVERSE[k]
+    var l1 = B64_LOG_LOG_INV[2_u64 * k]
+    var l2 = B64_LOG_LOG_INV[2_u64 * k + 1_u64]
+    # exact
+    var z = LLVM::fma[B64](a: r, b: y, c: -1.0)
+    # P(z) - z, for |z| < 0.00212097167968735
+    var z2 = z *! z
+    var p45 = LLVM::fma[B64](a: -0x1.55362255e0f63p-3, b: z, c: 0x1.999a14758b084p-3)
+    var p23 = LLVM::fma[B64](a: -0x1.0000000537df6p-2, b: z, c: 0x1.555555554f4d8p-2)
+    var ph = LLVM::fma[B64](a: p45, b: z2, c: p23)
+    ph = LLVM::fma[B64](a: ph, b: z, c: -0x1.ffffffffffffap-2)
+    ph = ph *! z2
+    # add e*log(2): log2_h is an integer multiple of 2^-42, so e*log2_h + l1 is exact
+    var eed = B64(from: ee)
+    var hi = LLVM::fma[B64](a: eed, b: 0x1.62e42fefa38p-1, c: l1)
+    var h = hi +! z
+    var lo = z -! (h -! hi)
+    lo = ph +! (lo +! l2)
+    lo = LLVM::fma[B64](a: eed, b: 0x1.ef35793c7673p-45, c: lo)
+    return (h, lo)
 
 ### The accurate path of `log`: log(x) as a dint with about 126 bits of accuracy.
 ### :param x: The argument, positive, finite and not 1.
 ### :returns: The dint (m, ex, sgn) approximating log(x).
 secret routine b64_log_dint_log_of(x: B64) -> (U128, S64, U64)
-  var d = b64_log_dint_from_b64(x: x)
-  var xm = d.item0
-  var xex = d.item1
-  var e = xex
-  var hi = LLVM::int_truncate[U128, U64](xm >>> 64)
-  # lookup index
-  var i = hi >>> 55
-  if hi > 0xB504F333F9DE6484_u64
-    e = e + 1
-    i = i >>> 1
-  xex = xex - e
-  var k = i - 128
-  var z = b64_log_dint_mul(am: xm, aex: xex, asgn: 0, bm: LLVM::zero_extend[U64, U128](B64_LOG_DINV_HI[k]) << 64, bex: B64_LOG_DINV_EX[k], bsgn: 0)
-  z = b64_log_dint_add(am: 1_u128 << 127, aex: 0, asgn: 1, bm: z.item0, bex: z.item1, bsgn: z.item2)
-  # e*log(2)
-  var r = b64_log_dint_mul_int(b: e, am: b64_log_u128(hi: 0xB17217F7D1CF79AB_u64, lo: 0xC9E3B39803F2F6AF_u64), aex: -1, asgn: 0)
-  var p = b64_log_dint_poly(zm: z.item0, zex: z.item1, zsgn: z.item2)
-  p = b64_log_dint_add(am: b64_log_u128(hi: B64_LOG_DLOG_INV_HI[k], lo: B64_LOG_DLOG_INV_LO[k]), aex: B64_LOG_DLOG_INV_EX[k], asgn: B64_LOG_DLOG_INV_SGN[k], bm: p.item0, bex: p.item1, bsgn: p.item2)
-  return b64_log_dint_add(am: p.item0, aex: p.item1, asgn: p.item2, bm: r.item0, bex: r.item1, bsgn: r.item2)
+    var d = b64_log_dint_from_b64(x: x)
+    var xm = d.item0
+    var xex = d.item1
+    var e = xex
+    var hi = LLVM::int_truncate[U128, U64](xm >>> 64)
+    # lookup index
+    var i = hi >>> 55
+    if hi > 0xB504F333F9DE6484_u64
+        e = e + 1
+        i = i >>> 1
+    xex = xex - e
+    var k = i - 128
+    var z = b64_log_dint_mul(am: xm, aex: xex, asgn: 0, bm: LLVM::zero_extend[U64, U128](B64_LOG_DINV_HI[k]) << 64, bex: B64_LOG_DINV_EX[k], bsgn: 0)
+    z = b64_log_dint_add(am: 1_u128 << 127, aex: 0, asgn: 1, bm: z.item0, bex: z.item1, bsgn: z.item2)
+    # e*log(2)
+    var r = b64_log_dint_mul_int(b: e, am: b64_log_u128(hi: 0xB17217F7D1CF79AB_u64, lo: 0xC9E3B39803F2F6AF_u64), aex: -1, asgn: 0)
+    var p = b64_log_dint_poly(zm: z.item0, zex: z.item1, zsgn: z.item2)
+    p = b64_log_dint_add(am: b64_log_u128(hi: B64_LOG_DLOG_INV_HI[k], lo: B64_LOG_DLOG_INV_LO[k]), aex: B64_LOG_DLOG_INV_EX[k], asgn: B64_LOG_DLOG_INV_SGN[k], bm: p.item0, bex: p.item1, bsgn: p.item2)
+    return b64_log_dint_add(am: p.item0, aex: p.item1, asgn: p.item2, bm: r.item0, bex: r.item1, bsgn: r.item2)
 
 ### The accurate-path polynomial approximating log(1 + z), evaluated in dint arithmetic.
 ### :param zm: The significand of z.
@@ -118,25 +118,25 @@ secret routine b64_log_dint_log_of(x: B64) -> (U128, S64, U64)
 ### :param zsgn: The sign of z.
 ### :returns: The dint approximating log(1 + z).
 secret routine b64_log_dint_poly(zm: U128, zex: S64, zsgn: U64) -> (U128, S64, U64)
-  var rm = b64_log_u128(hi: B64_LOG_DP_HI[0], lo: B64_LOG_DP_LO[0])
-  var rex = B64_LOG_DP_EX[0]
-  var rsgn = B64_LOG_DP_SGN[0]
-  var j = 1_u64
-  while j < 13_u64
-    var t = b64_log_dint_mul(am: zm, aex: zex, asgn: zsgn, bm: rm, bex: rex, bsgn: rsgn)
-    t = b64_log_dint_add(am: b64_log_u128(hi: B64_LOG_DP_HI[j], lo: B64_LOG_DP_LO[j]), aex: B64_LOG_DP_EX[j], asgn: B64_LOG_DP_SGN[j], bm: t.item0, bex: t.item1, bsgn: t.item2)
-    rm = t.item0
-    rex = t.item1
-    rsgn = t.item2
-    j = j + 1_u64
-  return b64_log_dint_mul(am: zm, aex: zex, asgn: zsgn, bm: rm, bex: rex, bsgn: rsgn)
+    var rm = b64_log_u128(hi: B64_LOG_DP_HI[0], lo: B64_LOG_DP_LO[0])
+    var rex = B64_LOG_DP_EX[0]
+    var rsgn = B64_LOG_DP_SGN[0]
+    var j = 1_u64
+    while j < 13_u64
+        var t = b64_log_dint_mul(am: zm, aex: zex, asgn: zsgn, bm: rm, bex: rex, bsgn: rsgn)
+        t = b64_log_dint_add(am: b64_log_u128(hi: B64_LOG_DP_HI[j], lo: B64_LOG_DP_LO[j]), aex: B64_LOG_DP_EX[j], asgn: B64_LOG_DP_SGN[j], bm: t.item0, bex: t.item1, bsgn: t.item2)
+        rm = t.item0
+        rex = t.item1
+        rsgn = t.item2
+        j = j + 1_u64
+    return b64_log_dint_mul(am: zm, aex: zex, asgn: zsgn, bm: rm, bex: rex, bsgn: rsgn)
 
 ### Builds a 128-bit integer from its two 64-bit halves.
 ### :param hi: The high 64 bits.
 ### :param lo: The low 64 bits.
 ### :returns: hi * 2^64 + lo.
 secret routine b64_log_u128(hi: U64, lo: U64) -> U128
-  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+    return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
 
 ### Sum of two dints, rounded to nearest on 128 bits.
 ### :param am: The significand of a.
@@ -147,62 +147,62 @@ secret routine b64_log_u128(hi: U64, lo: U64) -> U128
 ### :param bsgn: The sign of b.
 ### :returns: The dint a + b.
 secret routine b64_log_dint_add(am: U128, aex: S64, asgn: U64, bm: U128, bex: S64, bsgn: U64) -> (U128, S64, U64)
-  if am == 0
-    return (bm, bex, bsgn)
-  if bm == 0
-    return (am, aex, asgn)
-  var order = 0
-  if aex > bex
-    order = 1
-  elseif aex < bex
-    order = -1
-  elseif am > bm
-    order = 1
-  elseif am < bm
-    order = -1
-  if order == 0
-    if asgn != bsgn
-      return (0_u128, 0, 0)
-    return (am, aex + 1, asgn)
-  # from now on |x| > |y|
-  var xm = am
-  var xex = aex
-  var xsgn = asgn
-  var ym = bm
-  var yex = bex
-  var ysgn = bsgn
-  if order < 0
-    xm = bm
-    xex = bex
-    xsgn = bsgn
-    ym = am
-    yex = aex
-    ysgn = asgn
-  var m_ex = xex
-  if xex > yex
-    var sh = xex - yex
-    # round to nearest
-    if sh <= 128
-      ym = ym +% ((ym >>> LLVM::int_truncate[S64, U32](sh - 1)) & 1_u128)
-    if sh < 128
-      ym = ym >>> LLVM::int_truncate[S64, U32](sh)
+    if am == 0
+        return (bm, bex, bsgn)
+    if bm == 0
+        return (am, aex, asgn)
+    var order = 0
+    if aex > bex
+        order = 1
+    elseif aex < bex
+        order = -1
+    elseif am > bm
+        order = 1
+    elseif am < bm
+        order = -1
+    if order == 0
+        if asgn != bsgn
+            return (0_u128, 0, 0)
+        return (am, aex + 1, asgn)
+    # from now on |x| > |y|
+    var xm = am
+    var xex = aex
+    var xsgn = asgn
+    var ym = bm
+    var yex = bex
+    var ysgn = bsgn
+    if order < 0
+        xm = bm
+        xex = bex
+        xsgn = bsgn
+        ym = am
+        yex = aex
+        ysgn = asgn
+    var m_ex = xex
+    if xex > yex
+        var sh = xex - yex
+        # round to nearest
+        if sh <= 128
+            ym = ym +% ((ym >>> LLVM::int_truncate[S64, U32](sh - 1)) & 1_u128)
+        if sh < 128
+            ym = ym >>> LLVM::int_truncate[S64, U32](sh)
+        else
+            ym = 0_u128
+    var c = xm
+    if xsgn != ysgn
+        c = xm -% ym
     else
-      ym = 0_u128
-  var c = xm
-  if xsgn != ysgn
-    c = xm -% ym
-  else
-    c = xm +% ym
-    # carry out of the 128 bits
-    if c < xm
-      c = c +% (c & 1_u128)
-      c = (1_u128 << 127) | (c >>> 1)
-      m_ex = m_ex + 1
-  if c == 0
-    return (0_u128, m_ex - (64 + xex), xsgn)
-  var lz = c.leading_zeros()
-  c = c << LLVM::int_truncate[U128, U32](lz)
-  return (c, m_ex - LLVM::int_truncate[U128, S64](lz), xsgn)
+        c = xm +% ym
+        # carry out of the 128 bits
+        if c < xm
+            c = c +% (c & 1_u128)
+            c = (1_u128 << 127) | (c >>> 1)
+            m_ex = m_ex + 1
+    if c == 0
+        return (0_u128, m_ex - (64 + xex), xsgn)
+    var lz = c.leading_zeros()
+    c = c << LLVM::int_truncate[U128, U32](lz)
+    return (c, m_ex - LLVM::int_truncate[U128, S64](lz), xsgn)
 
 ### Product of two dints, with 126 bits of accuracy.
 ### :param am: The significand of a.
@@ -213,25 +213,25 @@ secret routine b64_log_dint_add(am: U128, aex: S64, asgn: U64, bm: U128, bex: S6
 ### :param bsgn: The sign of b.
 ### :returns: The dint a * b.
 secret routine b64_log_dint_mul(am: U128, aex: S64, asgn: U64, bm: U128, bex: S64, bsgn: U64) -> (U128, S64, U64)
-  var mask = 0xFFFFFFFFFFFFFFFF_u128
-  var ahi = am >>> 64
-  var alo = am & mask
-  var bhi = bm >>> 64
-  var blo = bm & mask
-  var t = ahi *% bhi
-  var m1 = ahi *% blo
-  var m2 = alo *% bhi
-  var m = m1 +% m2
-  if m < m1
-    t = t +% (1_u128 << 64)
-  t = t +% (m >>> 64)
-  # make the top bit of the significand 1
-  var ex = 0
-  if t >>> 127 == 0
-    ex = 1
-    t = t << 1
-  t = t +% ((m & mask) >>> 63)
-  return (t, aex + bex - ex + 1, asgn ^ bsgn)
+    var mask = 0xFFFFFFFFFFFFFFFF_u128
+    var ahi = am >>> 64
+    var alo = am & mask
+    var bhi = bm >>> 64
+    var blo = bm & mask
+    var t = ahi *% bhi
+    var m1 = ahi *% blo
+    var m2 = alo *% bhi
+    var m = m1 +% m2
+    if m < m1
+        t = t +% (1_u128 << 64)
+    t = t +% (m >>> 64)
+    # make the top bit of the significand 1
+    var ex = 0
+    if t >>> 127 == 0
+        ex = 1
+        t = t << 1
+    t = t +% ((m & mask) >>> 63)
+    return (t, aex + bex - ex + 1, asgn ^ bsgn)
 
 ### Product of an integer and a dint.
 ### :param b: The integer factor, small enough that the product's low word needs no extra care.
@@ -240,41 +240,41 @@ secret routine b64_log_dint_mul(am: U128, aex: S64, asgn: U64, bm: U128, bex: S6
 ### :param asgn: The sign of a.
 ### :returns: The dint b * a.
 secret routine b64_log_dint_mul_int(b: S64, am: U128, aex: S64, asgn: U64) -> (U128, S64, U64)
-  if b == 0
-    return (0_u128, 0, 0)
-  var c = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](b))
-  var sgn = asgn
-  if b < 0
-    c = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](-b))
-    sgn = 1_u64 - asgn
-  var t = (am >>> 64) *% c
-  var m = 64
-  if t >>> 64 != 0
-    m = LLVM::int_truncate[U128, S64](t.leading_zeros())
-  t = t << LLVM::int_truncate[S64, U32](m)
-  var l = (am & 0xFFFFFFFFFFFFFFFF_u128) *% c
-  l = (l << LLVM::int_truncate[S64, U32](m - 1)) >>> 63
-  var s = l +% t
-  if s < l
-    s = s +% (s & 1_u128)
-    s = (1_u128 << 127) | (s >>> 1)
-    m = m - 1
-  return (s, aex + 64 - m, sgn)
+    if b == 0
+        return (0_u128, 0, 0)
+    var c = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](b))
+    var sgn = asgn
+    if b < 0
+        c = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](-b))
+        sgn = 1_u64 - asgn
+    var t = (am >>> 64) *% c
+    var m = 64
+    if t >>> 64 != 0
+        m = LLVM::int_truncate[U128, S64](t.leading_zeros())
+    t = t << LLVM::int_truncate[S64, U32](m)
+    var l = (am & 0xFFFFFFFFFFFFFFFF_u128) *% c
+    l = (l << LLVM::int_truncate[S64, U32](m - 1)) >>> 63
+    var s = l +% t
+    if s < l
+        s = s +% (s & 1_u128)
+        s = (1_u128 << 127) | (s >>> 1)
+        m = m - 1
+    return (s, aex + 64 - m, sgn)
 
 ### Converts a positive finite B64 to a dint.
 ### :param x: The value to convert.
 ### :returns: The dint (m, ex, 0) equal to x.
 secret routine b64_log_dint_from_b64(x: B64) -> (U128, S64, U64)
-  var u = x.to_bits()
-  var eb = (u >>> 52) & 0x7FF_u64
-  var mant = u & 0x000FFFFFFFFFFFFF_u64
-  if eb != 0
-    mant = mant + 0x0010000000000000_u64
-  var e = LLVM::reinterpret_bits[U64, S64](eb) - 0x3FF
-  var t = mant.leading_zeros()
-  if t > 11
-    e = e - LLVM::reinterpret_bits[U64, S64](t - 12)
-  return (LLVM::zero_extend[U64, U128](mant << LLVM::int_truncate[U64, U32](t)) << 64, e, 0)
+    var u = x.to_bits()
+    var eb = (u >>> 52) & 0x7FF_u64
+    var mant = u & 0x000FFFFFFFFFFFFF_u64
+    if eb != 0
+        mant = mant + 0x0010000000000000_u64
+    var e = LLVM::reinterpret_bits[U64, S64](eb) - 0x3FF
+    var t = mant.leading_zeros()
+    if t > 11
+        e = e - LLVM::reinterpret_bits[U64, S64](t - 12)
+    return (LLVM::zero_extend[U64, U128](mant << LLVM::int_truncate[U64, U32](t)) << 64, e, 0)
 
 ### Rounds a dint to the nearest B64, assuming the result is in the normal range.
 ### :param m: The significand.
@@ -282,24 +282,24 @@ secret routine b64_log_dint_from_b64(x: B64) -> (U128, S64, U64)
 ### :param sgn: The sign.
 ### :returns: The rounded value.
 secret routine b64_log_dint_to_b64(m: U128, ex: S64, sgn: U64) -> B64
-  var hi = LLVM::int_truncate[U128, U64](m >>> 64)
-  var lo = LLVM::int_truncate[U128, U64](m)
-  # the upper 53 bits of hi, 1 <= r < 2
-  var rbits = (hi >>> 11) | 0x3FF0000000000000_u64
-  var rd = 0.0
-  # round bit
-  if (hi >>> 10) & 1 == 1
-    rd = rd +! 0x1p-53
-  # sticky bits
-  if hi & 0x3FF_u64 != 0 or lo != 0
-    rd = rd +! 0x1p-54
-  var r = B64.from_bits(bits: rbits | (sgn << 63))
-  if sgn == 0
-    r = r +! rd
-  else
-    r = r +! -rd
-  var scale = B64.from_bits(bits: (LLVM::reinterpret_bits[S64, U64](ex + 1023) & 0x7FF_u64) << 52)
-  return r *! scale
+    var hi = LLVM::int_truncate[U128, U64](m >>> 64)
+    var lo = LLVM::int_truncate[U128, U64](m)
+    # the upper 53 bits of hi, 1 <= r < 2
+    var rbits = (hi >>> 11) | 0x3FF0000000000000_u64
+    var rd = 0.0
+    # round bit
+    if (hi >>> 10) & 1 == 1
+        rd = rd +! 0x1p-53
+    # sticky bits
+    if hi & 0x3FF_u64 != 0 or lo != 0
+        rd = rd +! 0x1p-54
+    var r = B64.from_bits(bits: rbits | (sgn << 63))
+    if sgn == 0
+        r = r +! rd
+    else
+        r = r +! -rd
+    var scale = B64.from_bits(bits: (LLVM::reinterpret_bits[S64, U64](ex + 1023) & 0x7FF_u64) << 52)
+    return r *! scale
 
 # Reciprocal approximations r[i] of the fast path, 362 <= i <= 724: a 10-bit approximation of 1/y for
 # i*2^-9 <= y < (i+1)*2^-9 such that r[i]*y - 1 is exact (the entries for i = 511, 512 are forced to 1).

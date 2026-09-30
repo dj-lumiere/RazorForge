@@ -27,17 +27,17 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is Direction.NORTH => 1
-                            is Direction.SOUTH => 2
-                            is Direction.EAST => 3
-                            is Direction.WEST => 4
-                          return
+                            return when d
+                                is Direction.NORTH => 1
+                                is Direction.SOUTH => 2
+                                is Direction.EAST => 3
+                                is Direction.WEST => 4
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -52,16 +52,16 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is Direction.NORTH => 1
-                            is Direction.SOUTH => 2
-                            is Direction.EAST => 3
-                          return
+                            return when d
+                                is Direction.NORTH => 1
+                                is Direction.SOUTH => 2
+                                is Direction.EAST => 3
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -76,15 +76,15 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is Direction.NORTH => 1
-                            else => 0
-                          return
+                            return when d
+                                is Direction.NORTH => 1
+                                else => 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -99,15 +99,15 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         routine test(c: Color) -> S32
-                          return when c
-                            is RED => 1
-                            is GREEN => 2
-                            is BLUE => 3
-                          return
+                            return when c
+                                is RED => 1
+                                is GREEN => 2
+                                is BLUE => 3
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -122,14 +122,14 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            == Direction.NORTH => 1_s32
-                            else => 0_s32
+                            return when d
+                                == Direction.NORTH => 1_s32
+                                else => 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -150,15 +150,15 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction)
-                          when d
-                            is Direction.NORTH => show("N")
-                            is Direction.SOUTH => show("S")
-                          return
+                            when d
+                                is Direction.NORTH => show("N")
+                                is Direction.SOUTH => show("S")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -173,15 +173,15 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         routine test(c: Color)
-                          when c
-                            is Color.RED => show("red")
-                            is Color.GREEN => show("green")
-                            is Color.BLUE => show("blue")
-                          return
+                            when c
+                                is Color.RED => show("red")
+                                is Color.GREEN => show("green")
+                                is Color.BLUE => show("blue")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -196,15 +196,15 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction)
-                          when d
-                            is Direction.NORTH => show("N")
-                            else => show("other")
-                          return
+                            when d
+                                is Direction.NORTH => show("N")
+                                else => show("other")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -224,10 +224,10 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(b: Bool) -> S32
-                          return when b
-                            true => 1
-                            false => 0
-                          return
+                            return when b
+                                true => 1
+                                false => 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -242,9 +242,9 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(b: Bool) -> S32
-                          return when b
-                            true => 1
-                          return
+                            return when b
+                                true => 1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -259,9 +259,9 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(b: Bool) -> S32
-                          return when b
-                            false => 0
-                          return
+                            return when b
+                                false => 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -281,10 +281,10 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine process(value: S32?) -> S32
-                          return when value
-                            is None => 0
-                            else v => v
-                          return
+                            return when value
+                                is None => 0
+                                else v => v
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -304,10 +304,10 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(x: S32) -> S32
-                          return when x
-                            == 1 => 10
-                            _ => 0
-                          return
+                            return when x
+                                == 1 => 10
+                                _ => 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -322,10 +322,10 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(x: S32) -> S32
-                          return when x
-                            == 1 => 10
-                            else v => v
-                          return
+                            return when x
+                                == 1 => 10
+                                else v => v
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -341,10 +341,10 @@ public class ExhaustivenessTests
         // S32 has 2**32 values -> without else, cannot be exhaustive
         string source = """
                         routine test(x: S32) -> S32
-                          return when x
-                            == 1 => 10
-                            == 2 => 20
-                          return
+                            return when x
+                                == 1 => 10
+                                == 2 => 20
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -364,14 +364,14 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Status
-                          ACTIVE
-                          INACTIVE
-                          PENDING
+                            ACTIVE
+                            INACTIVE
+                            PENDING
                         routine test(s: Status) -> S32
-                          return when s
-                            is Status.ACTIVE => 1
-                            is Status.INACTIVE => 2
-                          return
+                            return when s
+                                is Status.ACTIVE => 1
+                                is Status.INACTIVE => 2
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -388,9 +388,9 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(b: Bool) -> S32
-                          return when b
-                            true => 1
-                          return
+                            return when b
+                                true => 1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -407,14 +407,14 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction)
-                          when d
-                            is Direction.NORTH => show("N")
-                          return
+                            when d
+                                is Direction.NORTH => show("N")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -439,12 +439,12 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Only
-                          ONE
+                            ONE
 
                         routine test(o: Only) -> S32
-                          return when o
-                            is ONE => 1
-                          return
+                            return when o
+                                is ONE => 1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -464,10 +464,10 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(b: Bool)
-                          when b
-                            true => show("yes")
-                            false => show("no")
-                          return
+                            when b
+                                true => show("yes")
+                                false => show("no")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -483,9 +483,9 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(b: Bool)
-                          when b
-                            true => show("yes")
-                          return
+                            when b
+                                true => show("yes")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -501,10 +501,10 @@ public class ExhaustivenessTests
     {
         string source = """
                         routine test(b: Bool)
-                          when b
-                            true => show("yes")
-                            else => show("no")
-                          return
+                            when b
+                                true => show("yes")
+                                else => show("no")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -524,17 +524,17 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is NORTH => 1
-                            is SOUTH => 2
-                            is EAST => 3
-                            is WEST => 4
-                          return
+                            return when d
+                                is NORTH => 1
+                                is SOUTH => 2
+                                is EAST => 3
+                                is WEST => 4
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -549,17 +549,17 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is Direction.NORTH => 1
-                            is Direction.SOUTH => 2
-                            is Direction.EAST => 3
-                            is Direction.WEST => 4
-                          return
+                            return when d
+                                is Direction.NORTH => 1
+                                is Direction.SOUTH => 2
+                                is Direction.EAST => 3
+                                is Direction.WEST => 4
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -574,16 +574,16 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is NORTH => 1
-                            is SOUTH => 2
-                            is EAST => 3
-                          return
+                            return when d
+                                is NORTH => 1
+                                is SOUTH => 2
+                                is EAST => 3
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -598,15 +598,15 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is NORTH => 1
-                            else => 0
-                          return
+                            return when d
+                                is NORTH => 1
+                                else => 0
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -621,15 +621,15 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction)
-                          when d
-                            is NORTH => show("N")
-                            is SOUTH => show("S")
-                          return
+                            when d
+                                is NORTH => show("N")
+                                is SOUTH => show("S")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -644,16 +644,16 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is NORTH => 1_s32
-                            == Direction.SOUTH => 2_s32
-                            is EAST => 3_s32
-                            is WEST => 4_s32
+                            return when d
+                                is NORTH => 1_s32
+                                == Direction.SOUTH => 2_s32
+                                is EAST => 3_s32
+                                is WEST => 4_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -669,17 +669,17 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is NORTH => 1
-                            is SOUTH => 2
-                            is EAST => 3
-                            is INVALID => 4
-                          return
+                            return when d
+                                is NORTH => 1
+                                is SOUTH => 2
+                                is EAST => 3
+                                is INVALID => 4
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -694,14 +694,14 @@ public class ExhaustivenessTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         routine test(d: Direction) -> S32
-                          return when d
-                            is NORTH n => 1_s32
-                            else => 0_s32
+                            return when d
+                                is NORTH n => 1_s32
+                                else => 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

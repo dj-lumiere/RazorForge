@@ -20,8 +20,8 @@ secret preset DEC_TURN_NEG: Array[U64, 280] = [2935890503282001226_u64, 91540829
 ### for a non-negative exponent, else DEC_TURN_NEG row `row` = 1 / (2 pi 10^row).
 @inline
 secret routine dec_turn_word(neg: Bool, row: U64, j: U64) -> U64
-  var i = row *% 8_u64 +% (7_u64 -% j)
-  return if neg then DEC_TURN_NEG[i] else DEC_TURN_POS[i]
+    var i = row *% 8_u64 +% (7_u64 -% j)
+    return if neg then DEC_TURN_NEG[i] else DEC_TURN_POS[i]
 
 ### The reduction of x = c * 10^e (c > 0, x >= 0.78) modulo pi/2: the quadrant q in 0..3 and the angle
 ### x - q * pi/2 in [-pi/4, pi/4] on the 384-bit tier. For e >= 0, frac(x / (2 pi)) = frac(c * 10^b *
@@ -30,262 +30,262 @@ secret routine dec_turn_word(neg: Bool, row: U64, j: U64) -> U64
 ### bits, so the turn fraction is known to about 2^-295, which the angle's bound carries (relative to the
 ### angle: no decimal128 value comes within 2^-104 of a quarter turn of a multiple of pi/2).
 secret routine decimal_quarter_reduce(c: U128, e: S64) -> (U64, B128Wx)
-  var m = Array[U64, 4]()
-  var neg = e < 0_s64
-  var row = 0_u64
-  if neg
-    row = LLVM::reinterpret_bits[S64, U64](0_s64 -% e)
-    m[0] = LLVM::int_truncate[U128, U64](c)
-    m[1] = LLVM::int_truncate[U128, U64](c >>> 64)
-  else
-    var eu = LLVM::reinterpret_bits[S64, U64](e)
-    row = eu >>> 5
-    # m = c * 10^b, a 128 x 128 -> 256-bit product (10^b < 2^104)
-    var p10 = p10_u128(k: LLVM::reinterpret_bits[U64, S64](eu & 31_u64))
-    var cl = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](c))
-    var ch = c >>> 64
-    var pl = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](p10))
-    var ph = p10 >>> 64
-    var ll = cl *% pl
-    var lh = cl *% ph
-    var hl = ch *% pl
-    var hh = ch *% ph
-    var s1 = (ll >>> 64) +% LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](lh)) +% LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](hl))
-    var s2 = (lh >>> 64) +% (hl >>> 64) +% LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](hh)) +% (s1 >>> 64)
-    m[0] = LLVM::int_truncate[U128, U64](ll)
-    m[1] = LLVM::int_truncate[U128, U64](s1)
-    m[2] = LLVM::int_truncate[U128, U64](s2)
-    m[3] = LLVM::int_truncate[U128, U64]((hh >>> 64) +% (s2 >>> 64))
-  # the turn fraction: the low 512 bits of m times the table fraction
-  var acc = Array[U64, 8]()
-  var i = 0_u64
-  while i < 4_u64
-    var mi = m[i]
-    if mi != 0_u64
-      var carry = 0_u64
-      var j = 0_u64
-      while i +% j < 8_u64
-        var t = LLVM::zero_extend[U64, U128](mi) *% LLVM::zero_extend[U64, U128](dec_turn_word(neg: neg, row: row, j: j)) +% LLVM::zero_extend[U64, U128](acc[i +% j]) +% LLVM::zero_extend[U64, U128](carry)
-        acc[i +% j] = LLVM::int_truncate[U128, U64](t)
-        carry = LLVM::int_truncate[U128, U64](t >>> 64)
-        j = j +% 1_u64
-    i = i +% 1_u64
-  # in quarter turns: the top two bits are the quadrant, the rest the remainder, rounded to the nearest
-  # quadrant (a remainder of half a quarter or more counts from the next quadrant, negatively)
-  var top = acc[7]
-  var q = top >>> 62
-  var negative = ((top >>> 61) & 1_u64) != 0_u64
-  acc[7] = top & 0x3FFFFFFFFFFFFFFF_u64
-  if negative
-    q = (q +% 1_u64) & 3_u64
-    # 2^510 - acc: the two's complement over the 512 bits, less the two top bits
-    var borrow = 1_u64
-    var k = 0_u64
-    while k < 8_u64
-      var v = (acc[k] ^ 0xFFFFFFFFFFFFFFFF_u64) +% borrow
-      if v != 0_u64
-        borrow = 0_u64
-      acc[k] = v
-      k = k +% 1_u64
-    acc[7] = acc[7] & 0x3FFFFFFFFFFFFFFF_u64
-  # the remainder in units of 2^-510 quarter turns, times pi/2
-  var t = wx_scale(w: wx_mul(a: wx_of_limbs8(a: acc, rel: 0.0), b: wx_table(i: 9_u64)), k: -510_s64)
-  if wx_is_zero(w: t)
+    var m = Array[U64, 4]()
+    var neg = e < 0_s64
+    var row = 0_u64
+    if neg
+        row = LLVM::reinterpret_bits[S64, U64](0_s64 -% e)
+        m[0] = LLVM::int_truncate[U128, U64](c)
+        m[1] = LLVM::int_truncate[U128, U64](c >>> 64)
+    else
+        var eu = LLVM::reinterpret_bits[S64, U64](e)
+        row = eu >>> 5
+        # m = c * 10^b, a 128 x 128 -> 256-bit product (10^b < 2^104)
+        var p10 = p10_u128(k: LLVM::reinterpret_bits[U64, S64](eu & 31_u64))
+        var cl = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](c))
+        var ch = c >>> 64
+        var pl = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](p10))
+        var ph = p10 >>> 64
+        var ll = cl *% pl
+        var lh = cl *% ph
+        var hl = ch *% pl
+        var hh = ch *% ph
+        var s1 = (ll >>> 64) +% LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](lh)) +% LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](hl))
+        var s2 = (lh >>> 64) +% (hl >>> 64) +% LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](hh)) +% (s1 >>> 64)
+        m[0] = LLVM::int_truncate[U128, U64](ll)
+        m[1] = LLVM::int_truncate[U128, U64](s1)
+        m[2] = LLVM::int_truncate[U128, U64](s2)
+        m[3] = LLVM::int_truncate[U128, U64]((hh >>> 64) +% (s2 >>> 64))
+    # the turn fraction: the low 512 bits of m times the table fraction
+    var acc = Array[U64, 8]()
+    var i = 0_u64
+    while i < 4_u64
+        var mi = m[i]
+        if mi != 0_u64
+            var carry = 0_u64
+            var j = 0_u64
+            while i +% j < 8_u64
+                var t = LLVM::zero_extend[U64, U128](mi) *% LLVM::zero_extend[U64, U128](dec_turn_word(neg: neg, row: row, j: j)) +% LLVM::zero_extend[U64, U128](acc[i +% j]) +% LLVM::zero_extend[U64, U128](carry)
+                acc[i +% j] = LLVM::int_truncate[U128, U64](t)
+                carry = LLVM::int_truncate[U128, U64](t >>> 64)
+                j = j +% 1_u64
+        i = i +% 1_u64
+    # in quarter turns: the top two bits are the quadrant, the rest the remainder, rounded to the nearest
+    # quadrant (a remainder of half a quarter or more counts from the next quadrant, negatively)
+    var top = acc[7]
+    var q = top >>> 62
+    var negative = ((top >>> 61) & 1_u64) != 0_u64
+    acc[7] = top & 0x3FFFFFFFFFFFFFFF_u64
+    if negative
+        q = (q +% 1_u64) & 3_u64
+        # 2^510 - acc: the two's complement over the 512 bits, less the two top bits
+        var borrow = 1_u64
+        var k = 0_u64
+        while k < 8_u64
+            var v = (acc[k] ^ 0xFFFFFFFFFFFFFFFF_u64) +% borrow
+            if v != 0_u64
+                borrow = 0_u64
+            acc[k] = v
+            k = k +% 1_u64
+        acc[7] = acc[7] & 0x3FFFFFFFFFFFFFFF_u64
+    # the remainder in units of 2^-510 quarter turns, times pi/2
+    var t = wx_scale(w: wx_mul(a: wx_of_limbs8(a: acc, rel: 0.0), b: wx_table(i: 9_u64)), k: -510_s64)
+    if wx_is_zero(w: t)
+        return (q, t)
+    t = wx_widen(w: t, r: b128fx_p2(k: -292_s64 -% wx_ilog2(w: t)))
+    if negative
+        return (q, wx_neg(w: t))
     return (q, t)
-  t = wx_widen(w: t, r: b128fx_p2(k: -292_s64 -% wx_ilog2(w: t)))
-  if negative
-    return (q, wx_neg(w: t))
-  return (q, t)
 
 ### Which of sin(t), cos(t), -sin(t), -cos(t) is sin(t + q * pi/2) (cos: shift q by one).
 @inline
 secret routine quadrant_pick_b128(q: U64, s: B128, c: B128) -> B128
-  var k = q & 3_u64
-  if k == 0_u64
-    return s
-  if k == 1_u64
-    return c
-  if k == 2_u64
-    return s.neg()
-  return c.neg()
+    var k = q & 3_u64
+    if k == 0_u64
+        return s
+    if k == 1_u64
+        return c
+    if k == 2_u64
+        return s.neg()
+    return c.neg()
 
 ### quadrant_pick_b128 on the 384-bit tier.
 @inline
 secret routine quadrant_pick_wx(q: U64, s: B128Wx, c: B128Wx) -> B128Wx
-  var k = q & 3_u64
-  if k == 0_u64
-    return s
-  if k == 1_u64
-    return c
-  if k == 2_u64
-    return wx_neg(w: s)
-  return wx_neg(w: c)
+    var k = q & 3_u64
+    if k == 0_u64
+        return s
+    if k == 1_u64
+        return c
+    if k == 2_u64
+        return wx_neg(w: s)
+    return wx_neg(w: c)
 
 ### The D64 that every value within r * (1 ± 2^-k) rounds to, and whether there is one (a correct
 ### rounding of the true value when r approximates it that closely).
 routine d64_round_within(r: B128, k: S64) -> (Bool, D64)
-  var (ok, p) = b128_to_decimal_band(x: r, digits: 16_s64, emin: -398_s64, emax: 369_s64, zmin: -1325_s64, imax: 1279_s64, bk: k)
-  return (ok, d64_of_parts(p: p))
+    var (ok, p) = b128_to_decimal_band(x: r, digits: 16_s64, emin: -398_s64, emax: 369_s64, zmin: -1325_s64, imax: 1279_s64, bk: k)
+    return (ok, d64_of_parts(p: p))
 
 ### d64_round_within for D32.
 routine d32_round_within(r: B128, k: S64) -> (Bool, D32)
-  var (ok, p) = b128_to_decimal_band(x: r, digits: 7_s64, emin: -101_s64, emax: 90_s64, zmin: -337_s64, imax: 323_s64, bk: k)
-  return (ok, d32_of_parts(p: D32Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: p.coeff)))
+    var (ok, p) = b128_to_decimal_band(x: r, digits: 7_s64, emin: -101_s64, emax: 90_s64, zmin: -337_s64, imax: 323_s64, bk: k)
+    return (ok, d32_of_parts(p: D32Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: p.coeff)))
 
 ### sin (which = 0), cos (1) or tan (2) of a finite decimal c * 10^e as a B128 near the true value, from the
 ### correctly rounded B128 sin/cos (relative error below 2^-107). `small` means |x| < 0.78, where no reduction
 ### is needed and xb = the B128 of x (relative error 2^-113).
 routine decimal_trig_fast(which: U64, sign: Bool, c: U128, e: S64, small: Bool, xb: B128) -> B128
-  if small
-    if which == 0_u64
-      return xb.sin()
-    if which == 1_u64
-      return xb.cos()
-    var (ss, cs) = xb.sincos()
-    return ss /! cs
-  var (q, t) = decimal_quarter_reduce(c: c, e: e)
-  var tb = wx_b128(w: t)
-  if which == 2_u64
-    var (st, ct) = tb.sincos()
-    var s = quadrant_pick_b128(q: q, s: st, c: ct)
-    if sign
-      s = s.neg()
-    return s /! quadrant_pick_b128(q: q +% 1_u64, s: st, c: ct)
-  # sin(t + q pi/2) is ±sin t for an even quadrant and ±cos t for an odd one (cos: one quadrant on), so
-  # only one of them is evaluated
-  var k = (q +% which) & 3_u64
-  var v = tb.sin()
-  if (k & 1_u64) != 0_u64
-    v = tb.cos()
-  if (k & 2_u64) != 0_u64
-    v = v.neg()
-  if sign and which == 0_u64
-    v = v.neg()
-  return v
+    if small
+        if which == 0_u64
+            return xb.sin()
+        if which == 1_u64
+            return xb.cos()
+        var (ss, cs) = xb.sincos()
+        return ss /! cs
+    var (q, t) = decimal_quarter_reduce(c: c, e: e)
+    var tb = wx_b128(w: t)
+    if which == 2_u64
+        var (st, ct) = tb.sincos()
+        var s = quadrant_pick_b128(q: q, s: st, c: ct)
+        if sign
+            s = s.neg()
+        return s /! quadrant_pick_b128(q: q +% 1_u64, s: st, c: ct)
+    # sin(t + q pi/2) is ±sin t for an even quadrant and ±cos t for an odd one (cos: one quadrant on), so
+    # only one of them is evaluated
+    var k = (q +% which) & 3_u64
+    var v = tb.sin()
+    if (k & 1_u64) != 0_u64
+        v = tb.cos()
+    if (k & 2_u64) != 0_u64
+        v = v.neg()
+    if sign and which == 0_u64
+        v = v.neg()
+    return v
 
 ### sin (which = 0), cos (1) or tan (2) of a finite nonzero decimal c * 10^e (sign `sign`) on the 384-bit tier:
 ### below 0.78 (`small`) directly, else from the exact quarter-turn reduction.
 secret routine decimal_trig_wide(which: U64, sign: Bool, c: U128, e: S64, small: Bool) -> B128Wx
-  var s = wx_zero(rel: 0.0)
-  var co = s
-  if small
-    var sc = wx_sincos(a: wx_of_decimal(neg: false, c: c, q: e))
-    s = sc.item0
-    co = sc.item1
-  else
-    var (q, t) = decimal_quarter_reduce(c: c, e: e)
-    var (st, ct) = wx_sincos(a: t)
-    s = quadrant_pick_wx(q: q, s: st, c: ct)
-    co = quadrant_pick_wx(q: q +% 1_u64, s: st, c: ct)
-  if sign
-    s = wx_neg(w: s)
-  if which == 0_u64
-    return s
-  if which == 1_u64
-    return co
-  return wx_div(a: s, b: co)
+    var s = wx_zero(rel: 0.0)
+    var co = s
+    if small
+        var sc = wx_sincos(a: wx_of_decimal(neg: false, c: c, q: e))
+        s = sc.item0
+        co = sc.item1
+    else
+        var (q, t) = decimal_quarter_reduce(c: c, e: e)
+        var (st, ct) = wx_sincos(a: t)
+        s = quadrant_pick_wx(q: q, s: st, c: ct)
+        co = quadrant_pick_wx(q: q +% 1_u64, s: st, c: ct)
+    if sign
+        s = wx_neg(w: s)
+    if which == 0_u64
+        return s
+    if which == 1_u64
+        return co
+    return wx_div(a: s, b: co)
 
 ### sin / cos / tan of a D64 (which = 0 / 1 / 2), correctly rounded: the B128 fast value when its band settles
 ### the decimal rounding, else the 384-bit tier. D32 goes through the same after its B64 band.
 secret routine d64_trig(x: D64, which: U64) -> D64
-  var p = x.decode()
-  if p.special != 0_u64
-    return D64.quiet_nan()
-  var xb = d64_to_b128(x: x)
-  var small = xb.abs() < 0.78_b128
-  var c = LLVM::zero_extend[U64, U128](p.coeff)
-  var (ok, r) = d64_round_within(r: decimal_trig_fast(which: which, sign: p.sign, c: c, e: p.exp, small: small, xb: xb), k: 106_s64)
-  if ok
-    return r
-  return wx_d64(w: decimal_trig_wide(which: which, sign: p.sign, c: c, e: p.exp, small: small))
+    var p = x.decode()
+    if p.special != 0_u64
+        return D64.quiet_nan()
+    var xb = d64_to_b128(x: x)
+    var small = xb.abs() < 0.78_b128
+    var c = LLVM::zero_extend[U64, U128](p.coeff)
+    var (ok, r) = d64_round_within(r: decimal_trig_fast(which: which, sign: p.sign, c: c, e: p.exp, small: small, xb: xb), k: 106_s64)
+    if ok
+        return r
+    return wx_d64(w: decimal_trig_wide(which: which, sign: p.sign, c: c, e: p.exp, small: small))
 
 ### sin / cos / tan of a D32 (which = 0 / 1 / 2): first the correctly rounded B64 routine at x's B64 rounding, kept
 ### when its band settles the D32 rounding (as for the other D32 functions), the band being the argument's rounding
 ### through the condition number (|x cot x| <= |x / sin x| for sin, |x / cos x| for cos, |x| (|tan x| + 1 / |tan x|)
 ### for tan) plus half an ulp. It grows near the zeros and poles and with |x|, where the D64 path takes over.
 secret routine d32_trig(x: D32, which: U64) -> D32
-  var p = x.decode()
-  if p.special != 0_u64
-    return D32.quiet_nan()
-  var xd = d32_to_b64(x: x)
-  var ad = xd.abs()
-  var yd = 0.0_b64
-  var cond = 0.0_b64
-  if which == 0_u64
-    yd = xd.sin()
-    cond = ad /! yd.abs()
-  elseif which == 1_u64
-    yd = xd.cos()
-    cond = ad /! yd.abs()
-  else
-    yd = xd.tan()
-    var at = yd.abs()
-    cond = ad *! (at +! 1.0_b64 /! at)
-  var (fast, v) = d32_from_b64_band(y: yd, k: d32_b64_k(cond: cond))
-  if fast
-    return v
-  var xb = B128(from: x)
-  var small = xb.abs() < 0.78_b128
-  var c = LLVM::zero_extend[U64, U128](p.coeff)
-  var (ok, r) = d32_round_within(r: decimal_trig_fast(which: which, sign: p.sign, c: c, e: p.exp, small: small, xb: xb), k: 106_s64)
-  if ok
-    return r
-  return wx_d32(w: decimal_trig_wide(which: which, sign: p.sign, c: c, e: p.exp, small: small))
+    var p = x.decode()
+    if p.special != 0_u64
+        return D32.quiet_nan()
+    var xd = d32_to_b64(x: x)
+    var ad = xd.abs()
+    var yd = 0.0_b64
+    var cond = 0.0_b64
+    if which == 0_u64
+        yd = xd.sin()
+        cond = ad /! yd.abs()
+    elseif which == 1_u64
+        yd = xd.cos()
+        cond = ad /! yd.abs()
+    else
+        yd = xd.tan()
+        var at = yd.abs()
+        cond = ad *! (at +! 1.0_b64 /! at)
+    var (fast, v) = d32_from_b64_band(y: yd, k: d32_b64_k(cond: cond))
+    if fast
+        return v
+    var xb = B128(from: x)
+    var small = xb.abs() < 0.78_b128
+    var c = LLVM::zero_extend[U64, U128](p.coeff)
+    var (ok, r) = d32_round_within(r: decimal_trig_fast(which: which, sign: p.sign, c: c, e: p.exp, small: small, xb: xb), k: 106_s64)
+    if ok
+        return r
+    return wx_d32(w: decimal_trig_wide(which: which, sign: p.sign, c: c, e: p.exp, small: small))
 
 ### sin / cos / tan of a D128 (which = 0 / 1 / 2) on the 384-bit tier, for when its fast path leaves the
 ### rounding open.
 secret routine d128_trig(x: D128, which: U64) -> D128
-  var p = x.decode()
-  if p.special != 0_u64
-    return D128.quiet_nan()
-  if p.coeff == 0_u128
-    if which == 1_u64
-      return D128.from_components(sign: false, coeff: 1_u128, exp: 0_s64)
-    return x
-  var small = x.abs() < D128.from_components(sign: false, coeff: 78_u128, exp: -2_s64)
-  return wx_d128(w: decimal_trig_wide(which: which, sign: p.sign, c: p.coeff, e: p.exp, small: small))
+    var p = x.decode()
+    if p.special != 0_u64
+        return D128.quiet_nan()
+    if p.coeff == 0_u128
+        if which == 1_u64
+            return D128.from_components(sign: false, coeff: 1_u128, exp: 0_s64)
+        return x
+    var small = x.abs() < D128.from_components(sign: false, coeff: 78_u128, exp: -2_s64)
+    return wx_d128(w: decimal_trig_wide(which: which, sign: p.sign, c: p.coeff, e: p.exp, small: small))
 
 ### Sine of me (radians), correctly rounded. NaN for a non-finite argument.
 routine D64.sin() -> D64
-  return d64_trig(x: me, which: 0_u64)
+    return d64_trig(x: me, which: 0_u64)
 
 ### Cosine of me (radians), correctly rounded. NaN for a non-finite argument.
 routine D64.cos() -> D64
-  return d64_trig(x: me, which: 1_u64)
+    return d64_trig(x: me, which: 1_u64)
 
 ### Tangent of me (radians), correctly rounded. NaN for a non-finite argument.
 routine D64.tan() -> D64
-  return d64_trig(x: me, which: 2_u64)
+    return d64_trig(x: me, which: 2_u64)
 
 ### Sine of me (radians), correctly rounded. NaN for a non-finite argument.
 routine D32.sin() -> D32
-  return d32_trig(x: me, which: 0_u64)
+    return d32_trig(x: me, which: 0_u64)
 
 ### Cosine of me (radians), correctly rounded. NaN for a non-finite argument.
 routine D32.cos() -> D32
-  return d32_trig(x: me, which: 1_u64)
+    return d32_trig(x: me, which: 1_u64)
 
 ### Tangent of me (radians), correctly rounded. NaN for a non-finite argument.
 routine D32.tan() -> D32
-  return d32_trig(x: me, which: 2_u64)
+    return d32_trig(x: me, which: 2_u64)
 
 ### Sine of me (radians). NaN for a non-finite argument.
 routine D128.sin() -> D128
-  var (fast, v) = d128_trig_fast(x: me, which: 0_u64)
-  if fast
-    return v
-  return d128_trig(x: me, which: 0_u64)
+    var (fast, v) = d128_trig_fast(x: me, which: 0_u64)
+    if fast
+        return v
+    return d128_trig(x: me, which: 0_u64)
 
 ### Cosine of me (radians). NaN for a non-finite argument.
 routine D128.cos() -> D128
-  var (fast, v) = d128_trig_fast(x: me, which: 1_u64)
-  if fast
-    return v
-  return d128_trig(x: me, which: 1_u64)
+    var (fast, v) = d128_trig_fast(x: me, which: 1_u64)
+    if fast
+        return v
+    return d128_trig(x: me, which: 1_u64)
 
 ### Tangent of me (radians). NaN for a non-finite argument.
 routine D128.tan() -> D128
-  var (fast, v) = d128_trig_fast(x: me, which: 2_u64)
-  if fast
-    return v
-  return d128_trig(x: me, which: 2_u64)
+    var (fast, v) = d128_trig_fast(x: me, which: 2_u64)
+    if fast
+        return v
+    return d128_trig(x: me, which: 2_u64)

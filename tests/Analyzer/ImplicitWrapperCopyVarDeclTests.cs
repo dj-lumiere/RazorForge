@@ -19,13 +19,13 @@ public class ImplicitWrapperCopyVarDeclTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var rb = ra
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var rb = ra
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -40,16 +40,16 @@ public class ImplicitWrapperCopyVarDeclTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Box
-                          handle: Retained[Node]
+                            handle: Retained[Node]
 
                         routine start()
-                          var a = Node(value: 1)
-                          var b = Box(handle: Retained(from: steal a))
-                          var taken = b.handle
-                          return
+                            var a = Node(value: 1)
+                            var b = Box(handle: Retained(from: steal a))
+                            var taken = b.handle
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -63,13 +63,13 @@ public class ImplicitWrapperCopyVarDeclTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var rb = ra.share()
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var rb = ra.share()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -84,13 +84,13 @@ public class ImplicitWrapperCopyVarDeclTests
     {
         string source = """
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine start()
-                          var p1 = Point(x: 1, y: 2)
-                          var p2 = p1
-                          return
+                            var p1 = Point(x: 1, y: 2)
+                            var p2 = p1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -107,12 +107,12 @@ public class ImplicitWrapperCopyVarDeclTests
         // fires on borrowed identifier / member references, not on call results.
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -127,12 +127,12 @@ public class ImplicitWrapperCopyVarDeclTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var v = a.view()
-                          return
+                            var a = Node(value: 1)
+                            var v = a.view()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -149,12 +149,12 @@ public class ImplicitWrapperCopyVarDeclTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var g = a.modify()
-                          return
+                            var a = Node(value: 1)
+                            var g = a.modify()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -173,12 +173,12 @@ public class ImplicitWrapperCopyVarDeclTests
                         import IO/Console
 
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          show(f"{a.view().value}")
-                          return
+                            var a = Node(value: 1)
+                            show(f"{a.view().value}")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -193,13 +193,13 @@ public class ImplicitWrapperCopyVarDeclTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var t = ra.observe()
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var t = ra.observe()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -215,20 +215,20 @@ public class ImplicitWrapperCopyVarDeclTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Wrapper
-                          ref: Retained[Node]
+                            ref: Retained[Node]
 
                         record Box
-                          inner: Wrapper
+                            inner: Wrapper
 
                         routine start()
-                          var a = Node(value: 1)
-                          var w = Wrapper(ref: Retained(from: steal a))
-                          var b = Box(inner: w)
-                          var taken = b.inner.ref
-                          return
+                            var a = Node(value: 1)
+                            var w = Wrapper(ref: Retained(from: steal a))
+                            var b = Box(inner: w)
+                            var taken = b.inner.ref
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -245,13 +245,13 @@ public class ImplicitWrapperCopyVarDeclTests
                         import IO/Console
 
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          using a.view() as v
-                            show(f"{v.value}")
-                          return
+                            var a = Node(value: 1)
+                            using a.view() as v
+                                show(f"{v.value}")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

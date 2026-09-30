@@ -23,9 +23,9 @@ public class TypeNarrowingTests
         // is narrowed from Maybe[S32] to S32 inside the block
         string source = """
                         routine process(value: S32?) -> S32
-                          unless value is None
-                            return value
-                          return 0
+                            unless value is None
+                                return value
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -41,9 +41,9 @@ public class TypeNarrowingTests
         // After the if (guard clause), value narrows til S32
         string source = """
                         routine process(value: S32?) -> S32
-                          if value is None
-                            return 0
-                          return value
+                            if value is None
+                                return 0
+                            return value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -59,9 +59,9 @@ public class TypeNarrowingTests
         // The then branch narrows value to S32
         string source = """
                         routine process(value: S32?) -> S32
-                          if value isnot None
-                            return value
-                          return 0
+                            if value isnot None
+                                return value
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -77,10 +77,10 @@ public class TypeNarrowingTests
         // The else branch narrows value til S32
         string source = """
                         routine process(value: S32?) -> S32
-                          if value is None
-                            return 0
-                          else
-                            return value
+                            if value is None
+                                return 0
+                            else
+                                return value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -96,9 +96,9 @@ public class TypeNarrowingTests
         // A non-exiting if branch must not narrow the remainder of the scope.
         string source = """
                         routine process(value: S32?) -> S32
-                          if value is None
-                            show("missing")
-                          return value
+                            if value is None
+                                show("missing")
+                            return value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -120,10 +120,10 @@ public class TypeNarrowingTests
         // After handling None, else v should be S32
         string source = """
                         routine process(value: S32?) -> S32
-                          when value
-                            is None => return 0
-                            else v => return v
-                          return
+                            when value
+                                is None => return 0
+                                else v => return v
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -142,11 +142,11 @@ public class TypeNarrowingTests
     {
         string source = """
                         routine process(a: S32?, b: S32?) -> S32
-                          if a is None
-                            return 0
-                          if b is None
-                            return 0
-                          return a + b
+                            if a is None
+                                return 0
+                            if b is None
+                                return 0
+                            return a + b
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -165,9 +165,9 @@ public class TypeNarrowingTests
     {
         string source = """
                         routine process(value: S32?) -> S32
-                          if value isnot None
-                            pass
-                          return value
+                            if value isnot None
+                                pass
+                            return value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -185,9 +185,9 @@ public class TypeNarrowingTests
         // After the unless block (if execution reaches there), value is still S32?.
         string source = """
                         routine process(value: S32?) -> S32
-                          unless value is None
+                            unless value is None
+                                return value
                             return value
-                          return value
                         """;
 
         // The second return sees value as S32? — return type mismatch expected.
@@ -209,9 +209,9 @@ public class TypeNarrowingTests
         // Ensure narrowing logic doesn't break for non-error-handling types
         string source = """
                         routine process(value: S32) -> S32
-                          if value isnot None
-                            return value
-                          return 0
+                            if value isnot None
+                                return value
+                            return 0
                         """;
 
         // Should not crash -> the is/isnot check may produce warnings

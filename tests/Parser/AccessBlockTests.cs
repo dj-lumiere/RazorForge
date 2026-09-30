@@ -17,10 +17,10 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var data = SomeEntity()
-                          using data.view() as v
-                            show(v.value)
-                          return
+                            var data = SomeEntity()
+                            using data.view() as v
+                                show(v.value)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -33,12 +33,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var node = Node(42)
-                          using node.view() as v
-                            var x = v.value
-                            var y = v.name
-                            process(x, y)
-                          return
+                            var node = Node(42)
+                            using node.view() as v
+                                var x = v.value
+                                var y = v.name
+                                process(x, y)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -51,12 +51,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var a = EntityA()
-                          var b = EntityB()
-                          using a.view() as va
-                            using b.view() as vb
-                              compare(va, vb)
-                          return
+                            var a = EntityA()
+                            var b = EntityB()
+                            using a.view() as va
+                                using b.view() as vb
+                                    compare(va, vb)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -69,12 +69,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var user = User()
-                          using user.view() as v
-                            show(v.name)
-                            show(v.age)
-                            show(v.get_full_name())
-                          return
+                            var user = User()
+                            using user.view() as v
+                                show(v.name)
+                                show(v.age)
+                                show(v.get_full_name())
+                            return
                         """;
 
         AssertParses(source: source);
@@ -92,10 +92,10 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var data = SomeEntity()
-                          using data.modify() as h
-                            h.value = 42
-                          return
+                            var data = SomeEntity()
+                            using data.modify() as h
+                                h.value = 42
+                            return
                         """;
 
         AssertParses(source: source);
@@ -108,12 +108,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var node = Node(42)
-                          using node.modify() as h
-                            h.value = 42
-                            h.name = "foo"
-                            process(h)
-                          return
+                            var node = Node(42)
+                            using node.modify() as h
+                                h.value = 42
+                                h.name = "foo"
+                                process(h)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -126,13 +126,13 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var counter = Counter()
-                          using counter.modify() as c
-                            if c.value < 100
-                              c.value += 1
-                            else
-                              c.reset()
-                          return
+                            var counter = Counter()
+                            using counter.modify() as c
+                                if c.value < 100
+                                    c.value += 1
+                                else
+                                    c.reset()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -153,10 +153,10 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          var shared = data.share[MultiReadLock]()
-                          using shared.consult() as r
-                            show(r.value)
-                          return
+                            var shared = data.share[MultiReadLock]()
+                            using shared.consult() as r
+                                show(r.value)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -169,11 +169,11 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          var shared = data.share[MultiReadLock]()
-                          using shared.consult() as r1
-                            using shared.consult() as r2
-                              compare(r1, r2)
-                          return
+                            var shared = data.share[MultiReadLock]()
+                            using shared.consult() as r1
+                                using shared.consult() as r2
+                                    compare(r1, r2)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -191,10 +191,10 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          var shared = data.share[Mutex]()
-                          using shared.amend() as w
-                            w.value = 42
-                          return
+                            var shared = data.share[Mutex]()
+                            using shared.amend() as w
+                                w.value = 42
+                            return
                         """;
 
         AssertParses(source: source);
@@ -207,12 +207,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          var shared = counter.share[Mutex]()
-                          using shared.amend() as s
-                            s.count += 1
-                            s.last_updated = now()
-                            s.notify_listeners()
-                          return
+                            var shared = counter.share[Mutex]()
+                            using shared.amend() as s
+                                s.count += 1
+                                s.last_updated = now()
+                                s.notify_listeners()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -225,12 +225,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          var shared = data.share[MultiReadLock]()
-                          using shared.amend() as w
-                            w.value = 42
-                            using w.view() as v
-                              show(v.value)
-                          return
+                            var shared = data.share[MultiReadLock]()
+                            using shared.amend() as w
+                                w.value = 42
+                                using w.view() as v
+                                    show(v.value)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -248,10 +248,10 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          using open_file("file.txt", mode: FileIO.Read) as file
-                            var content = file.read_all()
-                            process(content)
-                          return
+                            using open_file("file.txt", mode: FileIO.Read) as file
+                                var content = file.read_all()
+                                process(content)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -264,10 +264,10 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          using open_file("input.txt") as input, open_file("output.txt", mode: FileIO.Write) as output
-                            var data = input.read_all()
-                            output.write(transform(data))
-                          return
+                            using open_file("input.txt") as input, open_file("output.txt", mode: FileIO.Write) as output
+                                var data = input.read_all()
+                                output.write(transform(data))
+                            return
                         """;
 
         AssertParses(source: source);
@@ -280,10 +280,10 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          using acquire_lock() as lock
-                            using open_connection() as conn
-                              process(conn)
-                          return
+                            using acquire_lock() as lock
+                                using open_connection() as conn
+                                    process(conn)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -296,12 +296,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          using open_file("data.txt") as file
-                            each line in file.lines()
-                              if line.starts_with("#")
-                                continue
-                              process_line(line)
-                          return
+                            using open_file("data.txt") as file
+                                each line in file.lines()
+                                    if line.starts_with("#")
+                                        continue
+                                    process_line(line)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -314,12 +314,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine process_files!(paths: List[Text])
-                          each path in paths
-                            using open_file(path) as file
-                              var content = file.read_all()
-                              unless content.is_empty()
-                                process(content)
-                          return
+                            each path in paths
+                                using open_file(path) as file
+                                    var content = file.read_all()
+                                    unless content.is_empty()
+                                        process(content)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -337,13 +337,13 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var data = SomeEntity()
-                          using data.view() as v
-                            if v.needs_update()
-                              pass
-                          using data.modify() as h
-                            h.update()
-                          return
+                            var data = SomeEntity()
+                            using data.view() as v
+                                if v.needs_update()
+                                    pass
+                            using data.modify() as h
+                                h.update()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -356,12 +356,12 @@ public class AccessBlockTests
     {
         string source = """
                         routine test!()
-                          var cache = Cache()
-                          using open_file("config.json") as file
-                            var config = parse_json(file.read_all())
-                            using cache.view() as c
-                              apply_config(c, config)
-                          return
+                            var cache = Cache()
+                            using open_file("config.json") as file
+                                var config = parse_json(file.read_all())
+                                using cache.view() as c
+                                    apply_config(c, config)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -374,17 +374,17 @@ public class AccessBlockTests
     {
         string source = """
                         routine sync_data!()
-                          var local = LocalData()
-                          var shared = remote.share[MultiReadLock]()
+                            var local = LocalData()
+                            var shared = remote.share[MultiReadLock]()
 
-                          using local.view() as l
-                            using shared.amend() as s
-                              each item in l.items
-                                s.add(item.clone())
+                            using local.view() as l
+                                using shared.amend() as s
+                                    each item in l.items
+                                        s.add(item.clone())
 
-                          using shared.consult() as r
-                            verify(r.count() > 0, "Sync failed")
-                          return
+                            using shared.consult() as r
+                                verify(r.count() > 0, "Sync failed")
+                            return
                         """;
 
         AssertParses(source: source);
@@ -402,9 +402,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var node = Node(42)
-                          show(node.view().value)
-                          return
+                            var node = Node(42)
+                            show(node.view().value)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -417,9 +417,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var node = Node(42)
-                          node.modify().value += 1
-                          return
+                            var node = Node(42)
+                            node.modify().value += 1
+                            return
                         """;
 
         AssertParses(source: source);
@@ -432,9 +432,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var node = Node(42)
-                          process(node.view())
-                          return
+                            var node = Node(42)
+                            process(node.view())
+                            return
                         """;
 
         AssertParses(source: source);
@@ -447,9 +447,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var node = Node(42)
-                          compare(node.view(), node.view())
-                          return
+                            var node = Node(42)
+                            compare(node.view(), node.view())
+                            return
                         """;
 
         AssertParses(source: source);
@@ -467,9 +467,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var node = Node(42)
-                          var owned = node.consume()
-                          return
+                            var node = Node(42)
+                            var owned = node.consume()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -482,9 +482,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var node = Node(42)
-                          take_ownership(node.consume())
-                          return
+                            var node = Node(42)
+                            take_ownership(node.consume())
+                            return
                         """;
 
         AssertParses(source: source);
@@ -502,9 +502,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var data = SomeEntity()
-                          var shared = data.share[MultiReadLock]()
-                          return
+                            var data = SomeEntity()
+                            var shared = data.share[MultiReadLock]()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -517,9 +517,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var data = SomeEntity()
-                          var shared = data.share[Mutex]()
-                          return
+                            var data = SomeEntity()
+                            var shared = data.share[Mutex]()
+                            return
                         """;
 
         AssertParses(source: source);
@@ -532,9 +532,9 @@ public class AccessBlockTests
     {
         string source = """
                         routine test()
-                          var shared = data.share[Mutex]()
-                          var weak = shared.track()
-                          return
+                            var shared = data.share[Mutex]()
+                            var weak = shared.track()
+                            return
                         """;
 
         AssertParses(source: source);

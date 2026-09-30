@@ -33,15 +33,15 @@ public partial class Tokenizer
     /// <para>
     /// Indentation rules:
     /// <list type="bullet">
-    ///   <item><description>Each indentation level is 2 spaces</description></item>
+    ///   <item><description>Each indentation level is 4 spaces</description></item>
     ///   <item><description>Tabs are rejected; indentation must use spaces</description></item>
-    ///   <item><description>Indentation must be a multiple of 2</description></item>
+    ///   <item><description>Indentation must be a multiple of 4</description></item>
     ///   <item><description>Indentation increases start a new block</description></item>
     /// </list>
     /// </para>
     /// </remarks>
     /// <exception cref="GrammarException">
-    /// Thrown when indentation is misaligned (not a multiple of 2).
+    /// Thrown when indentation is misaligned (not a multiple of 4).
     /// </exception>
     private void HandleIndentation()
     {
@@ -88,10 +88,10 @@ public partial class Tokenizer
         }
 
         // Validate indentation alignment
-        if (spaces % 2 != 0)
+        if (spaces % 4 != 0)
         {
             throw new GrammarException(code: GrammarDiagnosticCode.InconsistentIndentation,
-                message: $"Indentation error: expected multiple of 2 spaces, got {spaces} spaces",
+                message: $"This line is indented by {spaces} spaces. Indent in steps of 4 spaces (4, 8, 12, ...).",
                 fileName: _fileName,
                 line: _line,
                 column: _column,
@@ -111,7 +111,7 @@ public partial class Tokenizer
     }
 
     /// <summary>
-    /// Counts the leading whitespace on the current line (tabs count as 2 spaces) and consumes it.
+    /// Counts the leading whitespace on the current line (tabs count as 4 spaces) and consumes it.
     /// </summary>
     /// <exception cref="GrammarException">Thrown when tabs and spaces are mixed.</exception>
     private int CountLeadingWhitespace()
@@ -128,9 +128,9 @@ public partial class Tokenizer
                 spaces += 1;
                 hasSpaces = true;
             }
-            else // Tab counts as 2 spaces
+            else // Tab counts as 4 spaces
             {
-                spaces += 2;
+                spaces += 4;
                 hasTabs = true;
             }
 

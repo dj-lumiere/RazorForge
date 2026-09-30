@@ -23,8 +23,8 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -41,7 +41,7 @@ public class TypeResolutionTests
     {
         string source = """
                         entity User
-                          name: Text
+                            name: Text
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -58,10 +58,10 @@ public class TypeResolutionTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -79,8 +79,8 @@ public class TypeResolutionTests
         // Note: Don't use "Result" as it's a well-known error handling type
         string source = """
                         variant MyVariant
-                          S32
-                          Text
+                            S32
+                            Text
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -97,8 +97,8 @@ public class TypeResolutionTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -120,7 +120,7 @@ public class TypeResolutionTests
     {
         string source = """
                         record Container[T]
-                          value: T
+                            value: T
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -137,8 +137,8 @@ public class TypeResolutionTests
     {
         string source = """
                         entity Pair[K, V]
-                          key: K
-                          value: V
+                            key: K
+                            value: V
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -160,7 +160,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine greet(name: Text) -> Text
-                          return name
+                            return name
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -177,12 +177,12 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.distance() -> B32
-                          return 0.0_b32
+                            return 0.0_b32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -199,7 +199,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine get_value!() -> S32
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -221,9 +221,9 @@ public class TypeResolutionTests
     {
         string source = """
                         record Color
-                          r: U8
-                          g: U8
-                          b: U8
+                            r: U8
+                            g: U8
+                            b: U8
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -240,8 +240,8 @@ public class TypeResolutionTests
     {
         string source = """
                         entity Document
-                          title: Text
-                          page_count: U32
+                            title: Text
+                            page_count: U32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -262,7 +262,7 @@ public class TypeResolutionTests
     {
         string source = """
                         record Container
-                          value: UnknownType
+                            value: UnknownType
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -279,10 +279,10 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: B32
+                            x: B32
 
                         record Point
-                          y: B32
+                            y: B32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -296,8 +296,8 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: B32
-                          x: B32
+                            x: B32
+                            x: B32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -312,8 +312,8 @@ public class TypeResolutionTests
     {
         string source = """
                         routine try_something()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -328,8 +328,8 @@ public class TypeResolutionTests
     {
         string source = """
                         routine check_value()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -344,8 +344,8 @@ public class TypeResolutionTests
     {
         string source = """
                         routine lookup_item()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -365,12 +365,12 @@ public class TypeResolutionTests
     {
         string source = """
                         protocol Comparable
-                          @readonly
-                          routine Me.$cmp(other: Me) -> S32
+                            @readonly
+                            routine Me.$cmp(other: Me) -> S32
 
                         record Wrapper[T]
                         needs T obeys Comparable
-                          value: T
+                            value: T
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -386,7 +386,7 @@ public class TypeResolutionTests
         string source = """
                         record Container[T]
                         needs X obeys Comparable
-                          value: T
+                            value: T
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -406,16 +406,16 @@ public class TypeResolutionTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.display() -> Text
-                          return "point"
+                            return "point"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -435,7 +435,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine get_value() -> S32
-                          return 0
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -449,7 +449,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine get_count() -> U32
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -463,7 +463,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine get_big() -> S64
-                          return 123456789
+                            return 123456789
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -477,11 +477,11 @@ public class TypeResolutionTests
     {
         string source = """
                         record Counter
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine Counter.get_zero() -> S32
-                          return 0
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -496,8 +496,8 @@ public class TypeResolutionTests
         // var c: S32 = 123 should infer 123 as S32, not default S64
         string source = """
                         routine test()
-                          var c: S32 = 123
-                          return
+                            var c: S32 = 123
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -511,8 +511,8 @@ public class TypeResolutionTests
     {
         string source = """
                         routine test()
-                          var x: U8 = 255
-                          return
+                            var x: U8 = 255
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -527,8 +527,8 @@ public class TypeResolutionTests
         // 256 doesn't fit in U8 (0..255), should report overflow
         string source = """
                         routine test()
-                          var x: U8 = 256
-                          return
+                            var x: U8 = 256
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -544,8 +544,8 @@ public class TypeResolutionTests
         // 1231231231234 doesn't fit in S32 (-2147483648..2147483647), should report overflow
         string source = """
                         routine test()
-                          var c: S32 = 1231231231234
-                          return
+                            var c: S32 = 1231231231234
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -565,12 +565,12 @@ public class TypeResolutionTests
     {
         string source = """
                         choice HttpStatus
-                          OK
-                          NOT_FOUND
+                            OK
+                            NOT_FOUND
 
                         @readonly
                         routine HttpStatus.$add(you: HttpStatus) -> HttpStatus
-                          return OK
+                            return OK
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -585,13 +585,13 @@ public class TypeResolutionTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
 
                         @readonly
                         routine Color.is_warm() -> Bool
-                          return false
+                            return false
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -606,9 +606,9 @@ public class TypeResolutionTests
     {
         string source = """
                         choice HttpStatus
-                          OK: 200
-                          NOT_FOUND
-                          INTERNAL_ERROR: 500
+                            OK: 200
+                            NOT_FOUND
+                            INTERNAL_ERROR: 500
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -623,9 +623,9 @@ public class TypeResolutionTests
     {
         string source = """
                         choice HttpStatus
-                          OK: 200
-                          NOT_FOUND: 404
-                          INTERNAL_ERROR: 500
+                            OK: 200
+                            NOT_FOUND: 404
+                            INTERNAL_ERROR: 500
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -640,9 +640,9 @@ public class TypeResolutionTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -662,8 +662,8 @@ public class TypeResolutionTests
     {
         string source = """
                         routine foo() -> Maybe[S32]
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -678,7 +678,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine foo() -> Check[S32]
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -693,7 +693,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine foo() -> Lookup[S32]
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -708,7 +708,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine get_value!() -> S32
-                          return 42
+                            return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -723,13 +723,13 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: B32
-                          y: B32
+                            x: B32
+                            y: B32
 
                         @readonly
                         routine Point.foo() -> Maybe[B32]
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -751,10 +751,10 @@ public class TypeResolutionTests
         string source = """
                         entity Buffer[T, N]
                         needs N is Address
-                          data: T
+                            data: T
 
                         routine test(buf: Buffer[U8, Address])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -772,10 +772,10 @@ public class TypeResolutionTests
         string source = """
                         record Config[T]
                         needs T is Bool
-                          value: S32
+                            value: S32
 
                         routine test(cfg: Config[Bool])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -791,17 +791,17 @@ public class TypeResolutionTests
         // Choice types are valid for const generics by category
         string source = """
                         choice Direction
-                          North
-                          South
-                          East
-                          West
+                            North
+                            South
+                            East
+                            West
 
                         record Compass[D]
                         needs D is Direction
-                          strength: B32
+                            strength: B32
 
                         routine test(c: Compass[Direction])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -817,14 +817,14 @@ public class TypeResolutionTests
         // Arbitrary record types should fail validation when used as type expression
         string source = """
                         record Foo
-                          x: S32
+                            x: S32
 
                         record Bar[T]
                         needs Foo T
-                          value: S32
+                            value: S32
 
                         routine test(b: Bar[Foo])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -841,10 +841,10 @@ public class TypeResolutionTests
         string source = """
                         entity Buffer[T, N]
                         needs Address N
-                          data: T
+                            data: T
 
                         routine test(buf: Buffer[U8, S32])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -863,10 +863,10 @@ public class TypeResolutionTests
 
                         entity Buffer[T, N]
                         needs N is Address
-                          data: T
+                            data: T
 
                         routine test(buf: Buffer[U8, WIDTH])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -888,10 +888,10 @@ public class TypeResolutionTests
 
                         entity Buffer[T, N]
                         needs N is Address
-                          data: T
+                            data: T
 
                         routine test(buf: Buffer[U8, WIDTH])
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -914,18 +914,18 @@ public class TypeResolutionTests
         // S193: == on generic record resolution should not produce MemberNotFound
         string source = """
                         protocol Equatable
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
                         record Wrapper[T] obeys Equatable
-                          value: T
+                            value: T
 
                         @readonly
                         routine Wrapper.$eq(you: Wrapper) -> Bool
-                          return true
+                            return true
 
                         routine test(a: Wrapper[S32], b: Wrapper[S32]) -> Bool
-                          return a == b
+                            return a == b
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -941,15 +941,15 @@ public class TypeResolutionTests
         // S191: Void memberRoutine call on generic resolution should not produce error type
         string source = """
                         record Container[T]
-                          value: T
+                            value: T
 
                         routine Container.reset()
-                          me.value = me.value
-                          return
+                            me.value = me.value
+                            return
 
                         routine test(c: Container[S32])
-                          c.reset()
-                          return
+                            c.reset()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -965,14 +965,14 @@ public class TypeResolutionTests
         // memberRoutine on generic type should be found through the generic definition
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         @readonly
                         routine Box.size() -> S32
-                          return 1
+                            return 1
 
                         routine test(b: Box[S32]) -> S32
-                          return b.size()
+                            return b.size()
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

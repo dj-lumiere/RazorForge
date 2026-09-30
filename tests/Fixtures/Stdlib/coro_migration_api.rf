@@ -17,41 +17,41 @@ import IO/Console
 # Returns 1 if this coroutine EVER resumed on a different worker than it was born on, else 0.
 # Sweeps many park (waitfor) + yield cycles so a working pool reliably migrates it at least once.
 suspended routine probe() -> S64
-  var w0 = C::rf_current_thread_id()
-  var moved = 0_s64
-  var j = 0_s64
-  while j < 64_s64
-    waitfor(1ms)                       # park under the pool; some worker picks us back up
-    yield_now()                        # requeue: another worker may steal us while the birth one is busy
-    if C::rf_current_thread_id() != w0
-      moved = 1_s64
-    j = j + 1_s64
-  return moved
+    var w0 = C::rf_current_thread_id()
+    var moved = 0_s64
+    var j = 0_s64
+    while j < 64_s64
+        waitfor(1ms)                       # park under the pool; some worker picks us back up
+        yield_now()                        # requeue: another worker may steal us while the birth one is busy
+        if C::rf_current_thread_id() != w0
+            moved = 1_s64
+        j = j + 1_s64
+    return moved
 
 routine start()
-  var workers = C::rf_sched_worker_count()
+    var workers = C::rf_sched_worker_count()
 
-  var probes = List[Agent[S64]]()
-  var i = 0_s64
-  while i < 40_s64
-    probes.add_last(value: probe())
-    i = i + 1_s64
-  var results = probes.gather()
+    var probes = List[Agent[S64]]()
+    var i = 0_s64
+    while i < 40_s64
+        probes.add_last(value: probe())
+        i = i + 1_s64
+    var results = probes.gather()
 
-  var migrated = 0_s64
-  var completed = 0_s64
-  var k = 0_s64
-  while k < 40_s64
-    migrated = migrated + results[k]
-    completed = completed + 1_s64
-    k = k + 1_s64
-  show(f"probes completed: {completed}")
+    var migrated = 0_s64
+    var completed = 0_s64
+    var k = 0_s64
+    while k < 40_s64
+        migrated = migrated + results[k]
+        completed = completed + 1_s64
+        k = k + 1_s64
+    show(f"probes completed: {completed}")
 
-  # A single-worker pool never migrates (correct); a multi-worker pool must migrate at least one of 40
-  # parked probes, else coroutines are pinned to their birth worker (the 2b bug).
-  var ok = workers <= 1_u64 or migrated > 0_s64
-  if ok
-    show("scheduler migration: ok")
-  else
-    show("scheduler migration: BROKEN")
-  return
+    # A single-worker pool never migrates (correct); a multi-worker pool must migrate at least one of 40
+    # parked probes, else coroutines are pinned to their birth worker (the 2b bug).
+    var ok = workers <= 1_u64 or migrated > 0_s64
+    if ok
+        show("scheduler migration: ok")
+    else
+        show("scheduler migration: BROKEN")
+    return

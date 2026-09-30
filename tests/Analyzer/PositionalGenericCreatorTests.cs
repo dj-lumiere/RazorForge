@@ -19,17 +19,17 @@ public class PositionalGenericCreatorTests
                               import BuilderQuery
 
                               dangerous routine alloc_nested(count: U64) -> Hijacked[FrozenController]
-                                var header = FrozenController.data_size()
-                                var ctrl = Hijacked[FrozenController](rf_allocate_dynamic(size: header + U32.data_size() * count))
-                                return ctrl
+                                  var header = FrozenController.data_size()
+                                  var ctrl = Hijacked[FrozenController](rf_allocate_dynamic(size: header + U32.data_size() * count))
+                                  return ctrl
 
                               dangerous routine alloc_split(count: U64) -> Hijacked[FrozenController]
-                                var raw = rf_allocate_dynamic(size: U32.data_size() * count)
-                                var ctrl = Hijacked[FrozenController](raw)
-                                return ctrl
+                                  var raw = rf_allocate_dynamic(size: U32.data_size() * count)
+                                  var ctrl = Hijacked[FrozenController](raw)
+                                  return ctrl
 
                               routine start()
-                                return
+                                  return
                               """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -41,10 +41,10 @@ public class PositionalGenericCreatorTests
     {
         const string source = """
                               dangerous routine wrap(flag: Bool) -> Hijacked[FrozenController]
-                                return Hijacked[FrozenController](flag)
+                                  return Hijacked[FrozenController](flag)
 
                               routine start()
-                                return
+                                  return
                               """;
 
         AssertHasErrorSa(source: source, expectedErrorSubstring: "takes a 'Bool' here");

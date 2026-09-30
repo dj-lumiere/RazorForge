@@ -15,246 +15,246 @@ module Core
 ### +infinity, and an argument below -1 or NaN gives NaN.
 ### :returns: The correctly rounded log(1 + x).
 routine B64.log1p_unchecked() -> B64
-  var x = me
-  var ixu = x.to_bits()
-  var ax = ixu << 1
-  var ln1 = 0.0
-  var ln0 = 0.0
-  var eps = 0.0
-  # |x| < 0.0625
-  if ax < 0x7F60000000000000_u64
-    # |x| < 2^-53: log1p(x) rounds to x - |x|*2^-54 (and x itself for ±0)
-    if ax < 0x7940000000000000_u64
-      if ax == 0
-        return x
-      return LLVM::fma[B64](a: x.abs(), b: -0x1p-54, c: x)
-    var x2 = x *! x
-    # |x| < 2^-12
-    if ax < 0x7E60000000000000_u64
-      ln1 = x
-      eps = 0x1.ap-64 *! x
-      # |x| < 0x1.19bp-21
-      if ax < 0x7D43360000000000_u64
-        ln0 = x2 *! (-0x1.00000000001d1p-1 +! x *! 0x1.55555555558f7p-2)
-      else
-        ln0 = x2 *! ((-0x1.ffffffffffffdp-2 +! x *! 0x1.5555555555551p-2) +! x2 *! (-0x1.000000d5555e1p-2 +! x *! 0x1.99999b442f73fp-3))
+    var x = me
+    var ixu = x.to_bits()
+    var ax = ixu << 1
+    var ln1 = 0.0
+    var ln0 = 0.0
+    var eps = 0.0
+    # |x| < 0.0625
+    if ax < 0x7F60000000000000_u64
+        # |x| < 2^-53: log1p(x) rounds to x - |x|*2^-54 (and x itself for ±0)
+        if ax < 0x7940000000000000_u64
+            if ax == 0
+                return x
+            return LLVM::fma[B64](a: x.abs(), b: -0x1p-54, c: x)
+        var x2 = x *! x
+        # |x| < 2^-12
+        if ax < 0x7E60000000000000_u64
+            ln1 = x
+            eps = 0x1.ap-64 *! x
+            # |x| < 0x1.19bp-21
+            if ax < 0x7D43360000000000_u64
+                ln0 = x2 *! (-0x1.00000000001d1p-1 +! x *! 0x1.55555555558f7p-2)
+            else
+                ln0 = x2 *! ((-0x1.ffffffffffffdp-2 +! x *! 0x1.5555555555551p-2) +! x2 *! (-0x1.000000d5555e1p-2 +! x *! 0x1.99999b442f73fp-3))
+        else
+            var x3 = x2 *! x
+            var x4 = x2 *! x2
+            var hx = -0.5 *! x
+            ln1 = LLVM::fma[B64](a: hx, b: x, c: x)
+            ln0 = LLVM::fma[B64](a: hx, b: x, c: x -! ln1)
+            var f0 = (0x1.5555555555555p-2 +! x *! -0x1p-2) +! x2 *! (0x1.9999999999b41p-3 +! x *! -0x1.555555555583bp-3)
+            var f1 = (0x1.24924923f39ep-3 +! x *! -0x1.fffffffe42e43p-4) +! x2 *! (0x1.c71c75511d70bp-4 +! x *! -0x1.99999de10510fp-4)
+            var f2 = (0x1.7457e81b175f6p-4 +! x *! -0x1.554fb43e54e0fp-4) +! x2 *! (0x1.3ed68744f3d18p-4 +! x *! -0x1.28558ad5a7ac4p-4)
+            var f = f0 +! x4 *! (f1 +! x4 *! f2)
+            ln0 = ln0 +! x3 *! f
+            eps = x3 *! 0x1.b6p-52
     else
-      var x3 = x2 *! x
-      var x4 = x2 *! x2
-      var hx = -0.5 *! x
-      ln1 = LLVM::fma[B64](a: hx, b: x, c: x)
-      ln0 = LLVM::fma[B64](a: hx, b: x, c: x -! ln1)
-      var f0 = (0x1.5555555555555p-2 +! x *! -0x1p-2) +! x2 *! (0x1.9999999999b41p-3 +! x *! -0x1.555555555583bp-3)
-      var f1 = (0x1.24924923f39ep-3 +! x *! -0x1.fffffffe42e43p-4) +! x2 *! (0x1.c71c75511d70bp-4 +! x *! -0x1.99999de10510fp-4)
-      var f2 = (0x1.7457e81b175f6p-4 +! x *! -0x1.554fb43e54e0fp-4) +! x2 *! (0x1.3ed68744f3d18p-4 +! x *! -0x1.28558ad5a7ac4p-4)
-      var f = f0 +! x4 *! (f1 +! x4 *! f2)
-      ln0 = ln0 +! x3 *! f
-      eps = x3 *! 0x1.b6p-52
-  else
-    # |x| >= 0.0625: 1 + x = t + dt
-    var tf = x
-    var dtf = 0.0
-    if LLVM::reinterpret_bits[U64, S64](ixu) < 0x4340000000000000 and ixu < 0xBFF0000000000000_u64
-      # 0.0625 < x < 2^53 or -1 < x < -0.0625
-      var s = b64_log1p_fasttwosum(x: 1.0, y: x)
-      tf = s.item0
-      dtf = s.item1
-    elseif ixu < 0x4690000000000000_u64
-      # 2^53 <= x < 2^106
-      dtf = 1.0
-    elseif ixu >= 0x7FF0000000000000_u64
-      # NaN
-      if ax > 0xFFE0000000000000_u64
-        return x +! x
-      # +infinity
-      if ixu == 0x7FF0000000000000_u64
-        return x
-      # -1: pole
-      if ixu == 0xBFF0000000000000_u64
-        return B64.from_bits(bits: 0xFFF0000000000000_u64)
-      # x < -1: the default NaN of 0/0
-      return B64.from_bits(bits: 0xFFF8000000000000_u64)
-    var j = LLVM::reinterpret_bits[U64, S64](tf.to_bits() -% 0x3FE6A00000000000_u64)
-    var j1 = LLVM::reinterpret_bits[S64, U64]((j >> 46) & 0x3F)
-    var je = j >> 52
-    var rsu = B64_LOG1P_RF[j1].to_bits()
-    if je < 1022
-      rsu = rsu -% (LLVM::reinterpret_bits[S64, U64](je) << 52)
-    else
-      # scale t and dt instead of rs, which would become subnormal
-      rsu = rsu -% (1021_u64 << 52)
-      var sc = 0.125
-      if je == 1022
-        sc = 0.5
-      elseif je == 1023
-        sc = 0.25
-      tf = tf *! sc
-      dtf = dtf *! sc
-    var rs = B64.from_bits(bits: rsu)
-    var dh = rs *! tf
-    var dl = LLVM::fma[B64](a: rs, b: tf, c: -dh) +! rs *! dtf
-    var xs = b64_log1p_fasttwosum(x: dh -! 1.0, y: dl)
-    var xh = xs.item0
-    var xl = xs.item1
-    var x2 = xh *! xh
-    xl = xl +! x2 *! ((-0x1.000000000003dp-1 +! xh *! 0x1.5555555554cf5p-2) +! x2 *! ((-0x1.ffffffeca2939p-3 +! xh *! 0x1.99999a3661724p-3) +! x2 *! (-0x1.555d345bfe6fdp-3 +! xh *! 0x1.247b887a6e5edp-3)))
-    var jed = B64(from: je)
-    var l1 = 0x1.62e42fefa4p-1 *! jed
-    var l0 = -0x1.8432a1b0e2634p-43 *! jed
-    var s = b64_log1p_fastsum(xh: B64_LOG1P_LF[2_u64 * j1 + 1_u64] +! l1, xl: B64_LOG1P_LF[2_u64 * j1] +! l0, yh: xh, yl: xl)
-    ln1 = s.item0
-    ln0 = s.item1
-    eps = 0x1.ap-65
-  var lb = ln1 +! (ln0 -! eps)
-  var ub = ln1 +! (ln0 +! eps)
-  if lb != ub
-    return b64_log1p_refine(x: x, a: lb)
-  return lb
+        # |x| >= 0.0625: 1 + x = t + dt
+        var tf = x
+        var dtf = 0.0
+        if LLVM::reinterpret_bits[U64, S64](ixu) < 0x4340000000000000 and ixu < 0xBFF0000000000000_u64
+            # 0.0625 < x < 2^53 or -1 < x < -0.0625
+            var s = b64_log1p_fasttwosum(x: 1.0, y: x)
+            tf = s.item0
+            dtf = s.item1
+        elseif ixu < 0x4690000000000000_u64
+            # 2^53 <= x < 2^106
+            dtf = 1.0
+        elseif ixu >= 0x7FF0000000000000_u64
+            # NaN
+            if ax > 0xFFE0000000000000_u64
+                return x +! x
+            # +infinity
+            if ixu == 0x7FF0000000000000_u64
+                return x
+            # -1: pole
+            if ixu == 0xBFF0000000000000_u64
+                return B64.from_bits(bits: 0xFFF0000000000000_u64)
+            # x < -1: the default NaN of 0/0
+            return B64.from_bits(bits: 0xFFF8000000000000_u64)
+        var j = LLVM::reinterpret_bits[U64, S64](tf.to_bits() -% 0x3FE6A00000000000_u64)
+        var j1 = LLVM::reinterpret_bits[S64, U64]((j >> 46) & 0x3F)
+        var je = j >> 52
+        var rsu = B64_LOG1P_RF[j1].to_bits()
+        if je < 1022
+            rsu = rsu -% (LLVM::reinterpret_bits[S64, U64](je) << 52)
+        else
+            # scale t and dt instead of rs, which would become subnormal
+            rsu = rsu -% (1021_u64 << 52)
+            var sc = 0.125
+            if je == 1022
+                sc = 0.5
+            elseif je == 1023
+                sc = 0.25
+            tf = tf *! sc
+            dtf = dtf *! sc
+        var rs = B64.from_bits(bits: rsu)
+        var dh = rs *! tf
+        var dl = LLVM::fma[B64](a: rs, b: tf, c: -dh) +! rs *! dtf
+        var xs = b64_log1p_fasttwosum(x: dh -! 1.0, y: dl)
+        var xh = xs.item0
+        var xl = xs.item1
+        var x2 = xh *! xh
+        xl = xl +! x2 *! ((-0x1.000000000003dp-1 +! xh *! 0x1.5555555554cf5p-2) +! x2 *! ((-0x1.ffffffeca2939p-3 +! xh *! 0x1.99999a3661724p-3) +! x2 *! (-0x1.555d345bfe6fdp-3 +! xh *! 0x1.247b887a6e5edp-3)))
+        var jed = B64(from: je)
+        var l1 = 0x1.62e42fefa4p-1 *! jed
+        var l0 = -0x1.8432a1b0e2634p-43 *! jed
+        var s = b64_log1p_fastsum(xh: B64_LOG1P_LF[2_u64 * j1 + 1_u64] +! l1, xl: B64_LOG1P_LF[2_u64 * j1] +! l0, yh: xh, yl: xl)
+        ln1 = s.item0
+        ln0 = s.item1
+        eps = 0x1.ap-65
+    var lb = ln1 +! (ln0 -! eps)
+    var ub = ln1 +! (ln0 +! eps)
+    if lb != ub
+        return b64_log1p_refine(x: x, a: lb)
+    return lb
 
 ### The accurate path of `log1p`, taken when the fast path cannot decide the rounding.
 ### :param x: The argument, finite and above -1.
 ### :param a: The fast path's approximation of log1p(x).
 ### :returns: The correctly rounded log(1 + x).
 secret routine b64_log1p_refine(x: B64, a: B64) -> B64
-  var ixu = x.to_bits()
-  var ax = ixu << 1
-  var ln22 = 0.0
-  var ln21 = 0.0
-  var ln20 = 0.0
-  if ax < 0x7EA0000000000000_u64
-    if ax < 0x7940000000000000_u64
-      if ax == 0
-        return x
-      return LLVM::fma[B64](a: x.abs(), b: -0x1p-54, c: x)
-    var x2h = x *! x
-    var x2l = LLVM::fma[B64](a: x, b: x, c: -x2h)
-    var x3 = b64_log1p_mulddd(x: x, ch: x2h, cl: x2l)
-    var sl = x *! ((-0x1.fffffffffc555p-4 +! x *! 0x1.c71c71c7185aap-4) +! x2h *! (-0x1.9999d44449a31p-4 +! x *! 0x1.745d51f1817c7p-4))
-    # Horner evaluation of the double-double coefficients cz, in the double x
-    var i = 4_u64
-    var h0 = b64_log1p_fasttwosum(x: B64_LOG1P_CZ[2_u64 * i], y: sl)
-    var ch = h0.item0
-    var cl = B64_LOG1P_CZ[2_u64 * i + 1_u64] +! h0.item1
-    while i > 0_u64
-      i = i - 1_u64
-      var m = b64_log1p_mulddd(x: x, ch: ch, cl: cl)
-      var t = b64_log1p_fastsum(xh: B64_LOG1P_CZ[2_u64 * i], xl: B64_LOG1P_CZ[2_u64 * i + 1_u64], yh: m.item0, yl: m.item1)
-      ch = t.item0
-      cl = t.item1
-    var p = b64_log1p_muldd(xh: ch, xl: cl, ch: x3.item0, cl: x3.item1)
-    x2h = x2h *! -0.5
-    x2l = x2l *! -0.5
-    ln22 = x
-    var q = b64_log1p_fastsum(xh: x2h, xl: x2l, yh: p.item0, yl: p.item1)
-    ln21 = q.item0
-    ln20 = q.item1
-  else
-    var j = LLVM::float_to_signed[B64, S64](LLVM::rint[B64](value: a *! 0x1.71547652b82fep+16))
-    var ii = j + 34952
-    var j1 = LLVM::reinterpret_bits[S64, U64]((ii >> 12) & 0xF)
-    var j2 = LLVM::reinterpret_bits[S64, U64]((ii >> 8) & 0xF)
-    var j3 = LLVM::reinterpret_bits[S64, U64]((ii >> 4) & 0xF)
-    var j4 = LLVM::reinterpret_bits[S64, U64](ii & 0xF)
-    var je = ii >> 16
-    var k1 = 3_u64 * j1
-    var k2 = 3_u64 * (16_u64 + j2)
-    var k3 = 3_u64 * (32_u64 + j3)
-    var k4 = 3_u64 * (48_u64 + j4)
-    var ll0 = (B64_LOG1P_LN[k1] +! B64_LOG1P_LN[k2]) +! (B64_LOG1P_LN[k3] +! B64_LOG1P_LN[k4])
-    var ll1 = (B64_LOG1P_LN[k1 + 1_u64] +! B64_LOG1P_LN[k2 + 1_u64]) +! (B64_LOG1P_LN[k3 + 1_u64] +! B64_LOG1P_LN[k4 + 1_u64])
-    var ll2 = (B64_LOG1P_LN[k1 + 2_u64] +! B64_LOG1P_LN[k2 + 2_u64]) +! (B64_LOG1P_LN[k3 + 2_u64] +! B64_LOG1P_LN[k4 + 2_u64])
-    # 1 + x = t + dt
-    var tf = x
-    var dtu = 0_u64
-    if LLVM::reinterpret_bits[U64, S64](ixu) < 0x4690000000000000 and ixu < 0xBFE0000000000000_u64
-      var s = b64_log1p_twosum(xh: 1.0, ch: x)
-      tf = s.item0
-      dtu = s.item1.to_bits()
-      # a zero dt of either sign counts as +0
-      if dtu << 1 == 0
-        dtu = 0
-    elseif LLVM::reinterpret_bits[U64, S64](ixu) < 0x4690000000000000
-      tf = 1.0 +! x
-    var escale = LLVM::reinterpret_bits[S64, U64](je) << 52
-    var t = B64.from_bits(bits: tf.to_bits() -% escale)
-    var t12 = B64_LOG1P_RT[j1] *! B64_LOG1P_RT[16_u64 + j2]
-    var t34 = B64_LOG1P_RT[32_u64 + j3] *! B64_LOG1P_RT[48_u64 + j4]
-    var th = t12 *! t34
-    var tl = LLVM::fma[B64](a: t12, b: t34, c: -th)
-    var dh = th *! t
-    var dl = LLVM::fma[B64](a: th, b: t, c: -dh)
-    var sh = tl *! t
-    var sl = LLVM::fma[B64](a: tl, b: t, c: -sh)
-    var xs = b64_log1p_fasttwosum(x: dh -! 1.0, y: dl)
-    xs = b64_log1p_fastsum(xh: xs.item0, xl: xs.item1, yh: sh, yl: sl)
-    if dtu != 0
-      var dt = B64.from_bits(bits: dtu -% escale)
-      var ddh = th *! dt
-      var ddl = LLVM::fma[B64](a: th, b: dt, c: -ddh) +! tl *! dt
-      xs = b64_log1p_fastsum(xh: xs.item0, xl: xs.item1, yh: ddh, yl: ddl)
-    var xh = xs.item0
-    var xl = xs.item1
-    sl = xh *! ((-0x1.5555555555555p-3 +! xh *! 0x1.2492492492492p-3) +! (xh *! xh) *! (-0x1.0000000073334p-3 +! xh *! 0x1.c71c71c802f68p-4))
-    # Horner evaluation of the double-double coefficients cy, in the double-double (xh, xl)
-    var i = 4_u64
-    var h0 = b64_log1p_fasttwosum(x: B64_LOG1P_CY[2_u64 * i], y: sl)
-    var ch = h0.item0
-    var cl = B64_LOG1P_CY[2_u64 * i + 1_u64] +! h0.item1
-    while i > 0_u64
-      i = i - 1_u64
-      var m = b64_log1p_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
-      var u = b64_log1p_fastsum(xh: B64_LOG1P_CY[2_u64 * i], xl: B64_LOG1P_CY[2_u64 * i + 1_u64], yh: m.item0, yl: m.item1)
-      ch = u.item0
-      cl = u.item1
-    var p = b64_log1p_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
-    if je != 0
-      var jed = B64(from: je)
-      ln22 = 0x1.62e42fefa4p-1 *! jed
-      ln21 = -0x1.8432a1b0e28p-43 *! jed
-      ln20 = 0x1.cc01f97b57a08p-87 *! jed
-      ln22 = ln22 +! ll2
-      var q = b64_log1p_fastsum(xh: ln21, xl: ln20, yh: ll1, yl: ll0)
-      ln21 = q.item0
-      ln20 = q.item1
+    var ixu = x.to_bits()
+    var ax = ixu << 1
+    var ln22 = 0.0
+    var ln21 = 0.0
+    var ln20 = 0.0
+    if ax < 0x7EA0000000000000_u64
+        if ax < 0x7940000000000000_u64
+            if ax == 0
+                return x
+            return LLVM::fma[B64](a: x.abs(), b: -0x1p-54, c: x)
+        var x2h = x *! x
+        var x2l = LLVM::fma[B64](a: x, b: x, c: -x2h)
+        var x3 = b64_log1p_mulddd(x: x, ch: x2h, cl: x2l)
+        var sl = x *! ((-0x1.fffffffffc555p-4 +! x *! 0x1.c71c71c7185aap-4) +! x2h *! (-0x1.9999d44449a31p-4 +! x *! 0x1.745d51f1817c7p-4))
+        # Horner evaluation of the double-double coefficients cz, in the double x
+        var i = 4_u64
+        var h0 = b64_log1p_fasttwosum(x: B64_LOG1P_CZ[2_u64 * i], y: sl)
+        var ch = h0.item0
+        var cl = B64_LOG1P_CZ[2_u64 * i + 1_u64] +! h0.item1
+        while i > 0_u64
+            i = i - 1_u64
+            var m = b64_log1p_mulddd(x: x, ch: ch, cl: cl)
+            var t = b64_log1p_fastsum(xh: B64_LOG1P_CZ[2_u64 * i], xl: B64_LOG1P_CZ[2_u64 * i + 1_u64], yh: m.item0, yl: m.item1)
+            ch = t.item0
+            cl = t.item1
+        var p = b64_log1p_muldd(xh: ch, xl: cl, ch: x3.item0, cl: x3.item1)
+        x2h = x2h *! -0.5
+        x2l = x2l *! -0.5
+        ln22 = x
+        var q = b64_log1p_fastsum(xh: x2h, xl: x2l, yh: p.item0, yl: p.item1)
+        ln21 = q.item0
+        ln20 = q.item1
     else
-      ln22 = ll2
-      ln21 = ll1
-      ln20 = ll0
-    var r = b64_log1p_sum(xh: ln21, xl: ln20, ch: p.item0, cl: p.item1)
-    ln21 = r.item0
-    ln20 = r.item1
-  var w = b64_log1p_fasttwosum(x: ln22, y: ln21)
-  ln22 = w.item0
-  w = b64_log1p_fasttwosum(x: w.item1, y: ln20)
-  ln21 = w.item0
-  ln20 = w.item1
-  var tb = ln21.to_bits()
-  # ln21 has an all-zero mantissa: nudge it one ulp toward ln20 so that ln22 + ln21 rounds correctly
-  if tb & 0x000FFFFFFFFFFFFF_u64 == 0
-    if (ln20.to_bits() ^ tb) >>> 63 == 1
-      tb = tb -% 1
-    else
-      tb = tb +% 1
-    ln21 = B64.from_bits(bits: tb)
-  return ln22 +! ln21
+        var j = LLVM::float_to_signed[B64, S64](LLVM::rint[B64](value: a *! 0x1.71547652b82fep+16))
+        var ii = j + 34952
+        var j1 = LLVM::reinterpret_bits[S64, U64]((ii >> 12) & 0xF)
+        var j2 = LLVM::reinterpret_bits[S64, U64]((ii >> 8) & 0xF)
+        var j3 = LLVM::reinterpret_bits[S64, U64]((ii >> 4) & 0xF)
+        var j4 = LLVM::reinterpret_bits[S64, U64](ii & 0xF)
+        var je = ii >> 16
+        var k1 = 3_u64 * j1
+        var k2 = 3_u64 * (16_u64 + j2)
+        var k3 = 3_u64 * (32_u64 + j3)
+        var k4 = 3_u64 * (48_u64 + j4)
+        var ll0 = (B64_LOG1P_LN[k1] +! B64_LOG1P_LN[k2]) +! (B64_LOG1P_LN[k3] +! B64_LOG1P_LN[k4])
+        var ll1 = (B64_LOG1P_LN[k1 + 1_u64] +! B64_LOG1P_LN[k2 + 1_u64]) +! (B64_LOG1P_LN[k3 + 1_u64] +! B64_LOG1P_LN[k4 + 1_u64])
+        var ll2 = (B64_LOG1P_LN[k1 + 2_u64] +! B64_LOG1P_LN[k2 + 2_u64]) +! (B64_LOG1P_LN[k3 + 2_u64] +! B64_LOG1P_LN[k4 + 2_u64])
+        # 1 + x = t + dt
+        var tf = x
+        var dtu = 0_u64
+        if LLVM::reinterpret_bits[U64, S64](ixu) < 0x4690000000000000 and ixu < 0xBFE0000000000000_u64
+            var s = b64_log1p_twosum(xh: 1.0, ch: x)
+            tf = s.item0
+            dtu = s.item1.to_bits()
+            # a zero dt of either sign counts as +0
+            if dtu << 1 == 0
+                dtu = 0
+        elseif LLVM::reinterpret_bits[U64, S64](ixu) < 0x4690000000000000
+            tf = 1.0 +! x
+        var escale = LLVM::reinterpret_bits[S64, U64](je) << 52
+        var t = B64.from_bits(bits: tf.to_bits() -% escale)
+        var t12 = B64_LOG1P_RT[j1] *! B64_LOG1P_RT[16_u64 + j2]
+        var t34 = B64_LOG1P_RT[32_u64 + j3] *! B64_LOG1P_RT[48_u64 + j4]
+        var th = t12 *! t34
+        var tl = LLVM::fma[B64](a: t12, b: t34, c: -th)
+        var dh = th *! t
+        var dl = LLVM::fma[B64](a: th, b: t, c: -dh)
+        var sh = tl *! t
+        var sl = LLVM::fma[B64](a: tl, b: t, c: -sh)
+        var xs = b64_log1p_fasttwosum(x: dh -! 1.0, y: dl)
+        xs = b64_log1p_fastsum(xh: xs.item0, xl: xs.item1, yh: sh, yl: sl)
+        if dtu != 0
+            var dt = B64.from_bits(bits: dtu -% escale)
+            var ddh = th *! dt
+            var ddl = LLVM::fma[B64](a: th, b: dt, c: -ddh) +! tl *! dt
+            xs = b64_log1p_fastsum(xh: xs.item0, xl: xs.item1, yh: ddh, yl: ddl)
+        var xh = xs.item0
+        var xl = xs.item1
+        sl = xh *! ((-0x1.5555555555555p-3 +! xh *! 0x1.2492492492492p-3) +! (xh *! xh) *! (-0x1.0000000073334p-3 +! xh *! 0x1.c71c71c802f68p-4))
+        # Horner evaluation of the double-double coefficients cy, in the double-double (xh, xl)
+        var i = 4_u64
+        var h0 = b64_log1p_fasttwosum(x: B64_LOG1P_CY[2_u64 * i], y: sl)
+        var ch = h0.item0
+        var cl = B64_LOG1P_CY[2_u64 * i + 1_u64] +! h0.item1
+        while i > 0_u64
+            i = i - 1_u64
+            var m = b64_log1p_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+            var u = b64_log1p_fastsum(xh: B64_LOG1P_CY[2_u64 * i], xl: B64_LOG1P_CY[2_u64 * i + 1_u64], yh: m.item0, yl: m.item1)
+            ch = u.item0
+            cl = u.item1
+        var p = b64_log1p_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+        if je != 0
+            var jed = B64(from: je)
+            ln22 = 0x1.62e42fefa4p-1 *! jed
+            ln21 = -0x1.8432a1b0e28p-43 *! jed
+            ln20 = 0x1.cc01f97b57a08p-87 *! jed
+            ln22 = ln22 +! ll2
+            var q = b64_log1p_fastsum(xh: ln21, xl: ln20, yh: ll1, yl: ll0)
+            ln21 = q.item0
+            ln20 = q.item1
+        else
+            ln22 = ll2
+            ln21 = ll1
+            ln20 = ll0
+        var r = b64_log1p_sum(xh: ln21, xl: ln20, ch: p.item0, cl: p.item1)
+        ln21 = r.item0
+        ln20 = r.item1
+    var w = b64_log1p_fasttwosum(x: ln22, y: ln21)
+    ln22 = w.item0
+    w = b64_log1p_fasttwosum(x: w.item1, y: ln20)
+    ln21 = w.item0
+    ln20 = w.item1
+    var tb = ln21.to_bits()
+    # ln21 has an all-zero mantissa: nudge it one ulp toward ln20 so that ln22 + ln21 rounds correctly
+    if tb & 0x000FFFFFFFFFFFFF_u64 == 0
+        if (ln20.to_bits() ^ tb) >>> 63 == 1
+            tb = tb -% 1
+        else
+            tb = tb +% 1
+        ln21 = B64.from_bits(bits: tb)
+    return ln22 +! ln21
 
 ### Error-free sum of `x` and `y` when |x| >= |y|.
 ### :param x: The larger addend.
 ### :param y: The smaller addend.
 ### :returns: (s, e) with s = x + y rounded and s + e = x + y exactly.
 secret routine b64_log1p_fasttwosum(x: B64, y: B64) -> (B64, B64)
-  var s = x +! y
-  var z = s -! x
-  return (s, y -! z)
+    var s = x +! y
+    var z = s -! x
+    return (s, y -! z)
 
 ### Error-free sum of `xh` and `ch` in any order of magnitude.
 ### :param xh: The first addend.
 ### :param ch: The second addend.
 ### :returns: (s, e) with s = xh + ch rounded and s + e = xh + ch exactly.
 secret routine b64_log1p_twosum(xh: B64, ch: B64) -> (B64, B64)
-  var s = xh +! ch
-  var d = s -! xh
-  return (s, (ch -! d) +! (xh +! (d -! s)))
+    var s = xh +! ch
+    var d = s -! xh
+    return (s, (ch -! d) +! (xh +! (d -! s)))
 
 ### Sum of the double-doubles (xh, xl) and (yh, yl) when |xh| >= |yh|.
 ### :param xh: The high part of the first addend.
@@ -263,8 +263,8 @@ secret routine b64_log1p_twosum(xh: B64, ch: B64) -> (B64, B64)
 ### :param yl: The low part of the second addend.
 ### :returns: The double-double sum (high, low).
 secret routine b64_log1p_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
-  var s = b64_log1p_fasttwosum(x: xh, y: yh)
-  return (s.item0, (xl +! yl) +! s.item1)
+    var s = b64_log1p_fasttwosum(x: xh, y: yh)
+    return (s.item0, (xl +! yl) +! s.item1)
 
 ### Sum of the double-doubles (xh, xl) and (ch, cl) in any order of magnitude.
 ### :param xh: The high part of the first addend.
@@ -273,8 +273,8 @@ secret routine b64_log1p_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B6
 ### :param cl: The low part of the second addend.
 ### :returns: The double-double sum (high, low).
 secret routine b64_log1p_sum(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
-  var s = b64_log1p_twosum(xh: xh, ch: ch)
-  return (s.item0, (xl +! cl) +! s.item1)
+    var s = b64_log1p_twosum(xh: xh, ch: ch)
+    return (s.item0, (xl +! cl) +! s.item1)
 
 ### Product of the double-doubles (xh, xl) and (ch, cl).
 ### :param xh: The high part of the first factor.
@@ -283,8 +283,8 @@ secret routine b64_log1p_sum(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
 ### :param cl: The low part of the second factor.
 ### :returns: The double-double product (high, low).
 secret routine b64_log1p_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
-  var ahhh = ch *! xh
-  return (ahhh, (cl *! xh +! ch *! xl) +! LLVM::fma[B64](a: ch, b: xh, c: -ahhh))
+    var ahhh = ch *! xh
+    return (ahhh, (cl *! xh +! ch *! xl) +! LLVM::fma[B64](a: ch, b: xh, c: -ahhh))
 
 ### Product of the double `x` and the double-double (ch, cl).
 ### :param x: The first factor.
@@ -292,8 +292,8 @@ secret routine b64_log1p_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
 ### :param cl: The low part of the second factor.
 ### :returns: The double-double product (high, low).
 secret routine b64_log1p_mulddd(x: B64, ch: B64, cl: B64) -> (B64, B64)
-  var ahhh = ch *! x
-  return (ahhh, cl *! x +! LLVM::fma[B64](a: ch, b: x, c: -ahhh))
+    var ahhh = ch *! x
+    return (ahhh, cl *! x +! LLVM::fma[B64](a: ch, b: x, c: -ahhh))
 
 # Reciprocals rf[j] of the fast path, from about sqrt(2) down to 1/sqrt(2).
 secret preset B64_LOG1P_RF: Array[B64, 64] = [0x1.6816818p+0_b64, 0x1.642c858p+0_b64, 0x1.605816p+0_b64, 0x1.5c98828p+0_b64, 0x1.58ed23p+0_b64, 0x1.5555558p+0_b64, 0x1.51d07e8p+0_b64, 0x1.4e5e0a8p+0_b64, 0x1.4afd6ap+0_b64, 0x1.47ae148p+0_b64, 0x1.446f868p+0_b64, 0x1.4141418p+0_b64, 0x1.3e22ccp+0_b64, 0x1.3b13b1p+0_b64, 0x1.381381p+0_b64, 0x1.3521cf8p+0_b64, 0x1.323e348p+0_b64, 0x1.2f684cp+0_b64, 0x1.2c9fb5p+0_b64, 0x1.29e4128p+0_b64, 0x1.27350b8p+0_b64, 0x1.249249p+0_b64, 0x1.21fb78p+0_b64, 0x1.1f7048p+0_b64, 0x1.1cf06bp+0_b64, 0x1.1a7b96p+0_b64, 0x1.181181p+0_b64, 0x1.15b1e6p+0_b64, 0x1.135c81p+0_b64, 0x1.111111p+0_b64, 0x1.0ecf568p+0_b64, 0x1.0c9715p+0_b64, 0x1.0a68108p+0_b64, 0x1.0842108p+0_b64, 0x1.0624ddp+0_b64, 0x1.041041p+0_b64, 0x1.020408p+0_b64, 0x1p+0_b64, 0x1.f81f82p-1_b64, 0x1.f07c1fp-1_b64, 0x1.e9131a8p-1_b64, 0x1.e1e1e2p-1_b64, 0x1.dae6078p-1_b64, 0x1.d41d42p-1_b64, 0x1.cd85688p-1_b64, 0x1.c71c72p-1_b64, 0x1.c0e07p-1_b64, 0x1.bacf918p-1_b64, 0x1.b4e81b8p-1_b64, 0x1.af286cp-1_b64, 0x1.a98ef6p-1_b64, 0x1.a41a418p-1_b64, 0x1.9ec8e98p-1_b64, 0x1.9999998p-1_b64, 0x1.948b1p-1_b64, 0x1.8f9c19p-1_b64, 0x1.8acb91p-1_b64, 0x1.8618618p-1_b64, 0x1.8181818p-1_b64, 0x1.7d05f4p-1_b64, 0x1.78a4c8p-1_b64, 0x1.745d178p-1_b64, 0x1.702e06p-1_b64, 0x1.6c16c18p-1_b64]

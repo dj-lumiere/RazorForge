@@ -18,8 +18,8 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
-                                                    var ch: Character = 'A'
-                                                    return
+                                                      var ch: Character = 'A'
+                                                      return
                                                   """);
 
         Assert.Empty(collection: result.Errors);
@@ -33,8 +33,8 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
-                                                    var ch: Character = "Hello"[0]
-                                                    return
+                                                      var ch: Character = "Hello"[0]
+                                                      return
                                                   """);
 
         Assert.Empty(collection: result.Errors);
@@ -48,15 +48,15 @@ public class TextBytesInteropTests
     {
         AnalysisResult valid = AnalyzeSa(source: """
                                                  routine test(ch: Character)
-                                                   var ok: Bool = ch.is_alphabetic()
-                                                   return
+                                                     var ok: Bool = ch.is_alphabetic()
+                                                     return
                                                  """);
         Assert.Empty(collection: valid.Errors);
 
         AnalysisResult invalid = AnalyzeSa(source: """
                                                    routine test(ch: Character)
-                                                     var bad: Bool = ch.is_letter()
-                                                     return
+                                                       var bad: Bool = ch.is_letter()
+                                                       return
                                                    """);
         // `is_letter()` calls a routine that does not exist on Character (the API is
         // `is_alphabetic`), so it is a memberRoutineNotFound — `.name()` is a routine call, distinct
@@ -75,10 +75,10 @@ public class TextBytesInteropTests
         // routine; the non-failable counterpart is `decode_as_utf8_lossy()`. RF-S458 otherwise.
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test!()
-                                                    var text: Text = "Hello, 계"
-                                                    var bytes: Bytes = text.encode_as_utf8()
-                                                    var roundtrip: Text = bytes.decode_as_utf8()
-                                                    return
+                                                      var text: Text = "Hello, 계"
+                                                      var bytes: Bytes = text.encode_as_utf8()
+                                                      var roundtrip: Text = bytes.decode_as_utf8()
+                                                      return
                                                   """);
 
         Assert.Empty(collection: result.Errors);
@@ -95,10 +95,10 @@ public class TextBytesInteropTests
         // form does not exist (the lossy counterpart is `interpret_as_utf8_lossy()`). RF-S458.
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test!()
-                                                    var bytes: Bytes = "Hi".encode_as_utf8()
-                                                    each ch in bytes.interpret_as_utf8()
-                                                      var cp: U32 = ch.codepoint()
-                                                    return
+                                                      var bytes: Bytes = "Hi".encode_as_utf8()
+                                                      each ch in bytes.interpret_as_utf8()
+                                                          var cp: U32 = ch.codepoint()
+                                                      return
                                                   """);
 
         Assert.Empty(collection: result.Errors);
@@ -112,11 +112,11 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
-                                                    var bytes: Bytes = b"\x80ABC"
-                                                    var text: Text = bytes.decode_as_utf8_lossy()
-                                                    each ch in bytes.interpret_as_utf8_lossy()
-                                                      var cp: U32 = ch.codepoint()
-                                                    return
+                                                      var bytes: Bytes = b"\x80ABC"
+                                                      var text: Text = bytes.decode_as_utf8_lossy()
+                                                      each ch in bytes.interpret_as_utf8_lossy()
+                                                          var cp: U32 = ch.codepoint()
+                                                      return
                                                   """);
 
         Assert.Empty(collection: result.Errors);
@@ -130,12 +130,12 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test!()
-                                                    var bytes: Bytes = b"ABC"
-                                                    var text: Text = bytes.decode_as_utf8()
-                                                    var view = bytes.interpret_as_utf8()
-                                                    each ch in view
-                                                      var cp: U32 = ch.codepoint()
-                                                    absent
+                                                      var bytes: Bytes = b"ABC"
+                                                      var text: Text = bytes.decode_as_utf8()
+                                                      var view = bytes.interpret_as_utf8()
+                                                      each ch in view
+                                                          var cp: U32 = ch.codepoint()
+                                                      absent
                                                   """);
 
         Assert.Empty(collection: result.Errors);

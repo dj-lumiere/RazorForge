@@ -32,34 +32,34 @@ public sealed class BaseObjectCache
         "module Base\n" +
         "import IO/Console\n" +
         "routine start()\n" +
-        "  var xs = [1, 2, 3]\n" +
-        "  xs.add_last(value: 4)\n" +
-        "  xs.add_first(value: 0)\n" +
-        "  show(f\"xs: {xs} size {xs.count()} first {xs[0]}\")\n" +
-        "  var sum = 0\n" +
-        "  each x in xs\n" +
-        "    sum = sum + x\n" +
-        "  show(f\"sum: {sum}\")\n" +
-        "  var names = [\"alpha\", \"beta\"]\n" +
-        "  names.add_last(value: \"gamma\")\n" +
-        "  show(f\"names: {names} have beta {names have \"beta\"}\")\n" +
-        "  var d = Dict[Text, S64]()\n" +
-        "  discard d.add(key: \"one\", value: 1)\n" +
-        "  discard d.add(key: \"two\", value: 2)\n" +
-        "  show(f\"d: {d} d[one] {d[\"one\"]} have two {d have \"two\"}\")\n" +
-        "  var di = Dict[S64, S64]()\n" +
-        "  discard di.add(key: 10, value: 100)\n" +
-        "  show(f\"di: {di} size {di.count()}\")\n" +
-        "  var s = Set[S64]()\n" +
-        "  discard s.add(value: 7)\n" +
-        "  discard s.add(value: 8)\n" +
-        "  show(f\"s: {s} size {s.count()} have 7 {s have 7}\")\n" +
-        "  var b = true\n" +
-        "  var n: S64 = 42\n" +
-        "  var u: U64 = 42\n" +
-        "  show(f\"scalars: {b} {n} {u} {n + 1} {n // 2}\")\n" +
-        "  show(\"BASE_SEED_DONE\")\n" +
-        "  return\n";
+        "    var xs = [1, 2, 3]\n" +
+        "    xs.add_last(value: 4)\n" +
+        "    xs.add_first(value: 0)\n" +
+        "    show(f\"xs: {xs} size {xs.count()} first {xs[0]}\")\n" +
+        "    var sum = 0\n" +
+        "    each x in xs\n" +
+        "        sum = sum + x\n" +
+        "    show(f\"sum: {sum}\")\n" +
+        "    var names = [\"alpha\", \"beta\"]\n" +
+        "    names.add_last(value: \"gamma\")\n" +
+        "    show(f\"names: {names} have beta {names have \"beta\"}\")\n" +
+        "    var d = Dict[Text, S64]()\n" +
+        "    discard d.add(key: \"one\", value: 1)\n" +
+        "    discard d.add(key: \"two\", value: 2)\n" +
+        "    show(f\"d: {d} d[one] {d[\"one\"]} have two {d have \"two\"}\")\n" +
+        "    var di = Dict[S64, S64]()\n" +
+        "    discard di.add(key: 10, value: 100)\n" +
+        "    show(f\"di: {di} size {di.count()}\")\n" +
+        "    var s = Set[S64]()\n" +
+        "    discard s.add(value: 7)\n" +
+        "    discard s.add(value: 8)\n" +
+        "    show(f\"s: {s} size {s.count()} have 7 {s have 7}\")\n" +
+        "    var b = true\n" +
+        "    var n: S64 = 42\n" +
+        "    var u: U64 = 42\n" +
+        "    show(f\"scalars: {b} {n} {u} {n + 1} {n // 2}\")\n" +
+        "    show(\"BASE_SEED_DONE\")\n" +
+        "    return\n";
 
     private readonly string _dir;
 

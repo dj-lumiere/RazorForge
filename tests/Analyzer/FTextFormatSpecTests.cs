@@ -18,8 +18,8 @@ public class FTextFormatSpecTests
     {
         string source = """
                         routine test(x: S64)
-                          var msg = f"{x:?}"
-                          return
+                            var msg = f"{x:?}"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -34,8 +34,8 @@ public class FTextFormatSpecTests
     {
         string source = """
                         routine test(x: S64)
-                          var msg = f"{x:=}"
-                          return
+                            var msg = f"{x:=}"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -50,8 +50,8 @@ public class FTextFormatSpecTests
     {
         string source = """
                         routine test(x: S64)
-                          var msg = f"{x:=?}"
-                          return
+                            var msg = f"{x:=?}"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -66,8 +66,8 @@ public class FTextFormatSpecTests
     {
         string source = """
                         routine test(x: S64)
-                          var msg = f"{x}"
-                          return
+                            var msg = f"{x}"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -82,8 +82,8 @@ public class FTextFormatSpecTests
     {
         string source = """
                         routine test(x: S64)
-                          var msg = f"{x:?=}"
-                          return
+                            var msg = f"{x:?=}"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -98,8 +98,8 @@ public class FTextFormatSpecTests
     {
         string source = """
                         routine test(x: S64)
-                          var msg = f"{x:d}"
-                          return
+                            var msg = f"{x:d}"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -114,8 +114,8 @@ public class FTextFormatSpecTests
     {
         string source = """
                         routine test(x: S64)
-                          var msg = f"{x:0.2f}"
-                          return
+                            var msg = f"{x:0.2f}"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

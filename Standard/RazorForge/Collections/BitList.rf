@@ -32,16 +32,16 @@ import BuilderQuery
 ### :see: {BitArray[N]} for a compile-time-sized, value-semantic alternative.
 entity BitList obeys Iterable[Bool], MutableIndexable[Bool], Sized, ListLiteral[Bool]
 relates BitListEmittable as Iter
-  ### Stores the heap-allocated word buffer that packs the bits.
-  secret data: Hijacked[U64]      # Heap-allocated word array (64 bits per U64)
-  ### Stores the number of logical bits currently present in the list.
-  secret count: U64              # Current number of bits
-  ### Stores the number of bits that can be appended before growth is required.
-  ### Capacity is tracked in bits rather than words.
-  secret capacity: U64           # Total bit capacity (in bits, not words)
-  ### How many `each` loops and in-place element accesses are using the element positions right now.
-  ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
-  secret shape_users: U64
+    ### Stores the heap-allocated word buffer that packs the bits.
+    secret data: Hijacked[U64]      # Heap-allocated word array (64 bits per U64)
+    ### Stores the number of logical bits currently present in the list.
+    secret count: U64              # Current number of bits
+    ### Stores the number of bits that can be appended before growth is required.
+    ### Capacity is tracked in bits rather than words.
+    secret capacity: U64           # Total bit capacity (in bits, not words)
+    ### How many `each` loops and in-place element accesses are using the element positions right now.
+    ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
+    secret shape_users: U64
 
 # ============================================================================
 # Creators
@@ -51,25 +51,25 @@ relates BitListEmittable as Iter
 ### The first append allocates the initial packed word buffer.
 ### :returns: An empty `BitList`.
 routine BitList() -> BitList
-  # Create empty bit list with default capacity
-  return BitList(
-    data: hijacked_none[U64](),
-    count: 0u64,
-    capacity: 0u64,
-    shape_users: 0u64
-  )
+    # Create empty bit list with default capacity
+    return BitList(
+        data: hijacked_none[U64](),
+        count: 0u64,
+        capacity: 0u64,
+        shape_users: 0u64
+    )
 
 ### Creates a bit list containing exactly the given `elements`, in order. Variadic constructor behind the
 ### `[a, b, c]` list-literal syntax (the `ListLiteral` opt-in).
 ### :param elements: The boolean bits to populate the bit list with, in order.
 ### :returns: A bit list of the given bits.
 common routine BitList.from_literal(elements...: Bool) -> BitList
-  var result = BitList()
-  var i = 0u64
-  while i < elements.count()
-    result.add_last(value: elements[i])
-    i = i +% 1u64
-  return result
+    var result = BitList()
+    var i = 0u64
+    while i < elements.count()
+        result.add_last(value: elements[i])
+        i = i +% 1u64
+    return result
 
 ### Creates an empty bit list with storage reserved for at least `capacity` bits.
 ### Reserving ahead of time avoids repeated reallocations when building large
@@ -77,18 +77,18 @@ common routine BitList.from_literal(elements...: Bool) -> BitList
 ### :param capacity: The minimum number of bits to reserve.
 ### :returns: An empty `BitList` with preallocated storage.
 routine BitList(capacity: U64) -> BitList
-  # Create bit list with pre-allocated capacity (in bits)
-  var word_size = (capacity +% 63u64) >> 6u32
-  danger
-    var data_ptr = Hijacked[U64](C::rf_allocate_dynamic_uninit(word_size *% 8u64))
-    # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
-    # and mid-word appends only read bits we've already written ourselves.
-    return BitList(
-      data: data_ptr,
-      count: 0u64,
-      capacity: capacity,
-      shape_users: 0u64
-    )
+    # Create bit list with pre-allocated capacity (in bits)
+    var word_size = (capacity +% 63u64) >> 6u32
+    danger
+        var data_ptr = Hijacked[U64](C::rf_allocate_dynamic_uninit(word_size *% 8u64))
+        # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
+        # and mid-word appends only read bits we've already written ourselves.
+        return BitList(
+            data: data_ptr,
+            count: 0u64,
+            capacity: capacity,
+            shape_users: 0u64
+        )
 
 # ============================================================================
 # Internal Helpers
@@ -99,16 +99,16 @@ routine BitList(capacity: U64) -> BitList
 ### :returns: The zero-based `U64` word index containing that bit.
 @readonly
 routine BitList.word_index(bit_index: U64) -> U64
-  # Get the word index for a given bit index
-  return bit_index >> 6u32
+    # Get the word index for a given bit index
+    return bit_index >> 6u32
 
 ### Resolves a logical bit index to its offset inside a machine word.
 ### :param bit_index: The zero-based bit position.
 ### :returns: A value in the range `0..63` describing the bit offset inside the word.
 @readonly
 routine BitList.bit_offset(bit_index: U64) -> U8
-  # Get the bit position within the word (0-63)
-  return U8(bit_index & 63u64)
+    # Get the bit position within the word (0-63)
+    return U8(bit_index & 63u64)
 
 ### Reads a stored bit without performing bounds checks.
 ### This helper is intended for internal use after the caller has validated the
@@ -117,30 +117,30 @@ routine BitList.bit_offset(bit_index: U64) -> U8
 ### :returns: The bit value stored at `index`.
 @readonly
 routine BitList.get_bit_internal(index: U64) -> Bool
-  # Internal: get bit without bounds checking
-  var word_idx = index >> 6u32
-  var bit_off = U8(index & 63u64)
-  lateinit var word_val: U64
-  danger
-    var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-    word_val = ptr.peek()
-  return (word_val & (1u64 << bit_off)) != 0u64
+    # Internal: get bit without bounds checking
+    var word_idx = index >> 6u32
+    var bit_off = U8(index & 63u64)
+    lateinit var word_val: U64
+    danger
+        var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
+        word_val = ptr.peek()
+    return (word_val & (1u64 << bit_off)) != 0u64
 
 ### Writes a stored bit without performing bounds checks.
 ### :param index: The zero-based bit position to write.
 ### :param value: The bit value to store at `index`.
 routine BitList.set_bit_internal(index: U64, value: Bool)
-  # Internal: set bit without bounds checking — branchless RMW
-  var word_idx = index >> 6u32
-  var bit_off = U8(index & 63u64)
-  var mask = 1u64 << bit_off
-  var set_mask = 0u64
-  if value
-    set_mask = mask
-  danger
-    var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-    word_ptr.poke((word_ptr.peek() & ~mask) | set_mask)
-  return
+    # Internal: set bit without bounds checking — branchless RMW
+    var word_idx = index >> 6u32
+    var bit_off = U8(index & 63u64)
+    var mask = 1u64 << bit_off
+    var set_mask = 0u64
+    if value
+        set_mask = mask
+    danger
+        var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
+        word_ptr.poke((word_ptr.peek() & ~mask) | set_mask)
+    return
 
 # ============================================================================
 # Core Operations
@@ -150,88 +150,88 @@ routine BitList.set_bit_internal(index: U64, value: Bool)
 ### :returns: The live bit count.
 @readonly
 routine BitList.count() -> U64
-  # Get current number of bits
-  return me.count
+    # Get current number of bits
+    return me.count
 
 ### Returns the number of bits that can be stored before the next growth step.
 ### :returns: The current bit capacity (in bits, not words).
 @readonly
 routine BitList.capacity() -> U64
-  # Get current capacity in bits
-  return me.capacity
+    # Get current capacity in bits
+    return me.capacity
 
 ### Returns true if the list currently stores no logical bits.
 ### :returns: `true` when `count()` is zero.
 @readonly
 routine BitList.is_empty() -> Bool
-  return me.count == 0u64
+    return me.count == 0u64
 
 ### Appends `value` to the logical end of the bit sequence.
 ### Storage grows automatically when the packed buffer runs out of capacity.
 ### :param value: The bit value to append.
 routine BitList.add_last(value: Bool)
-  # Append bit to end - O(1) amortized
-  if me.count >= me.capacity
-    var new_capacity = me.capacity *% 2u64
-    if me.capacity == 0u64
-      new_capacity = 64u64
-    me.reserve(new_capacity)
+    # Append bit to end - O(1) amortized
+    if me.count >= me.capacity
+        var new_capacity = me.capacity *% 2u64
+        if me.capacity == 0u64
+            new_capacity = 64u64
+        me.reserve(new_capacity)
 
-  # Inlined set_bit_internal with a write-only fast path at word boundaries.
-  # When bit_off == 0, every bit in this word (positions 1..63) is beyond the
-  # current valid range, so we can overwrite rather than RMW.
-  var word_idx = me.count >> 6u32
-  var bit_off = U8(me.count & 63u64)
-  var mask = 1u64 << bit_off
-  var set_mask = 0u64
-  if value
-    set_mask = mask
-  danger
-    var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-    if bit_off == 0u8
-      word_ptr.poke(set_mask)
-    else
-      word_ptr.poke((word_ptr.peek() & ~mask) | set_mask)
-  me.count = me.count +% 1u64
-  return
+    # Inlined set_bit_internal with a write-only fast path at word boundaries.
+    # When bit_off == 0, every bit in this word (positions 1..63) is beyond the
+    # current valid range, so we can overwrite rather than RMW.
+    var word_idx = me.count >> 6u32
+    var bit_off = U8(me.count & 63u64)
+    var mask = 1u64 << bit_off
+    var set_mask = 0u64
+    if value
+        set_mask = mask
+    danger
+        var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
+        if bit_off == 0u8
+            word_ptr.poke(set_mask)
+        else
+            word_ptr.poke((word_ptr.peek() & ~mask) | set_mask)
+    me.count = me.count +% 1u64
+    return
 
 ### Removes and returns the final bit in the sequence.
 ### :returns: The resulting `Bool` value.
 ### :absent: Returns absent when the bit list is empty.
 routine BitList.remove_last!() -> Bool
-  # Remove and return last bit - O(1)
-  # Uses absent because empty list means "no bit to remove"
-  if me.is_empty()
-    absent
+    # Remove and return last bit - O(1)
+    # Uses absent because empty list means "no bit to remove"
+    if me.is_empty()
+        absent
 
-  me.count = me.count - 1u64
-  return me.get_bit_internal(me.count)
+    me.count = me.count - 1u64
+    return me.get_bit_internal(me.count)
 
 ### Ensures that the packed storage can hold at least `new_capacity` logical bits.
 ### :param new_capacity: The minimum capacity to reserve.
 @reshaping
 routine BitList.reserve(new_capacity: U64)
-  # Ensure capacity is at least new_capacity (in bits)
-  if new_capacity > me.capacity
-    var new_word_size = (new_capacity +% 63u64) >> 6u32
-    danger
-      var new_data = Hijacked[U64](C::rf_allocate_dynamic_uninit(new_word_size *% 8u64))
+    # Ensure capacity is at least new_capacity (in bits)
+    if new_capacity > me.capacity
+        var new_word_size = (new_capacity +% 63u64) >> 6u32
+        danger
+            var new_data = Hijacked[U64](C::rf_allocate_dynamic_uninit(new_word_size *% 8u64))
 
-      # Copy existing words; remainder stays uninitialized — add_last overwrites
-      # whole words at word boundaries, so the untouched tail is never read.
-      if me.count > 0u64
-        var copy_words = (me.count +% 63u64) >> 6u32
-        C::rf_copy_bytes_at(dest: new_data.get_address(), src: me.data.get_address(), size: copy_words *% 8u64)
+            # Copy existing words; remainder stays uninitialized — add_last overwrites
+            # whole words at word boundaries, so the untouched tail is never read.
+            if me.count > 0u64
+                var copy_words = (me.count +% 63u64) >> 6u32
+                C::rf_copy_bytes_at(dest: new_data.get_address(), src: me.data.get_address(), size: copy_words *% 8u64)
 
-      me.data = new_data
-    me.capacity = new_capacity
-  return
+            me.data = new_data
+        me.capacity = new_capacity
+    return
 
 ### Removes every logical bit while preserving the allocated packed storage.
 routine BitList.clear()
-  # Remove all bits
-  me.count = 0u64
-  return
+    # Remove all bits
+    me.count = 0u64
+    return
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -243,19 +243,19 @@ routine BitList.clear()
 ### :throws: May throw {IndexOutOfBoundsError}.
 @readonly
 routine BitList.getitem!(index: U64) -> Bool
-  if index >= me.count
-    throw IndexOutOfBoundsError(index: index, count: me.count)
-  return me.get_bit_internal(index)
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    return me.get_bit_internal(index)
 
 ### Replaces the bit stored at the given zero-based position.
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement bit value.
 ### :throws: May throw {IndexOutOfBoundsError}.
 routine BitList.setitem!(index: U64, value: Bool)
-  if index >= me.count
-    throw IndexOutOfBoundsError(index: index, count: me.count)
-  me.set_bit_internal(index: index, value: value)
-  return
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    me.set_bit_internal(index: index, value: value)
+    return
 
 # ============================================================================
 # Bit Operations
@@ -266,90 +266,90 @@ routine BitList.setitem!(index: U64, value: Bool)
 ### packed padding bits in the tail storage remain an implementation detail.
 ### :param value: The value to write into every logical bit.
 routine BitList.set_all(value: Bool)
-  # Set all bits to the same value
-  var byte_count = (me.count +% 7u64) >> 3u32
-  var fill_byte = if value then 0xFFu8 else 0x00u8
-  danger
-    C::rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
-  return
+    # Set all bits to the same value
+    var byte_count = (me.count +% 7u64) >> 3u32
+    var fill_byte = if value then 0xFFu8 else 0x00u8
+    danger
+        C::rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
+    return
 
 ### Toggles the bit at `index`.
 ### :param index: The zero-based bit position to flip.
 ### :throws: May throw {IndexOutOfBoundsError}.
 routine BitList.flip!(index: U64)
-  # Toggle bit at index
-  if index >= me.count
-    throw IndexOutOfBoundsError(index: index, count: me.count)
-  var current = me.get_bit_internal(index)
-  me.set_bit_internal(index: index, value: not current)
-  return
+    # Toggle bit at index
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var current = me.get_bit_internal(index)
+    me.set_bit_internal(index: index, value: not current)
+    return
 
 ### Inverts every stored bit in place.
 ### This routine flips the packed storage a word at a time for the current
 ### logical range.
 routine BitList.flip_all()
-  # Toggle all bits word-at-a-time
-  var word_count = (me.count +% 63u64) >> 6u32
-  var i = 0u64
-  while i < word_count
-    danger
-      var word_ptr = Hijacked[U64](me.data.get_address() +% Address(i *% 8u64))
-      var word_val = word_ptr.peek()
-      word_ptr.poke(~word_val)
-    i = i +% 1u64
-  return
+    # Toggle all bits word-at-a-time
+    var word_count = (me.count +% 63u64) >> 6u32
+    var i = 0u64
+    while i < word_count
+        danger
+            var word_ptr = Hijacked[U64](me.data.get_address() +% Address(i *% 8u64))
+            var word_val = word_ptr.peek()
+            word_ptr.poke(~word_val)
+        i = i +% 1u64
+    return
 
 ### Counts how many stored bits are set to `true`.
 ### :returns: The number of one-bits in the logical sequence.
 @readonly
 routine BitList.count_ones() -> U64
-  # Count number of bits set to 1 (popcount)
-  var count = 0u64
-  var i = 0u64
-  while i < me.count
-    if me.get_bit_internal(i)
-      count = count +% 1u64
-    i = i +% 1u64
-  return count
+    # Count number of bits set to 1 (popcount)
+    var count = 0u64
+    var i = 0u64
+    while i < me.count
+        if me.get_bit_internal(i)
+            count = count +% 1u64
+        i = i +% 1u64
+    return count
 
 ### Counts how many stored bits are set to `false`.
 ### :returns: `count()` minus the number of one-bits.
 @readonly
 routine BitList.count_zeros() -> U64
-  # Count number of bits set to 0
-  return me.count -% me.count_ones()
+    # Count number of bits set to 0
+    return me.count -% me.count_ones()
 
 ### Returns `true` when at least one stored bit is set.
 ### :returns: `true` if any bit is `true`; `false` if all bits are clear.
 @readonly
 routine BitList.any() -> Bool
-  # Check if any bit is set to 1
-  var i = 0u64
-  while i < me.count
-    if me.get_bit_internal(i)
-      return true
-    i = i +% 1u64
-  return false
+    # Check if any bit is set to 1
+    var i = 0u64
+    while i < me.count
+        if me.get_bit_internal(i)
+            return true
+        i = i +% 1u64
+    return false
 
 ### Returns `true` when every stored bit is set.
 ### An empty list vacuously returns `true`.
 ### :returns: `true` if all bits are set; `false` if any bit is clear.
 @readonly
 routine BitList.all() -> Bool
-  # Check if all bits are set to 1
-  var i = 0u64
-  while i < me.count
-    if not me.get_bit_internal(i)
-      return false
-    i = i +% 1u64
-  return true
+    # Check if all bits are set to 1
+    var i = 0u64
+    while i < me.count
+        if not me.get_bit_internal(i)
+            return false
+        i = i +% 1u64
+    return true
 
 ### Returns `true` when no stored bit is set.
 ### :returns: `true` if all bits are clear; `false` if any bit is set.
 @readonly
 routine BitList.none() -> Bool
-  # Check if no bits are set to 1
-  return not me.any()
+    # Check if no bits are set to 1
+    return not me.any()
 
 # ============================================================================
 # Bitwise Operations (returns new BitList)
@@ -362,16 +362,16 @@ routine BitList.none() -> Bool
 ### :returns: A new `BitList` whose bits are `me[i] and other[i]`.
 @readonly
 routine BitList.bitand(other: Accessing[BitList]) -> BitList
-  # Bitwise AND - returns new BitList with shorter length
-  var min_count = if me.count < other.count then me.count else other.count
-  var result = BitList(min_count)
+    # Bitwise AND - returns new BitList with shorter length
+    var min_count = if me.count < other.count then me.count else other.count
+    var result = BitList(min_count)
 
-  var i = 0u64
-  while i < min_count
-    var val = me.get_bit_internal(i) and other.get_bit_internal(i)
-    result.add_last(val)
-    i = i +% 1u64
-  return steal result
+    var i = 0u64
+    while i < min_count
+        var val = me.get_bit_internal(i) and other.get_bit_internal(i)
+        result.add_last(val)
+        i = i +% 1u64
+    return steal result
 
 ### Returns the bitwise union of two bit lists.
 ### Missing bits past the end of the shorter input are treated as `false`.
@@ -379,17 +379,17 @@ routine BitList.bitand(other: Accessing[BitList]) -> BitList
 ### :returns: A new `BitList` whose length matches the longer input.
 @readonly
 routine BitList.bitor(other: Accessing[BitList]) -> BitList
-  # Bitwise OR - returns new BitList with longer length
-  var max_count = if me.count > other.count then me.count else other.count
-  var result = BitList(max_count)
+    # Bitwise OR - returns new BitList with longer length
+    var max_count = if me.count > other.count then me.count else other.count
+    var result = BitList(max_count)
 
-  var i = 0u64
-  while i < max_count
-    var a = if i < me.count then me.get_bit_internal(i) else false
-    var b = if i < other.count then other.get_bit_internal(i) else false
-    result.add_last(a or b)
-    i = i +% 1u64
-  return steal result
+    var i = 0u64
+    while i < max_count
+        var a = if i < me.count then me.get_bit_internal(i) else false
+        var b = if i < other.count then other.get_bit_internal(i) else false
+        result.add_last(a or b)
+        i = i +% 1u64
+    return steal result
 
 ### Returns the bitwise exclusive-or of two bit lists.
 ### Missing bits past the end of the shorter input are treated as `false`.
@@ -397,31 +397,31 @@ routine BitList.bitor(other: Accessing[BitList]) -> BitList
 ### :returns: A new `BitList` whose bits are set where exactly one input bit is set.
 @readonly
 routine BitList.bitxor(other: Accessing[BitList]) -> BitList
-  # Bitwise XOR - returns new BitList with longer length
-  var max_count = if me.count > other.count then me.count else other.count
-  var result = BitList(max_count)
+    # Bitwise XOR - returns new BitList with longer length
+    var max_count = if me.count > other.count then me.count else other.count
+    var result = BitList(max_count)
 
-  var i = 0u64
-  while i < max_count
-    var a = if i < me.count then me.get_bit_internal(i) else false
-    var b = if i < other.count then other.get_bit_internal(i) else false
-    # Two Bools differ exactly when their xor is set.
-    result.add_last(a != b)
-    i = i +% 1u64
-  return steal result
+    var i = 0u64
+    while i < max_count
+        var a = if i < me.count then me.get_bit_internal(i) else false
+        var b = if i < other.count then other.get_bit_internal(i) else false
+        # Two Bools differ exactly when their xor is set.
+        result.add_last(a != b)
+        i = i +% 1u64
+    return steal result
 
 ### Returns a new bit list with every stored bit inverted.
 ### :returns: A copy of this list with `true` and `false` swapped at each position.
 @readonly
 routine BitList.bitnot() -> BitList
-  # Bitwise NOT - returns new BitList with flipped bits
-  var result = BitList(me.count)
+    # Bitwise NOT - returns new BitList with flipped bits
+    var result = BitList(me.count)
 
-  var i = 0u64
-  while i < me.count
-    result.add_last(not me.get_bit_internal(i))
-    i = i +% 1u64
-  return steal result
+    var i = 0u64
+    while i < me.count
+        result.add_last(not me.get_bit_internal(i))
+        i = i +% 1u64
+    return steal result
 
 # ============================================================================
 # Iteration Support
@@ -432,34 +432,34 @@ routine BitList.bitnot() -> BitList
 ### :returns: The resulting `BitListEmittable` value.
 @readonly
 routine BitList.iter() -> BitListEmittable
-  danger
-    return BitListEmittable(data: me.data, count: me.count(), index: 0u64)
+    danger
+        return BitListEmittable(data: me.data, count: me.count(), index: 0u64)
 
 ### Represents an iterator over the logical bits stored in a `BitList`.
 ### The iterator walks the packed word buffer in ascending logical index order.
 entity BitListEmittable obeys Emittable[Bool]
-  ### Raw pointer into the source bit list's packed word buffer.
-  secret data: Hijacked[U64]
-  ### Bit count captured at iterator creation.
-  secret count: U64
-  ### Current bit position.
-  secret index: U64
+    ### Raw pointer into the source bit list's packed word buffer.
+    secret data: Hijacked[U64]
+    ### Bit count captured at iterator creation.
+    secret count: U64
+    ### Current bit position.
+    secret index: U64
 
 ### Returns the next bit from the iterator.
 ### :returns: The resulting `Bool` value.
 ### :absent: Returns absent when the iterator reaches the captured bit count.
 routine BitListEmittable.emit!() -> Bool
-  if me.index >= me.count
-    absent
-  var word_idx = me.index >> 6u32
-  var bit_idx = U8(me.index & 63u64)
-  lateinit var word_val: U64
-  danger
-    var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-    word_val = ptr.peek()
-  var _result = (word_val >> bit_idx) & 1u64 != 0u64
-  me.index = me.index + 1u64
-  return _result
+    if me.index >= me.count
+        absent
+    var word_idx = me.index >> 6u32
+    var bit_idx = U8(me.index & 63u64)
+    lateinit var word_val: U64
+    danger
+        var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
+        word_val = ptr.peek()
+    var _result = (word_val >> bit_idx) & 1u64 != 0u64
+    me.index = me.index + 1u64
+    return _result
 
 # ============================================================================
 # Utility Operations
@@ -470,32 +470,32 @@ routine BitListEmittable.emit!() -> Bool
 ### :absent: Returns absent when the list is empty.
 @readonly
 routine BitList.first!() -> Bool
-  # Get first bit (absent if empty)
-  if me.is_empty()
-    absent
-  return me.get_bit_internal(0u64)
+    # Get first bit (absent if empty)
+    if me.is_empty()
+        absent
+    return me.get_bit_internal(0u64)
 
 ### Returns the last stored bit without removing it.
 ### :returns: The bit at index `count - 1`.
 ### :absent: Returns absent when the list is empty.
 @readonly
 routine BitList.last!() -> Bool
-  # Get last bit (absent if empty)
-  if me.is_empty()
-    absent
-  return me.get_bit_internal(me.count - 1u64)
+    # Get last bit (absent if empty)
+    if me.is_empty()
+        absent
+    return me.get_bit_internal(me.count - 1u64)
 
 ### Returns a copy with the value order reversed.
 ### :returns: The resulting `BitList` value.
 @readonly
 routine BitList.reverse() -> BitList
-  # Return a reversed copy
-  var result = BitList(me.count)
-  var i = me.count
-  while i > 0u64
-    i = i -% 1u64
-    result.add_last(me.get_bit_internal(i))
-  return steal result
+    # Return a reversed copy
+    var result = BitList(me.count)
+    var i = me.count
+    while i > 0u64
+        i = i -% 1u64
+        result.add_last(me.get_bit_internal(i))
+    return steal result
 
 # ============================================================================
 # Comparison Operations
@@ -506,14 +506,14 @@ routine BitList.reverse() -> BitList
 ### :returns: `true` if both have the same count and all corresponding bits match.
 @readonly
 routine BitList.eq(other: Accessing[BitList]) -> Bool
-  if me.count != other.count
-    return false
-  var i = 0u64
-  while i < me.count
-    if me.get_bit_internal(i) != other.get_bit_internal(i)
-      return false
-    i = i +% 1u64
-  return true
+    if me.count != other.count
+        return false
+    var i = 0u64
+    while i < me.count
+        if me.get_bit_internal(i) != other.get_bit_internal(i)
+            return false
+        i = i +% 1u64
+    return true
 
 # ============================================================================
 # Conversion Operations
@@ -525,14 +525,14 @@ routine BitList.eq(other: Accessing[BitList]) -> Bool
 ### :absent: Returns absent when fewer than eight bits are stored.
 @readonly
 routine BitList.to_u8!() -> U8
-  # Convert first 8 bits to U8 (absent if fewer than 8 bits)
-  if me.count < 8u64
-    absent
-  lateinit var word: U64
-  danger
-    word = Hijacked[U64](me.data.get_address()).peek()
-  var _result = U8(word & 0xFFu64)
-  return _result
+    # Convert first 8 bits to U8 (absent if fewer than 8 bits)
+    if me.count < 8u64
+        absent
+    lateinit var word: U64
+    danger
+        word = Hijacked[U64](me.data.get_address()).peek()
+    var _result = U8(word & 0xFFu64)
+    return _result
 
 ### Packs the first sixteen bits into a `U16`.
 ### Bit `0` becomes the least-significant output bit.
@@ -540,14 +540,14 @@ routine BitList.to_u8!() -> U8
 ### :absent: Returns absent when fewer than sixteen bits are stored.
 @readonly
 routine BitList.to_u16!() -> U16
-  # Convert first 16 bits to U16 (absent if fewer than 16 bits)
-  if me.count < 16u64
-    absent
-  lateinit var word: U64
-  danger
-    word = Hijacked[U64](me.data.get_address()).peek()
-  var _result = U16(word & 0xFFFFu64)
-  return _result
+    # Convert first 16 bits to U16 (absent if fewer than 16 bits)
+    if me.count < 16u64
+        absent
+    lateinit var word: U64
+    danger
+        word = Hijacked[U64](me.data.get_address()).peek()
+    var _result = U16(word & 0xFFFFu64)
+    return _result
 
 ### Packs the first thirty-two bits into a `U32`.
 ### Bit `0` becomes the least-significant output bit.
@@ -555,14 +555,14 @@ routine BitList.to_u16!() -> U16
 ### :absent: Returns absent when fewer than thirty-two bits are stored.
 @readonly
 routine BitList.to_u32!() -> U32
-  # Convert first 32 bits to U32 (absent if fewer than 32 bits)
-  if me.count < 32u64
-    absent
-  lateinit var word: U64
-  danger
-    word = Hijacked[U64](me.data.get_address()).peek()
-  var _result = U32(word & 0xFFFFFFFFu64)
-  return _result
+    # Convert first 32 bits to U32 (absent if fewer than 32 bits)
+    if me.count < 32u64
+        absent
+    lateinit var word: U64
+    danger
+        word = Hijacked[U64](me.data.get_address()).peek()
+    var _result = U32(word & 0xFFFFFFFFu64)
+    return _result
 
 ### Packs the first sixty-four bits into a `U64`.
 ### Bit `0` becomes the least-significant output bit.
@@ -570,97 +570,97 @@ routine BitList.to_u32!() -> U32
 ### :absent: Returns absent when fewer than sixty-four bits are stored.
 @readonly
 routine BitList.to_u64!() -> U64
-  # Convert first 64 bits to U64 (absent if fewer than 64 bits)
-  if me.count < 64u64
-    absent
-  lateinit var _result: U64
-  danger
-    _result = Hijacked[U64](me.data.get_address()).peek()
-  return _result
+    # Convert first 64 bits to U64 (absent if fewer than 64 bits)
+    if me.count < 64u64
+        absent
+    lateinit var _result: U64
+    danger
+        _result = Hijacked[U64](me.data.get_address()).peek()
+    return _result
 
 ### Expands a `U8` into a bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed byte to unpack.
 ### :returns: An eight-bit `BitList` representing `value`.
 common routine BitList.from_u8(value: U8) -> BitList
-  # Create BitList from U8 (8 bits)
-  var result = BitList(8u64)
-  var i = 0u8
-  while i < 8u8
-    result.add_last((value & (1u8 << i)) != 0u8)
-    i = i + 1u8
-  return steal result
+    # Create BitList from U8 (8 bits)
+    var result = BitList(8u64)
+    var i = 0u8
+    while i < 8u8
+        result.add_last((value & (1u8 << i)) != 0u8)
+        i = i + 1u8
+    return steal result
 
 ### Expands a `U16` into a sixteen-bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 16-bit value to unpack.
 ### :returns: A sixteen-bit `BitList` representing `value`.
 common routine BitList.from_u16(value: U16) -> BitList
-  # Create BitList from U16 (16 bits)
-  var result = BitList(16u64)
-  var i = 0u16
-  while i < 16u16
-    result.add_last((value & (1u16 << i)) != 0u16)
-    i = i + 1u16
-  return steal result
+    # Create BitList from U16 (16 bits)
+    var result = BitList(16u64)
+    var i = 0u16
+    while i < 16u16
+        result.add_last((value & (1u16 << i)) != 0u16)
+        i = i + 1u16
+    return steal result
 
 ### Expands a `U32` into a thirty-two-bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 32-bit value to unpack.
 ### :returns: A thirty-two-bit `BitList` representing `value`.
 common routine BitList.from_u32(value: U32) -> BitList
-  # Create BitList from U32 (32 bits)
-  var result = BitList(32u64)
-  var i = 0u32
-  while i < 32u32
-    result.add_last((value & (1u32 << i)) != 0u32)
-    i = i + 1u32
-  return steal result
+    # Create BitList from U32 (32 bits)
+    var result = BitList(32u64)
+    var i = 0u32
+    while i < 32u32
+        result.add_last((value & (1u32 << i)) != 0u32)
+        i = i + 1u32
+    return steal result
 
 @[readonly, override]
 routine BitList.represent() -> Text
-  var result = me.type_name() + "(["
-  var i = 0u64
-  each v in me
-    if i > 0u64
-      result = result + ", "
-    result = result + nested_repr(v)
-    i = i +% 1u64
-  result = result + "])"
-  return result
+    var result = me.type_name() + "(["
+    var i = 0u64
+    each v in me
+        if i > 0u64
+            result = result + ", "
+        result = result + nested_repr(v)
+        i = i +% 1u64
+    result = result + "])"
+    return result
 
 ### Returns a diagnostic form that includes the bit count, one-bit count, and contents.
 ### :returns: The resulting `Text` value.
 @[readonly, override]
 routine BitList.diagnose() -> Text
-  var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
-  var i = 0u64
-  each v in me
-    if i > 0u64
-      result = result + ", "
-    result = result + nested_repr(v)
-    i = i +% 1u64
-  result = result + "])"
-  return result
+    var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
+    var i = 0u64
+    each v in me
+        if i > 0u64
+            result = result + ", "
+        result = result + nested_repr(v)
+        i = i +% 1u64
+    result = result + "])"
+    return result
 
 ### Expands a `U64` into a sixty-four-bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 64-bit value to unpack.
 ### :returns: A sixty-four-bit `BitList` representing `value`.
 common routine BitList.from_u64(value: U64) -> BitList
-  # Create BitList from U64 (64 bits)
-  var result = BitList(64u64)
-  var i = 0u64
-  while i < 64u64
-    result.add_last((value & (1u64 << i)) != 0u64)
-    i = i +% 1u64
-  return steal result
+    # Create BitList from U64 (64 bits)
+    var result = BitList(64u64)
+    var i = 0u64
+    while i < 64u64
+        result.add_last((value & (1u64 << i)) != 0u64)
+        i = i +% 1u64
+    return steal result
 
 @override
 dangerous routine BitList.destroy()
-  me.data.invalidate()
-  me.hijack().invalidate()
-  return
+    me.data.invalidate()
+    me.hijack().invalidate()
+    return
 
 ### Cycle-collector FREE: free the packed word buffer and this list's own box. The elements are bits, so
 ### there is nothing the collector needs to reap — the override exists only to free the heap buffer (the
@@ -668,9 +668,9 @@ dangerous routine BitList.destroy()
 ### needed: bits can never be `Roamed`, so the universal no-op trace is already correct.
 @override
 dangerous routine BitList.roam_free()
-  me.data.invalidate()
-  me.hijack().invalidate()
-  return
+    me.data.invalidate()
+    me.hijack().invalidate()
+    return
 
 # ============================================================================
 # Shape use (keeps the element positions still for `each` loops and in-place element access)
@@ -681,17 +681,17 @@ dangerous routine BitList.roam_free()
 ### elements), because such a change would leave that loop or call unsure where the elements are.
 @readonly
 routine BitList.require_shape_free!()
-  if me.shape_users != 0u64
-    throw ReshapingWhileInUseError(container: "bit list")
-  return
+    if me.shape_users != 0u64
+        throw ReshapingWhileInUseError(container: "bit list")
+    return
 
 ### Marks one more `each` loop or element call as using this bit list's element positions. Only the builder
 ### calls this, paired with `end_shape_use` when that use ends.
 dangerous routine BitList.begin_shape_use()
-  me.shape_users = me.shape_users +% 1u64
-  return
+    me.shape_users = me.shape_users +% 1u64
+    return
 
 ### Ends one use started by `begin_shape_use`.
 dangerous routine BitList.end_shape_use()
-  me.shape_users = me.shape_users -% 1u64
-  return
+    me.shape_users = me.shape_users -% 1u64
+    return

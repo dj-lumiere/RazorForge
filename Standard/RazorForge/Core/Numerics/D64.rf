@@ -21,18 +21,18 @@ import Collections
 ### A software decimal64 value in BID storage.
 @llvm("i64")
 record D64 obeys Numeric, Ordered, Assignable, Copyable
-  pass
+    pass
 
 ### Narrow decoded fields (U64 coefficient — decimal64 has <= 16 digits).
 record D64Parts
-  sign: Bool
-  special: U64
-  exp: S64
-  coeff: U64
+    sign: Bool
+    special: U64
+    exp: S64
+    coeff: U64
 
 ### Widen to D128Parts for the shared special-value rules / decimal formatter.
 routine d64parts_to_d128(p: D64Parts) -> D128Parts
-  return D128Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: LLVM::zero_extend[U64, U128](p.coeff))
+    return D128Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: LLVM::zero_extend[U64, U128](p.coeff))
 
 ### Narrows a D128Parts to decimal64. Specials (inf/NaN) pass through; a finite value goes through
 ### `decfin64` so its (up to 34-digit) coefficient is rounded half-even to 16 digits AND its exponent
@@ -40,26 +40,26 @@ routine d64parts_to_d128(p: D64Parts) -> D128Parts
 ### A naive truncate-coeff / copy-exp dropped high digits and produced a garbage BID pattern when the
 ### exponent exceeded qmax (e.g. `D64(from_text: "1e370")`).
 routine d128_to_d64parts(p: D128Parts) -> D64Parts
-  if LLVM::int_ne(a: p.special, b: 0_u64)
-    return D64Parts(sign: p.sign, special: p.special, exp: 0_s64, coeff: 0_u64)
-  return decfin64(sign: p.sign, coeff: p.coeff, exp: p.exp, pref: p.exp)
+    if LLVM::int_ne(a: p.special, b: 0_u64)
+        return D64Parts(sign: p.sign, special: p.special, exp: 0_s64, coeff: 0_u64)
+    return decfin64(sign: p.sign, coeff: p.coeff, exp: p.exp, pref: p.exp)
 
 ### 10^k as a U128 (k <= 38), via the U256 pow10 table truncated.
 routine p10_u128(k: S64) -> U128
-  return LLVM::int_truncate[U256, U128](pow10_tbl(k: k))
+    return LLVM::int_truncate[U256, U128](pow10_tbl(k: k))
 
 ### 10^k as a U64 (k <= 19).
 routine p10_u64_d(k: S64) -> U64
-  return LLVM::int_truncate[U256, U64](pow10_tbl(k: k))
+    return LLVM::int_truncate[U256, U64](pow10_tbl(k: k))
 
 # ---- raw bits ----
 ### Reinterprets the 64-bit BID storage as a raw U64 (no decode).
 routine D64.to_bits() -> U64
-  return LLVM::reinterpret_bits[D64, U64](me)
+    return LLVM::reinterpret_bits[D64, U64](me)
 
 ### Reinterprets a raw U64 as BID64 storage (no validation).
 common routine D64.from_bits(bits: U64) -> D64
-  return LLVM::reinterpret_bits[U64, D64](bits)
+    return LLVM::reinterpret_bits[U64, D64](bits)
 
 # ---- DPD interchange (IEEE 754-2008 densely-packed-decimal) ----
 # BID is native (to_bits/from_bits); these convert to/from the DPD interchange word for interop.
@@ -69,171 +69,171 @@ common routine D64.from_bits(bits: U64) -> D64
 
 ### The decimal64 value re-encoded in DPD interchange form. Never crashes.
 routine D64.to_dpd() -> U64
-  var p = me.decode()
-  var sbit = LLVM::shift_left(value: if p.sign then 1_u64 else 0_u64, bits: 63_u64)
-  if LLVM::int_ne(a: p.special, b: 0_u64)
-    var top5 = if LLVM::int_eq(a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
-    var bb = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: top5, bits: 58_u64))
-    if LLVM::int_eq(a: p.special, b: 3_u64)
-      bb = LLVM::bit_or(a: bb, b: LLVM::shift_left(value: 1_u64, bits: 57_u64))
-    return bb
-  var e = LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 398_u64)
-  var c = p.coeff
-  var d0 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
-  c = LLVM::unsigned_div(a: c, b: 1000_u64)
-  var d1 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
-  c = LLVM::unsigned_div(a: c, b: 1000_u64)
-  var d2 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
-  c = LLVM::unsigned_div(a: c, b: 1000_u64)
-  var d3 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
-  c = LLVM::unsigned_div(a: c, b: 1000_u64)
-  var d4 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
-  c = LLVM::unsigned_div(a: c, b: 1000_u64)
-  var msd = c
-  var ehi = LLVM::shift_right_unsigned(e, 8_u64)
-  var elo = LLVM::bit_and(a: e, b: 0xFF_u64)
-  var combo = 0_u64
-  if LLVM::unsigned_lt(a: msd, b: 8_u64)
-    combo = LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 3_u64), b: msd)
-  else
-    combo = LLVM::bit_or(a: 0x18_u64, b: LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 1_u64), b: LLVM::sub(a: msd, b: 8_u64)))
-  var w = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: combo, bits: 58_u64))
-  w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: elo, bits: 50_u64))
-  w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: d4, bits: 40_u64))
-  w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: d3, bits: 30_u64))
-  w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: d2, bits: 20_u64))
-  w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: d1, bits: 10_u64))
-  w = LLVM::bit_or(a: w, b: d0)
-  return w
+    var p = me.decode()
+    var sbit = LLVM::shift_left(value: if p.sign then 1_u64 else 0_u64, bits: 63_u64)
+    if LLVM::int_ne(a: p.special, b: 0_u64)
+        var top5 = if LLVM::int_eq(a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+        var bb = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: top5, bits: 58_u64))
+        if LLVM::int_eq(a: p.special, b: 3_u64)
+            bb = LLVM::bit_or(a: bb, b: LLVM::shift_left(value: 1_u64, bits: 57_u64))
+        return bb
+    var e = LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 398_u64)
+    var c = p.coeff
+    var d0 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
+    c = LLVM::unsigned_div(a: c, b: 1000_u64)
+    var d1 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
+    c = LLVM::unsigned_div(a: c, b: 1000_u64)
+    var d2 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
+    c = LLVM::unsigned_div(a: c, b: 1000_u64)
+    var d3 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
+    c = LLVM::unsigned_div(a: c, b: 1000_u64)
+    var d4 = bin_to_dpd(v: LLVM::unsigned_rem(a: c, b: 1000_u64))
+    c = LLVM::unsigned_div(a: c, b: 1000_u64)
+    var msd = c
+    var ehi = LLVM::shift_right_unsigned(e, 8_u64)
+    var elo = LLVM::bit_and(a: e, b: 0xFF_u64)
+    var combo = 0_u64
+    if LLVM::unsigned_lt(a: msd, b: 8_u64)
+        combo = LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 3_u64), b: msd)
+    else
+        combo = LLVM::bit_or(a: 0x18_u64, b: LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 1_u64), b: LLVM::sub(a: msd, b: 8_u64)))
+    var w = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: combo, bits: 58_u64))
+    w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: elo, bits: 50_u64))
+    w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: d4, bits: 40_u64))
+    w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: d3, bits: 30_u64))
+    w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: d2, bits: 20_u64))
+    w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: d1, bits: 10_u64))
+    w = LLVM::bit_or(a: w, b: d0)
+    return w
 
 ### Decodes a DPD interchange word into a decimal64. Never crashes.
 common routine D64.from_dpd(bits: U64) -> D64
-  var sign = LLVM::int_ne(a: LLVM::bit_and(a: bits, b: LLVM::shift_left(value: 1_u64, bits: 63_u64)), b: 0_u64)
-  var combo = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 58_u64), b: 0x1F_u64)
-  if LLVM::int_eq(a: combo, b: 0x1E_u64)
-    return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
-  if LLVM::int_eq(a: combo, b: 0x1F_u64)
-    var sp = 2_u64
-    if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 57_u64), b: 1_u64), b: 0_u64)
-      sp = 3_u64
-    return d64_of_parts(p: D64Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64))
-  var ehi = 0_u64
-  var msd = 0_u64
-  if LLVM::unsigned_lt(a: combo, b: 0x18_u64)
-    ehi = LLVM::shift_right_unsigned(combo, 3_u64)
-    msd = LLVM::bit_and(a: combo, b: 0x7_u64)
-  else
-    ehi = LLVM::bit_and(a: LLVM::shift_right_unsigned(combo, 1_u64), b: 0x3_u64)
-    msd = LLVM::add(a: 8_u64, b: LLVM::bit_and(a: combo, b: 1_u64))
-  var elo = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 50_u64), b: 0xFF_u64)
-  var e = LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 8_u64), b: elo)
-  var exp = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 398_s64)
-  var coeff = msd
-  coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 40_u64), b: 0x3FF_u64)))
-  coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 30_u64), b: 0x3FF_u64)))
-  coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 20_u64), b: 0x3FF_u64)))
-  coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 10_u64), b: 0x3FF_u64)))
-  coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: bits, b: 0x3FF_u64)))
-  return d64_of_parts(p: D64Parts(sign: sign, special: 0_u64, exp: exp, coeff: coeff))
+    var sign = LLVM::int_ne(a: LLVM::bit_and(a: bits, b: LLVM::shift_left(value: 1_u64, bits: 63_u64)), b: 0_u64)
+    var combo = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 58_u64), b: 0x1F_u64)
+    if LLVM::int_eq(a: combo, b: 0x1E_u64)
+        return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+    if LLVM::int_eq(a: combo, b: 0x1F_u64)
+        var sp = 2_u64
+        if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 57_u64), b: 1_u64), b: 0_u64)
+            sp = 3_u64
+        return d64_of_parts(p: D64Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64))
+    var ehi = 0_u64
+    var msd = 0_u64
+    if LLVM::unsigned_lt(a: combo, b: 0x18_u64)
+        ehi = LLVM::shift_right_unsigned(combo, 3_u64)
+        msd = LLVM::bit_and(a: combo, b: 0x7_u64)
+    else
+        ehi = LLVM::bit_and(a: LLVM::shift_right_unsigned(combo, 1_u64), b: 0x3_u64)
+        msd = LLVM::add(a: 8_u64, b: LLVM::bit_and(a: combo, b: 1_u64))
+    var elo = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 50_u64), b: 0xFF_u64)
+    var e = LLVM::bit_or(a: LLVM::shift_left(value: ehi, bits: 8_u64), b: elo)
+    var exp = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 398_s64)
+    var coeff = msd
+    coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 40_u64), b: 0x3FF_u64)))
+    coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 30_u64), b: 0x3FF_u64)))
+    coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 20_u64), b: 0x3FF_u64)))
+    coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 10_u64), b: 0x3FF_u64)))
+    coeff = LLVM::add(a: LLVM::mul(a: coeff, b: 1000_u64), b: dpd_to_bin(d: LLVM::bit_and(a: bits, b: 0x3FF_u64)))
+    return d64_of_parts(p: D64Parts(sign: sign, special: 0_u64, exp: exp, coeff: coeff))
 
 ### BID64 decode -> narrow parts.
 routine D64.decode() -> D64Parts
-  var bits = me.to_bits()
-  # sign = bit 63
-  var sign = LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 63_u64), b: 1_u64), b: 0_u64)
-  # top5 = 5-bit combination prefix (bits 62:58) that selects form/special
-  var top5 = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 58_u64), b: 0x1F_u64)
-  # 11110 -> infinity (special 1)
-  if LLVM::int_eq(a: top5, b: 0x1E_u64)
-    return D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
-  # 11111 -> NaN; bit 57 distinguishes signaling (special 3) from quiet (special 2)
-  if LLVM::int_eq(a: top5, b: 0x1F_u64)
-    var sp = 2_u64
-    if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 57_u64), b: 1_u64), b: 0_u64)
-      sp = 3_u64
-    return D64Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64)
-  var biased = 0_u64
-  var c64 = 0_u64
-  # top5 >> 3 == 3 means combo prefix starts with 11 -> Form 2, else Form 1
-  if LLVM::int_eq(a: LLVM::shift_right_unsigned(top5, 3_u64), b: 3_u64)
-    # Form 2: exp bits 60:51, coeff = (bits 50:0) | 2^53
-    biased = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 51_u64), b: 0x3FF_u64)
-    c64 = LLVM::bit_or(a: LLVM::bit_and(a: bits, b: 0x7FFFFFFFFFFFF_u64), b: 0x20000000000000_u64)
-  else
-    # Form 1: exp bits 62:53, coeff bits 52:0
-    biased = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 53_u64), b: 0x3FF_u64)
-    c64 = LLVM::bit_and(a: bits, b: 0x1FFFFFFFFFFFFF_u64)
-  # unbias: stored exponent q = biased - 398 (bias=398)
-  return D64Parts(sign: sign, special: 0_u64, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](biased), b: 398_s64), coeff: c64)
+    var bits = me.to_bits()
+    # sign = bit 63
+    var sign = LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 63_u64), b: 1_u64), b: 0_u64)
+    # top5 = 5-bit combination prefix (bits 62:58) that selects form/special
+    var top5 = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 58_u64), b: 0x1F_u64)
+    # 11110 -> infinity (special 1)
+    if LLVM::int_eq(a: top5, b: 0x1E_u64)
+        return D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
+    # 11111 -> NaN; bit 57 distinguishes signaling (special 3) from quiet (special 2)
+    if LLVM::int_eq(a: top5, b: 0x1F_u64)
+        var sp = 2_u64
+        if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 57_u64), b: 1_u64), b: 0_u64)
+            sp = 3_u64
+        return D64Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64)
+    var biased = 0_u64
+    var c64 = 0_u64
+    # top5 >> 3 == 3 means combo prefix starts with 11 -> Form 2, else Form 1
+    if LLVM::int_eq(a: LLVM::shift_right_unsigned(top5, 3_u64), b: 3_u64)
+        # Form 2: exp bits 60:51, coeff = (bits 50:0) | 2^53
+        biased = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 51_u64), b: 0x3FF_u64)
+        c64 = LLVM::bit_or(a: LLVM::bit_and(a: bits, b: 0x7FFFFFFFFFFFF_u64), b: 0x20000000000000_u64)
+    else
+        # Form 1: exp bits 62:53, coeff bits 52:0
+        biased = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 53_u64), b: 0x3FF_u64)
+        c64 = LLVM::bit_and(a: bits, b: 0x1FFFFFFFFFFFFF_u64)
+    # unbias: stored exponent q = biased - 398 (bias=398)
+    return D64Parts(sign: sign, special: 0_u64, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](biased), b: 398_s64), coeff: c64)
 
 ### Narrow parts -> BID64 (Form 1 / Form 2 / special). Finite parts must already be
 ### rounded to <= 16 digits and in the decimal64 exponent range (decfin64 guarantees it).
 routine d64_of_parts(p: D64Parts) -> D64
-  # sign into bit 63
-  var sbit = LLVM::shift_left(value: if p.sign then 1_u64 else 0_u64, bits: 63_u64)
-  if LLVM::int_ne(a: p.special, b: 0_u64)
-    # special: combo prefix 11110 (inf) or 11111 (NaN) into bits 62:58
-    var top5 = if LLVM::int_eq(a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
-    var bb = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: top5, bits: 58_u64))
-    # signaling NaN sets bit 57
-    if LLVM::int_eq(a: p.special, b: 3_u64)
-      bb = LLVM::bit_or(a: bb, b: LLVM::shift_left(value: 1_u64, bits: 57_u64))
-    return D64.from_bits(bits: bb)
-  # rebias: biased = (q + 398) masked to 10 bits
-  var biased = LLVM::bit_and(a: LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 398_u64), b: 0x3FF_u64)
-  var c64 = p.coeff
-  # coeff < 2^53 -> Form 1, else Form 2 (implicit leading 2^53)
-  if LLVM::unsigned_lt(a: c64, b: 0x20000000000000_u64)
-    # Form 1: exp bits 62:53, coeff bits 52:0
-    return D64.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: biased, bits: 53_u64)), b: c64))
-  # Form 2: bits 62:61 = 11, exp bits 60:51, coeff low 51 bits (implicit 2^53)
-  var g2 = LLVM::shift_left(value: 0x3_u64, bits: 61_u64)  # the 11 prefix
-  var ebits = LLVM::shift_left(value: biased, bits: 51_u64)
-  var clow = LLVM::bit_and(a: c64, b: 0x7FFFFFFFFFFFF_u64)  # low 51 coeff bits
-  return D64.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: g2), b: LLVM::bit_or(a: ebits, b: clow)))
+    # sign into bit 63
+    var sbit = LLVM::shift_left(value: if p.sign then 1_u64 else 0_u64, bits: 63_u64)
+    if LLVM::int_ne(a: p.special, b: 0_u64)
+        # special: combo prefix 11110 (inf) or 11111 (NaN) into bits 62:58
+        var top5 = if LLVM::int_eq(a: p.special, b: 1_u64) then 0x1E_u64 else 0x1F_u64
+        var bb = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: top5, bits: 58_u64))
+        # signaling NaN sets bit 57
+        if LLVM::int_eq(a: p.special, b: 3_u64)
+            bb = LLVM::bit_or(a: bb, b: LLVM::shift_left(value: 1_u64, bits: 57_u64))
+        return D64.from_bits(bits: bb)
+    # rebias: biased = (q + 398) masked to 10 bits
+    var biased = LLVM::bit_and(a: LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 398_u64), b: 0x3FF_u64)
+    var c64 = p.coeff
+    # coeff < 2^53 -> Form 1, else Form 2 (implicit leading 2^53)
+    if LLVM::unsigned_lt(a: c64, b: 0x20000000000000_u64)
+        # Form 1: exp bits 62:53, coeff bits 52:0
+        return D64.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: biased, bits: 53_u64)), b: c64))
+    # Form 2: bits 62:61 = 11, exp bits 60:51, coeff low 51 bits (implicit 2^53)
+    var g2 = LLVM::shift_left(value: 0x3_u64, bits: 61_u64)  # the 11 prefix
+    var ebits = LLVM::shift_left(value: biased, bits: 51_u64)
+    var clow = LLVM::bit_and(a: c64, b: 0x7FFFFFFFFFFFF_u64)  # low 51 coeff bits
+    return D64.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: g2), b: LLVM::bit_or(a: ebits, b: clow)))
 
 ### Builds a finite D64 from a signed coefficient and base-10 exponent (rounded/ranged).
 common routine D64.from_components(sign: Bool, coeff: U64, exp: S64) -> D64
-  return d64_of_parts(p: decfin64(sign: sign, coeff: LLVM::zero_extend[U64, U128](coeff), exp: exp, pref: exp))
+    return d64_of_parts(p: decfin64(sign: sign, coeff: LLVM::zero_extend[U64, U128](coeff), exp: exp, pref: exp))
 
 ### Builds a D64 from a 64-bit signed integer (exponent 0).
 common routine D64.from_int64(value: S64) -> D64
-  var neg = LLVM::signed_lt(a: value, b: 0_s64)
-  var mag = if neg then LLVM::sub(a: 0_s64, b: value) else value
-  return D64.from_components(sign: neg, coeff: LLVM::reinterpret_bits[S64, U64](mag), exp: 0_s64)
+    var neg = LLVM::signed_lt(a: value, b: 0_s64)
+    var mag = if neg then LLVM::sub(a: 0_s64, b: value) else value
+    return D64.from_components(sign: neg, coeff: LLVM::reinterpret_bits[S64, U64](mag), exp: 0_s64)
 
 ### Infinity / quiet NaN.
 common routine D64.infinity(sign: Bool) -> D64
-  return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+    return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
 
 ### Returns a quiet NaN.
 common routine D64.quiet_nan() -> D64
-  return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
+    return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
 common routine D64.signaling_nan() -> D64
-  return d64_of_parts(p: D64Parts(sign: false, special: 3_u64, exp: 0_s64, coeff: 0_u64))
+    return d64_of_parts(p: D64Parts(sign: false, special: 3_u64, exp: 0_s64, coeff: 0_u64))
 
 ### True when this is a finite value (special field == 0).
 routine D64.is_finite() -> Bool
-  return LLVM::int_eq(a: me.decode().special, b: 0_u64)
+    return LLVM::int_eq(a: me.decode().special, b: 0_u64)
 
 ### True when this is ±infinity (special field == 1).
 routine D64.is_infinite() -> Bool
-  return LLVM::int_eq(a: me.decode().special, b: 1_u64)
+    return LLVM::int_eq(a: me.decode().special, b: 1_u64)
 
 ### True when this is a NaN (special field >= 2: 2 quiet, 3 signaling).
 routine D64.is_nan() -> Bool
-  return LLVM::unsigned_ge(a: me.decode().special, b: 2_u64)
+    return LLVM::unsigned_ge(a: me.decode().special, b: 2_u64)
 
 ### True when this is a SIGNALING NaN (special field == 3).
 routine D64.is_signaling() -> Bool
-  return LLVM::int_eq(a: me.decode().special, b: 3_u64)
+    return LLVM::int_eq(a: me.decode().special, b: 3_u64)
 
 ### True when this is a finite zero (±0).
 routine D64.is_zero() -> Bool
-  var p = me.decode()
-  return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_eq(a: p.coeff, b: 0_u64)
+    var p = me.decode()
+    return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_eq(a: p.coeff, b: 0_u64)
 
 # ============================================================================
 # Finalize: round a U128 working coeff to Pmax=16, clamp exponent to [-398, 369]
@@ -250,27 +250,27 @@ routine D64.is_zero() -> Bool
 ### divides `c` outright (terminating quotient, e.g. `a/a = 1.0…0`), return `cap` in one check;
 ### (3) else a 6-step binary descent. `cap` is clamped to 34 (all real callers pass ≤ 33).
 routine trailing_zeros10_u128(c: U128, cap0: S64) -> S64
-  var cap = if LLVM::signed_lt(a: cap0, b: 34_s64) then cap0 else 34_s64
-  var t2 = LLVM::int_truncate[U128, S64](LLVM::trailing_zeros(c))
-  if LLVM::signed_lt(a: t2, b: cap)
-    cap = t2
-  if LLVM::signed_le(a: cap, b: 0_s64)
-    return 0_s64
-  # not a multiple of 5 (2^64 = 1 mod 5, so c mod 5 is that of its two words' sum): no trailing zero
-  if (LLVM::int_truncate[U128, U64](c) % 5_u64 + LLVM::int_truncate[U128, U64](c >>> 64_u32) % 5_u64) % 5_u64 != 0_u64
-    return 0_s64
-  if LLVM::int_eq[U128](a: LLVM::mul(a: div_pow10_u128(x: c, k: cap), b: p10_u128(k: cap)), b: c)
-    return cap
-  var tz = 0_s64
-  var hi = LLVM::sub(a: cap, b: 1_s64)
-  var probe = 32_s64
-  while LLVM::signed_ge(a: probe, b: 1_s64)
-    var cand = LLVM::add(a: tz, b: probe)
-    if LLVM::signed_le(a: cand, b: hi)
-      if LLVM::int_eq[U128](a: LLVM::mul(a: div_pow10_u128(x: c, k: cand), b: p10_u128(k: cand)), b: c)
-        tz = cand
-    probe = LLVM::signed_div(a: probe, b: 2_s64)
-  return tz
+    var cap = if LLVM::signed_lt(a: cap0, b: 34_s64) then cap0 else 34_s64
+    var t2 = LLVM::int_truncate[U128, S64](LLVM::trailing_zeros(c))
+    if LLVM::signed_lt(a: t2, b: cap)
+        cap = t2
+    if LLVM::signed_le(a: cap, b: 0_s64)
+        return 0_s64
+    # not a multiple of 5 (2^64 = 1 mod 5, so c mod 5 is that of its two words' sum): no trailing zero
+    if (LLVM::int_truncate[U128, U64](c) % 5_u64 + LLVM::int_truncate[U128, U64](c >>> 64_u32) % 5_u64) % 5_u64 != 0_u64
+        return 0_s64
+    if LLVM::int_eq[U128](a: LLVM::mul(a: div_pow10_u128(x: c, k: cap), b: p10_u128(k: cap)), b: c)
+        return cap
+    var tz = 0_s64
+    var hi = LLVM::sub(a: cap, b: 1_s64)
+    var probe = 32_s64
+    while LLVM::signed_ge(a: probe, b: 1_s64)
+        var cand = LLVM::add(a: tz, b: probe)
+        if LLVM::signed_le(a: cand, b: hi)
+            if LLVM::int_eq[U128](a: LLVM::mul(a: div_pow10_u128(x: c, k: cand), b: p10_u128(k: cand)), b: c)
+                tz = cand
+        probe = LLVM::signed_div(a: probe, b: 2_s64)
+    return tz
 
 ### :param sign: result sign.
 ### :param coeff: U128 working coefficient (unrounded; may exceed 16 digits).
@@ -278,101 +278,101 @@ routine trailing_zeros10_u128(c: U128, cap0: S64) -> S64
 ### :param pref: preferred (cohort) exponent; trailing-zero strip/pad targets this.
 ### :returns: rounded, range-clamped D64Parts (special=1 if overflow to inf).
 routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
-  # zero coefficient: result is ±0 with the preferred exponent clamped into range
-  if LLVM::int_eq[U128](a: coeff, b: 0)
-    var ez = pref
-    if LLVM::signed_lt(a: ez, b: -398_s64)
-      ez = -398_s64
-    if LLVM::signed_gt(a: ez, b: 369_s64)
-      ez = 369_s64
-    return D64Parts(sign: sign, special: 0_u64, exp: ez, coeff: 0_u64)
-  # U64 fast path (the usual sum, product or quotient): a coefficient below 2^64 at an exponent that neither
-  # underflows nor can overflow, and a preferred exponent the result does not have to strip or pad toward -
-  # the general path below does the same in U128 arithmetic
-  if (coeff >>> 64_u32) == 0_u128 and exp >= -398_s64 and exp <= 360_s64 and pref <= exp
-    var c64 = LLVM::int_truncate[U128, U64](coeff)
-    var nd64 = digits10_u64(c: c64)
-    if nd64 <= 16_s64
-      if exp == pref
-        return D64Parts(sign: sign, special: 0_u64, exp: exp, coeff: c64)
-    else
-      # one half-even rounding of the 1 to 4 excess digits, the result has 16 digits (so no padding)
-      var drop64 = nd64 -% 16_s64
-      var p10d = p10_u64(k: drop64)
-      var q64 = div_pow10_u64(x: c64, k: drop64)
-      var r64 = c64 -% q64 *% p10d
-      var twice64 = r64 *% 2_u64
-      if twice64 > p10d or (twice64 == p10d and (q64 & 1_u64) != 0_u64)
-        q64 = q64 +% 1_u64
-      var e64 = exp +% drop64
-      if q64 == 10000000000000000_u64
-        q64 = 1000000000000000_u64
-        e64 = e64 +% 1_s64
-      return D64Parts(sign: sign, special: 0_u64, exp: e64, coeff: q64)
-  var c = coeff
-  var e = exp
-  var nd = digits10_u128(c: c)  # current digit count
-  # Drop, in ONE half-even rounding, every digit that must go: the excess over 16 digits and the digits
-  # below the minimum exponent. Rounding the excess first and then the underflow digit by digit rounded
-  # twice (...4|9 went to ...5 on the first rounding and then, as an exact half, up to the next even).
-  var drop = LLVM::sub(a: nd, b: 16_s64)
-  var under = LLVM::sub(a: -398_s64, b: e)
-  if LLVM::signed_gt(a: under, b: drop)
-    drop = under
-  # whether the rounding drops a nonzero digit: an inexact result keeps its full precision (it is never
-  # stripped toward the preferred exponent, which only an exact result takes)
-  var inexact = false
-  if LLVM::signed_ge(a: drop, b: nd)
-    inexact = true
-    # every digit goes: the result is 1 only when the value is above half of 10^drop (exactly half is
-    # a tie that rounds to the even 0)
-    var above = LLVM::int_eq(a: drop, b: nd) and LLVM::signed_le(a: nd, b: 38_s64) and LLVM::unsigned_gt(a: c, b: LLVM::mul[U128](a: p10_u128(k: LLVM::sub(a: nd, b: 1_s64)), b: 5))
-    c = if above then 1_u128 else 0_u128
-    e = LLVM::add(a: e, b: drop)
-  elseif LLVM::signed_gt(a: drop, b: 0_s64)
-    var divv = p10_u128(k: drop)  # 10^drop divisor
-    var q = div_pow10_u128(x: c, k: drop)  # kept high digits
-    var r = LLVM::sub(a: c, b: LLVM::mul(a: q, b: divv))  # dropped remainder
-    inexact = r != 0_u128
-    var twice = LLVM::mul[U128](a: r, b: 2)
-    # round up when remainder > half; on exact half (==) round to even (odd q)
-    if LLVM::unsigned_gt(a: twice, b: divv)
-      q = LLVM::add[U128](a: q, b: 1)
-    elseif LLVM::int_eq[U128](a: twice, b: divv) and LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: q, b: 1), b: 0)
-      q = LLVM::add[U128](a: q, b: 1)
-    c = q
-    e = LLVM::add(a: e, b: drop)
-    # rounding may have carried to a 17th digit -> renormalize one digit
-    if LLVM::unsigned_ge(a: c, b: p10_u128(k: 16_s64))
-      c = div_pow10_u128(x: c, k: 1_s64)
-      e = LLVM::add(a: e, b: 1_s64)
-  # overflow: pad up to 16 digits, then saturate to inf
-  while LLVM::signed_gt(a: e, b: 369_s64) and LLVM::unsigned_lt(a: c, b: p10_u128(k: 15_s64))
-    c = LLVM::mul(a: c, b: 10_u128)
-    e = LLVM::sub(a: e, b: 1_s64)
-  if LLVM::signed_gt(a: e, b: 369_s64)
-    return D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
-  if LLVM::int_eq[U128](a: c, b: 0)
-    var ez2 = if LLVM::signed_lt(a: e, b: -398_s64) then -398_s64 else e
-    return D64Parts(sign: sign, special: 0_u64, exp: ez2, coeff: 0_u64)
-  # strip trailing zeros toward pref (raise e); pad toward pref (lower e) within 16 digits.
-  # Batched: count the trailing zeros (capped at pref-e) and divide them off in ONE
-  # reciprocal-multiply instead of one U128 ÷10 per digit — a fully-scaled divide quotient
-  # otherwise loops ~14× on a dependent i128 chain (the bulk of D64 truediv).
-  # Strip toward pref to restore the preferred cohort — but NEVER past qmax (369): an
-  # overflow-padded value already sits at e=369 with a padded coefficient, and stripping it back
-  # toward an out-of-range pref (e.g. pref=370 for `1e370`) would re-raise e above qmax and encode
-  # a garbage BID pattern. Clamp the strip target to qmax.
-  var strip_to = if LLVM::signed_gt(a: pref, b: 369_s64) then 369_s64 else pref
-  if not inexact and LLVM::signed_lt[S64](a: e, b: strip_to)
-    var tz = trailing_zeros10_u128(c: c, cap0: LLVM::sub(a: strip_to, b: e))
-    c = div_pow10_u128(x: c, k: tz)
-    e = LLVM::add(a: e, b: tz)
-  # (never below the minimum exponent, where a subnormal preferred exponent would put it)
-  while LLVM::signed_gt(a: e, b: pref) and LLVM::unsigned_lt(a: c, b: p10_u128(k: 15_s64)) and LLVM::signed_le(a: e, b: 369_s64) and LLVM::signed_gt(a: e, b: -398_s64)
-    c = LLVM::mul(a: c, b: 10_u128)
-    e = LLVM::sub(a: e, b: 1_s64)
-  return D64Parts(sign: sign, special: 0_u64, exp: e, coeff: LLVM::int_truncate[U128, U64](c))
+    # zero coefficient: result is ±0 with the preferred exponent clamped into range
+    if LLVM::int_eq[U128](a: coeff, b: 0)
+        var ez = pref
+        if LLVM::signed_lt(a: ez, b: -398_s64)
+            ez = -398_s64
+        if LLVM::signed_gt(a: ez, b: 369_s64)
+            ez = 369_s64
+        return D64Parts(sign: sign, special: 0_u64, exp: ez, coeff: 0_u64)
+    # U64 fast path (the usual sum, product or quotient): a coefficient below 2^64 at an exponent that neither
+    # underflows nor can overflow, and a preferred exponent the result does not have to strip or pad toward -
+    # the general path below does the same in U128 arithmetic
+    if (coeff >>> 64_u32) == 0_u128 and exp >= -398_s64 and exp <= 360_s64 and pref <= exp
+        var c64 = LLVM::int_truncate[U128, U64](coeff)
+        var nd64 = digits10_u64(c: c64)
+        if nd64 <= 16_s64
+            if exp == pref
+                return D64Parts(sign: sign, special: 0_u64, exp: exp, coeff: c64)
+        else
+            # one half-even rounding of the 1 to 4 excess digits, the result has 16 digits (so no padding)
+            var drop64 = nd64 -% 16_s64
+            var p10d = p10_u64(k: drop64)
+            var q64 = div_pow10_u64(x: c64, k: drop64)
+            var r64 = c64 -% q64 *% p10d
+            var twice64 = r64 *% 2_u64
+            if twice64 > p10d or (twice64 == p10d and (q64 & 1_u64) != 0_u64)
+                q64 = q64 +% 1_u64
+            var e64 = exp +% drop64
+            if q64 == 10000000000000000_u64
+                q64 = 1000000000000000_u64
+                e64 = e64 +% 1_s64
+            return D64Parts(sign: sign, special: 0_u64, exp: e64, coeff: q64)
+    var c = coeff
+    var e = exp
+    var nd = digits10_u128(c: c)  # current digit count
+    # Drop, in ONE half-even rounding, every digit that must go: the excess over 16 digits and the digits
+    # below the minimum exponent. Rounding the excess first and then the underflow digit by digit rounded
+    # twice (...4|9 went to ...5 on the first rounding and then, as an exact half, up to the next even).
+    var drop = LLVM::sub(a: nd, b: 16_s64)
+    var under = LLVM::sub(a: -398_s64, b: e)
+    if LLVM::signed_gt(a: under, b: drop)
+        drop = under
+    # whether the rounding drops a nonzero digit: an inexact result keeps its full precision (it is never
+    # stripped toward the preferred exponent, which only an exact result takes)
+    var inexact = false
+    if LLVM::signed_ge(a: drop, b: nd)
+        inexact = true
+        # every digit goes: the result is 1 only when the value is above half of 10^drop (exactly half is
+        # a tie that rounds to the even 0)
+        var above = LLVM::int_eq(a: drop, b: nd) and LLVM::signed_le(a: nd, b: 38_s64) and LLVM::unsigned_gt(a: c, b: LLVM::mul[U128](a: p10_u128(k: LLVM::sub(a: nd, b: 1_s64)), b: 5))
+        c = if above then 1_u128 else 0_u128
+        e = LLVM::add(a: e, b: drop)
+    elseif LLVM::signed_gt(a: drop, b: 0_s64)
+        var divv = p10_u128(k: drop)  # 10^drop divisor
+        var q = div_pow10_u128(x: c, k: drop)  # kept high digits
+        var r = LLVM::sub(a: c, b: LLVM::mul(a: q, b: divv))  # dropped remainder
+        inexact = r != 0_u128
+        var twice = LLVM::mul[U128](a: r, b: 2)
+        # round up when remainder > half; on exact half (==) round to even (odd q)
+        if LLVM::unsigned_gt(a: twice, b: divv)
+            q = LLVM::add[U128](a: q, b: 1)
+        elseif LLVM::int_eq[U128](a: twice, b: divv) and LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: q, b: 1), b: 0)
+            q = LLVM::add[U128](a: q, b: 1)
+        c = q
+        e = LLVM::add(a: e, b: drop)
+        # rounding may have carried to a 17th digit -> renormalize one digit
+        if LLVM::unsigned_ge(a: c, b: p10_u128(k: 16_s64))
+            c = div_pow10_u128(x: c, k: 1_s64)
+            e = LLVM::add(a: e, b: 1_s64)
+    # overflow: pad up to 16 digits, then saturate to inf
+    while LLVM::signed_gt(a: e, b: 369_s64) and LLVM::unsigned_lt(a: c, b: p10_u128(k: 15_s64))
+        c = LLVM::mul(a: c, b: 10_u128)
+        e = LLVM::sub(a: e, b: 1_s64)
+    if LLVM::signed_gt(a: e, b: 369_s64)
+        return D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
+    if LLVM::int_eq[U128](a: c, b: 0)
+        var ez2 = if LLVM::signed_lt(a: e, b: -398_s64) then -398_s64 else e
+        return D64Parts(sign: sign, special: 0_u64, exp: ez2, coeff: 0_u64)
+    # strip trailing zeros toward pref (raise e); pad toward pref (lower e) within 16 digits.
+    # Batched: count the trailing zeros (capped at pref-e) and divide them off in ONE
+    # reciprocal-multiply instead of one U128 ÷10 per digit — a fully-scaled divide quotient
+    # otherwise loops ~14× on a dependent i128 chain (the bulk of D64 truediv).
+    # Strip toward pref to restore the preferred cohort — but NEVER past qmax (369): an
+    # overflow-padded value already sits at e=369 with a padded coefficient, and stripping it back
+    # toward an out-of-range pref (e.g. pref=370 for `1e370`) would re-raise e above qmax and encode
+    # a garbage BID pattern. Clamp the strip target to qmax.
+    var strip_to = if LLVM::signed_gt(a: pref, b: 369_s64) then 369_s64 else pref
+    if not inexact and LLVM::signed_lt[S64](a: e, b: strip_to)
+        var tz = trailing_zeros10_u128(c: c, cap0: LLVM::sub(a: strip_to, b: e))
+        c = div_pow10_u128(x: c, k: tz)
+        e = LLVM::add(a: e, b: tz)
+    # (never below the minimum exponent, where a subnormal preferred exponent would put it)
+    while LLVM::signed_gt(a: e, b: pref) and LLVM::unsigned_lt(a: c, b: p10_u128(k: 15_s64)) and LLVM::signed_le(a: e, b: 369_s64) and LLVM::signed_gt(a: e, b: -398_s64)
+        c = LLVM::mul(a: c, b: 10_u128)
+        e = LLVM::sub(a: e, b: 1_s64)
+    return D64Parts(sign: sign, special: 0_u64, exp: e, coeff: LLVM::int_truncate[U128, U64](c))
 
 # ============================================================================
 # Arithmetic (U64 operands, U128 intermediates)
@@ -380,125 +380,125 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
 ### Raw IEEE 754 decimal64 multiply: coeff product, exponents add, finalized via decfin64.
 ### Either operand non-finite -> shared special-value rules. May yield ±inf / NaN.
 routine d64_mul(a: D64, b: D64) -> D64
-  var pa = a.decode()
-  var pb = b.decode()
-  # any inf/NaN operand: delegate to the shared D128 special-value table
-  if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
-    return d64_of_parts(p: d128_to_d64parts(mul_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
-  var sign = pa.sign != pb.sign  # XOR signs
-  # 64x64 -> 128 widening product (both operands fit U64).
-  var prod = LLVM::mul(a: LLVM::zero_extend[U64, U128](pa.coeff), b: LLVM::zero_extend[U64, U128](pb.coeff))
-  return d64_of_parts(p: decfin64(sign: sign, coeff: prod, exp: LLVM::add(a: pa.exp, b: pb.exp), pref: LLVM::add(a: pa.exp, b: pb.exp)))
+    var pa = a.decode()
+    var pb = b.decode()
+    # any inf/NaN operand: delegate to the shared D128 special-value table
+    if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
+        return d64_of_parts(p: d128_to_d64parts(mul_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
+    var sign = pa.sign != pb.sign  # XOR signs
+    # 64x64 -> 128 widening product (both operands fit U64).
+    var prod = LLVM::mul(a: LLVM::zero_extend[U64, U128](pa.coeff), b: LLVM::zero_extend[U64, U128](pb.coeff))
+    return d64_of_parts(p: decfin64(sign: sign, coeff: prod, exp: LLVM::add(a: pa.exp, b: pb.exp), pref: LLVM::add(a: pa.exp, b: pb.exp)))
 
 ### Raw IEEE 754 decimal64 add: align to the smaller exponent, combine, finalize via decfin64.
 ### Either operand non-finite -> shared special-value rules. May yield ±inf / NaN.
 routine d64_add(a: D64, b: D64) -> D64
-  var pa = a.decode()
-  var pb = b.decode()
-  # any inf/NaN operand: delegate to the shared D128 special-value table
-  if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
-    return d64_of_parts(p: d128_to_d64parts(add_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
-  # h = higher-exponent operand, l = lower; swap so eh >= el
-  var eh = pa.exp
-  var ch = pa.coeff
-  var sh = pa.sign
-  var el = pb.exp
-  var cl = pb.coeff
-  var sl = pb.sign
-  if LLVM::signed_lt(a: pa.exp, b: pb.exp)
-    eh = pb.exp
-    ch = pb.coeff
-    sh = pb.sign
-    el = pa.exp
-    cl = pa.coeff
-    sl = pa.sign
-  var pref = el  # preferred exponent = the smaller input exponent
-  # a zero with the larger exponent: the sum is the other operand exactly (aligning it under the zero's
-  # exponent would round it into a sticky unit there)
-  if ch == 0_u64 and cl != 0_u64
-    return d64_of_parts(p: D64Parts(sign: sl, special: 0_u64, exp: el, coeff: cl))
-  var shift = LLVM::sub(a: eh, b: el)  # decimal places to align l up to h
-  var ew = el  # working exponent of the aligned result
-  var chw = LLVM::zero_extend[U64, U128](0_u64)  # high coeff scaled to working exp
-  var clw = LLVM::zero_extend[U64, U128](0_u64)  # low coeff aligned (with sticky)
-  # shift <= 18: full U64-scale alignment fits the U128 product exactly
-  if LLVM::signed_le(a: shift, b: 18_s64)
-    # 64x64 -> 128 widening align (10^shift fits U64 for shift <= 18).
-    chw = LLVM::mul(a: LLVM::zero_extend[U64, U128](ch), b: LLVM::zero_extend[U64, U128](p10_u64_d(k: shift)))
-    clw = LLVM::zero_extend[U64, U128](cl)
-  else
-    # shift > 18: cap the high scale at 10^18, round the low operand into that window
-    chw = LLVM::mul(a: LLVM::zero_extend[U64, U128](ch), b: LLVM::zero_extend[U64, U128](p10_u64_d(k: 18_s64)))
-    ew = LLVM::sub(a: eh, b: 18_s64)
-    # keep the low operand's in-window digits (down to ew) in U64; sticky only below.
-    var drop = LLVM::sub(a: shift, b: 18_s64)
-    # drop >= 16: low operand vanishes entirely; collapse to a single sticky bit
-    if LLVM::signed_ge(a: drop, b: 16_s64)
-      clw = if LLVM::int_ne(a: cl, b: 0_u64) then LLVM::zero_extend[U64, U128](1_u64) else LLVM::zero_extend[U64, U128](0_u64)
+    var pa = a.decode()
+    var pb = b.decode()
+    # any inf/NaN operand: delegate to the shared D128 special-value table
+    if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
+        return d64_of_parts(p: d128_to_d64parts(add_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
+    # h = higher-exponent operand, l = lower; swap so eh >= el
+    var eh = pa.exp
+    var ch = pa.coeff
+    var sh = pa.sign
+    var el = pb.exp
+    var cl = pb.coeff
+    var sl = pb.sign
+    if LLVM::signed_lt(a: pa.exp, b: pb.exp)
+        eh = pb.exp
+        ch = pb.coeff
+        sh = pb.sign
+        el = pa.exp
+        cl = pa.coeff
+        sl = pa.sign
+    var pref = el  # preferred exponent = the smaller input exponent
+    # a zero with the larger exponent: the sum is the other operand exactly (aligning it under the zero's
+    # exponent would round it into a sticky unit there)
+    if ch == 0_u64 and cl != 0_u64
+        return d64_of_parts(p: D64Parts(sign: sl, special: 0_u64, exp: el, coeff: cl))
+    var shift = LLVM::sub(a: eh, b: el)  # decimal places to align l up to h
+    var ew = el  # working exponent of the aligned result
+    var chw = LLVM::zero_extend[U64, U128](0_u64)  # high coeff scaled to working exp
+    var clw = LLVM::zero_extend[U64, U128](0_u64)  # low coeff aligned (with sticky)
+    # shift <= 18: full U64-scale alignment fits the U128 product exactly
+    if LLVM::signed_le(a: shift, b: 18_s64)
+        # 64x64 -> 128 widening align (10^shift fits U64 for shift <= 18).
+        chw = LLVM::mul(a: LLVM::zero_extend[U64, U128](ch), b: LLVM::zero_extend[U64, U128](p10_u64_d(k: shift)))
+        clw = LLVM::zero_extend[U64, U128](cl)
     else
-      # divide off `drop` digits; OR a sticky 1 into bit 0 if anything was lost
-      var q = div_pow10_u64(x: cl, k: drop)
-      var rem = LLVM::sub(a: cl, b: LLVM::mul(a: q, b: p10_u64_d(k: drop)))
-      clw = LLVM::zero_extend[U64, U128](if LLVM::int_ne(a: rem, b: 0_u64) then LLVM::bit_or(a: q, b: 1_u64) else q)
-  var rc = LLVM::zero_extend[U64, U128](0_u64)  # combined coefficient
-  var rsign = sh
-  # same sign: add magnitudes; opposite sign: subtract smaller from larger, take its sign
-  if sh == sl
-    rc = LLVM::add(a: chw, b: clw)
-  elseif LLVM::unsigned_ge(a: chw, b: clw)
-    rc = LLVM::sub(a: chw, b: clw)
-  else
-    rc = LLVM::sub(a: clw, b: chw)
-    rsign = sl
-  if LLVM::int_eq[U128](a: rc, b: 0)
-    # IEEE 754: a zero sum keeps the common sign ((-0)+(-0) = -0); opposite-sign
-    # cancellation gives +0 (roundTiesToEven).
-    rsign = if sh == sl then sh else false
-  return d64_of_parts(p: decfin64(sign: rsign, coeff: rc, exp: ew, pref: pref))
+        # shift > 18: cap the high scale at 10^18, round the low operand into that window
+        chw = LLVM::mul(a: LLVM::zero_extend[U64, U128](ch), b: LLVM::zero_extend[U64, U128](p10_u64_d(k: 18_s64)))
+        ew = LLVM::sub(a: eh, b: 18_s64)
+        # keep the low operand's in-window digits (down to ew) in U64; sticky only below.
+        var drop = LLVM::sub(a: shift, b: 18_s64)
+        # drop >= 16: low operand vanishes entirely; collapse to a single sticky bit
+        if LLVM::signed_ge(a: drop, b: 16_s64)
+            clw = if LLVM::int_ne(a: cl, b: 0_u64) then LLVM::zero_extend[U64, U128](1_u64) else LLVM::zero_extend[U64, U128](0_u64)
+        else
+            # divide off `drop` digits; OR a sticky 1 into bit 0 if anything was lost
+            var q = div_pow10_u64(x: cl, k: drop)
+            var rem = LLVM::sub(a: cl, b: LLVM::mul(a: q, b: p10_u64_d(k: drop)))
+            clw = LLVM::zero_extend[U64, U128](if LLVM::int_ne(a: rem, b: 0_u64) then LLVM::bit_or(a: q, b: 1_u64) else q)
+    var rc = LLVM::zero_extend[U64, U128](0_u64)  # combined coefficient
+    var rsign = sh
+    # same sign: add magnitudes; opposite sign: subtract smaller from larger, take its sign
+    if sh == sl
+        rc = LLVM::add(a: chw, b: clw)
+    elseif LLVM::unsigned_ge(a: chw, b: clw)
+        rc = LLVM::sub(a: chw, b: clw)
+    else
+        rc = LLVM::sub(a: clw, b: chw)
+        rsign = sl
+    if LLVM::int_eq[U128](a: rc, b: 0)
+        # IEEE 754: a zero sum keeps the common sign ((-0)+(-0) = -0); opposite-sign
+        # cancellation gives +0 (roundTiesToEven).
+        rsign = if sh == sl then sh else false
+    return d64_of_parts(p: decfin64(sign: rsign, coeff: rc, exp: ew, pref: pref))
 
 ### Negation: flip the sign bit.
 routine d64_neg(a: D64) -> D64
-  return D64.from_bits(bits: LLVM::bit_xor(a: a.to_bits(), b: LLVM::shift_left(value: 1_u64, bits: 63_u64)))
+    return D64.from_bits(bits: LLVM::bit_xor(a: a.to_bits(), b: LLVM::shift_left(value: 1_u64, bits: 63_u64)))
 
 ### Raw IEEE 754 decimal64 subtract: add the negation of b.
 routine d64_sub(a: D64, b: D64) -> D64
-  return d64_add(a: a, b: d64_neg(a: b))
+    return d64_add(a: a, b: d64_neg(a: b))
 
 ### Raw IEEE 754 decimal64 divide: scale numerator, integer-divide with sticky, finalize.
 ### Non-finite operands -> shared special rules; x/0 -> ±inf, 0/0 -> NaN. May yield ±inf / NaN.
 routine d64_div(a: D64, b: D64) -> D64
-  var pa = a.decode()
-  var pb = b.decode()
-  # any inf/NaN operand: delegate to the shared D128 special-value table
-  if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
-    return d64_of_parts(p: d128_to_d64parts(div_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
-  var sign = pa.sign != pb.sign  # XOR signs
-  var azero = LLVM::int_eq(a: pa.coeff, b: 0_u64)
-  var bzero = LLVM::int_eq(a: pb.coeff, b: 0_u64)
-  # divide by zero: 0/0 -> NaN (special 2), x/0 -> ±inf (special 1)
-  if bzero
+    var pa = a.decode()
+    var pb = b.decode()
+    # any inf/NaN operand: delegate to the shared D128 special-value table
+    if LLVM::int_ne(a: pa.special, b: 0_u64) or LLVM::int_ne(a: pb.special, b: 0_u64)
+        return d64_of_parts(p: d128_to_d64parts(div_special_parts(pa: d64parts_to_d128(p: pa), pb: d64parts_to_d128(p: pb))))
+    var sign = pa.sign != pb.sign  # XOR signs
+    var azero = LLVM::int_eq(a: pa.coeff, b: 0_u64)
+    var bzero = LLVM::int_eq(a: pb.coeff, b: 0_u64)
+    # divide by zero: 0/0 -> NaN (special 2), x/0 -> ±inf (special 1)
+    if bzero
+        if azero
+            return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
+        return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+    var pref = LLVM::sub(a: pa.exp, b: pb.exp)  # preferred exponent = ea - eb
+    # 0/x -> signed zero at the preferred exponent
     if azero
-      return d64_of_parts(p: D64Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
-    return d64_of_parts(p: D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
-  var pref = LLVM::sub(a: pa.exp, b: pb.exp)  # preferred exponent = ea - eb
-  # 0/x -> signed zero at the preferred exponent
-  if azero
-    return d64_of_parts(p: decfin64(sign: sign, coeff: LLVM::zero_extend[U64, U128](0_u64), exp: pref, pref: pref))
-  var num = LLVM::zero_extend[U64, U128](pa.coeff)
-  var den = LLVM::zero_extend[U64, U128](pb.coeff)
-  # scale numerator to ~Pmax+2 quotient digits, divide, sticky, round to 16
-  var target = LLVM::add(a: digits10_u128(c: den), b: 18_s64)  # want this many num digits
-  var shift = LLVM::sub(a: target, b: digits10_u128(c: num))  # extra 10^shift to apply
-  if LLVM::signed_lt(a: shift, b: 0_s64)
-    shift = 0_s64
-  num = LLVM::mul(a: num, b: p10_u128(k: shift))
-  # The digit-scaling above caps the quotient at ~18-19 digits (< 2^64), so `hi(num) < den`
-  # is guaranteed and the divide is ONE hardware 128/64 (x86 `divq`) via the hi<den
-  # specialization — not the two-limb long division (the general routine's high-limb step
-  # would divide 0 here). Sticky in bit 0, so no separate %/multiply-back to recover it.
-  var q = udiv128_hi_lt_den_sticky(num: num, den: pb.coeff)
-  var exp = LLVM::sub(a: LLVM::sub(a: pa.exp, b: pb.exp), b: shift)
-  return d64_of_parts(p: decfin64(sign: sign, coeff: q, exp: exp, pref: pref))
+        return d64_of_parts(p: decfin64(sign: sign, coeff: LLVM::zero_extend[U64, U128](0_u64), exp: pref, pref: pref))
+    var num = LLVM::zero_extend[U64, U128](pa.coeff)
+    var den = LLVM::zero_extend[U64, U128](pb.coeff)
+    # scale numerator to ~Pmax+2 quotient digits, divide, sticky, round to 16
+    var target = LLVM::add(a: digits10_u128(c: den), b: 18_s64)  # want this many num digits
+    var shift = LLVM::sub(a: target, b: digits10_u128(c: num))  # extra 10^shift to apply
+    if LLVM::signed_lt(a: shift, b: 0_s64)
+        shift = 0_s64
+    num = LLVM::mul(a: num, b: p10_u128(k: shift))
+    # The digit-scaling above caps the quotient at ~18-19 digits (< 2^64), so `hi(num) < den`
+    # is guaranteed and the divide is ONE hardware 128/64 (x86 `divq`) via the hi<den
+    # specialization — not the two-limb long division (the general routine's high-limb step
+    # would divide 0 here). Sticky in bit 0, so no separate %/multiply-back to recover it.
+    var q = udiv128_hi_lt_den_sticky(num: num, den: pb.coeff)
+    var exp = LLVM::sub(a: LLVM::sub(a: pa.exp, b: pb.exp), b: shift)
+    return d64_of_parts(p: decfin64(sign: sign, coeff: q, exp: exp, pref: pref))
 
 # ---- wired operators + represent ----
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors B64/Decimal):
@@ -508,138 +508,138 @@ routine d64_div(a: D64, b: D64) -> D64
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
 routine D64.add!(you: D64) -> D64
-  var r = d64_add(a: me, b: you)
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = d64_add(a: me, b: you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
 routine D64.sub!(you: D64) -> D64
-  var r = d64_sub(a: me, b: you)
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = d64_sub(a: me, b: you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
 routine D64.mul!(you: D64) -> D64
-  var r = d64_mul(a: me, b: you)
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = d64_mul(a: me, b: you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
 ### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 routine D64.truediv!(you: D64) -> D64
-  var r = d64_div(a: me, b: you)
-  if r.is_finite()
-    return r
-  if you.is_zero() and not me.is_zero()
-    throw DivisionByZeroError()
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = d64_div(a: me, b: you)
+    if r.is_finite()
+        return r
+    if you.is_zero() and not me.is_zero()
+        throw DivisionByZeroError()
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D64.add_unchecked(you: D64) -> D64
-  return d64_add(a: me, b: you)
+    return d64_add(a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D64.sub_unchecked(you: D64) -> D64
-  return d64_sub(a: me, b: you)
+    return d64_sub(a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D64.mul_unchecked(you: D64) -> D64
-  return d64_mul(a: me, b: you)
+    return d64_mul(a: me, b: you)
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
 routine D64.truediv_unchecked(you: D64) -> D64
-  return d64_div(a: me, b: you)
+    return d64_div(a: me, b: you)
 
 ### -1, 0 or 1 as |a| = ca 10^ea is below, equal to or above |b| = cb 10^eb (both coefficients nonzero): the same
 ### exponent compares the coefficients, a different adjusted exponent (digits + exponent) decides alone, and
 ### otherwise the coefficient with the larger exponent is scaled by 10^(exponent difference), which stays below
 ### 10^16 (the two adjusted exponents are equal), so the comparison is exact.
 routine d64_cmp_mag(ca: U64, ea: S64, cb: U64, eb: S64) -> S64
-  var x = ca
-  var y = cb
-  if ea != eb
-    var aa = digits10_u64(c: ca) +% ea
-    var ab = digits10_u64(c: cb) +% eb
-    if aa < ab
-      return -1_s64
-    if aa > ab
-      return 1_s64
-    if ea > eb
-      x = ca *% p10_u64(k: ea -% eb)
-    else
-      y = cb *% p10_u64(k: eb -% ea)
-  if x < y
-    return -1_s64
-  if x > y
-    return 1_s64
-  return 0_s64
+    var x = ca
+    var y = cb
+    if ea != eb
+        var aa = digits10_u64(c: ca) +% ea
+        var ab = digits10_u64(c: cb) +% eb
+        if aa < ab
+            return -1_s64
+        if aa > ab
+            return 1_s64
+        if ea > eb
+            x = ca *% p10_u64(k: ea -% eb)
+        else
+            y = cb *% p10_u64(k: eb -% ea)
+    if x < y
+        return -1_s64
+    if x > y
+        return 1_s64
+    return 0_s64
 
 ### The order of a and b: -1, 0 or 1 as a is below, equal to or above b (+0 and -0 equal, cohorts equal), 2 when
 ### either is a NaN. Decodes each operand once instead of forming a - b.
 routine d64_order(a: D64, b: D64) -> S64
-  var pa = a.decode()
-  var pb = b.decode()
-  if pa.special >= 2_u64 or pb.special >= 2_u64
-    return 2_s64
-  if pa.special == 1_u64 or pb.special == 1_u64
-    if pa.special == pb.special and pa.sign == pb.sign
-      return 0_s64
-    if pa.special == 1_u64
-      return if pa.sign then -1_s64 else 1_s64
-    return if pb.sign then 1_s64 else -1_s64
-  var za = pa.coeff == 0_u64
-  var zb = pb.coeff == 0_u64
-  if za and zb
-    return 0_s64
-  if za
-    return if pb.sign then 1_s64 else -1_s64
-  if zb or pa.sign != pb.sign
-    return if pa.sign then -1_s64 else 1_s64
-  var m = d64_cmp_mag(ca: pa.coeff, ea: pa.exp, cb: pb.coeff, eb: pb.exp)
-  return if pa.sign then 0_s64 -% m else m
+    var pa = a.decode()
+    var pb = b.decode()
+    if pa.special >= 2_u64 or pb.special >= 2_u64
+        return 2_s64
+    if pa.special == 1_u64 or pb.special == 1_u64
+        if pa.special == pb.special and pa.sign == pb.sign
+            return 0_s64
+        if pa.special == 1_u64
+            return if pa.sign then -1_s64 else 1_s64
+        return if pb.sign then 1_s64 else -1_s64
+    var za = pa.coeff == 0_u64
+    var zb = pb.coeff == 0_u64
+    if za and zb
+        return 0_s64
+    if za
+        return if pb.sign then 1_s64 else -1_s64
+    if zb or pa.sign != pb.sign
+        return if pa.sign then -1_s64 else 1_s64
+    var m = d64_cmp_mag(ca: pa.coeff, ea: pa.exp, cb: pb.coeff, eb: pb.exp)
+    return if pa.sign then 0_s64 -% m else m
 
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;
 ### finite values compare by value, so different cohorts of the same number are equal).
 routine D64.eq(you: D64) -> Bool
-  return d64_order(a: me, b: you) == 0_s64
+    return d64_order(a: me, b: you) == 0_s64
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
 routine D64.cmp(you: D64) -> ComparisonSign
-  var o = d64_order(a: me, b: you)
-  if o == -1_s64
-    return ME_SMALL
-  if o == 1_s64
-    return ME_LARGE
-  return SAME
+    var o = d64_order(a: me, b: you)
+    if o == -1_s64
+        return ME_SMALL
+    if o == 1_s64
+        return ME_LARGE
+    return SAME
 
 ### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
 routine D64.pow!(you: D64) -> D64
-  var r = me.pow_unchecked(you: you)
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.pow_unchecked(you: you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### Shortest decimal text (widens to D128Parts and reuses the shared formatter).
 @override
 routine D64.represent() -> Text
-  return d128_represent(p: d64parts_to_d128(p: me.decode()))
+    return d128_represent(p: d64parts_to_d128(p: me.decode()))
 
 ### Renders this value with exactly `places` digits after the point, rounded half to even from its
 ### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
@@ -647,12 +647,12 @@ routine D64.represent() -> Text
 ### :param places: The number of digits after the point (0 for none).
 ### :returns: The rendered `Text`.
 routine D64.fixed(places: U64) -> Text
-  return format_decimal_fixed(p: d64parts_to_d128(p: me.decode()), places: places)
+    return format_decimal_fixed(p: d64parts_to_d128(p: me.decode()), places: places)
 
 ### Debug form: `D64(<value>)`.
 @override
 routine D64.diagnose() -> Text
-  return d128_represent_wrapped(p: d64parts_to_d128(p: me.decode()), wrap: "D64", strip: false)
+    return d128_represent_wrapped(p: d64parts_to_d128(p: me.decode()), wrap: "D64", strip: false)
 
 # ============================================================================
 # Public surface — creators / presets / parser / hash / bytes
@@ -670,13 +670,13 @@ routine D64.diagnose() -> Text
 ### :param you: The value to compare against.
 ### :returns: `me` if `me <= you`, otherwise `you`.
 routine D64.min(you: D64) -> D64
-  return if me <= you then me else you
+    return if me <= you then me else you
 
 ### Returns the larger of `me` and `you` under decimal ordering.
 ### :param you: The value to compare against.
 ### :returns: `me` if `me >= you`, otherwise `you`.
 routine D64.max(you: D64) -> D64
-  return if me >= you then me else you
+    return if me >= you then me else you
 
 ### Restricts `me` to the closed interval `[min_val, max_val]`.
 ### :param min_val: The lower bound.
@@ -684,33 +684,33 @@ routine D64.max(you: D64) -> D64
 ### :returns: The clamped value.
 @positional
 routine D64.clamp(min_val: D64, max_val: D64) -> D64
-  return me.min(max_val).max(min_val)
+    return me.min(max_val).max(min_val)
 
 ### Returns the reciprocal `1 / me`.
 ### :returns: The multiplicative inverse.
 routine D64.recip() -> D64
-  return D64_ONE.truediv_unchecked(me)
+    return D64_ONE.truediv_unchecked(me)
 
 ### Returns `me` raised to the integer power `n` via exponentiation by squaring.
 ### A negative `n` inverts the result.
 ### :param n: The integer exponent.
 ### :returns: `me ** n`.
 routine D64.powi(n: S32) -> D64
-  var base = if n < 0_s32 then D64_ONE.truediv_unchecked(me) else me
-  var count = n.unsigned_abs()
-  var result = D64_ONE
-  while count > 0_u32
-    if count.bitand(1_u32) == 1_u32
-      result = result.mul_unchecked(base)
-    base = base.mul_unchecked(base)
-    count = count.lshr(1_u32)
-  return result
+    var base = if n < 0_s32 then D64_ONE.truediv_unchecked(me) else me
+    var count = n.unsigned_abs()
+    var result = D64_ONE
+    while count > 0_u32
+        if count.bitand(1_u32) == 1_u32
+            result = result.mul_unchecked(base)
+        base = base.mul_unchecked(base)
+        count = count.lshr(1_u32)
+    return result
 
 ### Returns `(me + you) / 2`.
 ### :param you: The other value.
 ### :returns: The arithmetic midpoint of `me` and `you`.
 routine D64.midpoint(you: D64) -> D64
-  return me.add_unchecked(you).truediv_unchecked(2.0_d64)
+    return me.add_unchecked(you).truediv_unchecked(2.0_d64)
 
 # ============================================================================
 # Constants
@@ -730,51 +730,51 @@ preset D64_EPSILON: D64 = 1e-15_d64
 
 ### Converts an S8 to D64 (widen to S64, exponent 0).
 routine D64(from: S8) -> D64
-  return D64.from_int64(value: S64(from))
+    return D64.from_int64(value: S64(from))
 
 ### Converts an S16 to D64 (widen to S64, exponent 0).
 routine D64(from: S16) -> D64
-  return D64.from_int64(value: S64(from))
+    return D64.from_int64(value: S64(from))
 
 ### Converts an S32 to D64 (widen to S64, exponent 0).
 routine D64(from: S32) -> D64
-  return D64.from_int64(value: S64(from))
+    return D64.from_int64(value: S64(from))
 
 ### Converts an S64 to D64 (exponent 0; rounded to 16 digits).
 routine D64(from: S64) -> D64
-  return D64.from_int64(value: from)
+    return D64.from_int64(value: from)
 
 ### Converts an S128 to D64 via D128 (rounded to 16 digits).
 routine D64(from: S128) -> D64
-  return D64(from: D128(from: from))
+    return D64(from: D128(from: from))
 
 ### Converts an S256 to D64 via D128 (rounded to 16 digits).
 routine D64(from: S256) -> D64
-  return D64(from: D128(from: from))
+    return D64(from: D128(from: from))
 
 ### Converts a U8 to D64 (exponent 0).
 routine D64(from: U8) -> D64
-  return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+    return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U16 to D64 (exponent 0).
 routine D64(from: U16) -> D64
-  return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+    return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U32 to D64 (exponent 0).
 routine D64(from: U32) -> D64
-  return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
+    return D64.from_components(sign: false, coeff: U64(from), exp: 0_s64)
 
 ### Converts a U64 to D64 (exponent 0; rounded to 16 digits).
 routine D64(from: U64) -> D64
-  return D64.from_components(sign: false, coeff: from, exp: 0_s64)
+    return D64.from_components(sign: false, coeff: from, exp: 0_s64)
 
 ### Converts a U128 to D64 via D128 (rounded to 16 digits).
 routine D64(from: U128) -> D64
-  return D64(from: D128(from: from))
+    return D64(from: D128(from: from))
 
 ### Converts a U256 to D64 via D128 (rounded to 16 digits).
 routine D64(from: U256) -> D64
-  return D64(from: D128(from: from))
+    return D64(from: D128(from: from))
 
 # ============================================================================
 # Creators — binary floats (matched width is B128)
@@ -782,19 +782,19 @@ routine D64(from: U256) -> D64
 
 ### Converts an B16 to D64 (via B64, then B128 -> D64, correctly rounded).
 routine D64(from: B16) -> D64
-  return D64(from: B64(from))
+    return D64(from: B64(from))
 
 ### Converts an B32 to D64 (via B64, then B128 -> D64, correctly rounded).
 routine D64(from: B32) -> D64
-  return D64(from: B64(from))
+    return D64(from: B64(from))
 
 ### Converts an B64 to D64 (widened to B128 for correctly-rounded decimal conversion).
 routine D64(from: B64) -> D64
-  return b128_to_d64(x: B128(from: from))
+    return b128_to_d64(x: B128(from: from))
 
 ### Converts an B128 to D64 (correctly-rounded binary -> decimal).
 routine D64(from: B128) -> D64
-  return b128_to_d64(x: from)
+    return b128_to_d64(x: from)
 
 # ============================================================================
 # Creators — decimal <-> decimal
@@ -802,15 +802,15 @@ routine D64(from: B128) -> D64
 
 ### Converts a D32 to D64 (always exact — every decimal32 fits decimal64).
 routine D64(from: D32) -> D64
-  return d64_of_parts(p: d128_to_d64parts(p: d32parts_to_d128(p: from.decode())))
+    return d64_of_parts(p: d128_to_d64parts(p: d32parts_to_d128(p: from.decode())))
 
 ### Identity conversion (D64 -> D64).
 routine D64(from: D64) -> D64
-  return from
+    return from
 
 ### Converts a D128 to D64 (rounded to 16 digits / decimal64 range).
 routine D64(from: D128) -> D64
-  return d64_of_parts(p: d128_to_d64parts(p: from.decode()))
+    return d64_of_parts(p: d128_to_d64parts(p: from.decode()))
 
 # ============================================================================
 # Text parsing — shared D128 scanner, narrowed to D64.
@@ -819,7 +819,7 @@ routine D64(from: D128) -> D64
 ### Parses a decimal literal into a `D64`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 routine D64!(from_text: Text) -> D64
-  return D64(from: parse_decimal_d128(from_text: from_text))
+    return D64(from: parse_decimal_d128(from_text: from_text))
 
 # ============================================================================
 # Hashing
@@ -831,22 +831,22 @@ routine D64!(from_text: Text) -> D64
 
 ### Returns the raw bytes of this value in little-endian order.
 routine D64.to_bytes_le() -> Array[Byte, 8]
-  var raw = me.to_bits()
-  var result = Array[Byte, 8]()
-  var i = 0_u64
-  while LLVM::unsigned_lt(a: i, b: 8_u64)
-    var b = LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, LLVM::mul(a: i, b: 8_u64)))
-    result = LLVM::set_byte_at(array: result, index: i, value: b)
-    i = LLVM::add(a: i, b: 1_u64)
-  return result
+    var raw = me.to_bits()
+    var result = Array[Byte, 8]()
+    var i = 0_u64
+    while LLVM::unsigned_lt(a: i, b: 8_u64)
+        var b = LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, LLVM::mul(a: i, b: 8_u64)))
+        result = LLVM::set_byte_at(array: result, index: i, value: b)
+        i = LLVM::add(a: i, b: 1_u64)
+    return result
 
 ### Returns the raw bytes of this value in big-endian order.
 routine D64.to_bytes_be() -> Array[Byte, 8]
-  var raw = me.to_bits()
-  var result = Array[Byte, 8]()
-  var i = 0_u64
-  while LLVM::unsigned_lt(a: i, b: 8_u64)
-    var b = LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, LLVM::mul(a: LLVM::sub(a: 7_u64, b: i), b: 8_u64)))
-    result = LLVM::set_byte_at(array: result, index: i, value: b)
-    i = LLVM::add(a: i, b: 1_u64)
-  return result
+    var raw = me.to_bits()
+    var result = Array[Byte, 8]()
+    var i = 0_u64
+    while LLVM::unsigned_lt(a: i, b: 8_u64)
+        var b = LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, LLVM::mul(a: LLVM::sub(a: 7_u64, b: i), b: 8_u64)))
+        result = LLVM::set_byte_at(array: result, index: i, value: b)
+        i = LLVM::add(a: i, b: 1_u64)
+    return result

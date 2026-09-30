@@ -20,8 +20,8 @@ public class ImportValidationTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         import Core
                         """;
 
@@ -38,8 +38,8 @@ public class ImportValidationTests
         string source = """
                         import Core
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -57,8 +57,8 @@ public class ImportValidationTests
                         import Core.Text
                         import Core.Bool
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -80,7 +80,7 @@ public class ImportValidationTests
                         import Core.[Text]
                         import Core.[Text]
                         record Dummy
-                          value: S32
+                            value: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -97,7 +97,7 @@ public class ImportValidationTests
                         import Core.[Text]
                         import Core.[Bool]
                         record Dummy
-                          value: S32
+                            value: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

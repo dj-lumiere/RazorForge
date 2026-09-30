@@ -16,124 +16,124 @@ module Core
 ### NaN inputs, +infinity for +infinity, ±0 for ±0.
 ### :returns: The correctly rounded square root.
 routine B128.sqrt_unchecked() -> B128
-  var ua = me.to_bits()
-  var hi = LLVM::int_truncate[U128, U64](ua >>> 64)
-  var lo = LLVM::int_truncate[U128, U64](ua)
-  var e = LLVM::reinterpret_bits[U64, S64](hi >>> 48)
-  if e == 0
-    # subnormal or +0: normalize the mantissa
-    var ns = -15_s64
-    if hi != 0
-      ns = ns +% LLVM::reinterpret_bits[U64, S64](hi.leading_zeros())
-    elseif lo != 0
-      ns = ns +% LLVM::reinterpret_bits[U64, S64](lo.leading_zeros()) +% 64
-    else
-      return me
-    e = 1 -% ns
-    ua = ua << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](ns))
-  if e >= 0x7FFF
-    # -0, +infinity, negative numbers and NaN
-    if (ua << 1) == 0
-      return me
-    if ua == (0x7FFF_u128 << 112)
-      return me
-    if ua <= (0xFFFF_u128 << 112) and ua > (0x8000_u128 << 112)
-      # x < 0: the default NaN
-      return B128.from_bits(bits: 0x1FFFF_u128 << 111)
-    # NaN: quiet a signaling NaN, keep sign and payload
-    return B128.from_bits(bits: ua | (1_u128 << 111))
-  e = e +% 1
-  var q2 = e >> 1
-  var i = LLVM::reinterpret_bits[S64, U64](e & 1)
-  # exponent of the final result
-  var e2 = LLVM::reinterpret_bits[S64, U64](q2 +% 8190) << 48
-  ua = ua << 16
-  var rx = LLVM::int_truncate[U128, U64](ua >>> 64)
-  var r = b128_sqrt_rsqrt9(m: rx)
-  # 2^64/sqrt(2) for odd exponents
-  var rs = 0xFFFFFFFFFFFFFFFF_u64
-  if i != 0
-    rs = 0xB504F333F9DE6484_u64
-  var r2 = LLVM::zero_extend[U64, U128](r) *% LLVM::zero_extend[U64, U128](rs)
-  ua = ua >>> LLVM::int_truncate[U64, U32](2 -% i)
-  ua = ua | (1_u128 << LLVM::int_truncate[U64, U32](126 +% i))
-  r = LLVM::int_truncate[U128, U64](r2 >>> 64)
-  var sx = b128_sqrt_mhuU(y: r, x: ua)
-  var h = b128_sqrt_mhuU(y: r, x: sx) << 2
-  # high part of the (signed h) x (unsigned sx) product
-  var ds = b128_sqrt_mhUU(a: sx, b: h)
-  if (h >>> 127) != 0
-    ds = ds -% sx
-  sx = sx << 1
-  var v = sx -% ds
-  var dd = LLVM::reinterpret_bits[U16, S16](LLVM::int_truncate[U128, U16](v << 2))
-  if not (dd < -37 or dd > 13)
-    # v is almost the final result, at most 1 ulp off: square the candidate and compare with the argument
-    v = v +% (1_u128 << 13)
-    var m = v >>> 14
-    var dm2 = LLVM::reinterpret_bits[U128, S128]((m *% m) -% (ua << 100))
-    v = v & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFC000_u128
-    if dm2 > 0
-      v = v -% 1
-    if dm2 < 0
-      v = v +% 1
-  # round to nearest, ties to even
-  var rnd = (v >>> 14) & 1
-  v = (v >>> 15) +% rnd
-  # place the exponent
-  v = v +% (LLVM::zero_extend[U64, U128](e2) << 64)
-  return B128.from_bits(bits: v)
+    var ua = me.to_bits()
+    var hi = LLVM::int_truncate[U128, U64](ua >>> 64)
+    var lo = LLVM::int_truncate[U128, U64](ua)
+    var e = LLVM::reinterpret_bits[U64, S64](hi >>> 48)
+    if e == 0
+        # subnormal or +0: normalize the mantissa
+        var ns = -15_s64
+        if hi != 0
+            ns = ns +% LLVM::reinterpret_bits[U64, S64](hi.leading_zeros())
+        elseif lo != 0
+            ns = ns +% LLVM::reinterpret_bits[U64, S64](lo.leading_zeros()) +% 64
+        else
+            return me
+        e = 1 -% ns
+        ua = ua << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](ns))
+    if e >= 0x7FFF
+        # -0, +infinity, negative numbers and NaN
+        if (ua << 1) == 0
+            return me
+        if ua == (0x7FFF_u128 << 112)
+            return me
+        if ua <= (0xFFFF_u128 << 112) and ua > (0x8000_u128 << 112)
+            # x < 0: the default NaN
+            return B128.from_bits(bits: 0x1FFFF_u128 << 111)
+        # NaN: quiet a signaling NaN, keep sign and payload
+        return B128.from_bits(bits: ua | (1_u128 << 111))
+    e = e +% 1
+    var q2 = e >> 1
+    var i = LLVM::reinterpret_bits[S64, U64](e & 1)
+    # exponent of the final result
+    var e2 = LLVM::reinterpret_bits[S64, U64](q2 +% 8190) << 48
+    ua = ua << 16
+    var rx = LLVM::int_truncate[U128, U64](ua >>> 64)
+    var r = b128_sqrt_rsqrt9(m: rx)
+    # 2^64/sqrt(2) for odd exponents
+    var rs = 0xFFFFFFFFFFFFFFFF_u64
+    if i != 0
+        rs = 0xB504F333F9DE6484_u64
+    var r2 = LLVM::zero_extend[U64, U128](r) *% LLVM::zero_extend[U64, U128](rs)
+    ua = ua >>> LLVM::int_truncate[U64, U32](2 -% i)
+    ua = ua | (1_u128 << LLVM::int_truncate[U64, U32](126 +% i))
+    r = LLVM::int_truncate[U128, U64](r2 >>> 64)
+    var sx = b128_sqrt_mhuU(y: r, x: ua)
+    var h = b128_sqrt_mhuU(y: r, x: sx) << 2
+    # high part of the (signed h) x (unsigned sx) product
+    var ds = b128_sqrt_mhUU(a: sx, b: h)
+    if (h >>> 127) != 0
+        ds = ds -% sx
+    sx = sx << 1
+    var v = sx -% ds
+    var dd = LLVM::reinterpret_bits[U16, S16](LLVM::int_truncate[U128, U16](v << 2))
+    if not (dd < -37 or dd > 13)
+        # v is almost the final result, at most 1 ulp off: square the candidate and compare with the argument
+        v = v +% (1_u128 << 13)
+        var m = v >>> 14
+        var dm2 = LLVM::reinterpret_bits[U128, S128]((m *% m) -% (ua << 100))
+        v = v & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFC000_u128
+        if dm2 > 0
+            v = v -% 1
+        if dm2 < 0
+            v = v +% 1
+    # round to nearest, ties to even
+    var rnd = (v >>> 14) & 1
+    v = (v >>> 15) +% rnd
+    # place the exponent
+    v = v +% (LLVM::zero_extend[U64, U128](e2) << 64)
+    return B128.from_bits(bits: v)
 
 ### Reciprocal square root of the mantissa m (1 <= m/2^63 < 2) to almost 64 bits: a cubic minimax seed per
 ### 1/64 subrange followed by one Newton-Raphson step.
 ### :param m: The mantissa with its leading bit at bit 63.
 ### :returns: 2^64/sqrt(m/2^63) approximately.
 secret routine b128_sqrt_rsqrt9(m: U64) -> U64
-  var indx = (m >>> 58) *% 4
-  var c0 = B128_SQRT_RSQRT9[indx]
-  var c1 = B128_SQRT_RSQRT9[indx +% 1]
-  var c2 = B128_SQRT_RSQRT9[indx +% 2]
-  var c3 = B128_SQRT_RSQRT9[indx +% 3]
-  c0 = (c0 << 31) | 0x8000000000000000_u64
-  c1 = c1 << 25
-  # local coordinate in the subrange [0, 2^32]
-  var d = (m << 6) >>> 32
-  var d2 = (d *% d) >>> 32
-  # even part of the polynomial (positive)
-  var re = c0 +% ((d2 *% c2) >>> 13)
-  # odd part of the polynomial (negative)
-  var ro = (d *% ((c1 +% ((d2 *% c3) >>> 19)) >>> 26)) >>> 6
-  var r = re -% ro
-  # Newton-Raphson step: r1 = r0 - r0*(r0^2*x - 1)/2
-  var r2 = b128_sqrt_mhuu(a: r, b: r)
-  var h = LLVM::reinterpret_bits[U64, S64](b128_sqrt_mhuu(a: m, b: r2) +% r2)
-  var hr = LLVM::int_truncate[S128, S64]((LLVM::sign_extend[S64, S128](h) *% LLVM::sign_extend[S64, S128](LLVM::reinterpret_bits[U64, S64](r >>> 1))) >> 64)
-  r = r -% LLVM::reinterpret_bits[S64, U64](hr)
-  if r == 0
-    r = r -% 1
-  return r
+    var indx = (m >>> 58) *% 4
+    var c0 = B128_SQRT_RSQRT9[indx]
+    var c1 = B128_SQRT_RSQRT9[indx +% 1]
+    var c2 = B128_SQRT_RSQRT9[indx +% 2]
+    var c3 = B128_SQRT_RSQRT9[indx +% 3]
+    c0 = (c0 << 31) | 0x8000000000000000_u64
+    c1 = c1 << 25
+    # local coordinate in the subrange [0, 2^32]
+    var d = (m << 6) >>> 32
+    var d2 = (d *% d) >>> 32
+    # even part of the polynomial (positive)
+    var re = c0 +% ((d2 *% c2) >>> 13)
+    # odd part of the polynomial (negative)
+    var ro = (d *% ((c1 +% ((d2 *% c3) >>> 19)) >>> 26)) >>> 6
+    var r = re -% ro
+    # Newton-Raphson step: r1 = r0 - r0*(r0^2*x - 1)/2
+    var r2 = b128_sqrt_mhuu(a: r, b: r)
+    var h = LLVM::reinterpret_bits[U64, S64](b128_sqrt_mhuu(a: m, b: r2) +% r2)
+    var hr = LLVM::int_truncate[S128, S64]((LLVM::sign_extend[S64, S128](h) *% LLVM::sign_extend[S64, S128](LLVM::reinterpret_bits[U64, S64](r >>> 1))) >> 64)
+    r = r -% LLVM::reinterpret_bits[S64, U64](hr)
+    if r == 0
+        r = r -% 1
+    return r
 
 ### High 64 bits of the unsigned product a*b.
 @inline
 secret routine b128_sqrt_mhuu(a: U64, b: U64) -> U64
-  return LLVM::int_truncate[U128, U64]((LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)) >>> 64)
+    return LLVM::int_truncate[U128, U64]((LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)) >>> 64)
 
 ### High 128 bits of the 64x128-bit unsigned product y*x (the low partial product's low half dropped).
 @inline
 secret routine b128_sqrt_mhuU(y: U64, x: U128) -> U128
-  var y2 = LLVM::zero_extend[U64, U128](y)
-  var xy0 = (x & 0xFFFFFFFFFFFFFFFF_u128) *% y2
-  var xy1 = (x >>> 64) *% y2
-  return xy1 +% (xy0 >>> 64)
+    var y2 = LLVM::zero_extend[U64, U128](y)
+    var xy0 = (x & 0xFFFFFFFFFFFFFFFF_u128) *% y2
+    var xy1 = (x >>> 64) *% y2
+    return xy1 +% (xy0 >>> 64)
 
 ### Approximate high 128 bits of the unsigned 128x128-bit product a*b (the low*low product dropped).
 @inline
 secret routine b128_sqrt_mhUU(a: U128, b: U128) -> U128
-  var a0 = a & 0xFFFFFFFFFFFFFFFF_u128
-  var a1 = a >>> 64
-  var b0 = b & 0xFFFFFFFFFFFFFFFF_u128
-  var b1 = b >>> 64
-  return ((a1 *% b1) +% ((a1 *% b0) >>> 64)) +% ((a0 *% b1) >>> 64)
+    var a0 = a & 0xFFFFFFFFFFFFFFFF_u128
+    var a1 = a >>> 64
+    var b0 = b & 0xFFFFFFFFFFFFFFFF_u128
+    var b1 = b >>> 64
+    return ((a1 *% b1) +% ((a1 *% b0) >>> 64)) +% ((a0 *% b1) >>> 64)
 
 # The reciprocal-square-root seed table: for each of the 64 subranges of [1, 2), the cubic's four 32-bit
 # coefficients c0 c1 c2 c3 (c0 without its implicit leading bit).

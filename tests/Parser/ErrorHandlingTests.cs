@@ -19,7 +19,7 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine get_value!() -> S32
-                          return 42
+                            return 42
                         """;
 
         Program program = AssertParses(source: source);
@@ -36,7 +36,7 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine parse_int!(text: Text) -> S32
-                          return 42
+                            return 42
                         """;
 
         Program program = AssertParses(source: source);
@@ -53,7 +53,7 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine User.validate!() -> bool
-                          return true
+                            return true
                         """;
 
         Program program = AssertParses(source: source);
@@ -75,7 +75,7 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine get_value() -> S32
-                          return 42
+                            return 42
                         """;
 
         Program program = AssertParses(source: source);
@@ -96,9 +96,9 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine validate!(x: S32) -> S32
-                          if x < 0
-                            throw ValidationError("negative value")
-                          return x
+                            if x < 0
+                                throw ValidationError("negative value")
+                            return x
                         """;
 
         Program program = AssertParses(source: source);
@@ -125,8 +125,8 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine fail!() -> S32
-                          throw CustomError(code: 123, message: "failed")
-                          return
+                            throw CustomError(code: 123, message: "failed")
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -152,9 +152,9 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine find!(id: U64) -> User
-                          if id == 0
-                            absent
-                          return get_user(id)
+                            if id == 0
+                                absent
+                            return get_user(id)
                         """;
 
         Program program = AssertParses(source: source);
@@ -181,9 +181,9 @@ public class ErrorHandlingTests
         // unless parses til IfStatement with negated condition
         string source = """
                         routine get!(key: Text) -> Value
-                          unless cache.has(key)
-                            absent
-                          return cache.get(key)
+                            unless cache.has(key)
+                                absent
+                            return cache.get(key)
                         """;
 
         Program program = AssertParses(source: source);
@@ -215,11 +215,11 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine get_user!(id: U64) -> User
-                          if id == 0
-                            throw ValidationError("invalid id")
-                          unless database.has_user(id)
-                            absent
-                          return database.get_user(id)
+                            if id == 0
+                                throw ValidationError("invalid id")
+                            unless database.has_user(id)
+                                absent
+                            return database.get_user(id)
                         """;
 
         Program program = AssertParses(source: source);
@@ -258,9 +258,9 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine try_get(id: U64) -> User?
-                          if id == 0
-                            return none
-                          return get_user(id)
+                            if id == 0
+                                return none
+                            return get_user(id)
                         """;
 
         Program program = AssertParses(source: source);
@@ -277,8 +277,8 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine process(data: Text?)
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -294,8 +294,8 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine foo()
-                          var x: S32? = none
-                          return
+                            var x: S32? = none
+                            return
                         """;
 
         AssertParses(source: source);
@@ -313,8 +313,8 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine get_or_default() -> S32
-                          var value: S32? = none
-                          return value ?? 42
+                            var value: S32? = none
+                            return value ?? 42
                         """;
 
         AssertParses(source: source);
@@ -327,10 +327,10 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine get_first_available() -> S32
-                          var a: S32? = none
-                          var b: S32? = none
-                          var c: S32 = 100
-                          return a ?? b ?? c
+                            var a: S32? = none
+                            var b: S32? = none
+                            var c: S32 = 100
+                            return a ?? b ?? c
                         """;
 
         AssertParses(source: source);
@@ -348,10 +348,10 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine handle(value: User?)
-                          when value
-                            is None => show("not found")
-                            else u => show(u.name)
-                          return
+                            when value
+                                is None => show("not found")
+                                else u => show(u.name)
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -381,8 +381,8 @@ public class ErrorHandlingTests
         // Parser accepts, semantic analyzer should reject
         string source = """
                         routine not_failable()
-                          throw SomeError()
-                          return
+                            throw SomeError()
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -398,8 +398,8 @@ public class ErrorHandlingTests
         // Parser accepts, semantic analyzer should reject
         string source = """
                         routine not_failable()
-                          absent
-                          return
+                            absent
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -413,8 +413,8 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine fail!()
-                          throw
-                          return
+                            throw
+                            return
                         """;
 
         // Parser uses error recovery, check for errors instead of exception

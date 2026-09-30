@@ -20,11 +20,11 @@ public class RecordSecretWithTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         routine test(p: Point)
-                          var q = p with .x = 2
-                          return
+                            var q = p with .x = 2
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -39,11 +39,11 @@ public class RecordSecretWithTests
     {
         string source = """
                         record SecretRecord
-                          secret hash: S32
-                          name: Text
+                            secret hash: S32
+                            name: Text
                         routine test(r: SecretRecord)
-                          var s = r with .hash = 42
-                          return
+                            var s = r with .hash = 42
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -58,11 +58,11 @@ public class RecordSecretWithTests
     {
         string source = """
                         record Info
-                          posted status: S32
-                          name: Text
+                            posted status: S32
+                            name: Text
                         routine test(info: Info)
-                          var i = info with .name = "test"
-                          return
+                            var i = info with .name = "test"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

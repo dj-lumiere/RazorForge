@@ -30,27 +30,27 @@ module Core
 ### :param cosine: True for the cosine, false for the sine.
 ### :returns: The bits of the correctly rounded result.
 secret routine b128_trig(bits: U128, cosine: Bool) -> U128
-  var signmask = 1_u128 << 127
-  var expmask = 0x7FFF_u128 << 112
-  var implicit = 1_u128 << 112
-  var ax = bits & (signmask -% 1)
-  if ax >= expmask
-    if ax == expmask
-      # +-infinity: the positive default quiet NaN
-      return expmask | (1_u128 << 111)
-    # NaN: quiet it, keep sign and payload
-    return bits | (1_u128 << 111)
-  if ax < (LLVM::zero_extend[U64, U128](16383_u64 -% 57_u64) << 112)
-    # |x| < 2^-57: sin(x) rounds to x, cos(x) to 1
-    if cosine
-      return 0x3FFF_u128 << 112
-    return bits
-  var m = (ax & (implicit -% 1)) | implicit
-  var sign = 0_u128
-  if not cosine
-    sign = bits & signmask
-  var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
-  return b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: cosine), m: m, e: e, cosine: cosine, sign: sign)
+    var signmask = 1_u128 << 127
+    var expmask = 0x7FFF_u128 << 112
+    var implicit = 1_u128 << 112
+    var ax = bits & (signmask -% 1)
+    if ax >= expmask
+        if ax == expmask
+            # +-infinity: the positive default quiet NaN
+            return expmask | (1_u128 << 111)
+        # NaN: quiet it, keep sign and payload
+        return bits | (1_u128 << 111)
+    if ax < (LLVM::zero_extend[U64, U128](16383_u64 -% 57_u64) << 112)
+        # |x| < 2^-57: sin(x) rounds to x, cos(x) to 1
+        if cosine
+            return 0x3FFF_u128 << 112
+        return bits
+    var m = (ax & (implicit -% 1)) | implicit
+    var sign = 0_u128
+    if not cosine
+        sign = bits & signmask
+    var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
+    return b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: cosine), m: m, e: e, cosine: cosine, sign: sign)
 
 ### Rounds a fast-path result, or runs the accurate path when the fast one cannot vouch for it.
 ### :param fr: The fast path's (vouched, frac, e2, sign) result.
@@ -60,306 +60,306 @@ secret routine b128_trig(bits: U128, cosine: Bool) -> U128
 ### :param sign: The argument's sign bit for the sine, 0 for the cosine.
 ### :returns: The bits of the correctly rounded result.
 secret routine b128_trig_finish(fr: (Bool, U128, S64, U128), m: U128, e: S64, cosine: Bool, sign: U128) -> U128
-  var implicit = 1_u128 << 112
-  if fr.item0
-    # round on the fixed 15-bit guard unless it sits within 16 units of the midpoint
-    var frac = fr.item1
-    var rest = LLVM::int_truncate[U128, U64](frac) & 0x7FFF_u64
-    if ((rest +% 16_u64 -% 0x4000_u64) & 0x7FFF_u64) > 32_u64
-      var up = 0_u128
-      if rest > 0x4000_u64
-        up = 1
-      var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](fr.item2 +% 16382)) << 112
-      return (sign ^ fr.item3) | (((ex +% (frac >>> 15)) -% implicit) +% up)
-  return b128_trig_accurate(m: m, e: e, cosine: cosine, sign: sign)
+    var implicit = 1_u128 << 112
+    if fr.item0
+        # round on the fixed 15-bit guard unless it sits within 16 units of the midpoint
+        var frac = fr.item1
+        var rest = LLVM::int_truncate[U128, U64](frac) & 0x7FFF_u64
+        if ((rest +% 16_u64 -% 0x4000_u64) & 0x7FFF_u64) > 32_u64
+            var up = 0_u128
+            if rest > 0x4000_u64
+                up = 1
+            var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](fr.item2 +% 16382)) << 112
+            return (sign ^ fr.item3) | (((ex +% (frac >>> 15)) -% implicit) +% up)
+    return b128_trig_accurate(m: m, e: e, cosine: cosine, sign: sign)
 
 ### Both correctly rounded results for the argument bits, the sine's then the cosine's, sharing the argument
 ### reduction (the expensive part) between them.
 ### :param bits: The argument's bits.
 ### :returns: The bits of sin and of cos.
 secret routine b128_trig_both(bits: U128) -> (U128, U128)
-  var signmask = 1_u128 << 127
-  var expmask = 0x7FFF_u128 << 112
-  var implicit = 1_u128 << 112
-  var ax = bits & (signmask -% 1)
-  if ax >= expmask or ax < (LLVM::zero_extend[U64, U128](16383_u64 -% 57_u64) << 112)
-    return (b128_trig(bits: bits, cosine: false), b128_trig(bits: bits, cosine: true))
-  var m = (ax & (implicit -% 1)) | implicit
-  var sign = bits & signmask
-  var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
-  if e < -8
-    return (b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: false), m: m, e: e, cosine: false, sign: sign), b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: true), m: m, e: e, cosine: true, sign: 0_u128))
-  var r = b128_trig_reduce(m: m, e: e)
-  if not r.item0
-    return (b128_trig_accurate(m: m, e: e, cosine: false, sign: sign), b128_trig_accurate(m: m, e: e, cosine: true, sign: 0_u128))
-  var sq = b128_trig_squares(t1: r.item3, et: r.item4)
-  var s1 = b128_trig_sin_frac(t1: r.item3, u: sq.item0, v: sq.item1)
-  var fs = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: false)
-  var fc = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: true)
-  return (b128_trig_finish(fr: fs, m: m, e: e, cosine: false, sign: sign), b128_trig_finish(fr: fc, m: m, e: e, cosine: true, sign: 0_u128))
+    var signmask = 1_u128 << 127
+    var expmask = 0x7FFF_u128 << 112
+    var implicit = 1_u128 << 112
+    var ax = bits & (signmask -% 1)
+    if ax >= expmask or ax < (LLVM::zero_extend[U64, U128](16383_u64 -% 57_u64) << 112)
+        return (b128_trig(bits: bits, cosine: false), b128_trig(bits: bits, cosine: true))
+    var m = (ax & (implicit -% 1)) | implicit
+    var sign = bits & signmask
+    var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
+    if e < -8
+        return (b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: false), m: m, e: e, cosine: false, sign: sign), b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: true), m: m, e: e, cosine: true, sign: 0_u128))
+    var r = b128_trig_reduce(m: m, e: e)
+    if not r.item0
+        return (b128_trig_accurate(m: m, e: e, cosine: false, sign: sign), b128_trig_accurate(m: m, e: e, cosine: true, sign: 0_u128))
+    var sq = b128_trig_squares(t1: r.item3, et: r.item4)
+    var s1 = b128_trig_sin_frac(t1: r.item3, u: sq.item0, v: sq.item1)
+    var fs = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: false)
+    var fc = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: true)
+    return (b128_trig_finish(fr: fs, m: m, e: e, cosine: false, sign: sign), b128_trig_finish(fr: fc, m: m, e: e, cosine: true, sign: 0_u128))
 
 ### A shift amount as the U32 the shift operators take.
 @inline
 secret routine b128_trig_sh(n: S64) -> U32
-  return LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](n))
+    return LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](n))
 
 ### Builds a 128-bit integer from two 64-bit halves.
 @inline
 secret routine b128_trig_u128(hi: U64, lo: U64) -> U128
-  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+    return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
 
 ### Leading zeros of a 128-bit value, 128 when it is zero.
 @inline
 secret routine b128_trig_clz128(x: U128) -> S64
-  var h = LLVM::int_truncate[U128, U64](x >>> 64)
-  if h != 0
-    return LLVM::reinterpret_bits[U64, S64](h.leading_zeros())
-  var l = LLVM::int_truncate[U128, U64](x)
-  if l != 0
-    return 64 +% LLVM::reinterpret_bits[U64, S64](l.leading_zeros())
-  return 128
+    var h = LLVM::int_truncate[U128, U64](x >>> 64)
+    if h != 0
+        return LLVM::reinterpret_bits[U64, S64](h.leading_zeros())
+    var l = LLVM::int_truncate[U128, U64](x)
+    if l != 0
+        return 64 +% LLVM::reinterpret_bits[U64, S64](l.leading_zeros())
+    return 128
 
 ### The low 64 bits of (high:low) >> shift, for shift < 64.
 @inline
 secret routine b128_trig_funnel(low: U64, high: U64, shift: U32) -> U64
-  return (low >>> shift) | ((high << 1) << (63_u32 -% shift))
+    return (low >>> shift) | ((high << 1) << (63_u32 -% shift))
 
 ### Full 128x128-bit product.
 ### :returns: The high and low halves.
 @inline
 secret routine b128_trig_wmul(x: U128, y: U128) -> (U128, U128)
-  var mask = 0xFFFFFFFFFFFFFFFF_u128
-  var xl = x & mask
-  var xh = x >>> 64
-  var yl = y & mask
-  var yh = y >>> 64
-  var ll = xl *% yl
-  var lh = xl *% yh
-  var hl = xh *% yl
-  var hh = xh *% yh
-  var mid = ((ll >>> 64) +% (lh & mask)) +% (hl & mask)
-  var low = (mid << 64) | (ll & mask)
-  var high = ((hh +% (lh >>> 64)) +% (hl >>> 64)) +% (mid >>> 64)
-  return (high, low)
+    var mask = 0xFFFFFFFFFFFFFFFF_u128
+    var xl = x & mask
+    var xh = x >>> 64
+    var yl = y & mask
+    var yh = y >>> 64
+    var ll = xl *% yl
+    var lh = xl *% yh
+    var hl = xh *% yl
+    var hh = xh *% yh
+    var mid = ((ll >>> 64) +% (lh & mask)) +% (hl & mask)
+    var low = (mid << 64) | (ll & mask)
+    var high = ((hh +% (lh >>> 64)) +% (hl >>> 64)) +% (mid >>> 64)
+    return (high, low)
 
 ### Approximate high half of a 128x128-bit product from three 64-bit products: up to two units short of the
 ### exact high half, never over.
 @inline
 secret routine b128_trig_mhi(x: U128, y: U128) -> U128
-  var mask = 0xFFFFFFFFFFFFFFFF_u128
-  var xh = x >>> 64
-  var xl = x & mask
-  var yh = y >>> 64
-  var yl = y & mask
-  return ((xh *% yh) +% ((xh *% yl) >>> 64)) +% ((xl *% yh) >>> 64)
+    var mask = 0xFFFFFFFFFFFFFFFF_u128
+    var xh = x >>> 64
+    var xl = x & mask
+    var yh = y >>> 64
+    var yl = y & mask
+    return ((xh *% yh) +% ((xh *% yl) >>> 64)) +% ((xl *% yh) >>> 64)
 
 @inline
 secret routine b128_trig_add256(a: (U128, U128), b: (U128, U128)) -> (U128, U128)
-  var r0 = a.item0 +% b.item0
-  var c = 0_u128
-  if r0 < a.item0
-    c = 1
-  return (r0, (a.item1 +% b.item1) +% c)
+    var r0 = a.item0 +% b.item0
+    var c = 0_u128
+    if r0 < a.item0
+        c = 1
+    return (r0, (a.item1 +% b.item1) +% c)
 
 @inline
 secret routine b128_trig_sub256(a: (U128, U128), b: (U128, U128)) -> (U128, U128)
-  var c = 0_u128
-  if a.item0 < b.item0
-    c = 1
-  return (a.item0 -% b.item0, (a.item1 -% b.item1) -% c)
+    var c = 0_u128
+    if a.item0 < b.item0
+        c = 1
+    return (a.item0 -% b.item0, (a.item1 -% b.item1) -% c)
 
 ### f << shift in the 256-bit frame, for shift < 128.
 @inline
 secret routine b128_trig_place256(f: U128, shift: S64) -> (U128, U128)
-  return (f << b128_trig_sh(n: shift), (f >>> 1) >>> b128_trig_sh(n: 127 -% shift))
+    return (f << b128_trig_sh(n: shift), (f >>> 1) >>> b128_trig_sh(n: 127 -% shift))
 
 ### The top 128 bits of s << shift, for shift < 64.
 @inline
 secret routine b128_trig_top256(s: (U128, U128), shift: S64) -> U128
-  return (s.item1 << b128_trig_sh(n: shift)) | ((s.item0 >>> 1) >>> b128_trig_sh(n: 127 -% shift))
+    return (s.item1 << b128_trig_sh(n: shift)) | ((s.item0 >>> 1) >>> b128_trig_sh(n: 127 -% shift))
 
 secret routine b128_trig_add384(a: (U128, U128, U128), b: (U128, U128, U128)) -> (U128, U128, U128)
-  var r0 = a.item0 +% b.item0
-  var c0 = 0_u128
-  if r0 < a.item0
-    c0 = 1
-  var r1 = a.item1 +% b.item1
-  var c1 = 0_u128
-  if r1 < a.item1
-    c1 = 1
-  var r1b = r1 +% c0
-  var c2 = 0_u128
-  if r1b < r1
-    c2 = 1
-  return (r0, r1b, ((a.item2 +% b.item2) +% c1) +% c2)
+    var r0 = a.item0 +% b.item0
+    var c0 = 0_u128
+    if r0 < a.item0
+        c0 = 1
+    var r1 = a.item1 +% b.item1
+    var c1 = 0_u128
+    if r1 < a.item1
+        c1 = 1
+    var r1b = r1 +% c0
+    var c2 = 0_u128
+    if r1b < r1
+        c2 = 1
+    return (r0, r1b, ((a.item2 +% b.item2) +% c1) +% c2)
 
 secret routine b128_trig_sub384(a: (U128, U128, U128), b: (U128, U128, U128)) -> (U128, U128, U128)
-  var c0 = 0_u128
-  if a.item0 < b.item0
-    c0 = 1
-  var r1 = a.item1 -% b.item1
-  var c1 = 0_u128
-  if a.item1 < b.item1
-    c1 = 1
-  var c2 = 0_u128
-  if r1 < c0
-    c2 = 1
-  return (a.item0 -% b.item0, r1 -% c0, ((a.item2 -% b.item2) -% c1) -% c2)
+    var c0 = 0_u128
+    if a.item0 < b.item0
+        c0 = 1
+    var r1 = a.item1 -% b.item1
+    var c1 = 0_u128
+    if a.item1 < b.item1
+        c1 = 1
+    var c2 = 0_u128
+    if r1 < c0
+        c2 = 1
+    return (a.item0 -% b.item0, r1 -% c0, ((a.item2 -% b.item2) -% c1) -% c2)
 
 ### x << shift, discarding whatever leaves the window, for shift < 384.
 secret routine b128_trig_shl384(x: (U128, U128, U128), shift: S64) -> (U128, U128, U128)
-  var word = (shift >> 7)
-  var bits = (shift & 127)
-  var b = b128_trig_sh(n: bits)
-  var cb = b128_trig_sh(n: 128 -% bits)
-  if word == 0
-    if bits == 0
-      return x
-    return (x.item0 << b, (x.item1 << b) | (x.item0 >>> cb), (x.item2 << b) | (x.item1 >>> cb))
-  if word == 1
-    if bits == 0
-      return (0_u128, x.item0, x.item1)
-    return (0_u128, x.item0 << b, (x.item1 << b) | (x.item0 >>> cb))
-  return (0_u128, 0_u128, x.item0 << b)
+    var word = (shift >> 7)
+    var bits = (shift & 127)
+    var b = b128_trig_sh(n: bits)
+    var cb = b128_trig_sh(n: 128 -% bits)
+    if word == 0
+        if bits == 0
+            return x
+        return (x.item0 << b, (x.item1 << b) | (x.item0 >>> cb), (x.item2 << b) | (x.item1 >>> cb))
+    if word == 1
+        if bits == 0
+            return (0_u128, x.item0, x.item1)
+        return (0_u128, x.item0 << b, (x.item1 << b) | (x.item0 >>> cb))
+    return (0_u128, 0_u128, x.item0 << b)
 
 ### x >> shift, saturating to zero past the window.
 secret routine b128_trig_shr384(x: (U128, U128, U128), shift: S64) -> (U128, U128, U128)
-  if shift >= 384
-    return (0_u128, 0_u128, 0_u128)
-  var word = (shift >> 7)
-  var bits = (shift & 127)
-  var b = b128_trig_sh(n: bits)
-  var cb = b128_trig_sh(n: 128 -% bits)
-  if word == 0
-    if bits == 0
-      return x
-    return ((x.item0 >>> b) | (x.item1 << cb), (x.item1 >>> b) | (x.item2 << cb), x.item2 >>> b)
-  if word == 1
-    if bits == 0
-      return (x.item1, x.item2, 0_u128)
-    return ((x.item1 >>> b) | (x.item2 << cb), x.item2 >>> b, 0_u128)
-  return (x.item2 >>> b, 0_u128, 0_u128)
+    if shift >= 384
+        return (0_u128, 0_u128, 0_u128)
+    var word = (shift >> 7)
+    var bits = (shift & 127)
+    var b = b128_trig_sh(n: bits)
+    var cb = b128_trig_sh(n: 128 -% bits)
+    if word == 0
+        if bits == 0
+            return x
+        return ((x.item0 >>> b) | (x.item1 << cb), (x.item1 >>> b) | (x.item2 << cb), x.item2 >>> b)
+    if word == 1
+        if bits == 0
+            return (x.item1, x.item2, 0_u128)
+        return ((x.item1 >>> b) | (x.item2 << cb), x.item2 >>> b, 0_u128)
+    return (x.item2 >>> b, 0_u128, 0_u128)
 
 ### Leading zeros of a 384-bit value, 384 when it is zero.
 secret routine b128_trig_lz384(x: (U128, U128, U128)) -> S64
-  if x.item2 != 0
-    return b128_trig_clz128(x: x.item2)
-  if x.item1 != 0
-    return 128 +% b128_trig_clz128(x: x.item1)
-  return 256 +% b128_trig_clz128(x: x.item0)
+    if x.item2 != 0
+        return b128_trig_clz128(x: x.item2)
+    if x.item1 != 0
+        return 128 +% b128_trig_clz128(x: x.item1)
+    return 256 +% b128_trig_clz128(x: x.item0)
 
 ### High 384 bits of a 384x384-bit product: the dropped tail leaves it up to four units short of the exact
 ### value, never over.
 secret routine b128_trig_mul384(a: (U128, U128, U128), b: (U128, U128, U128)) -> (U128, U128, U128)
-  var p02 = b128_trig_wmul(x: a.item0, y: b.item2)
-  var p11 = b128_trig_wmul(x: a.item1, y: b.item1)
-  var p20 = b128_trig_wmul(x: a.item2, y: b.item0)
-  var p12 = b128_trig_wmul(x: a.item1, y: b.item2)
-  var p21 = b128_trig_wmul(x: a.item2, y: b.item1)
-  var p22 = b128_trig_wmul(x: a.item2, y: b.item2)
-  # the diagonal one limb below the window contributes its high halves plus the carry of its low halves
-  var sum = p02.item1 +% p11.item1
-  var carries = 0_u128
-  if sum < p02.item1
-    carries = carries +% 1
-  var sum2 = sum +% p20.item1
-  if sum2 < sum
-    carries = carries +% 1
-  var diag = p02.item0 +% p11.item0
-  var hc = 0_u128
-  if diag < p02.item0
-    hc = hc +% 1
-  var diag2 = diag +% p20.item0
-  if diag2 < diag
-    hc = hc +% 1
-  var diag3 = diag2 +% carries
-  if diag3 < diag2
-    hc = hc +% 1
-  var t12 = b128_trig_add384(a: (p12.item1, p12.item0, 0_u128), b: (p21.item1, p21.item0, 0_u128))
-  var t34 = b128_trig_add384(a: (0_u128, p22.item1, p22.item0), b: (diag3, hc, 0_u128))
-  return b128_trig_add384(a: t12, b: t34)
+    var p02 = b128_trig_wmul(x: a.item0, y: b.item2)
+    var p11 = b128_trig_wmul(x: a.item1, y: b.item1)
+    var p20 = b128_trig_wmul(x: a.item2, y: b.item0)
+    var p12 = b128_trig_wmul(x: a.item1, y: b.item2)
+    var p21 = b128_trig_wmul(x: a.item2, y: b.item1)
+    var p22 = b128_trig_wmul(x: a.item2, y: b.item2)
+    # the diagonal one limb below the window contributes its high halves plus the carry of its low halves
+    var sum = p02.item1 +% p11.item1
+    var carries = 0_u128
+    if sum < p02.item1
+        carries = carries +% 1
+    var sum2 = sum +% p20.item1
+    if sum2 < sum
+        carries = carries +% 1
+    var diag = p02.item0 +% p11.item0
+    var hc = 0_u128
+    if diag < p02.item0
+        hc = hc +% 1
+    var diag2 = diag +% p20.item0
+    if diag2 < diag
+        hc = hc +% 1
+    var diag3 = diag2 +% carries
+    if diag3 < diag2
+        hc = hc +% 1
+    var t12 = b128_trig_add384(a: (p12.item1, p12.item0, 0_u128), b: (p21.item1, p21.item0, 0_u128))
+    var t34 = b128_trig_add384(a: (0_u128, p22.item1, p22.item0), b: (diag3, hc, 0_u128))
+    return b128_trig_add384(a: t12, b: t34)
 
 ### High 256 bits of a 256x256-bit product: the dropped tail leaves it up to one unit short of the exact
 ### value, never over.
 secret routine b128_trig_mul256(a: (U128, U128), b: (U128, U128)) -> (U128, U128)
-  var hh = b128_trig_wmul(x: a.item1, y: b.item1)
-  var cr = b128_trig_wmul(x: a.item1, y: b.item0)
-  var ot = b128_trig_wmul(x: a.item0, y: b.item1)
-  # the two cross terms and the top of a0*b0 land one limb below the window: only their carry survives
-  var sum = cr.item1 +% ot.item1
-  var carry = 0_u128
-  if sum < cr.item1
-    carry = 1
-  var sum2 = sum +% b128_trig_mhi(x: a.item0, y: b.item0)
-  if sum2 < sum
-    carry = carry +% 1
-  var middle = cr.item0 +% ot.item0
-  var hc = 0_u128
-  if middle < cr.item0
-    hc = 1
-  var middle2 = middle +% carry
-  if middle2 < middle
-    hc = hc +% 1
-  var low = hh.item1 +% middle2
-  if low < middle2
-    hc = hc +% 1
-  return (low, hh.item0 +% hc)
+    var hh = b128_trig_wmul(x: a.item1, y: b.item1)
+    var cr = b128_trig_wmul(x: a.item1, y: b.item0)
+    var ot = b128_trig_wmul(x: a.item0, y: b.item1)
+    # the two cross terms and the top of a0*b0 land one limb below the window: only their carry survives
+    var sum = cr.item1 +% ot.item1
+    var carry = 0_u128
+    if sum < cr.item1
+        carry = 1
+    var sum2 = sum +% b128_trig_mhi(x: a.item0, y: b.item0)
+    if sum2 < sum
+        carry = carry +% 1
+    var middle = cr.item0 +% ot.item0
+    var hc = 0_u128
+    if middle < cr.item0
+        hc = 1
+    var middle2 = middle +% carry
+    if middle2 < middle
+        hc = hc +% 1
+    var low = hh.item1 +% middle2
+    if low < middle2
+        hc = hc +% 1
+    return (low, hh.item0 +% hc)
 
 ### Limb `limb` (0 = least significant) of sin(j*pi/256) (w = 0) or cos(j*pi/256) (w = 1) times 2^384.
 @inline
 secret routine b128_trig_sincos(j: S64, w: S64, limb: S64) -> U128
-  var idx = LLVM::reinterpret_bits[S64, U64](((j *% 2 +% w) *% 3 +% limb) *% 2)
-  return b128_trig_u128(hi: B128_TRIG_SINCOS[idx], lo: B128_TRIG_SINCOS[idx +% 1])
+    var idx = LLVM::reinterpret_bits[S64, U64](((j *% 2 +% w) *% 3 +% limb) *% 2)
+    return b128_trig_u128(hi: B128_TRIG_SINCOS[idx], lo: B128_TRIG_SINCOS[idx +% 1])
 
 @inline
 secret routine b128_trig_sincos384(j: S64, w: S64) -> (U128, U128, U128)
-  return (b128_trig_sincos(j: j, w: w, limb: 0), b128_trig_sincos(j: j, w: w, limb: 1), b128_trig_sincos(j: j, w: w, limb: 2))
+    return (b128_trig_sincos(j: j, w: w, limb: 0), b128_trig_sincos(j: j, w: w, limb: 1), b128_trig_sincos(j: j, w: w, limb: 2))
 
 ### Limb `limb` of the Taylor coefficient k of the sine (cosine false) or cosine (cosine true) series.
 @inline
 secret routine b128_trig_coef(cosine: Bool, k: S64, limb: S64) -> U128
-  var idx = LLVM::reinterpret_bits[S64, U64]((k *% 3 +% limb) *% 2)
-  if cosine
-    return b128_trig_u128(hi: B128_TRIG_COS_COEF[idx], lo: B128_TRIG_COS_COEF[idx +% 1])
-  return b128_trig_u128(hi: B128_TRIG_SIN_COEF[idx], lo: B128_TRIG_SIN_COEF[idx +% 1])
+    var idx = LLVM::reinterpret_bits[S64, U64]((k *% 3 +% limb) *% 2)
+    if cosine
+        return b128_trig_u128(hi: B128_TRIG_COS_COEF[idx], lo: B128_TRIG_COS_COEF[idx +% 1])
+    return b128_trig_u128(hi: B128_TRIG_SIN_COEF[idx], lo: B128_TRIG_SIN_COEF[idx +% 1])
 
 ### m*win as W+3 little-endian 64-bit limbs, for the window of W limbs of 2/pi starting at limb `wo` (most
 ### significant first): the product fills W+2 of them and the spare top limb stays zero.
 secret routine b128_trig_product(m: U128, wo: U64, w: S64) -> Array[U64, 13]
-  var p = Array[U64, 13]()
-  var low = m & 0xFFFFFFFFFFFFFFFF_u128
-  var high = m >>> 64
-  var carry = 0_u128
-  var c = 0_s64
-  while c < w +% 3
-    var cur = 0_u128
-    if c < w
-      cur = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% LLVM::reinterpret_bits[S64, U64](w -% 1 -% c)])
-    var prev = 0_u128
-    if c >= 1 and c <= w
-      prev = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% LLVM::reinterpret_bits[S64, U64](w -% c)])
-    # high < 2^49 keeps the first sum under 2^114, only the second can spill
-    var acc = (high *% prev) +% carry
-    var t = acc +% (low *% cur)
-    var spill = 0_u128
-    if t < acc
-      spill = 1_u128 << 64
-    p[LLVM::reinterpret_bits[S64, U64](c)] = LLVM::int_truncate[U128, U64](t)
-    carry = (t >>> 64) | spill
-    c = c +% 1
-  return p
+    var p = Array[U64, 13]()
+    var low = m & 0xFFFFFFFFFFFFFFFF_u128
+    var high = m >>> 64
+    var carry = 0_u128
+    var c = 0_s64
+    while c < w +% 3
+        var cur = 0_u128
+        if c < w
+            cur = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% LLVM::reinterpret_bits[S64, U64](w -% 1 -% c)])
+        var prev = 0_u128
+        if c >= 1 and c <= w
+            prev = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% LLVM::reinterpret_bits[S64, U64](w -% c)])
+        # high < 2^49 keeps the first sum under 2^114, only the second can spill
+        var acc = (high *% prev) +% carry
+        var t = acc +% (low *% cur)
+        var spill = 0_u128
+        if t < acc
+            spill = 1_u128 << 64
+        p[LLVM::reinterpret_bits[S64, U64](c)] = LLVM::int_truncate[U128, U64](t)
+        carry = (t >>> 64) | spill
+        c = c +% 1
+    return p
 
 ### One column of the product m*window: (high*prev + carry) + low*cur, whose low 64 bits are the column's limb.
 ### :returns: The limb and the carry into the next column.
 @inline
 secret routine b128_trig_pstep(low: U128, high: U128, cur: U128, prev: U128, carry: U128) -> (U64, U128)
-  # high < 2^49 keeps the first sum under 2^114, only the second can spill
-  var acc = (high *% prev) +% carry
-  var t = acc +% (low *% cur)
-  var spill = 0_u128
-  if t < acc
-    spill = 1_u128 << 64
-  return (LLVM::int_truncate[U128, U64](t), (t >>> 64) | spill)
+    # high < 2^49 keeps the first sum under 2^114, only the second can spill
+    var acc = (high *% prev) +% carry
+    var t = acc +% (low *% cur)
+    var spill = 0_u128
+    if t < acc
+        spill = 1_u128 << 64
+    return (LLVM::int_truncate[U128, U64](t), (t >>> 64) | spill)
 
 ### The 2/pi window for x = m*2^(e-112): bits of 2/pi above position e-114 contribute multiples of 4 to
 ### x*2/pi, so the window starts at the limb holding bit e-113.
@@ -367,340 +367,340 @@ secret routine b128_trig_pstep(low: U128, high: U128, cur: U128, prev: U128, car
 ### 64*W-2 (negative below |x| = 2^114, where the window is the top of 2/pi).
 @inline
 secret routine b128_trig_window(e: S64) -> (U64, S64)
-  var big = e -% 114
-  if big >= 0
-    return (LLVM::reinterpret_bits[S64, U64]((big >> 6)), (big & 63))
-  return (0_u64, big)
+    var big = e -% 114
+    if big >= 0
+        return (LLVM::reinterpret_bits[S64, U64]((big >> 6)), (big & 63))
+    return (0_u64, big)
 
 ### Payne-Hanek on six limbs of 2/pi.
 ### :returns: Whether the residual keeps at least 136 of the fraction's 192 bits, n = round(256*x/pi) mod
 ### 512, whether g < 0, and the reduced angle theta = |g|*pi/2 as t1*2^(et-128).
 secret routine b128_trig_reduce(m: U128, e: S64) -> (Bool, S64, Bool, U128, S64)
-  var win = b128_trig_window(e: e)
-  # m times the six-limb window, unrolled: limb c of the product is p_c (p8 is the spare top limb, always 0)
-  var wo = win.item0
-  var w0 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo])
-  var w1 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 1])
-  var w2 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 2])
-  var w3 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 3])
-  var w4 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 4])
-  var w5 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 5])
-  var ml = m & 0xFFFFFFFFFFFFFFFF_u128
-  var mh = m >>> 64
-  var s0 = b128_trig_pstep(low: ml, high: mh, cur: w5, prev: 0_u128, carry: 0_u128)
-  var s1 = b128_trig_pstep(low: ml, high: mh, cur: w4, prev: w5, carry: s0.item1)
-  var s2 = b128_trig_pstep(low: ml, high: mh, cur: w3, prev: w4, carry: s1.item1)
-  var s3 = b128_trig_pstep(low: ml, high: mh, cur: w2, prev: w3, carry: s2.item1)
-  var s4 = b128_trig_pstep(low: ml, high: mh, cur: w1, prev: w2, carry: s3.item1)
-  var s5 = b128_trig_pstep(low: ml, high: mh, cur: w0, prev: w1, carry: s4.item1)
-  var s6 = b128_trig_pstep(low: ml, high: mh, cur: 0_u128, prev: w0, carry: s5.item1)
-  var p7 = LLVM::int_truncate[U128, U64](s6.item1)
-  # the fraction is the 192 bits below the units bit, the quadrant the two above: limbs i ..= i+4, 1 <= i <= 4
-  var base = 190 -% win.item1
-  var i = (base >> 6) & 7
-  var bits = b128_trig_sh(n: (base & 63))
-  var a0 = s1.item0
-  var a1 = s2.item0
-  var a2 = s3.item0
-  var a3 = s4.item0
-  var a4 = s5.item0
-  if i == 2
-    a0 = s2.item0
-    a1 = s3.item0
-    a2 = s4.item0
-    a3 = s5.item0
-    a4 = s6.item0
-  elseif i == 3
-    a0 = s3.item0
-    a1 = s4.item0
-    a2 = s5.item0
-    a3 = s6.item0
-    a4 = p7
-  elseif i == 4
-    a0 = s4.item0
-    a1 = s5.item0
-    a2 = s6.item0
-    a3 = p7
-    a4 = 0_u64
-  var f0 = b128_trig_funnel(low: a0, high: a1, shift: bits)
-  var f1 = b128_trig_funnel(low: a1, high: a2, shift: bits)
-  var f2 = b128_trig_funnel(low: a2, high: a3, shift: bits)
-  var quadrant = b128_trig_funnel(low: a3, high: a4, shift: bits) & 3
-  # n = round(256*x/pi), the residual's top limb becomes signed
-  var top = b128_trig_u128(hi: quadrant, lo: f2)
-  var nu = LLVM::int_truncate[U128, U64]((top +% (1_u128 << 56)) >>> 57) & 511
-  var n = LLVM::reinterpret_bits[U64, S64](nu)
-  f2 = f2 -% ((nu & 127) << 57)
-  var negative = (f2 >>> 63) != 0
-  var mask = 0_u64
-  var neg1 = 0_u64
-  if negative
-    mask = 0xFFFFFFFFFFFFFFFF_u64
-    neg1 = 1
-  var g0 = (f0 ^ mask) +% neg1
-  var c0 = 0_u64
-  if g0 < neg1
-    c0 = 1
-  var g1 = (f1 ^ mask) +% c0
-  var c1 = 0_u64
-  if g1 < c0
-    c1 = 1
-  var g2 = (f2 ^ mask) +% c1
-  if g2 == 0
-    return (false, 0_s64, false, 0_u128, 0_s64)
-  var lz = LLVM::reinterpret_bits[U64, S64](g2.leading_zeros())
-  if lz > 56
-    return (false, 0_s64, false, 0_u128, 0_s64)
-  # |g| <= 1/256 leaves at least seven leading zeros, so every shift below is in range
-  var sl = b128_trig_sh(n: lz)
-  var sr = b128_trig_sh(n: 64 -% lz)
-  var high = (g2 << sl) | (g1 >>> sr)
-  var low = (g1 << sl) | (g0 >>> sr)
-  var g = b128_trig_u128(hi: high, lo: low)
-  var pp = b128_trig_wmul(x: g, y: 0xC90FDAA22168C234C4C6628B80DC1CD1_u128)
-  var lzt = b128_trig_clz128(x: pp.item0)
-  var t1 = b128_trig_top256(s: (pp.item1, pp.item0), shift: lzt)
-  return (true, n, negative, t1, 1 -% (lz +% lzt))
+    var win = b128_trig_window(e: e)
+    # m times the six-limb window, unrolled: limb c of the product is p_c (p8 is the spare top limb, always 0)
+    var wo = win.item0
+    var w0 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo])
+    var w1 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 1])
+    var w2 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 2])
+    var w3 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 3])
+    var w4 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 4])
+    var w5 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 5])
+    var ml = m & 0xFFFFFFFFFFFFFFFF_u128
+    var mh = m >>> 64
+    var s0 = b128_trig_pstep(low: ml, high: mh, cur: w5, prev: 0_u128, carry: 0_u128)
+    var s1 = b128_trig_pstep(low: ml, high: mh, cur: w4, prev: w5, carry: s0.item1)
+    var s2 = b128_trig_pstep(low: ml, high: mh, cur: w3, prev: w4, carry: s1.item1)
+    var s3 = b128_trig_pstep(low: ml, high: mh, cur: w2, prev: w3, carry: s2.item1)
+    var s4 = b128_trig_pstep(low: ml, high: mh, cur: w1, prev: w2, carry: s3.item1)
+    var s5 = b128_trig_pstep(low: ml, high: mh, cur: w0, prev: w1, carry: s4.item1)
+    var s6 = b128_trig_pstep(low: ml, high: mh, cur: 0_u128, prev: w0, carry: s5.item1)
+    var p7 = LLVM::int_truncate[U128, U64](s6.item1)
+    # the fraction is the 192 bits below the units bit, the quadrant the two above: limbs i ..= i+4, 1 <= i <= 4
+    var base = 190 -% win.item1
+    var i = (base >> 6) & 7
+    var bits = b128_trig_sh(n: (base & 63))
+    var a0 = s1.item0
+    var a1 = s2.item0
+    var a2 = s3.item0
+    var a3 = s4.item0
+    var a4 = s5.item0
+    if i == 2
+        a0 = s2.item0
+        a1 = s3.item0
+        a2 = s4.item0
+        a3 = s5.item0
+        a4 = s6.item0
+    elseif i == 3
+        a0 = s3.item0
+        a1 = s4.item0
+        a2 = s5.item0
+        a3 = s6.item0
+        a4 = p7
+    elseif i == 4
+        a0 = s4.item0
+        a1 = s5.item0
+        a2 = s6.item0
+        a3 = p7
+        a4 = 0_u64
+    var f0 = b128_trig_funnel(low: a0, high: a1, shift: bits)
+    var f1 = b128_trig_funnel(low: a1, high: a2, shift: bits)
+    var f2 = b128_trig_funnel(low: a2, high: a3, shift: bits)
+    var quadrant = b128_trig_funnel(low: a3, high: a4, shift: bits) & 3
+    # n = round(256*x/pi), the residual's top limb becomes signed
+    var top = b128_trig_u128(hi: quadrant, lo: f2)
+    var nu = LLVM::int_truncate[U128, U64]((top +% (1_u128 << 56)) >>> 57) & 511
+    var n = LLVM::reinterpret_bits[U64, S64](nu)
+    f2 = f2 -% ((nu & 127) << 57)
+    var negative = (f2 >>> 63) != 0
+    var mask = 0_u64
+    var neg1 = 0_u64
+    if negative
+        mask = 0xFFFFFFFFFFFFFFFF_u64
+        neg1 = 1
+    var g0 = (f0 ^ mask) +% neg1
+    var c0 = 0_u64
+    if g0 < neg1
+        c0 = 1
+    var g1 = (f1 ^ mask) +% c0
+    var c1 = 0_u64
+    if g1 < c0
+        c1 = 1
+    var g2 = (f2 ^ mask) +% c1
+    if g2 == 0
+        return (false, 0_s64, false, 0_u128, 0_s64)
+    var lz = LLVM::reinterpret_bits[U64, S64](g2.leading_zeros())
+    if lz > 56
+        return (false, 0_s64, false, 0_u128, 0_s64)
+    # |g| <= 1/256 leaves at least seven leading zeros, so every shift below is in range
+    var sl = b128_trig_sh(n: lz)
+    var sr = b128_trig_sh(n: 64 -% lz)
+    var high = (g2 << sl) | (g1 >>> sr)
+    var low = (g1 << sl) | (g0 >>> sr)
+    var g = b128_trig_u128(hi: high, lo: low)
+    var pp = b128_trig_wmul(x: g, y: 0xC90FDAA22168C234C4C6628B80DC1CD1_u128)
+    var lzt = b128_trig_clz128(x: pp.item0)
+    var t1 = b128_trig_top256(s: (pp.item1, pp.item0), shift: lzt)
+    return (true, n, negative, t1, 1 -% (lz +% lzt))
 
 ### theta^2 rounded into a 2^-128 word (u), theta^4 likewise (v), and the unshifted theta^2 =
 ### u1*2^(2*et-128) the cosine's correction rides on.
 ### :returns: (u, v, u1).
 @inline
 secret routine b128_trig_squares(t1: U128, et: S64) -> (U128, U128, U128)
-  var u1 = b128_trig_mhi(x: t1, y: t1)
-  var s = 0 -% (et +% et)
-  var u = (u1 >>> b128_trig_sh(n: s)) | ((u1 >>> b128_trig_sh(n: s -% 1)) & 1)
-  return (u, b128_trig_mhi(x: u, y: u), u1)
+    var u1 = b128_trig_mhi(x: t1, y: t1)
+    var s = 0 -% (et +% et)
+    var u = (u1 >>> b128_trig_sh(n: s)) | ((u1 >>> b128_trig_sh(n: s -% 1)) & 1)
+    return (u, b128_trig_mhi(x: u, y: u), u1)
 
 ### sin(theta) in theta's own floating form: t1*(1 - u*(A - u*B)) with the even and odd halves of a
 ### degree-four minimax for (1 - sin(sqrt(u))/sqrt(u))/u in v.
 @inline
 secret routine b128_trig_sin_frac(t1: U128, u: U128, v: U128) -> U128
-  var s0 = 0x2AAAAAAAAAAAAAAAAAAAAAAAAAAA8B20_u128
-  var s1 = 0x02222222222222222222221FA2FD1243_u128
-  var s2 = 0x000D00D00D00D00D00C7F4BE42E1A641_u128
-  var s3 = 0x00002E3BC74AAD85378E3E9D9C3058A3_u128
-  var s4 = 0x0000006B99115EA3FD77EEA5743FF7BE_u128
-  var a = s0 +% b128_trig_mhi(x: v, y: s2 +% b128_trig_mhi(x: v, y: s4))
-  var b = s1 +% b128_trig_mhi(x: v, y: s3)
-  return t1 -% b128_trig_mhi(x: b128_trig_mhi(x: t1, y: u), y: a -% b128_trig_mhi(x: u, y: b))
+    var s0 = 0x2AAAAAAAAAAAAAAAAAAAAAAAAAAA8B20_u128
+    var s1 = 0x02222222222222222222221FA2FD1243_u128
+    var s2 = 0x000D00D00D00D00D00C7F4BE42E1A641_u128
+    var s3 = 0x00002E3BC74AAD85378E3E9D9C3058A3_u128
+    var s4 = 0x0000006B99115EA3FD77EEA5743FF7BE_u128
+    var a = s0 +% b128_trig_mhi(x: v, y: s2 +% b128_trig_mhi(x: v, y: s4))
+    var b = s1 +% b128_trig_mhi(x: v, y: s3)
+    return t1 -% b128_trig_mhi(x: b128_trig_mhi(x: t1, y: u), y: a -% b128_trig_mhi(x: u, y: b))
 
 ### 1 - cos(theta) as the floating fraction c1*2^(2*et-128): theta^2*(1/2 - u*W) with W the even and odd
 ### halves of sum (-1)^k u^k/(2k+4)! in v, six terms.
 @inline
 secret routine b128_trig_cos_corr(u1: U128, u: U128, v: U128) -> U128
-  var c0 = b128_trig_coef(cosine: true, k: 0, limb: 2)
-  var c1 = b128_trig_coef(cosine: true, k: 1, limb: 2)
-  var c2 = b128_trig_coef(cosine: true, k: 2, limb: 2)
-  var c3 = b128_trig_coef(cosine: true, k: 3, limb: 2)
-  var c4 = b128_trig_coef(cosine: true, k: 4, limb: 2)
-  var c5 = b128_trig_coef(cosine: true, k: 5, limb: 2)
-  var e = c1 +% b128_trig_mhi(x: v, y: c3 +% b128_trig_mhi(x: v, y: c5))
-  var o = c2 +% b128_trig_mhi(x: v, y: c4)
-  return b128_trig_mhi(x: u1, y: c0 -% b128_trig_mhi(x: u, y: e -% b128_trig_mhi(x: u, y: o)))
+    var c0 = b128_trig_coef(cosine: true, k: 0, limb: 2)
+    var c1 = b128_trig_coef(cosine: true, k: 1, limb: 2)
+    var c2 = b128_trig_coef(cosine: true, k: 2, limb: 2)
+    var c3 = b128_trig_coef(cosine: true, k: 3, limb: 2)
+    var c4 = b128_trig_coef(cosine: true, k: 4, limb: 2)
+    var c5 = b128_trig_coef(cosine: true, k: 5, limb: 2)
+    var e = c1 +% b128_trig_mhi(x: v, y: c3 +% b128_trig_mhi(x: v, y: c5))
+    var o = c2 +% b128_trig_mhi(x: v, y: c4)
+    return b128_trig_mhi(x: u1, y: c0 -% b128_trig_mhi(x: u, y: e -% b128_trig_mhi(x: u, y: o)))
 
 ### The fast path.
 ### :returns: Whether the reduction vouches for the result, the magnitude as a floating 128-bit fraction
 ### frac*2^(e2-128), e2, and the sign it contributes.
 secret routine b128_trig_fast(m: U128, e: S64, cosine: Bool) -> (Bool, U128, S64, U128)
-  if e < -8
-    # below 2^-8 the argument is its own reduced angle
-    var t1 = m << 15
-    var et = e +% 1
-    var sq = b128_trig_squares(t1: t1, et: et)
-    if cosine
-      var all = (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128)
-      var cc = b128_trig_place256(f: b128_trig_cos_corr(u1: sq.item2, u: sq.item0, v: sq.item1), shift: 2 *% et +% 128)
-      return (true, b128_trig_sub256(a: all, b: cc).item1, 0_s64, 0_u128)
-    # sin(theta) < theta drops a leading bit when t1 starts a binade
-    var s1 = b128_trig_sin_frac(t1: t1, u: sq.item0, v: sq.item1)
-    var lz = b128_trig_clz128(x: s1)
-    return (true, s1 << b128_trig_sh(n: lz), et -% lz, 0_u128)
-  var r = b128_trig_reduce(m: m, e: e)
-  if not r.item0
-    return (false, 0_u128, 0_s64, 0_u128)
-  var n = r.item1
-  var negative = r.item2
-  var rt1 = r.item3
-  var ret = r.item4
-  var sq2 = b128_trig_squares(t1: rt1, et: ret)
-  var s1b = b128_trig_sin_frac(t1: rt1, u: sq2.item0, v: sq2.item1)
-  return b128_trig_fast_tail(n: n, negative: negative, rt1: rt1, ret: ret, sq: sq2, s1b: s1b, cosine: cosine)
+    if e < -8
+        # below 2^-8 the argument is its own reduced angle
+        var t1 = m << 15
+        var et = e +% 1
+        var sq = b128_trig_squares(t1: t1, et: et)
+        if cosine
+            var all = (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128)
+            var cc = b128_trig_place256(f: b128_trig_cos_corr(u1: sq.item2, u: sq.item0, v: sq.item1), shift: 2 *% et +% 128)
+            return (true, b128_trig_sub256(a: all, b: cc).item1, 0_s64, 0_u128)
+        # sin(theta) < theta drops a leading bit when t1 starts a binade
+        var s1 = b128_trig_sin_frac(t1: t1, u: sq.item0, v: sq.item1)
+        var lz = b128_trig_clz128(x: s1)
+        return (true, s1 << b128_trig_sh(n: lz), et -% lz, 0_u128)
+    var r = b128_trig_reduce(m: m, e: e)
+    if not r.item0
+        return (false, 0_u128, 0_s64, 0_u128)
+    var n = r.item1
+    var negative = r.item2
+    var rt1 = r.item3
+    var ret = r.item4
+    var sq2 = b128_trig_squares(t1: rt1, et: ret)
+    var s1b = b128_trig_sin_frac(t1: rt1, u: sq2.item0, v: sq2.item1)
+    return b128_trig_fast_tail(n: n, negative: negative, rt1: rt1, ret: ret, sq: sq2, s1b: s1b, cosine: cosine)
 
 ### The fast path after the reduction: sin or cos of j*pi/256 + theta from the table and theta's series.
 ### :returns: As b128_trig_fast.
 secret routine b128_trig_fast_tail(n: S64, negative: Bool, rt1: U128, ret: S64, sq: (U128, U128, U128), s1b: U128, cosine: Bool) -> (Bool, U128, S64, U128)
-  var signmask = 1_u128 << 127
-  var sq2 = sq
-  # the cosine is the sine a quadrant on: the top bit of the quadrant is the sign, the low bit which of
-  # sin A and cos A is wanted
-  var k = (n >> 7)
-  if cosine
-    k = k +% 1
-  var want_cos = k & 1
-  var j = n & 127
-  var flip = 0_u128
-  if (k & 2) != 0
-    flip = signmask
-  if j == 0 and want_cos == 0
-    var lz2 = b128_trig_clz128(x: s1b)
-    if negative
-      flip = flip ^ signmask
-    return (true, s1b << b128_trig_sh(n: lz2), ret -% lz2, flip)
-  var c1 = b128_trig_cos_corr(u1: sq2.item2, u: sq2.item0, v: sq2.item1)
-  var first1 = b128_trig_sincos(j: j, w: want_cos, limb: 1)
-  var first2 = b128_trig_sincos(j: j, w: want_cos, limb: 2)
-  var second2 = b128_trig_sincos(j: j, w: 1 -% want_cos, limb: 2)
-  var c = b128_trig_place256(f: b128_trig_mhi(x: first2, y: c1), shift: 2 *% ret +% 128)
-  var s = b128_trig_place256(f: b128_trig_mhi(x: second2, y: s1b), shift: ret +% 128)
-  var bc = b128_trig_sub256(a: (first1, first2), b: c)
-  var f = b128_trig_add256(a: bc, b: s)
-  if negative != (want_cos != 0)
-    f = b128_trig_sub256(a: bc, b: s)
-  var lz3 = b128_trig_clz128(x: f.item1)
-  return (true, b128_trig_top256(s: f, shift: lz3), 0 -% lz3, flip)
+    var signmask = 1_u128 << 127
+    var sq2 = sq
+    # the cosine is the sine a quadrant on: the top bit of the quadrant is the sign, the low bit which of
+    # sin A and cos A is wanted
+    var k = (n >> 7)
+    if cosine
+        k = k +% 1
+    var want_cos = k & 1
+    var j = n & 127
+    var flip = 0_u128
+    if (k & 2) != 0
+        flip = signmask
+    if j == 0 and want_cos == 0
+        var lz2 = b128_trig_clz128(x: s1b)
+        if negative
+            flip = flip ^ signmask
+        return (true, s1b << b128_trig_sh(n: lz2), ret -% lz2, flip)
+    var c1 = b128_trig_cos_corr(u1: sq2.item2, u: sq2.item0, v: sq2.item1)
+    var first1 = b128_trig_sincos(j: j, w: want_cos, limb: 1)
+    var first2 = b128_trig_sincos(j: j, w: want_cos, limb: 2)
+    var second2 = b128_trig_sincos(j: j, w: 1 -% want_cos, limb: 2)
+    var c = b128_trig_place256(f: b128_trig_mhi(x: first2, y: c1), shift: 2 *% ret +% 128)
+    var s = b128_trig_place256(f: b128_trig_mhi(x: second2, y: s1b), shift: ret +% 128)
+    var bc = b128_trig_sub256(a: (first1, first2), b: c)
+    var f = b128_trig_add256(a: bc, b: s)
+    if negative != (want_cos != 0)
+        f = b128_trig_sub256(a: bc, b: s)
+    var lz3 = b128_trig_clz128(x: f.item1)
+    return (true, b128_trig_top256(s: f, shift: lz3), 0 -% lz3, flip)
 
 ### reduce() on ten limbs of 2/pi and a 448-bit fraction.
 ### :returns: n, whether g < 0, and the residual as a normalized 384-bit fraction t*2^(et-384) with et.
 secret routine b128_trig_reduce_wide(m: U128, e: S64) -> (S64, Bool, (U128, U128, U128), S64)
-  var win = b128_trig_window(e: e)
-  var p = b128_trig_product(m: m, wo: win.item0, w: 10)
-  var base = 190 -% win.item1
-  var i = LLVM::reinterpret_bits[S64, U64](((base >> 6)) & 7)
-  var bits = b128_trig_sh(n: (base & 63))
-  var f = Array[U64, 7]()
-  var k = 0_u64
-  while k < 7
-    f[k] = b128_trig_funnel(low: p[i +% k], high: p[i +% k +% 1], shift: bits)
-    k = k +% 1
-  var quadrant = b128_trig_funnel(low: p[i +% 7], high: p[i +% 8], shift: bits) & 3
-  var top = b128_trig_u128(hi: quadrant, lo: f[6])
-  var nu = LLVM::int_truncate[U128, U64]((top +% (1_u128 << 56)) >>> 57) & 511
-  f[6] = f[6] -% ((nu & 127) << 57)
-  var negative = (f[6] >>> 63) != 0
-  var mask = 0_u64
-  var carry = 0_u64
-  if negative
-    mask = 0xFFFFFFFFFFFFFFFF_u64
-    carry = 1
-  k = 0
-  while k < 7
-    var sv = (f[k] ^ mask) +% carry
-    if sv < carry
-      carry = 1
-    else
-      carry = 0
-    f[k] = sv
-    k = k +% 1
-  var lz = 448_s64
-  var kk = 6_s64
-  while kk >= 0
-    var fk = f[LLVM::reinterpret_bits[S64, U64](kk)]
-    if fk != 0
-      lz = 64 *% (6 -% kk) +% LLVM::reinterpret_bits[U64, S64](fk.leading_zeros())
-      break
-    kk = kk -% 1
-  # no binary128 comes within 2^-124 of a multiple of pi/2, so the residual keeps over 300 of its 448 bits
-  var word = LLVM::reinterpret_bits[S64, U64]((lz >> 6))
-  var wbits = (lz & 63)
-  var s = Array[U64, 7]()
-  var q = word
-  while q < 7
-    var cv = 0_u64
-    if wbits != 0 and q != word
-      cv = f[q -% word -% 1] >>> b128_trig_sh(n: 64 -% wbits)
-    s[q] = (f[q -% word] << b128_trig_sh(n: wbits)) | cv
-    q = q +% 1
-  var g = (b128_trig_u128(hi: s[2], lo: s[1]), b128_trig_u128(hi: s[4], lo: s[3]), b128_trig_u128(hi: s[6], lo: s[5]))
-  var pio2 = (0x514A08798E3404DDEF9519B3CD3A431B_u128, 0x29024E088A67CC74020BBEA63B139B22_u128, 0xC90FDAA22168C234C4C6628B80DC1CD1_u128)
-  var tt = b128_trig_mul384(a: g, b: pio2)
-  var lzt = b128_trig_clz128(x: tt.item2)
-  return (LLVM::reinterpret_bits[U64, S64](nu), negative, b128_trig_shl384(x: tt, shift: lzt), 1 -% (lz +% lzt))
+    var win = b128_trig_window(e: e)
+    var p = b128_trig_product(m: m, wo: win.item0, w: 10)
+    var base = 190 -% win.item1
+    var i = LLVM::reinterpret_bits[S64, U64](((base >> 6)) & 7)
+    var bits = b128_trig_sh(n: (base & 63))
+    var f = Array[U64, 7]()
+    var k = 0_u64
+    while k < 7
+        f[k] = b128_trig_funnel(low: p[i +% k], high: p[i +% k +% 1], shift: bits)
+        k = k +% 1
+    var quadrant = b128_trig_funnel(low: p[i +% 7], high: p[i +% 8], shift: bits) & 3
+    var top = b128_trig_u128(hi: quadrant, lo: f[6])
+    var nu = LLVM::int_truncate[U128, U64]((top +% (1_u128 << 56)) >>> 57) & 511
+    f[6] = f[6] -% ((nu & 127) << 57)
+    var negative = (f[6] >>> 63) != 0
+    var mask = 0_u64
+    var carry = 0_u64
+    if negative
+        mask = 0xFFFFFFFFFFFFFFFF_u64
+        carry = 1
+    k = 0
+    while k < 7
+        var sv = (f[k] ^ mask) +% carry
+        if sv < carry
+            carry = 1
+        else
+            carry = 0
+        f[k] = sv
+        k = k +% 1
+    var lz = 448_s64
+    var kk = 6_s64
+    while kk >= 0
+        var fk = f[LLVM::reinterpret_bits[S64, U64](kk)]
+        if fk != 0
+            lz = 64 *% (6 -% kk) +% LLVM::reinterpret_bits[U64, S64](fk.leading_zeros())
+            break
+        kk = kk -% 1
+    # no binary128 comes within 2^-124 of a multiple of pi/2, so the residual keeps over 300 of its 448 bits
+    var word = LLVM::reinterpret_bits[S64, U64]((lz >> 6))
+    var wbits = (lz & 63)
+    var s = Array[U64, 7]()
+    var q = word
+    while q < 7
+        var cv = 0_u64
+        if wbits != 0 and q != word
+            cv = f[q -% word -% 1] >>> b128_trig_sh(n: 64 -% wbits)
+        s[q] = (f[q -% word] << b128_trig_sh(n: wbits)) | cv
+        q = q +% 1
+    var g = (b128_trig_u128(hi: s[2], lo: s[1]), b128_trig_u128(hi: s[4], lo: s[3]), b128_trig_u128(hi: s[6], lo: s[5]))
+    var pio2 = (0x514A08798E3404DDEF9519B3CD3A431B_u128, 0x29024E088A67CC74020BBEA63B139B22_u128, 0xC90FDAA22168C234C4C6628B80DC1CD1_u128)
+    var tt = b128_trig_mul384(a: g, b: pio2)
+    var lzt = b128_trig_clz128(x: tt.item2)
+    return (LLVM::reinterpret_bits[U64, S64](nu), negative, b128_trig_shl384(x: tt, shift: lzt), 1 -% (lz +% lzt))
 
 ### sum_{k>=0} (-1)^k coef[k]*u^k, eighteen terms by Horner in three tiers: terms 11..17 at 128 bits, 2..10
 ### at 256 and 0..1 at 384; every step stays positive because u*coef[k+1] < coef[k].
 secret routine b128_trig_alternating(u: (U128, U128, U128), cosine: Bool) -> (U128, U128, U128)
-  var narrow = b128_trig_coef(cosine: cosine, k: 17, limb: 2)
-  var k = 16_s64
-  while k >= 11
-    narrow = b128_trig_coef(cosine: cosine, k: k, limb: 2) -% b128_trig_mhi(x: u.item2, y: narrow)
-    k = k -% 1
-  var middle = (0_u128, narrow)
-  var u2 = (u.item1, u.item2)
-  k = 10
-  while k >= 2
-    var c = (b128_trig_coef(cosine: cosine, k: k, limb: 1), b128_trig_coef(cosine: cosine, k: k, limb: 2))
-    middle = b128_trig_sub256(a: c, b: b128_trig_mul256(a: u2, b: middle))
-    k = k -% 1
-  var q = (0_u128, middle.item0, middle.item1)
-  k = 1
-  while k >= 0
-    var c3 = (b128_trig_coef(cosine: cosine, k: k, limb: 0), b128_trig_coef(cosine: cosine, k: k, limb: 1), b128_trig_coef(cosine: cosine, k: k, limb: 2))
-    q = b128_trig_sub384(a: c3, b: b128_trig_mul384(a: u, b: q))
-    k = k -% 1
-  return q
+    var narrow = b128_trig_coef(cosine: cosine, k: 17, limb: 2)
+    var k = 16_s64
+    while k >= 11
+        narrow = b128_trig_coef(cosine: cosine, k: k, limb: 2) -% b128_trig_mhi(x: u.item2, y: narrow)
+        k = k -% 1
+    var middle = (0_u128, narrow)
+    var u2 = (u.item1, u.item2)
+    k = 10
+    while k >= 2
+        var c = (b128_trig_coef(cosine: cosine, k: k, limb: 1), b128_trig_coef(cosine: cosine, k: k, limb: 2))
+        middle = b128_trig_sub256(a: c, b: b128_trig_mul256(a: u2, b: middle))
+        k = k -% 1
+    var q = (0_u128, middle.item0, middle.item1)
+    k = 1
+    while k >= 0
+        var c3 = (b128_trig_coef(cosine: cosine, k: k, limb: 0), b128_trig_coef(cosine: cosine, k: k, limb: 1), b128_trig_coef(cosine: cosine, k: k, limb: 2))
+        q = b128_trig_sub384(a: c3, b: b128_trig_mul384(a: u, b: q))
+        k = k -% 1
+    return q
 
 ### Rounds a normalized 384-bit fraction frac*2^(e2-384) to binary128, to nearest with ties to even. The
 ### result is never subnormal here: |x| >= 2^-57 keeps it above 2^-124.
 secret routine b128_trig_round384(frac: (U128, U128, U128), e2: S64, sign: U128) -> U128
-  var mantissa = frac.item2 >>> 15
-  var round_bit = (frac.item2 >>> 14) & 1
-  var sticky = ((frac.item2 & 0x3FFF_u128) | frac.item1 | frac.item0) != 0
-  var up = 0_u128
-  if round_bit != 0 and (sticky or (mantissa & 1) != 0)
-    up = 1
-  var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](e2 +% 16382)) << 112
-  return sign | ((ex +% (mantissa -% (1_u128 << 112))) +% up)
+    var mantissa = frac.item2 >>> 15
+    var round_bit = (frac.item2 >>> 14) & 1
+    var sticky = ((frac.item2 & 0x3FFF_u128) | frac.item1 | frac.item0) != 0
+    var up = 0_u128
+    if round_bit != 0 and (sticky or (mantissa & 1) != 0)
+        up = 1
+    var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](e2 +% 16382)) << 112
+    return sign | ((ex +% (mantissa -% (1_u128 << 112))) +% up)
 
 ### The 384-bit path: everything the fast path would not decide.
 secret routine b128_trig_accurate(m: U128, e: S64, cosine: Bool, sign: U128) -> U128
-  var n = 0_s64
-  var negative = false
-  var t = (0_u128, 0_u128, m << 15)
-  var et = e +% 1
-  if e >= -8
-    var rw = b128_trig_reduce_wide(m: m, e: e)
-    n = rw.item0
-    negative = rw.item1
-    t = rw.item2
-    et = rw.item3
-  var (sg, frac, e2) = b128_trig_accurate_eval(n: n, negative: negative, t: t, et: et, cosine: cosine, sign: sign)
-  return b128_trig_round384(frac: frac, e2: e2, sign: sg)
+    var n = 0_s64
+    var negative = false
+    var t = (0_u128, 0_u128, m << 15)
+    var et = e +% 1
+    if e >= -8
+        var rw = b128_trig_reduce_wide(m: m, e: e)
+        n = rw.item0
+        negative = rw.item1
+        t = rw.item2
+        et = rw.item3
+    var (sg, frac, e2) = b128_trig_accurate_eval(n: n, negative: negative, t: t, et: et, cosine: cosine, sign: sign)
+    return b128_trig_round384(frac: frac, e2: e2, sign: sg)
 
 ### sin (cosine false) or cos of n pi/256 + theta, theta = (-1)^negative t 2^(et - 384) with t a normalized
 ### 384-bit fraction, to about 2^-370: the sign bit to apply (sign, the argument's for the sine, flipped by the
 ### quadrant) and the normalized 384-bit result frac with its exponent e2 (value frac 2^(e2 - 384)).
 secret routine b128_trig_accurate_eval(n: S64, negative: Bool, t: (U128, U128, U128), et: S64, cosine: Bool, sign: U128) -> (U128, (U128, U128, U128), S64)
-  var signmask = 1_u128 << 127
-  var u = b128_trig_shr384(x: b128_trig_mul384(a: t, b: t), shift: 0 -% (et +% et))
-  var k = n >> 7
-  if cosine
-    k = k +% 1
-  var want_cos = k & 1
-  var j = n & 127
-  var sg = sign
-  if (k & 2) != 0
-    sg = sg ^ signmask
-  # sin(theta) = theta*(1 - u*Q) keeps theta's floating form, at most one bit short
-  var s = b128_trig_sub384(a: t, b: b128_trig_mul384(a: t, b: b128_trig_mul384(a: u, b: b128_trig_alternating(u: u, cosine: false))))
-  var lzs = b128_trig_lz384(x: s)
-  s = b128_trig_shl384(x: s, shift: lzs)
-  var es = et -% lzs
-  if j == 0 and want_cos == 0
-    if negative
-      return (sg ^ signmask, s, es)
-    return (sg, s, es)
-  # 1 - cos(theta) = u*Q, so T*cos(theta) = T - T*(u*Q) never overflows the frame
-  var c = b128_trig_mul384(a: u, b: b128_trig_alternating(u: u, cosine: true))
-  var first = b128_trig_sincos384(j: j, w: want_cos)
-  var second = b128_trig_sincos384(j: j, w: 1 -% want_cos)
-  var base = b128_trig_sub384(a: first, b: b128_trig_mul384(a: first, b: c))
-  var term = b128_trig_shr384(x: b128_trig_mul384(a: second, b: s), shift: 0 -% es)
-  var f = b128_trig_add384(a: base, b: term)
-  if negative != (want_cos != 0)
-    f = b128_trig_sub384(a: base, b: term)
-  var lz = b128_trig_lz384(x: f)
-  return (sg, b128_trig_shl384(x: f, shift: lz), 0 -% lz)
+    var signmask = 1_u128 << 127
+    var u = b128_trig_shr384(x: b128_trig_mul384(a: t, b: t), shift: 0 -% (et +% et))
+    var k = n >> 7
+    if cosine
+        k = k +% 1
+    var want_cos = k & 1
+    var j = n & 127
+    var sg = sign
+    if (k & 2) != 0
+        sg = sg ^ signmask
+    # sin(theta) = theta*(1 - u*Q) keeps theta's floating form, at most one bit short
+    var s = b128_trig_sub384(a: t, b: b128_trig_mul384(a: t, b: b128_trig_mul384(a: u, b: b128_trig_alternating(u: u, cosine: false))))
+    var lzs = b128_trig_lz384(x: s)
+    s = b128_trig_shl384(x: s, shift: lzs)
+    var es = et -% lzs
+    if j == 0 and want_cos == 0
+        if negative
+            return (sg ^ signmask, s, es)
+        return (sg, s, es)
+    # 1 - cos(theta) = u*Q, so T*cos(theta) = T - T*(u*Q) never overflows the frame
+    var c = b128_trig_mul384(a: u, b: b128_trig_alternating(u: u, cosine: true))
+    var first = b128_trig_sincos384(j: j, w: want_cos)
+    var second = b128_trig_sincos384(j: j, w: 1 -% want_cos)
+    var base = b128_trig_sub384(a: first, b: b128_trig_mul384(a: first, b: c))
+    var term = b128_trig_shr384(x: b128_trig_mul384(a: second, b: s), shift: 0 -% es)
+    var f = b128_trig_add384(a: base, b: term)
+    if negative != (want_cos != 0)
+        f = b128_trig_sub384(a: base, b: term)
+    var lz = b128_trig_lz384(x: f)
+    return (sg, b128_trig_shl384(x: f, shift: lz), 0 -% lz)
 
 # 2/pi as 64-bit limbs: B128_TRIG_FRAC_2_PI[i] holds bits 64i+1 ..= 64i+64 after the binary point, most
 # significant limb first (264 limbs: a window of 10 limbs must reach exponent 16383).

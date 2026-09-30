@@ -33,8 +33,8 @@ public sealed partial class BaseEmissionTests
                                    module Bench
                                    import IO/Console
                                    routine start()
-                                     show("hi")
-                                     return
+                                       show("hi")
+                                       return
                                    """;
 
     private static Program Parse(string src, string file)
@@ -300,7 +300,7 @@ public sealed partial class BaseEmissionTests
         var baseSa =
             new SemanticVerifier(language: Language.RazorForge) { SeedAllStdlibRoutines = true };
         AnalysisResult baseR =
-            baseSa.Analyze(program: Parse(src: "module Base\nroutine start()\n  return",
+            baseSa.Analyze(program: Parse(src: "module Base\nroutine start()\n    return",
                 file: "base.rf"));
         Assert.Empty(collection: baseR.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
@@ -426,7 +426,7 @@ public sealed partial class BaseEmissionTests
     public void GenerateBase_Standalone_ParsesValid()
     {
         AnalysisResult baseR = new SemanticVerifier(language: Language.RazorForge).Analyze(
-            program: Parse(src: "module Base\nroutine start()\n  return", file: "base.rf"));
+            program: Parse(src: "module Base\nroutine start()\n    return", file: "base.rf"));
         Assert.Empty(collection: baseR.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,
@@ -465,7 +465,7 @@ public sealed partial class BaseEmissionTests
         // it must DEFINE every stdlib symbol the delta will mark resident (extern-declare).
         var baseSa = new SemanticVerifier(language: Language.RazorForge);
         AnalysisResult baseR =
-            baseSa.Analyze(program: Parse(src: "module Base\nroutine start()\n  return",
+            baseSa.Analyze(program: Parse(src: "module Base\nroutine start()\n    return",
                 file: "base.rf"));
         Assert.Empty(collection: baseR.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
@@ -519,7 +519,7 @@ public sealed partial class BaseEmissionTests
         var baseSa =
             new SemanticVerifier(language: Language.RazorForge) { SeedAllStdlibRoutines = true };
         AnalysisResult baseR = baseSa.Analyze(
-            program: Parse(src: "module Base\nroutine start()\n  return", file: "base.rf"));
+            program: Parse(src: "module Base\nroutine start()\n    return", file: "base.rf"));
         Assert.Empty(collection: baseR.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,

@@ -23,7 +23,7 @@ public class AssociatedTypeTests
         string source = """
                         protocol Sequence[T]
                         relates Cursor obeys Iterator[T]
-                          routine Me.peek() -> Me/Cursor
+                            routine Me.peek() -> Me/Cursor
                         """;
 
         Program program = AssertParses(source: source);
@@ -51,7 +51,7 @@ public class AssociatedTypeTests
         string source = """
                         entity MyList[T] obeys Iterable[T]
                         relates ListEmitter[T] as Iter
-                          secret count: U64
+                            secret count: U64
                         """;
 
         Program program = AssertParses(source: source);
@@ -75,7 +75,7 @@ public class AssociatedTypeTests
         string source = """
                         record Pair[T] obeys Iterable[T]
                         relates PairEmitter[T] as Iter
-                          first: T
+                            first: T
                         """;
 
         Program program = AssertParses(source: source);
@@ -96,7 +96,7 @@ public class AssociatedTypeTests
     {
         string source = """
                         entity Plain[T]
-                          secret value: T
+                            secret value: T
                         """;
 
         Program program = AssertParses(source: source);
@@ -115,7 +115,7 @@ public class AssociatedTypeTests
                         protocol Mapping[K, V]
                         relates KeyIter obeys Iterator[K]
                         relates ValueIter obeys Iterator[V]
-                          routine Me.keys() -> Me/KeyIter
+                            routine Me.keys() -> Me/KeyIter
                         """;
 
         Program program = AssertParses(source: source);
@@ -140,7 +140,7 @@ public class AssociatedTypeTests
     {
         string source = """
                         entity Adapter[S]
-                          secret cursor: S/Cursor
+                            secret cursor: S/Cursor
                         """;
 
         Program program = AssertParses(source: source);
@@ -160,7 +160,7 @@ public class AssociatedTypeTests
     {
         string source = """
                         routine Adapter[S].peek() -> Me/Cursor
-                          return
+                            return
                         """;
 
         Program program = AssertParses(source: source);

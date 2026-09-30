@@ -19,160 +19,160 @@ module Core
 ### :param exp: The exponent applied to `me`.
 ### :returns: The correctly rounded `me ** exp`.
 routine B32.pow_unchecked(exp: B32) -> B32
-  var x0 = me
-  var y0 = exp
-  var x = B64(from: x0)
-  var y = B64(from: y0)
-  var tx = x.to_bits()
-  var ty = y.to_bits()
-  if (tx << 1) == (0x3FF_u64 << 53)
-    # |x| = 1
-    if (tx >>> 63) == 1
-      # x = -1
-      if (ty << 1) > (0x7FF_u64 << 53)
-        return y0 +! y0
-      if b32_pow_isint(y: y0)
+    var x0 = me
+    var y0 = exp
+    var x = B64(from: x0)
+    var y = B64(from: y0)
+    var tx = x.to_bits()
+    var ty = y.to_bits()
+    if (tx << 1) == (0x3FF_u64 << 53)
+        # |x| = 1
+        if (tx >>> 63) == 1
+            # x = -1
+            if (ty << 1) > (0x7FF_u64 << 53)
+                return y0 +! y0
+            if b32_pow_isint(y: y0)
+                if b32_pow_isodd(y: y0)
+                    return x0
+                return -x0
+            return B32.from_bits(bits: 0xFFC00000_u32)
+        # 1^y = 1 except for a signaling NaN y
+        if b32_pow_is_signaling(x: y0)
+            return x0 +! y0
+        return x0
+    if (ty << 1) == 0
+        # x^0 = 1 except for a signaling NaN x
+        if b32_pow_is_signaling(x: x0)
+            return x0 +! y0
+        return 1.0_b32
+    if (ty << 1) >= (0x7FF_u64 << 53)
+        # y = ±infinity or NaN
+        if (tx << 1) > (0x7FF_u64 << 53)
+            return x0 +! y0
+        if (ty << 1) == (0x7FF_u64 << 53)
+            if ((tx << 1) < (0x3FF_u64 << 53)) != ((ty >>> 63) == 1)
+                return 0.0_b32
+            return B32.from_bits(bits: 0x7F800000_u32)
+        return x0 +! y0
+    if tx >= (0x7FF_u64 << 52)
+        # x is ±infinity, NaN, or has its sign bit set
+        if (tx << 1) == (0x7FF_u64 << 53)
+            if not b32_pow_isodd(y: y0)
+                x0 = x0.abs()
+            if (ty >>> 63) == 1
+                return 1.0_b32 /! x0
+            return x0
+        if (tx << 1) > (0x7FF_u64 << 53)
+            return x0 +! x0
+        if tx > (0x7FF_u64 << 52)
+            if not b32_pow_isint(y: y0) and x != 0.0
+                return B32.from_bits(bits: 0xFFC00000_u32)
+    if (tx << 1) == 0
+        # x = ±0
+        if (ty >>> 63) == 1
+            if b32_pow_isodd(y: y0)
+                return 1.0_b32 /! 0.0_b32.copysign(sign: x0)
+            return B32.from_bits(bits: 0x7F800000_u32)
         if b32_pow_isodd(y: y0)
-          return x0
-        return -x0
-      return B32.from_bits(bits: 0xFFC00000_u32)
-    # 1^y = 1 except for a signaling NaN y
-    if b32_pow_is_signaling(x: y0)
-      return x0 +! y0
-    return x0
-  if (ty << 1) == 0
-    # x^0 = 1 except for a signaling NaN x
-    if b32_pow_is_signaling(x: x0)
-      return x0 +! y0
-    return 1.0_b32
-  if (ty << 1) >= (0x7FF_u64 << 53)
-    # y = ±infinity or NaN
-    if (tx << 1) > (0x7FF_u64 << 53)
-      return x0 +! y0
-    if (ty << 1) == (0x7FF_u64 << 53)
-      if ((tx << 1) < (0x3FF_u64 << 53)) != ((ty >>> 63) == 1)
+            return 1.0_b32.copysign(sign: x0) *! 0.0_b32
         return 0.0_b32
-      return B32.from_bits(bits: 0x7F800000_u32)
-    return x0 +! y0
-  if tx >= (0x7FF_u64 << 52)
-    # x is ±infinity, NaN, or has its sign bit set
-    if (tx << 1) == (0x7FF_u64 << 53)
-      if not b32_pow_isodd(y: y0)
-        x0 = x0.abs()
-      if (ty >>> 63) == 1
-        return 1.0_b32 /! x0
-      return x0
-    if (tx << 1) > (0x7FF_u64 << 53)
-      return x0 +! x0
-    if tx > (0x7FF_u64 << 52)
-      if not b32_pow_isint(y: y0) and x != 0.0
-        return B32.from_bits(bits: 0xFFC00000_u32)
-  if (tx << 1) == 0
-    # x = ±0
-    if (ty >>> 63) == 1
-      if b32_pow_isodd(y: y0)
-        return 1.0_b32 /! 0.0_b32.copysign(sign: x0)
-      return B32.from_bits(bits: 0x7F800000_u32)
-    if b32_pow_isodd(y: y0)
-      return 1.0_b32.copysign(sign: x0) *! 0.0_b32
-    return 0.0_b32
-  # |x| = 2^e * xd with a 32-entry reciprocal table on xd
-  var m = tx & 0x000FFFFFFFFFFFFF_u64
-  var e = LLVM::reinterpret_bits[U64, S64]((tx >>> 52) & 0x7FF_u64) - 0x3FF
-  var j = (m + (1_u64 << 46)) >>> 47
-  if j > 13
-    e = e + 1
-  var xd = B64.from_bits(bits: m | (0x3FF_u64 << 52))
-  var z = LLVM::fma[B64](a: xd, b: B64.from_bits(bits: B32_POW_IX[j]), c: -1.0)
-  var z2 = z *! z
-  var z4 = z2 *! z2
-  var c6 = 0x1.a6406efd4b877p-3 +! z *! -0x1.717d824a520f7p-3
-  var c4 = 0x1.2776c441b72ep-2 +! z *! -0x1.ec709bdf453ecp-3
-  var c2 = 0x1.ec709dc3a2d0bp-2 +! z *! -0x1.71547652bc4a9p-2
-  var c0 = 0x1.71547652b82fep+0 +! z *! -0x1.71547652b82fep-1
-  c0 = c0 +! z2 *! c2
-  c4 = c4 +! z2 *! c6
-  c0 = c0 +! z4 *! c4
-  var j2 = 2 * j
-  var l = z *! c0 -! B64.from_bits(bits: B32_POW_LIX[j2 + 1])
-  y = y *! 16.0
-  var zt = (B64(from: e) -! B64.from_bits(bits: B32_POW_LIX[j2])) *! y
-  # z = 16 * y * log2(x)
-  z = l *! y +! zt
-  if z > 2048.0
-    # overflow
-    if b32_pow_isodd(y: y0)
-      return 0x1p127_b32.copysign(sign: x0) *! 0x1p127_b32
-    return 0x1p127_b32 *! 0x1p127_b32
-  if z < -2400.0
-    # underflow
-    if b32_pow_isodd(y: y0)
-      return 0x1p-126_b32.copysign(sign: x0) *! 0x1p-126_b32
-    return 0x1p-126_b32 *! 0x1p-126_b32
-  if z.abs() < 0x1p-26
-    return B32(from: 1.0 +! z)
-  var ia = z.floor()
-  var h = LLVM::fma[B64](a: l, b: y, c: zt -! ia)
-  var il = LLVM::float_to_signed[B64, S64](ia)
-  var jl = il & 0xF
-  var el = (il - jl) >> 4
-  var ji = LLVM::reinterpret_bits[S64, U64](jl)
-  var s = B64.from_bits(bits: B32_POW_TB[ji])
-  s = s *! B64.from_bits(bits: (LLVM::reinterpret_bits[S64, U64](el) +% 0x3FF_u64) << 52)
-  var h2 = h *! h
-  c0 = 0x1.62e42fefa398bp-5 +! h *! 0x1.ebfbdff84555ap-11
-  c2 = 0x1.c6b08d4ad86d3p-17 +! h *! 0x1.3b2ad1b1716a2p-23
-  c4 = 0x1.5d7472718ce9dp-30 +! h *! 0x1.4a1d7f457ac56p-37
-  c0 = c0 +! h2 *! (c2 +! h2 *! c4)
-  var w = s *! h
-  var rr = s +! w *! c0
-  if ((rr.to_bits() +% 468) & 0xFFFFFFF_u64) <= 936
-    return b32_pow_accurate(x0: x0, y0: y0)
-  # an odd integer y keeps the sign of x
-  var et = LLVM::reinterpret_bits[U64, S64]((ty >>> 52) & 0x7FF_u64) - 0x3FF
-  var kk = 0_u64
-  if et >= -11 and et < 53
-    kk = ty << LLVM::int_truncate[S64, U32](11 + et)
-  elseif et < -11 and et > -75
-    kk = ty >>> LLVM::int_truncate[S64, U32](-11 - et)
-  if (kk << 1) == 0 and kk != 0
-    rr = rr.copysign(sign: x)
-  return B32(from: rr)
+    # |x| = 2^e * xd with a 32-entry reciprocal table on xd
+    var m = tx & 0x000FFFFFFFFFFFFF_u64
+    var e = LLVM::reinterpret_bits[U64, S64]((tx >>> 52) & 0x7FF_u64) - 0x3FF
+    var j = (m + (1_u64 << 46)) >>> 47
+    if j > 13
+        e = e + 1
+    var xd = B64.from_bits(bits: m | (0x3FF_u64 << 52))
+    var z = LLVM::fma[B64](a: xd, b: B64.from_bits(bits: B32_POW_IX[j]), c: -1.0)
+    var z2 = z *! z
+    var z4 = z2 *! z2
+    var c6 = 0x1.a6406efd4b877p-3 +! z *! -0x1.717d824a520f7p-3
+    var c4 = 0x1.2776c441b72ep-2 +! z *! -0x1.ec709bdf453ecp-3
+    var c2 = 0x1.ec709dc3a2d0bp-2 +! z *! -0x1.71547652bc4a9p-2
+    var c0 = 0x1.71547652b82fep+0 +! z *! -0x1.71547652b82fep-1
+    c0 = c0 +! z2 *! c2
+    c4 = c4 +! z2 *! c6
+    c0 = c0 +! z4 *! c4
+    var j2 = 2 * j
+    var l = z *! c0 -! B64.from_bits(bits: B32_POW_LIX[j2 + 1])
+    y = y *! 16.0
+    var zt = (B64(from: e) -! B64.from_bits(bits: B32_POW_LIX[j2])) *! y
+    # z = 16 * y * log2(x)
+    z = l *! y +! zt
+    if z > 2048.0
+        # overflow
+        if b32_pow_isodd(y: y0)
+            return 0x1p127_b32.copysign(sign: x0) *! 0x1p127_b32
+        return 0x1p127_b32 *! 0x1p127_b32
+    if z < -2400.0
+        # underflow
+        if b32_pow_isodd(y: y0)
+            return 0x1p-126_b32.copysign(sign: x0) *! 0x1p-126_b32
+        return 0x1p-126_b32 *! 0x1p-126_b32
+    if z.abs() < 0x1p-26
+        return B32(from: 1.0 +! z)
+    var ia = z.floor()
+    var h = LLVM::fma[B64](a: l, b: y, c: zt -! ia)
+    var il = LLVM::float_to_signed[B64, S64](ia)
+    var jl = il & 0xF
+    var el = (il - jl) >> 4
+    var ji = LLVM::reinterpret_bits[S64, U64](jl)
+    var s = B64.from_bits(bits: B32_POW_TB[ji])
+    s = s *! B64.from_bits(bits: (LLVM::reinterpret_bits[S64, U64](el) +% 0x3FF_u64) << 52)
+    var h2 = h *! h
+    c0 = 0x1.62e42fefa398bp-5 +! h *! 0x1.ebfbdff84555ap-11
+    c2 = 0x1.c6b08d4ad86d3p-17 +! h *! 0x1.3b2ad1b1716a2p-23
+    c4 = 0x1.5d7472718ce9dp-30 +! h *! 0x1.4a1d7f457ac56p-37
+    c0 = c0 +! h2 *! (c2 +! h2 *! c4)
+    var w = s *! h
+    var rr = s +! w *! c0
+    if ((rr.to_bits() +% 468) & 0xFFFFFFF_u64) <= 936
+        return b32_pow_accurate(x0: x0, y0: y0)
+    # an odd integer y keeps the sign of x
+    var et = LLVM::reinterpret_bits[U64, S64]((ty >>> 52) & 0x7FF_u64) - 0x3FF
+    var kk = 0_u64
+    if et >= -11 and et < 53
+        kk = ty << LLVM::int_truncate[S64, U32](11 + et)
+    elseif et < -11 and et > -75
+        kk = ty >>> LLVM::int_truncate[S64, U32](-11 - et)
+    if (kk << 1) == 0 and kk != 0
+        rr = rr.copysign(sign: x)
+    return B32(from: rr)
 
 ### True when `y` is an integer (or ±0).
 ### :param y: The exponent.
 ### :returns: Whether `y` is integral.
 secret routine b32_pow_isint(y: B32) -> Bool
-  var wy = y.to_bits()
-  var ey = LLVM::zero_extend[U32, S64]((wy >>> 23) & 0xFF_u32) - 127
-  var s = ey + 9
-  if ey >= 0
-    if s >= 32
-      return true
-    return (wy << LLVM::int_truncate[S64, U32](s)) == 0
-  return (wy << 1) == 0
+    var wy = y.to_bits()
+    var ey = LLVM::zero_extend[U32, S64]((wy >>> 23) & 0xFF_u32) - 127
+    var s = ey + 9
+    if ey >= 0
+        if s >= 32
+            return true
+        return (wy << LLVM::int_truncate[S64, U32](s)) == 0
+    return (wy << 1) == 0
 
 ### True when `y` is an odd integer.
 ### :param y: The exponent.
 ### :returns: Whether `y` is an odd integer.
 secret routine b32_pow_isodd(y: B32) -> Bool
-  var wy = y.to_bits()
-  var ey = LLVM::zero_extend[U32, S64]((wy >>> 23) & 0xFF_u32) - 127
-  var s = ey + 9
-  var odd = 0_u32
-  if ey >= 0
-    if s < 32 and (wy << LLVM::int_truncate[S64, U32](s)) == 0
-      odd = (wy >>> LLVM::int_truncate[S64, U32](32 - s)) & 1
-    if s == 32
-      odd = wy & 1
-  return odd == 1
+    var wy = y.to_bits()
+    var ey = LLVM::zero_extend[U32, S64]((wy >>> 23) & 0xFF_u32) - 127
+    var s = ey + 9
+    var odd = 0_u32
+    if ey >= 0
+        if s < 32 and (wy << LLVM::int_truncate[S64, U32](s)) == 0
+            odd = (wy >>> LLVM::int_truncate[S64, U32](32 - s)) & 1
+        if s == 32
+            odd = wy & 1
+    return odd == 1
 
 ### True when `x` is a signaling NaN.
 ### :param x: The value to test.
 ### :returns: Whether `x` is a signaling NaN.
 secret routine b32_pow_is_signaling(x: B32) -> Bool
-  var u = x.to_bits() ^ 0x00400000_u32
-  return (u & 0x7FFFFFFF_u32) > 0x7FC00000_u32
+    var u = x.to_bits() ^ 0x00400000_u32
+    return (u & 0x7FFFFFFF_u32) > 0x7FC00000_u32
 
 ### Double-double product (xh + xl) * (ch + cl).
 ### :param xh: High part of the first factor.
@@ -181,13 +181,13 @@ secret routine b32_pow_is_signaling(x: B32) -> Bool
 ### :param cl: Low part of the second factor.
 ### :returns: The product as (high, low).
 secret routine b32_pow_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
-  var ahlh = ch *! xl
-  var alhh = cl *! xh
-  var ahhh = ch *! xh
-  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
-  ahhl = ahhl +! (alhh +! ahlh)
-  var hi = ahhh +! ahhl
-  return (hi, (ahhh -! hi) +! ahhl)
+    var ahlh = ch *! xl
+    var alhh = cl *! xh
+    var ahhh = ch *! xh
+    var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+    ahhl = ahhl +! (alhh +! ahlh)
+    var hi = ahhh +! ahhl
+    return (hi, (ahhh -! hi) +! ahhl)
 
 ### Double-double times double product (xh + xl) * ch.
 ### :param xh: High part of the first factor.
@@ -195,138 +195,138 @@ secret routine b32_pow_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
 ### :param ch: The second factor.
 ### :returns: The product as (high, low).
 secret routine b32_pow_mulddd(xh: B64, xl: B64, ch: B64) -> (B64, B64)
-  var ahlh = ch *! xl
-  var ahhh = ch *! xh
-  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
-  ahhl = ahhl +! ahlh
-  var hi = ahhh +! ahhl
-  return (hi, (ahhh -! hi) +! ahhl)
+    var ahlh = ch *! xl
+    var ahhh = ch *! xh
+    var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+    ahhl = ahhl +! ahlh
+    var hi = ahhh +! ahhl
+    return (hi, (ahhh -! hi) +! ahhl)
 
 ### Double-double Horner evaluation of the log2 series (13 double-double coefficients).
 ### :param xh: High part of the argument.
 ### :param xl: Low part of the argument.
 ### :returns: The polynomial value as (high, low).
 secret routine b32_pow_poly_log(xh: B64, xl: B64) -> (B64, B64)
-  var i = 12_u64
-  var ch = B64.from_bits(bits: B32_POW_CH[2 * i])
-  var cl = B64.from_bits(bits: B32_POW_CH[2 * i + 1])
-  while i > 0
-    i = i - 1
-    var (ph, pl) = b32_pow_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
-    var c0 = B64.from_bits(bits: B32_POW_CH[2 * i])
-    var th = ph +! c0
-    var tl = (c0 -! th) +! ph
-    ch = th
-    cl = pl +! (tl +! B64.from_bits(bits: B32_POW_CH[2 * i + 1]))
-  return (ch, cl)
+    var i = 12_u64
+    var ch = B64.from_bits(bits: B32_POW_CH[2 * i])
+    var cl = B64.from_bits(bits: B32_POW_CH[2 * i + 1])
+    while i > 0
+        i = i - 1
+        var (ph, pl) = b32_pow_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+        var c0 = B64.from_bits(bits: B32_POW_CH[2 * i])
+        var th = ph +! c0
+        var tl = (c0 -! th) +! ph
+        ch = th
+        cl = pl +! (tl +! B64.from_bits(bits: B32_POW_CH[2 * i + 1]))
+    return (ch, cl)
 
 ### Double-double Horner evaluation of the 2^x series (18 double-double coefficients).
 ### :param xh: High part of the argument.
 ### :param xl: Low part of the argument.
 ### :returns: The polynomial value as (high, low).
 secret routine b32_pow_poly_exp(xh: B64, xl: B64) -> (B64, B64)
-  var i = 17_u64
-  var ch = B64.from_bits(bits: B32_POW_CE[2 * i])
-  var cl = B64.from_bits(bits: B32_POW_CE[2 * i + 1])
-  while i > 0
-    i = i - 1
-    var (ph, pl) = b32_pow_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
-    var c0 = B64.from_bits(bits: B32_POW_CE[2 * i])
-    var th = ph +! c0
-    var tl = (c0 -! th) +! ph
-    ch = th
-    cl = pl +! (tl +! B64.from_bits(bits: B32_POW_CE[2 * i + 1]))
-  return (ch, cl)
+    var i = 17_u64
+    var ch = B64.from_bits(bits: B32_POW_CE[2 * i])
+    var cl = B64.from_bits(bits: B32_POW_CE[2 * i + 1])
+    while i > 0
+        i = i - 1
+        var (ph, pl) = b32_pow_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+        var c0 = B64.from_bits(bits: B32_POW_CE[2 * i])
+        var th = ph +! c0
+        var tl = (c0 -! th) +! ph
+        ch = th
+        cl = pl +! (tl +! B64.from_bits(bits: B32_POW_CE[2 * i + 1]))
+    return (ch, cl)
 
 ### The accurate path of pow, in double-double arithmetic, for results close to a rounding boundary.
 ### :param x0: The base (finite, positive or a negative base with an integer exponent, not ±0 or ±1).
 ### :param y0: The exponent (finite, non-zero).
 ### :returns: The correctly rounded `x0 ** y0`.
 secret routine b32_pow_accurate(x0: B32, y0: B32) -> B32
-  var y = B64(from: y0)
-  var t = B64(from: x0).to_bits()
-  var e = LLVM::reinterpret_bits[U64, S64]((t >>> 52) & 0x7FF_u64) - 0x3FF
-  t = t & 0x000FFFFFFFFFFFFF_u64
-  var o = 1.0
-  if t > 0x6A09E667F3BCD_u64
-    e = e + 1
-    o = 2.0
-  var x = B64.from_bits(bits: t | (0x3FF_u64 << 52))
-  # log2(x) = 2 atanh-like series in z = (x - o)/(x + o)
-  var xm = x -! o
-  var xp = x +! o
-  var zh = xm /! xp
-  var zl = LLVM::fma[B64](a: zh, b: -xp, c: xm) /! xp
-  var (z2h, z2l) = b32_pow_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
-  var (p2h, p2l) = b32_pow_poly_log(xh: z2h, xl: z2l)
-  var (qh, ql) = b32_pow_muldd(xh: zh, xl: zl, ch: p2h, cl: p2l)
-  var (rh, rl) = b32_pow_mulddd(xh: qh, xl: ql, ch: y)
-  var ey = B64(from: e) *! y
-  var eh = ey +! rh
-  var el = ((ey -! eh) +! rh) +! rl
-  var ee = LLVM::rint[B64](value: eh)
-  eh = eh -! ee
-  var (sh, sl) = b32_pow_poly_exp(xh: eh, xl: el)
-  eh = sh
-  el = sl
-  var r = B64.from_bits(bits: (0x3FF_u64 +% LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ee))) << 52)
-  var ty = y0.to_bits()
-  var et = LLVM::zero_extend[U32, S64]((ty >>> 23) & 0xFF_u32) - 0x7F
-  # kk keeps the bits of y from its units bit down; a shift of 32 or more clears it (y is then an even
-  # integer). The C original shifts by 8+et unguarded, which is undefined for 8+et >= 32 and in practice
-  # (x86 and AArch64 mask the count) gave a negative result for a negative x and an even |y| >= 2^24.
-  var kk = 0_u32
-  if 8 + et >= 0 and 8 + et < 32
-    kk = ty << LLVM::int_truncate[S64, U32](8 + et)
-  elseif 8 + et < 0 and -8 - et < 32
-    kk = ty >>> LLVM::int_truncate[S64, U32](-8 - et)
-  var isint = (et >= 0 and (kk << 1) == 0) or et >= 23
-  var lmid = (el.to_bits() >>> 23) & 0x1FFFFFFF_u64
-  if lmid == 0x1FFFFFFF_u64
-    if eh < 1.0
-      if el >= 0x1p-54
-        el = el -! 0x1p-53
-        eh = eh +! 0x1p-53
-      elseif el <= -0x1p-54
-        el = el +! 0x1p-53
-        eh = eh -! 0x1p-53
-    else
-      if el >= 0x1p-53
-        el = el -! 0x1p-52
-        eh = eh +! 0x1p-52
-      elseif el <= -0x1p-53
-        el = el +! 0x1p-52
-        eh = eh -! 0x1p-52
-  elseif lmid == 0
-    if el > 0.0
-      if eh < 1.0
-        if el >= 0x1p-53
-          el = el -! 0x1p-53
-          eh = eh +! 0x1p-53
-      else
-        if el >= 0x1p-52
-          el = el -! 0x1p-52
-          eh = eh +! 0x1p-52
-    else
-      if eh < 1.0
-        if el <= -0x1p-53
-          el = el +! 0x1p-53
-          eh = eh -! 0x1p-53
-      else
-        if el <= -0x1p-52
-          el = el +! 0x1p-52
-          eh = eh -! 0x1p-52
-  var lh = eh.to_bits()
-  if (lh & 0xFFFFFFF_u64) == 0
-    if el.abs() > 0x1p-91
-      if el < 0.0
-        eh = B64.from_bits(bits: lh -% 1)
-      else
-        eh = B64.from_bits(bits: lh +% 1)
-  eh = eh *! r
-  if isint and kk != 0
-    eh = eh.copysign(sign: B64(from: x0))
-  return B32(from: eh)
+    var y = B64(from: y0)
+    var t = B64(from: x0).to_bits()
+    var e = LLVM::reinterpret_bits[U64, S64]((t >>> 52) & 0x7FF_u64) - 0x3FF
+    t = t & 0x000FFFFFFFFFFFFF_u64
+    var o = 1.0
+    if t > 0x6A09E667F3BCD_u64
+        e = e + 1
+        o = 2.0
+    var x = B64.from_bits(bits: t | (0x3FF_u64 << 52))
+    # log2(x) = 2 atanh-like series in z = (x - o)/(x + o)
+    var xm = x -! o
+    var xp = x +! o
+    var zh = xm /! xp
+    var zl = LLVM::fma[B64](a: zh, b: -xp, c: xm) /! xp
+    var (z2h, z2l) = b32_pow_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
+    var (p2h, p2l) = b32_pow_poly_log(xh: z2h, xl: z2l)
+    var (qh, ql) = b32_pow_muldd(xh: zh, xl: zl, ch: p2h, cl: p2l)
+    var (rh, rl) = b32_pow_mulddd(xh: qh, xl: ql, ch: y)
+    var ey = B64(from: e) *! y
+    var eh = ey +! rh
+    var el = ((ey -! eh) +! rh) +! rl
+    var ee = LLVM::rint[B64](value: eh)
+    eh = eh -! ee
+    var (sh, sl) = b32_pow_poly_exp(xh: eh, xl: el)
+    eh = sh
+    el = sl
+    var r = B64.from_bits(bits: (0x3FF_u64 +% LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ee))) << 52)
+    var ty = y0.to_bits()
+    var et = LLVM::zero_extend[U32, S64]((ty >>> 23) & 0xFF_u32) - 0x7F
+    # kk keeps the bits of y from its units bit down; a shift of 32 or more clears it (y is then an even
+    # integer). The C original shifts by 8+et unguarded, which is undefined for 8+et >= 32 and in practice
+    # (x86 and AArch64 mask the count) gave a negative result for a negative x and an even |y| >= 2^24.
+    var kk = 0_u32
+    if 8 + et >= 0 and 8 + et < 32
+        kk = ty << LLVM::int_truncate[S64, U32](8 + et)
+    elseif 8 + et < 0 and -8 - et < 32
+        kk = ty >>> LLVM::int_truncate[S64, U32](-8 - et)
+    var isint = (et >= 0 and (kk << 1) == 0) or et >= 23
+    var lmid = (el.to_bits() >>> 23) & 0x1FFFFFFF_u64
+    if lmid == 0x1FFFFFFF_u64
+        if eh < 1.0
+            if el >= 0x1p-54
+                el = el -! 0x1p-53
+                eh = eh +! 0x1p-53
+            elseif el <= -0x1p-54
+                el = el +! 0x1p-53
+                eh = eh -! 0x1p-53
+        else
+            if el >= 0x1p-53
+                el = el -! 0x1p-52
+                eh = eh +! 0x1p-52
+            elseif el <= -0x1p-53
+                el = el +! 0x1p-52
+                eh = eh -! 0x1p-52
+    elseif lmid == 0
+        if el > 0.0
+            if eh < 1.0
+                if el >= 0x1p-53
+                    el = el -! 0x1p-53
+                    eh = eh +! 0x1p-53
+            else
+                if el >= 0x1p-52
+                    el = el -! 0x1p-52
+                    eh = eh +! 0x1p-52
+        else
+            if eh < 1.0
+                if el <= -0x1p-53
+                    el = el +! 0x1p-53
+                    eh = eh -! 0x1p-53
+            else
+                if el <= -0x1p-52
+                    el = el +! 0x1p-52
+                    eh = eh -! 0x1p-52
+    var lh = eh.to_bits()
+    if (lh & 0xFFFFFFF_u64) == 0
+        if el.abs() > 0x1p-91
+            if el < 0.0
+                eh = B64.from_bits(bits: lh -% 1)
+            else
+                eh = B64.from_bits(bits: lh +% 1)
+    eh = eh *! r
+    if isint and kk != 0
+        eh = eh.copysign(sign: B64(from: x0))
+    return B32(from: eh)
 
 ### Table of reciprocals 1/(1 + j/32) (rounded), for j in 0..32, as B64 bit patterns.
 secret preset B32_POW_IX: Array[U64, 33] = [0x3FF0000000000000_u64, 0x3FEF07C1F07C0000_u64, 0x3FEE1E1E1E1E0000_u64, 0x3FED41D41D420000_u64, 0x3FEC71C71C720000_u64, 0x3FEBACF914C20000_u64, 0x3FEAF286BCA20000_u64, 0x3FEA41A41A420000_u64, 0x3FE99999999A0000_u64, 0x3FE8F9C18F9C0000_u64, 0x3FE8618618620000_u64, 0x3FE7D05F417D0000_u64, 0x3FE745D1745D0000_u64, 0x3FE6C16C16C10000_u64, 0x3FE642C8590B0000_u64, 0x3FE5C9882B930000_u64, 0x3FE5555555550000_u64, 0x3FE4E5E0A72F0000_u64, 0x3FE47AE147AE0000_u64, 0x3FE4141414140000_u64, 0x3FE3B13B13B10000_u64, 0x3FE3521CFB2B0000_u64, 0x3FE2F684BDA10000_u64, 0x3FE29E4129E40000_u64, 0x3FE2492492490000_u64, 0x3FE1F7047DC10000_u64, 0x3FE1A7B9611A0000_u64, 0x3FE15B1E5F750000_u64, 0x3FE1111111110000_u64, 0x3FE0C9714FBD0000_u64, 0x3FE0842108420000_u64, 0x3FE0410410410000_u64, 0x3FE0000000000000_u64]

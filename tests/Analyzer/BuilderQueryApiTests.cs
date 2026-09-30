@@ -24,13 +24,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.type_name()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.type_name()
+                                     return
                                  """);
     }
     /// <summary>
@@ -43,13 +43,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.type_kind()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.type_kind()
+                                     return
                                  """);
     }
     /// <summary>
@@ -62,13 +62,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.type_id()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.type_id()
+                                     return
                                  """);
     }
     /// <summary>
@@ -81,13 +81,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.module_name()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.module_name()
+                                     return
                                  """);
     }
     /// <summary>
@@ -100,13 +100,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.is_generic()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.is_generic()
+                                     return
                                  """);
     }
     /// <summary>
@@ -119,13 +119,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.data_size()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.data_size()
+                                     return
                                  """);
     }
     /// <summary>
@@ -138,13 +138,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.member_variable_count()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.member_variable_count()
+                                     return
                                  """);
     }
     /// <summary>
@@ -157,13 +157,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.generic_args()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.generic_args()
+                                     return
                                  """);
     }
     /// <summary>
@@ -176,13 +176,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.protocols()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.protocols()
+                                     return
                                  """);
     }
     /// <summary>
@@ -195,13 +195,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.routine_names()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.routine_names()
+                                     return
                                  """);
     }
     /// <summary>
@@ -214,13 +214,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.annotations()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.annotations()
+                                     return
                                  """);
     }
     /// <summary>
@@ -233,13 +233,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.dependencies()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.dependencies()
+                                     return
                                  """);
     }
     /// <summary>
@@ -252,13 +252,13 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Point
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Point(x: 1, y: 2)
-                                   var v = p.full_type_name()
-                                   return
+                                     var p = Point(x: 1, y: 2)
+                                     var v = p.full_type_name()
+                                     return
                                  """);
     }
 
@@ -276,12 +276,12 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  entity Counter
-                                   value: S64
+                                     value: S64
 
                                  routine test()
-                                   var c = Counter(value: 0)
-                                   var v = c.type_name()
-                                   return
+                                     var c = Counter(value: 0)
+                                     var v = c.type_name()
+                                     return
                                  """);
     }
     /// <summary>
@@ -294,12 +294,12 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  entity Counter
-                                   value: S64
+                                     value: S64
 
                                  routine test()
-                                   var c = Counter(value: 0)
-                                   var v = c.type_kind()
-                                   return
+                                     var c = Counter(value: 0)
+                                     var v = c.type_kind()
+                                     return
                                  """);
     }
     /// <summary>
@@ -312,12 +312,12 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  entity Counter
-                                   value: S64
+                                     value: S64
 
                                  routine test()
-                                   var c = Counter(value: 0)
-                                   var v = c.member_variable_count()
-                                   return
+                                     var c = Counter(value: 0)
+                                     var v = c.member_variable_count()
+                                     return
                                  """);
     }
 
@@ -335,14 +335,14 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  choice Color
-                                   RED
-                                   GREEN
-                                   BLUE
+                                     RED
+                                     GREEN
+                                     BLUE
 
                                  routine test()
-                                   var c = Color.RED
-                                   var v = c.type_name()
-                                   return
+                                     var c = Color.RED
+                                     var v = c.type_name()
+                                     return
                                  """);
     }
     /// <summary>
@@ -355,14 +355,14 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  choice Color
-                                   RED
-                                   GREEN
-                                   BLUE
+                                     RED
+                                     GREEN
+                                     BLUE
 
                                  routine test()
-                                   var c = Color.RED
-                                   var v = c.type_kind()
-                                   return
+                                     var c = Color.RED
+                                     var v = c.type_kind()
+                                     return
                                  """);
     }
 
@@ -389,13 +389,13 @@ public class BuilderQueryApiTests
     {
         string source = $$"""
                           record Pair
-                            a: S64
-                            b: S64
+                              a: S64
+                              b: S64
 
                           routine test()
-                            var p = Pair(a: 1, b: 2)
-                            var v = p.{{routineName}}()
-                            return
+                              var p = Pair(a: 1, b: 2)
+                              var v = p.{{routineName}}()
+                              return
                           """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -423,13 +423,13 @@ public class BuilderQueryApiTests
                           import BuilderQuery
 
                           record Pair
-                            a: S64
-                            b: S64
+                              a: S64
+                              b: S64
 
                           routine test()
-                            var p = Pair(a: 1, b: 2)
-                            var v = p.{{routineName}}()
-                            return
+                              var p = Pair(a: 1, b: 2)
+                              var v = p.{{routineName}}()
+                              return
                           """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -456,8 +456,8 @@ public class BuilderQueryApiTests
     {
         string source = $$"""
                           routine test()
-                            var v = {{routineName}}()
-                            return
+                              var v = {{routineName}}()
+                              return
                           """;
 
         // Standalone BuilderQuery routines are plain `module BuilderQuery` members: without the
@@ -484,8 +484,8 @@ public class BuilderQueryApiTests
                           import BuilderQuery
 
                           routine test()
-                            var v = {{routineName}}()
-                            return
+                              var v = {{routineName}}()
+                              return
                           """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -511,8 +511,8 @@ public class BuilderQueryApiTests
     {
         string source = $$"""
                           routine test()
-                            var v = {{routineName}}()
-                            return
+                              var v = {{routineName}}()
+                              return
                           """;
 
         // See SourceLocationRoutine_WithoutImport_ReportsError: standalone BuilderQuery routines are
@@ -537,8 +537,8 @@ public class BuilderQueryApiTests
                           import BuilderQuery
 
                           routine test()
-                            var v = {{routineName}}()
-                            return
+                              var v = {{routineName}}()
+                              return
                           """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -563,14 +563,14 @@ public class BuilderQueryApiTests
     {
         string source = $$"""
                           record Point
-                            x: S64
-                            y: S64
+                              x: S64
+                              y: S64
 
                           routine test()
-                            var p = Point(x: 1, y: 2)
-                            var q = Point(x: 3, y: 4)
-                            {{usage}}
-                            return
+                              var p = Point(x: 1, y: 2)
+                              var q = Point(x: 3, y: 4)
+                              {{usage}}
+                              return
                           """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -592,25 +592,25 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Pair
-                                   x: S64
-                                   y: S64
+                                     x: S64
+                                     y: S64
 
                                  routine test()
-                                   var p = Pair(x: 1, y: 2)
-                                   var a = p.type_name()
-                                   var b = p.type_kind()
-                                   var c = p.type_id()
-                                   var d = p.module_name()
-                                   var e = p.is_generic()
-                                   var f = p.data_size()
-                                   var g = p.member_variable_count()
-                                   var h = p.generic_args()
-                                   var i = p.protocols()
-                                   var j = p.routine_names()
-                                   var k = p.annotations()
-                                   var l = p.dependencies()
-                                   var m = p.full_type_name()
-                                   return
+                                     var p = Pair(x: 1, y: 2)
+                                     var a = p.type_name()
+                                     var b = p.type_kind()
+                                     var c = p.type_id()
+                                     var d = p.module_name()
+                                     var e = p.is_generic()
+                                     var f = p.data_size()
+                                     var g = p.member_variable_count()
+                                     var h = p.generic_args()
+                                     var i = p.protocols()
+                                     var j = p.routine_names()
+                                     var k = p.annotations()
+                                     var l = p.dependencies()
+                                     var m = p.full_type_name()
+                                     return
                                  """);
     }
     /// <summary>
@@ -623,24 +623,24 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  routine test()
-                                   var a = source_file()
-                                   var b = source_line()
-                                   var c = source_column()
-                                   var d = source_routine()
-                                   var e = source_module()
-                                   var f = source_text()
-                                   var g = caller_file()
-                                   var h = caller_line()
-                                   var i = caller_routine()
-                                   var j = target_os()
-                                   var k = target_arch()
-                                   var l = builder_version()
-                                   var m = build_timestamp()
-                                   var n = build_mode()
-                                   var o = page_size()
-                                   var p = cache_line()
-                                   var q = word_size()
-                                   return
+                                     var a = source_file()
+                                     var b = source_line()
+                                     var c = source_column()
+                                     var d = source_routine()
+                                     var e = source_module()
+                                     var f = source_text()
+                                     var g = caller_file()
+                                     var h = caller_line()
+                                     var i = caller_routine()
+                                     var j = target_os()
+                                     var k = target_arch()
+                                     var l = builder_version()
+                                     var m = build_timestamp()
+                                     var n = build_mode()
+                                     var o = page_size()
+                                     var p = cache_line()
+                                     var q = word_size()
+                                     return
                                  """);
     }
     /// <summary>
@@ -653,17 +653,17 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  record Pair
-                                   a: S64
-                                   b: S64
+                                     a: S64
+                                     b: S64
 
                                  routine test()
-                                   var p = Pair(a: 1, b: 2)
-                                   var name = p.type_name()
-                                   var file = source_file()
-                                   var os = target_os()
-                                   var sz = p.data_size()
-                                   var line = source_line()
-                                   return
+                                     var p = Pair(a: 1, b: 2)
+                                     var name = p.type_name()
+                                     var file = source_file()
+                                     var os = target_os()
+                                     var sz = p.data_size()
+                                     var line = source_line()
+                                     return
                                  """);
     }
 
@@ -682,19 +682,19 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  entity Node
-                                   value: S64
+                                     value: S64
 
                                  routine test()
-                                   var n = Node(value: 42)
-                                   var a = n.type_name()
-                                   var b = n.type_kind()
-                                   var c = n.type_id()
-                                   var d = n.module_name()
-                                   var e = n.is_generic()
-                                   var f = n.member_variable_count()
-                                   var g = n.protocols()
-                                   var h = n.routine_names()
-                                   return
+                                     var n = Node(value: 42)
+                                     var a = n.type_name()
+                                     var b = n.type_kind()
+                                     var c = n.type_id()
+                                     var d = n.module_name()
+                                     var e = n.is_generic()
+                                     var f = n.member_variable_count()
+                                     var g = n.protocols()
+                                     var h = n.routine_names()
+                                     return
                                  """);
     }
     /// <summary>
@@ -707,18 +707,18 @@ public class BuilderQueryApiTests
                                  import BuilderQuery
 
                                  choice Direction
-                                   NORTH
-                                   SOUTH
-                                   EAST
-                                   WEST
+                                     NORTH
+                                     SOUTH
+                                     EAST
+                                     WEST
 
                                  routine test()
-                                   var d = Direction.NORTH
-                                   var a = d.type_name()
-                                   var b = d.type_kind()
-                                   var c = d.type_id()
-                                   var e = d.module_name()
-                                   return
+                                     var d = Direction.NORTH
+                                     var a = d.type_name()
+                                     var b = d.type_kind()
+                                     var c = d.type_id()
+                                     var e = d.module_name()
+                                     return
                                  """);
     }
 

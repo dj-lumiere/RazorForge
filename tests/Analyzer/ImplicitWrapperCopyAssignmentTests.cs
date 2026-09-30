@@ -17,14 +17,14 @@ public class ImplicitWrapperCopyAssignmentTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var rb = ra.share()
-                          rb = ra
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var rb = ra.share()
+                            rb = ra
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -39,14 +39,14 @@ public class ImplicitWrapperCopyAssignmentTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var rb = ra.share()
-                          rb = ra.share()
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var rb = ra.share()
+                            rb = ra.share()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -61,14 +61,14 @@ public class ImplicitWrapperCopyAssignmentTests
     {
         string source = """
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine start()
-                          var p1 = Point(x: 1, y: 2)
-                          var p2 = Point(x: 3, y: 4)
-                          p2 = p1
-                          return
+                            var p1 = Point(x: 1, y: 2)
+                            var p2 = Point(x: 3, y: 4)
+                            p2 = p1
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -83,10 +83,10 @@ public class ImplicitWrapperCopyAssignmentTests
     {
         string source = """
                         routine start()
-                          var a = 1_s64
-                          var b = 2_s64
-                          b = a
-                          return
+                            var a = 1_s64
+                            var b = 2_s64
+                            b = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -101,14 +101,14 @@ public class ImplicitWrapperCopyAssignmentTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var rb = ra.share()
-                          rb = ra.observe()
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var rb = ra.share()
+                            rb = ra.observe()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

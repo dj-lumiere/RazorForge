@@ -19,13 +19,13 @@ import BuilderExpansion
 entity SplitList[AnyType T] obeys Iterable[T], MutableIndexable[T], Sized, Container, ListLiteral[T]
 needs T obeys Splittable
 relates SplitListEmittable[T] as Iter
-  expand m in allmemvarof(T)
-    ### One contiguous column buffer holding this field across every element.
-    secret $nameof(m): Hijacked[$typeof(m)]
-  ### The number of elements currently stored.
-  secret count: U64
-  ### The number of elements each column can hold without reallocating.
-  secret capacity: U64
+    expand m in allmemvarof(T)
+        ### One contiguous column buffer holding this field across every element.
+        secret $nameof(m): Hijacked[$typeof(m)]
+    ### The number of elements currently stored.
+    secret count: U64
+    ### The number of elements each column can hold without reallocating.
+    secret capacity: U64
 
 # Creators
 
@@ -34,8 +34,8 @@ relates SplitListEmittable[T] as Iter
 ### backing column buffers.
 ### :returns: An empty `SplitList[T]`.
 routine SplitList[T]() -> SplitList[T]
-  danger
-    return hollow[SplitList[T]]()
+    danger
+        return hollow[SplitList[T]]()
 
 ### Creates a split list containing exactly the given `elements`, in order. Variadic constructor behind
 ### the `[a, b, c]` list-literal syntax (the `ListLiteral` opt-in).
@@ -43,12 +43,12 @@ routine SplitList[T]() -> SplitList[T]
 ### :returns: A split list of the given elements.
 common routine SplitList[T].from_literal(elements...: T) -> SplitList[T]
 needs T obeys Splittable
-  var result = SplitList[T]()
-  var i = 0u64
-  while i < elements.count()
-    result.add_last(value: elements[i])
-    i = i +% 1u64
-  return result
+    var result = SplitList[T]()
+    var i = 0u64
+    while i < elements.count()
+        result.add_last(value: elements[i])
+        i = i +% 1u64
+    return result
 
 # Core operations
 
@@ -56,19 +56,19 @@ needs T obeys Splittable
 ### :returns: The live element count.
 @readonly
 routine SplitList[T].count() -> U64
-  return me.count
+    return me.count
 
 ### Returns the number of elements each column can hold without reallocating.
 ### :returns: The current per-column capacity.
 @readonly
 routine SplitList[T].capacity() -> U64
-  return me.capacity
+    return me.capacity
 
 ### Returns true if the list contains no elements.
 ### :returns: `true` when `count()` is zero.
 @readonly
 routine SplitList[T].is_empty() -> Bool
-  return me.count == 0u64
+    return me.count == 0u64
 
 ### Returns true if any element equals `value`. O(n): reconstructs each element from the columns and
 ### compares by value.
@@ -77,37 +77,37 @@ routine SplitList[T].is_empty() -> Bool
 @readonly
 routine SplitList[T].contains(value: Accessing[T]) -> Bool
 needs T obeys Equatable
-  var i = 0u64
-  while i < me.count()
-    if me[i] == value
-      return true
-    i = i +% 1u64
-  return false
+    var i = 0u64
+    while i < me.count()
+        if me[i] == value
+            return true
+        i = i +% 1u64
+    return false
 
 ### Grows every column buffer to hold at least `new_capacity` elements. A null column reallocates from
 ### scratch (`rf_reallocate_dynamic` on a null address behaves as an allocation).
 ### :param new_capacity: The per-column capacity to reserve.
 routine SplitList[T].reserve(new_capacity: U64)
-  if new_capacity > me.capacity
-    expand m in allmemvarof(T)
-      danger
-        var bytes = $typeof(m).data_size() * new_capacity
-        var ptr = rf_reallocate_dynamic(ptr: me.$nameof(m).get_address(), size: bytes)
-        me.$nameof(m) = hijacked_from[$typeof(m)](ptr)
-    me.capacity = new_capacity
-  return
+    if new_capacity > me.capacity
+        expand m in allmemvarof(T)
+            danger
+                var bytes = $typeof(m).data_size() * new_capacity
+                var ptr = rf_reallocate_dynamic(ptr: me.$nameof(m).get_address(), size: bytes)
+                me.$nameof(m) = hijacked_from[$typeof(m)](ptr)
+        me.capacity = new_capacity
+    return
 
 ### Adds `value` at the back, growing (doubling) every column when capacity is exhausted.
 ### :param value: The element to add.
 routine SplitList[T].add_last(value: T)
-  if me.count >= me.capacity
-    var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
-    me.reserve(new_capacity: new_capacity)
-  expand m in allmemvarof(T)
-    danger
-      me.$nameof(m).poke_at_offset(at: $typeof(m).data_size() * me.count, value: value.$nameof(m))
-  me.count = me.count +% 1u64
-  return
+    if me.count >= me.capacity
+        var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
+        me.reserve(new_capacity: new_capacity)
+    expand m in allmemvarof(T)
+        danger
+            me.$nameof(m).poke_at_offset(at: $typeof(m).data_size() * me.count, value: value.$nameof(m))
+    me.count = me.count +% 1u64
+    return
 
 ### Returns the element at `index`, gathering one value from each column. Enables `list[i]`.
 ### :param index: The zero-based element position.
@@ -115,56 +115,56 @@ routine SplitList[T].add_last(value: T)
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
 routine SplitList[T].getitem!(index: U64) -> T
-  if index >= me.count
-    throw IndexOutOfBoundsError(index: index, count: me.count)
-  var result = T.blank()
-  expand m in allmemvarof(T)
-    danger
-      result.$nameof(m) = me.$nameof(m).peek_at_offset(offset: $typeof(m).data_size() * index)
-  return result
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var result = T.blank()
+    expand m in allmemvarof(T)
+        danger
+            result.$nameof(m) = me.$nameof(m).peek_at_offset(offset: $typeof(m).data_size() * index)
+    return result
 
 ### Overwrites the element at `index`, scattering each field into its column. Enables `list[i] = value`.
 ### :param index: The zero-based element position.
 ### :param value: The replacement element.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 routine SplitList[T].setitem!(index: U64, value: T)
-  if index >= me.count
-    throw IndexOutOfBoundsError(index: index, count: me.count)
-  expand m in allmemvarof(T)
-    danger
-      me.$nameof(m).poke_at_offset(at: $typeof(m).data_size() * index, value: value.$nameof(m))
-  return
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    expand m in allmemvarof(T)
+        danger
+            me.$nameof(m).poke_at_offset(at: $typeof(m).data_size() * index, value: value.$nameof(m))
+    return
 
 ### Frees every column buffer, then the entity itself. Elements are `Splittable` (trivially
 ### destructible), so no per-element teardown is needed — only the raw column allocations are released.
 @override
 dangerous routine SplitList[T].destroy()
-  expand m in allmemvarof(T)
-    if not me.$nameof(m).is_none()
-      me.$nameof(m).invalidate()
-  me.hijack().invalidate()
-  return
+    expand m in allmemvarof(T)
+        if not me.$nameof(m).is_none()
+            me.$nameof(m).invalidate()
+    me.hijack().invalidate()
+    return
 
 ### Cycle-collector TRACE: report every live field value to the collector, one column at a time. A
 ### column whose field type is `Roamed` reports each handle; a value column is a no-op. Overrides the
 ### universal member-walk (raw column buffers cannot self-trace — the list supplies the `count`).
 @override
 dangerous routine SplitList[T].roam_trace()
-  expand m in allmemvarof(T)
-    if not me.$nameof(m).is_none()
-      me.$nameof(m).cyclic_trace_buffer(count: me.count)
-  return
+    expand m in allmemvarof(T)
+        if not me.$nameof(m).is_none()
+            me.$nameof(m).cyclic_trace_buffer(count: me.count)
+    return
 
 ### Cycle-collector FREE: free every column buffer and this list's own box, but NOT the stored field
 ### values (the collector frees the whole white cycle directly). Same shape as `destroy`, which already
 ### frees only the columns.
 @override
 dangerous routine SplitList[T].roam_free()
-  expand m in allmemvarof(T)
-    if not me.$nameof(m).is_none()
-      me.$nameof(m).invalidate()
-  me.hijack().invalidate()
-  return
+    expand m in allmemvarof(T)
+        if not me.$nameof(m).is_none()
+            me.$nameof(m).invalidate()
+    me.hijack().invalidate()
+    return
 
 # Iteration
 
@@ -174,35 +174,35 @@ dangerous routine SplitList[T].roam_free()
 ### :returns: A `SplitListEmittable[T]` positioned at the first element.
 @readonly
 routine SplitList[T].iter() -> SplitListEmittable[T]
-  danger
-    var it = hollow[SplitListEmittable[T]]()
-    expand m in allmemvarof(T)
-      it.$nameof(m) = me.$nameof(m)
-    it.count = me.count
-    it.index = 0u64
-    return it
+    danger
+        var it = hollow[SplitListEmittable[T]]()
+        expand m in allmemvarof(T)
+            it.$nameof(m) = me.$nameof(m)
+        it.count = me.count
+        it.index = 0u64
+        return it
 
 ### A forward iterator over a `SplitList[T]`: holds a borrowed alias of each column buffer plus the
 ### captured count and current position. Emits whole `T` values gathered one field at a time.
 entity SplitListEmittable[AnyType T] obeys Emittable[T]
 needs T obeys Splittable
-  expand m in allmemvarof(T)
-    ### Borrowed alias of the source list's column for this field.
-    secret $nameof(m): Hijacked[$typeof(m)]
-  ### Element count captured when the iterator was created.
-  secret count: U64
-  ### Current iteration position.
-  secret index: U64
+    expand m in allmemvarof(T)
+        ### Borrowed alias of the source list's column for this field.
+        secret $nameof(m): Hijacked[$typeof(m)]
+    ### Element count captured when the iterator was created.
+    secret count: U64
+    ### Current iteration position.
+    secret index: U64
 
 ### Produces the next element and advances, or `absent`s when the sequence is exhausted.
 ### :returns: The element at the current position.
 ### :absent: The iterator has reached the end.
 routine SplitListEmittable[T].emit!() -> T
-  if me.index >= me.count
-    absent
-  var result = T.blank()
-  expand m in allmemvarof(T)
-    danger
-      result.$nameof(m) = me.$nameof(m).peek_at_offset(offset: $typeof(m).data_size() * me.index)
-  me.index = me.index +% 1u64
-  return result
+    if me.index >= me.count
+        absent
+    var result = T.blank()
+    expand m in allmemvarof(T)
+        danger
+            result.$nameof(m) = me.$nameof(m).peek_at_offset(offset: $typeof(m).data_size() * me.index)
+    me.index = me.index +% 1u64
+    return result

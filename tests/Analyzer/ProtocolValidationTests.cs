@@ -20,13 +20,13 @@ public class ProtocolValidationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
                         record Foo obeys Displayable
-                          value: S32
+                            value: S32
                         @readonly
                         routine Foo.display() -> Text
-                          return "foo"
+                            return "foo"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -41,12 +41,12 @@ public class ProtocolValidationTests
     {
         string source = """
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
                         record Bar obeys Displayable
-                          value: S32
+                            value: S32
                         routine Bar.display() -> Text
-                          return "bar"
+                            return "bar"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -61,12 +61,12 @@ public class ProtocolValidationTests
     {
         string source = """
                         protocol Mutator
-                          routine Me.mutate()
+                            routine Me.mutate()
                         record Baz obeys Mutator
-                          value: S32
+                            value: S32
                         @readonly
                         routine Baz.mutate()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -83,12 +83,12 @@ public class ProtocolValidationTests
         // the contract allows, so it is rejected (a Modifying-token caller could trigger relocation).
         string source = """
                         protocol Mutator
-                          routine Me.mutate()
+                            routine Me.mutate()
                         entity Thing obeys Mutator
-                          value: S32
+                            value: S32
                         @reshaping
                         routine Thing.mutate()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -108,13 +108,13 @@ public class ProtocolValidationTests
     {
         string source = """
                         protocol Relocatable
-                          @reshaping
-                          routine Me.relocate()
+                            @reshaping
+                            routine Me.relocate()
                         entity Widget obeys Relocatable
-                          value: S32
+                            value: S32
                         @reshaping
                         routine Widget.relocate()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -131,12 +131,12 @@ public class ProtocolValidationTests
     {
         string source = """
                         protocol Relocatable
-                          @reshaping
-                          routine Me.relocate()
+                            @reshaping
+                            routine Me.relocate()
                         entity Widget obeys Relocatable
-                          value: S32
+                            value: S32
                         routine Widget.relocate()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -152,13 +152,13 @@ public class ProtocolValidationTests
     {
         string source = """
                         protocol Reader
-                          @readonly
-                          routine Me.read() -> S32
+                            @readonly
+                            routine Me.read() -> S32
                         entity Sensor obeys Reader
-                          value: S32
+                            value: S32
                         @reshaping
                         routine Sensor.read() -> S32
-                          return me.value
+                            return me.value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

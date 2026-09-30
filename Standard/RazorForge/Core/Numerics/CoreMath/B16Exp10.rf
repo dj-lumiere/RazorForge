@@ -15,16 +15,16 @@ module Core
 ### a NaN.
 ### :returns: The correctly rounded exp10.
 routine B16.exp10_unchecked() -> B16
-  # x = x1 + x2, where x1 keeps the upper 11 bits of the encoding and x2 the sign, the exponent and the
-  # lower 5 bits: exp10(x) = exp10(x1) * exp10(x2), both tabulated as B32 approximations
-  var u = LLVM::zero_extend[U16, U64](me.to_bits())
-  var i1 = u >>> 5
-  var i2 = ((u >>> 10) << 5) | (u & 0x1F_u64)
-  # a NaN input: both table entries may be NaN patterns, so the NaN is picked explicitly instead of
-  # relying on the platform's NaN propagation
-  if me.is_nan()
-    return b16_exp10_pick_nan(first: B16_EXP10_T1[i1], second: B16_EXP10_T2[i2])
-  return B16(from: B32.from_bits(bits: B16_EXP10_T1[i1]) *! B32.from_bits(bits: B16_EXP10_T2[i2]))
+    # x = x1 + x2, where x1 keeps the upper 11 bits of the encoding and x2 the sign, the exponent and the
+    # lower 5 bits: exp10(x) = exp10(x1) * exp10(x2), both tabulated as B32 approximations
+    var u = LLVM::zero_extend[U16, U64](me.to_bits())
+    var i1 = u >>> 5
+    var i2 = ((u >>> 10) << 5) | (u & 0x1F_u64)
+    # a NaN input: both table entries may be NaN patterns, so the NaN is picked explicitly instead of
+    # relying on the platform's NaN propagation
+    if me.is_nan()
+        return b16_exp10_pick_nan(first: B16_EXP10_T1[i1], second: B16_EXP10_T2[i2])
+    return B16(from: B32.from_bits(bits: B16_EXP10_T1[i1]) *! B32.from_bits(bits: B16_EXP10_T2[i2]))
 
 ### The result for a NaN input: the B32 table entry `first` when it is a NaN, else `second` (then a NaN
 ### too), quieted and narrowed to B16 by truncating its payload, as the x86 reference does. Here that is
@@ -33,12 +33,12 @@ routine B16.exp10_unchecked() -> B16
 ### :param second: The B32 bit pattern used when `first` is not a NaN.
 ### :returns: The quiet B16 NaN.
 secret routine b16_exp10_pick_nan(first: U32, second: U32) -> B16
-  var n = second
-  if (first & 0x7FFFFFFF_u32) > 0x7F800000_u32
-    n = first
-  n = n | 0x00400000_u32
-  var h = ((n >>> 16) & 0x8000_u32) | 0x7C00_u32 | ((n >>> 13) & 0x3FF_u32)
-  return B16.from_bits(bits: LLVM::int_truncate[U32, U16](h))
+    var n = second
+    if (first & 0x7FFFFFFF_u32) > 0x7F800000_u32
+        n = first
+    n = n | 0x00400000_u32
+    var h = ((n >>> 16) & 0x8000_u32) | 0x7C00_u32 | ((n >>> 13) & 0x3FF_u32)
+    return B16.from_bits(bits: LLVM::int_truncate[U32, U16](h))
 
 ### B32 bit patterns of exp10(x1), where the B16 encoding of x1 is `i1 * 2^5` (capped to the
 ### largest/smallest B32 when out of range, NaN patterns for the infinity/NaN encodings).

@@ -20,11 +20,11 @@ public class VariantValidationTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         variant Shape
-                          S32
-                          Point
+                            S32
+                            Point
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -39,9 +39,9 @@ public class VariantValidationTests
     {
         string source = """
                         variant Value
-                          S32
-                          B64
-                          None
+                            S32
+                            B64
+                            None
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -61,11 +61,11 @@ public class VariantValidationTests
     {
         string source = """
                         entity Node
-                          value: S32
+                            value: S32
 
                         variant Container
-                          Node
-                          S32
+                            Node
+                            S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -81,13 +81,13 @@ public class VariantValidationTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
 
                         variant Value
-                          Color
-                          S32
+                            Color
+                            S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -103,8 +103,8 @@ public class VariantValidationTests
     {
         string source = """
                         variant MaybeText
-                          Text
-                          None
+                            Text
+                            None
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -120,8 +120,8 @@ public class VariantValidationTests
     {
         string source = """
                         variant Result
-                          SUCCESS: S32
-                          FAILURE: Text
+                            SUCCESS: S32
+                            FAILURE: Text
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

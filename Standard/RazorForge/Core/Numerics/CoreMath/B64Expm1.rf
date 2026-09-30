@@ -16,173 +16,173 @@ module Core
 ### propagation (overflow -> +infinity, `expm1(-infinity) == -1`, NaN -> NaN).
 ### :returns: The correctly rounded `e^x - 1`, possibly +infinity.
 routine B64.expm1_unchecked() -> B64
-  var x = me
-  var ux = x.to_bits()
-  var aix = ux & 0x7FFFFFFFFFFFFFFF_u64
-  if aix < 0x3FD0000000000000_u64
-    # |x| < 0.25
-    if aix < 0x3CA0000000000000_u64
-      # |x| < 2^-53
-      if aix == 0_u64
-        return x
-      return LLVM::fma[B64](a: 0x1p-54, b: x.abs(), c: x)
-    var sx = 0x1p7 *! x
-    var fx = LLVM::rint[B64](value: sx)
-    var z = sx -! fx
-    var z2 = z *! z
-    # e^x - 1 = (e^(i/128) - 1) + e^(i/128) * (e^(z/128) - 1), with |i| <= 32 and |z| <= 1/2
-    var i = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](fx) + 32)
-    var th = B64.from_bits(bits: B64_EXPM1_TZ[2_u64 * i + 1_u64])
-    var tl = B64.from_bits(bits: B64_EXPM1_TZ[2_u64 * i])
-    var fh = z *! 0x1p-7
-    var fl = z2 *! ((0x1p-15 +! z *! 0x1.55555555551adp-24) +! z2 *! (0x1.555555555599cp-33 +! z *! (0x1.11111ad1ad69dp-42 +! z *! 0x1.6c16c168b1fb5p-52)))
-    var eps = z2 *! 0x1.ap-65 +! 0x1p-104
-    var r = b64_exp_fasttwosum(x: th, y: fh)
-    var rh = r.item0
-    var rl = r.item1 +! (tl +! fl)
-    var f = b64_exp_muldd(xh: th, xl: tl, ch: fh, cl: fl)
-    f = b64_exp_fastsum(xh: rh, xl: rl, yh: f.item0, yl: f.item1)
-    fh = f.item0
-    fl = f.item1
+    var x = me
+    var ux = x.to_bits()
+    var aix = ux & 0x7FFFFFFFFFFFFFFF_u64
+    if aix < 0x3FD0000000000000_u64
+        # |x| < 0.25
+        if aix < 0x3CA0000000000000_u64
+            # |x| < 2^-53
+            if aix == 0_u64
+                return x
+            return LLVM::fma[B64](a: 0x1p-54, b: x.abs(), c: x)
+        var sx = 0x1p7 *! x
+        var fx = LLVM::rint[B64](value: sx)
+        var z = sx -! fx
+        var z2 = z *! z
+        # e^x - 1 = (e^(i/128) - 1) + e^(i/128) * (e^(z/128) - 1), with |i| <= 32 and |z| <= 1/2
+        var i = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](fx) + 32)
+        var th = B64.from_bits(bits: B64_EXPM1_TZ[2_u64 * i + 1_u64])
+        var tl = B64.from_bits(bits: B64_EXPM1_TZ[2_u64 * i])
+        var fh = z *! 0x1p-7
+        var fl = z2 *! ((0x1p-15 +! z *! 0x1.55555555551adp-24) +! z2 *! (0x1.555555555599cp-33 +! z *! (0x1.11111ad1ad69dp-42 +! z *! 0x1.6c16c168b1fb5p-52)))
+        var eps = z2 *! 0x1.ap-65 +! 0x1p-104
+        var r = b64_exp_fasttwosum(x: th, y: fh)
+        var rh = r.item0
+        var rl = r.item1 +! (tl +! fl)
+        var f = b64_exp_muldd(xh: th, xl: tl, ch: fh, cl: fl)
+        f = b64_exp_fastsum(xh: rh, xl: rl, yh: f.item0, yl: f.item1)
+        fh = f.item0
+        fl = f.item1
+        var ub = fh +! (fl +! eps)
+        var lb = fh +! (fl -! eps)
+        if ub != lb
+            return b64_expm1_accurate(x: x)
+        return lb
+    # |x| >= 0.25
+    if aix >= 0x40862E42FEFA39F0_u64
+        # NaN
+        if aix > 0x7FF0000000000000_u64
+            return x +! x
+        # ±infinity
+        if aix == 0x7FF0000000000000_u64
+            if ux >>> 63 == 1
+                return -1.0
+            return x
+        # x >= 0x1.62e42fefa39fp+9: overflow
+        if ux >>> 63 == 0
+            return 0x1p1023 *! 0x1p1023
+    if ux >= 0xC0425E4F7B2737FA_u64
+        # x <= -0x1.25e4f7b2737fap+5: the result is within an ulp of -1
+        if ux >= 0xC042B708872320E2_u64
+            return -1.0 +! 0x1p-55
+        return ((0x1.25e4f7b2737fap+5 +! x) +! 0x1.8486612173c69p-51) *! 0x1.71547652b82fep-54 -! 0x1.fffffffffffffp-1
+    var t = LLVM::rint[B64](value: x *! 0x1.71547652b82fep+12)
+    var jt = LLVM::float_to_signed[B64, S64](t)
+    var ie = jt >> 12
+    var tt = b64_exp_table_2pow(j: LLVM::reinterpret_bits[S64, U64](jt))
+    var th = tt.item0
+    var tl = tt.item1
+    var dx = (x -! 0x1.62e42ffp-13 *! t) +! 0x1.718432a1b0e26p-47 *! t
+    var dx2 = dx *! dx
+    var p = (1.0 +! dx *! 0x1p-1) +! dx2 *! (0x1.55555557e54ffp-3 +! dx *! 0x1.55555553a12f4p-5)
+    var fh = th
+    var tx = th *! dx
+    var fl = tl +! tx *! p
+    var eps = 1.64e-19 *! th
+    # off = -2^-ie, so that 2^ie * (fh + fl + off) = e^x - 1
+    var off = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](3071_s64 - ie) << 52)
+    var e = 0.0
+    if ie < 53
+        var s = b64_exp_fasttwosum(x: off, y: fh)
+        fh = s.item0
+        e = s.item1
+    elseif ie < 75
+        var s = b64_exp_fasttwosum(x: fh, y: off)
+        fh = s.item0
+        e = s.item1
+    fl = fl +! e
     var ub = fh +! (fl +! eps)
     var lb = fh +! (fl -! eps)
     if ub != lb
-      return b64_expm1_accurate(x: x)
-    return lb
-  # |x| >= 0.25
-  if aix >= 0x40862E42FEFA39F0_u64
-    # NaN
-    if aix > 0x7FF0000000000000_u64
-      return x +! x
-    # ±infinity
-    if aix == 0x7FF0000000000000_u64
-      if ux >>> 63 == 1
-        return -1.0
-      return x
-    # x >= 0x1.62e42fefa39fp+9: overflow
-    if ux >>> 63 == 0
-      return 0x1p1023 *! 0x1p1023
-  if ux >= 0xC0425E4F7B2737FA_u64
-    # x <= -0x1.25e4f7b2737fap+5: the result is within an ulp of -1
-    if ux >= 0xC042B708872320E2_u64
-      return -1.0 +! 0x1p-55
-    return ((0x1.25e4f7b2737fap+5 +! x) +! 0x1.8486612173c69p-51) *! 0x1.71547652b82fep-54 -! 0x1.fffffffffffffp-1
-  var t = LLVM::rint[B64](value: x *! 0x1.71547652b82fep+12)
-  var jt = LLVM::float_to_signed[B64, S64](t)
-  var ie = jt >> 12
-  var tt = b64_exp_table_2pow(j: LLVM::reinterpret_bits[S64, U64](jt))
-  var th = tt.item0
-  var tl = tt.item1
-  var dx = (x -! 0x1.62e42ffp-13 *! t) +! 0x1.718432a1b0e26p-47 *! t
-  var dx2 = dx *! dx
-  var p = (1.0 +! dx *! 0x1p-1) +! dx2 *! (0x1.55555557e54ffp-3 +! dx *! 0x1.55555553a12f4p-5)
-  var fh = th
-  var tx = th *! dx
-  var fl = tl +! tx *! p
-  var eps = 1.64e-19 *! th
-  # off = -2^-ie, so that 2^ie * (fh + fl + off) = e^x - 1
-  var off = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](3071_s64 - ie) << 52)
-  var e = 0.0
-  if ie < 53
-    var s = b64_exp_fasttwosum(x: off, y: fh)
-    fh = s.item0
-    e = s.item1
-  elseif ie < 75
-    var s = b64_exp_fasttwosum(x: fh, y: off)
-    fh = s.item0
-    e = s.item1
-  fl = fl +! e
-  var ub = fh +! (fl +! eps)
-  var lb = fh +! (fl -! eps)
-  if ub != lb
-    return b64_expm1_accurate(x: x)
-  return b64_exp_ldexp(x: lb, e: ie)
+        return b64_expm1_accurate(x: x)
+    return b64_exp_ldexp(x: lb, e: ie)
 
 ### The slow accurate path of `expm1`, taken when the fast path cannot decide the rounding.
 ### :param x: The argument, finite, with 2^-53 <= |x| and e^x - 1 neither overflowing nor within an ulp of -1.
 ### :returns: The correctly rounded `e^x - 1`.
 secret routine b64_expm1_accurate(x: B64) -> B64
-  if x.abs() < 0.25
-    # odd-and-even Taylor expansion x + x^2/2 + x^3 * (1/6 + ...), with the high-order terms in double
-    var fl = x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[0_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[1_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[2_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[3_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[4_u64]) +! x *! B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[5_u64]))))))
-    var i = 10_u64
-    var h0 = b64_exp_fasttwosum(x: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i]), y: fl)
-    var ch = h0.item0
-    var cl = B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i + 1_u64]) +! h0.item1
+    if x.abs() < 0.25
+        # odd-and-even Taylor expansion x + x^2/2 + x^3 * (1/6 + ...), with the high-order terms in double
+        var fl = x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[0_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[1_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[2_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[3_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[4_u64]) +! x *! B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[5_u64]))))))
+        var i = 10_u64
+        var h0 = b64_exp_fasttwosum(x: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i]), y: fl)
+        var ch = h0.item0
+        var cl = B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i + 1_u64]) +! h0.item1
+        while i > 0_u64
+            i = i - 1_u64
+            var m = b64_expm1_mulddd(xh: ch, xl: cl, c: x)
+            var s = b64_exp_fastsum(xh: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i]), xl: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i + 1_u64]), yh: m.item0, yl: m.item1)
+            ch = s.item0
+            cl = s.item1
+        var f = b64_expm1_mulddd(xh: ch, xl: cl, c: x)
+        f = b64_expm1_mulddd(xh: f.item0, xl: f.item1, c: x)
+        f = b64_expm1_mulddd(xh: f.item0, xl: f.item1, c: x)
+        var hx = 0.5 *! x
+        var x2h = x *! hx
+        var x2l = LLVM::fma[B64](a: x, b: hx, c: -x2h)
+        f = b64_exp_fastsum(xh: x2h, xl: x2l, yh: f.item0, yl: f.item1)
+        var a1 = b64_exp_fasttwosum(x: x, y: f.item0)
+        var a2 = b64_exp_fasttwosum(x: a1.item1, y: f.item1)
+        var a3 = b64_exp_fasttwosum(x: a1.item0, y: a2.item0)
+        var a4 = b64_exp_fasttwosum(x: a3.item1, y: a2.item1)
+        var v0 = a3.item0
+        var v1 = a4.item0
+        var u1 = v1.to_bits()
+        if (u1 & 0x000FFFFFFFFFFFFF_u64) == 0_u64
+            if (u1 << 1) == 0_u64
+                return b64_expm1_database(x: x, f: v0)
+            # v1 is a power of 2: nudge it one ulp toward the sign of the tail
+            if (u1 >>> 63) == (a4.item1.to_bits() >>> 63)
+                u1 = u1 +% 1_u64
+            else
+                u1 = u1 -% 1_u64
+            v1 = B64.from_bits(bits: u1)
+        return v0 +! v1
+    var t = LLVM::rint[B64](value: x *! 0x1.71547652b82fep+12)
+    var jt = LLVM::float_to_signed[B64, S64](t)
+    var ie = jt >> 12
+    var tt = b64_exp_table_2pow(j: LLVM::reinterpret_bits[S64, U64](jt))
+    var th = tt.item0
+    var tl = tt.item1
+    # Cody-Waite argument reduction with a triple-double log(2)/2^12
+    var dx = x -! 0x1.62e42ffp-13 *! t
+    var dxl = 0x1.718432a1b0e26p-47 *! t
+    var dxll = 0x1.9ff0342542fc3p-102 *! t +! LLVM::fma[B64](a: 0x1.718432a1b0e26p-47, b: t, c: -dxl)
+    var dxh = dx +! dxl
+    dxl = ((dx -! dxh) +! dxl) +! dxll
+    # Horner evaluation of the degree-6 double-double polynomial of exp
+    var i = 6_u64
+    var ch = B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i])
+    var cl = B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i + 1_u64])
     while i > 0_u64
-      i = i - 1_u64
-      var m = b64_expm1_mulddd(xh: ch, xl: cl, c: x)
-      var s = b64_exp_fastsum(xh: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i]), xl: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i + 1_u64]), yh: m.item0, yl: m.item1)
-      ch = s.item0
-      cl = s.item1
-    var f = b64_expm1_mulddd(xh: ch, xl: cl, c: x)
-    f = b64_expm1_mulddd(xh: f.item0, xl: f.item1, c: x)
-    f = b64_expm1_mulddd(xh: f.item0, xl: f.item1, c: x)
-    var hx = 0.5 *! x
-    var x2h = x *! hx
-    var x2l = LLVM::fma[B64](a: x, b: hx, c: -x2h)
-    f = b64_exp_fastsum(xh: x2h, xl: x2l, yh: f.item0, yl: f.item1)
-    var a1 = b64_exp_fasttwosum(x: x, y: f.item0)
-    var a2 = b64_exp_fasttwosum(x: a1.item1, y: f.item1)
-    var a3 = b64_exp_fasttwosum(x: a1.item0, y: a2.item0)
-    var a4 = b64_exp_fasttwosum(x: a3.item1, y: a2.item1)
-    var v0 = a3.item0
-    var v1 = a4.item0
-    var u1 = v1.to_bits()
-    if (u1 & 0x000FFFFFFFFFFFFF_u64) == 0_u64
-      if (u1 << 1) == 0_u64
-        return b64_expm1_database(x: x, f: v0)
-      # v1 is a power of 2: nudge it one ulp toward the sign of the tail
-      if (u1 >>> 63) == (a4.item1.to_bits() >>> 63)
-        u1 = u1 +% 1_u64
-      else
-        u1 = u1 -% 1_u64
-      v1 = B64.from_bits(bits: u1)
-    return v0 +! v1
-  var t = LLVM::rint[B64](value: x *! 0x1.71547652b82fep+12)
-  var jt = LLVM::float_to_signed[B64, S64](t)
-  var ie = jt >> 12
-  var tt = b64_exp_table_2pow(j: LLVM::reinterpret_bits[S64, U64](jt))
-  var th = tt.item0
-  var tl = tt.item1
-  # Cody-Waite argument reduction with a triple-double log(2)/2^12
-  var dx = x -! 0x1.62e42ffp-13 *! t
-  var dxl = 0x1.718432a1b0e26p-47 *! t
-  var dxll = 0x1.9ff0342542fc3p-102 *! t +! LLVM::fma[B64](a: 0x1.718432a1b0e26p-47, b: t, c: -dxl)
-  var dxh = dx +! dxl
-  dxl = ((dx -! dxh) +! dxl) +! dxll
-  # Horner evaluation of the degree-6 double-double polynomial of exp
-  var i = 6_u64
-  var ch = B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i])
-  var cl = B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i + 1_u64])
-  while i > 0_u64
-    i = i - 1_u64
-    var m = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
-    var s = b64_exp_fastsum(xh: B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i]), xl: B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i + 1_u64]), yh: m.item0, yl: m.item1)
-    ch = s.item0
-    cl = s.item1
-  var f = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
-  f = b64_exp_muldd(xh: f.item0, xl: f.item1, ch: th, cl: tl)
-  f = b64_exp_fastsum(xh: th, xl: tl, yh: f.item0, yl: f.item1)
-  var fh = f.item0
-  var fl = f.item1
-  var off = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](3071_s64 - ie) << 52)
-  var e = 0.0
-  if ie < 53
-    var s1 = b64_exp_fasttwosum(x: off, y: fh)
-    fh = s1.item0
-    e = s1.item1
-  elseif ie < 104
-    var s1 = b64_exp_fasttwosum(x: fh, y: off)
-    fh = s1.item0
-    e = s1.item1
-  fl = fl +! e
-  var s2 = b64_exp_fasttwosum(x: fh, y: fl)
-  fh = s2.item0
-  var d = (s2.item1.to_bits() +% 8_u64) & 0x000FFFFFFFFFFFFF_u64
-  if d <= 8_u64
-    fh = b64_expm1_database(x: x, f: fh)
-  return b64_exp_ldexp(x: fh, e: ie)
+        i = i - 1_u64
+        var m = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
+        var s = b64_exp_fastsum(xh: B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i]), xl: B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i + 1_u64]), yh: m.item0, yl: m.item1)
+        ch = s.item0
+        cl = s.item1
+    var f = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
+    f = b64_exp_muldd(xh: f.item0, xl: f.item1, ch: th, cl: tl)
+    f = b64_exp_fastsum(xh: th, xl: tl, yh: f.item0, yl: f.item1)
+    var fh = f.item0
+    var fl = f.item1
+    var off = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](3071_s64 - ie) << 52)
+    var e = 0.0
+    if ie < 53
+        var s1 = b64_exp_fasttwosum(x: off, y: fh)
+        fh = s1.item0
+        e = s1.item1
+    elseif ie < 104
+        var s1 = b64_exp_fasttwosum(x: fh, y: off)
+        fh = s1.item0
+        e = s1.item1
+    fl = fl +! e
+    var s2 = b64_exp_fasttwosum(x: fh, y: fl)
+    fh = s2.item0
+    var d = (s2.item1.to_bits() +% 8_u64) & 0x000FFFFFFFFFFFFF_u64
+    if d <= 8_u64
+        fh = b64_expm1_database(x: x, f: fh)
+    return b64_exp_ldexp(x: fh, e: ie)
 
 ### Double-double times double `(xh + xl) * c`.
 ### :param xh: The high part of the double-double factor.
@@ -190,8 +190,8 @@ secret routine b64_expm1_accurate(x: B64) -> B64
 ### :param c: The double factor.
 ### :returns: `(high, low)` of the product.
 secret routine b64_expm1_mulddd(xh: B64, xl: B64, c: B64) -> (B64, B64)
-  var h = c *! xh
-  return (h, c *! xl +! LLVM::fma[B64](a: c, b: xh, c: -h))
+    var h = c *! xh
+    return (h, c *! xl +! LLVM::fma[B64](a: c, b: xh, c: -h))
 
 ### Looks `x` up among the arguments whose `e^x - 1` lies too close to a rounding boundary for the
 ### accurate path, and returns the correctly rounded result for them, or `f` unchanged otherwise.
@@ -199,27 +199,27 @@ secret routine b64_expm1_mulddd(xh: B64, xl: B64, c: B64) -> (B64, B64)
 ### :param f: The accurate path's result (before scaling by 2^ie when |x| >= 0.25).
 ### :returns: The corrected result.
 secret routine b64_expm1_database(x: B64, f: B64) -> B64
-  var ux = x.to_bits()
-  var a = 0_s64
-  var b = 37_s64
-  var m = (a + b) >> 1
-  while a <= b
-    var um = LLVM::reinterpret_bits[S64, U64](m)
-    var cm = B64_EXPM1_DB[um]
-    if cm < ux
-      a = m + 1
-    elseif cm == ux
-      var jf = f.to_bits()
-      var dr = B64.from_bits(bits: ((0x300E81651C_u64 >>> LLVM::int_truncate[U64, U32](um)) << 63) | ((((jf >>> 52) & 0x7FF_u64) -% 54_u64) << 52))
-      var s2 = 0x76F58B0D65BD5553_u64
-      if (um >>> 5) == 1_u64
-        s2 = 0xC06_u64
-      var t = (s2 >>> LLVM::int_truncate[U64, U32]((um << 1) & 63_u64)) & 3_u64
-      return b64_exp_pick(f: f, t: t, dr: dr)
-    else
-      b = m - 1
-    m = (a + b) >> 1
-  return f
+    var ux = x.to_bits()
+    var a = 0_s64
+    var b = 37_s64
+    var m = (a + b) >> 1
+    while a <= b
+        var um = LLVM::reinterpret_bits[S64, U64](m)
+        var cm = B64_EXPM1_DB[um]
+        if cm < ux
+            a = m + 1
+        elseif cm == ux
+            var jf = f.to_bits()
+            var dr = B64.from_bits(bits: ((0x300E81651C_u64 >>> LLVM::int_truncate[U64, U32](um)) << 63) | ((((jf >>> 52) & 0x7FF_u64) -% 54_u64) << 52))
+            var s2 = 0x76F58B0D65BD5553_u64
+            if (um >>> 5) == 1_u64
+                s2 = 0xC06_u64
+            var t = (s2 >>> LLVM::int_truncate[U64, U32]((um << 1) & 63_u64)) & 3_u64
+            return b64_exp_pick(f: f, t: t, dr: dr)
+        else
+            b = m - 1
+        m = (a + b) >> 1
+    return f
 
 # Double-double coefficients (high, low) of the degree-10 polynomial (in x, times x^3) of the accurate
 # path for |x| < 0.25, as bit patterns.

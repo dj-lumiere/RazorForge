@@ -18,8 +18,8 @@ public class LocalShadowingTests
     {
         string source = """
                         routine f(acc: Bool) -> S128
-                          var acc = 5_s128
-                          return acc
+                            var acc = 5_s128
+                            return acc
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -33,12 +33,12 @@ public class LocalShadowingTests
     {
         string source = """
                         routine h(flag: Bool) -> S128
-                          var v = true
-                          var out = 0_s128
-                          if flag
-                            var v = 5_s128
-                            out = v
-                          return out
+                            var v = true
+                            var out = 0_s128
+                            if flag
+                                var v = 5_s128
+                                out = v
+                            return out
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -52,14 +52,14 @@ public class LocalShadowingTests
     {
         string source = """
                         routine h(flag: Bool) -> S64
-                          var out = 0_s64
-                          if flag
-                            var i = 1_s64
-                            out = i
-                          else
-                            var i = 2_s64
-                            out = i
-                          return out
+                            var out = 0_s64
+                            if flag
+                                var i = 1_s64
+                                out = i
+                            else
+                                var i = 2_s64
+                                out = i
+                            return out
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

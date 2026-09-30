@@ -23,7 +23,7 @@ public sealed class TargetGateTests
     [Fact]
     public void NoDirective_AlwaysCompiles()
     {
-        string f = WriteTemp(name: "plain.rf", body: "module M\n\nroutine start()\n  return\n");
+        string f = WriteTemp(name: "plain.rf", body: "module M\n\nroutine start()\n    return\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f,
@@ -112,7 +112,7 @@ public sealed class TargetGateTests
         // The directive must precede real code (leading comment block). Here it follows `module`, so it
         // is a plain comment and the file compiles unconditionally.
         string f = WriteTemp(name: "late.rf",
-            body: "module M\n@target(os: \"windows\")\nroutine start()\n  return\n");
+            body: "module M\n@target(os: \"windows\")\nroutine start()\n    return\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f,

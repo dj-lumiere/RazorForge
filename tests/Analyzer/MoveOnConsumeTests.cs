@@ -19,13 +19,13 @@ public class MoveOnConsumeTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          show(a.value)
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            show(a.value)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -47,16 +47,16 @@ public class MoveOnConsumeTests
         // same field a second time after `.retain()` consumed the borrow should error.
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Box
-                          inner: Node
+                            inner: Node
 
                         routine start()
-                          var b = Box(inner: Node(value: 1))
-                          var ra = Retained(from: steal b.inner)
-                          show(b.inner.value)
-                          return
+                            var b = Box(inner: Node(value: 1))
+                            var ra = Retained(from: steal b.inner)
+                            show(b.inner.value)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -81,13 +81,13 @@ public class MoveOnConsumeTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var r1 = Retained(from: steal a)
-                          var r2 = Retained(from: steal a)
-                          return
+                            var a = Node(value: 1)
+                            var r1 = Retained(from: steal a)
+                            var r2 = Retained(from: steal a)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -101,14 +101,14 @@ public class MoveOnConsumeTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var rb = ra.share()
-                          show(ra.value)
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var rb = ra.share()
+                            show(ra.value)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -122,14 +122,14 @@ public class MoveOnConsumeTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var t = ra.observe()
-                          show(ra.value)
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var t = ra.observe()
+                            show(ra.value)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

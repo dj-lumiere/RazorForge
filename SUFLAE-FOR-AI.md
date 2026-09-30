@@ -123,7 +123,7 @@ Script mode (statements fold into an implicit `start()`):
 ```suflae
 var total = 0
 each n in 1 to 5
-  total = total + n
+    total = total + n
 show(f"total = {total}")
 ```
 
@@ -133,8 +133,8 @@ Explicit `start()` (also fine — most `StdlibSf` fixtures use this form):
 module Tests/StdlibSf/Demo
 
 routine start()
-  show("Hello from Suflae!")
-  return
+    show("Hello from Suflae!")
+    return
 ```
 
 - Hoistable declarations (`module`/`import`/`type`/`routine`/`preset`) may
@@ -156,15 +156,15 @@ re-grounds the split as **VALUE vs SHARED = copy vs don't-copy**:
 
 ```suflae
 entity Point          # SHARED: aliases freely, no steal, memory-safe
-  x: S64
-  y: S64
+    x: S64
+    y: S64
 
 routine start()
-  var p = Point(x: 3, y: 4)
-  var q = p                # both refer to the same Point — no steal, no error
-  show(f"p: {p}")          # f"{entity}" reads the inner value, prints like the RF twin
-  show(f"fields: {p.x}, {p.y}")
-  return
+    var p = Point(x: 3, y: 4)
+    var q = p                # both refer to the same Point — no steal, no error
+    show(f"p: {p}")          # f"{entity}" reads the inner value, prints like the RF twin
+    show(f"fields: {p.x}, {p.y}")
+    return
 ```
 
 - Every SF `entity` lowers to **`Roamed[E]`** — RF's biased reference-counting
@@ -344,16 +344,16 @@ import Signals
 global should_quit: Bool = false
 
 routine on_interrupt()
-  should_quit = true
-  return
+    should_quit = true
+    return
 
 routine start()
-  when_interrupted(handler: on_interrupt)
-  while not should_quit
-    waitfor(200ms)
-    # ... do work ...
-  show("exiting gracefully")
-  return
+    when_interrupted(handler: on_interrupt)
+    while not should_quit
+        waitfor(200ms)
+        # ... do work ...
+    show("exiting gracefully")
+    return
 ```
 
 The `Guarded[T,P]` / `Roamed[T]` context overload exists too, but in Suflae the `global`

@@ -22,8 +22,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: List[S64] = []
-                          return
+                            var items: List[S64] = []
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -37,8 +37,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = []
-                          return
+                            var items = []
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -53,8 +53,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Set[S64] = {}
-                          return
+                            var items: Set[S64] = {}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -68,8 +68,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = {}
-                          return
+                            var items = {}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -84,8 +84,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Dict[S64, Text] = {:}
-                          return
+                            var items: Dict[S64, Text] = {:}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -99,8 +99,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = {:}
-                          return
+                            var items = {:}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -115,8 +115,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = [1, 2, 3]
-                          return
+                            var items = [1, 2, 3]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -131,8 +131,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: List[S64] = [10, 20, 30]
-                          return
+                            var items: List[S64] = [10, 20, 30]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -147,8 +147,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = {1, 2, 3}
-                          return
+                            var items = {1, 2, 3}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -162,8 +162,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = {1: "one", 2: "two"}
-                          return
+                            var items = {1: "one", 2: "two"}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -178,8 +178,8 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                          var items: CircularList[S64] = [1, 2, 3]
-                          return
+                            var items: CircularList[S64] = [1, 2, 3]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -195,8 +195,8 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                          var items: SortedList[S64] = [3, 1, 2]
-                          return
+                            var items: SortedList[S64] = [3, 1, 2]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -212,8 +212,8 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                          var items: SortedSet[S64] = {3, 1, 2}
-                          return
+                            var items: SortedSet[S64] = {3, 1, 2}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -229,8 +229,8 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                          var items: SortedDict[S32, S32] = {3: 30, 1: 10, 2: 20}
-                          return
+                            var items: SortedDict[S32, S32] = {3: 30, 1: 10, 2: 20}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -246,8 +246,8 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                          var items: PriorityQueue[S64, Text] = {1: "high", 10: "low"}
-                          return
+                            var items: PriorityQueue[S64, Text] = {1: "high", 10: "low"}
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -262,8 +262,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Array[S64, 4] = [1, 2, 3, 4]
-                          return
+                            var items: Array[S64, 4] = [1, 2, 3, 4]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -279,8 +279,8 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                          var items: BitArray[8] = [true, false, true, true, false, true, false, true]
-                          return
+                            var items: BitArray[8] = [true, false, true, true, false, true, false, true]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -295,8 +295,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = [[1, 2, 3], [4, 5], [6], []]
-                          return
+                            var items = [[1, 2, 3], [4, 5], [6], []]
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -330,8 +330,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = [1, 2, 3]
-                          return
+                            var items = [1, 2, 3]
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -369,8 +369,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items = List[S64](capacity: 8u64)
-                          return
+                            var items = List[S64](capacity: 8u64)
+                            return
                         """;
 
         Program program = Parse(source: source);
@@ -404,8 +404,8 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Array[S64, 4] = [1, 2, 3, 4, 5]
-                          return
+                            var items: Array[S64, 4] = [1, 2, 3, 4, 5]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -422,8 +422,8 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                          var items: BitArray[4] = [true, false, true]
-                          return
+                            var items: BitArray[4] = [true, false, true]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

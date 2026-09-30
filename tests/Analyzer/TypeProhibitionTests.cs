@@ -21,8 +21,8 @@ public class TypeProhibitionTests
         // None? desugars to Maybe[None] ≡ Bool (carrier None-collapse)
         string source = """
                         routine foo(x: None?)
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -37,8 +37,8 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine bar() -> Maybe[None]
-                          absent
-                          return
+                            absent
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -58,8 +58,8 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine foo(x: S32?)
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -75,8 +75,8 @@ public class TypeProhibitionTests
         // None as a direct type (not wrapped in a generic) is fine
         string source = """
                         routine foo() -> None
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -92,8 +92,8 @@ public class TypeProhibitionTests
         // Result<None> is allowed for failable void routines
         string source = """
                         routine foo(x: Check[None])
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -110,8 +110,8 @@ public class TypeProhibitionTests
         // Lookup[None] ≡ Check[None] (carrier None-collapse)
         string source = """
                         routine foo(x: Lookup[None])
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -131,8 +131,8 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine test(x: Maybe[Maybe[S32]])
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -147,8 +147,8 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine test(x: S32?)
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -168,9 +168,9 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine find!(text: Text?) -> Text
-                          if text is None
-                            absent
-                          return text
+                            if text is None
+                                absent
+                            return text
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -186,8 +186,8 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine test(x: Maybe[S32?])
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -208,8 +208,8 @@ public class TypeProhibitionTests
         // Non-ASCII byte literals are rejected at the lexer level (RF-G005)
         string source = """
                         routine test()
-                          var x: Byte = b'é'
-                          return
+                            var x: Byte = b'é'
+                            return
                         """;
 
         Assert.ThrowsAny<GrammarException>(testCode: () => AnalyzeSa(source: source));
@@ -223,8 +223,8 @@ public class TypeProhibitionTests
         // ASCII byte literals pass the lexer without throwing
         string source = """
                         routine test()
-                          var x: Byte = b'a'
-                          return
+                            var x: Byte = b'a'
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

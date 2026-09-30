@@ -16,101 +16,101 @@ module Core
 ### +infinity -> +infinity, NaN -> quiet NaN.
 ### :returns: The correctly rounded natural logarithm.
 routine B128.log_unchecked() -> B128
-  var u = me.to_bits()
-  var hi = b128_wide_hi(x: u)
-  var lo = b128_wide_lo(x: u)
-  if hi >= 0x7FFF000000000000_u64
-    var b1 = hi & 0x7FFFFFFFFFFFFFFF_u64
-    if b1 > 0x7FFF000000000000_u64 or (b1 == 0x7FFF000000000000_u64 and lo != 0)
-      # NaN: quieted, sign and payload kept
-      return B128.from_bits(bits: b128_wide_u128(hi: hi | 0x0000800000000000_u64, lo: lo))
-    if hi == 0x7FFF000000000000_u64 and lo == 0
-      return me
-    if b1 == 0 and lo == 0
-      return B128.from_bits(bits: b128_wide_u128(hi: 0xFFFF000000000000_u64, lo: 0_u64))
-    # x < 0: the NaN the original returns
-    return B128.from_bits(bits: b128_wide_u128(hi: 0xFFFF800000000000_u64, lo: 11_u64))
-  if 0x3FFEFFFFF0000040_u64 <= hi and hi <= 0x3FFF000008000020_u64
-    # too close to 1: specific treatment
-    return b128_log_nearone(x: u)
-  var fs = b128_log_fs(hi: hi, lo: lo)
-  var res = 0_u128
-  var msk = b128_wide_sar(x: fs.item2, s: 63)
-  var f0 = fs.item0 ^ msk
-  var f1 = fs.item1 ^ msk
-  var f2 = fs.item2 ^ msk
-  var nz = 0_u64
-  if f2 != 0
-    nz = f2.leading_zeros()
-  else
-    nz = f1.leading_zeros() +% 64
-  var ns = nz -% 15
-  var tm = 0xFFFFFFFFFFFFFFFF_u64 >>> b128_wide_s(n: ns & 63)
-  var rnd = (f0 >>> b128_wide_s(n: (63 -% ns) & 63)) & 1
-  var el = (0x4029_u64 -% nz) | (msk << 15)
-  if (((f0 +% (1_u64 << b128_wide_s(n: (63 -% ns) & 63))) +% 12) & tm) <= 24
-    # rounding test failed: decide the rounding exactly
-    var ls = nz -% 14
-    var rs = (64 -% ls) & 63
-    var rh = (f2 << b128_wide_s(n: ls & 63)) | (f1 >>> b128_wide_s(n: rs))
-    var rl = (f1 << b128_wide_s(n: ls & 63)) | (f0 >>> b128_wide_s(n: rs))
-    res = b128_wide_u128(hi: rh, lo: rl) +% LLVM::zero_extend[U64, U128]((f0 >>> b128_wide_s(n: (63 -% ls) & 63)) & 1)
-    var rf = b128_log_refine(el: el, m: res, x: u)
-    rnd = rf.item0
-    res = rf.item1
-  else
-    var rs = (64 -% ns) & 63
-    res = b128_wide_u128(hi: (f2 << b128_wide_s(n: ns & 63)) | (f1 >>> b128_wide_s(n: rs)), lo: (f1 << b128_wide_s(n: ns & 63)) | (f0 >>> b128_wide_s(n: rs)))
-  return B128.from_bits(bits: res +% b128_wide_u128(hi: el << 48, lo: rnd))
+    var u = me.to_bits()
+    var hi = b128_wide_hi(x: u)
+    var lo = b128_wide_lo(x: u)
+    if hi >= 0x7FFF000000000000_u64
+        var b1 = hi & 0x7FFFFFFFFFFFFFFF_u64
+        if b1 > 0x7FFF000000000000_u64 or (b1 == 0x7FFF000000000000_u64 and lo != 0)
+            # NaN: quieted, sign and payload kept
+            return B128.from_bits(bits: b128_wide_u128(hi: hi | 0x0000800000000000_u64, lo: lo))
+        if hi == 0x7FFF000000000000_u64 and lo == 0
+            return me
+        if b1 == 0 and lo == 0
+            return B128.from_bits(bits: b128_wide_u128(hi: 0xFFFF000000000000_u64, lo: 0_u64))
+        # x < 0: the NaN the original returns
+        return B128.from_bits(bits: b128_wide_u128(hi: 0xFFFF800000000000_u64, lo: 11_u64))
+    if 0x3FFEFFFFF0000040_u64 <= hi and hi <= 0x3FFF000008000020_u64
+        # too close to 1: specific treatment
+        return b128_log_nearone(x: u)
+    var fs = b128_log_fs(hi: hi, lo: lo)
+    var res = 0_u128
+    var msk = b128_wide_sar(x: fs.item2, s: 63)
+    var f0 = fs.item0 ^ msk
+    var f1 = fs.item1 ^ msk
+    var f2 = fs.item2 ^ msk
+    var nz = 0_u64
+    if f2 != 0
+        nz = f2.leading_zeros()
+    else
+        nz = f1.leading_zeros() +% 64
+    var ns = nz -% 15
+    var tm = 0xFFFFFFFFFFFFFFFF_u64 >>> b128_wide_s(n: ns & 63)
+    var rnd = (f0 >>> b128_wide_s(n: (63 -% ns) & 63)) & 1
+    var el = (0x4029_u64 -% nz) | (msk << 15)
+    if (((f0 +% (1_u64 << b128_wide_s(n: (63 -% ns) & 63))) +% 12) & tm) <= 24
+        # rounding test failed: decide the rounding exactly
+        var ls = nz -% 14
+        var rs = (64 -% ls) & 63
+        var rh = (f2 << b128_wide_s(n: ls & 63)) | (f1 >>> b128_wide_s(n: rs))
+        var rl = (f1 << b128_wide_s(n: ls & 63)) | (f0 >>> b128_wide_s(n: rs))
+        res = b128_wide_u128(hi: rh, lo: rl) +% LLVM::zero_extend[U64, U128]((f0 >>> b128_wide_s(n: (63 -% ls) & 63)) & 1)
+        var rf = b128_log_refine(el: el, m: res, x: u)
+        rnd = rf.item0
+        res = rf.item1
+    else
+        var rs = (64 -% ns) & 63
+        res = b128_wide_u128(hi: (f2 << b128_wide_s(n: ns & 63)) | (f1 >>> b128_wide_s(n: rs)), lo: (f1 << b128_wide_s(n: ns & 63)) | (f0 >>> b128_wide_s(n: rs)))
+    return B128.from_bits(bits: res +% b128_wide_u128(hi: el << 48, lo: rnd))
 
 ### ln(x) as a signed 192-bit fixed-point value fs (words w0 low .. w2 high, two's complement) with
 ### ln(x) = fs * 2^-148 to within 12 units, for a positive finite normal or subnormal B128 whose high word is
 ### hi and low word lo, outside the range next to 1 that B128.log_unchecked treats separately. This is the
 ### value the logarithm rounds; log2 and log10 scale it before rounding.
 secret routine b128_log_fs(hi: U64, lo: U64) -> (U64, U64, U64)
-  var u = b128_wide_u128(hi: hi, lo: lo)
-  var mh = hi
-  var ml = lo
-  var e = hi & 0xFFFF000000000000_u64
-  if e == 0
-    var nz = 0_u64
-    if hi != 0
-      nz = hi.leading_zeros()
-    else
-      nz = lo.leading_zeros() +% 64
-    var mm = u << b128_wide_s(n: nz -% 15)
-    mh = b128_wide_hi(x: mm)
-    ml = b128_wide_lo(x: mm)
-    e = e -% ((nz -% 16) << 48)
-  e = e +% (112_u64 << 48)
-  # crude approximation of log2
-  var l = b128_log_log2(x: mh)
-  var j0 = l >>> 59
-  var j1 = (l >>> 54) & 31
-  var j2 = (l >>> 49) & 31
-  var j3 = (l >>> 44) & 31
-  mh = (mh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
-  var r01 = B128_LOG_RT1[j1] *% B128_LOG_RT0[j0]
-  var r23 = B128_LOG_RT2[j2] *% B128_LOG_RT3[j3]
-  var rr = b128_wide_mUU(a: b128_wide_u128(hi: mh, lo: ml), b: b128_wide_muu(a: r01, b: r23))
-  var rhh = b128_wide_hi(x: rr.item0)
-  var rhl = b128_wide_lo(x: rr.item0)
-  var rlh = b128_wide_hi(x: rr.item1)
-  mh = (rhh << 40) | (rhl >>> 24)
-  ml = (rhl << 40) | (rlh >>> 24)
-  var m = b128_wide_u128(hi: mh, lo: ml)
-  var fs = b128_wide_mahu3(a: e, b0: B128_LOG_LN2A[0], b1: B128_LOG_LN2A[1], b2: B128_LOG_LN2A[2], c0: B128_LOG_OFFA[0], c1: B128_LOG_OFFA[1], c2: B128_LOG_OFFA[2])
-  fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: B128_LOG_LT0[3 *% j0], b1: B128_LOG_LT0[3 *% j0 +% 1], b2: B128_LOG_LT0[3 *% j0 +% 2])
-  fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: B128_LOG_LT1[3 *% j1], b1: B128_LOG_LT1[3 *% j1 +% 1], b2: B128_LOG_LT1[3 *% j1 +% 2])
-  fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: B128_LOG_LT2[3 *% j2], b1: B128_LOG_LT2[3 *% j2 +% 1], b2: B128_LOG_LT2[3 *% j2 +% 2])
-  fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: B128_LOG_LT3[3 *% j3], b1: B128_LOG_LT3[3 *% j3 +% 1], b2: B128_LOG_LT3[3 *% j3 +% 2])
-  var f = b128_wide_u128(hi: B128_LOG_C[7], lo: B128_LOG_C[6] -% b128_wide_mhuu(a: mh, b: B128_LOG_C[8] -% b128_wide_mhuu(a: mh, b: B128_LOG_C[10])))
-  f = b128_wide_u128(hi: B128_LOG_C[5], lo: B128_LOG_C[4]) -% b128_wide_mhUU(a: m, b: f)
-  f = b128_wide_u128(hi: B128_LOG_C[3], lo: B128_LOG_C[2]) -% b128_wide_mhUU(a: m, b: f)
-  f = b128_wide_u128(hi: B128_LOG_C[1], lo: B128_LOG_C[0]) -% b128_wide_mhUU(a: m, b: f)
-  var res = b128_wide_mhUU(a: m, b: f)
-  fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: b128_wide_lo(x: res), b1: b128_wide_hi(x: res), b2: 0_u64)
-  return fs
+    var u = b128_wide_u128(hi: hi, lo: lo)
+    var mh = hi
+    var ml = lo
+    var e = hi & 0xFFFF000000000000_u64
+    if e == 0
+        var nz = 0_u64
+        if hi != 0
+            nz = hi.leading_zeros()
+        else
+            nz = lo.leading_zeros() +% 64
+        var mm = u << b128_wide_s(n: nz -% 15)
+        mh = b128_wide_hi(x: mm)
+        ml = b128_wide_lo(x: mm)
+        e = e -% ((nz -% 16) << 48)
+    e = e +% (112_u64 << 48)
+    # crude approximation of log2
+    var l = b128_log_log2(x: mh)
+    var j0 = l >>> 59
+    var j1 = (l >>> 54) & 31
+    var j2 = (l >>> 49) & 31
+    var j3 = (l >>> 44) & 31
+    mh = (mh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+    var r01 = B128_LOG_RT1[j1] *% B128_LOG_RT0[j0]
+    var r23 = B128_LOG_RT2[j2] *% B128_LOG_RT3[j3]
+    var rr = b128_wide_mUU(a: b128_wide_u128(hi: mh, lo: ml), b: b128_wide_muu(a: r01, b: r23))
+    var rhh = b128_wide_hi(x: rr.item0)
+    var rhl = b128_wide_lo(x: rr.item0)
+    var rlh = b128_wide_hi(x: rr.item1)
+    mh = (rhh << 40) | (rhl >>> 24)
+    ml = (rhl << 40) | (rlh >>> 24)
+    var m = b128_wide_u128(hi: mh, lo: ml)
+    var fs = b128_wide_mahu3(a: e, b0: B128_LOG_LN2A[0], b1: B128_LOG_LN2A[1], b2: B128_LOG_LN2A[2], c0: B128_LOG_OFFA[0], c1: B128_LOG_OFFA[1], c2: B128_LOG_OFFA[2])
+    fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: B128_LOG_LT0[3 *% j0], b1: B128_LOG_LT0[3 *% j0 +% 1], b2: B128_LOG_LT0[3 *% j0 +% 2])
+    fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: B128_LOG_LT1[3 *% j1], b1: B128_LOG_LT1[3 *% j1 +% 1], b2: B128_LOG_LT1[3 *% j1 +% 2])
+    fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: B128_LOG_LT2[3 *% j2], b1: B128_LOG_LT2[3 *% j2 +% 1], b2: B128_LOG_LT2[3 *% j2 +% 2])
+    fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: B128_LOG_LT3[3 *% j3], b1: B128_LOG_LT3[3 *% j3 +% 1], b2: B128_LOG_LT3[3 *% j3 +% 2])
+    var f = b128_wide_u128(hi: B128_LOG_C[7], lo: B128_LOG_C[6] -% b128_wide_mhuu(a: mh, b: B128_LOG_C[8] -% b128_wide_mhuu(a: mh, b: B128_LOG_C[10])))
+    f = b128_wide_u128(hi: B128_LOG_C[5], lo: B128_LOG_C[4]) -% b128_wide_mhUU(a: m, b: f)
+    f = b128_wide_u128(hi: B128_LOG_C[3], lo: B128_LOG_C[2]) -% b128_wide_mhUU(a: m, b: f)
+    f = b128_wide_u128(hi: B128_LOG_C[1], lo: B128_LOG_C[0]) -% b128_wide_mhUU(a: m, b: f)
+    var res = b128_wide_mhUU(a: m, b: f)
+    fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: b128_wide_lo(x: res), b1: b128_wide_hi(x: res), b2: 0_u64)
+    return fs
 
 ### The B128 nearest to (-1)^neg * mag * 2^scale, when every value within err of mag rounds to it (mag and
 ### err are in units of 2^scale). mag must carry at least 120 significant bits so the 113-bit significand
@@ -120,66 +120,66 @@ secret routine b128_log_fs(hi: U64, lo: U64) -> (U64, U64, U64)
 ### spaced half as far apart). False when it reaches that boundary, and for results outside the normal
 ### B128 range.
 secret routine b128_round_fixed(neg: Bool, mag: U256, scale: S64, err: U256) -> (Bool, B128)
-  var zero = B128.from_bits(bits: 0_u128)
-  if mag == 0_u256
-    return (false, zero)
-  var mhi = LLVM::int_truncate[U256, U128](mag >>> 128_u32)
-  var mlo = LLVM::int_truncate[U256, U128](mag)
-  var lead = 127_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(mlo))
-  if mhi != 0_u128
-    lead = 255_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(mhi))
-  if lead < 120_s64
-    return (false, zero)
-  var shs = lead -% 112_s64
-  if shs < 64_s64 and (err >>> 64_u32) == 0_u256
-    # the usual case (a result far from the range ends): the rounded-off bits are below 2^64, so the test and
-    # the significand take U128 and U64 arithmetic instead of 256-bit shifts
-    var sh64 = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](shs))
-    var e64 = LLVM::int_truncate[U256, U64](err)
-    var span64 = 1_u64 << LLVM::reinterpret_bits[S64, U64](shs)
-    var r64 = LLVM::int_truncate[U128, U64](mlo) & (span64 -% 1_u64)
-    var half64 = span64 >>> 1_u32
-    if e64 >= (span64 >>> 2_u32)
-      return (false, zero)
-    if (r64 > half64 and r64 -% half64 <= e64) or (r64 <= half64 and half64 -% r64 <= e64)
-      return (false, zero)
-    var biased64 = lead +% scale +% 16383_s64
-    if biased64 < 1_s64 or biased64 > 32766_s64
-      return (false, zero)
-    var m64 = (mhi << (128_u128 -% sh64)) | (mlo >>> sh64)
-    if sh64 == 0_u128
-      m64 = mlo
-    var rnd64 = if r64 > half64 then 1_u128 else 0_u128
-    var bits64 = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased64)) << 112) +% ((m64 & ((1_u128 << 113) -% 1_u128)) -% (1_u128 << 112)) +% rnd64
+    var zero = B128.from_bits(bits: 0_u128)
+    if mag == 0_u256
+        return (false, zero)
+    var mhi = LLVM::int_truncate[U256, U128](mag >>> 128_u32)
+    var mlo = LLVM::int_truncate[U256, U128](mag)
+    var lead = 127_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(mlo))
+    if mhi != 0_u128
+        lead = 255_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(mhi))
+    if lead < 120_s64
+        return (false, zero)
+    var shs = lead -% 112_s64
+    if shs < 64_s64 and (err >>> 64_u32) == 0_u256
+        # the usual case (a result far from the range ends): the rounded-off bits are below 2^64, so the test and
+        # the significand take U128 and U64 arithmetic instead of 256-bit shifts
+        var sh64 = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](shs))
+        var e64 = LLVM::int_truncate[U256, U64](err)
+        var span64 = 1_u64 << LLVM::reinterpret_bits[S64, U64](shs)
+        var r64 = LLVM::int_truncate[U128, U64](mlo) & (span64 -% 1_u64)
+        var half64 = span64 >>> 1_u32
+        if e64 >= (span64 >>> 2_u32)
+            return (false, zero)
+        if (r64 > half64 and r64 -% half64 <= e64) or (r64 <= half64 and half64 -% r64 <= e64)
+            return (false, zero)
+        var biased64 = lead +% scale +% 16383_s64
+        if biased64 < 1_s64 or biased64 > 32766_s64
+            return (false, zero)
+        var m64 = (mhi << (128_u128 -% sh64)) | (mlo >>> sh64)
+        if sh64 == 0_u128
+            m64 = mlo
+        var rnd64 = if r64 > half64 then 1_u128 else 0_u128
+        var bits64 = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased64)) << 112) +% ((m64 & ((1_u128 << 113) -% 1_u128)) -% (1_u128 << 112)) +% rnd64
+        if neg
+            bits64 = bits64 | (1_u128 << 127)
+        return (true, B128.from_bits(bits: bits64))
+    var sh = LLVM::int_truncate[S64, U32](shs)
+    var one = 1_u256
+    var span = one << sh
+    var r = mag & (span -% one)
+    var half = span >>> 1_u32
+    if err >= (span >>> 2_u32)
+        return (false, zero)
+    if (r > half and r -% half <= err) or (r <= half and half -% r <= err)
+        return (false, zero)
+    var biased = lead +% scale +% 16383_s64
+    if biased < 1_s64 or biased > 32766_s64
+        return (false, zero)
+    var m = LLVM::int_truncate[U256, U128](mag >>> sh)
+    var rnd = if r > half then 1_u128 else 0_u128
+    var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112) +% (m -% (1_u128 << 112)) +% rnd
     if neg
-      bits64 = bits64 | (1_u128 << 127)
-    return (true, B128.from_bits(bits: bits64))
-  var sh = LLVM::int_truncate[S64, U32](shs)
-  var one = 1_u256
-  var span = one << sh
-  var r = mag & (span -% one)
-  var half = span >>> 1_u32
-  if err >= (span >>> 2_u32)
-    return (false, zero)
-  if (r > half and r -% half <= err) or (r <= half and half -% r <= err)
-    return (false, zero)
-  var biased = lead +% scale +% 16383_s64
-  if biased < 1_s64 or biased > 32766_s64
-    return (false, zero)
-  var m = LLVM::int_truncate[U256, U128](mag >>> sh)
-  var rnd = if r > half then 1_u128 else 0_u128
-  var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112) +% (m -% (1_u128 << 112)) +% rnd
-  if neg
-    bits = bits | (1_u128 << 127)
-  return (true, B128.from_bits(bits: bits))
+        bits = bits | (1_u128 << 127)
+    return (true, B128.from_bits(bits: bits))
 
 ### |fs| as a U256 and whether fs is negative, for a signed 192-bit fs from b128_log_fs.
 secret routine b128_fs_magnitude(fs: (U64, U64, U64)) -> (Bool, U256)
-  var v = LLVM::zero_extend[U64, U256](fs.item0) | (LLVM::zero_extend[U64, U256](fs.item1) << 64_u32) | (LLVM::zero_extend[U64, U256](fs.item2) << 128_u32)
-  if (fs.item2 >>> 63) == 0_u64
-    return (false, v)
-  var m192 = (1_u256 << 192_u32) -% 1_u256
-  return (true, ((v ^ m192) +% 1_u256) & m192)
+    var v = LLVM::zero_extend[U64, U256](fs.item0) | (LLVM::zero_extend[U64, U256](fs.item1) << 64_u32) | (LLVM::zero_extend[U64, U256](fs.item2) << 128_u32)
+    if (fs.item2 >>> 63) == 0_u64
+        return (false, v)
+    var m192 = (1_u256 << 192_u32) -% 1_u256
+    return (true, ((v ^ m192) +% 1_u256) & m192)
 
 ### log_b(x) for a positive finite B128 outside the range next to 1, from the fixed-point ln(x) times a
 ### constant c = 2^p / ln(b) rounded to an integer with its top bit at 2^127 (so its rounding is at most
@@ -188,181 +188,181 @@ secret routine b128_fs_magnitude(fs: (U64, U64, U64)) -> (Bool, U256)
 ### v / 2^128 units for the result v): 22 + v / 2^127 in all.
 @inline
 secret routine b128_log_scaled(hi: U64, lo: U64, c1: U64, c0: U64, p: U32) -> (Bool, B128)
-  var fs = b128_log_fs(hi: hi, lo: lo)
-  var (neg, mag) = b128_fs_magnitude(fs: fs)
-  # mag (below 2^192) times c = c1 2^64 + c0 exactly, as 128-bit words (not two 256-bit multiplications),
-  # then shifted down by p (a constant at each call, 127 or 129)
-  var (ahi, alo) = b128_trig_wmul(x: LLVM::int_truncate[U256, U128](mag), y: (LLVM::zero_extend[U64, U128](c1) << 64_u32) | LLVM::zero_extend[U64, U128](c0))
-  var (bhi, blo) = b128_trig_wmul(x: LLVM::int_truncate[U256, U128](mag >>> 128_u32), y: (LLVM::zero_extend[U64, U128](c1) << 64_u32) | LLVM::zero_extend[U64, U128](c0))
-  var pmid = ahi +% blo
-  var phigh = bhi
-  if pmid < ahi
-    phigh = phigh +% 1_u128
-  var sh = b128_trig_shr384(x: (alo, pmid, phigh), shift: LLVM::zero_extend[U32, S64](p))
-  var v = (LLVM::zero_extend[U128, U256](sh.item1) << 128_u32) | LLVM::zero_extend[U128, U256](sh.item0)
-  return b128_round_fixed(neg: neg, mag: v, scale: -148_s64, err: 22_u256 +% (v >>> 127_u32))
+    var fs = b128_log_fs(hi: hi, lo: lo)
+    var (neg, mag) = b128_fs_magnitude(fs: fs)
+    # mag (below 2^192) times c = c1 2^64 + c0 exactly, as 128-bit words (not two 256-bit multiplications),
+    # then shifted down by p (a constant at each call, 127 or 129)
+    var (ahi, alo) = b128_trig_wmul(x: LLVM::int_truncate[U256, U128](mag), y: (LLVM::zero_extend[U64, U128](c1) << 64_u32) | LLVM::zero_extend[U64, U128](c0))
+    var (bhi, blo) = b128_trig_wmul(x: LLVM::int_truncate[U256, U128](mag >>> 128_u32), y: (LLVM::zero_extend[U64, U128](c1) << 64_u32) | LLVM::zero_extend[U64, U128](c0))
+    var pmid = ahi +% blo
+    var phigh = bhi
+    if pmid < ahi
+        phigh = phigh +% 1_u128
+    var sh = b128_trig_shr384(x: (alo, pmid, phigh), shift: LLVM::zero_extend[U32, S64](p))
+    var v = (LLVM::zero_extend[U128, U256](sh.item1) << 128_u32) | LLVM::zero_extend[U128, U256](sh.item0)
+    return b128_round_fixed(neg: neg, mag: v, scale: -148_s64, err: 22_u256 +% (v >>> 127_u32))
 
 ### The high and low words of a positive finite B128 that b128_log_scaled can take (normal, not next to 1),
 ### or false.
 secret routine b128_log_scaled_ok(x: B128) -> (Bool, U64, U64)
-  var u = x.to_bits()
-  var hi = b128_wide_hi(x: u)
-  var lo = b128_wide_lo(x: u)
-  if hi >= 0x7FFF000000000000_u64 or hi < 0x0001000000000000_u64
-    return (false, hi, lo)
-  if 0x3FFEFFFFF0000040_u64 <= hi and hi <= 0x3FFF000008000020_u64
-    return (false, hi, lo)
-  return (true, hi, lo)
+    var u = x.to_bits()
+    var hi = b128_wide_hi(x: u)
+    var lo = b128_wide_lo(x: u)
+    if hi >= 0x7FFF000000000000_u64 or hi < 0x0001000000000000_u64
+        return (false, hi, lo)
+    if 0x3FFEFFFFF0000040_u64 <= hi and hi <= 0x3FFF000008000020_u64
+        return (false, hi, lo)
+    return (true, hi, lo)
 
 ### Crude approximation of log2 of the high significand word x (fixed point), selecting the table indices.
 secret routine b128_log_log2(x: U64) -> U64
-  var j = (x >>> 43) & 31
-  var z = (x >>> 11) & 0xFFFFFFFF_u64
-  var z2 = (z *% z) >>> 32
-  var t0 = (B128_LOG_L2C[4 *% j] -% ((z *% B128_LOG_L2C[4 *% j +% 1]) >>> 38)) & 0xFFFFFFFF_u64
-  var t2 = (B128_LOG_L2C[4 *% j +% 2] -% ((z *% B128_LOG_L2C[4 *% j +% 3]) >>> 32)) & 0xFFFFFFFF_u64
-  t0 = (t0 +% ((z2 *% t2) >>> 44)) & 0xFFFFFFFF_u64
-  return B128_LOG_L2C0[j] +% ((z *% t0) >>> 4)
+    var j = (x >>> 43) & 31
+    var z = (x >>> 11) & 0xFFFFFFFF_u64
+    var z2 = (z *% z) >>> 32
+    var t0 = (B128_LOG_L2C[4 *% j] -% ((z *% B128_LOG_L2C[4 *% j +% 1]) >>> 38)) & 0xFFFFFFFF_u64
+    var t2 = (B128_LOG_L2C[4 *% j +% 2] -% ((z *% B128_LOG_L2C[4 *% j +% 3]) >>> 32)) & 0xFFFFFFFF_u64
+    t0 = (t0 +% ((z2 *% t2) >>> 44)) & 0xFFFFFFFF_u64
+    return B128_LOG_L2C0[j] +% ((z *% t0) >>> 4)
 
 ### (w2, w1, w0) >> s (logical, s < 192).
 secret routine b128_log_rlshft(t0: U64, t1: U64, t2: U64, s: U64) -> (U64, U64, U64)
-  var a0 = t0
-  var a1 = t1
-  var a2 = t2
-  var rs = s & 63
-  if rs != 0
-    var ls = (64 -% rs) & 63
-    a0 = (a0 >>> b128_wide_s(n: rs)) | (a1 << b128_wide_s(n: ls))
-    a1 = (a1 >>> b128_wide_s(n: rs)) | (a2 << b128_wide_s(n: ls))
-    a2 = a2 >>> b128_wide_s(n: rs)
-  var k = s
-  while k >= 64
-    a0 = a1
-    a1 = a2
-    a2 = 0_u64
-    k = k -% 64
-  return (a0, a1, a2)
+    var a0 = t0
+    var a1 = t1
+    var a2 = t2
+    var rs = s & 63
+    if rs != 0
+        var ls = (64 -% rs) & 63
+        a0 = (a0 >>> b128_wide_s(n: rs)) | (a1 << b128_wide_s(n: ls))
+        a1 = (a1 >>> b128_wide_s(n: rs)) | (a2 << b128_wide_s(n: ls))
+        a2 = a2 >>> b128_wide_s(n: rs)
+    var k = s
+    while k >= 64
+        a0 = a1
+        a1 = a2
+        a2 = 0_u64
+        k = k -% 64
+    return (a0, a1, a2)
 
 ### ln(x) for x within about 2^-29 of 1, where the general reduction would lose accuracy.
 secret routine b128_log_nearone(x: U128) -> B128
-  var one = 0x3FFF000000000000_u64
-  var hi = b128_wide_hi(x: x)
-  var lo = b128_wide_lo(x: x)
-  var e = 0_u64
-  var neg = 0_u64
-  var crnd = false
-  var res = 0_u128
-  if hi >= one
-    # x >= 1
-    hi = hi -% one
-    var nz = 0_u64
-    if hi != 0
-      nz = hi.leading_zeros()
-    elseif lo != 0
-      nz = lo.leading_zeros() +% 64
+    var one = 0x3FFF000000000000_u64
+    var hi = b128_wide_hi(x: x)
+    var lo = b128_wide_lo(x: x)
+    var e = 0_u64
+    var neg = 0_u64
+    var crnd = false
+    var res = 0_u128
+    if hi >= one
+        # x >= 1
+        hi = hi -% one
+        var nz = 0_u64
+        if hi != 0
+            nz = hi.leading_zeros()
+        elseif lo != 0
+            nz = lo.leading_zeros() +% 64
+        else
+            return B128.from_bits(bits: 0_u128)
+        var u = b128_wide_u128(hi: hi, lo: lo) << b128_wide_s(n: nz)
+        e = nz -% 16
+        var u2 = b128_wide_mhUU(a: u, b: u)
+        var m = u >>> b128_wide_s(n: e -% 20)
+        var mh = b128_wide_hi(x: m)
+        var f = b128_wide_u128(hi: B128_LOG_NCP[7], lo: B128_LOG_NCP[6] -% b128_wide_mhuu(a: mh, b: B128_LOG_NCP[8] -% b128_wide_mhuu(a: mh, b: B128_LOG_NCP[10])))
+        f = b128_wide_u128(hi: B128_LOG_NCP[5], lo: B128_LOG_NCP[4]) -% b128_wide_mhUU(a: m, b: f)
+        f = b128_wide_u128(hi: B128_LOG_NCP[3], lo: B128_LOG_NCP[2]) -% b128_wide_mhUU(a: m, b: f)
+        f = b128_wide_u128(hi: B128_LOG_NCP[1], lo: B128_LOG_NCP[0]) -% b128_wide_mhUU(a: m, b: f)
+        m = b128_wide_mhUU(a: u2, b: f)
+        var t = b128_log_rlshft(t0: 0_u64, t1: b128_wide_lo(x: m), t2: b128_wide_hi(x: m), s: e)
+        var z = b128_wide_sub3(a0: 0_u64, a1: b128_wide_lo(x: u), a2: b128_wide_hi(x: u), b0: t.item0, b1: t.item1, b2: t.item2)
+        var eps = 12_u64
+        var tl = b128_wide_u128(hi: z.item1, lo: z.item0)
+        var zs = z.item2 >>> 63
+        var msk = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128 >>> b128_wide_s(n: 50 -% zs)
+        var nrnd = 1_u128 << b128_wide_s(n: 13 +% zs)
+        if e < 64
+            tl = tl >>> b128_wide_s(n: 64 -% e)
+            msk = msk >>> b128_wide_s(n: 64 -% e)
+            nrnd = (nrnd << b128_wide_s(n: e)) | LLVM::zero_extend[U64, U128](eps)
+        else
+            eps = 1 +% (eps >>> b128_wide_s(n: e -% 64))
+            nrnd = (nrnd << 64) | LLVM::zero_extend[U64, U128](eps)
+        tl = msk & (tl +% nrnd)
+        crnd = tl <= LLVM::zero_extend[U64, U128](2 *% eps)
+        res = b128_wide_u128(hi: z.item2, lo: z.item1)
     else
-      return B128.from_bits(bits: 0_u128)
-    var u = b128_wide_u128(hi: hi, lo: lo) << b128_wide_s(n: nz)
-    e = nz -% 16
-    var u2 = b128_wide_mhUU(a: u, b: u)
-    var m = u >>> b128_wide_s(n: e -% 20)
-    var mh = b128_wide_hi(x: m)
-    var f = b128_wide_u128(hi: B128_LOG_NCP[7], lo: B128_LOG_NCP[6] -% b128_wide_mhuu(a: mh, b: B128_LOG_NCP[8] -% b128_wide_mhuu(a: mh, b: B128_LOG_NCP[10])))
-    f = b128_wide_u128(hi: B128_LOG_NCP[5], lo: B128_LOG_NCP[4]) -% b128_wide_mhUU(a: m, b: f)
-    f = b128_wide_u128(hi: B128_LOG_NCP[3], lo: B128_LOG_NCP[2]) -% b128_wide_mhUU(a: m, b: f)
-    f = b128_wide_u128(hi: B128_LOG_NCP[1], lo: B128_LOG_NCP[0]) -% b128_wide_mhUU(a: m, b: f)
-    m = b128_wide_mhUU(a: u2, b: f)
-    var t = b128_log_rlshft(t0: 0_u64, t1: b128_wide_lo(x: m), t2: b128_wide_hi(x: m), s: e)
-    var z = b128_wide_sub3(a0: 0_u64, a1: b128_wide_lo(x: u), a2: b128_wide_hi(x: u), b0: t.item0, b1: t.item1, b2: t.item2)
-    var eps = 12_u64
-    var tl = b128_wide_u128(hi: z.item1, lo: z.item0)
-    var zs = z.item2 >>> 63
-    var msk = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128 >>> b128_wide_s(n: 50 -% zs)
-    var nrnd = 1_u128 << b128_wide_s(n: 13 +% zs)
-    if e < 64
-      tl = tl >>> b128_wide_s(n: 64 -% e)
-      msk = msk >>> b128_wide_s(n: 64 -% e)
-      nrnd = (nrnd << b128_wide_s(n: e)) | LLVM::zero_extend[U64, U128](eps)
+        # x < 1
+        neg = 1_u64
+        var u = b128_wide_u128(hi: one, lo: 0_u64) -% x
+        var uh = b128_wide_hi(x: u)
+        var nz = 0_u64
+        if uh != 0
+            nz = uh.leading_zeros()
+        else
+            nz = b128_wide_lo(x: u).leading_zeros() +% 64
+        u = u << b128_wide_s(n: nz)
+        e = nz -% 16
+        var u2 = b128_wide_mhUU(a: u, b: u)
+        var m = u >>> b128_wide_s(n: e -% 20)
+        var mh = b128_wide_hi(x: m)
+        var f = b128_wide_u128(hi: B128_LOG_NCN[5], lo: B128_LOG_NCN[4]) +% LLVM::zero_extend[U64, U128](b128_wide_mhuu(a: mh, b: B128_LOG_NCN[6] +% b128_wide_mhuu(a: mh, b: B128_LOG_NCN[8] +% b128_wide_mhuu(a: mh, b: B128_LOG_NCN[10]))))
+        f = b128_wide_u128(hi: B128_LOG_NCN[3], lo: B128_LOG_NCN[2]) +% b128_wide_mhUU(a: m, b: f)
+        f = b128_wide_u128(hi: B128_LOG_NCN[1], lo: B128_LOG_NCN[0]) +% b128_wide_mhUU(a: m, b: f)
+        m = b128_wide_mhUU(a: u2, b: f)
+        u = u >>> 1
+        var t = b128_log_rlshft(t0: 0_u64, t1: b128_wide_lo(x: m), t2: b128_wide_hi(x: m), s: e +% 2)
+        var z = b128_wide_add3(a0: 0_u64, a1: b128_wide_lo(x: u), a2: b128_wide_hi(x: u), b0: t.item0, b1: t.item1, b2: t.item2)
+        var eps = 12_u64
+        var tl = b128_wide_u128(hi: z.item1, lo: z.item0)
+        var zs = z.item2 >>> 63
+        var msk = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128 >>> b128_wide_s(n: 50 -% zs)
+        var nrnd = 1_u128 << b128_wide_s(n: 13 +% zs)
+        if e <= 62
+            tl = tl >>> b128_wide_s(n: 62 -% e)
+            msk = msk >>> b128_wide_s(n: 62 -% e)
+            nrnd = (nrnd << b128_wide_s(n: e)) | LLVM::zero_extend[U64, U128](eps)
+        else
+            eps = 1 +% (eps >>> b128_wide_s(n: e -% 62))
+            nrnd = (nrnd << 62) | LLVM::zero_extend[U64, U128](eps)
+        tl = msk & (tl +% nrnd)
+        crnd = tl <= LLVM::zero_extend[U64, U128](2 *% eps)
+        res = b128_wide_u128(hi: z.item2, lo: z.item1)
+    if (b128_wide_hi(x: res) >>> 63) == 0
+        res = res << 1
+        e = e +% 1
+    var rnd = (b128_wide_lo(x: res) >>> 14) & 1
+    e = 16381 -% e
+    if crnd
+        res = (res +% (1_u128 << 13)) >>> 14
+        var rf = b128_log_refine(el: e | (neg << 15), m: res, x: x)
+        rnd = rf.item0
+        res = rf.item1
     else
-      eps = 1 +% (eps >>> b128_wide_s(n: e -% 64))
-      nrnd = (nrnd << 64) | LLVM::zero_extend[U64, U128](eps)
-    tl = msk & (tl +% nrnd)
-    crnd = tl <= LLVM::zero_extend[U64, U128](2 *% eps)
-    res = b128_wide_u128(hi: z.item2, lo: z.item1)
-  else
-    # x < 1
-    neg = 1_u64
-    var u = b128_wide_u128(hi: one, lo: 0_u64) -% x
-    var uh = b128_wide_hi(x: u)
-    var nz = 0_u64
-    if uh != 0
-      nz = uh.leading_zeros()
-    else
-      nz = b128_wide_lo(x: u).leading_zeros() +% 64
-    u = u << b128_wide_s(n: nz)
-    e = nz -% 16
-    var u2 = b128_wide_mhUU(a: u, b: u)
-    var m = u >>> b128_wide_s(n: e -% 20)
-    var mh = b128_wide_hi(x: m)
-    var f = b128_wide_u128(hi: B128_LOG_NCN[5], lo: B128_LOG_NCN[4]) +% LLVM::zero_extend[U64, U128](b128_wide_mhuu(a: mh, b: B128_LOG_NCN[6] +% b128_wide_mhuu(a: mh, b: B128_LOG_NCN[8] +% b128_wide_mhuu(a: mh, b: B128_LOG_NCN[10]))))
-    f = b128_wide_u128(hi: B128_LOG_NCN[3], lo: B128_LOG_NCN[2]) +% b128_wide_mhUU(a: m, b: f)
-    f = b128_wide_u128(hi: B128_LOG_NCN[1], lo: B128_LOG_NCN[0]) +% b128_wide_mhUU(a: m, b: f)
-    m = b128_wide_mhUU(a: u2, b: f)
-    u = u >>> 1
-    var t = b128_log_rlshft(t0: 0_u64, t1: b128_wide_lo(x: m), t2: b128_wide_hi(x: m), s: e +% 2)
-    var z = b128_wide_add3(a0: 0_u64, a1: b128_wide_lo(x: u), a2: b128_wide_hi(x: u), b0: t.item0, b1: t.item1, b2: t.item2)
-    var eps = 12_u64
-    var tl = b128_wide_u128(hi: z.item1, lo: z.item0)
-    var zs = z.item2 >>> 63
-    var msk = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128 >>> b128_wide_s(n: 50 -% zs)
-    var nrnd = 1_u128 << b128_wide_s(n: 13 +% zs)
-    if e <= 62
-      tl = tl >>> b128_wide_s(n: 62 -% e)
-      msk = msk >>> b128_wide_s(n: 62 -% e)
-      nrnd = (nrnd << b128_wide_s(n: e)) | LLVM::zero_extend[U64, U128](eps)
-    else
-      eps = 1 +% (eps >>> b128_wide_s(n: e -% 62))
-      nrnd = (nrnd << 62) | LLVM::zero_extend[U64, U128](eps)
-    tl = msk & (tl +% nrnd)
-    crnd = tl <= LLVM::zero_extend[U64, U128](2 *% eps)
-    res = b128_wide_u128(hi: z.item2, lo: z.item1)
-  if (b128_wide_hi(x: res) >>> 63) == 0
-    res = res << 1
-    e = e +% 1
-  var rnd = (b128_wide_lo(x: res) >>> 14) & 1
-  e = 16381 -% e
-  if crnd
-    res = (res +% (1_u128 << 13)) >>> 14
-    var rf = b128_log_refine(el: e | (neg << 15), m: res, x: x)
-    rnd = rf.item0
-    res = rf.item1
-  else
-    res = res >>> 15
-  return B128.from_bits(bits: res +% b128_wide_u128(hi: (e << 48) | (neg << 63), lo: rnd))
+        res = res >>> 15
+    return B128.from_bits(bits: res +% b128_wide_u128(hi: (e << 48) | (neg << 63), lo: rnd))
 
 ### Decides the rounding exactly: evaluates 2^(m / ln 2) for the candidate result m (113 bits plus one) to
 ### about 380 bits and compares it with x. Returns the round bit and the adjusted significand.
 secret routine b128_log_refine(el: U64, m: U128, x: U128) -> (U64, U128)
-  var sm = 0_u64 -% ((el >>> 15) & 1)
-  var xw = b128_wide_mhu7xu2(a: B128_WIDE_ILN2, b: m)
-  var i = 0_u64
-  while i < 7
-    xw[i] = xw[i] ^ sm
-    i = i +% 1
-  xw = b128_wide_arsu7(x: xw, n: 0x402E_u64 -% (el & 0x7FFF))
-  var ft = b128_wide_exp2_frac(x: xw)
-  if (ft[0] | ft[1] | ft[2] | ft[3]) != 0
-    ft[4] = ft[4] | 1
-  var d = ft[4] -% (b128_wide_lo(x: x) << 12)
-  var down = (d >>> 63) == 0
-  if sm != 0
-    down = not down
-  var mm = m << 1
-  if down
-    mm = mm -% 1_u128
-  else
-    mm = mm +% 1_u128
-  return (b128_wide_lo(x: mm >>> 1) & 1, mm >>> 2)
+    var sm = 0_u64 -% ((el >>> 15) & 1)
+    var xw = b128_wide_mhu7xu2(a: B128_WIDE_ILN2, b: m)
+    var i = 0_u64
+    while i < 7
+        xw[i] = xw[i] ^ sm
+        i = i +% 1
+    xw = b128_wide_arsu7(x: xw, n: 0x402E_u64 -% (el & 0x7FFF))
+    var ft = b128_wide_exp2_frac(x: xw)
+    if (ft[0] | ft[1] | ft[2] | ft[3]) != 0
+        ft[4] = ft[4] | 1
+    var d = ft[4] -% (b128_wide_lo(x: x) << 12)
+    var down = (d >>> 63) == 0
+    if sm != 0
+        down = not down
+    var mm = m << 1
+    if down
+        mm = mm -% 1_u128
+    else
+        mm = mm +% 1_u128
+    return (b128_wide_lo(x: mm >>> 1) & 1, mm >>> 2)
 
 secret preset B128_LOG_L2C: Array[U64, 128] = [0x00000000B8AA3AF4_u64, 0x00000000B8A9CF24_u64, 0x00000000F5EC11E6_u64, 0x00000000056CDE26_u64, 0x00000000B311AD8D_u64, 0x00000000ADA42C83_u64, 0x00000000E04081E5_u64, 0x0000000004CE4AA7_u64, 0x00000000ADCD64B4_u64, 0x00000000A393D29C_u64, 0x00000000CD0DF3B5_u64, 0x000000000445B73B_u64, 0x00000000A8D62754_u64, 0x000000009A5D2082_u64, 0x00000000BBFCA4ED_u64, 0x0000000003CF93B1_u64, 0x00000000A42589CE_u64, 0x0000000091E83E37_u64, 0x00000000ACC3070B_u64, 0x000000000368F7A9_u64, 0x000000009FB5D233_u64, 0x000000008A208126_u64, 0x000000009F23232C_u64, 0x00000000030F8032_u64, 0x000000009B81E0E3_u64, 0x0000000082F3ED8D_u64, 0x0000000092E88678_u64, 0x0000000002C13522_u64, 0x0000000097851CC6_u64, 0x000000007C52CE34_u64, 0x0000000087E698B1_u64, 0x00000000027C744D_u64, 0x0000000093BB6276_u64, 0x00000000762F5E29_u64, 0x000000007DF7458B_u64, 0x00000000023FE121_u64, 0x000000009020F5EB_u64, 0x00000000707D8107_u64, 0x0000000074F9E730_u64, 0x00000000020A57BF_u64, 0x000000008CB2762A_u64, 0x000000006B32870B_u64, 0x000000006CD26447_u64, 0x0000000001DAE2AA_u64, 0x00000000896CD2AD_u64, 0x000000006644FAD1_u64, 0x00000000656876FF_u64, 0x0000000001B0B28C_u64, 0x00000000864D4241_u64, 0x0000000061AC76EF_u64, 0x000000005EA714E9_u64, 0x00000000018B1793_u64, 0x0000000083513B19_u64, 0x000000005D618220_u64, 0x00000000587BF145_u64, 0x0000000001697C1A_u64, 0x0000000080766BE7_u64, 0x00000000595D70C9_u64, 0x0000000052D714A2_u64, 0x00000000014B6048_u64, 0x000000007DBAB5DE_u64, 0x00000000559A4B07_u64, 0x000000004DAA85E3_u64, 0x0000000001305684_u64, 0x000000007B1C276A_u64, 0x000000005212B66C_u64, 0x0000000048EA016F_u64, 0x000000000118008B_u64, 0x000000007898F797_u64, 0x000000004EC1E2F3_u64, 0x00000000448ABC05_u64, 0x0000000001020D05_u64, 0x00000000762F8200_u64, 0x000000004BA37A8A_u64, 0x0000000040832F23_u64, 0x0000000000EE3590_u64, 0x0000000073DE4338_u64, 0x0000000048B392E0_u64, 0x000000003CCAED5B_u64, 0x0000000000DC3D0F_u64, 0x0000000071A3D59E_u64, 0x0000000045EEA114_u64, 0x00000000395A7D42_u64, 0x0000000000CBEE53_u64, 0x000000006F7EEE92_u64, 0x0000000043516F02_u64, 0x00000000362B39D1_u64, 0x0000000000BD1AF0_u64, 0x000000006D6E5BEF_u64, 0x0000000040D911EF_u64, 0x000000003337376A_u64, 0x0000000000AF9A47_u64, 0x000000006B7101D3_u64, 0x000000003E82E265_u64, 0x0000000030792CAD_u64, 0x0000000000A348B4_u64, 0x000000006985D8A7_u64, 0x000000003C4C750A_u64, 0x000000002DEC5E91_u64, 0x00000000009806E0_u64, 0x0000000067ABEB4F_u64, 0x000000003A33945D_u64, 0x000000002B8C8F3C_u64, 0x00000000008DB92C_u64, 0x0000000065E25598_u64, 0x0000000038363B33_u64, 0x000000002955EF28_u64, 0x0000000000844732_u64, 0x00000000642842CA_u64, 0x0000000036528FD2_u64, 0x000000002745104E_u64, 0x00000000007B9B57_u64, 0x00000000627CEC58_u64, 0x000000003486DFA6_u64, 0x000000002556DAEF_u64, 0x000000000073A270_u64, 0x0000000060DF98BB_u64, 0x0000000032D19B70_u64, 0x00000000238883E0_u64, 0x00000000006C4B75_u64, 0x000000005F4F9A66_u64, 0x00000000313153DE_u64, 0x0000000021D78407_u64, 0x0000000000658739_u64, 0x000000005DCC4ECE_u64, 0x000000002FA4B68C_u64, 0x00000000204190E7_u64, 0x00000000005F4832_u64]
 secret preset B128_LOG_L2C0: Array[U64, 32] = [0x00000000111843D8_u64, 0x0B5D69BAD62FA11A_u64, 0x1663F6FAD5C18924_u64, 0x2118B119BFF1FA3B_u64, 0x2B803474013E4469_u64, 0x359EBC5B7234BAED_u64, 0x3F782D720C23D39B_u64, 0x49101EAC3E8EE930_u64, 0x5269E12F3A1E46C3_u64, 0x5B888736793C6255_u64, 0x646EEA2480D45E3C_u64, 0x6D1FAFDCE6051F08_u64, 0x759D4F80CF356A9B_u64, 0x7DEA15A32F48CB06_u64, 0x86082806B4AEF51C_u64, 0x8DF988F4B11089FE_u64, 0x95C01A39FE25B941_u64, 0x9D5D9FD503210D19_u64, 0xA4D3C25E6ABF605B_u64, 0xAC241134C69F89B6_u64, 0xB35004723DD423A6_u64, 0xBA58FEB271A49370_u64, 0xC1404EADF4CD88F9_u64, 0xC80730B00143AD7B_u64, 0xCEAECFEA8199248C_u64, 0xD53847AC01A300FF_u64, 0xDBA4A47AAA7E5E5B_u64, 0xE1F4E5170DD764E5_u64, 0xE829FB6931086C4E_u64, 0xEE44CD5A005FB44D_u64, 0xF446359B13F9EDEF_u64, 0xFA2F045E78CC51CC_u64]

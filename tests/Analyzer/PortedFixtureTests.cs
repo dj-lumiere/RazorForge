@@ -23,15 +23,15 @@ public class PortedFixtureTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          var rt = ra.observe()
-                          when try rt.hold()
-                            is None => return
-                            else rc => return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            var rt = ra.observe()
+                            when try rt.hold()
+                                is None => return
+                                else rc => return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -48,16 +48,16 @@ public class PortedFixtureTests
     {
         string source = """
                         routine get_text!(n: S64) -> Text
-                          when n
-                            == 0 => absent
-                            == 1 => return "hello"
-                            else => return "world"
+                            when n
+                                == 0 => absent
+                                == 1 => return "hello"
+                                else => return "world"
 
                         routine start()
-                          var m1 = try get_text(n: 1)
-                          when m1
-                            is None => return
-                            else v => return
+                            var m1 = try get_text(n: 1)
+                            when m1
+                                is None => return
+                                else v => return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -74,9 +74,9 @@ public class PortedFixtureTests
     {
         string source = """
                         routine start()
-                          var xs = [1_s64, 2_s64, 3_s64]
-                          xs[0_u64] += 10_s64
-                          return
+                            var xs = [1_s64, 2_s64, 3_s64]
+                            xs[0_u64] += 10_s64
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

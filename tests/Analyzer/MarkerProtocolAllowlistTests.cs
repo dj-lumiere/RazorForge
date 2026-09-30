@@ -22,11 +22,11 @@ public class MarkerProtocolAllowlistTests
     {
         string source = """
                         entity Bar
-                          pass
+                            pass
                         @llvm("ptr")
                         record Weird[T] obeys Accessing[T]
                         needs EntityType T
-                          pass
+                            pass
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -41,11 +41,11 @@ public class MarkerProtocolAllowlistTests
         // Controlling[T] extends Accessing[T] — same allowlist applies.
         string source = """
                         entity Bar
-                          pass
+                            pass
                         @llvm("ptr")
                         record Sneaky[T] obeys Controlling[T]
                         needs EntityType T
-                          pass
+                            pass
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -63,7 +63,7 @@ public class MarkerProtocolAllowlistTests
         string source = """
                         import IO/Console
                         routine start()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -79,9 +79,9 @@ public class MarkerProtocolAllowlistTests
         // the closed-allowlist check exempts implicit conformances.
         string source = """
                         entity Foo
-                          pass
+                            pass
                         routine start()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -99,11 +99,11 @@ public class MarkerProtocolAllowlistTests
     {
         string source = """
                         entity Bar
-                          pass
+                            pass
                         @llvm("ptr")
                         record BadWrapper[T]
                         needs EntityType T
-                          extra_field: S64
+                            extra_field: S64
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -117,11 +117,11 @@ public class MarkerProtocolAllowlistTests
     {
         string source = """
                         entity Bar
-                          pass
+                            pass
                         @llvm("ptr")
                         record TightWrapper[T]
                         needs EntityType T
-                          pass
+                            pass
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -136,7 +136,7 @@ public class MarkerProtocolAllowlistTests
         // S708 is gated on @llvm presence — normal records freely declare fields.
         string source = """
                         record Plain
-                          value: S64
+                            value: S64
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

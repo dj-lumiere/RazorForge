@@ -17,10 +17,10 @@ public class ArrayZeroFillTests
                                    import Collections
 
                                    entity Node
-                                     n: S64
+                                       n: S64
 
                                    record Slot
-                                     node: Retained[Node]
+                                       node: Retained[Node]
 
                                    """;
 
@@ -29,8 +29,8 @@ public class ArrayZeroFillTests
     {
         AnalysisResult result = AssertHasErrorSa(source: Prelude + """
                                                           routine start()
-                                                            var slots = Array[Slot, 2]()
-                                                            return
+                                                              var slots = Array[Slot, 2]()
+                                                              return
                                                           """,
             expectedErrorSubstring: "'Slot' has no zero value (its 'node'");
         Assert.Contains(collection: result.Errors,
@@ -42,8 +42,8 @@ public class ArrayZeroFillTests
     {
         AssertHasErrorSa(source: Prelude + """
                                            routine start()
-                                             var nodes = Array[Node, 2]()
-                                             return
+                                               var nodes = Array[Node, 2]()
+                                               return
                                            """,
             expectedErrorSubstring: "'Node' is an entity");
     }
@@ -53,10 +53,10 @@ public class ArrayZeroFillTests
     {
         AnalysisResult result = AnalyzeSa(source: Prelude + """
                                                      routine start()
-                                                       var nums = Array[S64, 4]()
-                                                       var texts = Array[Text, 2]()
-                                                       var slots = Array[2](Slot(node: Retained[Node](from: Node(n: 1))), Slot(node: Retained[Node](from: Node(n: 2))))
-                                                       return
+                                                         var nums = Array[S64, 4]()
+                                                         var texts = Array[Text, 2]()
+                                                         var slots = Array[2](Slot(node: Retained[Node](from: Node(n: 1))), Slot(node: Retained[Node](from: Node(n: 2))))
+                                                         return
                                                      """);
         Assert.Empty(collection: result.Errors);
     }
@@ -66,8 +66,8 @@ public class ArrayZeroFillTests
     {
         AssertHasErrorSa(source: Prelude + """
                                            routine start()
-                                             var sl = SplitList[List[S64]]()
-                                             return
+                                               var sl = SplitList[List[S64]]()
+                                               return
                                            """,
             expectedErrorSubstring: "does not implement protocol 'Splittable'");
     }

@@ -20,7 +20,7 @@ public class AttributeTests
         string source = """
                         @readonly
                         routine Point.distance() -> B32
-                          return 0.0_b32
+                            return 0.0_b32
                         """;
 
         Program program = AssertParses(source: source);
@@ -37,9 +37,9 @@ public class AttributeTests
         string source = """
                         @crash_only
                         routine internal_divide!(a: S32, b: S32) -> S32
-                          if b == 0
-                            throw DivisionByZeroError()
-                          return a // b
+                            if b == 0
+                                throw DivisionByZeroError()
+                            return a // b
                         """;
 
         Program program = AssertParses(source: source);
@@ -56,8 +56,8 @@ public class AttributeTests
         string source = """
                         @prelude
                         routine show(msg: Text)
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         Program program = AssertParses(source: source);
@@ -74,7 +74,7 @@ public class AttributeTests
         string source = """
                         @static
                         routine Math.pi() -> B64
-                          return 3.14159265359_b64
+                            return 3.14159265359_b64
                         """;
 
         AssertParses(source: source);
@@ -88,7 +88,7 @@ public class AttributeTests
         string source = """
                         @inline
                         routine add(a: S32, b: S32) -> S32
-                          return a + b
+                            return a + b
                         """;
 
         AssertParses(source: source);
@@ -107,8 +107,8 @@ public class AttributeTests
         string source = """
                         @deprecated(message: "Use new_function instead")
                         routine old_function()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AssertParses(source: source);
@@ -127,9 +127,9 @@ public class AttributeTests
         string source = """
                         @[readonly, crash_only]
                         routine validate!(value: S32) -> S32
-                          if value < 0
-                            throw ValidationError()
-                          return value
+                            if value < 0
+                                throw ValidationError()
+                            return value
                         """;
 
         AssertParses(source: source);
@@ -143,7 +143,7 @@ public class AttributeTests
         string source = """
                         @[inline, readonly, prelude]
                         routine identity(x: S32) -> S32
-                          return x
+                            return x
                         """;
 
         AssertParses(source: source);
@@ -156,11 +156,11 @@ public class AttributeTests
     {
         string source = """
                         protocol Comparable
-                          @readonly
-                          routine Me.$lt(you: Me) -> Bool
+                            @readonly
+                            routine Me.$lt(you: Me) -> Bool
 
-                          @readonly
-                          routine Me.$gt(you: Me) -> Bool
+                            @readonly
+                            routine Me.$gt(you: Me) -> Bool
                         """;
 
         AssertParses(source: source);
@@ -179,8 +179,8 @@ public class AttributeTests
         string source = """
                         @prelude
                         protocol Displayable
-                          @readonly
-                          routine Me.display() -> Text
+                            @readonly
+                            routine Me.display() -> Text
                         """;
 
         AssertParses(source: source);
@@ -198,11 +198,11 @@ public class AttributeTests
     {
         string source = """
                         record Config
-                          @optional
-                          name: Text
+                            @optional
+                            name: Text
 
-                          @default(42)
-                          value: S32
+                            @default(42)
+                            value: S32
                         """;
 
         AssertParses(source: source);
@@ -215,11 +215,11 @@ public class AttributeTests
     {
         string source = """
                         entity User
-                          @readonly
-                          id: U64
+                            @readonly
+                            id: U64
 
-                          @initonly
-                          email: Text
+                            @initonly
+                            email: Text
                         """;
 
         AssertParses(source: source);
@@ -240,7 +240,7 @@ public class AttributeTests
                         @inline
                         @deprecated(message: "Use fast_compute_v2 instead")
                         routine fast_compute(x: S32) -> S32
-                          return x * 2
+                            return x * 2
                         """;
 
         AssertParses(source: source);
@@ -254,15 +254,15 @@ public class AttributeTests
         string source = """
                         @deprecated(message: "Use NewCalculator")
                         record Calculator
-                          value: S32
+                            value: S32
 
                         @readonly
                         routine Calculator.get() -> S32
-                          return me.value
+                            return me.value
 
                         routine Calculator.set(v: S32)
-                          me.value = v
-                          return
+                            me.value = v
+                            return
                         """;
 
         AssertParses(source: source);
@@ -282,7 +282,7 @@ public class AttributeTests
         string source = """
                         @readonly
                         routine Point.distance() -> B32
-                          return 0.0_b32
+                            return 0.0_b32
                         """;
 
         AssertParses(source: source);
@@ -296,7 +296,7 @@ public class AttributeTests
         string source = """
                         @inline
                         secret routine helper(x: S32) -> S32
-                          return x * 2
+                            return x * 2
                         """;
 
         AssertParses(source: source);
@@ -310,7 +310,7 @@ public class AttributeTests
         string source = """
                         @deprecated(message: "Use PublicData")
                         secret record InternalData
-                          value: S32
+                            value: S32
                         """;
 
         AssertParses(source: source);
@@ -328,13 +328,13 @@ public class AttributeTests
     {
         string source = """
                         protocol Container
-                          @readonly
-                          routine Me.count() -> uaddr
+                            @readonly
+                            routine Me.count() -> uaddr
 
-                          @readonly
-                          routine Me.is_empty() -> bool
+                            @readonly
+                            routine Me.is_empty() -> bool
 
-                          routine Me.clear()
+                            routine Me.clear()
                         """;
 
         AssertParses(source: source);
@@ -353,8 +353,8 @@ public class AttributeTests
         string source = """
                         @test
                         routine test_addition()
-                          verify(1 + 1 == 2)
-                          return
+                            verify(1 + 1 == 2)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -368,9 +368,9 @@ public class AttributeTests
         string source = """
                         @bench
                         routine bench_sort()
-                          var items = generate_random_list(1000)
-                          sort(items)
-                          return
+                            var items = generate_random_list(1000)
+                            sort(items)
+                            return
                         """;
 
         AssertParses(source: source);

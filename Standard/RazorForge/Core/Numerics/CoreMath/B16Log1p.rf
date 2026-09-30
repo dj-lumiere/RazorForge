@@ -15,51 +15,51 @@ module Core
 ### gives NaN, `log1p(+infinity)` is +infinity and a NaN input gives a NaN.
 ### :returns: The correctly rounded `log(1 + me)`.
 routine B16.log1p_unchecked() -> B16
-  var v = B32(from: me)
-  var u = LLVM::zero_extend[U32, U64](v.to_bits())
-  var au = u & 0x7FFFFFFF_u64
-  # x <= -1 (also every negative NaN)
-  if u >= 0xBF800000_u64
-    if u == 0xBF800000_u64
-      return B16.from_bits(bits: 0xFC00_u16)
-    return B16.from_bits(bits: 0xFE00_u16)
-  # +infinity or a positive NaN
-  if au >>> 23 == 0xFF_u64
-    return me +! me
-  # |x| < 2^-5
-  if au < 0x3D000000_u64
-    # hard cases
-    if u == 0xBBBFA000_u64
-      return B16(from: -0x1.805ffep-8_b32)
-    if u == 0xBCFB6000_u64
-      return B16(from: -0x1.fea004p-6_b32)
-    if u == 0x3BC06000_u64
-      return B16(from: 0x1.7fa002p-8_b32)
-    # |x| <= 2^-23
-    if au <= 0x34000000_u64
-      if au == 0
-        return me
-      return B16(from: v -! 0x1p-45_b32)
-    # log(1 + x) = x - x^2/2 + x^3/3 + O(x^4)
-    return B16(from: b16_log1p_small(x: v))
-  # hard case x = 0x1.d9p-4
-  if u == 0x3DEC8000_u64
-    return B16(from: 0x1.bfa006p-4_b32)
-  # 1 + x is exact; its upper encoding bits select r ~ 1/(1 + x) and -log(r)
-  v = v +! 1.0_b32
-  var i = (LLVM::zero_extend[U32, U64](v.to_bits()) >>> 20) - 928
-  var r = B32.from_bits(bits: B16_LOG1P_R[2 * i])
-  var logr = B32.from_bits(bits: B16_LOG1P_R[2 * i + 1])
-  var z = LLVM::fma[B32](a: r, b: v, c: -1.0_b32)
-  return B16(from: logr +! b16_log1p_small(x: z))
+    var v = B32(from: me)
+    var u = LLVM::zero_extend[U32, U64](v.to_bits())
+    var au = u & 0x7FFFFFFF_u64
+    # x <= -1 (also every negative NaN)
+    if u >= 0xBF800000_u64
+        if u == 0xBF800000_u64
+            return B16.from_bits(bits: 0xFC00_u16)
+        return B16.from_bits(bits: 0xFE00_u16)
+    # +infinity or a positive NaN
+    if au >>> 23 == 0xFF_u64
+        return me +! me
+    # |x| < 2^-5
+    if au < 0x3D000000_u64
+        # hard cases
+        if u == 0xBBBFA000_u64
+            return B16(from: -0x1.805ffep-8_b32)
+        if u == 0xBCFB6000_u64
+            return B16(from: -0x1.fea004p-6_b32)
+        if u == 0x3BC06000_u64
+            return B16(from: 0x1.7fa002p-8_b32)
+        # |x| <= 2^-23
+        if au <= 0x34000000_u64
+            if au == 0
+                return me
+            return B16(from: v -! 0x1p-45_b32)
+        # log(1 + x) = x - x^2/2 + x^3/3 + O(x^4)
+        return B16(from: b16_log1p_small(x: v))
+    # hard case x = 0x1.d9p-4
+    if u == 0x3DEC8000_u64
+        return B16(from: 0x1.bfa006p-4_b32)
+    # 1 + x is exact; its upper encoding bits select r ~ 1/(1 + x) and -log(r)
+    v = v +! 1.0_b32
+    var i = (LLVM::zero_extend[U32, U64](v.to_bits()) >>> 20) - 928
+    var r = B32.from_bits(bits: B16_LOG1P_R[2 * i])
+    var logr = B32.from_bits(bits: B16_LOG1P_R[2 * i + 1])
+    var z = LLVM::fma[B32](a: r, b: v, c: -1.0_b32)
+    return B16(from: logr +! b16_log1p_small(x: z))
 
 ### Approximates `log(1 + x)` for a small B32 `x` by its degree-3 Taylor polynomial.
 ### :param x: The small argument.
 ### :returns: The B32 approximation.
 secret routine b16_log1p_small(x: B32) -> B32
-  var c3 = LLVM::fma[B32](a: x, b: -0x1p-2_b32, c: 0x1.555556p-2_b32)
-  var c2 = LLVM::fma[B32](a: x, b: c3, c: -0.5_b32)
-  return LLVM::fma[B32](a: x, b: x *! c2, c: x)
+    var c3 = LLVM::fma[B32](a: x, b: -0x1p-2_b32, c: 0x1.555556p-2_b32)
+    var c2 = LLVM::fma[B32](a: x, b: c3, c: -0.5_b32)
+    return LLVM::fma[B32](a: x, b: x *! c2, c: x)
 
 ### Pairs of B32 bit patterns {r, -log(r)} (flattened), where r approximates 1/x and the index is the
 ### upper encoding bits of the B32 x = 1 + me, minus 928.

@@ -13,39 +13,39 @@ module Core
 ### A D128 as a D128 of the literal c * 10^q.
 @inline
 secret routine d128_lit(c: U128, q: S64) -> D128
-  return D128.from_components(sign: false, coeff: c, exp: q)
+    return D128.from_components(sign: false, coeff: c, exp: q)
 
 ### Whether a finite D128 is an integer.
 secret routine d128_is_int(p: D128Parts) -> Bool
-  if p.coeff == 0_u128 or p.exp >= 0_s64
-    return true
-  if p.exp < -38_s64
-    return false
-  var d = LLVM::int_truncate[U256, U128](pow10b(k: 0_s64 -% p.exp))
-  return p.coeff % d == 0_u128
+    if p.coeff == 0_u128 or p.exp >= 0_s64
+        return true
+    if p.exp < -38_s64
+        return false
+    var d = LLVM::int_truncate[U256, U128](pow10b(k: 0_s64 -% p.exp))
+    return p.coeff % d == 0_u128
 
 ### Whether a finite D128 integer is odd.
 secret routine d128_int_odd(p: D128Parts) -> Bool
-  if p.coeff == 0_u128 or p.exp > 0_s64
-    return false
-  if p.exp < -38_s64
-    return false
-  return (div_pow10_u128(x: p.coeff, k: 0_s64 -% p.exp) & 1_u128) == 1_u128
+    if p.coeff == 0_u128 or p.exp > 0_s64
+        return false
+    if p.exp < -38_s64
+        return false
+    return (div_pow10_u128(x: p.coeff, k: 0_s64 -% p.exp) & 1_u128) == 1_u128
 
 ### ln(x) of a finite positive D128 on the tier: within 1/4 of 1 as log1p(x - 1) with x - 1 exact in decimal
 ### (its coefficient needs no more digits than x's).
 secret routine d128_wide_log(x: D128) -> B128Wx
-  if x >= d128_lit(c: 75_u128, q: -2_s64) and x <= d128_lit(c: 125_u128, q: -2_s64)
-    return wx_log1p(t: wx_of_d128(p: d128_sub(a: x, b: d128_lit(c: 1_u128, q: 0_s64)).decode()))
-  return wx_log(x: wx_of_d128(p: x.decode()))
+    if x >= d128_lit(c: 75_u128, q: -2_s64) and x <= d128_lit(c: 125_u128, q: -2_s64)
+        return wx_log1p(t: wx_of_d128(p: d128_sub(a: x, b: d128_lit(c: 1_u128, q: 0_s64)).decode()))
+    return wx_log(x: wx_of_d128(p: x.decode()))
 
 ### 1 - |x| for a finite D128 with |x| <= 1 on the tier: exact in decimal from |x| = 1/2 on (the coefficient
 ### of the difference is no longer than x's), else on the tier (no cancellation there).
 secret routine d128_wide_omx(x: D128) -> B128Wx
-  var ax = x.abs()
-  if ax >= d128_lit(c: 5_u128, q: -1_s64)
-    return wx_of_d128(p: d128_sub(a: d128_lit(c: 1_u128, q: 0_s64), b: ax).decode())
-  return wx_sub(a: wx_one(), b: wx_abs(w: wx_of_d128(p: x.decode())))
+    var ax = x.abs()
+    if ax >= d128_lit(c: 5_u128, q: -1_s64)
+        return wx_of_d128(p: d128_sub(a: d128_lit(c: 1_u128, q: 0_s64), b: ax).decode())
+    return wx_sub(a: wx_one(), b: wx_abs(w: wx_of_d128(p: x.decode())))
 
 ### f(x) on the 384-bit tier for a D128 whose fast path left the rounding open: 0 exp, 1 expm1, 2 exp2,
 ### 3 exp10, 4 log, 5 log1p, 6 log2, 7 log10, 8 asin, 9 acos, 10 atan, 11 sinh, 12 cosh, 13 tanh, 14 asinh,
@@ -53,176 +53,176 @@ secret routine d128_wide_omx(x: D128) -> B128Wx
 ### range alone settles, are handled first: they come back as (true, the D128 result), every other argument as
 ### (false, x, the 384-bit value) for the caller to round.
 secret routine d128_wide_w(x: D128, which: U64) -> (Bool, D128, B128Wx)
-  var p = x.decode()
-  var nan = D128.quiet_nan()
-  if p.special >= 2_u64
-    return (true, nan, wx_zero(rel: 0.0))
-  var neg = p.sign
-  var inf = p.special == 1_u64
-  var zero = not inf and p.coeff == 0_u128
-  var one = d128_lit(c: 1_u128, q: 0_s64)
-  var signed_one = one
-  if neg
-    signed_one = d128_neg(a: one)
-  var posinf = D128.infinity(sign: false)
-  var neginf = D128.infinity(sign: true)
-  var pzero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
-  var ax = x.abs()
-  var w = wx_zero(rel: 0.0)
-  if not inf
-    w = wx_of_d128(p: p)
-  var r = w
-  if which <= 3_u64
-    # exp, expm1, exp2, exp10
-    if zero
-      if which == 1_u64
-        return (true, x, wx_zero(rel: 0.0))
-      return (true, one, wx_zero(rel: 0.0))
-    var big = d128_lit(c: 15000_u128, q: 0_s64)
-    if which == 2_u64
-      big = d128_lit(c: 22000_u128, q: 0_s64)
-    elseif which == 3_u64
-      big = d128_lit(c: 6300_u128, q: 0_s64)
-    if inf or ax > big
-      if not neg
-        return (true, posinf, wx_zero(rel: 0.0))
-      if which == 1_u64
-        return (true, signed_one, wx_zero(rel: 0.0))
-      return (true, pzero, wx_zero(rel: 0.0))
-    if which == 1_u64
-      if neg and ax > d128_lit(c: 100_u128, q: 0_s64)
-        return (true, signed_one, wx_zero(rel: 0.0))
-      return (false, x, wx_expm1(x: w))
-    if which == 2_u64
-      w = wx_mul(a: w, b: wx_table(i: 0_u64))
-    elseif which == 3_u64
-      w = wx_mul(a: w, b: wx_div(a: wx_one(), b: wx_table(i: 4_u64)))
-    return (false, x, wx_exp(x: w))
-  if which <= 7_u64
-    # log, log1p, log2, log10
-    if which == 5_u64
-      if x < d128_sub(a: pzero, b: one)
+    var p = x.decode()
+    var nan = D128.quiet_nan()
+    if p.special >= 2_u64
         return (true, nan, wx_zero(rel: 0.0))
-      if x == d128_sub(a: pzero, b: one)
-        return (true, neginf, wx_zero(rel: 0.0))
-      if zero or (inf and not neg)
-        return (true, x, wx_zero(rel: 0.0))
-      if x < d128_lit(c: 5_u128, q: -1_s64).neg()
-        return (false, x, wx_log(x: wx_of_d128(p: d128_add(a: one, b: x).decode())))
-      return (false, x, wx_log1p(t: w))
-    if neg and not zero
-      return (true, nan, wx_zero(rel: 0.0))
-    if zero
-      return (true, neginf, wx_zero(rel: 0.0))
+    var neg = p.sign
+    var inf = p.special == 1_u64
+    var zero = not inf and p.coeff == 0_u128
+    var one = d128_lit(c: 1_u128, q: 0_s64)
+    var signed_one = one
+    if neg
+        signed_one = d128_neg(a: one)
+    var posinf = D128.infinity(sign: false)
+    var neginf = D128.infinity(sign: true)
+    var pzero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
+    var ax = x.abs()
+    var w = wx_zero(rel: 0.0)
+    if not inf
+        w = wx_of_d128(p: p)
+    var r = w
+    if which <= 3_u64
+        # exp, expm1, exp2, exp10
+        if zero
+            if which == 1_u64
+                return (true, x, wx_zero(rel: 0.0))
+            return (true, one, wx_zero(rel: 0.0))
+        var big = d128_lit(c: 15000_u128, q: 0_s64)
+        if which == 2_u64
+            big = d128_lit(c: 22000_u128, q: 0_s64)
+        elseif which == 3_u64
+            big = d128_lit(c: 6300_u128, q: 0_s64)
+        if inf or ax > big
+            if not neg
+                return (true, posinf, wx_zero(rel: 0.0))
+            if which == 1_u64
+                return (true, signed_one, wx_zero(rel: 0.0))
+            return (true, pzero, wx_zero(rel: 0.0))
+        if which == 1_u64
+            if neg and ax > d128_lit(c: 100_u128, q: 0_s64)
+                return (true, signed_one, wx_zero(rel: 0.0))
+            return (false, x, wx_expm1(x: w))
+        if which == 2_u64
+            w = wx_mul(a: w, b: wx_table(i: 0_u64))
+        elseif which == 3_u64
+            w = wx_mul(a: w, b: wx_div(a: wx_one(), b: wx_table(i: 4_u64)))
+        return (false, x, wx_exp(x: w))
+    if which <= 7_u64
+        # log, log1p, log2, log10
+        if which == 5_u64
+            if x < d128_sub(a: pzero, b: one)
+                return (true, nan, wx_zero(rel: 0.0))
+            if x == d128_sub(a: pzero, b: one)
+                return (true, neginf, wx_zero(rel: 0.0))
+            if zero or (inf and not neg)
+                return (true, x, wx_zero(rel: 0.0))
+            if x < d128_lit(c: 5_u128, q: -1_s64).neg()
+                return (false, x, wx_log(x: wx_of_d128(p: d128_add(a: one, b: x).decode())))
+            return (false, x, wx_log1p(t: w))
+        if neg and not zero
+            return (true, nan, wx_zero(rel: 0.0))
+        if zero
+            return (true, neginf, wx_zero(rel: 0.0))
+        if inf
+            return (true, x, wx_zero(rel: 0.0))
+        var l = d128_wide_log(x: x)
+        if which == 6_u64
+            l = wx_mul(a: l, b: wx_table(i: 3_u64))
+        elseif which == 7_u64
+            l = wx_mul(a: l, b: wx_table(i: 4_u64))
+        return (false, x, l)
+    if which <= 10_u64
+        # asin, acos, atan
+        if which == 10_u64
+            if zero
+                return (true, x, wx_zero(rel: 0.0))
+            if inf
+                r = wx_table(i: 9_u64)
+                if neg
+                    r = wx_neg(w: r)
+                return (false, x, r)
+            return (false, x, wx_atan(z: w))
+        if inf or ax > one
+            return (true, nan, wx_zero(rel: 0.0))
+        if which == 8_u64
+            if zero
+                return (true, x, wx_zero(rel: 0.0))
+            return (false, x, wx_asin(x: w, omx: d128_wide_omx(x: x)))
+        return (false, x, wx_acos(x: w, omx: d128_wide_omx(x: x)))
+    if which <= 16_u64
+        # sinh, cosh, tanh, asinh, acosh, atanh
+        if which == 11_u64
+            if zero or inf
+                return (true, x, wx_zero(rel: 0.0))
+            if ax > d128_lit(c: 15000_u128, q: 0_s64)
+                return (true, D128.infinity(sign: neg), wx_zero(rel: 0.0))
+            return (false, x, wx_sinh(x: w))
+        if which == 12_u64
+            if inf or ax > d128_lit(c: 15000_u128, q: 0_s64)
+                return (true, posinf, wx_zero(rel: 0.0))
+            return (false, x, wx_cosh(x: w))
+        if which == 13_u64
+            if zero
+                return (true, x, wx_zero(rel: 0.0))
+            if inf or ax > d128_lit(c: 100_u128, q: 0_s64)
+                return (true, signed_one, wx_zero(rel: 0.0))
+            return (false, x, wx_tanh(x: w))
+        if which == 14_u64
+            if zero or inf
+                return (true, x, wx_zero(rel: 0.0))
+            return (false, x, wx_asinh(x: w))
+        if which == 15_u64
+            if x < one
+                return (true, nan, wx_zero(rel: 0.0))
+            if inf
+                return (true, x, wx_zero(rel: 0.0))
+            var t = wx_sub(a: w, b: wx_one())
+            if x < d128_lit(c: 2_u128, q: 0_s64)
+                t = wx_of_d128(p: d128_sub(a: x, b: one).decode())
+            return (false, x, wx_acosh(t: t))
+        if inf or ax > one
+            return (true, nan, wx_zero(rel: 0.0))
+        if ax == one
+            return (true, D128.infinity(sign: neg), wx_zero(rel: 0.0))
+        if zero
+            return (true, x, wx_zero(rel: 0.0))
+        return (false, x, wx_atanh(x: w, omx: d128_wide_omx(x: x)))
+    if which <= 18_u64
+        # erf, erfc
+        var twenty = d128_lit(c: 20_u128, q: 0_s64)
+        if which == 17_u64
+            if zero
+                return (true, x, wx_zero(rel: 0.0))
+            if inf or ax > twenty
+                return (true, signed_one, wx_zero(rel: 0.0))
+            return (false, x, wx_erf(x: w, complement: false))
+        if neg and (inf or ax > twenty)
+            return (true, d128_lit(c: 2_u128, q: 0_s64), wx_zero(rel: 0.0))
+        if inf or x > d128_lit(c: 130_u128, q: 0_s64)
+            return (true, pzero, wx_zero(rel: 0.0))
+        return (false, x, wx_erf(x: w, complement: true))
+    # tgamma (19) and lgamma (20)
     if inf
-      return (true, x, wx_zero(rel: 0.0))
-    var l = d128_wide_log(x: x)
-    if which == 6_u64
-      l = wx_mul(a: l, b: wx_table(i: 3_u64))
-    elseif which == 7_u64
-      l = wx_mul(a: l, b: wx_table(i: 4_u64))
-    return (false, x, l)
-  if which <= 10_u64
-    # asin, acos, atan
-    if which == 10_u64
-      if zero
-        return (true, x, wx_zero(rel: 0.0))
-      if inf
-        r = wx_table(i: 9_u64)
-        if neg
-          r = wx_neg(w: r)
-        return (false, x, r)
-      return (false, x, wx_atan(z: w))
-    if inf or ax > one
-      return (true, nan, wx_zero(rel: 0.0))
-    if which == 8_u64
-      if zero
-        return (true, x, wx_zero(rel: 0.0))
-      return (false, x, wx_asin(x: w, omx: d128_wide_omx(x: x)))
-    return (false, x, wx_acos(x: w, omx: d128_wide_omx(x: x)))
-  if which <= 16_u64
-    # sinh, cosh, tanh, asinh, acosh, atanh
-    if which == 11_u64
-      if zero or inf
-        return (true, x, wx_zero(rel: 0.0))
-      if ax > d128_lit(c: 15000_u128, q: 0_s64)
-        return (true, D128.infinity(sign: neg), wx_zero(rel: 0.0))
-      return (false, x, wx_sinh(x: w))
-    if which == 12_u64
-      if inf or ax > d128_lit(c: 15000_u128, q: 0_s64)
+        if which == 19_u64 and neg
+            return (true, nan, wx_zero(rel: 0.0))
         return (true, posinf, wx_zero(rel: 0.0))
-      return (false, x, wx_cosh(x: w))
-    if which == 13_u64
-      if zero
-        return (true, x, wx_zero(rel: 0.0))
-      if inf or ax > d128_lit(c: 100_u128, q: 0_s64)
-        return (true, signed_one, wx_zero(rel: 0.0))
-      return (false, x, wx_tanh(x: w))
-    if which == 14_u64
-      if zero or inf
-        return (true, x, wx_zero(rel: 0.0))
-      return (false, x, wx_asinh(x: w))
-    if which == 15_u64
-      if x < one
-        return (true, nan, wx_zero(rel: 0.0))
-      if inf
-        return (true, x, wx_zero(rel: 0.0))
-      var t = wx_sub(a: w, b: wx_one())
-      if x < d128_lit(c: 2_u128, q: 0_s64)
-        t = wx_of_d128(p: d128_sub(a: x, b: one).decode())
-      return (false, x, wx_acosh(t: t))
-    if inf or ax > one
-      return (true, nan, wx_zero(rel: 0.0))
-    if ax == one
-      return (true, D128.infinity(sign: neg), wx_zero(rel: 0.0))
     if zero
-      return (true, x, wx_zero(rel: 0.0))
-    return (false, x, wx_atanh(x: w, omx: d128_wide_omx(x: x)))
-  if which <= 18_u64
-    # erf, erfc
-    var twenty = d128_lit(c: 20_u128, q: 0_s64)
-    if which == 17_u64
-      if zero
-        return (true, x, wx_zero(rel: 0.0))
-      if inf or ax > twenty
-        return (true, signed_one, wx_zero(rel: 0.0))
-      return (false, x, wx_erf(x: w, complement: false))
-    if neg and (inf or ax > twenty)
-      return (true, d128_lit(c: 2_u128, q: 0_s64), wx_zero(rel: 0.0))
-    if inf or x > d128_lit(c: 130_u128, q: 0_s64)
-      return (true, pzero, wx_zero(rel: 0.0))
-    return (false, x, wx_erf(x: w, complement: true))
-  # tgamma (19) and lgamma (20)
-  if inf
-    if which == 19_u64 and neg
-      return (true, nan, wx_zero(rel: 0.0))
-    return (true, posinf, wx_zero(rel: 0.0))
-  if zero
+        if which == 19_u64
+            return (true, D128.infinity(sign: neg), wx_zero(rel: 0.0))
+        return (true, posinf, wx_zero(rel: 0.0))
+    if neg and d128_is_int(p: p)
+        if which == 19_u64
+            return (true, nan, wx_zero(rel: 0.0))
+        return (true, posinf, wx_zero(rel: 0.0))
+    var k = x.round()
+    var rd = d128_sub(a: x, b: k)
+    var k_odd = d128_int_odd(p: k.decode())
     if which == 19_u64
-      return (true, D128.infinity(sign: neg), wx_zero(rel: 0.0))
-    return (true, posinf, wx_zero(rel: 0.0))
-  if neg and d128_is_int(p: p)
-    if which == 19_u64
-      return (true, nan, wx_zero(rel: 0.0))
-    return (true, posinf, wx_zero(rel: 0.0))
-  var k = x.round()
-  var rd = d128_sub(a: x, b: k)
-  var k_odd = d128_int_odd(p: k.decode())
-  if which == 19_u64
-    if x > d128_lit(c: 3300_u128, q: 0_s64)
-      return (true, posinf, wx_zero(rel: 0.0))
-    if x < d128_lit(c: 3300_u128, q: 0_s64).neg()
-      # |Gamma| underflows; its sign is that of sin(pi x) = (-1)^k sin(pi r)
-      return (true, D128.from_components(sign: rd.decode().sign != k_odd, coeff: 0_u128, exp: 0_s64), wx_zero(rel: 0.0))
-    return (false, x, wx_tgamma(x: w, k_odd: k_odd, r: wx_of_d128(p: rd.decode())))
-  return (false, x, wx_lgamma(x: w, k_odd: k_odd, r: wx_of_d128(p: rd.decode())).item0)
+        if x > d128_lit(c: 3300_u128, q: 0_s64)
+            return (true, posinf, wx_zero(rel: 0.0))
+        if x < d128_lit(c: 3300_u128, q: 0_s64).neg()
+            # |Gamma| underflows; its sign is that of sin(pi x) = (-1)^k sin(pi r)
+            return (true, D128.from_components(sign: rd.decode().sign != k_odd, coeff: 0_u128, exp: 0_s64), wx_zero(rel: 0.0))
+        return (false, x, wx_tgamma(x: w, k_odd: k_odd, r: wx_of_d128(p: rd.decode())))
+    return (false, x, wx_lgamma(x: w, k_odd: k_odd, r: wx_of_d128(p: rd.decode())).item0)
 
 ### f(x) on the 384-bit tier (d128_wide_w) rounded to 34 digits.
 secret routine d128_wide(x: D128, which: U64) -> D128
-  var (done, d, w) = d128_wide_w(x: x, which: which)
-  if done
-    return d
-  return wx_d128(w: w)
+    var (done, d, w) = d128_wide_w(x: x, which: which)
+    if done
+        return d
+    return wx_d128(w: w)
 
 # ============================================================================
 # Exact integer sqrt, cbrt, hypot and fma
@@ -233,86 +233,86 @@ secret routine d128_wide(x: D128, which: U64) -> D128
 ### truncation (a few units off at most) and is settled by s^2 <= C < (s + 1)^2 with 128 x 128-bit products; the
 ### root lies above s + 1/2 exactly when (2s + 1)^2 < 4C, that is when C - s^2 > s.
 secret routine d128_sqrt_exact(c: U128, q: S64) -> D128
-  var t = 67_s64 -% digits10_u128(c: c)
-  if ((q -% t) & 1_s64) != 0_s64
-    t = t +% 1_s64
-  var cc = cwb(c: c) *% pow10b(k: t)
-  var sc = LLVM::int_truncate[U256, U128](b128_floor_u256(v: b128_of_u256_trunc(n: cc).sqrt_unchecked()))
-  var sq = d128_square256(s: sc)
-  while sq > cc
-    sc = sc -% 1_u128
-    sq = d128_square256(s: sc)
-  # (s + 1)^2 = s^2 + 2s + 1
-  var step = (LLVM::zero_extend[U128, U256](sc) << 1_u32) +% 1_u256
-  while sq +% step <= cc
-    sq = sq +% step
-    sc = sc +% 1_u128
-    step = step +% 2_u256
-  if cc -% sq > LLVM::zero_extend[U128, U256](sc)
-    sc = sc +% 1_u128
-  var ex = (q -% t) >> 1
-  if sc == 10000000000000000000000000000000000_u128
-    sc = 1000000000000000000000000000000000_u128
-    ex = ex +% 1_s64
-  return wx_d128_pack(neg: false, c: sc, q: ex, inf: false)
+    var t = 67_s64 -% digits10_u128(c: c)
+    if ((q -% t) & 1_s64) != 0_s64
+        t = t +% 1_s64
+    var cc = cwb(c: c) *% pow10b(k: t)
+    var sc = LLVM::int_truncate[U256, U128](b128_floor_u256(v: b128_of_u256_trunc(n: cc).sqrt_unchecked()))
+    var sq = d128_square256(s: sc)
+    while sq > cc
+        sc = sc -% 1_u128
+        sq = d128_square256(s: sc)
+    # (s + 1)^2 = s^2 + 2s + 1
+    var step = (LLVM::zero_extend[U128, U256](sc) << 1_u32) +% 1_u256
+    while sq +% step <= cc
+        sq = sq +% step
+        sc = sc +% 1_u128
+        step = step +% 2_u256
+    if cc -% sq > LLVM::zero_extend[U128, U256](sc)
+        sc = sc +% 1_u128
+    var ex = (q -% t) >> 1
+    if sc == 10000000000000000000000000000000000_u128
+        sc = 1000000000000000000000000000000000_u128
+        ex = ex +% 1_s64
+    return wx_d128_pack(neg: false, c: sc, q: ex, inf: false)
 
 ### s^2 for a 128-bit s, as a U256 (exact).
 @inline
 secret routine d128_square256(s: U128) -> U256
-  var p = b128_trig_wmul(x: s, y: s)
-  return (LLVM::zero_extend[U128, U256](p.item0) << 128_u32) | LLVM::zero_extend[U128, U256](p.item1)
+    var p = b128_trig_wmul(x: s, y: s)
+    return (LLVM::zero_extend[U128, U256](p.item0) << 128_u32) | LLVM::zero_extend[U128, U256](p.item1)
 
 ### a * b of a 256-bit a and b, the low 384 bits (exact when the product fits).
 secret routine d128_mul256(a: U256, b: U256) -> (U128, U128, U128)
-  var a1 = LLVM::int_truncate[U256, U128](a >>> 128_u32)
-  var b1 = LLVM::int_truncate[U256, U128](b >>> 128_u32)
-  var low = wx_product_t(c: LLVM::int_truncate[U256, U128](a), p: b)
-  var high = wx_product_t(c: a1, p: LLVM::zero_extend[U128, U256](LLVM::int_truncate[U256, U128](b)))
-  var top = a1 *% b1
-  return b128_trig_add384(a: low, b: (0_u128, high.item0, high.item1 +% top))
+    var a1 = LLVM::int_truncate[U256, U128](a >>> 128_u32)
+    var b1 = LLVM::int_truncate[U256, U128](b >>> 128_u32)
+    var low = wx_product_t(c: LLVM::int_truncate[U256, U128](a), p: b)
+    var high = wx_product_t(c: a1, p: LLVM::zero_extend[U128, U256](LLVM::int_truncate[U256, U128](b)))
+    var top = a1 *% b1
+    return b128_trig_add384(a: low, b: (0_u128, high.item0, high.item1 +% top))
 
 ### cbrt(c * 10^q) for a finite positive D128, to 34 digits exactly: C = c * 10^t with q - t divisible by 3
 ### and C of 100 to 102 digits (exact in 384 bits) has an integer cube root s of 34 digits, from the B128 cube
 ### root of C (within 2 units) settled by s^3 <= C < (s + 1)^3, and (2s + 1)^3 against 8C (odd against
 ### even) says whether the root lies above s + 1/2.
 secret routine d128_cbrt_exact(c: U128, q: S64) -> D128
-  var t = 100_s64 -% digits10_u128(c: c)
-  while ((q -% t) % 3_s64) != 0_s64
-    t = t +% 1_s64
-  # C = (c 10^38) 10^(t - 38), t in 66..103
-  var cbig = d128_mul256(a: cwb(c: c) *% pow10b(k: 38_s64), b: pow10b(k: t -% 38_s64))
-  var s0 = wx_b128(w: wx_make(neg: false, t: cbig, e: 0_s64, rel: 0.0)).cbrt()
-  var sb = s0.to_bits()
-  var se = LLVM::int_truncate[U128, S64](sb >>> 112_u32) -% 16383_s64
-  var s = ((sb & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32)) >>> b128_trig_sh(n: 112_s64 -% se)
-  # s^3 <= C < (s + 1)^3
-  var tries = 0_s64
-  while tries < 4_s64
-    var cube = wx_product_t(c: s, p: d128_wmul256(x: s, y: s))
-    if wx_t_gt(a: cube, b: cbig)
-      s = s -% 1_u128
-    else
-      var s1 = s +% 1_u128
-      var cube1 = wx_product_t(c: s1, p: d128_wmul256(x: s1, y: s1))
-      if wx_t_gt(a: cube1, b: cbig)
-        break
-      s = s1
-    tries = tries +% 1_s64
-  var m = s *% 2_u128 +% 1_u128
-  var mc = wx_product_t(c: m, p: d128_wmul256(x: m, y: m))
-  if wx_t_gt(a: b128_trig_shl384(x: cbig, shift: 3_s64), b: mc)
-    s = s +% 1_u128
-  var ex = (q -% t) // 3_s64
-  if s == 10000000000000000000000000000000000_u128
-    s = 1000000000000000000000000000000000_u128
-    ex = ex +% 1_s64
-  return wx_d128_pack(neg: false, c: s, q: ex, inf: false)
+    var t = 100_s64 -% digits10_u128(c: c)
+    while ((q -% t) % 3_s64) != 0_s64
+        t = t +% 1_s64
+    # C = (c 10^38) 10^(t - 38), t in 66..103
+    var cbig = d128_mul256(a: cwb(c: c) *% pow10b(k: 38_s64), b: pow10b(k: t -% 38_s64))
+    var s0 = wx_b128(w: wx_make(neg: false, t: cbig, e: 0_s64, rel: 0.0)).cbrt()
+    var sb = s0.to_bits()
+    var se = LLVM::int_truncate[U128, S64](sb >>> 112_u32) -% 16383_s64
+    var s = ((sb & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32)) >>> b128_trig_sh(n: 112_s64 -% se)
+    # s^3 <= C < (s + 1)^3
+    var tries = 0_s64
+    while tries < 4_s64
+        var cube = wx_product_t(c: s, p: d128_wmul256(x: s, y: s))
+        if wx_t_gt(a: cube, b: cbig)
+            s = s -% 1_u128
+        else
+            var s1 = s +% 1_u128
+            var cube1 = wx_product_t(c: s1, p: d128_wmul256(x: s1, y: s1))
+            if wx_t_gt(a: cube1, b: cbig)
+                break
+            s = s1
+        tries = tries +% 1_s64
+    var m = s *% 2_u128 +% 1_u128
+    var mc = wx_product_t(c: m, p: d128_wmul256(x: m, y: m))
+    if wx_t_gt(a: b128_trig_shl384(x: cbig, shift: 3_s64), b: mc)
+        s = s +% 1_u128
+    var ex = (q -% t) // 3_s64
+    if s == 10000000000000000000000000000000000_u128
+        s = 1000000000000000000000000000000000_u128
+        ex = ex +% 1_s64
+    return wx_d128_pack(neg: false, c: s, q: ex, inf: false)
 
 ### x * y as a U256 (x, y below 2^128).
 @inline
 secret routine d128_wmul256(x: U128, y: U128) -> U256
-  var p = b128_trig_wmul(x: x, y: y)
-  return (LLVM::zero_extend[U128, U256](p.item0) << 128_u32) | LLVM::zero_extend[U128, U256](p.item1)
+    var p = b128_trig_wmul(x: x, y: y)
+    return (LLVM::zero_extend[U128, U256](p.item0) << 128_u32) | LLVM::zero_extend[U128, U256](p.item1)
 
 ### sqrt(x^2 + y^2 + z^2) for finite D128 parts, exactly up to a sticky digit: the squares c^2 10^(2q) scaled to a
 ### common even exponent B where the largest has `lead` or lead + 1 digits (the smaller ones floored, a sticky bit
@@ -320,61 +320,61 @@ secret routine d128_wmul256(x: U128, y: U128) -> U256
 ### with its exponent, for a rounding to fewer digits than s has (the appended digit breaks a tie only when the
 ### root is inexact). (true, ...) when every leg is zero.
 secret routine d128_hypot_core(x: D128Parts, y: D128Parts, z: D128Parts, lead: S64) -> (Bool, U256, S64)
-  var parts = (x, y, z)
-  var top = -30000_s64
-  var i = 0_s64
-  while i < 3_s64
-    var pp = parts.item0
-    if i == 1_s64
-      pp = parts.item1
-    elseif i == 2_s64
-      pp = parts.item2
-    if pp.coeff != 0_u128
-      var sq_top = 2_s64 *% pp.exp +% digits10b(c: cwb(c: pp.coeff) *% cwb(c: pp.coeff))
-      if sq_top > top
-        top = sq_top
-    i = i +% 1_s64
-  if top == -30000_s64
-    return (true, 0_u256, 0_s64)
-  var b = top -% lead
-  if (b & 1_s64) != 0_s64
-    b = b -% 1_s64
-  var sum = 0_u256
-  var sticky = false
-  i = 0_s64
-  while i < 3_s64
-    var pp = parts.item0
-    if i == 1_s64
-      pp = parts.item1
-    elseif i == 2_s64
-      pp = parts.item2
-    if pp.coeff != 0_u128
-      var sq = cwb(c: pp.coeff) *% cwb(c: pp.coeff)
-      var sh = 2_s64 *% pp.exp -% b
-      if sh >= 0_s64
-        sum = sum +% sq *% pow10b(k: sh)
-      elseif sh >= -76_s64
-        var qv = div_pow10b(x: sq, k: 0_s64 -% sh)
-        if qv *% pow10b(k: 0_s64 -% sh) != sq
-          sticky = true
-        sum = sum +% qv
-      else
+    var parts = (x, y, z)
+    var top = -30000_s64
+    var i = 0_s64
+    while i < 3_s64
+        var pp = parts.item0
+        if i == 1_s64
+            pp = parts.item1
+        elseif i == 2_s64
+            pp = parts.item2
+        if pp.coeff != 0_u128
+            var sq_top = 2_s64 *% pp.exp +% digits10b(c: cwb(c: pp.coeff) *% cwb(c: pp.coeff))
+            if sq_top > top
+                top = sq_top
+        i = i +% 1_s64
+    if top == -30000_s64
+        return (true, 0_u256, 0_s64)
+    var b = top -% lead
+    if (b & 1_s64) != 0_s64
+        b = b -% 1_s64
+    var sum = 0_u256
+    var sticky = false
+    i = 0_s64
+    while i < 3_s64
+        var pp = parts.item0
+        if i == 1_s64
+            pp = parts.item1
+        elseif i == 2_s64
+            pp = parts.item2
+        if pp.coeff != 0_u128
+            var sq = cwb(c: pp.coeff) *% cwb(c: pp.coeff)
+            var sh = 2_s64 *% pp.exp -% b
+            if sh >= 0_s64
+                sum = sum +% sq *% pow10b(k: sh)
+            elseif sh >= -76_s64
+                var qv = div_pow10b(x: sq, k: 0_s64 -% sh)
+                if qv *% pow10b(k: 0_s64 -% sh) != sq
+                    sticky = true
+                sum = sum +% qv
+            else
+                sticky = true
+        i = i +% 1_s64
+    var s = b128_isqrt256(n: sum)
+    if s *% s != sum
         sticky = true
-    i = i +% 1_s64
-  var s = b128_isqrt256(n: sum)
-  if s *% s != sum
-    sticky = true
-  var coeff = s *% 10_u256
-  if sticky
-    coeff = coeff +% 1_u256
-  return (false, coeff, (b >> 1) -% 1_s64)
+    var coeff = s *% 10_u256
+    if sticky
+        coeff = coeff +% 1_u256
+    return (false, coeff, (b >> 1) -% 1_s64)
 
 ### sqrt(x^2 + y^2 + z^2) for finite D128s, correctly rounded to 34 digits (d128_hypot_core with 70-digit squares).
 secret routine d128_hypot_exact(x: D128Parts, y: D128Parts, z: D128Parts) -> D128
-  var (zero, coeff, ex) = d128_hypot_core(x: x, y: y, z: z, lead: 70_s64)
-  if zero
-    return D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
-  return d128_of_parts(p: decfinB(sign: false, coeff: coeff, exp: ex, pref: 6111_s64))
+    var (zero, coeff, ex) = d128_hypot_core(x: x, y: y, z: z, lead: 70_s64)
+    if zero
+        return D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
+    return d128_of_parts(p: decfinB(sign: false, coeff: coeff, exp: ex, pref: 6111_s64))
 
 ### a * b + c for finite D128 parts, exactly up to a sticky digit, as (sign, coefficient, exponent, preferred
 ### exponent) for one rounding (the preferred exponent the smaller of the product's and c's): the addend with
@@ -383,77 +383,77 @@ secret routine d128_hypot_exact(x: D128Parts, y: D128Parts, z: D128Parts) -> D12
 ### appended below (a subtraction then takes one unit off first, the true value lying strictly between).
 @inline
 secret routine d128_fma_core(a: D128Parts, b: D128Parts, c: D128Parts) -> (Bool, U256, S64, S64)
-  var pneg = a.sign != b.sign
-  var pc = cwb(c: a.coeff) *% cwb(c: b.coeff)
-  var pe = a.exp +% b.exp
-  var cc = cwb(c: c.coeff)
-  if pc == 0_u256 and cc == 0_u256
-    # (+0) + (+0) and (-0) + (-0) keep their sign, mixed signs give +0
-    var zs = pneg and c.sign
-    var ze = pe
-    if c.exp < ze
-      ze = c.exp
-    return (zs, 0_u256, ze, ze)
-  if cc == 0_u256
-    return (pneg, pc, pe, pe)
-  if pc == 0_u256
-    return (c.sign, cc, c.exp, c.exp)
-  # h: the addend with the larger exponent, l: the other
-  var hc = pc
-  var he = pe
-  var hs = pneg
-  var lc = cc
-  var le = c.exp
-  var ls = c.sign
-  if c.exp > pe
-    hc = cc
-    he = c.exp
-    hs = c.sign
-    lc = pc
-    le = pe
-    ls = pneg
-  var shift = he -% le
-  var pref = le
-  var hd = digits10b(c: hc)
-  var sticky = false
-  var ew = le
-  if hd +% shift <= 75_s64
-    hc = hc *% pow10b(k: shift)
-  else
-    var k = 75_s64 -% hd
-    hc = hc *% pow10b(k: k)
-    ew = he -% k
-    var drop = shift -% k
-    if drop > 76_s64
-      sticky = lc != 0_u256
-      lc = 0_u256
+    var pneg = a.sign != b.sign
+    var pc = cwb(c: a.coeff) *% cwb(c: b.coeff)
+    var pe = a.exp +% b.exp
+    var cc = cwb(c: c.coeff)
+    if pc == 0_u256 and cc == 0_u256
+        # (+0) + (+0) and (-0) + (-0) keep their sign, mixed signs give +0
+        var zs = pneg and c.sign
+        var ze = pe
+        if c.exp < ze
+            ze = c.exp
+        return (zs, 0_u256, ze, ze)
+    if cc == 0_u256
+        return (pneg, pc, pe, pe)
+    if pc == 0_u256
+        return (c.sign, cc, c.exp, c.exp)
+    # h: the addend with the larger exponent, l: the other
+    var hc = pc
+    var he = pe
+    var hs = pneg
+    var lc = cc
+    var le = c.exp
+    var ls = c.sign
+    if c.exp > pe
+        hc = cc
+        he = c.exp
+        hs = c.sign
+        lc = pc
+        le = pe
+        ls = pneg
+    var shift = he -% le
+    var pref = le
+    var hd = digits10b(c: hc)
+    var sticky = false
+    var ew = le
+    if hd +% shift <= 75_s64
+        hc = hc *% pow10b(k: shift)
     else
-      var ql = div_pow10b(x: lc, k: drop)
-      sticky = ql *% pow10b(k: drop) != lc
-      lc = ql
-  var rc = 0_u256
-  var rs = hs
-  if hs == ls
-    rc = hc +% lc
-  elseif hc >= lc
-    rc = hc -% lc
+        var k = 75_s64 -% hd
+        hc = hc *% pow10b(k: k)
+        ew = he -% k
+        var drop = shift -% k
+        if drop > 76_s64
+            sticky = lc != 0_u256
+            lc = 0_u256
+        else
+            var ql = div_pow10b(x: lc, k: drop)
+            sticky = ql *% pow10b(k: drop) != lc
+            lc = ql
+    var rc = 0_u256
+    var rs = hs
+    if hs == ls
+        rc = hc +% lc
+    elseif hc >= lc
+        rc = hc -% lc
+        if sticky
+            rc = rc -% 1_u256
+    else
+        rc = lc -% hc
+        rs = ls
+        if sticky
+            rc = rc -% 1_u256
+    if rc == 0_u256 and not sticky
+        return (false, 0_u256, ew, pref)
     if sticky
-      rc = rc -% 1_u256
-  else
-    rc = lc -% hc
-    rs = ls
-    if sticky
-      rc = rc -% 1_u256
-  if rc == 0_u256 and not sticky
-    return (false, 0_u256, ew, pref)
-  if sticky
-    return (rs, rc *% 10_u256 +% 1_u256, ew -% 1_s64, pref)
-  return (rs, rc, ew, pref)
+        return (rs, rc *% 10_u256 +% 1_u256, ew -% 1_s64, pref)
+    return (rs, rc, ew, pref)
 
 ### a * b + c for finite D128s, rounded once to 34 digits (d128_fma_core).
 secret routine d128_fma_exact(a: D128Parts, b: D128Parts, c: D128Parts) -> D128
-  var (sign, coeff, ex, pref) = d128_fma_core(a: a, b: b, c: c)
-  return d128_of_parts(p: decfinB(sign: sign, coeff: coeff, exp: ex, pref: pref))
+    var (sign, coeff, ex, pref) = d128_fma_core(a: a, b: b, c: c)
+    return d128_of_parts(p: decfinB(sign: sign, coeff: coeff, exp: ex, pref: pref))
 
 # ============================================================================
 # Transcendentals. The bare `op()` is CHECKED (crashes if the result is non-finite — domain/overflow);
@@ -462,511 +462,511 @@ secret routine d128_fma_exact(a: D128Parts, b: D128Parts, c: D128Parts) -> D128
 
 ### e^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.exp!() -> D128
-  var r = me.exp_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.exp_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### e^me, raw IEEE (+inf on overflow, NaN propagates).
 routine D128.exp_unchecked() -> D128
-  var (fast, v) = d128_exp_fast(x: me)
-  if fast
-    return v
-  return d128_wide(x: me, which: 0_u64)
+    var (fast, v) = d128_exp_fast(x: me)
+    if fast
+        return v
+    return d128_wide(x: me, which: 0_u64)
 
 ### e^me - 1 (accurate near 0). Crashes on a non-finite result.
 routine D128.expm1!() -> D128
-  var r = me.expm1_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.expm1_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### e^me - 1, raw IEEE.
 routine D128.expm1_unchecked() -> D128
-  var (fast, v) = d128_expm1_fast(x: me)
-  if fast
-    return v
-  return d128_wide(x: me, which: 1_u64)
+    var (fast, v) = d128_expm1_fast(x: me)
+    if fast
+        return v
+    return d128_wide(x: me, which: 1_u64)
 
 ### 2^me. Crashes on a non-finite result.
 routine D128.exp2!() -> D128
-  var r = me.exp2_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.exp2_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### 2^me, raw IEEE.
 routine D128.exp2_unchecked() -> D128
-  var (fast, v) = d128_exp_base_fast(x: me, ten: false)
-  if fast
-    return v
-  return d128_wide(x: me, which: 2_u64)
+    var (fast, v) = d128_exp_base_fast(x: me, ten: false)
+    if fast
+        return v
+    return d128_wide(x: me, which: 2_u64)
 
 ### 10^me. Crashes on a non-finite result.
 routine D128.exp10!() -> D128
-  var r = me.exp10_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.exp10_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### 10^me, raw IEEE.
 routine D128.exp10_unchecked() -> D128
-  var (fast, v) = d128_exp_base_fast(x: me, ten: true)
-  if fast
-    return v
-  return d128_wide(x: me, which: 3_u64)
+    var (fast, v) = d128_exp_base_fast(x: me, ten: true)
+    if fast
+        return v
+    return d128_wide(x: me, which: 3_u64)
 
 ### ln(me). Crashes: NumericDomainError for me < 0, NumericOverflowError for me = 0.
 routine D128.log!() -> D128
-  var r = me.log_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.log_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### ln(me), raw IEEE (NaN for me < 0, -inf for me = 0).
 routine D128.log_unchecked() -> D128
-  var (fast, v) = d128_log_fast(x: me, which: 0_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 4_u64)
+    var (fast, v) = d128_log_fast(x: me, which: 0_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 4_u64)
 
 ### ln(1 + me) (accurate near 0). Crashes on a non-finite result.
 routine D128.log1p!() -> D128
-  var r = me.log1p_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.log1p_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### ln(1 + me), raw IEEE.
 routine D128.log1p_unchecked() -> D128
-  var (fast, v) = d128_log1p_fast(x: me)
-  if fast
-    return v
-  return d128_wide(x: me, which: 5_u64)
+    var (fast, v) = d128_log1p_fast(x: me)
+    if fast
+        return v
+    return d128_wide(x: me, which: 5_u64)
 
 ### log2(me). Crashes on a non-finite result.
 routine D128.log2!() -> D128
-  var r = me.log2_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.log2_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### log2(me), raw IEEE.
 routine D128.log2_unchecked() -> D128
-  var (fast, v) = d128_log_fast(x: me, which: 1_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 6_u64)
+    var (fast, v) = d128_log_fast(x: me, which: 1_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 6_u64)
 
 ### log10(me). Crashes on a non-finite result.
 routine D128.log10!() -> D128
-  var r = me.log10_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.log10_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### log10(me), raw IEEE.
 routine D128.log10_unchecked() -> D128
-  var (fast, v) = d128_log_fast(x: me, which: 2_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 7_u64)
+    var (fast, v) = d128_log_fast(x: me, which: 2_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 7_u64)
 
 ### sqrt(me). Crashes: NumericDomainError for me < 0.
 routine D128.sqrt!() -> D128
-  var r = me.sqrt_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.sqrt_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### sqrt(me), correctly rounded (d128_sqrt_exact), raw IEEE: NaN for me < 0, sqrt(-0) = -0.
 routine D128.sqrt_unchecked() -> D128
-  var p = me.decode()
-  if p.special >= 2_u64
-    return D128.quiet_nan()
-  if p.coeff == 0_u128 and p.special == 0_u64
-    return me
-  if p.sign
-    return D128.quiet_nan()
-  if p.special == 1_u64
-    return me
-  return d128_sqrt_exact(c: p.coeff, q: p.exp)
+    var p = me.decode()
+    if p.special >= 2_u64
+        return D128.quiet_nan()
+    if p.coeff == 0_u128 and p.special == 0_u64
+        return me
+    if p.sign
+        return D128.quiet_nan()
+    if p.special == 1_u64
+        return me
+    return d128_sqrt_exact(c: p.coeff, q: p.exp)
 
 ### The real cube root, correctly rounded (d128_cbrt_exact). Finite-preserving.
 routine D128.cbrt() -> D128
-  var p = me.decode()
-  if p.special >= 2_u64
-    return D128.quiet_nan()
-  if p.special == 1_u64 or p.coeff == 0_u128
-    return me
-  var r = d128_cbrt_exact(c: p.coeff, q: p.exp)
-  if p.sign
-    return d128_neg(a: r)
-  return r
+    var p = me.decode()
+    if p.special >= 2_u64
+        return D128.quiet_nan()
+    if p.special == 1_u64 or p.coeff == 0_u128
+        return me
+    var r = d128_cbrt_exact(c: p.coeff, q: p.exp)
+    if p.sign
+        return d128_neg(a: r)
+    return r
 
 ### `me^you` with raw IEEE (the full C99 pow special-case ladder). The general case is exp(you ln|me|) on
 ### the 384-bit tier when the fast path leaves the rounding open, the sign of an odd-integer exponent
 ### reapplied.
 routine D128.pow_unchecked(you: D128) -> D128
-  var (fast, v) = d128_pow_fast(x: me, y: you)
-  if fast
-    return v
-  var (done, d, w) = d128_pow_w(x: me, y: you)
-  if done
-    return d
-  return wx_d128(w: w)
+    var (fast, v) = d128_pow_fast(x: me, y: you)
+    if fast
+        return v
+    var (done, d, w) = d128_pow_w(x: me, y: you)
+    if done
+        return d
+    return wx_d128(w: w)
 
 ### x^y past the fast path: the C99 special cases as (true, the result), else (false, x, e^(y ln|x|) on the
 ### 384-bit tier, negated for a negative x and an odd integer y).
 secret routine d128_pow_w(x: D128, y: D128) -> (Bool, D128, B128Wx)
-  var mp = x.decode()
-  var yp = y.decode()
-  var one = d128_lit(c: 1_u128, q: 0_s64)
-  var negone = d128_neg(a: one)
-  var poszero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
-  var negzero = D128.from_components(sign: true, coeff: 0_u128, exp: 0_s64)
-  var posinf = D128.infinity(sign: false)
-  var neginf = D128.infinity(sign: true)
-  var nan = D128.quiet_nan()
-  var menan = mp.special >= 2_u64
-  var younan = yp.special >= 2_u64
-  var meinf = mp.special == 1_u64
-  var youinf = yp.special == 1_u64
-  var mezero = not menan and not meinf and mp.coeff == 0_u128
-  var youzero = not younan and not youinf and yp.coeff == 0_u128
-  var youfin = not younan and not youinf
-  var yisint = youfin and d128_is_int(p: yp)
-  var yisoddint = yisint and d128_int_odd(p: yp)
-  if mp.sign and not menan and not meinf and not mezero and youfin and not yisint
-    return (true, nan, wx_zero(rel: 0.0))
-  if (not menan and x == one) or youzero
-    return (true, one, wx_zero(rel: 0.0))
-  if menan or younan
-    return (true, nan, wx_zero(rel: 0.0))
-  if not yp.sign and not youzero and mezero and yisoddint
-    return (true, x, wx_zero(rel: 0.0))
-  if mezero and not yp.sign and not youzero and not yisoddint
-    return (true, poszero, wx_zero(rel: 0.0))
-  if youinf and x == negone
-    return (true, one, wx_zero(rel: 0.0))
-  var absxlt1 = not meinf and negone < x and x < one
-  var absxgt1 = meinf or x < negone or one < x
-  if youinf and yp.sign and absxlt1
-    return (true, posinf, wx_zero(rel: 0.0))
-  if youinf and yp.sign and absxgt1
-    return (true, poszero, wx_zero(rel: 0.0))
-  if youinf and not yp.sign and absxlt1
-    return (true, poszero, wx_zero(rel: 0.0))
-  if youinf and not yp.sign and absxgt1
-    return (true, posinf, wx_zero(rel: 0.0))
-  if meinf and mp.sign and yp.sign and yisoddint
-    return (true, negzero, wx_zero(rel: 0.0))
-  if meinf and mp.sign and yp.sign and not yisoddint
-    return (true, poszero, wx_zero(rel: 0.0))
-  if meinf and mp.sign and not yp.sign and yisoddint
-    return (true, neginf, wx_zero(rel: 0.0))
-  if meinf and mp.sign and not yp.sign and not yisoddint
-    return (true, posinf, wx_zero(rel: 0.0))
-  if meinf and yp.sign
-    return (true, poszero, wx_zero(rel: 0.0))
-  if meinf
-    return (true, posinf, wx_zero(rel: 0.0))
-  if mezero and yisoddint and yp.sign
-    return (true, D128.infinity(sign: mp.sign), wx_zero(rel: 0.0))
-  if mezero and yp.sign
-    return (true, posinf, wx_zero(rel: 0.0))
-  # |x|^y = e^z with z = y ln|x|; far past the range the result is infinite or zero
-  var z = wx_mul(a: wx_of_d128(p: yp), b: d128_wide_log(x: x.abs()))
-  var zb = wx_b64(w: z)
-  var rneg = mp.sign and yisoddint
-  if zb > 15000.0
-    return (true, D128.infinity(sign: rneg), wx_zero(rel: 0.0))
-  if zb <= -15000.0
-    return (true, D128.from_components(sign: rneg, coeff: 0_u128, exp: 0_s64), wx_zero(rel: 0.0))
-  var r = wx_exp(x: z)
-  if rneg
-    r = wx_neg(w: r)
-  return (false, x, r)
+    var mp = x.decode()
+    var yp = y.decode()
+    var one = d128_lit(c: 1_u128, q: 0_s64)
+    var negone = d128_neg(a: one)
+    var poszero = D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
+    var negzero = D128.from_components(sign: true, coeff: 0_u128, exp: 0_s64)
+    var posinf = D128.infinity(sign: false)
+    var neginf = D128.infinity(sign: true)
+    var nan = D128.quiet_nan()
+    var menan = mp.special >= 2_u64
+    var younan = yp.special >= 2_u64
+    var meinf = mp.special == 1_u64
+    var youinf = yp.special == 1_u64
+    var mezero = not menan and not meinf and mp.coeff == 0_u128
+    var youzero = not younan and not youinf and yp.coeff == 0_u128
+    var youfin = not younan and not youinf
+    var yisint = youfin and d128_is_int(p: yp)
+    var yisoddint = yisint and d128_int_odd(p: yp)
+    if mp.sign and not menan and not meinf and not mezero and youfin and not yisint
+        return (true, nan, wx_zero(rel: 0.0))
+    if (not menan and x == one) or youzero
+        return (true, one, wx_zero(rel: 0.0))
+    if menan or younan
+        return (true, nan, wx_zero(rel: 0.0))
+    if not yp.sign and not youzero and mezero and yisoddint
+        return (true, x, wx_zero(rel: 0.0))
+    if mezero and not yp.sign and not youzero and not yisoddint
+        return (true, poszero, wx_zero(rel: 0.0))
+    if youinf and x == negone
+        return (true, one, wx_zero(rel: 0.0))
+    var absxlt1 = not meinf and negone < x and x < one
+    var absxgt1 = meinf or x < negone or one < x
+    if youinf and yp.sign and absxlt1
+        return (true, posinf, wx_zero(rel: 0.0))
+    if youinf and yp.sign and absxgt1
+        return (true, poszero, wx_zero(rel: 0.0))
+    if youinf and not yp.sign and absxlt1
+        return (true, poszero, wx_zero(rel: 0.0))
+    if youinf and not yp.sign and absxgt1
+        return (true, posinf, wx_zero(rel: 0.0))
+    if meinf and mp.sign and yp.sign and yisoddint
+        return (true, negzero, wx_zero(rel: 0.0))
+    if meinf and mp.sign and yp.sign and not yisoddint
+        return (true, poszero, wx_zero(rel: 0.0))
+    if meinf and mp.sign and not yp.sign and yisoddint
+        return (true, neginf, wx_zero(rel: 0.0))
+    if meinf and mp.sign and not yp.sign and not yisoddint
+        return (true, posinf, wx_zero(rel: 0.0))
+    if meinf and yp.sign
+        return (true, poszero, wx_zero(rel: 0.0))
+    if meinf
+        return (true, posinf, wx_zero(rel: 0.0))
+    if mezero and yisoddint and yp.sign
+        return (true, D128.infinity(sign: mp.sign), wx_zero(rel: 0.0))
+    if mezero and yp.sign
+        return (true, posinf, wx_zero(rel: 0.0))
+    # |x|^y = e^z with z = y ln|x|; far past the range the result is infinite or zero
+    var z = wx_mul(a: wx_of_d128(p: yp), b: d128_wide_log(x: x.abs()))
+    var zb = wx_b64(w: z)
+    var rneg = mp.sign and yisoddint
+    if zb > 15000.0
+        return (true, D128.infinity(sign: rneg), wx_zero(rel: 0.0))
+    if zb <= -15000.0
+        return (true, D128.from_components(sign: rneg, coeff: 0_u128, exp: 0_s64), wx_zero(rel: 0.0))
+    var r = wx_exp(x: z)
+    if rneg
+        r = wx_neg(w: r)
+    return (false, x, r)
 
 ### hypot(x, y) = sqrt(x^2 + y^2), no spurious overflow. Crashes on a non-finite result.
 routine hypot!(x: D128, y: D128) -> D128
-  var r = hypot_unchecked(x: x, y: y)
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = hypot_unchecked(x: x, y: y)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### sqrt(x^2 + y^2), correctly rounded (d128_hypot_exact), raw IEEE (any inf -> +inf, else NaN propagates).
 routine hypot_unchecked(x: D128, y: D128) -> D128
-  var px = x.decode()
-  var py = y.decode()
-  if px.special == 1_u64 or py.special == 1_u64
-    return D128.infinity(sign: false)
-  if px.special >= 2_u64 or py.special >= 2_u64
-    return D128.quiet_nan()
-  return d128_hypot_exact(x: px, y: py, z: D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64).decode())
+    var px = x.decode()
+    var py = y.decode()
+    if px.special == 1_u64 or py.special == 1_u64
+        return D128.infinity(sign: false)
+    if px.special >= 2_u64 or py.special >= 2_u64
+        return D128.quiet_nan()
+    return d128_hypot_exact(x: px, y: py, z: D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64).decode())
 
 ### hypot(x, y, z) = sqrt(x^2 + y^2 + z^2), no spurious overflow. Crashes on a non-finite result.
 routine hypot!(x: D128, y: D128, z: D128) -> D128
-  var r = hypot_unchecked(x: x, y: y, z: z)
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = hypot_unchecked(x: x, y: y, z: z)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### sqrt(x^2 + y^2 + z^2), correctly rounded (d128_hypot_exact), raw IEEE.
 routine hypot_unchecked(x: D128, y: D128, z: D128) -> D128
-  var px = x.decode()
-  var py = y.decode()
-  var pz = z.decode()
-  if px.special == 1_u64 or py.special == 1_u64 or pz.special == 1_u64
-    return D128.infinity(sign: false)
-  if px.special >= 2_u64 or py.special >= 2_u64 or pz.special >= 2_u64
-    return D128.quiet_nan()
-  return d128_hypot_exact(x: px, y: py, z: pz)
+    var px = x.decode()
+    var py = y.decode()
+    var pz = z.decode()
+    if px.special == 1_u64 or py.special == 1_u64 or pz.special == 1_u64
+        return D128.infinity(sign: false)
+    if px.special >= 2_u64 or py.special >= 2_u64 or pz.special >= 2_u64
+        return D128.quiet_nan()
+    return d128_hypot_exact(x: px, y: py, z: pz)
 
 ### Fused multiply-add me*b + c with a single rounding. Crashes on a non-finite result.
 routine D128.fma!(b: D128, c: D128) -> D128
-  var r = me.fma_unchecked(b: b, c: c)
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.fma_unchecked(b: b, c: c)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### me*b + c with a single rounding (d128_fma_exact), raw IEEE.
 routine D128.fma_unchecked(b: D128, c: D128) -> D128
-  var pa = me.decode()
-  var pb = b.decode()
-  var pc = c.decode()
-  if pa.special >= 2_u64 or pb.special >= 2_u64 or pc.special >= 2_u64
-    return D128.quiet_nan()
-  var pneg = pa.sign != pb.sign
-  if pa.special == 1_u64 or pb.special == 1_u64
-    if (pa.special == 0_u64 and pa.coeff == 0_u128) or (pb.special == 0_u64 and pb.coeff == 0_u128)
-      return D128.quiet_nan()
-    if pc.special == 1_u64 and pc.sign != pneg
-      return D128.quiet_nan()
-    return D128.infinity(sign: pneg)
-  if pc.special == 1_u64
-    return c
-  return d128_fma_exact(a: pa, b: pb, c: pc)
+    var pa = me.decode()
+    var pb = b.decode()
+    var pc = c.decode()
+    if pa.special >= 2_u64 or pb.special >= 2_u64 or pc.special >= 2_u64
+        return D128.quiet_nan()
+    var pneg = pa.sign != pb.sign
+    if pa.special == 1_u64 or pb.special == 1_u64
+        if (pa.special == 0_u64 and pa.coeff == 0_u128) or (pb.special == 0_u64 and pb.coeff == 0_u128)
+            return D128.quiet_nan()
+        if pc.special == 1_u64 and pc.sign != pneg
+            return D128.quiet_nan()
+        return D128.infinity(sign: pneg)
+    if pc.special == 1_u64
+        return c
+    return d128_fma_exact(a: pa, b: pb, c: pc)
 
 ### asin(me). Crashes: NumericDomainError for |me| > 1.
 routine D128.asin!() -> D128
-  var r = me.asin_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.asin_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### asin(me), raw IEEE (NaN for |me| > 1).
 routine D128.asin_unchecked() -> D128
-  var (fast, v) = d128_arctrig_fast(x: me, which: 0_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 8_u64)
+    var (fast, v) = d128_arctrig_fast(x: me, which: 0_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 8_u64)
 
 ### acos(me). Crashes: NumericDomainError for |me| > 1.
 routine D128.acos!() -> D128
-  var r = me.acos_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.acos_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### acos(me), raw IEEE (NaN for |me| > 1).
 routine D128.acos_unchecked() -> D128
-  var (fast, v) = d128_arctrig_fast(x: me, which: 1_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 9_u64)
+    var (fast, v) = d128_arctrig_fast(x: me, which: 1_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 9_u64)
 
 ### atan(me). Finite-preserving (atan(±inf) = ±pi/2).
 routine D128.atan() -> D128
-  var (fast, v) = d128_arctrig_fast(x: me, which: 2_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 10_u64)
+    var (fast, v) = d128_arctrig_fast(x: me, which: 2_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 10_u64)
 
 ### atan2(y, x), the angle of (x, y) in (-pi, pi], with the C99 special cases for zeros and infinities.
 routine atan2(y: D128, x: D128) -> D128
-  var (fast, v) = d128_atan2_fast(y: y, x: x)
-  if fast
-    return v
-  var (done, d, w) = d128_atan2_w(y: y, x: x)
-  if done
-    return d
-  return wx_d128(w: w)
+    var (fast, v) = d128_atan2_fast(y: y, x: x)
+    if fast
+        return v
+    var (done, d, w) = d128_atan2_w(y: y, x: x)
+    if done
+        return d
+    return wx_d128(w: w)
 
 ### atan2(y, x) past the fast path: NaN and a zero result as (true, the result), else (false, x, the angle on the
 ### 384-bit tier).
 secret routine d128_atan2_w(y: D128, x: D128) -> (Bool, D128, B128Wx)
-  var py = y.decode()
-  var px = x.decode()
-  if py.special >= 2_u64 or px.special >= 2_u64
-    return (true, D128.quiet_nan(), wx_zero(rel: 0.0))
-  var yzero = py.special == 0_u64 and py.coeff == 0_u128
-  var xzero = px.special == 0_u64 and px.coeff == 0_u128
-  var r = wx_zero(rel: 0.0)
-  if yzero
-    if px.sign
-      r = wx_table(i: 1_u64)
-  elseif xzero
-    r = wx_table(i: 9_u64)
-  elseif py.special == 1_u64
-    r = wx_table(i: 9_u64)
-    if px.special == 1_u64
-      r = wx_scale(w: wx_table(i: 1_u64), k: -2_s64)
-      if px.sign
-        r = wx_mul(a: r, b: wx_of_u128(v: 3_u128))
-  elseif px.special == 1_u64
-    if px.sign
-      r = wx_table(i: 1_u64)
-  else
-    r = wx_atan2(y: wx_of_d128(p: py), x: wx_of_d128(p: px))
-  if py.sign
-    r = wx_neg(w: wx_abs(w: r))
-  if wx_is_zero(w: r)
-    return (true, D128.from_components(sign: py.sign, coeff: 0_u128, exp: 0_s64), wx_zero(rel: 0.0))
-  return (false, x, r)
+    var py = y.decode()
+    var px = x.decode()
+    if py.special >= 2_u64 or px.special >= 2_u64
+        return (true, D128.quiet_nan(), wx_zero(rel: 0.0))
+    var yzero = py.special == 0_u64 and py.coeff == 0_u128
+    var xzero = px.special == 0_u64 and px.coeff == 0_u128
+    var r = wx_zero(rel: 0.0)
+    if yzero
+        if px.sign
+            r = wx_table(i: 1_u64)
+    elseif xzero
+        r = wx_table(i: 9_u64)
+    elseif py.special == 1_u64
+        r = wx_table(i: 9_u64)
+        if px.special == 1_u64
+            r = wx_scale(w: wx_table(i: 1_u64), k: -2_s64)
+            if px.sign
+                r = wx_mul(a: r, b: wx_of_u128(v: 3_u128))
+    elseif px.special == 1_u64
+        if px.sign
+            r = wx_table(i: 1_u64)
+    else
+        r = wx_atan2(y: wx_of_d128(p: py), x: wx_of_d128(p: px))
+    if py.sign
+        r = wx_neg(w: wx_abs(w: r))
+    if wx_is_zero(w: r)
+        return (true, D128.from_components(sign: py.sign, coeff: 0_u128, exp: 0_s64), wx_zero(rel: 0.0))
+    return (false, x, r)
 
 ### sinh(me). Crashes on a non-finite result.
 routine D128.sinh!() -> D128
-  var r = me.sinh_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.sinh_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### sinh(me), raw IEEE.
 routine D128.sinh_unchecked() -> D128
-  var (fast, v) = d128_hyp_fast(x: me, which: 0_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 11_u64)
+    var (fast, v) = d128_hyp_fast(x: me, which: 0_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 11_u64)
 
 ### cosh(me). Crashes on a non-finite result.
 routine D128.cosh!() -> D128
-  var r = me.cosh_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.cosh_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### cosh(me), raw IEEE.
 routine D128.cosh_unchecked() -> D128
-  var (fast, v) = d128_hyp_fast(x: me, which: 1_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 12_u64)
+    var (fast, v) = d128_hyp_fast(x: me, which: 1_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 12_u64)
 
 ### tanh(me). Finite-preserving.
 routine D128.tanh() -> D128
-  var (fast, v) = d128_hyp_fast(x: me, which: 2_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 13_u64)
+    var (fast, v) = d128_hyp_fast(x: me, which: 2_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 13_u64)
 
 ### asinh(me). Finite-preserving.
 routine D128.asinh() -> D128
-  var (fast, v) = d128_arch_fast(x: me, which: 0_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 14_u64)
+    var (fast, v) = d128_arch_fast(x: me, which: 0_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 14_u64)
 
 ### acosh(me). Crashes: NumericDomainError for me < 1.
 routine D128.acosh!() -> D128
-  var r = me.acosh_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.acosh_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### acosh(me), raw IEEE (NaN for me < 1).
 routine D128.acosh_unchecked() -> D128
-  var (fast, v) = d128_arch_fast(x: me, which: 1_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 15_u64)
+    var (fast, v) = d128_arch_fast(x: me, which: 1_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 15_u64)
 
 ### atanh(me). Crashes: NumericDomainError for |me| > 1, NumericOverflowError at ±1.
 routine D128.atanh!() -> D128
-  var r = me.atanh_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.atanh_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### atanh(me), raw IEEE.
 routine D128.atanh_unchecked() -> D128
-  var (fast, v) = d128_arch_fast(x: me, which: 2_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 16_u64)
+    var (fast, v) = d128_arch_fast(x: me, which: 2_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 16_u64)
 
 ### erf(me). Finite-preserving (erf(±inf) = ±1).
 routine D128.erf() -> D128
-  var (fast, v) = d128_erf_fast(x: me, which: 0_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 17_u64)
+    var (fast, v) = d128_erf_fast(x: me, which: 0_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 17_u64)
 
 ### erfc(me) = 1 - erf(me). Finite-preserving (erfc(-inf) = 2, erfc(+inf) = 0).
 routine D128.erfc() -> D128
-  var (fast, v) = d128_erf_fast(x: me, which: 1_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 18_u64)
+    var (fast, v) = d128_erf_fast(x: me, which: 1_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 18_u64)
 
 ### tgamma(me). Crashes on a non-finite result (poles, overflow).
 routine D128.tgamma!() -> D128
-  var r = me.tgamma_unchecked()
-  if r.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.tgamma_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### tgamma(me), raw IEEE (±inf at ±0, NaN at the negative integers and -inf).
 routine D128.tgamma_unchecked() -> D128
-  var (fast, v) = d128_gamma_fast(x: me, which: 1_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 19_u64)
+    var (fast, v) = d128_gamma_fast(x: me, which: 1_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 19_u64)
 
 ### ln|tgamma(me)| (+inf at the poles and at ±inf).
 routine D128.lgamma() -> D128
-  var (fast, v) = d128_gamma_fast(x: me, which: 0_u64)
-  if fast
-    return v
-  return d128_wide(x: me, which: 20_u64)
+    var (fast, v) = d128_gamma_fast(x: me, which: 0_u64)
+    if fast
+        return v
+    return d128_wide(x: me, which: 20_u64)
 
 # ============================================================================
 # libm manipulation / classification — decimal-native on D128Parts (value =
@@ -976,59 +976,59 @@ routine D128.lgamma() -> D128
 
 ### IEEE 754 signbit: the raw sign bit (true for negatives, -0, and -NaN). Never crashes.
 routine D128.signbit() -> Bool
-  return me.decode().sign
+    return me.decode().sign
 
 ### True if me is negative (sign bit set; includes -0 and -NaN).
 routine D128.is_negative() -> Bool
-  return me.decode().sign
+    return me.decode().sign
 
 ### True if me is strictly positive (not signed, not zero).
 routine D128.is_positive() -> Bool
-  var p = me.decode()
-  return not p.sign and LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_ne(a: p.coeff, b: 0_u128)
+    var p = me.decode()
+    return not p.sign and LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_ne(a: p.coeff, b: 0_u128)
 
 ### True if me is a finite, nonzero subnormal: quantum exponent at the minimum (-6176)
 ### with a coefficient below 10^33 (fewer than the full 34 significant digits).
 routine D128.is_subnormal() -> Bool
-  var p = me.decode()
-  if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u128)
-    return false
-  return LLVM::int_eq(a: p.exp, b: -6176_s64) and LLVM::unsigned_lt(a: p.coeff, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: 33_s64)))
+    var p = me.decode()
+    if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u128)
+        return false
+    return LLVM::int_eq(a: p.exp, b: -6176_s64) and LLVM::unsigned_lt(a: p.coeff, b: LLVM::int_truncate[U256, U128](pow10_tbl(k: 33_s64)))
 
 ### Splits into integer and fractional parts (C modf); both carry me's sign.
 routine D128.modf() -> (D128, D128)
-  if me.is_nan()
-    return (me, me)
-  var p = me.decode()
-  if LLVM::int_eq(a: p.special, b: 1_u64)
-    return (me, d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64))))
-  var ip = me.trunc()
-  return (ip, me - ip)
+    if me.is_nan()
+        return (me, me)
+    var p = me.decode()
+    if LLVM::int_eq(a: p.special, b: 1_u64)
+        return (me, d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64))))
+    var ip = me.trunc()
+    return (ip, me - ip)
 
 ### True if me is finite and nonzero (special=0, coeff!=0). Note: includes subnormals.
 routine D128.is_normal() -> Bool
-  var p = me.decode()
-  return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_ne(a: p.coeff, b: 0_u128)
+    var p = me.decode()
+    return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_ne(a: p.coeff, b: 0_u128)
 
 ### C99 fpclassify: classifies me as SIGNALING_NAN, NAN, INFINITE, ZERO, SUBNORMAL, or NORMAL.
 routine D128.fpclassify() -> FpClass
-  var p = me.decode()
-  if LLVM::int_eq(a: p.special, b: 3_u64)
-    return SIGNALING_NAN
-  if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-    return NAN
-  if LLVM::int_eq(a: p.special, b: 1_u64)
-    return INFINITE
-  if LLVM::int_eq(a: p.coeff, b: 0_u128)
-    return ZERO
-  if me.is_subnormal()
-    return SUBNORMAL
-  return NORMAL
+    var p = me.decode()
+    if LLVM::int_eq(a: p.special, b: 3_u64)
+        return SIGNALING_NAN
+    if LLVM::unsigned_ge(a: p.special, b: 2_u64)
+        return NAN
+    if LLVM::int_eq(a: p.special, b: 1_u64)
+        return INFINITE
+    if LLVM::int_eq(a: p.coeff, b: 0_u128)
+        return ZERO
+    if me.is_subnormal()
+        return SUBNORMAL
+    return NORMAL
 
 ### Absolute value |me| (clears the sign bit; preserves specials and the cohort). Never crashes.
 routine D128.abs() -> D128
-  var p = me.decode()
-  return d128_of_parts(p: D128Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
+    var p = me.decode()
+    return d128_of_parts(p: D128Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
 
 # ============================================================================
 # IEEE 754 Tier 1 — total ordering predicates (shared decimal band helper)
@@ -1038,12 +1038,12 @@ routine D128.abs() -> D128
 ### plain `<=` ranks cross-class operands per IEEE 754 totalOrder:
 ### -qNaN < -sNaN < -inf < -finite < +finite < +inf < +sNaN < +qNaN.
 routine decimal_order_band(sign: Bool, special: U64) -> S64
-  var rank = when
-    LLVM::int_eq(a: special, b: 1_u64) => 1_s64
-    LLVM::int_eq(a: special, b: 3_u64) => 2_s64
-    LLVM::int_eq(a: special, b: 2_u64) => 3_s64
-    else => 0_s64
-  return if sign then LLVM::sub(a: 0_s64, b: LLVM::add(a: 1_s64, b: rank)) else LLVM::add(a: 1_s64, b: rank)
+    var rank = when
+        LLVM::int_eq(a: special, b: 1_u64) => 1_s64
+        LLVM::int_eq(a: special, b: 3_u64) => 2_s64
+        LLVM::int_eq(a: special, b: 2_u64) => 3_s64
+        else => 0_s64
+    return if sign then LLVM::sub(a: 0_s64, b: LLVM::add(a: 1_s64, b: rank)) else LLVM::add(a: 1_s64, b: rank)
 
 ### IEEE 754 totalOrder for decimals: a total order over all values including signed zeros,
 ### cohorts (equal value with differing exponents), and NaNs. For finite operands of equal
@@ -1051,164 +1051,164 @@ routine decimal_order_band(sign: Bool, special: U64) -> S64
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
 routine D128.total_order(you: D128) -> Bool
-  var pa = me.decode()
-  var pb = you.decode()
-  if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-    return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
-  var c = me.cmp(you: you)
-  if c != SAME
-    return c == ME_SMALL
-  if pa.sign != pb.sign
-    return pa.sign
-  if pa.sign
-    return LLVM::signed_ge(a: pa.exp, b: pb.exp)
-  return LLVM::signed_le(a: pa.exp, b: pb.exp)
+    var pa = me.decode()
+    var pb = you.decode()
+    if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
+        return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
+    var c = me.cmp(you: you)
+    if c != SAME
+        return c == ME_SMALL
+    if pa.sign != pb.sign
+        return pa.sign
+    if pa.sign
+        return LLVM::signed_ge(a: pa.exp, b: pb.exp)
+    return LLVM::signed_le(a: pa.exp, b: pb.exp)
 
 ### IEEE 754 totalOrderMag for decimals: `total_order` applied to the magnitudes.
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine D128.total_order_mag(you: D128) -> Bool
-  return me.abs().total_order(you: you.abs())
+    return me.abs().total_order(you: you.abs())
 
 ### Negation -me (flips the sign bit; preserves specials and the cohort). Never crashes.
 routine D128.neg() -> D128
-  var p = me.decode()
-  return d128_of_parts(p: D128Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
+    var p = me.decode()
+    return d128_of_parts(p: D128Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
 ### C99 copysign: me's magnitude with you's sign bit. Never crashes.
 ### :param you: The value supplying the sign.
 routine D128.copysign(you: D128) -> D128
-  var p = me.decode()
-  return d128_of_parts(p: D128Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
+    var p = me.decode()
+    return d128_of_parts(p: D128Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
 ### Returns -1, 0, or +1 indicating the sign of `me`; NaN propagates; ±0 -> +0.
 routine D128.signum() -> D128
-  if me.is_nan()
-    return D128.quiet_nan()
-  if me.is_zero()
-    return d128_of_parts(p: D128Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u128))
-  return if me.decode().sign then D128(from: -1_s64) else D128(from: 1_s64)
+    if me.is_nan()
+        return D128.quiet_nan()
+    if me.is_zero()
+        return d128_of_parts(p: D128Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u128))
+    return if me.decode().sign then D128(from: -1_s64) else D128(from: 1_s64)
 
 ### Throws when `me` is non-finite (inf or NaN).
 @crash_only
 routine D128.finite!() -> D128
-  if not me.is_finite()
-    if me.is_nan()
-      throw NumericDomainError(description: "domain error: no real result")
-    throw NumericOverflowError(description: "overflow: out of range")
-  return me
+    if not me.is_finite()
+        if me.is_nan()
+            throw NumericDomainError(description: "domain error: no real result")
+        throw NumericOverflowError(description: "overflow: out of range")
+    return me
 
 ### d64_mod_core for D128 coefficients (below 10^34): the reductions through the Knuth U256 division
 ### (udivrem256), 38 digits at a time, and for ex < ey the aligned Y exceeds X once d > 38.
 secret routine d128_mod_core(cx: U128, ex: S64, cy: U128, ey: S64, near: Bool) -> (Bool, U128, S64)
-  var e = ey
-  var r2 = 0_u256
-  var y = LLVM::zero_extend[U128, U256](cy)
-  if ex >= ey
-    var m = y
-    if near
-      m = y *% 2_u256
-    var r = udivrem256(num: LLVM::zero_extend[U128, U256](cx), den: m).r
-    var d = ex -% ey
-    while d > 0_s64
-      var k = d
-      if k > 38_s64
-        k = 38_s64
-      r = udivrem256(num: r *% pow10b(k: k), den: m).r
-      d = d -% k
-    r2 = r
-  else
-    e = ex
-    var d = ey -% ex
-    if d > 38_s64
-      return (false, cx, ex)
-    y = y *% pow10b(k: d)
-    var m = y
-    if near
-      m = y *% 2_u256
-    r2 = LLVM::zero_extend[U128, U256](cx)
-    if r2 >= m
-      r2 = udivrem256(num: r2, den: m).r
-  if not near
-    return (false, LLVM::int_truncate[U256, U128](r2), e)
-  var r = r2
-  var odd = false
-  if r >= y
-    r = r -% y
-    odd = true
-  if r *% 2_u256 > y or (r *% 2_u256 == y and odd)
-    return (true, LLVM::int_truncate[U256, U128](y -% r), e)
-  return (false, LLVM::int_truncate[U256, U128](r), e)
+    var e = ey
+    var r2 = 0_u256
+    var y = LLVM::zero_extend[U128, U256](cy)
+    if ex >= ey
+        var m = y
+        if near
+            m = y *% 2_u256
+        var r = udivrem256(num: LLVM::zero_extend[U128, U256](cx), den: m).r
+        var d = ex -% ey
+        while d > 0_s64
+            var k = d
+            if k > 38_s64
+                k = 38_s64
+            r = udivrem256(num: r *% pow10b(k: k), den: m).r
+            d = d -% k
+        r2 = r
+    else
+        e = ex
+        var d = ey -% ex
+        if d > 38_s64
+            return (false, cx, ex)
+        y = y *% pow10b(k: d)
+        var m = y
+        if near
+            m = y *% 2_u256
+        r2 = LLVM::zero_extend[U128, U256](cx)
+        if r2 >= m
+            r2 = udivrem256(num: r2, den: m).r
+    if not near
+        return (false, LLVM::int_truncate[U256, U128](r2), e)
+    var r = r2
+    var odd = false
+    if r >= y
+        r = r -% y
+        odd = true
+    if r *% 2_u256 > y or (r *% 2_u256 == y and odd)
+        return (true, LLVM::int_truncate[U256, U128](y -% r), e)
+    return (false, LLVM::int_truncate[U256, U128](r), e)
 
 ### C99 fmod: me - trunc(me/you)*you (truncated-division remainder), exact (d64_mod_core / d128_mod_core).
 routine D128.fmod(you: D128) -> D128
-  if me.is_nan() or you.is_nan()
-    return D128.quiet_nan()
-  if me.is_infinite() or you.is_zero()
-    return D128.quiet_nan()
-  if you.is_infinite()
-    return me
-  var px = me.decode()
-  var py = you.decode()
-  var (flip, r, e) = d128_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: false)
-  return d128_of_parts(p: D128Parts(sign: px.sign, special: 0_u64, exp: e, coeff: r))
+    if me.is_nan() or you.is_nan()
+        return D128.quiet_nan()
+    if me.is_infinite() or you.is_zero()
+        return D128.quiet_nan()
+    if you.is_infinite()
+        return me
+    var px = me.decode()
+    var py = you.decode()
+    var (flip, r, e) = d128_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: false)
+    return d128_of_parts(p: D128Parts(sign: px.sign, special: 0_u64, exp: e, coeff: r))
 
 ### C99 fmax: the larger of me and you, treating NaN as missing (returns the non-NaN operand).
 ### :param you: The value to compare against.
 routine D128.fmax(you: D128) -> D128
-  if me.is_nan()
-    return you
-  if you.is_nan()
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if (me - you).decode().sign
+        return you
     return me
-  if (me - you).decode().sign
-    return you
-  return me
 
 ### C99 fmin: the smaller of me and you, treating NaN as missing (returns the non-NaN operand).
 ### :param you: The value to compare against.
 routine D128.fmin(you: D128) -> D128
-  if me.is_nan()
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if (me - you).decode().sign
+        return me
     return you
-  if you.is_nan()
-    return me
-  if (me - you).decode().sign
-    return me
-  return you
 
 ### C99 fdim: the positive difference max(me - you, 0); NaN if either operand is NaN.
 ### :param you: The value to subtract.
 routine D128.fdim(you: D128) -> D128
-  if me.is_nan() or you.is_nan()
-    return D128.quiet_nan()
-  var d = me - you
-  if d.decode().sign
-    return d128_of_parts(p: D128Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64)))
-  return d
+    if me.is_nan() or you.is_nan()
+        return D128.quiet_nan()
+    var d = me - you
+    if d.decode().sign
+        return d128_of_parts(p: D128Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64)))
+    return d
 
 ### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-ten exponent to apply.
 ### :returns: `me` scaled by `10^n`.
 routine D128.scaleb!(n: S64) -> D128
-  var r = me.scaleb_unchecked(n: n)
-  if r.is_finite() or not me.is_finite()
-    return r
-  if r.is_nan()
-    throw NumericDomainError(description: "domain error: no real result")
-  throw NumericOverflowError(description: "overflow: out of range")
+    var r = me.scaleb_unchecked(n: n)
+    if r.is_finite() or not me.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me * 10^n` with raw propagation (overflow -> ±infinity, underflow -> 0).
 ### :param n: The power-of-ten exponent to apply.
 ### :returns: `me` scaled by `10^n`.
 routine D128.scaleb_unchecked(n: S64) -> D128
-  var p = me.decode()
-  if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u128)
-    return me
-  var ne = LLVM::add(a: p.exp, b: n)
-  if LLVM::signed_gt(a: ne, b: 6111_s64)
-    return D128.infinity(sign: p.sign)
-  if LLVM::signed_lt(a: ne, b: -6176_s64)
-    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64)))
-  return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: ne, coeff: p.coeff))
+    var p = me.decode()
+    if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u128)
+        return me
+    var ne = LLVM::add(a: p.exp, b: n)
+    if LLVM::signed_gt(a: ne, b: 6111_s64)
+        return D128.infinity(sign: p.sign)
+    if LLVM::signed_lt(a: ne, b: -6176_s64)
+        return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64)))
+    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: ne, coeff: p.coeff))
 
 # ============================================================================
 # IEEE 754 Tier 2 — exponent extraction, selection, rounding
@@ -1219,66 +1219,66 @@ routine D128.scaleb_unchecked(n: S64) -> D128
 ### (logb(0)=-inf, logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
 ### :returns: The radix-10 exponent of `me`.
 routine D128.logb() -> D128
-  var p = me.decode()
-  if LLVM::int_eq(a: p.special, b: 2_u64) or LLVM::int_eq(a: p.special, b: 3_u64)
-    return D128.quiet_nan()
-  if LLVM::int_eq(a: p.special, b: 1_u64)
-    return D128.infinity(sign: false)
-  if LLVM::int_eq(a: p.coeff, b: 0_u128)
-    return D128.infinity(sign: true)
-  return D128(from: LLVM::add(a: p.exp, b: LLVM::sub(a: digits10_u128(c: p.coeff), b: 1_s64)))
+    var p = me.decode()
+    if LLVM::int_eq(a: p.special, b: 2_u64) or LLVM::int_eq(a: p.special, b: 3_u64)
+        return D128.quiet_nan()
+    if LLVM::int_eq(a: p.special, b: 1_u64)
+        return D128.infinity(sign: false)
+    if LLVM::int_eq(a: p.coeff, b: 0_u128)
+        return D128.infinity(sign: true)
+    return D128(from: LLVM::add(a: p.exp, b: LLVM::sub(a: digits10_u128(c: p.coeff), b: 1_s64)))
 
 ### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, ignoring NaN.
 routine D128.min_num(you: D128) -> D128
-  return me.fmin(you: you)
+    return me.fmin(you: you)
 
 ### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, ignoring NaN.
 routine D128.max_num(you: D128) -> D128
-  return me.fmax(you: you)
+    return me.fmax(you: you)
 
 ### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, NaN if either is NaN.
 routine D128.minimum(you: D128) -> D128
-  if me.is_nan()
+    if me.is_nan()
+        return me
+    if you.is_nan()
+        return you
+    var c = me.cmp(you: you)
+    if c == ME_SMALL
+        return me
+    if c == ME_LARGE
+        return you
+    if me.is_zero()
+        return if me.signbit() then me else you
     return me
-  if you.is_nan()
-    return you
-  var c = me.cmp(you: you)
-  if c == ME_SMALL
-    return me
-  if c == ME_LARGE
-    return you
-  if me.is_zero()
-    return if me.signbit() then me else you
-  return me
 
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, NaN if either is NaN.
 routine D128.maximum(you: D128) -> D128
-  if me.is_nan()
+    if me.is_nan()
+        return me
+    if you.is_nan()
+        return you
+    var c = me.cmp(you: you)
+    if c == ME_LARGE
+        return me
+    if c == ME_SMALL
+        return you
+    if me.is_zero()
+        return if me.signbit() then you else me
     return me
-  if you.is_nan()
-    return you
-  var c = me.cmp(you: you)
-  if c == ME_LARGE
-    return me
-  if c == ME_SMALL
-    return you
-  if me.is_zero()
-    return if me.signbit() then you else me
-  return me
 
 ### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero
 ### (alias of `round`). Never crashes.
 ### :returns: `me` rounded to an integral value with ties away from zero.
 routine D128.round_ties_away() -> D128
-  return me.round()
+    return me.round()
 
 # ============================================================================
 # IEEE 754 Tier 3 — decimal-specific (quantize, same_quantum, remainder)
@@ -1289,13 +1289,13 @@ routine D128.round_ties_away() -> D128
 ### :param you: The value whose quantum to compare against.
 ### :returns: Whether the two share a quantum.
 routine D128.same_quantum(you: D128) -> Bool
-  var pa = me.decode()
-  var pb = you.decode()
-  if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-    return LLVM::unsigned_ge(a: pa.special, b: 2_u64) and LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-  if LLVM::int_eq(a: pa.special, b: 1_u64) or LLVM::int_eq(a: pb.special, b: 1_u64)
-    return LLVM::int_eq(a: pa.special, b: 1_u64) and LLVM::int_eq(a: pb.special, b: 1_u64)
-  return LLVM::int_eq(a: pa.exp, b: pb.exp)
+    var pa = me.decode()
+    var pb = you.decode()
+    if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
+        return LLVM::unsigned_ge(a: pa.special, b: 2_u64) and LLVM::unsigned_ge(a: pb.special, b: 2_u64)
+    if LLVM::int_eq(a: pa.special, b: 1_u64) or LLVM::int_eq(a: pb.special, b: 1_u64)
+        return LLVM::int_eq(a: pa.special, b: 1_u64) and LLVM::int_eq(a: pb.special, b: 1_u64)
+    return LLVM::int_eq(a: pa.exp, b: pb.exp)
 
 ### IEEE 754 quantize: returns `me`'s value re-expressed with the exponent of `other` (rounding
 ### half-even when digits are dropped). Returns NaN when the result needs more than 34 significand
@@ -1303,40 +1303,40 @@ routine D128.same_quantum(you: D128) -> Bool
 ### :param you: The value supplying the target exponent.
 ### :returns: `me` quantized to `other`'s exponent, or NaN if not representable.
 routine D128.quantize(you: D128) -> D128
-  var pa = me.decode()
-  var pb = you.decode()
-  if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-    return D128.quiet_nan()
-  var ainf = LLVM::int_eq(a: pa.special, b: 1_u64)
-  var binf = LLVM::int_eq(a: pb.special, b: 1_u64)
-  if ainf or binf
-    if ainf and binf
-      return me
-    return D128.quiet_nan()
-  var target = pb.exp
-  if LLVM::int_eq(a: pa.exp, b: target)
-    return me
-  if LLVM::signed_gt(a: pa.exp, b: target)
-    # Scale the coefficient UP by 10^(pa.exp - target); exact, but NaN if it needs > 34 digits.
-    var shift = LLVM::sub(a: pa.exp, b: target)
-    if LLVM::int_ne(a: pa.coeff, b: 0_u128) and LLVM::signed_gt(a: LLVM::add(a: digits10_u128(c: pa.coeff), b: shift), b: 34_s64)
-      return D128.quiet_nan()
-    var scaled = LLVM::mul(a: LLVM::zero_extend[U128, U256](pa.coeff), b: pow10b(k: shift))
-    return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::int_truncate[U256, U128](scaled)))
-  # pa.exp < target: drop (target - pa.exp) digits with half-even rounding.
-  var drop = LLVM::sub(a: target, b: pa.exp)
-  if LLVM::signed_gt(a: drop, b: 34_s64)
-    return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::zero_extend[U64, U128](0_u64)))
-  var cw = LLVM::zero_extend[U128, U256](pa.coeff)
-  var divp = pow10b(k: drop)
-  var q = div_pow10b(x: cw, k: drop)
-  var r = LLVM::sub(a: cw, b: LLVM::mul(a: q, b: divp))
-  var twice = LLVM::mul(a: r, b: LLVM::zero_extend[U64, U256](2_u64))
-  if LLVM::unsigned_gt(a: twice, b: divp)
-    q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
-  elseif LLVM::int_eq(a: twice, b: divp) and LLVM::int_ne(a: LLVM::bit_and(a: q, b: LLVM::zero_extend[U64, U256](1_u64)), b: LLVM::zero_extend[U64, U256](0_u64))
-    q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
-  return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::int_truncate[U256, U128](q)))
+    var pa = me.decode()
+    var pb = you.decode()
+    if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
+        return D128.quiet_nan()
+    var ainf = LLVM::int_eq(a: pa.special, b: 1_u64)
+    var binf = LLVM::int_eq(a: pb.special, b: 1_u64)
+    if ainf or binf
+        if ainf and binf
+            return me
+        return D128.quiet_nan()
+    var target = pb.exp
+    if LLVM::int_eq(a: pa.exp, b: target)
+        return me
+    if LLVM::signed_gt(a: pa.exp, b: target)
+        # Scale the coefficient UP by 10^(pa.exp - target); exact, but NaN if it needs > 34 digits.
+        var shift = LLVM::sub(a: pa.exp, b: target)
+        if LLVM::int_ne(a: pa.coeff, b: 0_u128) and LLVM::signed_gt(a: LLVM::add(a: digits10_u128(c: pa.coeff), b: shift), b: 34_s64)
+            return D128.quiet_nan()
+        var scaled = LLVM::mul(a: LLVM::zero_extend[U128, U256](pa.coeff), b: pow10b(k: shift))
+        return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::int_truncate[U256, U128](scaled)))
+    # pa.exp < target: drop (target - pa.exp) digits with half-even rounding.
+    var drop = LLVM::sub(a: target, b: pa.exp)
+    if LLVM::signed_gt(a: drop, b: 34_s64)
+        return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::zero_extend[U64, U128](0_u64)))
+    var cw = LLVM::zero_extend[U128, U256](pa.coeff)
+    var divp = pow10b(k: drop)
+    var q = div_pow10b(x: cw, k: drop)
+    var r = LLVM::sub(a: cw, b: LLVM::mul(a: q, b: divp))
+    var twice = LLVM::mul(a: r, b: LLVM::zero_extend[U64, U256](2_u64))
+    if LLVM::unsigned_gt(a: twice, b: divp)
+        q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
+    elseif LLVM::int_eq(a: twice, b: divp) and LLVM::int_ne(a: LLVM::bit_and(a: q, b: LLVM::zero_extend[U64, U256](1_u64)), b: LLVM::zero_extend[U64, U256](0_u64))
+        q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
+    return d128_of_parts(p: D128Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::int_truncate[U256, U128](q)))
 
 ### IEEE 754 remainder: `me - other * n`, where `n` is the integer nearest `me / other` (ties to
 ### even). Result satisfies `|r| <= |other| / 2`. Returns NaN if `me` is infinite or `other` is
@@ -1344,16 +1344,16 @@ routine D128.quantize(you: D128) -> D128
 ### :param you: The divisor.
 ### :returns: The IEEE remainder of `me / other`.
 routine D128.remainder(you: D128) -> D128
-  if me.is_nan() or you.is_nan()
-    return D128.quiet_nan()
-  if me.is_infinite() or you.is_zero()
-    return D128.quiet_nan()
-  if you.is_infinite()
-    return me
-  var px = me.decode()
-  var py = you.decode()
-  var (flip, r, e) = d128_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: true)
-  return d128_of_parts(p: D128Parts(sign: px.sign != flip, special: 0_u64, exp: e, coeff: r))
+    if me.is_nan() or you.is_nan()
+        return D128.quiet_nan()
+    if me.is_infinite() or you.is_zero()
+        return D128.quiet_nan()
+    if you.is_infinite()
+        return me
+    var px = me.decode()
+    var py = you.decode()
+    var (flip, r, e) = d128_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: true)
+    return d128_of_parts(p: D128Parts(sign: px.sign != flip, special: 0_u64, exp: e, coeff: r))
 
 ### IEEE 754 normalize (the `reduce` operation): the value with trailing zeros stripped to the
 ### simplest member of its cohort (e.g. `3.00` -> `3`, `1.50` -> `1.5`, `100` -> `1E+2`,
@@ -1361,78 +1361,78 @@ routine D128.remainder(you: D128) -> D128
 ### cohort-preserving (IEEE); this is the explicit opt-in to the shortest representation.
 ### :returns: `me` normalized to its simplest cohort member.
 routine D128.normalize() -> D128
-  var p = me.decode()
-  if LLVM::int_ne(a: p.special, b: 0_u64)
-    return me
-  if LLVM::int_eq(a: p.coeff, b: 0_u128)
-    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64)))
-  return d128_of_parts(p: decfinB(sign: p.sign, coeff: LLVM::zero_extend[U128, U256](p.coeff), exp: p.exp, pref: 6111_s64))
+    var p = me.decode()
+    if LLVM::int_ne(a: p.special, b: 0_u64)
+        return me
+    if LLVM::int_eq(a: p.coeff, b: 0_u128)
+        return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64)))
+    return d128_of_parts(p: decfinB(sign: p.sign, coeff: LLVM::zero_extend[U128, U256](p.coeff), exp: p.exp, pref: 6111_s64))
 
 ### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 round (half away), 4 rint (half even).
 routine d128_round_int(x: D128, mode: S64) -> D128
-  var p = x.decode()
-  if LLVM::int_ne(a: p.special, b: 0_u64)
-    return x
-  if LLVM::int_eq(a: p.coeff, b: 0_u128)
-    return x
-  if LLVM::signed_ge(a: p.exp, b: 0_s64)
-    return x
-  var ndrop = LLVM::sub(a: 0_s64, b: p.exp)
-  var cw = p.coeff
-  var q = 0_u128
-  var rnz = true
-  var half = false
-  var gthalf = false
-  if LLVM::signed_le(a: ndrop, b: 34_s64)
-    var divp = p10_u128(k: ndrop)
-    q = div_pow10_u128(x: cw, k: ndrop)
-    var r = LLVM::sub(a: cw, b: LLVM::mul(a: q, b: divp))
-    rnz = r != 0_u128
-    var twice = r *% 2_u128
-    half = LLVM::int_eq(a: twice, b: divp)
-    gthalf = LLVM::unsigned_gt(a: twice, b: divp)
-  var inc = false
-  if LLVM::int_eq(a: mode, b: 1_s64)
-    inc = p.sign and rnz
-  elseif LLVM::int_eq(a: mode, b: 2_s64)
-    inc = (not p.sign) and rnz
-  elseif LLVM::int_eq(a: mode, b: 3_s64)
-    inc = gthalf or half
-  elseif LLVM::int_eq(a: mode, b: 4_s64)
-    if gthalf
-      inc = true
-    elseif half
-      inc = (q & 1_u128) != 0_u128
-  var qq = q
-  if inc
-    qq = q +% 1_u128
-  return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: qq))
+    var p = x.decode()
+    if LLVM::int_ne(a: p.special, b: 0_u64)
+        return x
+    if LLVM::int_eq(a: p.coeff, b: 0_u128)
+        return x
+    if LLVM::signed_ge(a: p.exp, b: 0_s64)
+        return x
+    var ndrop = LLVM::sub(a: 0_s64, b: p.exp)
+    var cw = p.coeff
+    var q = 0_u128
+    var rnz = true
+    var half = false
+    var gthalf = false
+    if LLVM::signed_le(a: ndrop, b: 34_s64)
+        var divp = p10_u128(k: ndrop)
+        q = div_pow10_u128(x: cw, k: ndrop)
+        var r = LLVM::sub(a: cw, b: LLVM::mul(a: q, b: divp))
+        rnz = r != 0_u128
+        var twice = r *% 2_u128
+        half = LLVM::int_eq(a: twice, b: divp)
+        gthalf = LLVM::unsigned_gt(a: twice, b: divp)
+    var inc = false
+    if LLVM::int_eq(a: mode, b: 1_s64)
+        inc = p.sign and rnz
+    elseif LLVM::int_eq(a: mode, b: 2_s64)
+        inc = (not p.sign) and rnz
+    elseif LLVM::int_eq(a: mode, b: 3_s64)
+        inc = gthalf or half
+    elseif LLVM::int_eq(a: mode, b: 4_s64)
+        if gthalf
+            inc = true
+        elseif half
+            inc = (q & 1_u128) != 0_u128
+    var qq = q
+    if inc
+        qq = q +% 1_u128
+    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: qq))
 
 ### Truncates toward zero to an integral value. Specials pass through. Never crashes.
 routine D128.trunc() -> D128
-  return d128_round_int(x: me, mode: 0_s64)
+    return d128_round_int(x: me, mode: 0_s64)
 
 ### Rounds down toward -inf to an integral value. Specials pass through. Never crashes.
 routine D128.floor() -> D128
-  return d128_round_int(x: me, mode: 1_s64)
+    return d128_round_int(x: me, mode: 1_s64)
 
 ### Rounds up toward +inf to an integral value. Specials pass through. Never crashes.
 routine D128.ceil() -> D128
-  return d128_round_int(x: me, mode: 2_s64)
+    return d128_round_int(x: me, mode: 2_s64)
 
 ### Rounds to nearest integral value, ties away from zero. Specials pass through. Never crashes.
 routine D128.round() -> D128
-  return d128_round_int(x: me, mode: 3_s64)
+    return d128_round_int(x: me, mode: 3_s64)
 
 ### Rounds to nearest integral value, ties to even (IEEE roundTiesToEven). Never crashes.
 routine D128.rint() -> D128
-  return d128_round_int(x: me, mode: 4_s64)
+    return d128_round_int(x: me, mode: 4_s64)
 
 ### Fractional part me - trunc(me) (carries me's sign). NaN propagates; ±inf -> ±0. Never crashes.
 routine D128.frac() -> D128
-  if me.is_nan()
-    return me
-  var p = me.decode()
-  if LLVM::int_eq(a: p.special, b: 1_u64)
-    return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64)))
-  return me - me.trunc()
+    if me.is_nan()
+        return me
+    var p = me.decode()
+    if LLVM::int_eq(a: p.special, b: 1_u64)
+        return d128_of_parts(p: D128Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: LLVM::zero_extend[U64, U128](0_u64)))
+    return me - me.trunc()

@@ -20,13 +20,13 @@ public class OperatorValidationTests
     {
         string source = """
                         protocol Indexable
-                          @readonly
-                          routine Me.$getitem(index: S32) -> S32
+                            @readonly
+                            routine Me.$getitem(index: S32) -> S32
                         entity Grid obeys Indexable
-                          size: S32
+                            size: S32
                         @readonly
                         routine Grid.$getitem(index: S32) -> S32
-                          return 0_s32
+                            return 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -42,14 +42,14 @@ public class OperatorValidationTests
     {
         string source = """
                         protocol Indexable
-                          @readonly
-                          routine Me.$getitem(index: S32) -> S32
+                            @readonly
+                            routine Me.$getitem(index: S32) -> S32
                         record Pair obeys Indexable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         @readonly
                         routine Pair.$getitem(index: S32) -> S32
-                          return 0_s32
+                            return 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -66,11 +66,11 @@ public class OperatorValidationTests
     {
         string source = """
                         record Pair
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         @readonly
                         routine Pair.$getitem(index: S32) -> S32
-                          return 0_s32
+                            return 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -90,10 +90,10 @@ public class OperatorValidationTests
     {
         string source = """
                         protocol Addable
-                          @readonly
-                          routine Me.$add(other: Me) -> Me
+                            @readonly
+                            routine Me.$add(other: Me) -> Me
                         routine test(a: S32, b: S32) -> S32
-                          return a + b
+                            return a + b
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -108,7 +108,7 @@ public class OperatorValidationTests
     {
         string source = """
                         routine test(a: S32, b: S64) -> S64
-                          return a + b
+                            return a + b
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -128,8 +128,8 @@ public class OperatorValidationTests
     {
         string source = """
                         routine test()
-                          var r = (^1 to 10)
-                          return
+                            var r = (^1 to 10)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -144,8 +144,8 @@ public class OperatorValidationTests
     {
         string source = """
                         routine test(list: Sequence[S32])
-                          var x = list[^1]
-                          return
+                            var x = list[^1]
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -165,7 +165,7 @@ public class OperatorValidationTests
     {
         string source = """
                         routine test(a: S8, b: S64) -> S64
-                          return a + b
+                            return a + b
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -181,7 +181,7 @@ public class OperatorValidationTests
     {
         string source = """
                         routine test(a: S64, b: S64) -> S64
-                          return a + b
+                            return a + b
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -201,8 +201,8 @@ public class OperatorValidationTests
     {
         string source = """
                         routine test()
-                          var r = (^5 to ^1)
-                          return
+                            var r = (^5 to ^1)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -222,7 +222,7 @@ public class OperatorValidationTests
     {
         string source = """
                         routine test(t: Text, xs: List[S64]) -> Text
-                          return t + xs
+                            return t + xs
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -237,7 +237,7 @@ public class OperatorValidationTests
     {
         string source = """
                         routine test(a: Text, b: Text) -> Text
-                          return a + b
+                            return a + b
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -16,47 +16,47 @@ module Core
 ### every platform. `erf(-x) == -erf(x)`, `erf(±0) == ±0`, `erf(±infinity) == ±1`, and NaN maps to NaN.
 ### :returns: The correctly rounded error function.
 routine B64.erf() -> B64
-  var z = me.abs()
-  var ux = z.to_bits()
-  # erf(x) rounds to ±1 for |x| > 0x1.7afb48dc96626p+2
-  if ux > 0x4017AFB48DC96626_u64
-    var one: B64 = 1.0
-    var os = one.copysign(sign: me)
-    if ux > 0x7FF0000000000000_u64
-      # NaN
-      return me +! me
-    if ux == 0x7FF0000000000000_u64
-      return os
-    return os -! 0x1p-54 *! os
-  # now |x| <= 0x1.7afb48dc96626p+2
-  if z < 0x1p-61
-    # for x = -0 the code below would return +0
-    if me == 0.0
-      return me
-    # tiny x: erf(x) ~ 2/sqrt(pi) * x + O(x^3), where the ratio of the O(x^3) term to the main term is
-    # below 2^-123
-    var y = B64_ERF_CH *! me
-    # scale x by 2^106 to get out of the subnormal range
-    var sx = me *! 0x1p106
-    var p = b64_erf_a_mul(a: B64_ERF_CH, b: sx)
-    var l = LLVM::fma[B64](a: B64_ERF_CL, b: sx, c: p.lo)
-    # the residual h + l - y: h - y*2^106 is exact since h and y are very close
-    l = l +! (p.hi -! y *! 0x1p106)
-    return LLVM::fma[B64](a: l, b: 0x1p-106, c: y)
-  # now z >= 2^-61
-  var err = b64_erf_fast_err(z: z)
-  var f = b64_erf_fast(z: z)
-  var sign = me.to_bits() & 0x8000000000000000_u64
-  var u = B64.from_bits(bits: f.hi.to_bits() ^ sign)
-  var v = B64.from_bits(bits: f.lo.to_bits() ^ sign)
-  var left = u +! LLVM::fma[B64](a: err, b: -u, c: v)
-  var right = u +! LLVM::fma[B64](a: err, b: u, c: v)
-  if left == right
-    return left
-  var a = b64_erf_accurate_exact(z: z)
-  if me >= 0.0
-    return a.hi +! a.lo
-  return (-a.hi) +! (-a.lo)
+    var z = me.abs()
+    var ux = z.to_bits()
+    # erf(x) rounds to ±1 for |x| > 0x1.7afb48dc96626p+2
+    if ux > 0x4017AFB48DC96626_u64
+        var one: B64 = 1.0
+        var os = one.copysign(sign: me)
+        if ux > 0x7FF0000000000000_u64
+            # NaN
+            return me +! me
+        if ux == 0x7FF0000000000000_u64
+            return os
+        return os -! 0x1p-54 *! os
+    # now |x| <= 0x1.7afb48dc96626p+2
+    if z < 0x1p-61
+        # for x = -0 the code below would return +0
+        if me == 0.0
+            return me
+        # tiny x: erf(x) ~ 2/sqrt(pi) * x + O(x^3), where the ratio of the O(x^3) term to the main term is
+        # below 2^-123
+        var y = B64_ERF_CH *! me
+        # scale x by 2^106 to get out of the subnormal range
+        var sx = me *! 0x1p106
+        var p = b64_erf_a_mul(a: B64_ERF_CH, b: sx)
+        var l = LLVM::fma[B64](a: B64_ERF_CL, b: sx, c: p.lo)
+        # the residual h + l - y: h - y*2^106 is exact since h and y are very close
+        l = l +! (p.hi -! y *! 0x1p106)
+        return LLVM::fma[B64](a: l, b: 0x1p-106, c: y)
+    # now z >= 2^-61
+    var err = b64_erf_fast_err(z: z)
+    var f = b64_erf_fast(z: z)
+    var sign = me.to_bits() & 0x8000000000000000_u64
+    var u = B64.from_bits(bits: f.hi.to_bits() ^ sign)
+    var v = B64.from_bits(bits: f.lo.to_bits() ^ sign)
+    var left = u +! LLVM::fma[B64](a: err, b: -u, c: v)
+    var right = u +! LLVM::fma[B64](a: err, b: u, c: v)
+    if left == right
+        return left
+    var a = b64_erf_accurate_exact(z: z)
+    if me >= 0.0
+        return a.hi +! a.lo
+    return (-a.hi) +! (-a.lo)
 
 # ---------------------------------------------------------------------------
 # Error-free transforms
@@ -67,29 +67,29 @@ routine B64.erf() -> B64
 ### :param b: The smaller addend.
 ### :returns: `hi + lo == a + b` with `hi = a + b` rounded.
 secret routine b64_erf_fast_two_sum(a: B64, b: B64) -> DD
-  var hi = a +! b
-  var e = hi -! a
-  return DD(hi: hi, lo: b -! e)
+    var hi = a +! b
+    var e = hi -! a
+    return DD(hi: hi, lo: b -! e)
 
 ### `a + b` as a double-double, for any order of magnitude (Knuth's two-sum).
 ### :param a: The first addend.
 ### :param b: The second addend.
 ### :returns: `hi + lo == a + b` with `hi = a + b` rounded.
 secret routine b64_erf_two_sum(a: B64, b: B64) -> DD
-  var hi = a +! b
-  var aa = hi -! b
-  var bb = hi -! aa
-  var da = a -! aa
-  var db = b -! bb
-  return DD(hi: hi, lo: da +! db)
+    var hi = a +! b
+    var aa = hi -! b
+    var bb = hi -! aa
+    var da = a -! aa
+    var db = b -! bb
+    return DD(hi: hi, lo: da +! db)
 
 ### The exact product `a * b` as a double-double (fma-based).
 ### :param a: The first factor.
 ### :param b: The second factor.
 ### :returns: `hi + lo == a * b` exactly.
 secret routine b64_erf_a_mul(a: B64, b: B64) -> DD
-  var hi = a *! b
-  return DD(hi: hi, lo: LLVM::fma[B64](a: a, b: b, c: -hi))
+    var hi = a *! b
+    return DD(hi: hi, lo: LLVM::fma[B64](a: a, b: b, c: -hi))
 
 # ---------------------------------------------------------------------------
 # Fast path
@@ -99,9 +99,9 @@ secret routine b64_erf_a_mul(a: B64, b: B64) -> DD
 ### :param z: The argument, 2^-61 <= z <= 0x1.7afb48dc96626p+2.
 ### :returns: `err` such that |(h + l)/erf(z) - 1| < err * |h + l|.
 secret routine b64_erf_fast_err(z: B64) -> B64
-  if z < 0.0625
-    return 0x1.78p-69
-  return 0x1.11p-69
+    if z < 0.0625
+        return 0x1.78p-69
+    return 0x1.11p-69
 
 ### A double-double approximation of `erf(z)` for 0 <= z <= 0x1.7afb48dc96626p+2, with relative error
 ### bounded by `b64_erf_fast_err(z)`. The range is split into intervals i/16 <= z < (i+1)/16: the first
@@ -109,68 +109,68 @@ secret routine b64_erf_fast_err(z: B64) -> B64
 ### :param z: The argument.
 ### :returns: `hi + lo` approximating erf(z).
 secret routine b64_erf_fast(z: B64) -> DD
-  if z < 0.0625
-    # a degree-11 minimax polynomial for erf on [0, 1/16], double-double coefficients for degrees 1 and 3,
-    # relative error 2^-68.935
-    var z2 = b64_erf_a_mul(a: z, b: z)
-    var z4 = z2.hi *! z2.hi
-    var q9 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C0[7]), b: z2.hi, c: B64.from_bits(bits: B64_ERF_C0[6]))
-    var q5 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C0[5]), b: z2.hi, c: B64.from_bits(bits: B64_ERF_C0[4]))
-    q5 = LLVM::fma[B64](a: q9, b: z4, c: q5)
-    # C0[2] + C0[3] + z2h*q5
-    var t = b64_erf_a_mul(a: z2.hi, b: q5)
-    var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C0[2]), b: t.hi)
+    if z < 0.0625
+        # a degree-11 minimax polynomial for erf on [0, 1/16], double-double coefficients for degrees 1 and 3,
+        # relative error 2^-68.935
+        var z2 = b64_erf_a_mul(a: z, b: z)
+        var z4 = z2.hi *! z2.hi
+        var q9 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C0[7]), b: z2.hi, c: B64.from_bits(bits: B64_ERF_C0[6]))
+        var q5 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C0[5]), b: z2.hi, c: B64.from_bits(bits: B64_ERF_C0[4]))
+        q5 = LLVM::fma[B64](a: q9, b: z4, c: q5)
+        # C0[2] + C0[3] + z2h*q5
+        var t = b64_erf_a_mul(a: z2.hi, b: q5)
+        var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C0[2]), b: t.hi)
+        var h = s.hi
+        var l = s.lo +! (t.lo +! B64.from_bits(bits: B64_ERF_C0[3]))
+        # C0[0] + C0[1] + (z2h + z2l)*(h + l)
+        var h_copy = h
+        t = b64_erf_a_mul(a: z2.hi, b: h)
+        var tl = t.lo +! LLVM::fma[B64](a: z2.hi, b: l, c: B64.from_bits(bits: B64_ERF_C0[1]))
+        s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C0[0]), b: t.hi)
+        h = s.hi
+        l = s.lo +! LLVM::fma[B64](a: z2.lo, b: h_copy, c: tl)
+        # multiply (h, l) by z
+        t = b64_erf_a_mul(a: h, b: z)
+        return DD(hi: t.hi, lo: LLVM::fma[B64](a: l, b: z, c: t.lo))
+    var v = LLVM::floor[B64](value: 16.0 *! z)
+    var i = LLVM::float_to_unsigned[B64, U64](16.0 *! z)
+    # i/16 <= z < (i+1)/16, and both subtractions below are exact
+    var w = (z -! 0.03125) -! 0.0625 *! v
+    # now |w| <= 1/32
+    var c = (i - 1) * 13
+    var w2 = w *! w
+    var w4 = w2 *! w2
+    # the degree-10 coefficient is C[c + 12]
+    var q9 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C[c + 12]), b: w, c: B64.from_bits(bits: B64_ERF_C[c + 11]))
+    var q7 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C[c + 10]), b: w, c: B64.from_bits(bits: B64_ERF_C[c + 9]))
+    var q5 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C[c + 8]), b: w, c: B64.from_bits(bits: B64_ERF_C[c + 7]))
+    # q3 <- C[c+5] + w*C[c+6]
+    var q3 = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C[c + 5]), b: w *! B64.from_bits(bits: B64_ERF_C[c + 6]))
+    var q3h = q3.hi
+    var q3l = q3.lo
+    q7 = LLVM::fma[B64](a: q9, b: w2, c: q7)
+    # q3 <- q3 + q5*w2
+    var s = b64_erf_fast_two_sum(a: q3h, b: q5 *! w2)
+    q3h = s.hi
+    q3l = q3l +! s.lo
+    # q3 <- q3 + q7*w4
+    s = b64_erf_fast_two_sum(a: q3h, b: q7 *! w4)
+    q3h = s.hi
+    q3l = q3l +! s.lo
+    # q2 <- C[c+4] + w*q3
+    var t = b64_erf_a_mul(a: w, b: q3h)
+    var q2 = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C[c + 4]), b: t.hi)
+    var q2l = q2.lo +! LLVM::fma[B64](a: w, b: q3l, c: t.lo)
+    # C[c+2] + C[c+3] + w*q2
+    t = b64_erf_a_mul(a: w, b: q2.hi)
+    s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C[c + 2]), b: t.hi)
     var h = s.hi
-    var l = s.lo +! (t.lo +! B64.from_bits(bits: B64_ERF_C0[3]))
-    # C0[0] + C0[1] + (z2h + z2l)*(h + l)
-    var h_copy = h
-    t = b64_erf_a_mul(a: z2.hi, b: h)
-    var tl = t.lo +! LLVM::fma[B64](a: z2.hi, b: l, c: B64.from_bits(bits: B64_ERF_C0[1]))
-    s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C0[0]), b: t.hi)
-    h = s.hi
-    l = s.lo +! LLVM::fma[B64](a: z2.lo, b: h_copy, c: tl)
-    # multiply (h, l) by z
-    t = b64_erf_a_mul(a: h, b: z)
-    return DD(hi: t.hi, lo: LLVM::fma[B64](a: l, b: z, c: t.lo))
-  var v = LLVM::floor[B64](value: 16.0 *! z)
-  var i = LLVM::float_to_unsigned[B64, U64](16.0 *! z)
-  # i/16 <= z < (i+1)/16, and both subtractions below are exact
-  var w = (z -! 0.03125) -! 0.0625 *! v
-  # now |w| <= 1/32
-  var c = (i - 1) * 13
-  var w2 = w *! w
-  var w4 = w2 *! w2
-  # the degree-10 coefficient is C[c + 12]
-  var q9 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C[c + 12]), b: w, c: B64.from_bits(bits: B64_ERF_C[c + 11]))
-  var q7 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C[c + 10]), b: w, c: B64.from_bits(bits: B64_ERF_C[c + 9]))
-  var q5 = LLVM::fma[B64](a: B64.from_bits(bits: B64_ERF_C[c + 8]), b: w, c: B64.from_bits(bits: B64_ERF_C[c + 7]))
-  # q3 <- C[c+5] + w*C[c+6]
-  var q3 = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C[c + 5]), b: w *! B64.from_bits(bits: B64_ERF_C[c + 6]))
-  var q3h = q3.hi
-  var q3l = q3.lo
-  q7 = LLVM::fma[B64](a: q9, b: w2, c: q7)
-  # q3 <- q3 + q5*w2
-  var s = b64_erf_fast_two_sum(a: q3h, b: q5 *! w2)
-  q3h = s.hi
-  q3l = q3l +! s.lo
-  # q3 <- q3 + q7*w4
-  s = b64_erf_fast_two_sum(a: q3h, b: q7 *! w4)
-  q3h = s.hi
-  q3l = q3l +! s.lo
-  # q2 <- C[c+4] + w*q3
-  var t = b64_erf_a_mul(a: w, b: q3h)
-  var q2 = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C[c + 4]), b: t.hi)
-  var q2l = q2.lo +! LLVM::fma[B64](a: w, b: q3l, c: t.lo)
-  # C[c+2] + C[c+3] + w*q2
-  t = b64_erf_a_mul(a: w, b: q2.hi)
-  s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C[c + 2]), b: t.hi)
-  var h = s.hi
-  var l = s.lo +! (t.lo +! LLVM::fma[B64](a: w, b: q2l, c: B64.from_bits(bits: B64_ERF_C[c + 3])))
-  # C[c+0] + C[c+1] + w*(h + l)
-  t = b64_erf_a_mul(a: w, b: h)
-  var tl = LLVM::fma[B64](a: w, b: l, c: t.lo)
-  s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C[c]), b: t.hi)
-  return DD(hi: s.hi, lo: s.lo +! (tl +! B64.from_bits(bits: B64_ERF_C[c + 1])))
+    var l = s.lo +! (t.lo +! LLVM::fma[B64](a: w, b: q2l, c: B64.from_bits(bits: B64_ERF_C[c + 3])))
+    # C[c+0] + C[c+1] + w*(h + l)
+    t = b64_erf_a_mul(a: w, b: h)
+    var tl = LLVM::fma[B64](a: w, b: l, c: t.lo)
+    s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_C[c]), b: t.hi)
+    return DD(hi: s.hi, lo: s.lo +! (tl +! B64.from_bits(bits: B64_ERF_C[c + 1])))
 
 # ---------------------------------------------------------------------------
 # Accurate path
@@ -181,24 +181,24 @@ secret routine b64_erf_fast(z: B64) -> DD
 ### :param z: The argument, 2^-61 <= z <= 0x1.7afb48dc96626p+2.
 ### :returns: `hi + lo` approximating erf(z) to about 106 bits.
 secret routine b64_erf_accurate_exact(z: B64) -> DD
-  var k = 0_u64
-  while k < 5
-    if z == B64.from_bits(bits: B64_ERF_ACCURATE_EXCEPTIONS[3 * k])
-      return DD(hi: B64.from_bits(bits: B64_ERF_ACCURATE_EXCEPTIONS[3 * k + 1]), lo: B64.from_bits(bits: B64_ERF_ACCURATE_EXCEPTIONS[3 * k + 2]))
-    k = k + 1
-  if z < 0.125
-    # binary search in the sorted table of hard cases below 1/8
-    var i = 0_u64
-    var j = 171_u64
-    while i + 1 < j
-      var m = (i + j) // 2
-      if B64.from_bits(bits: B64_ERF_TINY_EXCEPTIONS[3 * m]) <= z
-        i = m
-      else
-        j = m
-    if z == B64.from_bits(bits: B64_ERF_TINY_EXCEPTIONS[3 * i])
-      return DD(hi: B64.from_bits(bits: B64_ERF_TINY_EXCEPTIONS[3 * i + 1]), lo: B64.from_bits(bits: B64_ERF_TINY_EXCEPTIONS[3 * i + 2]))
-  return b64_erf_accurate(z: z)
+    var k = 0_u64
+    while k < 5
+        if z == B64.from_bits(bits: B64_ERF_ACCURATE_EXCEPTIONS[3 * k])
+            return DD(hi: B64.from_bits(bits: B64_ERF_ACCURATE_EXCEPTIONS[3 * k + 1]), lo: B64.from_bits(bits: B64_ERF_ACCURATE_EXCEPTIONS[3 * k + 2]))
+        k = k + 1
+    if z < 0.125
+        # binary search in the sorted table of hard cases below 1/8
+        var i = 0_u64
+        var j = 171_u64
+        while i + 1 < j
+            var m = (i + j) // 2
+            if B64.from_bits(bits: B64_ERF_TINY_EXCEPTIONS[3 * m]) <= z
+                i = m
+            else
+                j = m
+        if z == B64.from_bits(bits: B64_ERF_TINY_EXCEPTIONS[3 * i])
+            return DD(hi: B64.from_bits(bits: B64_ERF_TINY_EXCEPTIONS[3 * i + 1]), lo: B64.from_bits(bits: B64_ERF_TINY_EXCEPTIONS[3 * i + 2]))
+    return b64_erf_accurate(z: z)
 
 ### An accurate double-double approximation of `erf(z)` (about 106 bits), without any table of hard
 ### cases. The range is split into intervals i/8 <= z < (i+1)/8: the first one uses an odd polynomial at
@@ -206,77 +206,77 @@ secret routine b64_erf_accurate_exact(z: B64) -> DD
 ### :param z: The argument, 2^-61 <= z <= 0x1.7afb48dc96626p+2.
 ### :returns: `hi + lo` approximating erf(z).
 secret routine b64_erf_accurate(z: B64) -> DD
-  if z < 0.125
-    return b64_erf_accurate_tiny(z: z)
-  var v = LLVM::floor[B64](value: 8.0 *! z)
-  var i = LLVM::float_to_unsigned[B64, U64](8.0 *! z)
-  var w = (z -! 0.0625) -! 0.125 *! v
-  # now |w| <= 1/16
-  var p = (i - 1) * 27
-  # degree 18
-  var h = B64.from_bits(bits: B64_ERF_C2[p + 26])
-  var j = 17_u64
-  while j > 10
-    h = LLVM::fma[B64](a: h, b: w, c: B64.from_bits(bits: B64_ERF_C2[p + 8 + j]))
-    j = j - 1
-  var l: B64 = 0.0
-  while j > 7
-    # multiply h + l by w, then add C2[p+8+j]
-    var t = b64_erf_a_mul(a: h, b: w)
-    var tl = LLVM::fma[B64](a: l, b: w, c: t.lo)
-    var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERF_C2[p + 8 + j]), b: t.hi)
-    h = s.hi
-    l = s.lo +! tl
-    j = j - 1
-  # degrees 7 down to 0 have double-double coefficients C2[p+2j] + C2[p+2j+1]
-  j = 8
-  while j > 0
-    j = j - 1
-    var t = b64_erf_a_mul(a: h, b: w)
-    var tl = LLVM::fma[B64](a: l, b: w, c: t.lo)
-    var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERF_C2[p + 2 * j]), b: t.hi)
-    h = s.hi
-    l = s.lo +! (B64.from_bits(bits: B64_ERF_C2[p + 2 * j + 1]) +! tl)
-  return DD(hi: h, lo: l)
+    if z < 0.125
+        return b64_erf_accurate_tiny(z: z)
+    var v = LLVM::floor[B64](value: 8.0 *! z)
+    var i = LLVM::float_to_unsigned[B64, U64](8.0 *! z)
+    var w = (z -! 0.0625) -! 0.125 *! v
+    # now |w| <= 1/16
+    var p = (i - 1) * 27
+    # degree 18
+    var h = B64.from_bits(bits: B64_ERF_C2[p + 26])
+    var j = 17_u64
+    while j > 10
+        h = LLVM::fma[B64](a: h, b: w, c: B64.from_bits(bits: B64_ERF_C2[p + 8 + j]))
+        j = j - 1
+    var l: B64 = 0.0
+    while j > 7
+        # multiply h + l by w, then add C2[p+8+j]
+        var t = b64_erf_a_mul(a: h, b: w)
+        var tl = LLVM::fma[B64](a: l, b: w, c: t.lo)
+        var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERF_C2[p + 8 + j]), b: t.hi)
+        h = s.hi
+        l = s.lo +! tl
+        j = j - 1
+    # degrees 7 down to 0 have double-double coefficients C2[p+2j] + C2[p+2j+1]
+    j = 8
+    while j > 0
+        j = j - 1
+        var t = b64_erf_a_mul(a: h, b: w)
+        var tl = LLVM::fma[B64](a: l, b: w, c: t.lo)
+        var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERF_C2[p + 2 * j]), b: t.hi)
+        h = s.hi
+        l = s.lo +! (B64.from_bits(bits: B64_ERF_C2[p + 2 * j + 1]) +! tl)
+    return DD(hi: h, lo: l)
 
 ### An accurate double-double approximation of `erf(z)` for 2^-61 <= z < 1/8: an odd polynomial of
 ### degree 21 whose coefficients of degree 1 to 7 are double-double.
 ### :param z: The argument.
 ### :returns: `hi + lo` approximating erf(z).
 secret routine b64_erf_accurate_tiny(z: B64) -> DD
-  var z2 = z *! z
-  # degree 21
-  var h = B64.from_bits(bits: B64_ERF_TINY_P[14])
-  var a = 19_u64
-  while a > 11
-    h = LLVM::fma[B64](a: h, b: z2, c: B64.from_bits(bits: B64_ERF_TINY_P[a // 2 + 4]))
-    a = a - 2
-  var l: B64 = 0.0
-  while a > 7
-    # multiply h + l by z^2, then add P[a/2+4]
+    var z2 = z *! z
+    # degree 21
+    var h = B64.from_bits(bits: B64_ERF_TINY_P[14])
+    var a = 19_u64
+    while a > 11
+        h = LLVM::fma[B64](a: h, b: z2, c: B64.from_bits(bits: B64_ERF_TINY_P[a // 2 + 4]))
+        a = a - 2
+    var l: B64 = 0.0
+    while a > 7
+        # multiply h + l by z^2, then add P[a/2+4]
+        var t = b64_erf_a_mul(a: h, b: z)
+        var tl = LLVM::fma[B64](a: l, b: z, c: t.lo)
+        var m = b64_erf_a_mul(a: t.hi, b: z)
+        l = LLVM::fma[B64](a: tl, b: z, c: m.lo)
+        var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_TINY_P[a // 2 + 4]), b: m.hi)
+        h = s.hi
+        l = l +! s.lo
+        a = a - 2
+    # degrees 7 down to 1 have double-double coefficients P[a-1] + P[a]
+    loop
+        var t = b64_erf_a_mul(a: h, b: z)
+        var tl = LLVM::fma[B64](a: l, b: z, c: t.lo)
+        var m = b64_erf_a_mul(a: t.hi, b: z)
+        l = LLVM::fma[B64](a: tl, b: z, c: m.lo)
+        var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_TINY_P[a - 1]), b: m.hi)
+        h = s.hi
+        l = l +! (B64.from_bits(bits: B64_ERF_TINY_P[a]) +! s.lo)
+        if a == 1
+            break
+        a = a - 2
+    # multiply by z
     var t = b64_erf_a_mul(a: h, b: z)
-    var tl = LLVM::fma[B64](a: l, b: z, c: t.lo)
-    var m = b64_erf_a_mul(a: t.hi, b: z)
-    l = LLVM::fma[B64](a: tl, b: z, c: m.lo)
-    var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_TINY_P[a // 2 + 4]), b: m.hi)
-    h = s.hi
-    l = l +! s.lo
-    a = a - 2
-  # degrees 7 down to 1 have double-double coefficients P[a-1] + P[a]
-  loop
-    var t = b64_erf_a_mul(a: h, b: z)
-    var tl = LLVM::fma[B64](a: l, b: z, c: t.lo)
-    var m = b64_erf_a_mul(a: t.hi, b: z)
-    l = LLVM::fma[B64](a: tl, b: z, c: m.lo)
-    var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERF_TINY_P[a - 1]), b: m.hi)
-    h = s.hi
-    l = l +! (B64.from_bits(bits: B64_ERF_TINY_P[a]) +! s.lo)
-    if a == 1
-      break
-    a = a - 2
-  # multiply by z
-  var t = b64_erf_a_mul(a: h, b: z)
-  return DD(hi: t.hi, lo: LLVM::fma[B64](a: l, b: z, c: t.lo))
+    return DD(hi: t.hi, lo: LLVM::fma[B64](a: l, b: z, c: t.lo))
 
 # ---------------------------------------------------------------------------
 # Tables

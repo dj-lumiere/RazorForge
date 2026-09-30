@@ -22,8 +22,8 @@ public class EmptyBodyValidationTests
     {
         string source = """
                         routine do_nothing()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -43,7 +43,7 @@ public class EmptyBodyValidationTests
     {
         string source = """
                         protocol Marker
-                          pass
+                            pass
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -62,7 +62,7 @@ public class EmptyBodyValidationTests
     public void Analyze_EmptyRecordBody_ReportsError()
     {
         // record with no body (no indent after header) -> followed by another decl to ensure valid parse
-        string source = "record Empty\nrecord Other\n  pass\n";
+        string source = "record Empty\nrecord Other\n    pass\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
@@ -76,7 +76,7 @@ public class EmptyBodyValidationTests
     {
         string source = """
                         record Empty
-                          pass
+                            pass
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -90,7 +90,7 @@ public class EmptyBodyValidationTests
     public void Analyze_EmptyEntityBody_ReportsError()
     {
         // entity with no body (no indent after header)
-        string source = "entity Empty\nentity Other\n  pass\n";
+        string source = "entity Empty\nentity Other\n    pass\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
@@ -104,7 +104,7 @@ public class EmptyBodyValidationTests
     {
         string source = """
                         entity Empty
-                          pass
+                            pass
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -123,7 +123,7 @@ public class EmptyBodyValidationTests
     public void Analyze_EmptyChoice_ReportsError()
     {
         // choice with no cases
-        string source = "choice Empty\nchoice Other\n  OK\n";
+        string source = "choice Empty\nchoice Other\n    OK\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
@@ -136,7 +136,7 @@ public class EmptyBodyValidationTests
     public void Analyze_EmptyVariant_ReportsError()
     {
         // variant with no cases
-        string source = "variant Empty\nvariant Other\n  SOME\n";
+        string source = "variant Empty\nvariant Other\n    SOME\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
@@ -149,7 +149,7 @@ public class EmptyBodyValidationTests
     public void Analyze_EmptyFlags_ReportsError()
     {
         // flags with no members
-        string source = "flags Empty\nflags Other\n  READ\n";
+        string source = "flags Empty\nflags Other\n    READ\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,

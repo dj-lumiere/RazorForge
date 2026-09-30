@@ -23,13 +23,13 @@ public class GenericParamCollisionTests
     {
         AssertAnalyzes(source: """
                                record T
-                                 a: S32
+                                   a: S32
 
                                routine start()
-                                 var xs = List[S32]()
-                                 xs.add_last(10_s32)
-                                 var t = T(a: 1_s32)
-                                 return
+                                   var xs = List[S32]()
+                                   xs.add_last(10_s32)
+                                   var t = T(a: 1_s32)
+                                   return
                                """);
     }
 
@@ -42,24 +42,24 @@ public class GenericParamCollisionTests
     {
         AssertAnalyzes(source: """
                                record T
-                                 a: S32
+                                   a: S32
                                record N
-                                 a: S32
+                                   a: S32
                                record M
-                                 a: S32
+                                   a: S32
 
                                routine identity[U](x: U) -> U
-                                 return x
+                                   return x
 
                                routine start()
-                                 var xs = List[S32]()
-                                 xs.add_last(10_s32)
-                                 var id = identity(7_s32)
-                                 var f = 3.0_b128.sqrt()
-                                 var t = T(a: 1_s32)
-                                 var n = N(a: 2_s32)
-                                 var m = M(a: 3_s32)
-                                 return
+                                   var xs = List[S32]()
+                                   xs.add_last(10_s32)
+                                   var id = identity(7_s32)
+                                   var f = 3.0_b128.sqrt()
+                                   var t = T(a: 1_s32)
+                                   var n = N(a: 2_s32)
+                                   var m = M(a: 3_s32)
+                                   return
                                """);
     }
 
@@ -73,15 +73,15 @@ public class GenericParamCollisionTests
     {
         AssertAnalyzes(source: """
                                record T
-                                 a: S32
+                                   a: S32
 
                                routine identity[T](x: T) -> T
-                                 return x
+                                   return x
 
                                routine start()
-                                 var id = identity(7_s32)
-                                 var t = T(a: 1_s32)
-                                 return
+                                   var id = identity(7_s32)
+                                   var t = T(a: 1_s32)
+                                   return
                                """);
     }
 
@@ -94,19 +94,19 @@ public class GenericParamCollisionTests
     {
         AssertAnalyzes(source: """
                                record Holder[A]
-                                 value: A
+                                   value: A
 
                                routine Holder[A].mapped[U](u: U) -> U
-                                 return u
+                                   return u
 
                                record U
-                                 x: S32
+                                   x: S32
 
                                routine start()
-                                 var h = Holder[S32](value: 1_s32)
-                                 var r = h.mapped(7_s32)
-                                 var u = U(x: 2_s32)
-                                 return
+                                   var h = Holder[S32](value: 1_s32)
+                                   var r = h.mapped(7_s32)
+                                   var u = U(x: 2_s32)
+                                   return
                                """);
     }
 
@@ -119,15 +119,15 @@ public class GenericParamCollisionTests
     {
         AssertAnalyzes(source: """
                                record T
-                                 a: S32
+                                   a: S32
 
                                record Box[T]
-                                 item: T
+                                   item: T
 
                                routine start()
-                                 var b = Box[S32](item: 5_s32)
-                                 var t = T(a: 1_s32)
-                                 return
+                                   var b = Box[S32](item: 5_s32)
+                                   var t = T(a: 1_s32)
+                                   return
                                """);
     }
 }

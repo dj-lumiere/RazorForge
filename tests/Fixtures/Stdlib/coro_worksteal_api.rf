@@ -14,33 +14,33 @@ import IO/Console
 
 # Records which worker ran it, parks so any worker can pick it up, then records again; 1 if it moved.
 suspended routine tag() -> S64
-  var w0 = C::rf_current_thread_id()
-  waitfor(3ms)
-  var w1 = C::rf_current_thread_id()
-  return if w0 == w1 then 0_s64 else 1_s64
+    var w0 = C::rf_current_thread_id()
+    waitfor(3ms)
+    var w1 = C::rf_current_thread_id()
+    return if w0 == w1 then 0_s64 else 1_s64
 
 # Runs on a worker; its 48 children pile onto THIS worker's local deque. Returns how many migrated.
 suspended routine burst() -> S64
-  var kids = List[Agent[S64]]()
-  var i = 0_s64
-  while i < 48_s64
-    kids.add_last(value: tag())
-    i = i + 1_s64
-  var moved = kids.gather()
-  var migrated = 0_s64
-  var j = 0_s64
-  while j < 48_s64
-    migrated = migrated + moved[j]
-    j = j + 1_s64
-  return migrated
+    var kids = List[Agent[S64]]()
+    var i = 0_s64
+    while i < 48_s64
+        kids.add_last(value: tag())
+        i = i + 1_s64
+    var moved = kids.gather()
+    var migrated = 0_s64
+    var j = 0_s64
+    while j < 48_s64
+        migrated = migrated + moved[j]
+        j = j + 1_s64
+    return migrated
 
 routine start()
-  var workers = C::rf_sched_worker_count()
-  var b = burst()
-  var migrated = b.retrieve()
-  var ok = workers <= 1_u64 or migrated > 0_s64
-  if ok
-    show("worksteal distribution: ok")
-  else
-    show("worksteal distribution: BROKEN")
-  return
+    var workers = C::rf_sched_worker_count()
+    var b = burst()
+    var migrated = b.retrieve()
+    var ok = workers <= 1_u64 or migrated > 0_s64
+    if ok
+        show("worksteal distribution: ok")
+    else
+        show("worksteal distribution: BROKEN")
+    return

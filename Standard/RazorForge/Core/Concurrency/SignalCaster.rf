@@ -24,34 +24,34 @@ import BuilderQuery
 
 ### A condition-variable monitor: a lock plus a wait set. See the module notes for the pattern.
 entity SignalCaster
-  ### The shared native monitor handle (rf_signal*).
-  secret sig: CPtr
+    ### The shared native monitor handle (rf_signal*).
+    secret sig: CPtr
 
 ### Creates a new monitor.
 ### :returns: A fresh `SignalCaster`.
 routine SignalCaster() -> SignalCaster
-  danger
-    return SignalCaster(sig: C::rf_signal_create())
+    danger
+        return SignalCaster(sig: C::rf_signal_create())
 
 ### Acquires the monitor lock guarding your shared condition. Pair every `lock` with an `unlock`.
 routine SignalCaster.lock()
-  danger
-    C::rf_signal_lock(sig: me.sig)
-  return
+    danger
+        C::rf_signal_lock(sig: me.sig)
+    return
 
 ### Releases the monitor lock.
 routine SignalCaster.unlock()
-  danger
-    C::rf_signal_unlock(sig: me.sig)
-  return
+    danger
+        C::rf_signal_unlock(sig: me.sig)
+    return
 
 ### Waits for a cast. MUST be called holding the lock: it releases the lock while suspended and
 ### re-acquires it before returning. UNCOLORED — parks a coroutine (siblings run) or blocks a thread.
 ### Always re-check your condition in a loop, since wakes can be spurious.
 routine SignalCaster.wait()
-  danger
-    C::rf_signal_wait(sig: me.sig)
-  return
+    danger
+        C::rf_signal_wait(sig: me.sig)
+    return
 
 ### Like `wait`, but gives up after `deadline`. MUST hold the lock. Returns `true` if a cast (or a
 ### spurious wake) arrived in time — re-check your predicate — and `false` if the deadline elapsed
@@ -60,30 +60,30 @@ routine SignalCaster.wait()
 ### :param deadline: How long to wait before giving up.
 ### :returns: `true` if woken in time, `false` on timeout.
 routine SignalCaster.wait_within(deadline: Duration) -> Bool
-  danger
-    return C::rf_signal_wait_deadline(sig: me.sig, timeout_ns: U64(deadline.total_nanoseconds())) != 0_u32
+    danger
+        return C::rf_signal_wait_deadline(sig: me.sig, timeout_ns: U64(deadline.total_nanoseconds())) != 0_u32
 
 ### Wakes one waiting agent. Call after making the condition true and releasing the lock.
 routine SignalCaster.cast_one()
-  danger
-    C::rf_signal_cast_one(sig: me.sig)
-  return
+    danger
+        C::rf_signal_cast_one(sig: me.sig)
+    return
 
 ### Wakes every waiting agent. Call after making the condition true and releasing the lock.
 routine SignalCaster.cast_all()
-  danger
-    C::rf_signal_cast_all(sig: me.sig)
-  return
+    danger
+        C::rf_signal_cast_all(sig: me.sig)
+    return
 
 ### Produces another handle on the same monitor, so another agent can synchronize through it.
 ### :returns: A new `SignalCaster` sharing this monitor.
 routine SignalCaster.duplicate() -> SignalCaster
-  danger
-    C::rf_signal_add_ref(sig: me.sig)
-    return SignalCaster(sig: me.sig)
+    danger
+        C::rf_signal_add_ref(sig: me.sig)
+        return SignalCaster(sig: me.sig)
 
 ### Drops this handle; the monitor frees once the last handle goes.
 @override
 dangerous routine SignalCaster.destroy()
-  C::rf_signal_drop(sig: me.sig)
-  return
+    C::rf_signal_drop(sig: me.sig)
+    return

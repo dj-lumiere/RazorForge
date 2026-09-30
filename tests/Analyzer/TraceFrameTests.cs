@@ -21,17 +21,17 @@ public class TraceFrameTests
                                   import IO/Console
 
                                   routine pure_mix(a: U64) -> U64
-                                    return (a >>> 1) ^ 5_u64
+                                      return (a >>> 1) ^ 5_u64
 
                                   routine checked_sum(a: U64, b: U64) -> U64
-                                    return a + b
+                                      return a + b
 
                                   routine calls_checked(a: U64) -> U64
-                                    return checked_sum(a: a, b: 1_u64)
+                                      return checked_sum(a: a, b: 1_u64)
 
                                   routine start()
-                                    show(pure_mix(a: 3_u64) +% calls_checked(a: 2_u64))
-                                    return
+                                      show(pure_mix(a: 3_u64) +% calls_checked(a: 2_u64))
+                                      return
                                   """;
 
     [Fact]

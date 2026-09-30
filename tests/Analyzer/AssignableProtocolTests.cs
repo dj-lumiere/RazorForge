@@ -28,13 +28,13 @@ public class AssignableProtocolTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine start()
-                          var a = Point(x: 1, y: 2)
-                          var b = a
-                          return
+                            var a = Point(x: 1, y: 2)
+                            var b = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -47,14 +47,14 @@ public class AssignableProtocolTests
     {
         string source = """
                         choice Color
-                          Red
-                          Green
-                          Blue
+                            Red
+                            Green
+                            Blue
 
                         routine start()
-                          var a = Color.Red
-                          var b = a
-                          return
+                            var a = Color.Red
+                            var b = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -67,14 +67,14 @@ public class AssignableProtocolTests
     {
         string source = """
                         flags Perms
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
 
                         routine start()
-                          var a = Perms.READ
-                          var b = a
-                          return
+                            var a = Perms.READ
+                            var b = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -87,9 +87,9 @@ public class AssignableProtocolTests
     {
         string source = """
                         routine start()
-                          var a = (1_s32, 2_s32, 3_s32)
-                          var b = a
-                          return
+                            var a = (1_s32, 2_s32, 3_s32)
+                            var b = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -102,16 +102,16 @@ public class AssignableProtocolTests
     {
         string source = """
                         record Inner
-                          v: S32
+                            v: S32
 
                         record Outer
-                          inner: Inner
-                          tag: S64
+                            inner: Inner
+                            tag: S64
 
                         routine start()
-                          var a = Outer(inner: Inner(v: 1), tag: 42)
-                          var b = a
-                          return
+                            var a = Outer(inner: Inner(v: 1), tag: 42)
+                            var b = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -133,16 +133,16 @@ public class AssignableProtocolTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Box
-                          handle: Retained[Node]
+                            handle: Retained[Node]
 
                         routine start()
-                          var a = Node(value: 1)
-                          var b = Box(handle: Retained(from: steal a))
-                          var c = b
-                          return
+                            var a = Node(value: 1)
+                            var b = Box(handle: Retained(from: steal a))
+                            var c = b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -155,16 +155,16 @@ public class AssignableProtocolTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record TrackedBox
-                          handle: Tracked[Node]
+                            handle: Tracked[Node]
 
                         routine start()
-                          var a = Node(value: 1)
-                          var b = TrackedBox(handle: Retained(from: steal a).observe())
-                          var c = b
-                          return
+                            var a = Node(value: 1)
+                            var b = TrackedBox(handle: Retained(from: steal a).observe())
+                            var c = b
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -177,13 +177,13 @@ public class AssignableProtocolTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var t = (1_s32, Retained(from: steal a))
-                          var u = t
-                          return
+                            var a = Node(value: 1)
+                            var t = (1_s32, Retained(from: steal a))
+                            var u = t
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -200,10 +200,10 @@ public class AssignableProtocolTests
     {
         string source = """
                         routine start()
-                          danger
-                            var a = Hijacked[U8](0_addr)
-                            var b = a
-                          return
+                            danger
+                                var a = Hijacked[U8](0_addr)
+                                var b = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -216,9 +216,9 @@ public class AssignableProtocolTests
     {
         string source = """
                         routine start()
-                          var a = cptr_none()
-                          var b = a
-                          return
+                            var a = cptr_none()
+                            var b = a
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -235,13 +235,13 @@ public class AssignableProtocolTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine start()
-                          var p = Point(x: 1, y: 2)
-                          var q = p with .x = 5
-                          return
+                            var p = Point(x: 1, y: 2)
+                            var q = p with .x = 5
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -254,17 +254,17 @@ public class AssignableProtocolTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Box
-                          handle: Retained[Node]
-                          tag: S64
+                            handle: Retained[Node]
+                            tag: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var b = Box(handle: Retained(from: steal a), tag: 0)
-                          var c = b with .tag = 42
-                          return
+                            var a = Node(value: 1)
+                            var b = Box(handle: Retained(from: steal a), tag: 0)
+                            var c = b with .tag = 42
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -277,16 +277,16 @@ public class AssignableProtocolTests
     {
         string source = """
                         record Inner
-                          v: S32
+                            v: S32
 
                         record Outer
-                          inner: Inner
-                          tag: S64
+                            inner: Inner
+                            tag: S64
 
                         routine start()
-                          var a = Outer(inner: Inner(v: 1), tag: 42)
-                          var b = a with .tag = 99
-                          return
+                            var a = Outer(inner: Inner(v: 1), tag: 42)
+                            var b = a with .tag = 99
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -299,17 +299,17 @@ public class AssignableProtocolTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Box
-                          handle: Retained[Node]
-                          tag: S64
+                            handle: Retained[Node]
+                            tag: S64
 
                         routine start()
-                          var a = Node(value: 1)
-                          var b = Box(handle: Retained(from: steal a), tag: 0)
-                          var c = b with .tag = 42
-                          return
+                            var a = Node(value: 1)
+                            var b = Box(handle: Retained(from: steal a), tag: 0)
+                            var c = b with .tag = 42
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -328,19 +328,19 @@ public class AssignableProtocolTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Box
-                          handle: Retained[Node]
+                            handle: Retained[Node]
 
                         routine take(box: Box)
-                          return
+                            return
 
                         routine start()
-                          var a = Node(value: 1)
-                          var b = Box(handle: Retained(from: steal a))
-                          take(box: b)
-                          return
+                            var a = Node(value: 1)
+                            var b = Box(handle: Retained(from: steal a))
+                            take(box: b)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -353,16 +353,16 @@ public class AssignableProtocolTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine take(p: Point)
-                          return
+                            return
 
                         routine start()
-                          var a = Point(x: 1, y: 2)
-                          take(p: a)
-                          return
+                            var a = Point(x: 1, y: 2)
+                            take(p: a)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -379,13 +379,13 @@ public class AssignableProtocolTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine start()
-                          var a = Point(x: 1, y: 2)
-                          var b = a.assign()
-                          return
+                            var a = Point(x: 1, y: 2)
+                            var b = a.assign()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -397,14 +397,14 @@ public class AssignableProtocolTests
     {
         string source = """
                         choice Color
-                          Red
-                          Green
-                          Blue
+                            Red
+                            Green
+                            Blue
 
                         routine start()
-                          var a = Color.Red
-                          var b = a.assign()
-                          return
+                            var a = Color.Red
+                            var b = a.assign()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -416,14 +416,14 @@ public class AssignableProtocolTests
     {
         string source = """
                         flags Perms
-                          Read
-                          Write
-                          Execute
+                            Read
+                            Write
+                            Execute
 
                         routine start()
-                          var a = Perms.Read
-                          var b = a.assign()
-                          return
+                            var a = Perms.Read
+                            var b = a.assign()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -437,16 +437,16 @@ public class AssignableProtocolTests
         // User-written $assign would be required; without it the direct call fails to resolve.
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Box
-                          handle: Retained[Node]
+                            handle: Retained[Node]
 
                         routine start()
-                          var a = Node(value: 1)
-                          var b = Box(handle: Retained(from: steal a))
-                          var c = b.assign()
-                          return
+                            var a = Node(value: 1)
+                            var b = Box(handle: Retained(from: steal a))
+                            var c = b.assign()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -462,13 +462,13 @@ public class AssignableProtocolTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         routine start()
-                          var a = Point(x: 1, y: 2)
-                          var b = a.duplicate()
-                          return
+                            var a = Point(x: 1, y: 2)
+                            var b = a.duplicate()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -480,14 +480,14 @@ public class AssignableProtocolTests
     {
         string source = """
                         choice Color
-                          Red
-                          Green
-                          Blue
+                            Red
+                            Green
+                            Blue
 
                         routine start()
-                          var a = Color.Red
-                          var b = a.duplicate()
-                          return
+                            var a = Color.Red
+                            var b = a.duplicate()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -499,14 +499,14 @@ public class AssignableProtocolTests
     {
         string source = """
                         flags Perms
-                          Read
-                          Write
-                          Execute
+                            Read
+                            Write
+                            Execute
 
                         routine start()
-                          var a = Perms.Read
-                          var b = a.duplicate()
-                          return
+                            var a = Perms.Read
+                            var b = a.duplicate()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -518,16 +518,16 @@ public class AssignableProtocolTests
     {
         string source = """
                         record Inner
-                          v: S32
+                            v: S32
 
                         record Outer
-                          inner: Inner
-                          tag: S64
+                            inner: Inner
+                            tag: S64
 
                         routine start()
-                          var a = Outer(inner: Inner(v: 1), tag: 42)
-                          var b = a.duplicate()
-                          return
+                            var a = Outer(inner: Inner(v: 1), tag: 42)
+                            var b = a.duplicate()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -541,16 +541,16 @@ public class AssignableProtocolTests
         // does not auto-derive Cloneable — calling .duplicate() should fail to resolve.
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Box
-                          handle: Retained[Node]
+                            handle: Retained[Node]
 
                         routine start()
-                          var a = Node(value: 1)
-                          var b = Box(handle: Retained(from: steal a))
-                          var c = b.duplicate()
-                          return
+                            var a = Node(value: 1)
+                            var b = Box(handle: Retained(from: steal a))
+                            var c = b.duplicate()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

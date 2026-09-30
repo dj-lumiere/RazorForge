@@ -13,7 +13,7 @@ using static TestHelpers;
 public class LexerParserEdgeCaseTests
 {
     private const string RoutineTestSignature = "routine test()";
-    private const string ReturnStatement = "  return";
+    private const string ReturnStatement = "    return";
 
     /// <summary>
     /// Verifies that the tokenizer rejects tabs at each major whitespace breakpoint.
@@ -24,9 +24,9 @@ public class LexerParserEdgeCaseTests
     [Theory]
     [InlineData("routine test()\n\treturn\n", 2, 1)]
     [InlineData("routine test()\n \treturn\n", 2, 2)]
-    [InlineData("routine test()\n  return\t\n", 2, 9)]
-    [InlineData("routine\ttest()\n  return\n", 1, 8)]
-    [InlineData("routine test()\n  # comment\twith tab\n  return\n", 2, 12)]
+    [InlineData("routine test()\n    return\t\n", 2, 11)]
+    [InlineData("routine\ttest()\n    return\n", 1, 8)]
+    [InlineData("routine test()\n    # comment\twith tab\n    return\n", 2, 14)]
     public void Tokenize_Tabs_ThrowsInvalidCharacter(string source, int expectedLine,
         int expectedColumn)
     {
@@ -37,16 +37,18 @@ public class LexerParserEdgeCaseTests
     }
 
     /// <summary>
-    /// Verifies that odd indentation widths are rejected while even widths remain valid.
+    /// Verifies that only multiples of four spaces are accepted as indentation.
     /// </summary>
     /// <param name="spaces">The number of leading spaces before return.</param>
     /// <param name="shouldParse">Whether the indentation width is valid.</param>
     [Theory]
     [InlineData(1, false)]
-    [InlineData(2, true)]
+    [InlineData(2, false)]
     [InlineData(3, false)]
     [InlineData(4, true)]
-    public void Parse_IndentWidth_OnlyAllowsMultiplesOfTwo(int spaces, bool shouldParse)
+    [InlineData(6, false)]
+    [InlineData(8, true)]
+    public void Parse_IndentWidth_OnlyAllowsMultiplesOfFour(int spaces, bool shouldParse)
     {
         string source = $"routine test()\n{new string(c: ' ', count: spaces)}return\n";
 
@@ -69,10 +71,10 @@ public class LexerParserEdgeCaseTests
     /// <param name="expectedLine">The expected diagnostic line.</param>
     /// <param name="expectedColumn">The expected diagnostic column.</param>
     [Theory]
-    [InlineData("\0routine test()\n  return\n", 1, 1)]
-    [InlineData("routine test()\n  var va\0lue = 1\n  return\n", 2, 9)]
-    [InlineData("routine test()\n  var value = \"a\0b\"\n  return\n", 2, 17)]
-    [InlineData("routine test()\n  return\n\0", 3, 1)]
+    [InlineData("\0routine test()\n    return\n", 1, 1)]
+    [InlineData("routine test()\n    var va\0lue = 1\n    return\n", 2, 11)]
+    [InlineData("routine test()\n    var value = \"a\0b\"\n    return\n", 2, 19)]
+    [InlineData("routine test()\n    return\n\0", 3, 1)]
     public void Tokenize_NullBytes_ThrowsInvalidCharacter(string source, int expectedLine,
         int expectedColumn)
     {
@@ -96,7 +98,7 @@ public class LexerParserEdgeCaseTests
     public void Tokenize_UnicodeWhitespaceAndFormatCharacters_ThrowInvalidCharacter(
         string hiddenCharacter)
     {
-        string source = $"routine{hiddenCharacter}test()\n  return\n";
+        string source = $"routine{hiddenCharacter}test()\n    return\n";
 
         GrammarException exception = AssertInvalidCharacter(source: source);
 
@@ -110,7 +112,7 @@ public class LexerParserEdgeCaseTests
     [Fact]
     public void Parse_BomAtStart_Parses()
     {
-        string source = "\uFEFFroutine test()\n  return\n";
+        string source = "\uFEFFroutine test()\n    return\n";
 
         AssertParses(source: source);
     }
@@ -122,9 +124,9 @@ public class LexerParserEdgeCaseTests
     /// <param name="expectedLine">The expected diagnostic line.</param>
     /// <param name="expectedColumn">The expected diagnostic column.</param>
     [Theory]
-    [InlineData("routine \uFEFFtest()\n  return\n", 1, 9)]
-    [InlineData("\uFEFF\uFEFFroutine test()\n  return\n", 1, 1)]
-    [InlineData("routine test()\n  \uFEFFreturn\n", 2, 3)]
+    [InlineData("routine \uFEFFtest()\n    return\n", 1, 9)]
+    [InlineData("\uFEFF\uFEFFroutine test()\n    return\n", 1, 1)]
+    [InlineData("routine test()\n    \uFEFFreturn\n", 2, 5)]
     public void Tokenize_NonLeadingBom_ThrowsInvalidCharacter(string source, int expectedLine,
         int expectedColumn)
     {
@@ -140,7 +142,7 @@ public class LexerParserEdgeCaseTests
     [Fact]
     public void Tokenize_BomAtStart_DoesNotShiftTokenLocations()
     {
-        string source = "\uFEFFroutine test()\n  return\n";
+        string source = "\uFEFFroutine test()\n    return\n";
 
         Token routine = Tokenize(source: source)
            .First(predicate: token => token.Type == TokenType.Routine);
@@ -163,7 +165,7 @@ public class LexerParserEdgeCaseTests
             value:
             [
                 RoutineTestSignature,
-                "  var value = 1",
+                "    var value = 1",
                 ReturnStatement,
                 ""
             ]);
@@ -185,7 +187,7 @@ public class LexerParserEdgeCaseTests
             value:
             [
                 RoutineTestSignature,
-                "  var value = 1",
+                "    var value = 1",
                 ReturnStatement,
                 ""
             ]);
@@ -194,7 +196,7 @@ public class LexerParserEdgeCaseTests
         Token returnToken = tokens.Single(predicate: token => token.Type == TokenType.Return);
 
         Assert.Equal(expected: 3, actual: returnToken.Line);
-        Assert.Equal(expected: 3, actual: returnToken.Column);
+        Assert.Equal(expected: 5, actual: returnToken.Column);
         Assert.Equal(expected: 3,
             actual: tokens.Count(predicate: token => token.Type == TokenType.Newline));
     }
@@ -205,7 +207,7 @@ public class LexerParserEdgeCaseTests
     [Fact]
     public void Parse_MixedLineEndings_Parses()
     {
-        string source = "routine test()\r\n  var value = 1\r  return\n";
+        string source = "routine test()\r\n    var value = 1\r    return\n";
 
         AssertParses(source: source);
     }
@@ -221,10 +223,10 @@ public class LexerParserEdgeCaseTests
 
         for (int depth = 0; depth < nestingDepth; depth += 1)
         {
-            lines.Add(item: $"{new string(c: ' ', count: (depth + 1) * 2)}if true");
+            lines.Add(item: $"{new string(c: ' ', count: (depth + 1) * 4)}if true");
         }
 
-        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 2)}pass");
+        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 4)}pass");
         lines.Add(item: ReturnStatement);
 
         string source = string.Join(separator: "\n", values: lines);
@@ -258,7 +260,7 @@ public class LexerParserEdgeCaseTests
         const int nestingDepth = 256;
         string expression = new string(c: '(', count: nestingDepth) + "1" +
                             new string(c: ')', count: nestingDepth);
-        string source = $"routine test()\n  var value = {expression}\n  return\n";
+        string source = $"routine test()\n    var value = {expression}\n    return\n";
 
         List<Token> tokens = Tokenize(source: source);
 
@@ -275,7 +277,7 @@ public class LexerParserEdgeCaseTests
     public void Parse_VeryLongLine_Parses()
     {
         string longName = "value_" + new string(c: 'x', count: 12_000);
-        string source = $"routine test()\n  var {longName} = 1\n  return\n";
+        string source = $"routine test()\n    var {longName} = 1\n    return\n";
 
         AssertParses(source: source);
     }
@@ -287,7 +289,7 @@ public class LexerParserEdgeCaseTests
     public void Tokenize_VeryLongIdentifier_PreservesTokenText()
     {
         string longName = "value_" + new string(c: 'x', count: 12_000);
-        string source = $"routine test()\n  var {longName} = 1\n  return\n";
+        string source = $"routine test()\n    var {longName} = 1\n    return\n";
 
         Token identifier = Tokenize(source: source)
            .Single(predicate: token => token.Text == longName);
@@ -301,7 +303,7 @@ public class LexerParserEdgeCaseTests
     [Fact]
     public void Parse_VeryLongCommentLine_ParsesFollowingStatement()
     {
-        string source = "routine test()\n  #" + new string(c: 'x', count: 25_000) + "\n  return\n";
+        string source = "routine test()\n    #" + new string(c: 'x', count: 25_000) + "\n    return\n";
 
         AssertParses(source: source);
     }
@@ -341,7 +343,7 @@ public class LexerParserEdgeCaseTests
     [Fact]
     public void Parse_CommentOnlySourceFile_ProducesEmptyProgram()
     {
-        Program program = Parse(source: "# comment\n  # indented comment\n");
+        Program program = Parse(source: "# comment\n    # indented comment\n");
 
         Assert.NotNull(@object: program);
         Assert.Empty(collection: program.Declarations);
@@ -353,7 +355,7 @@ public class LexerParserEdgeCaseTests
     [Fact]
     public void Parse_TrailingWhitespaceWithinBlock_Parses()
     {
-        string source = "routine test()   \n  var x = 1   \n  return   \n";
+        string source = "routine test()   \n    var x = 1   \n    return   \n";
 
         AssertParses(source: source);
     }
@@ -367,9 +369,9 @@ public class LexerParserEdgeCaseTests
         string source = """
                         routine test()
 
-                          var x = 1
+                            var x = 1
 
-                          return
+                            return
                         """;
 
         AssertParses(source: source);
@@ -383,8 +385,8 @@ public class LexerParserEdgeCaseTests
     {
         string source = """
                         routine total() -> S32
-                          return 1 +
-                          2
+                            return 1 +
+                            2
                         """;
 
         AssertParses(source: source);
@@ -398,13 +400,13 @@ public class LexerParserEdgeCaseTests
     {
         string source = """
                         routine test(items: List[S32]) -> S32
-                          if true
-                            while true
-                              each item in items
-                                when item
-                                  == 0 => return 0
-                                  else => return item
-                          return 1
+                            if true
+                                while true
+                                    each item in items
+                                        when item
+                                            == 0 => return 0
+                                            else => return item
+                            return 1
                         """;
 
         AssertParses(source: source);
@@ -418,10 +420,10 @@ public class LexerParserEdgeCaseTests
     {
         string source = """
                         routine test()
-                          if true
                             if true
-                              var x = 1
-                          return
+                                if true
+                                    var x = 1
+                            return
                         """;
 
         List<Token> tokens = Tokenize(source: source);
@@ -439,10 +441,10 @@ public class LexerParserEdgeCaseTests
     {
         string source = """
                         routine test()
-                          # regular comment
-                                # oddly indented comment-only line
-                          var x = 1
-                          return
+                            # regular comment
+                                        # oddly indented comment-only line
+                            var x = 1
+                            return
                         """;
 
         AssertParses(source: source);
@@ -454,7 +456,7 @@ public class LexerParserEdgeCaseTests
     [Fact]
     public void Parse_EofWithoutFinalNewline_Parses()
     {
-        string source = "routine test()\n  return";
+        string source = "routine test()\n    return";
 
         Program program = Parse(source: source);
 
@@ -471,8 +473,8 @@ public class LexerParserEdgeCaseTests
         string source = """
                         routine test()
                         routine other()
-                          pass
-                          return
+                            pass
+                            return
                         """;
 
         AssertParseError(source: source);
@@ -487,7 +489,7 @@ public class LexerParserEdgeCaseTests
         string source = """
                         record Empty
                         record Other
-                          pass
+                            pass
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -510,10 +512,10 @@ public class LexerParserEdgeCaseTests
 
         for (int depth = 0; depth < nestingDepth; depth += 1)
         {
-            lines.Add(item: $"{new string(c: ' ', count: (depth + 1) * 2)}if true");
+            lines.Add(item: $"{new string(c: ' ', count: (depth + 1) * 4)}if true");
         }
 
-        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 2)}pass");
+        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 4)}pass");
         lines.Add(item: ReturnStatement);
 
         return string.Join(separator: "\n", values: lines);

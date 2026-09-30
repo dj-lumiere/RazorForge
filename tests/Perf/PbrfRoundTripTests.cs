@@ -29,8 +29,8 @@ public sealed partial class PbrfRoundTripTests
                                    module Bench
                                    import IO/Console
                                    routine start()
-                                     show("hi")
-                                     return
+                                       show("hi")
+                                       return
                                    """;
 
     private static Program ParseTrivial()

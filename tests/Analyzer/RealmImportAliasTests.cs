@@ -18,8 +18,8 @@ public class RealmImportAliasTests
                                import Core.C::rf_runtime_init
 
                                routine start()
-                                 rf_runtime_init()
-                                 return
+                                   rf_runtime_init()
+                                   return
                                """);
     }
 
@@ -29,8 +29,8 @@ public class RealmImportAliasTests
     {
         AssertHasError(source: """
                                routine start()
-                                 rf_runtime_init()
-                                 return
+                                   rf_runtime_init()
+                                   return
                                """,
             expectedErrorSubstring: "lives in the C realm");
     }
@@ -43,10 +43,10 @@ public class RealmImportAliasTests
                                import Core.LLVM::add
 
                                routine start()
-                                 var x = 20_s32
-                                 var y = 22_s32
-                                 var z = add[S32](a: x, b: y)
-                                 return
+                                   var x = 20_s32
+                                   var y = 22_s32
+                                   var z = add[S32](a: x, b: y)
+                                   return
                                """);
     }
 
@@ -59,8 +59,8 @@ public class RealmImportAliasTests
                                import Core.C::rf_runtime_init
 
                                routine start()
-                                 var z = add[S32](a: 1_s32, b: 2_s32)
-                                 return
+                                   var z = add[S32](a: 1_s32, b: 2_s32)
+                                   return
                                """,
             expectedErrorSubstring: "lives in the LLVM realm");
     }

@@ -18,8 +18,8 @@ public class MarkerConformanceTests
     {
         string source = """
                         record Point
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -48,8 +48,8 @@ public class MarkerConformanceTests
         // Comparable) and Hashable — so the gate passes and Point conforms all three with derived bodies.
         string source = """
                         record Point obeys Equatable, Comparable, Hashable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -73,10 +73,10 @@ public class MarkerConformanceTests
         // there is no bodyless-promise: `==` on it fails to resolve rather than LINKERR downstream.
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         record Holder
-                          node: Retained[Node]
+                            node: Retained[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -94,7 +94,7 @@ public class MarkerConformanceTests
     {
         string source = """
                         entity Widget
-                          label: Text
+                            label: Text
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -116,9 +116,9 @@ public class MarkerConformanceTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -142,9 +142,9 @@ public class MarkerConformanceTests
     {
         string source = """
                         flags Permission
-                          READ
-                          WRITE
-                          EXECUTE
+                            READ
+                            WRITE
+                            EXECUTE
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -169,16 +169,16 @@ public class MarkerConformanceTests
         // even though RecordType also includes Equatable transitively
         string source = """
                         protocol Equatable
-                          @readonly
-                          routine Me.$eq(you: Me) -> Bool
+                            @readonly
+                            routine Me.$eq(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: S32
-                          y: S32
+                            x: S32
+                            y: S32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool
-                          return me.x == you.x and me.y == you.y
+                            return me.x == you.x and me.y == you.y
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -193,15 +193,15 @@ public class MarkerConformanceTests
         // @innate memberRoutines cannot be overridden by user code
         string source = """
                         protocol Lockable
-                          @[readonly, innate]
-                          routine Me.$eq(you: Me) -> Bool
+                            @[readonly, innate]
+                            routine Me.$eq(you: Me) -> Bool
 
                         entity Widget obeys Lockable
-                          name: Text
+                            name: Text
 
                         @readonly
                         routine Widget.$eq(you: Widget) -> Bool
-                          return me.name == you.name
+                            return me.name == you.name
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -223,15 +223,15 @@ public class MarkerConformanceTests
     {
         string source = """
                         record Algebra[T]
-                          value: T
+                            value: T
 
                         entity Holder[M]
                         needs M obeys RecordType
-                          tag: S64
+                            tag: S64
 
                         routine start()
-                          var h = Holder[Algebra[S64]](tag: 1_s64)
-                          return
+                            var h = Holder[Algebra[S64]](tag: 1_s64)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -246,15 +246,15 @@ public class MarkerConformanceTests
     {
         string source = """
                         entity Resource
-                          tag: S64
+                            tag: S64
 
                         entity Keeper[M]
                         needs M obeys EntityType
-                          tag: S64
+                            tag: S64
 
                         routine start()
-                          var k = Keeper[Resource](tag: 3_s64)
-                          return
+                            var k = Keeper[Resource](tag: 3_s64)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -269,15 +269,15 @@ public class MarkerConformanceTests
     {
         string source = """
                         entity Resource
-                          tag: S64
+                            tag: S64
 
                         entity Holder[M]
                         needs M obeys RecordType
-                          tag: S64
+                            tag: S64
 
                         routine start()
-                          var h = Holder[Resource](tag: 2_s64)
-                          return
+                            var h = Holder[Resource](tag: 2_s64)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

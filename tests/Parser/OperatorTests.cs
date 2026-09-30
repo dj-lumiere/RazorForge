@@ -19,7 +19,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return 1 + 2
+                            return 1 + 2
                         """;
 
         AssertParses(source: source);
@@ -32,7 +32,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return 5 - 3
+                            return 5 - 3
                         """;
 
         AssertParses(source: source);
@@ -45,7 +45,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return 4 * 5
+                            return 4 * 5
                         """;
 
         AssertParses(source: source);
@@ -58,7 +58,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> B32
-                          return 10.0_b32 / 3.0_b32
+                            return 10.0_b32 / 3.0_b32
                         """;
 
         AssertParses(source: source);
@@ -71,7 +71,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return 10 // 3
+                            return 10 // 3
                         """;
 
         AssertParses(source: source);
@@ -84,7 +84,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return 10 % 3
+                            return 10 % 3
                         """;
 
         AssertParses(source: source);
@@ -97,7 +97,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return 2 ** 10
+                            return 2 ** 10
                         """;
 
         AssertParses(source: source);
@@ -110,7 +110,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return -42
+                            return -42
                         """;
 
         AssertParses(source: source);
@@ -123,7 +123,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return 1 + 2 * 3 - 4 // 2
+                            return 1 + 2 * 3 - 4 // 2
                         """;
 
         AssertParses(source: source);
@@ -136,7 +136,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return (1 + 2) * (3 - 4)
+                            return (1 + 2) * (3 - 4)
                         """;
 
         AssertParses(source: source);
@@ -154,9 +154,9 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U8
-                          var a: U8 = 250
-                          var b: U8 = 10
-                          return a +% b
+                            var a: U8 = 250
+                            var b: U8 = 10
+                            return a +% b
                         """;
 
         AssertParses(source: source);
@@ -169,9 +169,9 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U8
-                          var a: U8 = 5
-                          var b: U8 = 10
-                          return a -% b
+                            var a: U8 = 5
+                            var b: U8 = 10
+                            return a -% b
                         """;
 
         AssertParses(source: source);
@@ -184,9 +184,9 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U8
-                          var a: U8 = 20
-                          var b: U8 = 20
-                          return a *% b
+                            var a: U8 = 20
+                            var b: U8 = 20
+                            return a *% b
                         """;
 
         AssertParses(source: source);
@@ -199,9 +199,9 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U8
-                          var a: U8 = 2
-                          var b: U8 = 10
-                          return a **% b
+                            var a: U8 = 2
+                            var b: U8 = 10
+                            return a **% b
                         """;
 
         AssertParses(source: source);
@@ -219,9 +219,9 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U8
-                          var a: U8 = 250
-                          var b: U8 = 10
-                          return a +^ b
+                            var a: U8 = 250
+                            var b: U8 = 10
+                            return a +^ b
                         """;
 
         AssertParses(source: source);
@@ -234,9 +234,9 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U8
-                          var a: U8 = 5
-                          var b: U8 = 10
-                          return a -^ b
+                            var a: U8 = 5
+                            var b: U8 = 10
+                            return a -^ b
                         """;
 
         AssertParses(source: source);
@@ -249,9 +249,9 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U8
-                          var a: U8 = 20
-                          var b: U8 = 20
-                          return a *^ b
+                            var a: U8 = 20
+                            var b: U8 = 20
+                            return a *^ b
                         """;
 
         AssertParses(source: source);
@@ -264,9 +264,9 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U8
-                          var a: U8 = 2
-                          var b: U8 = 10
-                          return a **^ b
+                            var a: U8 = 2
+                            var b: U8 = 10
+                            return a **^ b
                         """;
 
         AssertParses(source: source);
@@ -284,7 +284,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a == b
+                            return a == b
                         """;
 
         AssertParses(source: source);
@@ -297,7 +297,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a != b
+                            return a != b
                         """;
 
         AssertParses(source: source);
@@ -310,7 +310,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a < b
+                            return a < b
                         """;
 
         AssertParses(source: source);
@@ -323,7 +323,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a <= b
+                            return a <= b
                         """;
 
         AssertParses(source: source);
@@ -336,7 +336,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a > b
+                            return a > b
                         """;
 
         AssertParses(source: source);
@@ -349,7 +349,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a >= b
+                            return a >= b
                         """;
 
         AssertParses(source: source);
@@ -362,7 +362,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return 0 <= index < length
+                            return 0 <= index < length
                         """;
 
         AssertParses(source: source);
@@ -375,7 +375,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return min <= value <= max
+                            return min <= value <= max
                         """;
 
         AssertParses(source: source);
@@ -393,7 +393,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a and b
+                            return a and b
                         """;
 
         AssertParses(source: source);
@@ -406,7 +406,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a or b
+                            return a or b
                         """;
 
         AssertParses(source: source);
@@ -419,7 +419,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return not a
+                            return not a
                         """;
 
         AssertParses(source: source);
@@ -432,7 +432,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a and b or c and not d
+                            return a and b or c and not d
                         """;
 
         AssertParses(source: source);
@@ -445,7 +445,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return x > 0 and x < 100
+                            return x > 0 and x < 100
                         """;
 
         AssertParses(source: source);
@@ -463,7 +463,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U32
-                          return bits & mask
+                            return bits & mask
                         """;
 
         AssertParses(source: source);
@@ -476,7 +476,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U32
-                          return bits | mask
+                            return bits | mask
                         """;
 
         AssertParses(source: source);
@@ -489,7 +489,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U32
-                          return bits ^ mask
+                            return bits ^ mask
                         """;
 
         AssertParses(source: source);
@@ -502,7 +502,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U32
-                          return ~bits
+                            return ~bits
                         """;
 
         AssertParses(source: source);
@@ -515,7 +515,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U32
-                          return value << 4
+                            return value << 4
                         """;
 
         AssertParses(source: source);
@@ -528,7 +528,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U32
-                          return value >> 4
+                            return value >> 4
                         """;
 
         AssertParses(source: source);
@@ -542,7 +542,7 @@ public class OperatorTests
     {
         var ex = Assert.Throws<GrammarException>(testCode: () => Tokenize(source: """
             routine test() -> U32
-              return value <<< 4
+                return value <<< 4
             """));
         Assert.Contains(expectedSubstring: "write '<<'", actualString: ex.Message);
     }
@@ -554,7 +554,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> U32
-                          return value >>> 4
+                            return value >>> 4
                         """;
 
         AssertParses(source: source);
@@ -572,8 +572,8 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          var value: S32? = none
-                          return value ?? 42
+                            var value: S32? = none
+                            return value ?? 42
                         """;
 
         AssertParses(source: source);
@@ -586,10 +586,10 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          var a: S32? = none
-                          var b: S32? = none
-                          var c: S32 = 100
-                          return a ?? b ?? c
+                            var a: S32? = none
+                            var b: S32? = none
+                            var c: S32 = 100
+                            return a ?? b ?? c
                         """;
 
         AssertParses(source: source);
@@ -602,7 +602,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> User
-                          return try_get_user(id) ?? default_user()
+                            return try_get_user(id) ?? default_user()
                         """;
 
         AssertParses(source: source);
@@ -620,9 +620,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x = 0
-                          x = 42
-                          return
+                            var x = 0
+                            x = 42
+                            return
                         """;
 
         AssertParses(source: source);
@@ -635,9 +635,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x = 0
-                          x += 1
-                          return
+                            var x = 0
+                            x += 1
+                            return
                         """;
 
         AssertParses(source: source);
@@ -650,9 +650,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x = 10
-                          x -= 1
-                          return
+                            var x = 10
+                            x -= 1
+                            return
                         """;
 
         AssertParses(source: source);
@@ -665,9 +665,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x = 2
-                          x *= 3
-                          return
+                            var x = 2
+                            x *= 3
+                            return
                         """;
 
         AssertParses(source: source);
@@ -680,9 +680,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x = 10.0_b32
-                          x /= 2.0_b32
-                          return
+                            var x = 10.0_b32
+                            x /= 2.0_b32
+                            return
                         """;
 
         AssertParses(source: source);
@@ -695,9 +695,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x = 10
-                          x //= 3
-                          return
+                            var x = 10
+                            x //= 3
+                            return
                         """;
 
         AssertParses(source: source);
@@ -710,9 +710,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x = 10
-                          x %= 3
-                          return
+                            var x = 10
+                            x %= 3
+                            return
                         """;
 
         AssertParses(source: source);
@@ -725,9 +725,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var bits: U32 = 0xFF
-                          bits &= 0x0F
-                          return
+                            var bits: U32 = 0xFF
+                            bits &= 0x0F
+                            return
                         """;
 
         AssertParses(source: source);
@@ -740,9 +740,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var bits: U32 = 0x00
-                          bits |= 0x0F
-                          return
+                            var bits: U32 = 0x00
+                            bits |= 0x0F
+                            return
                         """;
 
         AssertParses(source: source);
@@ -755,9 +755,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var bits: U32 = 0xFF
-                          bits ^= 0x0F
-                          return
+                            var bits: U32 = 0xFF
+                            bits ^= 0x0F
+                            return
                         """;
 
         AssertParses(source: source);
@@ -770,9 +770,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x: U32 = 1
-                          x <<= 4
-                          return
+                            var x: U32 = 1
+                            x <<= 4
+                            return
                         """;
 
         AssertParses(source: source);
@@ -785,9 +785,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x: U32 = 16
-                          x >>= 2
-                          return
+                            var x: U32 = 16
+                            x >>= 2
+                            return
                         """;
 
         AssertParses(source: source);
@@ -805,7 +805,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> Text
-                          return "Hello, " + "World!"
+                            return "Hello, " + "World!"
                         """;
 
         AssertParses(source: source);
@@ -818,7 +818,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> Text
-                          return "-" * 40
+                            return "-" * 40
                         """;
 
         AssertParses(source: source);
@@ -836,9 +836,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 10
-                            show(i)
-                          return
+                            each i in 0 til 10
+                                show(i)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -851,9 +851,9 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 100 by 5
-                            show(i)
-                          return
+                            each i in 0 til 100 by 5
+                                show(i)
+                            return
                         """;
 
         AssertParses(source: source);
@@ -871,7 +871,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          return (a + b) * c - d // e % f ** g
+                            return (a + b) * c - d // e % f ** g
                         """;
 
         AssertParses(source: source);
@@ -884,7 +884,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return a + b > c * d and not (e == f or g != h)
+                            return a + b > c * d and not (e == f or g != h)
                         """;
 
         AssertParses(source: source);
@@ -897,7 +897,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> bool
-                          return (bits & mask) != 0
+                            return (bits & mask) != 0
                         """;
 
         AssertParses(source: source);

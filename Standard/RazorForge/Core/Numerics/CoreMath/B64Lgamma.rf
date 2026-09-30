@@ -18,194 +18,194 @@ module Core
 ### platform. Poles (zero and the negative integers) and ±infinity give +infinity, and NaN stays NaN.
 ### :returns: The correctly rounded ln|gamma(x)|, possibly +infinity or NaN.
 routine B64.lgamma() -> B64
-  var x = me
-  var t = x.to_bits()
-  var nx = t << 1
-  if nx >= 0xFEAEA9B24F16A34C_u64
-    # |x| >= 0x1.006df1bfac84ep+1015
-    if t == 0x7F5754D9278B51A6_u64
-      return 0x1.ffffffffffffep+1023 -! 0x1p+969
-    if t == 0x7F5754D9278B51A7_u64
-      return 0x1.fffffffffffffp+1023 -! 0x1p+969
-    if nx >= (0x7FF_u64 << 53)
-      if nx == (0x7FF_u64 << 53)
-        # ±infinity
-        return x.abs()
-      # NaN: x + x also quiets a signaling NaN
-      return x +! x
-    # overflow, or a huge negative integer (a pole)
-    return 0x1.fp1023 *! 0x1.fp1023
-  var fx = x.floor()
-  if fx == x
-    # x is an integer
-    if x <= 0.0
-      # a pole
-      return 1.0 /! 0.0
-    if x == 1.0 or x == 2.0
-      return 0.0
-  var (fh, fl, eps) = b64_lgamma_dd(x: x)
-  var ub = fh +! (fl +! eps)
-  var lb = fh +! (fl -! eps)
-  if ub != lb
-    return b64_lgamma_accurate(x: x)
-  return ub
+    var x = me
+    var t = x.to_bits()
+    var nx = t << 1
+    if nx >= 0xFEAEA9B24F16A34C_u64
+        # |x| >= 0x1.006df1bfac84ep+1015
+        if t == 0x7F5754D9278B51A6_u64
+            return 0x1.ffffffffffffep+1023 -! 0x1p+969
+        if t == 0x7F5754D9278B51A7_u64
+            return 0x1.fffffffffffffp+1023 -! 0x1p+969
+        if nx >= (0x7FF_u64 << 53)
+            if nx == (0x7FF_u64 << 53)
+                # ±infinity
+                return x.abs()
+            # NaN: x + x also quiets a signaling NaN
+            return x +! x
+        # overflow, or a huge negative integer (a pole)
+        return 0x1.fp1023 *! 0x1.fp1023
+    var fx = x.floor()
+    if fx == x
+        # x is an integer
+        if x <= 0.0
+            # a pole
+            return 1.0 /! 0.0
+        if x == 1.0 or x == 2.0
+            return 0.0
+    var (fh, fl, eps) = b64_lgamma_dd(x: x)
+    var ub = fh +! (fl +! eps)
+    var lb = fh +! (fl -! eps)
+    if ub != lb
+        return b64_lgamma_accurate(x: x)
+    return ub
 
 ### The double-double fast phase of lgamma for a finite B64 x that is not a pole, not 1 or 2, and below
 ### 0x1.006df1bfac84ep+1015 in magnitude (the cases B64.lgamma settles first): (h, l, eps) with lgamma(x)
 ### within eps of h + l. Shared with the D64 lgamma, which widens it past B64 precision.
 secret routine b64_lgamma_dd(x: B64) -> (B64, B64, B64)
-  var t = x.to_bits()
-  var nx = t << 1
-  var au = nx >>> 38
-  var fh = 0.0
-  var fl = 0.0
-  var eps = 0.0
-  if au < B64_LGAMMA_UBRD[0]
-    # |x| < 0.5: lgamma(x) = lgamma(1 + x) - ln|x|
-    var lg = b64_gamma_logd(x: x.abs())
-    var lh = lg.item0
-    var ll = lg.item1
-    if au < 0x1DA0000_u64
-      # |x| < 2^-75
-      fh = -lh
-      fl = -ll
-      eps = 0x1.6aad80c11872cp-73
-    elseif au < 0x1FD0000_u64
-      # |x| < 0.03125
-      var z = x
-      var z2 = z *! z
-      var z4 = z2 *! z2
-      var q = 1437_u64
-      var q0 = b64_lgamma_t(i: q) +! z *! b64_lgamma_t(i: q + 1_u64)
-      var q2 = b64_lgamma_t(i: q + 2_u64) +! z *! b64_lgamma_t(i: q + 3_u64)
-      var q4 = b64_lgamma_t(i: q + 4_u64) +! z *! b64_lgamma_t(i: q + 5_u64)
-      var q6 = b64_lgamma_t(i: q + 6_u64) +! z *! b64_lgamma_t(i: q + 7_u64)
-      fl = z *! ((q0 +! z2 *! q2) +! z4 *! (q4 +! z2 *! q6))
-      var f = b64_lgamma_polydddfst(x: z, n: 4_u64, base: 1429_u64, l: fl)
-      f = b64_gamma_mulddd(x: x, ch: f.item0, cl: f.item1)
-      f = b64_gamma_sumdd(xh: -lh, xl: -ll, yh: f.item0, yl: f.item1)
-      fh = f.item0
-      fl = f.item1
-      eps = 0x1.6aad80c11872cp-73
+    var t = x.to_bits()
+    var nx = t << 1
+    var au = nx >>> 38
+    var fh = 0.0
+    var fl = 0.0
+    var eps = 0.0
+    if au < B64_LGAMMA_UBRD[0]
+        # |x| < 0.5: lgamma(x) = lgamma(1 + x) - ln|x|
+        var lg = b64_gamma_logd(x: x.abs())
+        var lh = lg.item0
+        var ll = lg.item1
+        if au < 0x1DA0000_u64
+            # |x| < 2^-75
+            fh = -lh
+            fl = -ll
+            eps = 0x1.6aad80c11872cp-73
+        elseif au < 0x1FD0000_u64
+            # |x| < 0.03125
+            var z = x
+            var z2 = z *! z
+            var z4 = z2 *! z2
+            var q = 1437_u64
+            var q0 = b64_lgamma_t(i: q) +! z *! b64_lgamma_t(i: q + 1_u64)
+            var q2 = b64_lgamma_t(i: q + 2_u64) +! z *! b64_lgamma_t(i: q + 3_u64)
+            var q4 = b64_lgamma_t(i: q + 4_u64) +! z *! b64_lgamma_t(i: q + 5_u64)
+            var q6 = b64_lgamma_t(i: q + 6_u64) +! z *! b64_lgamma_t(i: q + 7_u64)
+            fl = z *! ((q0 +! z2 *! q2) +! z4 *! (q4 +! z2 *! q6))
+            var f = b64_lgamma_polydddfst(x: z, n: 4_u64, base: 1429_u64, l: fl)
+            f = b64_gamma_mulddd(x: x, ch: f.item0, cl: f.item1)
+            f = b64_gamma_sumdd(xh: -lh, xl: -ll, yh: f.item0, yl: f.item1)
+            fh = f.item0
+            fl = f.item1
+            eps = 0x1.6aad80c11872cp-73
+        else
+            # -0.5 < x < -0.03125 or 0.03125 < x < 0.5: 1 + x is covered by the piece-wise approximation
+            var s = b64_gamma_fasttwosum(x: 1.0, y: x)
+            var tf = s.item0
+            var xl = s.item1
+            var au1 = tf.to_bits() >>> 37
+            var j = b64_lgamma_piece(au: au1)
+            var z = (tf -! b64_lgamma_t(i: 1068_u64 + j)) +! xl
+            var f = b64_lgamma_piece_poly(z: z, j: j)
+            if j == 4_u64
+                # the region around the root at 1
+                f = b64_gamma_mulddd(x: -x, ch: f.item0, cl: f.item1)
+            eps = f.item0.abs() *! 0x1.87f4d7d0af16bp-64
+            f = b64_gamma_sumdd(xh: -lh, xl: -ll, yh: f.item0, yl: f.item1)
+            fh = f.item0
+            fl = f.item1
+            eps = eps +! lh.abs() *! 0x1.2e3b40a0e9b4fp-71
     else
-      # -0.5 < x < -0.03125 or 0.03125 < x < 0.5: 1 + x is covered by the piece-wise approximation
-      var s = b64_gamma_fasttwosum(x: 1.0, y: x)
-      var tf = s.item0
-      var xl = s.item1
-      var au1 = tf.to_bits() >>> 37
-      var j = b64_lgamma_piece(au: au1)
-      var z = (tf -! b64_lgamma_t(i: 1068_u64 + j)) +! xl
-      var f = b64_lgamma_piece_poly(z: z, j: j)
-      if j == 4_u64
-        # the region around the root at 1
-        f = b64_gamma_mulddd(x: -x, ch: f.item0, cl: f.item1)
-      eps = f.item0.abs() *! 0x1.87f4d7d0af16bp-64
-      f = b64_gamma_sumdd(xh: -lh, xl: -ll, yh: f.item0, yl: f.item1)
-      fh = f.item0
-      fl = f.item1
-      eps = eps +! lh.abs() *! 0x1.2e3b40a0e9b4fp-71
-  else
-    # |x| >= 0.5
-    var ax = x.abs()
-    if au >= B64_LGAMMA_UBRD[19]
-      # |x| >= 8.29541: Stirling's asymptotic expansion
-      var lg = b64_gamma_logd(x: ax)
-      var lh = lg.item0 -! 1.0
-      var ll = lg.item1
-      if au >= 0x2198000_u64
-        # x >= 2^52
-        if au >= 0x3FABAA6_u64
-          # x >= 0x1.754cp+1014
-          var s = b64_gamma_fasttwosum(x: lh, y: ll)
-          lh = s.item0
-          ll = s.item1
-        var hlh = lh *! 0.5
-        var m = b64_gamma_mulddd(x: ax, ch: lh, cl: ll)
-        lh = m.item0
-        ll = m.item1 -! hlh
-      else
-        var m = b64_gamma_mulddd(x: ax -! 0.5, ch: lh, cl: ll)
-        lh = m.item0
-        ll = m.item1
-      var c = 1445_u64
-      var a = b64_gamma_fastsum(xh: lh, xl: ll, yh: b64_lgamma_t(i: c), yl: b64_lgamma_t(i: c + 1_u64))
-      lh = a.item0
-      ll = a.item1
-      if ax < 0x1p100
-        var zh = 1.0 /! ax
-        var zl = LLVM::fma[B64](a: zh, b: -ax, c: 1.0) *! zh
-        var z2h = zh *! zh
-        var z4h = z2h *! z2h
-        var q = 1449_u64
-        var q0 = b64_lgamma_t(i: q) +! z2h *! b64_lgamma_t(i: q + 1_u64)
-        var q2 = b64_lgamma_t(i: q + 2_u64) +! z2h *! b64_lgamma_t(i: q + 3_u64)
-        var q4 = b64_lgamma_t(i: q + 4_u64)
-        fl = z2h *! (q0 +! z4h *! (q2 +! z4h *! q4))
-        var f = b64_gamma_fasttwosum(x: b64_lgamma_t(i: c + 2_u64), y: fl)
-        f = b64_gamma_muldd(xh: f.item0, xl: f.item1 +! b64_lgamma_t(i: c + 3_u64), ch: zh, cl: zl)
-        fh = f.item0
-        fl = f.item1
-      var f = b64_gamma_fastsum(xh: lh, xl: ll, yh: fh, yl: fl)
-      fh = f.item0
-      fl = f.item1
-      eps = fh.abs() *! 0x1.a90352e248a68p-65
-    else
-      # x in [0.5, 8.29541]: piece-wise polynomials
-      var j = b64_lgamma_piece(au: au)
-      var z = ax -! b64_lgamma_t(i: 1068_u64 + j)
-      var f = b64_lgamma_piece_poly(z: z, j: j)
-      if j == 4_u64
-        # the region around the root at 1
-        f = b64_gamma_mulddd(x: 1.0 -! ax, ch: f.item0, cl: f.item1)
-      if j == 10_u64
-        # the region around the root at 2
-        f = b64_gamma_mulddd(x: ax -! 2.0, ch: f.item0, cl: f.item1)
-      fh = f.item0
-      fl = f.item1
-      eps = fh.abs() *! 0x1.9ad88bdabdb20p-64 +! 0x1.357c299a88ea7p-80
-    if (t >>> 63) == 1_u64
-      # x < 0: the reflection formula lgamma(x) = ln(pi / |x sin(pi x)|) - lgamma(-x)
-      var sp = b64_lgamma_sinpipid(x: x -! x.floor())
-      sp = b64_gamma_mulddd(x: -x, ch: sp.item0, cl: sp.item1)
-      var lg = b64_gamma_logd(x: sp.item0)
-      var s = b64_gamma_sumdd(xh: fh, xl: fl, yh: lg.item0, yl: lg.item1 +! sp.item1 /! sp.item0)
-      fh = -s.item0
-      fl = -s.item1
-      eps = eps +! lg.item0.abs() *! 0x1.e392010175ee6p-71
-  return (fh, fl, eps)
+        # |x| >= 0.5
+        var ax = x.abs()
+        if au >= B64_LGAMMA_UBRD[19]
+            # |x| >= 8.29541: Stirling's asymptotic expansion
+            var lg = b64_gamma_logd(x: ax)
+            var lh = lg.item0 -! 1.0
+            var ll = lg.item1
+            if au >= 0x2198000_u64
+                # x >= 2^52
+                if au >= 0x3FABAA6_u64
+                    # x >= 0x1.754cp+1014
+                    var s = b64_gamma_fasttwosum(x: lh, y: ll)
+                    lh = s.item0
+                    ll = s.item1
+                var hlh = lh *! 0.5
+                var m = b64_gamma_mulddd(x: ax, ch: lh, cl: ll)
+                lh = m.item0
+                ll = m.item1 -! hlh
+            else
+                var m = b64_gamma_mulddd(x: ax -! 0.5, ch: lh, cl: ll)
+                lh = m.item0
+                ll = m.item1
+            var c = 1445_u64
+            var a = b64_gamma_fastsum(xh: lh, xl: ll, yh: b64_lgamma_t(i: c), yl: b64_lgamma_t(i: c + 1_u64))
+            lh = a.item0
+            ll = a.item1
+            if ax < 0x1p100
+                var zh = 1.0 /! ax
+                var zl = LLVM::fma[B64](a: zh, b: -ax, c: 1.0) *! zh
+                var z2h = zh *! zh
+                var z4h = z2h *! z2h
+                var q = 1449_u64
+                var q0 = b64_lgamma_t(i: q) +! z2h *! b64_lgamma_t(i: q + 1_u64)
+                var q2 = b64_lgamma_t(i: q + 2_u64) +! z2h *! b64_lgamma_t(i: q + 3_u64)
+                var q4 = b64_lgamma_t(i: q + 4_u64)
+                fl = z2h *! (q0 +! z4h *! (q2 +! z4h *! q4))
+                var f = b64_gamma_fasttwosum(x: b64_lgamma_t(i: c + 2_u64), y: fl)
+                f = b64_gamma_muldd(xh: f.item0, xl: f.item1 +! b64_lgamma_t(i: c + 3_u64), ch: zh, cl: zl)
+                fh = f.item0
+                fl = f.item1
+            var f = b64_gamma_fastsum(xh: lh, xl: ll, yh: fh, yl: fl)
+            fh = f.item0
+            fl = f.item1
+            eps = fh.abs() *! 0x1.a90352e248a68p-65
+        else
+            # x in [0.5, 8.29541]: piece-wise polynomials
+            var j = b64_lgamma_piece(au: au)
+            var z = ax -! b64_lgamma_t(i: 1068_u64 + j)
+            var f = b64_lgamma_piece_poly(z: z, j: j)
+            if j == 4_u64
+                # the region around the root at 1
+                f = b64_gamma_mulddd(x: 1.0 -! ax, ch: f.item0, cl: f.item1)
+            if j == 10_u64
+                # the region around the root at 2
+                f = b64_gamma_mulddd(x: ax -! 2.0, ch: f.item0, cl: f.item1)
+            fh = f.item0
+            fl = f.item1
+            eps = fh.abs() *! 0x1.9ad88bdabdb20p-64 +! 0x1.357c299a88ea7p-80
+        if (t >>> 63) == 1_u64
+            # x < 0: the reflection formula lgamma(x) = ln(pi / |x sin(pi x)|) - lgamma(-x)
+            var sp = b64_lgamma_sinpipid(x: x -! x.floor())
+            sp = b64_gamma_mulddd(x: -x, ch: sp.item0, cl: sp.item1)
+            var lg = b64_gamma_logd(x: sp.item0)
+            var s = b64_gamma_sumdd(xh: fh, xl: fl, yh: lg.item0, yl: lg.item1 +! sp.item1 /! sp.item0)
+            fh = -s.item0
+            fl = -s.item1
+            eps = eps +! lg.item0.abs() *! 0x1.e392010175ee6p-71
+    return (fh, fl, eps)
 
 ### Reads entry `i` of the coefficient table B64_LGAMMA_T.
 ### :param i: The table index.
 ### :returns: The table entry as a `B64`.
 secret routine b64_lgamma_t(i: U64) -> B64
-  return B64.from_bits(bits: B64_LGAMMA_T[i])
+    return B64.from_bits(bits: B64_LGAMMA_T[i])
 
 ### The index of the piece-wise approximation region of [0.5, 8.29541] holding the argument.
 ### :param au: The argument's bits shifted right by 37 (at least B64_LGAMMA_UBRD[0]).
 ### :returns: The region index in 0..18.
 secret routine b64_lgamma_piece(au: U64) -> U64
-  var ou = au - B64_LGAMMA_UBRD[0]
-  # the 32-bit product of the original wraps
-  var p = (ou *% 0x150D_u64) & 0xFFFFFFFF_u64
-  var j = ((0x157CED865_u64 -% p) *% ou +% 0x128000000000_u64) >>> 45
-  if au < B64_LGAMMA_UBRD[j]
-    j = j - 1_u64
-  return j
+    var ou = au - B64_LGAMMA_UBRD[0]
+    # the 32-bit product of the original wraps
+    var p = (ou *% 0x150D_u64) & 0xFFFFFFFF_u64
+    var j = ((0x157CED865_u64 -% p) *% ou +% 0x128000000000_u64) >>> 45
+    if au < B64_LGAMMA_UBRD[j]
+        j = j - 1_u64
+    return j
 
 ### Evaluates the region-`j` polynomial of the piece-wise approximation at the offset `z`.
 ### :param z: The offset from the region's reference point.
 ### :param j: The region index.
 ### :returns: The value as a (high, low) pair.
 secret routine b64_lgamma_piece_poly(z: B64, j: U64) -> (B64, B64)
-  var z2 = z *! z
-  var z4 = z2 *! z2
-  var q = 1087_u64 + 8_u64 * j
-  var q0 = b64_lgamma_t(i: q) +! z *! b64_lgamma_t(i: q + 1_u64)
-  var q2 = b64_lgamma_t(i: q + 2_u64) +! z *! b64_lgamma_t(i: q + 3_u64)
-  var q4 = b64_lgamma_t(i: q + 4_u64) +! z *! b64_lgamma_t(i: q + 5_u64)
-  var q6 = b64_lgamma_t(i: q + 6_u64) +! z *! b64_lgamma_t(i: q + 7_u64)
-  var fl = z *! ((q0 +! z2 *! q2) +! z4 *! (q4 +! z2 *! q6))
-  return b64_lgamma_polydddfst(x: z, n: 5_u64, base: 1239_u64 + 10_u64 * j, l: fl)
+    var z2 = z *! z
+    var z4 = z2 *! z2
+    var q = 1087_u64 + 8_u64 * j
+    var q0 = b64_lgamma_t(i: q) +! z *! b64_lgamma_t(i: q + 1_u64)
+    var q2 = b64_lgamma_t(i: q + 2_u64) +! z *! b64_lgamma_t(i: q + 3_u64)
+    var q4 = b64_lgamma_t(i: q + 4_u64) +! z *! b64_lgamma_t(i: q + 5_u64)
+    var q6 = b64_lgamma_t(i: q + 6_u64) +! z *! b64_lgamma_t(i: q + 7_u64)
+    var fl = z *! ((q0 +! z2 *! q2) +! z4 *! (q4 +! z2 *! q6))
+    return b64_lgamma_polydddfst(x: z, n: 5_u64, base: 1239_u64 + 10_u64 * j, l: fl)
 
 ### Looks `x` up among the arguments whose log-gamma lies too close to a rounding boundary for the
 ### accurate path, and returns the correctly rounded result for them, or `f` unchanged otherwise.
@@ -213,20 +213,20 @@ secret routine b64_lgamma_piece_poly(z: B64, j: U64) -> (B64, B64)
 ### :param f: The accurate path's result.
 ### :returns: The corrected result.
 secret routine b64_lgamma_database(x: B64, f: B64) -> B64
-  var a = 0_s64
-  var b = 18_s64
-  var m = (a + b) // 2
-  while a <= b
-    var base = 0_u64 + 3_u64 * LLVM::reinterpret_bits[S64, U64](m)
-    var key = b64_lgamma_t(i: base)
-    if key < x
-      a = m + 1
-    elseif key == x
-      return b64_lgamma_t(i: base + 1_u64) +! b64_lgamma_t(i: base + 2_u64)
-    else
-      b = m - 1
-    m = (a + b) // 2
-  return f
+    var a = 0_s64
+    var b = 18_s64
+    var m = (a + b) // 2
+    while a <= b
+        var base = 0_u64 + 3_u64 * LLVM::reinterpret_bits[S64, U64](m)
+        var key = b64_lgamma_t(i: base)
+        if key < x
+            a = m + 1
+        elseif key == x
+            return b64_lgamma_t(i: base + 1_u64) +! b64_lgamma_t(i: base + 2_u64)
+        else
+            b = m - 1
+        m = (a + b) // 2
+    return f
 
 ### Adds the triple-double l = lh + ll + lll to the triple-double f = fh + fl + fll.
 ### :param fh: The high part of f.
@@ -237,170 +237,170 @@ secret routine b64_lgamma_database(x: B64, f: B64) -> B64
 ### :param lll: The low part of l.
 ### :returns: The (high, middle, low) parts of the sum.
 secret routine b64_lgamma_add3(fh: B64, fl: B64, fll: B64, lh: B64, ll: B64, lll: B64) -> (B64, B64, B64)
-  var s = b64_gamma_sumdd(xh: fl, xl: fll, yh: ll, yl: lll)
-  var h = b64_gamma_twosum(x: fh, y: lh)
-  var s2 = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: h.item1, yl: 0.0)
-  return (h.item0, s2.item0, s2.item1)
+    var s = b64_gamma_sumdd(xh: fl, xl: fll, yh: ll, yl: lll)
+    var h = b64_gamma_twosum(x: fh, y: lh)
+    var s2 = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: h.item1, yl: 0.0)
+    return (h.item0, s2.item0, s2.item1)
 
 ### ln(x1) + ln(x2) as a triple-double, for x1 = x - 1 and x2 = x - 2.
 ### :param x: The argument, with x - 2 > 0.
 ### :returns: The (high, middle, low) parts.
 secret routine b64_lgamma_log2terms(x: B64) -> (B64, B64, B64)
-  var l2 = b64_lgamma_logd_accurate(x: x -! 2.0)
-  var l1 = b64_lgamma_logd_accurate(x: x -! 1.0)
-  var s = b64_gamma_sumdd(xh: l1.item1, xl: l1.item2, yh: l2.item1, yl: l2.item2)
-  var h = b64_gamma_fasttwosum(x: l1.item0, y: l2.item0)
-  var s2 = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: h.item1, yl: 0.0)
-  return (h.item0, s2.item0, s2.item1)
+    var l2 = b64_lgamma_logd_accurate(x: x -! 2.0)
+    var l1 = b64_lgamma_logd_accurate(x: x -! 1.0)
+    var s = b64_gamma_sumdd(xh: l1.item1, xl: l1.item2, yh: l2.item1, yl: l2.item2)
+    var h = b64_gamma_fasttwosum(x: l1.item0, y: l2.item0)
+    var s2 = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: h.item1, yl: 0.0)
+    return (h.item0, s2.item0, s2.item1)
 
 ### The slow accurate path of `lgamma`, taken when the fast path cannot decide the rounding.
 ### :param x: The argument, finite and not a pole.
 ### :returns: The correctly rounded ln|gamma(x)|.
 secret routine b64_lgamma_accurate(x: B64) -> B64
-  var sx = x
-  var ax = x.abs()
-  var fh = 0.0
-  var fl = 0.0
-  var fll = 0.0
-  if ax < 0x1p-100
-    var l = b64_lgamma_logd_accurate(x: ax)
-    var s = b64_gamma_fasttwosum(x: -l.item0, y: -l.item1)
-    fh = s.item0
-    s = b64_gamma_fasttwosum(x: s.item1, y: -l.item2)
-    fl = s.item0
-    fll = s.item1
-    var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
-    if e == 0.0 and 1.0 +! 0x1p-54 == 1.0 -! 0x1p-54
-      var one = 1.0
-      var h52 = 0x1p-52
-      fl = fl *! (1.0 +! h52.copysign(sign: fl) *! one.copysign(sign: fll))
-  elseif ax < 0x1p-2
-    var f = b64_lgamma_polydddfst(x: sx, n: 34_u64, base: 57_u64, l: 0.0)
-    f = b64_gamma_mulddd(x: sx, ch: f.item0, cl: f.item1)
-    var l = b64_lgamma_logd_accurate(x: ax)
-    f = b64_gamma_sumdd(xh: f.item0, xl: f.item1, yh: -l.item1, yl: -l.item2)
-    var h = b64_gamma_twosum(x: -l.item0, y: f.item0)
-    fh = h.item0
-    var s = b64_gamma_twosum(x: h.item1, y: f.item1)
-    fl = s.item0
-    fll = s.item1
-    var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
-    if e == 0.0 and 1.0 +! 0x1p-54 == 1.0 -! 0x1p-54
-      var one = 1.0
-      var h52 = 0x1p-52
-      fl = fl *! (1.0 +! h52.copysign(sign: fl) *! one.copysign(sign: fll))
-  else
-    var r = (0.0, 0.0, 0.0)
-    if (ax -! 0.5).abs() < 0x1p-2
-      var f = b64_lgamma_polydddfst(x: ax -! 0.5, n: 30_u64, base: 125_u64, l: 0.0)
-      r = (f.item0, f.item1, 0.0)
-      if sx > 0.0
+    var sx = x
+    var ax = x.abs()
+    var fh = 0.0
+    var fl = 0.0
+    var fll = 0.0
+    if ax < 0x1p-100
         var l = b64_lgamma_logd_accurate(x: ax)
-        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: -l.item0, ll: -l.item1, lll: -l.item2)
-    elseif (ax -! 2.5).abs() < 0x1p-2
-      var f = b64_lgamma_polydddfst(x: ax -! 2.5, n: 30_u64, base: 125_u64, l: 0.0)
-      var l = b64_lgamma_logd_accurate(x: ax -! 1.0)
-      r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l.item0, ll: l.item1, lll: l.item2)
-      if sx < 0.0
-        l = b64_lgamma_logd_accurate(x: ax)
-        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
-    elseif (ax -! 3.5).abs() < 0x1p-2
-      var l1 = b64_lgamma_log2terms(x: ax)
-      var f = b64_lgamma_polydddfst(x: ax -! 3.5, n: 30_u64, base: 125_u64, l: 0.0)
-      r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l1.item0, ll: l1.item1, lll: l1.item2)
-      if sx < 0.0
+        var s = b64_gamma_fasttwosum(x: -l.item0, y: -l.item1)
+        fh = s.item0
+        s = b64_gamma_fasttwosum(x: s.item1, y: -l.item2)
+        fl = s.item0
+        fll = s.item1
+        var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
+        if e == 0.0 and 1.0 +! 0x1p-54 == 1.0 -! 0x1p-54
+            var one = 1.0
+            var h52 = 0x1p-52
+            fl = fl *! (1.0 +! h52.copysign(sign: fl) *! one.copysign(sign: fll))
+    elseif ax < 0x1p-2
+        var f = b64_lgamma_polydddfst(x: sx, n: 34_u64, base: 57_u64, l: 0.0)
+        f = b64_gamma_mulddd(x: sx, ch: f.item0, cl: f.item1)
         var l = b64_lgamma_logd_accurate(x: ax)
-        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
-    elseif (ax -! 1.0).abs() < 0x1p-2
-      var f = b64_lgamma_polydddfst(x: ax -! 1.0, n: 34_u64, base: 57_u64, l: 0.0)
-      f = b64_gamma_mulddd(x: ax -! 1.0, ch: f.item0, cl: f.item1)
-      r = (f.item0, f.item1, 0.0)
-      if sx < 0.0
-        var l = b64_lgamma_logd_accurate(x: ax)
-        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
-    elseif (ax -! 1.5).abs() < 0x1p-2
-      var f = b64_lgamma_polydddfst(x: ax -! 1.5, n: 30_u64, base: 125_u64, l: 0.0)
-      r = (f.item0, f.item1, 0.0)
-      if sx < 0.0
-        var l = b64_lgamma_logd_accurate(x: ax)
-        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
-    elseif (ax -! 2.0).abs() < 0x1p-2
-      var l = b64_lgamma_logd_accurate(x: ax -! 1.0)
-      var f = b64_lgamma_polydddfst(x: ax -! 2.0, n: 34_u64, base: 57_u64, l: 0.0)
-      f = b64_gamma_mulddd(x: ax -! 2.0, ch: f.item0, cl: f.item1)
-      r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l.item0, ll: l.item1, lll: l.item2)
-      if sx < 0.0
-        l = b64_lgamma_logd_accurate(x: ax)
-        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
-    elseif (ax -! 3.0).abs() < 0x1p-2
-      var l1 = b64_lgamma_log2terms(x: ax)
-      var f = b64_lgamma_polydddfst(x: ax -! 3.0, n: 34_u64, base: 57_u64, l: 0.0)
-      f = b64_gamma_mulddd(x: ax -! 3.0, ch: f.item0, cl: f.item1)
-      r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l1.item0, ll: l1.item1, lll: l1.item2)
-      if sx < 0.0
-        var l = b64_lgamma_logd_accurate(x: ax)
-        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+        f = b64_gamma_sumdd(xh: f.item0, xl: f.item1, yh: -l.item1, yl: -l.item2)
+        var h = b64_gamma_twosum(x: -l.item0, y: f.item0)
+        fh = h.item0
+        var s = b64_gamma_twosum(x: h.item1, y: f.item1)
+        fl = s.item0
+        fll = s.item1
+        var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
+        if e == 0.0 and 1.0 +! 0x1p-54 == 1.0 -! 0x1p-54
+            var one = 1.0
+            var h52 = 0x1p-52
+            fl = fl *! (1.0 +! h52.copysign(sign: fl) *! one.copysign(sign: fll))
     else
-      # x > 3.75: Stirling's series, for 1 - sx = ax + 1 when sx < 0
-      var xh = ax
-      var xl = 0.0
-      if sx < 0.0
-        var s = b64_gamma_fasttwosum(x: ax, y: 1.0)
-        xh = s.item0
-        xl = s.item1
-      r = b64_lgamma_asym_accurate(xh: xh, xl: xl)
-    if sx < 0.0
-      # reflection: lgamma(sx) = ln(pi / |sin(pi sx)|) - lgamma(1 - sx)
-      var phi = -sx
-      if sx < -0.5
-        phi = sx -! sx.floor()
-      var sp = b64_lgamma_sinpipid_accurate(x: phi)
-      var l = b64_lgamma_logd_accurate(x: sp.item0)
-      r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1 +! (sp.item1 /! sp.item0 +! l.item2), lll: 0.0)
-      r = (-r.item0, -r.item1, -r.item2)
-    var s = b64_gamma_fasttwosum(x: r.item0, y: r.item1)
-    var s2 = b64_gamma_fasttwosum(x: s.item1, y: r.item2)
-    s = b64_gamma_fasttwosum(x: s.item0, y: s2.item0)
-    fh = s.item0
-    s2 = b64_gamma_fasttwosum(x: s.item1, y: s2.item1)
-    fl = s2.item0
-    fll = s2.item1
-    var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
-    if e == 0.0
-      var h26 = 0x1p-26
-      fl = fl *! (1.0 +! h26.copysign(sign: fl) *! h26.copysign(sign: fll))
-  if fh.abs() < 0x1.8p-2
-    # near a root of lgamma for -10.5 < x < -2: a polynomial around the root
-    var k = 0_u64
-    while k < 17_u64
-      if fh.abs() < B64.from_bits(bits: B64_LGAMMA_RG_FH[k]) and sx > B64.from_bits(bits: B64_LGAMMA_RG_LO[k]) and sx < B64.from_bits(bits: B64_LGAMMA_RG_HI[k])
-        var f = b64_lgamma_root_poly(sx: sx, k: k)
-        fh = f.item0
-        fl = f.item1
-        break
-      k = k + 1_u64
-  if ((fl.to_bits() +% 2_u64) & 0x000FFFFFFFFFFFFF_u64) <= 2_u64
-    return b64_lgamma_database(x: sx, f: fh +! fl)
-  return fh +! fl
+        var r = (0.0, 0.0, 0.0)
+        if (ax -! 0.5).abs() < 0x1p-2
+            var f = b64_lgamma_polydddfst(x: ax -! 0.5, n: 30_u64, base: 125_u64, l: 0.0)
+            r = (f.item0, f.item1, 0.0)
+            if sx > 0.0
+                var l = b64_lgamma_logd_accurate(x: ax)
+                r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: -l.item0, ll: -l.item1, lll: -l.item2)
+        elseif (ax -! 2.5).abs() < 0x1p-2
+            var f = b64_lgamma_polydddfst(x: ax -! 2.5, n: 30_u64, base: 125_u64, l: 0.0)
+            var l = b64_lgamma_logd_accurate(x: ax -! 1.0)
+            r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l.item0, ll: l.item1, lll: l.item2)
+            if sx < 0.0
+                l = b64_lgamma_logd_accurate(x: ax)
+                r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+        elseif (ax -! 3.5).abs() < 0x1p-2
+            var l1 = b64_lgamma_log2terms(x: ax)
+            var f = b64_lgamma_polydddfst(x: ax -! 3.5, n: 30_u64, base: 125_u64, l: 0.0)
+            r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l1.item0, ll: l1.item1, lll: l1.item2)
+            if sx < 0.0
+                var l = b64_lgamma_logd_accurate(x: ax)
+                r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+        elseif (ax -! 1.0).abs() < 0x1p-2
+            var f = b64_lgamma_polydddfst(x: ax -! 1.0, n: 34_u64, base: 57_u64, l: 0.0)
+            f = b64_gamma_mulddd(x: ax -! 1.0, ch: f.item0, cl: f.item1)
+            r = (f.item0, f.item1, 0.0)
+            if sx < 0.0
+                var l = b64_lgamma_logd_accurate(x: ax)
+                r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+        elseif (ax -! 1.5).abs() < 0x1p-2
+            var f = b64_lgamma_polydddfst(x: ax -! 1.5, n: 30_u64, base: 125_u64, l: 0.0)
+            r = (f.item0, f.item1, 0.0)
+            if sx < 0.0
+                var l = b64_lgamma_logd_accurate(x: ax)
+                r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+        elseif (ax -! 2.0).abs() < 0x1p-2
+            var l = b64_lgamma_logd_accurate(x: ax -! 1.0)
+            var f = b64_lgamma_polydddfst(x: ax -! 2.0, n: 34_u64, base: 57_u64, l: 0.0)
+            f = b64_gamma_mulddd(x: ax -! 2.0, ch: f.item0, cl: f.item1)
+            r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l.item0, ll: l.item1, lll: l.item2)
+            if sx < 0.0
+                l = b64_lgamma_logd_accurate(x: ax)
+                r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+        elseif (ax -! 3.0).abs() < 0x1p-2
+            var l1 = b64_lgamma_log2terms(x: ax)
+            var f = b64_lgamma_polydddfst(x: ax -! 3.0, n: 34_u64, base: 57_u64, l: 0.0)
+            f = b64_gamma_mulddd(x: ax -! 3.0, ch: f.item0, cl: f.item1)
+            r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l1.item0, ll: l1.item1, lll: l1.item2)
+            if sx < 0.0
+                var l = b64_lgamma_logd_accurate(x: ax)
+                r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+        else
+            # x > 3.75: Stirling's series, for 1 - sx = ax + 1 when sx < 0
+            var xh = ax
+            var xl = 0.0
+            if sx < 0.0
+                var s = b64_gamma_fasttwosum(x: ax, y: 1.0)
+                xh = s.item0
+                xl = s.item1
+            r = b64_lgamma_asym_accurate(xh: xh, xl: xl)
+        if sx < 0.0
+            # reflection: lgamma(sx) = ln(pi / |sin(pi sx)|) - lgamma(1 - sx)
+            var phi = -sx
+            if sx < -0.5
+                phi = sx -! sx.floor()
+            var sp = b64_lgamma_sinpipid_accurate(x: phi)
+            var l = b64_lgamma_logd_accurate(x: sp.item0)
+            r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1 +! (sp.item1 /! sp.item0 +! l.item2), lll: 0.0)
+            r = (-r.item0, -r.item1, -r.item2)
+        var s = b64_gamma_fasttwosum(x: r.item0, y: r.item1)
+        var s2 = b64_gamma_fasttwosum(x: s.item1, y: r.item2)
+        s = b64_gamma_fasttwosum(x: s.item0, y: s2.item0)
+        fh = s.item0
+        s2 = b64_gamma_fasttwosum(x: s.item1, y: s2.item1)
+        fl = s2.item0
+        fll = s2.item1
+        var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
+        if e == 0.0
+            var h26 = 0x1p-26
+            fl = fl *! (1.0 +! h26.copysign(sign: fl) *! h26.copysign(sign: fll))
+    if fh.abs() < 0x1.8p-2
+        # near a root of lgamma for -10.5 < x < -2: a polynomial around the root
+        var k = 0_u64
+        while k < 17_u64
+            if fh.abs() < B64.from_bits(bits: B64_LGAMMA_RG_FH[k]) and sx > B64.from_bits(bits: B64_LGAMMA_RG_LO[k]) and sx < B64.from_bits(bits: B64_LGAMMA_RG_HI[k])
+                var f = b64_lgamma_root_poly(sx: sx, k: k)
+                fh = f.item0
+                fl = f.item1
+                break
+            k = k + 1_u64
+    if ((fl.to_bits() +% 2_u64) & 0x000FFFFFFFFFFFFF_u64) <= 2_u64
+        return b64_lgamma_database(x: sx, f: fh +! fl)
+    return fh +! fl
 
 ### Evaluates the polynomial of root region `k` (a root x0 of lgamma for -10.5 < x < -2) at `sx`.
 ### :param sx: The argument.
 ### :param k: The region index in 0..16.
 ### :returns: The value as a (high, low) pair.
 secret routine b64_lgamma_root_poly(sx: B64, k: U64) -> (B64, B64)
-  var x0 = B64_LGAMMA_RG_X0[k]
-  var c = B64_LGAMMA_RG_C[k]
-  var n = B64_LGAMMA_RG_N[k]
-  var kk = B64_LGAMMA_RG_K[k]
-  var sc = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1023 + B64_LGAMMA_RG_SC[k]) << 52)
-  var z = b64_gamma_fasttwosum(x: b64_lgamma_t(i: x0) +! sx, y: b64_lgamma_t(i: x0 + 1_u64))
-  var zh = z.item0
-  var zl = z.item1 +! b64_lgamma_t(i: x0 + 2_u64)
-  var sh = zh *! sc
-  var sl = zl *! sc
-  var fl = sh *! b64_lgamma_polyd(x: sh, n: kk, base: c + 2_u64 * (n - kk))
-  var f = b64_lgamma_polydd(xh: sh, xl: sl, n: n - kk, base: c, l: fl)
-  return b64_gamma_muldd(xh: zh, xl: zl, ch: f.item0, cl: f.item1)
+    var x0 = B64_LGAMMA_RG_X0[k]
+    var c = B64_LGAMMA_RG_C[k]
+    var n = B64_LGAMMA_RG_N[k]
+    var kk = B64_LGAMMA_RG_K[k]
+    var sc = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1023 + B64_LGAMMA_RG_SC[k]) << 52)
+    var z = b64_gamma_fasttwosum(x: b64_lgamma_t(i: x0) +! sx, y: b64_lgamma_t(i: x0 + 1_u64))
+    var zh = z.item0
+    var zl = z.item1 +! b64_lgamma_t(i: x0 + 2_u64)
+    var sh = zh *! sc
+    var sl = zl *! sc
+    var fl = sh *! b64_lgamma_polyd(x: sh, n: kk, base: c + 2_u64 * (n - kk))
+    var f = b64_lgamma_polydd(xh: sh, xl: sl, n: n - kk, base: c, l: fl)
+    return b64_gamma_muldd(xh: zh, xl: zl, ch: f.item0, cl: f.item1)
 
 ### Evaluates the double-double polynomial `c[0] + c[1]*x + ... + (c[n-1] + l)*x^(n-1)` of the table
 ### pairs (high, low) starting at `base`, with a double-double argument.
@@ -411,17 +411,17 @@ secret routine b64_lgamma_root_poly(sx: B64, k: U64) -> (B64, B64)
 ### :param l: A low-order term added to the leading coefficient.
 ### :returns: The value as a (high, low) pair.
 secret routine b64_lgamma_polydd(xh: B64, xl: B64, n: U64, base: U64, l: B64) -> (B64, B64)
-  var i = n - 1_u64
-  var s = b64_gamma_fasttwosum(x: b64_lgamma_t(i: base + 2_u64 * i), y: l)
-  var ch = s.item0
-  var cl = s.item1 +! b64_lgamma_t(i: base + 2_u64 * i + 1_u64)
-  while i > 0_u64
-    i = i - 1_u64
-    var m = b64_gamma_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
-    var a = b64_gamma_fastsum(xh: b64_lgamma_t(i: base + 2_u64 * i), xl: b64_lgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
-    ch = a.item0
-    cl = a.item1
-  return (ch, cl)
+    var i = n - 1_u64
+    var s = b64_gamma_fasttwosum(x: b64_lgamma_t(i: base + 2_u64 * i), y: l)
+    var ch = s.item0
+    var cl = s.item1 +! b64_lgamma_t(i: base + 2_u64 * i + 1_u64)
+    while i > 0_u64
+        i = i - 1_u64
+        var m = b64_gamma_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+        var a = b64_gamma_fastsum(xh: b64_lgamma_t(i: base + 2_u64 * i), xl: b64_lgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
+        ch = a.item0
+        cl = a.item1
+    return (ch, cl)
 
 ### Evaluates the double-double polynomial `c[0] + c[1]*x + ... + (c[n-1] + l)*x^(n-1)` of the table
 ### pairs (high, low) starting at `base`, with a double argument (accumulating with `fastsum`).
@@ -431,17 +431,17 @@ secret routine b64_lgamma_polydd(xh: B64, xl: B64, n: U64, base: U64, l: B64) ->
 ### :param l: A low-order term added to the leading coefficient.
 ### :returns: The value as a (high, low) pair.
 secret routine b64_lgamma_polydddfst(x: B64, n: U64, base: U64, l: B64) -> (B64, B64)
-  var i = n - 1_u64
-  var s = b64_gamma_fasttwosum(x: b64_lgamma_t(i: base + 2_u64 * i), y: l)
-  var ch = s.item0
-  var cl = s.item1 +! b64_lgamma_t(i: base + 2_u64 * i + 1_u64)
-  while i > 0_u64
-    i = i - 1_u64
-    var m = b64_gamma_mulddd(x: x, ch: ch, cl: cl)
-    var a = b64_gamma_fastsum(xh: b64_lgamma_t(i: base + 2_u64 * i), xl: b64_lgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
-    ch = a.item0
-    cl = a.item1
-  return (ch, cl)
+    var i = n - 1_u64
+    var s = b64_gamma_fasttwosum(x: b64_lgamma_t(i: base + 2_u64 * i), y: l)
+    var ch = s.item0
+    var cl = s.item1 +! b64_lgamma_t(i: base + 2_u64 * i + 1_u64)
+    while i > 0_u64
+        i = i - 1_u64
+        var m = b64_gamma_mulddd(x: x, ch: ch, cl: cl)
+        var a = b64_gamma_fastsum(xh: b64_lgamma_t(i: base + 2_u64 * i), xl: b64_lgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
+        ch = a.item0
+        cl = a.item1
+    return (ch, cl)
 
 ### Evaluates the double polynomial `c[0] + c[1]*x + ... + c[n-1]*x^(n-1)` of the high parts of the
 ### table pairs starting at `base`.
@@ -450,177 +450,177 @@ secret routine b64_lgamma_polydddfst(x: B64, n: U64, base: U64, l: B64) -> (B64,
 ### :param base: The table index of the first coefficient's high part.
 ### :returns: The value.
 secret routine b64_lgamma_polyd(x: B64, n: U64, base: U64) -> B64
-  var i = n - 1_u64
-  var ch = b64_lgamma_t(i: base + 2_u64 * i)
-  while i > 0_u64
-    i = i - 1_u64
-    ch = b64_lgamma_t(i: base + 2_u64 * i) +! x *! ch
-  return ch
+    var i = n - 1_u64
+    var ch = b64_lgamma_t(i: base + 2_u64 * i)
+    while i > 0_u64
+        i = i - 1_u64
+        ch = b64_lgamma_t(i: base + 2_u64 * i) +! x *! ch
+    return ch
 
 ### sin(pi x) / pi as a double-double, for 0 < x < 1.
 ### :param x: The argument.
 ### :returns: The (high, low) pair.
 secret routine b64_lgamma_sinpipid(x: B64) -> (B64, B64)
-  var ax = (x -! 0.5).abs()
-  var sx = ax *! 128.0
-  var ix = LLVM::rint[B64](value: sx)
-  var ky = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ix))
-  var kx = 64_u64 - ky
-  if kx < 2_u64
-    # x close to 0 or 1: sin(pi z) / pi = z (1 + z^2 P(z^2)) with z = 0.5 - |x - 0.5|
-    var z = 0.5 -! ax
-    var z2 = z *! z
-    var z2l = LLVM::fma[B64](a: z, b: z, c: -z2)
-    var fl = z2 *! (0x1.9f9cb402bc42ap-1 +! z2 *! (-0x1.86a8e46ddf78dp-3 +! z2 *! 0x1.ac644e7aa33e6p-6))
-    var f = b64_gamma_fasttwosum(x: -0x1.a51a6625307d3p+0, y: fl)
-    f = b64_gamma_muldd(xh: z2, xl: z2l, ch: f.item0, cl: f.item1 +! (-0x1.16cc8f2044a4ap-55))
-    f = b64_gamma_mulddd(x: z, ch: f.item0, cl: f.item1)
-    var s = b64_gamma_fasttwosum(x: z, y: f.item0)
-    return (s.item0, f.item1 +! s.item1)
-  var d = ix -! sx
-  var d2 = d *! d
-  var sh = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx + 1_u64)
-  var sl = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx)
-  var ch = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky + 1_u64)
-  var cl = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky)
-  var pp = d2 *! (0x1.03c1f081b5ac4p-26 +! d2 *! (-0x1.55d3c7e3bd8bfp-42 +! d2 *! 0x1.e1f4826790653p-59))
-  var qq = d2 *! (-0x1.4abbce625be53p-19 +! d2 *! (0x1.466bc67748efcp-34 +! d2 *! (-0x1.32d26e446373ap-50)))
-  var q = b64_gamma_fasttwosum(x: 0x1.921fb54442d18p-6, y: qq)
-  var c = b64_gamma_muldd(xh: q.item0, xl: q.item1 +! 0x1.1a624b88c9448p-60, ch: ch, cl: cl)
-  var th = b64_gamma_fasttwosum(x: -0x1.3bd3cc9be45dep-12, y: pp)
-  th = b64_gamma_mulddd(x: d, ch: th.item0, cl: th.item1 +! (-0x1.692b66e3cf6e8p-66))
-  var ph = b64_gamma_muldd(xh: th.item0, xl: th.item1, ch: sh, cl: sl)
-  c = b64_gamma_fastsum(xh: c.item0, xl: c.item1, yh: ph.item0, yl: ph.item1)
-  c = b64_gamma_mulddd(x: d, ch: c.item0, cl: c.item1)
-  return b64_gamma_fastsum(xh: sh, xl: sl, yh: c.item0, yl: c.item1)
+    var ax = (x -! 0.5).abs()
+    var sx = ax *! 128.0
+    var ix = LLVM::rint[B64](value: sx)
+    var ky = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ix))
+    var kx = 64_u64 - ky
+    if kx < 2_u64
+        # x close to 0 or 1: sin(pi z) / pi = z (1 + z^2 P(z^2)) with z = 0.5 - |x - 0.5|
+        var z = 0.5 -! ax
+        var z2 = z *! z
+        var z2l = LLVM::fma[B64](a: z, b: z, c: -z2)
+        var fl = z2 *! (0x1.9f9cb402bc42ap-1 +! z2 *! (-0x1.86a8e46ddf78dp-3 +! z2 *! 0x1.ac644e7aa33e6p-6))
+        var f = b64_gamma_fasttwosum(x: -0x1.a51a6625307d3p+0, y: fl)
+        f = b64_gamma_muldd(xh: z2, xl: z2l, ch: f.item0, cl: f.item1 +! (-0x1.16cc8f2044a4ap-55))
+        f = b64_gamma_mulddd(x: z, ch: f.item0, cl: f.item1)
+        var s = b64_gamma_fasttwosum(x: z, y: f.item0)
+        return (s.item0, f.item1 +! s.item1)
+    var d = ix -! sx
+    var d2 = d *! d
+    var sh = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx + 1_u64)
+    var sl = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx)
+    var ch = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky + 1_u64)
+    var cl = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky)
+    var pp = d2 *! (0x1.03c1f081b5ac4p-26 +! d2 *! (-0x1.55d3c7e3bd8bfp-42 +! d2 *! 0x1.e1f4826790653p-59))
+    var qq = d2 *! (-0x1.4abbce625be53p-19 +! d2 *! (0x1.466bc67748efcp-34 +! d2 *! (-0x1.32d26e446373ap-50)))
+    var q = b64_gamma_fasttwosum(x: 0x1.921fb54442d18p-6, y: qq)
+    var c = b64_gamma_muldd(xh: q.item0, xl: q.item1 +! 0x1.1a624b88c9448p-60, ch: ch, cl: cl)
+    var th = b64_gamma_fasttwosum(x: -0x1.3bd3cc9be45dep-12, y: pp)
+    th = b64_gamma_mulddd(x: d, ch: th.item0, cl: th.item1 +! (-0x1.692b66e3cf6e8p-66))
+    var ph = b64_gamma_muldd(xh: th.item0, xl: th.item1, ch: sh, cl: sl)
+    c = b64_gamma_fastsum(xh: c.item0, xl: c.item1, yh: ph.item0, yl: ph.item1)
+    c = b64_gamma_mulddd(x: d, ch: c.item0, cl: c.item1)
+    return b64_gamma_fastsum(xh: sh, xl: sl, yh: c.item0, yl: c.item1)
 
 ### sin(pi x) / pi as an accurate double-double, for 0 < x < 1.
 ### :param x: The argument.
 ### :returns: The (high, low) pair.
 secret routine b64_lgamma_sinpipid_accurate(x: B64) -> (B64, B64)
-  var y = (x -! 0.5).abs() *! 128.0
-  var ix = LLVM::rint[B64](value: y)
-  var d = ix -! y
-  var ky = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ix))
-  var kx = 64_u64 - ky
-  var sh = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx + 1_u64)
-  var sl = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx)
-  var ch = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky + 1_u64)
-  var cl = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky)
-  var d2h = d *! d
-  var d2l = LLVM::fma[B64](a: d, b: d, c: -d2h)
-  var p = b64_lgamma_polydd(xh: d2h, xl: d2l, n: 5_u64, base: 1800_u64, l: 0.0)
-  var q = b64_lgamma_polydd(xh: d2h, xl: d2l, n: 6_u64, base: 1810_u64, l: 0.0)
-  p = b64_gamma_mulddd(x: d, ch: p.item0, cl: p.item1)
-  p = b64_gamma_muldd(xh: sh, xl: sl, ch: p.item0, cl: p.item1)
-  q = b64_gamma_muldd(xh: ch, xl: cl, ch: q.item0, cl: q.item1)
-  var c = b64_gamma_fastsum(xh: q.item0, xl: q.item1, yh: p.item0, yl: p.item1)
-  c = b64_gamma_mulddd(x: d, ch: c.item0, cl: c.item1)
-  return b64_gamma_fastsum(xh: sh, xl: sl, yh: c.item0, yl: c.item1)
+    var y = (x -! 0.5).abs() *! 128.0
+    var ix = LLVM::rint[B64](value: y)
+    var d = ix -! y
+    var ky = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ix))
+    var kx = 64_u64 - ky
+    var sh = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx + 1_u64)
+    var sl = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx)
+    var ch = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky + 1_u64)
+    var cl = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky)
+    var d2h = d *! d
+    var d2l = LLVM::fma[B64](a: d, b: d, c: -d2h)
+    var p = b64_lgamma_polydd(xh: d2h, xl: d2l, n: 5_u64, base: 1800_u64, l: 0.0)
+    var q = b64_lgamma_polydd(xh: d2h, xl: d2l, n: 6_u64, base: 1810_u64, l: 0.0)
+    p = b64_gamma_mulddd(x: d, ch: p.item0, cl: p.item1)
+    p = b64_gamma_muldd(xh: sh, xl: sl, ch: p.item0, cl: p.item1)
+    q = b64_gamma_muldd(xh: ch, xl: cl, ch: q.item0, cl: q.item1)
+    var c = b64_gamma_fastsum(xh: q.item0, xl: q.item1, yh: p.item0, yl: p.item1)
+    c = b64_gamma_mulddd(x: d, ch: c.item0, cl: c.item1)
+    return b64_gamma_fastsum(xh: sh, xl: sl, yh: c.item0, yl: c.item1)
 
 ### ln(x) as a triple-double, for a positive finite x (subnormals included).
 ### :param x: The argument.
 ### :returns: The (high, middle, low) parts.
 secret routine b64_lgamma_logd_accurate(x: B64) -> (B64, B64, B64)
-  var t = x.to_bits()
-  var ex = LLVM::reinterpret_bits[U64, S64](t >>> 52)
-  if ex == 0
-    var k = LLVM::reinterpret_bits[U64, S64](t.leading_zeros())
-    t = t << LLVM::int_truncate[S64, U32](k - 11)
-    ex = ex - (k - 12)
-  var e = ex - 0x3FF
-  t = t & 0x000FFFFFFFFFFFFF_u64
-  var ed = LLVM::signed_to_float[S64, B64](e)
-  var i = t >>> 47
-  var d = t & 0x00007FFFFFFFFFFF_u64
-  var prod = B64_GAMMA_LOGD_B1[i] * LLVM::reinterpret_bits[U64, S64](d >>> 16)
-  var j = (t +% (B64_GAMMA_LOGD_B0[i] << 33) +% LLVM::reinterpret_bits[S64, U64](prod)) >>> 42
-  t = t | (0x3FF_u64 << 52)
-  var i1 = j >>> 5
-  var i2 = j & 0x1F_u64
-  var r = b64_tgamma_t(i: 969_u64 + i1) *! b64_tgamma_t(i: 1002_u64 + i2)
-  var tf = B64.from_bits(bits: t)
-  var o = r *! tf
-  var dx = b64_gamma_fasttwosum(x: o -! 1.0, y: LLVM::fma[B64](a: r, b: tf, c: -o))
-  var dxh = dx.item0
-  var dxl = dx.item1
-  var c = 1652_u64
-  var fl = dxh *! (b64_lgamma_t(i: c + 12_u64) +! dxh *! (b64_lgamma_t(i: c + 14_u64) +! dxh *! b64_lgamma_t(i: c + 16_u64)))
-  var f = b64_lgamma_polydd(xh: dxh, xl: dxl, n: 6_u64, base: c, l: fl)
-  f = b64_gamma_muldd(xh: dxh, xl: dxl, ch: f.item0, cl: f.item1)
-  var h1 = 1454_u64 + 3_u64 * i1
-  var h2 = 1553_u64 + 3_u64 * i2
-  var s2 = b64_lgamma_t(i: h1 + 2_u64) +! b64_lgamma_t(i: h2 + 2_u64)
-  var s1 = b64_lgamma_t(i: h1 + 1_u64) +! b64_lgamma_t(i: h2 + 1_u64)
-  var s0 = b64_lgamma_t(i: h1) +! b64_lgamma_t(i: h2)
-  var l0 = 0x1.62e42fefa38p-1 *! ed
-  var l1 = 0x1.ef35793c76p-45 *! ed
-  var l2 = 0x1.cc01f97b57a08p-87 *! ed
-  l0 = l0 +! s2
-  var a = b64_gamma_sumdd(xh: l1, xl: l2, yh: s1, yl: s0)
-  a = b64_gamma_sumdd(xh: a.item0, xl: a.item1, yh: f.item0, yl: f.item1)
-  var b = b64_gamma_fasttwosum(x: l0, y: a.item0)
-  var b2 = b64_gamma_fasttwosum(x: b.item1, y: a.item1)
-  return (b.item0, b2.item0, b2.item1)
+    var t = x.to_bits()
+    var ex = LLVM::reinterpret_bits[U64, S64](t >>> 52)
+    if ex == 0
+        var k = LLVM::reinterpret_bits[U64, S64](t.leading_zeros())
+        t = t << LLVM::int_truncate[S64, U32](k - 11)
+        ex = ex - (k - 12)
+    var e = ex - 0x3FF
+    t = t & 0x000FFFFFFFFFFFFF_u64
+    var ed = LLVM::signed_to_float[S64, B64](e)
+    var i = t >>> 47
+    var d = t & 0x00007FFFFFFFFFFF_u64
+    var prod = B64_GAMMA_LOGD_B1[i] * LLVM::reinterpret_bits[U64, S64](d >>> 16)
+    var j = (t +% (B64_GAMMA_LOGD_B0[i] << 33) +% LLVM::reinterpret_bits[S64, U64](prod)) >>> 42
+    t = t | (0x3FF_u64 << 52)
+    var i1 = j >>> 5
+    var i2 = j & 0x1F_u64
+    var r = b64_tgamma_t(i: 969_u64 + i1) *! b64_tgamma_t(i: 1002_u64 + i2)
+    var tf = B64.from_bits(bits: t)
+    var o = r *! tf
+    var dx = b64_gamma_fasttwosum(x: o -! 1.0, y: LLVM::fma[B64](a: r, b: tf, c: -o))
+    var dxh = dx.item0
+    var dxl = dx.item1
+    var c = 1652_u64
+    var fl = dxh *! (b64_lgamma_t(i: c + 12_u64) +! dxh *! (b64_lgamma_t(i: c + 14_u64) +! dxh *! b64_lgamma_t(i: c + 16_u64)))
+    var f = b64_lgamma_polydd(xh: dxh, xl: dxl, n: 6_u64, base: c, l: fl)
+    f = b64_gamma_muldd(xh: dxh, xl: dxl, ch: f.item0, cl: f.item1)
+    var h1 = 1454_u64 + 3_u64 * i1
+    var h2 = 1553_u64 + 3_u64 * i2
+    var s2 = b64_lgamma_t(i: h1 + 2_u64) +! b64_lgamma_t(i: h2 + 2_u64)
+    var s1 = b64_lgamma_t(i: h1 + 1_u64) +! b64_lgamma_t(i: h2 + 1_u64)
+    var s0 = b64_lgamma_t(i: h1) +! b64_lgamma_t(i: h2)
+    var l0 = 0x1.62e42fefa38p-1 *! ed
+    var l1 = 0x1.ef35793c76p-45 *! ed
+    var l2 = 0x1.cc01f97b57a08p-87 *! ed
+    l0 = l0 +! s2
+    var a = b64_gamma_sumdd(xh: l1, xl: l2, yh: s1, yl: s0)
+    a = b64_gamma_sumdd(xh: a.item0, xl: a.item1, yh: f.item0, yl: f.item1)
+    var b = b64_gamma_fasttwosum(x: l0, y: a.item0)
+    var b2 = b64_gamma_fasttwosum(x: b.item1, y: a.item1)
+    return (b.item0, b2.item0, b2.item1)
 
 ### ln(gamma(x)) for x = xh + xl > 3.75 as a triple-double, from Stirling's asymptotic series.
 ### :param xh: The high part of the argument.
 ### :param xl: The low part of the argument.
 ### :returns: The (high, middle, low) parts.
 secret routine b64_lgamma_asym_accurate(xh: B64, xl: B64) -> (B64, B64, B64)
-  var lg = b64_lgamma_logd_accurate(x: xh)
-  var l0 = lg.item0
-  var l1 = lg.item1
-  var l2 = lg.item2
-  if xh < 0x1p120
-    var zh = 1.0 /! xh
-    var dz = xl *! zh
-    var zl = (LLVM::fma[B64](a: zh, b: -xh, c: 1.0) -! dz) *! zh
-    if xl != 0.0
-      var dl = b64_gamma_mulddd(x: xl, ch: zh, cl: LLVM::fma[B64](a: zh, b: -xh, c: 1.0) *! zh)
-      var dl2 = dl.item1 -! (dl.item0 *! dl.item0) /! 2.0
-      var s = b64_gamma_sumdd(xh: l1, xl: l2, yh: dl.item0, yl: dl2)
-      l1 = s.item0
-      l2 = s.item1
-    var wh = xh -! 0.5
-    var wl = xl
-    if (xh.to_bits() >>> 52) > 0x432_u64
-      wh = xh
-      wl = xl -! 0.5
+    var lg = b64_lgamma_logd_accurate(x: xh)
+    var l0 = lg.item0
+    var l1 = lg.item1
+    var l2 = lg.item2
+    if xh < 0x1p120
+        var zh = 1.0 /! xh
+        var dz = xl *! zh
+        var zl = (LLVM::fma[B64](a: zh, b: -xh, c: 1.0) -! dz) *! zh
+        if xl != 0.0
+            var dl = b64_gamma_mulddd(x: xl, ch: zh, cl: LLVM::fma[B64](a: zh, b: -xh, c: 1.0) *! zh)
+            var dl2 = dl.item1 -! (dl.item0 *! dl.item0) /! 2.0
+            var s = b64_gamma_sumdd(xh: l1, xl: l2, yh: dl.item0, yl: dl2)
+            l1 = s.item0
+            l2 = s.item1
+        var wh = xh -! 0.5
+        var wl = xl
+        if (xh.to_bits() >>> 52) > 0x432_u64
+            wh = xh
+            wl = xl -! 0.5
+        l0 = l0 -! 1.0
+        var l0x = l0 *! wh
+        var l0xl = LLVM::fma[B64](a: l0, b: wh, c: -l0x)
+        var l1x = l1 *! wh
+        var l1xl = LLVM::fma[B64](a: l1, b: wh, c: -l1x)
+        var l2x = l2 *! wh
+        var s = b64_gamma_sumdd(xh: l1x, xl: l2x, yh: l0xl, yl: l1xl)
+        s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: l0 *! wl, yl: l1 *! wl)
+        var z2 = b64_gamma_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
+        var c = 1862_u64
+        var n = 27_u64
+        if xh >= 48.0
+            c = 1822_u64
+            n = 7_u64
+        elseif xh >= 14.5
+            c = 1838_u64
+            n = 11_u64
+        s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: b64_lgamma_t(i: c), yl: b64_lgamma_t(i: c + 1_u64))
+        var f = b64_lgamma_polydd(xh: z2.item0, xl: z2.item1, n: n, base: c + 2_u64, l: 0.0)
+        f = b64_gamma_muldd(xh: zh, xl: zl, ch: f.item0, cl: f.item1)
+        s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: f.item0, yl: f.item1)
+        var h = b64_gamma_fasttwosum(x: l0x, y: s.item0)
+        var h2 = b64_gamma_fasttwosum(x: h.item1, y: s.item1)
+        return (h.item0, h2.item0, h2.item1)
+    var wl = xl -! 0.5
     l0 = l0 -! 1.0
-    var l0x = l0 *! wh
-    var l0xl = LLVM::fma[B64](a: l0, b: wh, c: -l0x)
-    var l1x = l1 *! wh
-    var l1xl = LLVM::fma[B64](a: l1, b: wh, c: -l1x)
-    var l2x = l2 *! wh
+    var l0x = l0 *! xh
+    var l0xl = LLVM::fma[B64](a: l0, b: xh, c: -l0x)
+    var l1x = l1 *! xh
+    var l1xl = LLVM::fma[B64](a: l1, b: xh, c: -l1x)
+    var l2x = l2 *! xh
     var s = b64_gamma_sumdd(xh: l1x, xl: l2x, yh: l0xl, yl: l1xl)
     s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: l0 *! wl, yl: l1 *! wl)
-    var z2 = b64_gamma_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
-    var c = 1862_u64
-    var n = 27_u64
-    if xh >= 48.0
-      c = 1822_u64
-      n = 7_u64
-    elseif xh >= 14.5
-      c = 1838_u64
-      n = 11_u64
-    s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: b64_lgamma_t(i: c), yl: b64_lgamma_t(i: c + 1_u64))
-    var f = b64_lgamma_polydd(xh: z2.item0, xl: z2.item1, n: n, base: c + 2_u64, l: 0.0)
-    f = b64_gamma_muldd(xh: zh, xl: zl, ch: f.item0, cl: f.item1)
-    s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: f.item0, yl: f.item1)
-    var h = b64_gamma_fasttwosum(x: l0x, y: s.item0)
-    var h2 = b64_gamma_fasttwosum(x: h.item1, y: s.item1)
-    return (h.item0, h2.item0, h2.item1)
-  var wl = xl -! 0.5
-  l0 = l0 -! 1.0
-  var l0x = l0 *! xh
-  var l0xl = LLVM::fma[B64](a: l0, b: xh, c: -l0x)
-  var l1x = l1 *! xh
-  var l1xl = LLVM::fma[B64](a: l1, b: xh, c: -l1x)
-  var l2x = l2 *! xh
-  var s = b64_gamma_sumdd(xh: l1x, xl: l2x, yh: l0xl, yl: l1xl)
-  s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: l0 *! wl, yl: l1 *! wl)
-  return (l0x, s.item0, s.item1)
+    return (l0x, s.item0, s.item1)
 
 # Upper borders of the piece-wise regions of [0.5, 8.29541], as the argument's bits shifted right by 37.
 secret preset B64_LGAMMA_UBRD: Array[U64, 20] = [0x1FF0000_u64, 0x1FF146C_u64, 0x1FF2B7B_u64, 0x1FF4532_u64, 0x1FF614C_u64, 0x1FF8310_u64, 0x1FF93F7_u64, 0x1FFA880_u64, 0x1FFC05E_u64, 0x1FFDB73_u64, 0x1FFF8A5_u64, 0x2001147_u64, 0x2002703_u64, 0x20041AC_u64, 0x200622A_u64, 0x20084D9_u64, 0x2009CE7_u64, 0x200BA2C_u64, 0x200DDD7_u64, 0x20104BA_u64]

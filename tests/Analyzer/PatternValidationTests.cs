@@ -20,11 +20,11 @@ public class PatternValidationTests
     {
         string source = """
                         routine test()
-                          var x: S32 = 5
-                          when x
-                            is S32 x => show(x)
-                            else => pass
-                          return
+                            var x: S32 = 5
+                            when x
+                                is S32 x => show(x)
+                                else => pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -39,11 +39,11 @@ public class PatternValidationTests
     {
         string source = """
                         routine test()
-                          var value: S32 = 5
-                          when value
-                            is S32 n => show(n)
-                            else value => show(value)
-                          return
+                            var value: S32 = 5
+                            when value
+                                is S32 n => show(n)
+                                else value => show(value)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -58,11 +58,11 @@ public class PatternValidationTests
     {
         string source = """
                         routine test()
-                          var x: S32 = 5
-                          when x
-                            is S32 n => show(n)
-                            else => pass
-                          return
+                            var x: S32 = 5
+                            when x
+                                is S32 n => show(n)
+                                else => pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -77,11 +77,11 @@ public class PatternValidationTests
     {
         string source = """
                         routine test()
-                          var x: S32 = 5
-                          when x
-                            is S32 n => show(n)
-                            else n => show(n)
-                          return
+                            var x: S32 = 5
+                            when x
+                                is S32 n => show(n)
+                                else n => show(n)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -101,11 +101,11 @@ public class PatternValidationTests
     {
         string source = """
                         routine test() -> S32
-                          var x: S32 = 5
-                          var result: S32 = when x
-                            is S32 n => n
-                            else => 0
-                          return result
+                            var x: S32 = 5
+                            var result: S32 = when x
+                                is S32 n => n
+                                else => 0
+                            return result
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -126,11 +126,11 @@ public class PatternValidationTests
     {
         string source = """
                         routine test() -> S32
-                          var x: S32 = 5
-                          when x
-                            is S32 n => pass
-                            else => pass
-                          return n
+                            var x: S32 = 5
+                            when x
+                                is S32 n => pass
+                                else => pass
+                            return n
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -145,13 +145,13 @@ public class PatternValidationTests
     {
         string source = """
                         variant Value
-                          S32
-                          B64
+                            S32
+                            B64
 
                         routine test(v: Value) -> S32
-                          return when v
-                            is S32 n => n
-                            else n => 0
+                            return when v
+                                is S32 n => n
+                                else n => 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -171,11 +171,11 @@ public class PatternValidationTests
     {
         string source = """
                         routine test()
-                          var x: S32 = 5
-                          when x
-                            is S32 n => show(n)
-                            else => pass
-                          return
+                            var x: S32 = 5
+                            when x
+                                is S32 n => show(n)
+                                else => pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -190,15 +190,15 @@ public class PatternValidationTests
     {
         string source = """
                         record Foo
-                          x: S32
+                            x: S32
                         record Bar
-                          y: S32
+                            y: S32
                         routine test()
-                          var f = Foo(x: 1)
-                          when f
-                            is Bar b => pass
-                            else => pass
-                          return
+                            var f = Foo(x: 1)
+                            when f
+                                is Bar b => pass
+                                else => pass
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

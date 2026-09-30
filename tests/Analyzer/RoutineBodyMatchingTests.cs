@@ -22,18 +22,18 @@ public class RoutineBodyMatchingTests
         // match their correct body via resolved overload keys
         string source = """
                         record Measurement
-                          value: B64
+                            value: B64
 
                         routine Measurement.$create(from: S32) -> Measurement
-                          return Measurement(value: from.B64())
+                            return Measurement(value: from.B64())
 
                         routine Measurement.$create(from: B64) -> Measurement
-                          return Measurement(value: from)
+                            return Measurement(value: from)
 
                         routine test()
-                          var a = Measurement(from: 42)
-                          var b = Measurement(from: 3.14)
-                          return
+                            var a = Measurement(from: 42)
+                            var b = Measurement(from: 3.14)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -55,15 +55,15 @@ public class RoutineBodyMatchingTests
         // should match the registered declaration
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].unwrap() -> T
-                          return me.value
+                            return me.value
 
                         routine test()
-                          var b = Box[S32](value: 42)
-                          var v = b.unwrap()
-                          return
+                            var b = Box[S32](value: 42)
+                            var v = b.unwrap()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -79,15 +79,15 @@ public class RoutineBodyMatchingTests
         // memberRoutine-level generic params (Box[T].convert[U]) should match correctly
         string source = """
                         record Box[T]
-                          value: T
+                            value: T
 
                         routine Box[T].convert[U](new_val: U) -> Box[U]
-                          return Box[U](value: new_val)
+                            return Box[U](value: new_val)
 
                         routine test()
-                          var b = Box[S32](value: 42)
-                          var c = b.convert[Bool](true)
-                          return
+                            var b = Box[S32](value: 42)
+                            var c = b.convert[Bool](true)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -110,11 +110,11 @@ public class RoutineBodyMatchingTests
                         module MyLib
 
                         routine compute(x: S32) -> S32
-                          return x
+                            return x
 
                         routine test()
-                          var r = compute(x: 10)
-                          return
+                            var r = compute(x: 10)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -32,7 +32,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     /// <summary>
     /// Stores the i state used by this compiler phase.
     /// </summary>
-    private string I => new(c: ' ', count: _indent * 2);
+    private string I => new(c: ' ', count: _indent * 4);
 
     // -----------------------------------------------------------------------------
 

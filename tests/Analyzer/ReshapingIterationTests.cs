@@ -23,9 +23,9 @@ public sealed class ReshapingIterationTests
     {
         string source = """
                         routine grow(items: List[S32])
-                          each item in items
-                            items.add_last(value: item)
-                          return
+                            each item in items
+                                items.add_last(value: item)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -39,9 +39,9 @@ public sealed class ReshapingIterationTests
     {
         string source = """
                         routine copy_into(items: List[S32], other: List[S32])
-                          each item in items
-                            other.add_last(value: item)
-                          return
+                            each item in items
+                                other.add_last(value: item)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -55,10 +55,10 @@ public sealed class ReshapingIterationTests
     {
         string source = """
                         routine count_while_iterating(items: List[S32]) -> U64
-                          var n = 0u64
-                          each item in items
-                            n = items.count()
-                          return n
+                            var n = 0u64
+                            each item in items
+                                n = items.count()
+                            return n
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -72,11 +72,11 @@ public sealed class ReshapingIterationTests
     {
         string source = """
                         routine grow_after(items: List[S32])
-                          var n = 0u64
-                          each item in items
-                            n = n + 1u64
-                          items.add_last(value: 0)
-                          return
+                            var n = 0u64
+                            each item in items
+                                n = n + 1u64
+                            items.add_last(value: 0)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

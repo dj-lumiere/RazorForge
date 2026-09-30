@@ -25,13 +25,13 @@ public class EnterableConformanceTests
     {
         string source = """
                         protocol Openable
-                          routine Me.go!()
+                            routine Me.go!()
 
                         entity Door obeys Openable
-                          secret n: S32
+                            secret n: S32
 
                         routine Door.go()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -43,13 +43,13 @@ public class EnterableConformanceTests
     {
         string source = """
                         protocol Plain
-                          routine Me.go()
+                            routine Me.go()
 
                         entity Door obeys Plain
-                          secret n: S32
+                            secret n: S32
 
                         routine Door.go!()
-                          absent
+                            absent
                         """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -70,13 +70,13 @@ public class EnterableConformanceTests
         // `$enter` covariantly satisfies the failable `$enter!` requirement.
         string source = """
                         record MyGuard obeys Enterable
-                          secret n: S32
+                            secret n: S32
 
                         routine MyGuard.enter() -> MyGuard
-                          return me
+                            return me
 
                         routine MyGuard.exit()
-                          return
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -90,18 +90,18 @@ public class EnterableConformanceTests
                         import IO/Console
 
                         entity Session obeys Enterable
-                          secret n: S32
+                            secret n: S32
 
                         routine Session.enter() -> Session
-                          return me
+                            return me
 
                         routine Session.exit()
-                          return
+                            return
 
                         routine start()
-                          using Session(n: 1) as s
-                            show("in scope")
-                          return
+                            using Session(n: 1) as s
+                                show("in scope")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -120,16 +120,16 @@ public class EnterableConformanceTests
                         import BuilderQuery
 
                         entity Counter
-                          value: S64
+                            value: S64
 
                         routine peek(c: Accessing[Counter])
-                          show(f"{c.value}")
-                          return
+                            show(f"{c.value}")
+                            return
 
                         routine start()
-                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                          peek(s.consult())
-                          return
+                            var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                            peek(s.consult())
+                            return
                         """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -146,13 +146,13 @@ public class EnterableConformanceTests
                         import BuilderQuery
 
                         entity Counter
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                          using s.consult() as v
-                            show(f"{v.value}")
-                          return
+                            var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                            using s.consult() as v
+                                show(f"{v.value}")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -167,12 +167,12 @@ public class EnterableConformanceTests
                         import BuilderQuery
 
                         entity Counter
-                          value: S64
+                            value: S64
 
                         routine start()
-                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                          var v = s.consult()
-                          return
+                            var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                            var v = s.consult()
+                            return
                         """;
 
         AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "using");
@@ -190,19 +190,19 @@ public class EnterableConformanceTests
     {
         string source = """
                         record Bare
-                          n: S32
+                            n: S32
 
                         routine Bare.enter() -> Bare
-                          return me
+                            return me
 
                         routine Bare.exit()
-                          return
+                            return
 
                         routine test()
-                          var b = Bare(n: 1)
-                          using b as x
-                            var a: S32 = x.n
-                          return
+                            var b = Bare(n: 1)
+                            using b as x
+                                var a: S32 = x.n
+                            return
                         """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -221,9 +221,9 @@ public class EnterableConformanceTests
                         import IO/File
 
                         routine start!()
-                          var f = File("x.txt").open_write()
-                          f.flush()
-                          return
+                            var f = File("x.txt").open_write()
+                            f.flush()
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

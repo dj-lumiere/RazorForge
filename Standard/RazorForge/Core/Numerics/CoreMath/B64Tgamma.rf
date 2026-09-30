@@ -18,86 +18,86 @@ module Core
 ### stays NaN.
 ### :returns: The correctly rounded gamma function, possibly ±infinity or NaN.
 routine B64.tgamma_unchecked() -> B64
-  var x = me
-  var (st, h, l, eps, sc) = b64_tgamma_dd(x: x)
-  if st == 0_u64
-    var ub = h +! (l +! eps)
-    var lb = h +! (l -! eps)
-    if ub != lb
-      return b64_tgamma_accurate(x: x)
-    return B64.from_bits(bits: ub.to_bits() +% (LLVM::reinterpret_bits[S64, U64](sc) << 52))
-  if st == 2_u64
-    # reflection with a subnormal result: h + l is the value times 2^e, e = -sc
-    var e = 0_s64 - sc
-    var rh = h
-    var rl = l
-    var re = LLVM::reinterpret_bits[U64, S64]((rh.to_bits() >>> 52) & 0x7FF_u64)
-    if re - e <= 0
-      var th = rh.to_bits() +% (LLVM::reinterpret_bits[S64, U64](e - re + 1) << 52)
-      th = th & (0xFFF_u64 << 52)
-      var s2 = b64_gamma_fasttwosum(x: B64.from_bits(bits: th), y: rh)
-      rh = s2.item0
-      rl = rl +! s2.item1
-      var ub = rh +! (rl +! eps)
-      var lb = rh +! (rl -! eps)
-      if ub != lb
-        return b64_tgamma_accurate(x: x)
-      return B64.from_bits(bits: ub.to_bits() & (0x7FF_u64 << 52).bitnot())
-    var ub = rh +! (rl +! eps)
-    var lb = rh +! (rl -! eps)
-    if ub != lb
-      return b64_tgamma_accurate(x: x)
-    return B64.from_bits(bits: ub.to_bits() -% (LLVM::reinterpret_bits[S64, U64](e) << 52))
-  var t = x.to_bits()
-  var ax = t << 1
-  if ax >= (0x7FF_u64 << 53)
-    if ax == (0x7FF_u64 << 53)
-      # -infinity has no gamma (the default NaN), +infinity maps to itself
-      if (t >>> 63) == 1_u64
-        return B64.from_bits(bits: 0xFFF8000000000000_u64)
-      return x
-    # NaN: x + x also quiets a signaling NaN
-    return x +! x
-  if ax < 0x71E0000000000000_u64
-    # |x| < 2^-112: gamma(x) rounds to 1/x (or just below it for x = 2^k)
-    if x == 0x1p-1024
-      return 0x1.fffffffffffffp+1023 +! 0x1p+970
-    var r = 1.0 /! x
-    if x == 0.0
-      return r
-    if LLVM::fma[B64](a: r, b: x, c: -1.0) == 0.0
-      r = r -! 0.5
-    return r
-  if x >= 0x1.573fae561f648p+7
-    # overflow
-    return 0x1.fp1023 +! 0x1.fp1023
-  var fx = x.floor()
-  if fx == x
-    # x is an integer
-    if x == 0.0
-      return 1.0 /! x
-    if x < 0.0
-      # a pole of gamma at a negative integer: the default NaN
-      return B64.from_bits(bits: 0xFFF8000000000000_u64)
-    var k = LLVM::float_to_signed[B64, S64](fx)
-    var t0h = 1.0
-    var t0l = 0.0
-    var x0 = 1.0
-    var i = 1_s64
-    while i < k
-      var m = b64_gamma_mulddd(x: x0, ch: t0h, cl: t0l)
-      t0h = m.item0
-      t0l = m.item1
-      i = i + 1
-      x0 = x0 +! 1.0
-    return t0h +! t0l
-  # x <= -184, a negative non-integer: |gamma(x)| < 2^-1078 rounds to ±0
-  var kk = 0_s64
-  if fx >= -0x1p+62
-    kk = LLVM::float_to_signed[B64, S64](fx)
-  if (kk & 1) == 0
-    return 0x1p-1022 *! 0x1p-1022
-  return 0x1p-1022 *! (-0x1p-1022)
+    var x = me
+    var (st, h, l, eps, sc) = b64_tgamma_dd(x: x)
+    if st == 0_u64
+        var ub = h +! (l +! eps)
+        var lb = h +! (l -! eps)
+        if ub != lb
+            return b64_tgamma_accurate(x: x)
+        return B64.from_bits(bits: ub.to_bits() +% (LLVM::reinterpret_bits[S64, U64](sc) << 52))
+    if st == 2_u64
+        # reflection with a subnormal result: h + l is the value times 2^e, e = -sc
+        var e = 0_s64 - sc
+        var rh = h
+        var rl = l
+        var re = LLVM::reinterpret_bits[U64, S64]((rh.to_bits() >>> 52) & 0x7FF_u64)
+        if re - e <= 0
+            var th = rh.to_bits() +% (LLVM::reinterpret_bits[S64, U64](e - re + 1) << 52)
+            th = th & (0xFFF_u64 << 52)
+            var s2 = b64_gamma_fasttwosum(x: B64.from_bits(bits: th), y: rh)
+            rh = s2.item0
+            rl = rl +! s2.item1
+            var ub = rh +! (rl +! eps)
+            var lb = rh +! (rl -! eps)
+            if ub != lb
+                return b64_tgamma_accurate(x: x)
+            return B64.from_bits(bits: ub.to_bits() & (0x7FF_u64 << 52).bitnot())
+        var ub = rh +! (rl +! eps)
+        var lb = rh +! (rl -! eps)
+        if ub != lb
+            return b64_tgamma_accurate(x: x)
+        return B64.from_bits(bits: ub.to_bits() -% (LLVM::reinterpret_bits[S64, U64](e) << 52))
+    var t = x.to_bits()
+    var ax = t << 1
+    if ax >= (0x7FF_u64 << 53)
+        if ax == (0x7FF_u64 << 53)
+            # -infinity has no gamma (the default NaN), +infinity maps to itself
+            if (t >>> 63) == 1_u64
+                return B64.from_bits(bits: 0xFFF8000000000000_u64)
+            return x
+        # NaN: x + x also quiets a signaling NaN
+        return x +! x
+    if ax < 0x71E0000000000000_u64
+        # |x| < 2^-112: gamma(x) rounds to 1/x (or just below it for x = 2^k)
+        if x == 0x1p-1024
+            return 0x1.fffffffffffffp+1023 +! 0x1p+970
+        var r = 1.0 /! x
+        if x == 0.0
+            return r
+        if LLVM::fma[B64](a: r, b: x, c: -1.0) == 0.0
+            r = r -! 0.5
+        return r
+    if x >= 0x1.573fae561f648p+7
+        # overflow
+        return 0x1.fp1023 +! 0x1.fp1023
+    var fx = x.floor()
+    if fx == x
+        # x is an integer
+        if x == 0.0
+            return 1.0 /! x
+        if x < 0.0
+            # a pole of gamma at a negative integer: the default NaN
+            return B64.from_bits(bits: 0xFFF8000000000000_u64)
+        var k = LLVM::float_to_signed[B64, S64](fx)
+        var t0h = 1.0
+        var t0l = 0.0
+        var x0 = 1.0
+        var i = 1_s64
+        while i < k
+            var m = b64_gamma_mulddd(x: x0, ch: t0h, cl: t0l)
+            t0h = m.item0
+            t0l = m.item1
+            i = i + 1
+            x0 = x0 +! 1.0
+        return t0h +! t0l
+    # x <= -184, a negative non-integer: |gamma(x)| < 2^-1078 rounds to ±0
+    var kk = 0_s64
+    if fx >= -0x1p+62
+        kk = LLVM::float_to_signed[B64, S64](fx)
+    if (kk & 1) == 0
+        return 0x1p-1022 *! 0x1p-1022
+    return 0x1p-1022 *! (-0x1p-1022)
 
 ### The double-double fast phase of gamma for a B64 x, shared with the D64 gamma (which widens it past
 ### B64 precision): (status, h, l, eps, sc) with gamma(x) within eps * 2^sc of (h + l) * 2^sc. Status 0 is
@@ -105,100 +105,100 @@ routine B64.tgamma_unchecked() -> B64
 ### rounding), and 1 a case this does not cover: infinity or NaN, |x| < 2^-112, overflow, integers and
 ### x <= -184, all handled exactly by B64.tgamma_unchecked.
 secret routine b64_tgamma_dd(x: B64) -> (U64, B64, B64, B64, S64)
-  var ax = x.to_bits() << 1
-  if ax >= (0x7FF_u64 << 53) or ax < 0x71E0000000000000_u64
-    return (1_u64, 0.0, 0.0, 0.0, 0_s64)
-  var z = x
-  if x.abs() < 0.25
-    var x2 = x *! x
-    var x4 = x2 *! x2
-    var x8 = x4 *! x4
-    var c0 = (b64_tgamma_t(i: 899_u64) +! x *! b64_tgamma_t(i: 899_u64 + 1_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 2_u64) +! x *! b64_tgamma_t(i: 899_u64 + 3_u64))
-    var c4 = (b64_tgamma_t(i: 899_u64 + 4_u64) +! x *! b64_tgamma_t(i: 899_u64 + 5_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 6_u64) +! x *! b64_tgamma_t(i: 899_u64 + 7_u64))
-    var c8 = (b64_tgamma_t(i: 899_u64 + 8_u64) +! x *! b64_tgamma_t(i: 899_u64 + 9_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 10_u64) +! x *! b64_tgamma_t(i: 899_u64 + 11_u64))
-    var c12 = (b64_tgamma_t(i: 899_u64 + 12_u64) +! x *! b64_tgamma_t(i: 899_u64 + 13_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 14_u64) +! x *! b64_tgamma_t(i: 899_u64 + 15_u64))
-    c0 = c0 +! x4 *! c4
-    c8 = c8 +! x4 *! c12
-    var cl = x *! (c0 +! x8 *! c8)
-    var p = b64_tgamma_polyddd(x: x, n: 5_u64, base: 889_u64, l: cl)
-    var fh = 1.0 /! z
-    var fl = LLVM::fma[B64](a: fh, b: -z, c: 1.0) *! fh
-    var f = b64_gamma_fastsum(xh: fh, xl: fl, yh: p.item0, yl: p.item1)
-    fh = f.item0
+    var ax = x.to_bits() << 1
+    if ax >= (0x7FF_u64 << 53) or ax < 0x71E0000000000000_u64
+        return (1_u64, 0.0, 0.0, 0.0, 0_s64)
+    var z = x
+    if x.abs() < 0.25
+        var x2 = x *! x
+        var x4 = x2 *! x2
+        var x8 = x4 *! x4
+        var c0 = (b64_tgamma_t(i: 899_u64) +! x *! b64_tgamma_t(i: 899_u64 + 1_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 2_u64) +! x *! b64_tgamma_t(i: 899_u64 + 3_u64))
+        var c4 = (b64_tgamma_t(i: 899_u64 + 4_u64) +! x *! b64_tgamma_t(i: 899_u64 + 5_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 6_u64) +! x *! b64_tgamma_t(i: 899_u64 + 7_u64))
+        var c8 = (b64_tgamma_t(i: 899_u64 + 8_u64) +! x *! b64_tgamma_t(i: 899_u64 + 9_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 10_u64) +! x *! b64_tgamma_t(i: 899_u64 + 11_u64))
+        var c12 = (b64_tgamma_t(i: 899_u64 + 12_u64) +! x *! b64_tgamma_t(i: 899_u64 + 13_u64)) +! x2 *! (b64_tgamma_t(i: 899_u64 + 14_u64) +! x *! b64_tgamma_t(i: 899_u64 + 15_u64))
+        c0 = c0 +! x4 *! c4
+        c8 = c8 +! x4 *! c12
+        var cl = x *! (c0 +! x8 *! c8)
+        var p = b64_tgamma_polyddd(x: x, n: 5_u64, base: 889_u64, l: cl)
+        var fh = 1.0 /! z
+        var fl = LLVM::fma[B64](a: fh, b: -z, c: 1.0) *! fh
+        var f = b64_gamma_fastsum(xh: fh, xl: fl, yh: p.item0, yl: p.item1)
+        fh = f.item0
+        fl = f.item1
+        return (0_u64, fh, fl, fh *! (0x1.9d35025bff857p-62 +! (x2 *! x4) *! 0x1.203af9ee75616p-48), 0_s64)
+    if x >= 0x1.573fae561f648p+7 or x.floor() == x or x <= -184.0
+        return (1_u64, 0.0, 0.0, 0.0, 0_s64)
+    if x < -3.0
+        # reflection: gamma(x) = pi / (sin(pi x) * gamma(1 - x))
+        var s = b64_gamma_fasttwosum(x: -x, y: 1.0)
+        var lg = b64_tgamma_lgamma_asym(xh: s.item0, xl: s.item1)
+        var ex = b64_tgamma_expd(x: lg.item0, l: lg.item1)
+        var lh = ex.item0
+        var ll = ex.item1
+        var e = ex.item2
+        var ix = x.floor()
+        var dx = x -! ix
+        var ip = LLVM::float_to_signed[B64, S64](ix)
+        var sp = b64_tgamma_sinpid(x: dx)
+        var m = b64_gamma_muldd(xh: sp.item0, xl: sp.item1, ch: lh, cl: ll)
+        lh = m.item0
+        ll = m.item1
+        var pih = 0x1.921fb54442d18p+1
+        var pil = 0x1.1a62633145c07p-53
+        var rcp = 1.0 /! lh
+        var rh = rcp *! pih
+        var rl = rcp *! ((pil -! ll *! rh) -! LLVM::fma[B64](a: rh, b: lh, c: -pih))
+        if (ip & 1) != 0
+            rh = -rh
+            rl = -rl
+        var eps = rh *! (0x1.48ad3caefe280p-67 -! x *! 0x1.61019f74442b7p-73)
+        if ip >= -170
+            return (0_u64, rh, rl, eps, 0_s64 - e)
+        return (2_u64, rh, rl, eps, 0_s64 - e)
+    if x > 4.0
+        var lg = b64_tgamma_lgamma_asym(xh: x, xl: 0.0)
+        var ex = b64_tgamma_expd(x: lg.item0, l: lg.item1)
+        return (0_u64, ex.item0, ex.item1, ex.item0 *! (0x1.2e3b40a0e9b4fp-69 +! x *! 0x1.bce27bce24d11p-73), ex.item2)
+    # -3 <= x <= 4: a polynomial around 3.5 + i, shifted by the recurrence gamma(x+1) = x gamma(x)
+    var mm = z -! 3.5
+    var ri = LLVM::rint[B64](value: mm)
+    var d = z -! (ri +! 3.5)
+    var d2 = d *! d
+    var d4 = d2 *! d2
+    var o = 951_u64
+    var fl = d *! (((b64_tgamma_t(i: o + 10_u64) +! d *! b64_tgamma_t(i: o + 11_u64)) +! d2 *! (b64_tgamma_t(i: o + 12_u64) +! d *! b64_tgamma_t(i: o + 13_u64))) +! d4 *! ((b64_tgamma_t(i: o + 14_u64) +! d *! b64_tgamma_t(i: o + 15_u64)) +! d2 *! (b64_tgamma_t(i: o + 16_u64) +! d *! b64_tgamma_t(i: o + 17_u64))))
+    var f = b64_tgamma_polyddd(x: d, n: 10_u64, base: 915_u64, l: fl)
+    var fh = f.item0
     fl = f.item1
-    return (0_u64, fh, fl, fh *! (0x1.9d35025bff857p-62 +! (x2 *! x4) *! 0x1.203af9ee75616p-48), 0_s64)
-  if x >= 0x1.573fae561f648p+7 or x.floor() == x or x <= -184.0
-    return (1_u64, 0.0, 0.0, 0.0, 0_s64)
-  if x < -3.0
-    # reflection: gamma(x) = pi / (sin(pi x) * gamma(1 - x))
-    var s = b64_gamma_fasttwosum(x: -x, y: 1.0)
-    var lg = b64_tgamma_lgamma_asym(xh: s.item0, xl: s.item1)
-    var ex = b64_tgamma_expd(x: lg.item0, l: lg.item1)
-    var lh = ex.item0
-    var ll = ex.item1
-    var e = ex.item2
-    var ix = x.floor()
-    var dx = x -! ix
-    var ip = LLVM::float_to_signed[B64, S64](ix)
-    var sp = b64_tgamma_sinpid(x: dx)
-    var m = b64_gamma_muldd(xh: sp.item0, xl: sp.item1, ch: lh, cl: ll)
-    lh = m.item0
-    ll = m.item1
-    var pih = 0x1.921fb54442d18p+1
-    var pil = 0x1.1a62633145c07p-53
-    var rcp = 1.0 /! lh
-    var rh = rcp *! pih
-    var rl = rcp *! ((pil -! ll *! rh) -! LLVM::fma[B64](a: rh, b: lh, c: -pih))
-    if (ip & 1) != 0
-      rh = -rh
-      rl = -rl
-    var eps = rh *! (0x1.48ad3caefe280p-67 -! x *! 0x1.61019f74442b7p-73)
-    if ip >= -170
-      return (0_u64, rh, rl, eps, 0_s64 - e)
-    return (2_u64, rh, rl, eps, 0_s64 - e)
-  if x > 4.0
-    var lg = b64_tgamma_lgamma_asym(xh: x, xl: 0.0)
-    var ex = b64_tgamma_expd(x: lg.item0, l: lg.item1)
-    return (0_u64, ex.item0, ex.item1, ex.item0 *! (0x1.2e3b40a0e9b4fp-69 +! x *! 0x1.bce27bce24d11p-73), ex.item2)
-  # -3 <= x <= 4: a polynomial around 3.5 + i, shifted by the recurrence gamma(x+1) = x gamma(x)
-  var mm = z -! 3.5
-  var ri = LLVM::rint[B64](value: mm)
-  var d = z -! (ri +! 3.5)
-  var d2 = d *! d
-  var d4 = d2 *! d2
-  var o = 951_u64
-  var fl = d *! (((b64_tgamma_t(i: o + 10_u64) +! d *! b64_tgamma_t(i: o + 11_u64)) +! d2 *! (b64_tgamma_t(i: o + 12_u64) +! d *! b64_tgamma_t(i: o + 13_u64))) +! d4 *! ((b64_tgamma_t(i: o + 14_u64) +! d *! b64_tgamma_t(i: o + 15_u64)) +! d2 *! (b64_tgamma_t(i: o + 16_u64) +! d *! b64_tgamma_t(i: o + 17_u64))))
-  var f = b64_tgamma_polyddd(x: d, n: 10_u64, base: 915_u64, l: fl)
-  var fh = f.item0
-  fl = f.item1
-  var jm = LLVM::float_to_signed[B64, S64](ri.abs())
-  var wh = 1.0
-  var wl = 0.0
-  var xph = z
-  var xpl = 0.0
-  if jm != 0
-    wh = xph
-    var j = jm - 1
-    while j != 0
-      var s = b64_gamma_fasttwosum(x: 1.0, y: xph)
-      if xph.abs() > 1.0
-        s = b64_gamma_fasttwosum(x: xph, y: 1.0)
-      xph = s.item0
-      xpl = xpl +! s.item1
-      var w = b64_gamma_muldd(xh: xph, xl: xpl, ch: wh, cl: wl)
-      wh = w.item0
-      wl = w.item1
-      j = j - 1
-  var rh = 1.0 /! wh
-  var rl = (LLVM::fma[B64](a: rh, b: -wh, c: 1.0) -! wl *! rh) *! rh
-  f = b64_gamma_muldd(xh: rh, xl: rl, ch: fh, cl: fl)
-  return (0_u64, f.item0, f.item1, f.item0 *! 0x1.2e3b40a0e9b4fp-70, 0_s64)
+    var jm = LLVM::float_to_signed[B64, S64](ri.abs())
+    var wh = 1.0
+    var wl = 0.0
+    var xph = z
+    var xpl = 0.0
+    if jm != 0
+        wh = xph
+        var j = jm - 1
+        while j != 0
+            var s = b64_gamma_fasttwosum(x: 1.0, y: xph)
+            if xph.abs() > 1.0
+                s = b64_gamma_fasttwosum(x: xph, y: 1.0)
+            xph = s.item0
+            xpl = xpl +! s.item1
+            var w = b64_gamma_muldd(xh: xph, xl: xpl, ch: wh, cl: wl)
+            wh = w.item0
+            wl = w.item1
+            j = j - 1
+    var rh = 1.0 /! wh
+    var rl = (LLVM::fma[B64](a: rh, b: -wh, c: 1.0) -! wl *! rh) *! rh
+    f = b64_gamma_muldd(xh: rh, xl: rl, ch: fh, cl: fl)
+    return (0_u64, f.item0, f.item1, f.item0 *! 0x1.2e3b40a0e9b4fp-70, 0_s64)
 
 ### Reads entry `i` of the coefficient table B64_TGAMMA_T.
 ### :param i: The table index.
 ### :returns: The table entry as a `B64`.
 secret routine b64_tgamma_t(i: U64) -> B64
-  return B64.from_bits(bits: B64_TGAMMA_T[i])
+    return B64.from_bits(bits: B64_TGAMMA_T[i])
 
 ### Looks `x` up among the arguments whose gamma lies too close to a rounding boundary for the accurate
 ### path, and returns the correctly rounded result for them, or `f` unchanged otherwise.
@@ -206,162 +206,162 @@ secret routine b64_tgamma_t(i: U64) -> B64
 ### :param f: The accurate path's result.
 ### :returns: The corrected result.
 secret routine b64_tgamma_database(x: B64, f: B64) -> B64
-  var a = 0_s64
-  var b = 56_s64
-  var m = (a + b) // 2
-  while a <= b
-    var base = 0_u64 + 3_u64 * LLVM::reinterpret_bits[S64, U64](m)
-    var key = b64_tgamma_t(i: base)
-    if key < x
-      a = m + 1
-    elseif key == x
-      return b64_tgamma_t(i: base + 1_u64) +! b64_tgamma_t(i: base + 2_u64)
-    else
-      b = m - 1
-    m = (a + b) // 2
-  return f
+    var a = 0_s64
+    var b = 56_s64
+    var m = (a + b) // 2
+    while a <= b
+        var base = 0_u64 + 3_u64 * LLVM::reinterpret_bits[S64, U64](m)
+        var key = b64_tgamma_t(i: base)
+        if key < x
+            a = m + 1
+        elseif key == x
+            return b64_tgamma_t(i: base + 1_u64) +! b64_tgamma_t(i: base + 2_u64)
+        else
+            b = m - 1
+        m = (a + b) // 2
+    return f
 
 ### The slow accurate path of `tgamma`, taken when the fast path cannot decide the rounding.
 ### :param x: The argument, finite, not an integer, with -184 < x < 0x1.573fae561f648p+7.
 ### :returns: The correctly rounded gamma of `x`.
 secret routine b64_tgamma_accurate(x: B64) -> B64
-  if x.abs() < 0.25
-    var x2 = x *! x
-    var x4 = x2 *! x2
-    var o = 227_u64
-    var c0 = (b64_tgamma_t(i: o) +! x *! b64_tgamma_t(i: o + 1_u64)) +! x2 *! (b64_tgamma_t(i: o + 2_u64) +! x *! b64_tgamma_t(i: o + 3_u64))
-    var c4 = (b64_tgamma_t(i: o + 4_u64) +! x *! b64_tgamma_t(i: o + 5_u64)) +! x2 *! (b64_tgamma_t(i: o + 6_u64) +! x *! b64_tgamma_t(i: o + 7_u64))
-    c0 = c0 +! x4 *! c4
-    var p = b64_tgamma_polyddd(x: x, n: 28_u64, base: 171_u64, l: x *! c0)
-    var fh = 1.0 /! x
-    var dh = LLVM::fma[B64](a: fh, b: -x, c: 1.0)
-    var fl = dh *! fh
-    var fll = LLVM::fma[B64](a: fl, b: -x, c: dh) *! fh
-    var s = b64_gamma_sumdd(xh: fl, xl: fll, yh: p.item0, yl: p.item1)
-    s = b64_gamma_twosum(x: s.item0, y: s.item1)
-    fl = s.item0
-    fll = s.item1
-    s = b64_gamma_fasttwosum(x: fh, y: fl)
-    fh = s.item0
-    fl = s.item1
-    s = b64_gamma_fasttwosum(x: fl, y: fll)
-    fl = s.item0
-    fll = s.item1
-    var et = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
-    if et == 0.0
-      var one = 1.0
-      if one.copysign(sign: fl) *! one.copysign(sign: fll) > 0.0
-        fl = fl *! (1.0 +! 0x1p-50)
-      else
-        fl = fl *! (1.0 -! 0x1p-50)
-    return fh +! fl
-  var ix = x.floor()
-  var d = 2.0 *! (x -! (ix +! 0.5))
-  var i = LLVM::float_to_signed[B64, S64](ix)
-  # nine ranges of x, each with its own polynomial in d and reference point
-  var k = 8_u64
-  if i > 159
-    k = 0_u64
-  elseif i > 127
-    k = 1_u64
-  elseif i > 95
-    k = 2_u64
-  elseif i > 63
-    k = 3_u64
-  elseif i > 31
-    k = 4_u64
-  elseif i > 25
-    k = 5_u64
-  elseif i > 15
-    k = 6_u64
-  elseif i > 7
-    k = 7_u64
-  var pf = b64_tgamma_poly3(d: d, imax: B64_TGAMMA_BR_NCH[k], chbase: B64_TGAMMA_BR_CH[k], jmax: B64_TGAMMA_BR_NCL[k], clbase: B64_TGAMMA_BR_CL[k])
-  var fh = pf.item0
-  var fl = pf.item1
-  var jm = B64_TGAMMA_BR_BASE[k] - i
-  var eoff = B64_TGAMMA_BR_EOFF[k]
-  var wh = 1.0
-  var wl = 0.0
-  if jm != 0
+    if x.abs() < 0.25
+        var x2 = x *! x
+        var x4 = x2 *! x2
+        var o = 227_u64
+        var c0 = (b64_tgamma_t(i: o) +! x *! b64_tgamma_t(i: o + 1_u64)) +! x2 *! (b64_tgamma_t(i: o + 2_u64) +! x *! b64_tgamma_t(i: o + 3_u64))
+        var c4 = (b64_tgamma_t(i: o + 4_u64) +! x *! b64_tgamma_t(i: o + 5_u64)) +! x2 *! (b64_tgamma_t(i: o + 6_u64) +! x *! b64_tgamma_t(i: o + 7_u64))
+        c0 = c0 +! x4 *! c4
+        var p = b64_tgamma_polyddd(x: x, n: 28_u64, base: 171_u64, l: x *! c0)
+        var fh = 1.0 /! x
+        var dh = LLVM::fma[B64](a: fh, b: -x, c: 1.0)
+        var fl = dh *! fh
+        var fll = LLVM::fma[B64](a: fl, b: -x, c: dh) *! fh
+        var s = b64_gamma_sumdd(xh: fl, xl: fll, yh: p.item0, yl: p.item1)
+        s = b64_gamma_twosum(x: s.item0, y: s.item1)
+        fl = s.item0
+        fll = s.item1
+        s = b64_gamma_fasttwosum(x: fh, y: fl)
+        fh = s.item0
+        fl = s.item1
+        s = b64_gamma_fasttwosum(x: fl, y: fll)
+        fl = s.item0
+        fll = s.item1
+        var et = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
+        if et == 0.0
+            var one = 1.0
+            if one.copysign(sign: fl) *! one.copysign(sign: fll) > 0.0
+                fl = fl *! (1.0 +! 0x1p-50)
+            else
+                fl = fl *! (1.0 -! 0x1p-50)
+        return fh +! fl
+    var ix = x.floor()
+    var d = 2.0 *! (x -! (ix +! 0.5))
+    var i = LLVM::float_to_signed[B64, S64](ix)
+    # nine ranges of x, each with its own polynomial in d and reference point
+    var k = 8_u64
+    if i > 159
+        k = 0_u64
+    elseif i > 127
+        k = 1_u64
+    elseif i > 95
+        k = 2_u64
+    elseif i > 63
+        k = 3_u64
+    elseif i > 31
+        k = 4_u64
+    elseif i > 25
+        k = 5_u64
+    elseif i > 15
+        k = 6_u64
+    elseif i > 7
+        k = 7_u64
+    var pf = b64_tgamma_poly3(d: d, imax: B64_TGAMMA_BR_NCH[k], chbase: B64_TGAMMA_BR_CH[k], jmax: B64_TGAMMA_BR_NCL[k], clbase: B64_TGAMMA_BR_CL[k])
+    var fh = pf.item0
+    var fl = pf.item1
+    var jm = B64_TGAMMA_BR_BASE[k] - i
+    var eoff = B64_TGAMMA_BR_EOFF[k]
+    var wh = 1.0
+    var wl = 0.0
+    if jm != 0
+        if jm > 0
+            var xph = x
+            var xpl = 0.0
+            wh = xph
+            var j = jm - 1
+            while j != 0
+                var s = b64_gamma_fasttwosum(x: 1.0, y: xph)
+                if xph.abs() > 1.0
+                    s = b64_gamma_fasttwosum(x: xph, y: 1.0)
+                xph = s.item0
+                xpl = xpl +! s.item1
+                s = b64_gamma_fasttwosum(x: xph, y: xpl)
+                xph = s.item0
+                xpl = s.item1
+                var w = b64_gamma_muldd3(xh: xph, xl: xpl, yh: wh, yl: wl)
+                wh = w.item0
+                wl = w.item1
+                if wh.abs() > 0x1p518
+                    wh = wh *! 0x1p-500
+                    wl = wl *! 0x1p-500
+                    eoff = eoff - 500
+                j = j - 1
+        else
+            var xph = x -! 1.0
+            var xpl = 0.0
+            wh = xph
+            var j = -1 - jm
+            while j != 0
+                var s = b64_gamma_fasttwosum(x: xph, y: -1.0)
+                xph = s.item0
+                xpl = xpl +! s.item1
+                s = b64_gamma_fasttwosum(x: xph, y: xpl)
+                xph = s.item0
+                xpl = s.item1
+                var w = b64_gamma_muldd3(xh: xph, xl: xpl, yh: wh, yl: wl)
+                wh = w.item0
+                wl = w.item1
+                j = j - 1
     if jm > 0
-      var xph = x
-      var xpl = 0.0
-      wh = xph
-      var j = jm - 1
-      while j != 0
-        var s = b64_gamma_fasttwosum(x: 1.0, y: xph)
-        if xph.abs() > 1.0
-          s = b64_gamma_fasttwosum(x: xph, y: 1.0)
-        xph = s.item0
-        xpl = xpl +! s.item1
-        s = b64_gamma_fasttwosum(x: xph, y: xpl)
-        xph = s.item0
-        xpl = s.item1
-        var w = b64_gamma_muldd3(xh: xph, xl: xpl, yh: wh, yl: wl)
-        wh = w.item0
-        wl = w.item1
-        if wh.abs() > 0x1p518
-          wh = wh *! 0x1p-500
-          wl = wl *! 0x1p-500
-          eoff = eoff - 500
-        j = j - 1
+        var rh = 1.0 /! wh
+        var rl = (LLVM::fma[B64](a: rh, b: -wh, c: 1.0) -! wl *! rh) *! rh
+        var mr = b64_gamma_muldd3(xh: fh, xl: fl, yh: rh, yl: rl)
+        fh = mr.item0
+        fl = mr.item1
+    elseif jm < 0
+        var mw = b64_gamma_muldd3(xh: fh, xl: fl, yh: wh, yl: wl)
+        fh = mw.item0
+        fl = mw.item1
+    # a correction term that is zero in round-to-nearest (it matters only under directed rounding in C)
+    var crr = 0.0
+    if jm <= 0
+        crr = ((0x1p-54 +! 0x1p-107) -! 0x1p-54) +! ((0x1p-53 -! 0x1p-107) -! 0x1p-53)
+        fl = fl +! fh *! (LLVM::signed_to_float[S64, B64](jm) *! crr)
     else
-      var xph = x -! 1.0
-      var xpl = 0.0
-      wh = xph
-      var j = -1 - jm
-      while j != 0
-        var s = b64_gamma_fasttwosum(x: xph, y: -1.0)
-        xph = s.item0
-        xpl = xpl +! s.item1
-        s = b64_gamma_fasttwosum(x: xph, y: xpl)
-        xph = s.item0
-        xpl = s.item1
-        var w = b64_gamma_muldd3(xh: xph, xl: xpl, yh: wh, yl: wl)
-        wh = w.item0
-        wl = w.item1
-        j = j - 1
-  if jm > 0
-    var rh = 1.0 /! wh
-    var rl = (LLVM::fma[B64](a: rh, b: -wh, c: 1.0) -! wl *! rh) *! rh
-    var mr = b64_gamma_muldd3(xh: fh, xl: fl, yh: rh, yl: rl)
-    fh = mr.item0
-    fl = mr.item1
-  elseif jm < 0
-    var mw = b64_gamma_muldd3(xh: fh, xl: fl, yh: wh, yl: wl)
-    fh = mw.item0
-    fl = mw.item1
-  # a correction term that is zero in round-to-nearest (it matters only under directed rounding in C)
-  var crr = 0.0
-  if jm <= 0
-    crr = ((0x1p-54 +! 0x1p-107) -! 0x1p-54) +! ((0x1p-53 -! 0x1p-107) -! 0x1p-53)
-    fl = fl +! fh *! (LLVM::signed_to_float[S64, B64](jm) *! crr)
-  else
-    var op = 0x1p-53 -! 0x1p-107
-    var om = -0x1p-53 +! 0x1p-107
-    if op == -om
-      crr = 0x1p-53 -! op
-    fl = fl -! fh *! ((LLVM::signed_to_float[S64, B64](jm - 5) *! crr) *! 0x1.0a3d70a3d70a4p+0)
-  var eps = 0x1.ep-103 *! fh
-  var ub = fh +! (fl +! eps)
-  var lb = fh +! (fl -! eps)
-  var res = (fh +! fl).to_bits()
-  var re = LLVM::reinterpret_bits[U64, S64]((res >>> 52) & 0x7FF_u64)
-  if re + eoff <= 0
-    # subnormal result
-    res = res -% (LLVM::reinterpret_bits[S64, U64](eoff + re - 1) << 52)
-    res = res & (0xFFF_u64 << 52)
-    var s = b64_gamma_fasttwosum(x: B64.from_bits(bits: res), y: fh)
-    fh = s.item0
-    fl = fl +! s.item1
-    res = (fh +! fl).to_bits()
-    res = res & (0x7FF_u64 << 52).bitnot()
-  else
-    res = res +% (LLVM::reinterpret_bits[S64, U64](eoff) << 52)
-  if ub != lb
-    return b64_tgamma_database(x: x, f: B64.from_bits(bits: res))
-  return B64.from_bits(bits: res)
+        var op = 0x1p-53 -! 0x1p-107
+        var om = -0x1p-53 +! 0x1p-107
+        if op == -om
+            crr = 0x1p-53 -! op
+        fl = fl -! fh *! ((LLVM::signed_to_float[S64, B64](jm - 5) *! crr) *! 0x1.0a3d70a3d70a4p+0)
+    var eps = 0x1.ep-103 *! fh
+    var ub = fh +! (fl +! eps)
+    var lb = fh +! (fl -! eps)
+    var res = (fh +! fl).to_bits()
+    var re = LLVM::reinterpret_bits[U64, S64]((res >>> 52) & 0x7FF_u64)
+    if re + eoff <= 0
+        # subnormal result
+        res = res -% (LLVM::reinterpret_bits[S64, U64](eoff + re - 1) << 52)
+        res = res & (0xFFF_u64 << 52)
+        var s = b64_gamma_fasttwosum(x: B64.from_bits(bits: res), y: fh)
+        fh = s.item0
+        fl = fl +! s.item1
+        res = (fh +! fl).to_bits()
+        res = res & (0x7FF_u64 << 52).bitnot()
+    else
+        res = res +% (LLVM::reinterpret_bits[S64, U64](eoff) << 52)
+    if ub != lb
+        return b64_tgamma_database(x: x, f: B64.from_bits(bits: res))
+    return B64.from_bits(bits: res)
 
 ### Evaluates the double-double polynomial `c[0] + c[1]*x + ... + (c[n-1] + l)*x^(n-1)` of the table
 ### pairs (high, low) starting at `base`, with a double-double argument.
@@ -372,17 +372,17 @@ secret routine b64_tgamma_accurate(x: B64) -> B64
 ### :param l: A low-order term added to the leading coefficient.
 ### :returns: The value as a (high, low) pair.
 secret routine b64_tgamma_polydd(xh: B64, xl: B64, n: U64, base: U64, l: B64) -> (B64, B64)
-  var i = n - 1_u64
-  var s = b64_gamma_fasttwosum(x: b64_tgamma_t(i: base + 2_u64 * i), y: l)
-  var ch = s.item0
-  var cl = s.item1 +! b64_tgamma_t(i: base + 2_u64 * i + 1_u64)
-  while i > 0_u64
-    i = i - 1_u64
-    var m = b64_gamma_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
-    var a = b64_gamma_fastsum(xh: b64_tgamma_t(i: base + 2_u64 * i), xl: b64_tgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
-    ch = a.item0
-    cl = a.item1
-  return (ch, cl)
+    var i = n - 1_u64
+    var s = b64_gamma_fasttwosum(x: b64_tgamma_t(i: base + 2_u64 * i), y: l)
+    var ch = s.item0
+    var cl = s.item1 +! b64_tgamma_t(i: base + 2_u64 * i + 1_u64)
+    while i > 0_u64
+        i = i - 1_u64
+        var m = b64_gamma_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+        var a = b64_gamma_fastsum(xh: b64_tgamma_t(i: base + 2_u64 * i), xl: b64_tgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
+        ch = a.item0
+        cl = a.item1
+    return (ch, cl)
 
 ### Evaluates the double-double polynomial `c[0] + c[1]*x + ... + (c[n-1] + l)*x^(n-1)` of the table
 ### pairs (high, low) starting at `base`, with a double argument (accumulating with `sumdd`).
@@ -392,17 +392,17 @@ secret routine b64_tgamma_polydd(xh: B64, xl: B64, n: U64, base: U64, l: B64) ->
 ### :param l: A low-order term added to the leading coefficient.
 ### :returns: The value as a (high, low) pair.
 secret routine b64_tgamma_polyddd(x: B64, n: U64, base: U64, l: B64) -> (B64, B64)
-  var i = n - 1_u64
-  var s = b64_gamma_fasttwosum(x: b64_tgamma_t(i: base + 2_u64 * i), y: l)
-  var ch = s.item0
-  var cl = s.item1 +! b64_tgamma_t(i: base + 2_u64 * i + 1_u64)
-  while i > 0_u64
-    i = i - 1_u64
-    var m = b64_gamma_mulddd(x: x, ch: ch, cl: cl)
-    var a = b64_gamma_sumdd(xh: b64_tgamma_t(i: base + 2_u64 * i), xl: b64_tgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
-    ch = a.item0
-    cl = a.item1
-  return (ch, cl)
+    var i = n - 1_u64
+    var s = b64_gamma_fasttwosum(x: b64_tgamma_t(i: base + 2_u64 * i), y: l)
+    var ch = s.item0
+    var cl = s.item1 +! b64_tgamma_t(i: base + 2_u64 * i + 1_u64)
+    while i > 0_u64
+        i = i - 1_u64
+        var m = b64_gamma_mulddd(x: x, ch: ch, cl: cl)
+        var a = b64_gamma_sumdd(xh: b64_tgamma_t(i: base + 2_u64 * i), xl: b64_tgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
+        ch = a.item0
+        cl = a.item1
+    return (ch, cl)
 
 ### Evaluates the double polynomial `c[0] + c[1]*x + ... + c[n-1]*x^(n-1)` of the high parts of the
 ### table pairs starting at `base`.
@@ -411,19 +411,19 @@ secret routine b64_tgamma_polyddd(x: B64, n: U64, base: U64, l: B64) -> (B64, B6
 ### :param base: The table index of the first coefficient's high part.
 ### :returns: The value.
 secret routine b64_tgamma_polyd(x: B64, n: U64, base: U64) -> B64
-  var i = n - 1_u64
-  var ch = b64_tgamma_t(i: base + 2_u64 * i)
-  while i > 0_u64
-    i = i - 1_u64
-    ch = b64_tgamma_t(i: base + 2_u64 * i) +! x *! ch
-  return ch
+    var i = n - 1_u64
+    var ch = b64_tgamma_t(i: base + 2_u64 * i)
+    while i > 0_u64
+        i = i - 1_u64
+        ch = b64_tgamma_t(i: base + 2_u64 * i) +! x *! ch
+    return ch
 
 ### Splits `x` into xh + xl where ulp(xh) = 2^-25 (exact when |x| <= 2^26).
 ### :param x: The value to split.
 ### :returns: The (xh, xl) pair.
 secret routine b64_tgamma_splt(x: B64) -> (B64, B64)
-  var xh = (x +! 0x1.8p27) -! 0x1.8p27
-  return (xh, x -! xh)
+    var xh = (x +! 0x1.8p27) -! 0x1.8p27
+    return (xh, x -! xh)
 
 ### Multiplies `x` by the triple-double x0 + x1 + x2 and returns the product as a triple-double.
 ### :param x: The multiplier.
@@ -432,21 +432,21 @@ secret routine b64_tgamma_splt(x: B64) -> (B64, B64)
 ### :param x2: The trailing part.
 ### :returns: The (l0, l1, l2) parts of the product.
 secret routine b64_tgamma_sprod(x: B64, x0: B64, x1: B64, x2: B64) -> (B64, B64, B64)
-  var z0 = x *! x0
-  var z0l = LLVM::fma[B64](a: x, b: x0, c: -z0)
-  var z1 = x *! x1
-  var z2 = x *! x2 +! LLVM::fma[B64](a: x, b: x1, c: -z1)
-  var sp = b64_tgamma_splt(x: z0)
-  z0 = sp.item0
-  var e = sp.item1
-  var s = b64_gamma_fasttwosum(x: e, y: z0l)
-  e = s.item0
-  z0l = s.item1
-  s = b64_gamma_twosum(x: e, y: z1)
-  var l1 = s.item0
-  e = s.item1
-  var l2 = (e +! z0l) +! z2
-  return (z0, l1, l2)
+    var z0 = x *! x0
+    var z0l = LLVM::fma[B64](a: x, b: x0, c: -z0)
+    var z1 = x *! x1
+    var z2 = x *! x2 +! LLVM::fma[B64](a: x, b: x1, c: -z1)
+    var sp = b64_tgamma_splt(x: z0)
+    z0 = sp.item0
+    var e = sp.item1
+    var s = b64_gamma_fasttwosum(x: e, y: z0l)
+    e = s.item0
+    z0l = s.item1
+    s = b64_gamma_twosum(x: e, y: z1)
+    var l1 = s.item0
+    e = s.item1
+    var l2 = (e +! z0l) +! z2
+    return (z0, l1, l2)
 
 ### Evaluates the accurate-path polynomial: `imax` double coefficients at `chbase` combined in
 ### triple-double powers of `d`, plus a double-double tail of `jmax` pairs at `clbase`.
@@ -457,59 +457,59 @@ secret routine b64_tgamma_sprod(x: B64, x0: B64, x1: B64, x2: B64) -> (B64, B64,
 ### :param clbase: The table index of the double-double coefficients.
 ### :returns: The value as a (high, low) pair.
 secret routine b64_tgamma_poly3(d: B64, imax: U64, chbase: U64, jmax: U64, clbase: U64) -> (B64, B64)
-  var t0 = 1.0
-  var t1 = 0.0
-  var t2 = 0.0
-  var s0 = b64_tgamma_t(i: chbase)
-  var s1 = 0.0
-  var s2 = 0.0
-  var i = 1_u64
-  while i < imax
-    var sp = b64_tgamma_sprod(x: d, x0: t0, x1: t1, x2: t2)
-    t0 = sp.item0
-    t1 = sp.item1
-    t2 = sp.item2
-    var chi = b64_tgamma_t(i: chbase + i)
-    s0 = s0 +! t0 *! chi
-    var f = b64_gamma_mulddd(x: chi, ch: t1, cl: t2)
-    var a = b64_gamma_sumdd(xh: s1, xl: s2, yh: f.item0, yl: f.item1)
+    var t0 = 1.0
+    var t1 = 0.0
+    var t2 = 0.0
+    var s0 = b64_tgamma_t(i: chbase)
+    var s1 = 0.0
+    var s2 = 0.0
+    var i = 1_u64
+    while i < imax
+        var sp = b64_tgamma_sprod(x: d, x0: t0, x1: t1, x2: t2)
+        t0 = sp.item0
+        t1 = sp.item1
+        t2 = sp.item2
+        var chi = b64_tgamma_t(i: chbase + i)
+        s0 = s0 +! t0 *! chi
+        var f = b64_gamma_mulddd(x: chi, ch: t1, cl: t2)
+        var a = b64_gamma_sumdd(xh: s1, xl: s2, yh: f.item0, yl: f.item1)
+        s1 = a.item0
+        s2 = a.item1
+        i = i + 1_u64
+    var p = b64_tgamma_polyddd(x: d, n: jmax, base: clbase, l: 0.0)
+    var a = b64_gamma_sumdd(xh: s1, xl: s2, yh: p.item0, yl: p.item1)
     s1 = a.item0
     s2 = a.item1
-    i = i + 1_u64
-  var p = b64_tgamma_polyddd(x: d, n: jmax, base: clbase, l: 0.0)
-  var a = b64_gamma_sumdd(xh: s1, xl: s2, yh: p.item0, yl: p.item1)
-  s1 = a.item0
-  s2 = a.item1
-  a = b64_gamma_fasttwosum(x: s0, y: s1)
-  s0 = a.item0
-  s1 = a.item1
-  a = b64_gamma_fasttwosum(x: s1, y: s2)
-  return (s0, a.item0)
+    a = b64_gamma_fasttwosum(x: s0, y: s1)
+    s0 = a.item0
+    s1 = a.item1
+    a = b64_gamma_fasttwosum(x: s1, y: s2)
+    return (s0, a.item0)
 
 ### sin(pi x) as a double-double, for 0 < x < 1.
 ### :param x: The argument.
 ### :returns: The (high, low) pair.
 secret routine b64_tgamma_sinpid(x: B64) -> (B64, B64)
-  var y = ((x -! 0.5).abs()) *! 128.0
-  var ix = LLVM::rint[B64](value: y)
-  var d = ix -! y
-  var d2 = d *! d
-  var ky = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ix))
-  var kx = 64_u64 - ky
-  var sh = b64_tgamma_t(i: 1169_u64 + 2_u64 * kx + 1_u64)
-  var sl = b64_tgamma_t(i: 1169_u64 + 2_u64 * kx)
-  var ch = b64_tgamma_t(i: 1169_u64 + 2_u64 * ky + 1_u64)
-  var cl = b64_tgamma_t(i: 1169_u64 + 2_u64 * ky)
-  var pp = d2 *! (0x1.03c1f081b5ac4p-26 +! d2 *! (-0x1.55d3c7e3bd8bfp-42 +! d2 *! 0x1.e1f4826790653p-59))
-  var qq = d2 *! (-0x1.4abbce625be53p-19 +! d2 *! (0x1.466bc67748efcp-34 +! d2 *! (-0x1.32d26e446373ap-50)))
-  var q = b64_gamma_fasttwosum(x: 0x1.921fb54442d18p-6, y: qq)
-  var c = b64_gamma_muldd(xh: q.item0, xl: q.item1 +! 0x1.1a624b88c9448p-60, ch: ch, cl: cl)
-  var th = b64_gamma_fasttwosum(x: -0x1.3bd3cc9be45dep-12, y: pp)
-  th = b64_gamma_mulddd(x: d, ch: th.item0, cl: th.item1 +! (-0x1.692b66e3cf6e8p-66))
-  var ph = b64_gamma_muldd(xh: th.item0, xl: th.item1, ch: sh, cl: sl)
-  c = b64_gamma_fastsum(xh: c.item0, xl: c.item1, yh: ph.item0, yl: ph.item1)
-  c = b64_gamma_mulddd(x: d, ch: c.item0, cl: c.item1)
-  return b64_gamma_fastsum(xh: sh, xl: sl, yh: c.item0, yl: c.item1)
+    var y = ((x -! 0.5).abs()) *! 128.0
+    var ix = LLVM::rint[B64](value: y)
+    var d = ix -! y
+    var d2 = d *! d
+    var ky = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ix))
+    var kx = 64_u64 - ky
+    var sh = b64_tgamma_t(i: 1169_u64 + 2_u64 * kx + 1_u64)
+    var sl = b64_tgamma_t(i: 1169_u64 + 2_u64 * kx)
+    var ch = b64_tgamma_t(i: 1169_u64 + 2_u64 * ky + 1_u64)
+    var cl = b64_tgamma_t(i: 1169_u64 + 2_u64 * ky)
+    var pp = d2 *! (0x1.03c1f081b5ac4p-26 +! d2 *! (-0x1.55d3c7e3bd8bfp-42 +! d2 *! 0x1.e1f4826790653p-59))
+    var qq = d2 *! (-0x1.4abbce625be53p-19 +! d2 *! (0x1.466bc67748efcp-34 +! d2 *! (-0x1.32d26e446373ap-50)))
+    var q = b64_gamma_fasttwosum(x: 0x1.921fb54442d18p-6, y: qq)
+    var c = b64_gamma_muldd(xh: q.item0, xl: q.item1 +! 0x1.1a624b88c9448p-60, ch: ch, cl: cl)
+    var th = b64_gamma_fasttwosum(x: -0x1.3bd3cc9be45dep-12, y: pp)
+    th = b64_gamma_mulddd(x: d, ch: th.item0, cl: th.item1 +! (-0x1.692b66e3cf6e8p-66))
+    var ph = b64_gamma_muldd(xh: th.item0, xl: th.item1, ch: sh, cl: sl)
+    c = b64_gamma_fastsum(xh: c.item0, xl: c.item1, yh: ph.item0, yl: ph.item1)
+    c = b64_gamma_mulddd(x: d, ch: c.item0, cl: c.item1)
+    return b64_gamma_fastsum(xh: sh, xl: sl, yh: c.item0, yl: c.item1)
 
 ### 2^(1024 (x + l) / log(2)) split as a double-double mantissa and a binary exponent: e^(x + l) is
 ### (rh + rl) * 2^e.
@@ -517,123 +517,123 @@ secret routine b64_tgamma_sinpid(x: B64) -> (B64, B64)
 ### :param l: The low part of the argument.
 ### :returns: The (rh, rl, e) triple.
 secret routine b64_tgamma_expd(x: B64, l: B64) -> (B64, B64, S64)
-  var m = b64_gamma_muldd(xh: x, xl: l, ch: 0x1.71547652b82fep+10, cl: 0x1.777d0ffda0d24p-46)
-  var ix = LLVM::rint[B64](value: m.item0)
-  var s = b64_gamma_fasttwosum(x: m.item0 -! ix, y: m.item1)
-  var xh = s.item0
-  var xl = s.item1
-  var k = LLVM::float_to_signed[B64, S64](ix)
-  var i0 = LLVM::reinterpret_bits[S64, U64]((k >> 5) & 31)
-  var i1 = LLVM::reinterpret_bits[S64, U64](k & 31)
-  var e = k >> 10
-  var r = b64_gamma_muldd(xh: b64_tgamma_t(i: 1299_u64 + 2_u64 * i0 + 1_u64), xl: b64_tgamma_t(i: 1299_u64 + 2_u64 * i0), ch: b64_tgamma_t(i: 1363_u64 + 2_u64 * i1 + 1_u64), cl: b64_tgamma_t(i: 1363_u64 + 2_u64 * i1))
-  var fl = xh *! b64_tgamma_polyd(x: xh, n: 4_u64, base: 1427_u64 + 2_u64)
-  var f = b64_tgamma_polydd(xh: xh, xl: xl, n: 1_u64, base: 1427_u64, l: fl)
-  f = b64_gamma_muldd(xh: xh, xl: xl, ch: f.item0, cl: f.item1)
-  var o = b64_gamma_fasttwosum(x: 1.0, y: f.item0)
-  f = b64_gamma_muldd(xh: r.item0, xl: r.item1, ch: o.item0, cl: f.item1 +! o.item1)
-  return (f.item0, f.item1, e)
+    var m = b64_gamma_muldd(xh: x, xl: l, ch: 0x1.71547652b82fep+10, cl: 0x1.777d0ffda0d24p-46)
+    var ix = LLVM::rint[B64](value: m.item0)
+    var s = b64_gamma_fasttwosum(x: m.item0 -! ix, y: m.item1)
+    var xh = s.item0
+    var xl = s.item1
+    var k = LLVM::float_to_signed[B64, S64](ix)
+    var i0 = LLVM::reinterpret_bits[S64, U64]((k >> 5) & 31)
+    var i1 = LLVM::reinterpret_bits[S64, U64](k & 31)
+    var e = k >> 10
+    var r = b64_gamma_muldd(xh: b64_tgamma_t(i: 1299_u64 + 2_u64 * i0 + 1_u64), xl: b64_tgamma_t(i: 1299_u64 + 2_u64 * i0), ch: b64_tgamma_t(i: 1363_u64 + 2_u64 * i1 + 1_u64), cl: b64_tgamma_t(i: 1363_u64 + 2_u64 * i1))
+    var fl = xh *! b64_tgamma_polyd(x: xh, n: 4_u64, base: 1427_u64 + 2_u64)
+    var f = b64_tgamma_polydd(xh: xh, xl: xl, n: 1_u64, base: 1427_u64, l: fl)
+    f = b64_gamma_muldd(xh: xh, xl: xl, ch: f.item0, cl: f.item1)
+    var o = b64_gamma_fasttwosum(x: 1.0, y: f.item0)
+    f = b64_gamma_muldd(xh: r.item0, xl: r.item1, ch: o.item0, cl: f.item1 +! o.item1)
+    return (f.item0, f.item1, e)
 
 ### ln(gamma(x)) for x = xh + xl > 3 from Stirling's asymptotic series.
 ### :param xh: The high part of the argument.
 ### :param xl: The low part of the argument.
 ### :returns: The (high, low) pair.
 secret routine b64_tgamma_lgamma_asym(xh: B64, xl: B64) -> (B64, B64)
-  var zh = 1.0 /! xh
-  var dz = xl *! zh
-  var zl = (LLVM::fma[B64](a: zh, b: -xh, c: 1.0) -! dz) *! zh
-  var lg = b64_gamma_logd(x: xh)
-  var l = b64_gamma_muldd(xh: xh -! 0.5, xl: xl, ch: lg.item0 -! 1.0, cl: lg.item1 +! dz)
-  var lh = l.item0
-  var ll = l.item1
-  var z2 = b64_gamma_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
-  var z2h = z2.item0
-  var x2 = z2h *! z2h
-  var f = (0.0, 0.0)
-  if xh > 11.5
-    var c = 1437_u64
-    var a = b64_gamma_fastsum(xh: lh, xl: ll, yh: b64_tgamma_t(i: c), yl: b64_tgamma_t(i: c + 1_u64))
-    lh = a.item0
-    ll = a.item1
-    # q = c + 2: the high parts of pairs 2..7
-    var q = c + 4_u64
-    var q0 = b64_tgamma_t(i: q) +! z2h *! b64_tgamma_t(i: q + 2_u64)
-    var q2 = b64_tgamma_t(i: q + 4_u64) +! z2h *! b64_tgamma_t(i: q + 6_u64)
-    var q4 = b64_tgamma_t(i: q + 8_u64) +! z2h *! b64_tgamma_t(i: q + 10_u64)
-    var fl = z2h *! (q0 +! x2 *! (q2 +! x2 *! q4))
-    f = b64_tgamma_polydd(xh: z2h, xl: z2.item1, n: 1_u64, base: c + 2_u64, l: fl)
-  else
-    var c = 1453_u64
-    var a = b64_gamma_fastsum(xh: lh, xl: ll, yh: b64_tgamma_t(i: c), yl: b64_tgamma_t(i: c + 1_u64))
-    lh = a.item0
-    ll = a.item1
-    var x4 = x2 *! x2
-    # q = c + 3: the high parts of pairs 3..12
-    var q = c + 6_u64
-    var q0 = b64_tgamma_t(i: q) +! z2h *! b64_tgamma_t(i: q + 2_u64)
-    var q2 = b64_tgamma_t(i: q + 4_u64) +! z2h *! b64_tgamma_t(i: q + 6_u64)
-    var q4 = b64_tgamma_t(i: q + 8_u64) +! z2h *! b64_tgamma_t(i: q + 10_u64)
-    var q6 = b64_tgamma_t(i: q + 12_u64) +! z2h *! b64_tgamma_t(i: q + 14_u64)
-    var q8 = b64_tgamma_t(i: q + 16_u64) +! z2h *! b64_tgamma_t(i: q + 18_u64)
-    q4 = q4 +! x2 *! (q6 +! x2 *! q8)
-    q0 = q0 +! x2 *! q2
-    q0 = q0 +! x4 *! q4
-    f = b64_tgamma_polydd(xh: z2h, xl: z2.item1, n: 2_u64, base: c + 2_u64, l: z2h *! q0)
-  f = b64_gamma_muldd(xh: zh, xl: zl, ch: f.item0, cl: f.item1)
-  return b64_gamma_fastsum(xh: lh, xl: ll, yh: f.item0, yl: f.item1)
+    var zh = 1.0 /! xh
+    var dz = xl *! zh
+    var zl = (LLVM::fma[B64](a: zh, b: -xh, c: 1.0) -! dz) *! zh
+    var lg = b64_gamma_logd(x: xh)
+    var l = b64_gamma_muldd(xh: xh -! 0.5, xl: xl, ch: lg.item0 -! 1.0, cl: lg.item1 +! dz)
+    var lh = l.item0
+    var ll = l.item1
+    var z2 = b64_gamma_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
+    var z2h = z2.item0
+    var x2 = z2h *! z2h
+    var f = (0.0, 0.0)
+    if xh > 11.5
+        var c = 1437_u64
+        var a = b64_gamma_fastsum(xh: lh, xl: ll, yh: b64_tgamma_t(i: c), yl: b64_tgamma_t(i: c + 1_u64))
+        lh = a.item0
+        ll = a.item1
+        # q = c + 2: the high parts of pairs 2..7
+        var q = c + 4_u64
+        var q0 = b64_tgamma_t(i: q) +! z2h *! b64_tgamma_t(i: q + 2_u64)
+        var q2 = b64_tgamma_t(i: q + 4_u64) +! z2h *! b64_tgamma_t(i: q + 6_u64)
+        var q4 = b64_tgamma_t(i: q + 8_u64) +! z2h *! b64_tgamma_t(i: q + 10_u64)
+        var fl = z2h *! (q0 +! x2 *! (q2 +! x2 *! q4))
+        f = b64_tgamma_polydd(xh: z2h, xl: z2.item1, n: 1_u64, base: c + 2_u64, l: fl)
+    else
+        var c = 1453_u64
+        var a = b64_gamma_fastsum(xh: lh, xl: ll, yh: b64_tgamma_t(i: c), yl: b64_tgamma_t(i: c + 1_u64))
+        lh = a.item0
+        ll = a.item1
+        var x4 = x2 *! x2
+        # q = c + 3: the high parts of pairs 3..12
+        var q = c + 6_u64
+        var q0 = b64_tgamma_t(i: q) +! z2h *! b64_tgamma_t(i: q + 2_u64)
+        var q2 = b64_tgamma_t(i: q + 4_u64) +! z2h *! b64_tgamma_t(i: q + 6_u64)
+        var q4 = b64_tgamma_t(i: q + 8_u64) +! z2h *! b64_tgamma_t(i: q + 10_u64)
+        var q6 = b64_tgamma_t(i: q + 12_u64) +! z2h *! b64_tgamma_t(i: q + 14_u64)
+        var q8 = b64_tgamma_t(i: q + 16_u64) +! z2h *! b64_tgamma_t(i: q + 18_u64)
+        q4 = q4 +! x2 *! (q6 +! x2 *! q8)
+        q0 = q0 +! x2 *! q2
+        q0 = q0 +! x4 *! q4
+        f = b64_tgamma_polydd(xh: z2h, xl: z2.item1, n: 2_u64, base: c + 2_u64, l: z2h *! q0)
+    f = b64_gamma_muldd(xh: zh, xl: zl, ch: f.item0, cl: f.item1)
+    return b64_gamma_fastsum(xh: lh, xl: ll, yh: f.item0, yl: f.item1)
 
 ### ln(x) as a double-double, for a positive finite x (subnormals included).
 ### :param x: The argument.
 ### :returns: The (high, low) pair.
 secret routine b64_gamma_logd(x: B64) -> (B64, B64)
-  var t = x.to_bits()
-  var ex = LLVM::reinterpret_bits[U64, S64](t >>> 52)
-  if ex == 0
-    var k = LLVM::reinterpret_bits[U64, S64](t.leading_zeros())
-    t = t << LLVM::int_truncate[S64, U32](k - 11)
-    ex = ex - (k - 12)
-  var e = ex - 0x3FF
-  t = t & 0x000FFFFFFFFFFFFF_u64
-  var ed = LLVM::signed_to_float[S64, B64](e)
-  var i = t >>> 47
-  var d = t & 0x00007FFFFFFFFFFF_u64
-  var prod = B64_GAMMA_LOGD_B1[i] * LLVM::reinterpret_bits[U64, S64](d >>> 16)
-  var j = (t +% (B64_GAMMA_LOGD_B0[i] << 33) +% LLVM::reinterpret_bits[S64, U64](prod)) >>> 42
-  t = t | (0x3FF_u64 << 52)
-  var i1 = j >>> 5
-  var i2 = j & 0x1F_u64
-  var r = b64_tgamma_t(i: 969_u64 + i1) *! b64_tgamma_t(i: 1002_u64 + i2)
-  var tf = B64.from_bits(bits: t)
-  var o = r *! tf
-  var dxl = LLVM::fma[B64](a: r, b: tf, c: -o)
-  var dxh = o -! 1.0
-  var dx = LLVM::fma[B64](a: r, b: tf, c: -1.0)
-  var dx2 = dx *! dx
-  var f = dx2 *! ((-0x1.fffffffffffd3p-2 +! dx *! 0x1.55555555543d5p-2) +! dx2 *! (-0x1.000002bb2d74ep-2 +! dx *! 0x1.999a692c56e4ep-3))
-  var lt = (b64_tgamma_t(i: 1035_u64 + 2_u64 * i1 + 1_u64) +! b64_tgamma_t(i: 1101_u64 + 2_u64 * i2 + 1_u64)) +! ed *! 0x1.62e42fef8p-1
-  var lh = lt +! dxh
-  var ll = (lt -! lh) +! dxh
-  ll = ll +! (((b64_tgamma_t(i: 1035_u64 + 2_u64 * i1) +! b64_tgamma_t(i: 1101_u64 + 2_u64 * i2)) +! 0x1.1cf79abc9e3b4p-36 *! ed) +! dxl)
-  ll = ll +! f
-  return (lh, ll)
+    var t = x.to_bits()
+    var ex = LLVM::reinterpret_bits[U64, S64](t >>> 52)
+    if ex == 0
+        var k = LLVM::reinterpret_bits[U64, S64](t.leading_zeros())
+        t = t << LLVM::int_truncate[S64, U32](k - 11)
+        ex = ex - (k - 12)
+    var e = ex - 0x3FF
+    t = t & 0x000FFFFFFFFFFFFF_u64
+    var ed = LLVM::signed_to_float[S64, B64](e)
+    var i = t >>> 47
+    var d = t & 0x00007FFFFFFFFFFF_u64
+    var prod = B64_GAMMA_LOGD_B1[i] * LLVM::reinterpret_bits[U64, S64](d >>> 16)
+    var j = (t +% (B64_GAMMA_LOGD_B0[i] << 33) +% LLVM::reinterpret_bits[S64, U64](prod)) >>> 42
+    t = t | (0x3FF_u64 << 52)
+    var i1 = j >>> 5
+    var i2 = j & 0x1F_u64
+    var r = b64_tgamma_t(i: 969_u64 + i1) *! b64_tgamma_t(i: 1002_u64 + i2)
+    var tf = B64.from_bits(bits: t)
+    var o = r *! tf
+    var dxl = LLVM::fma[B64](a: r, b: tf, c: -o)
+    var dxh = o -! 1.0
+    var dx = LLVM::fma[B64](a: r, b: tf, c: -1.0)
+    var dx2 = dx *! dx
+    var f = dx2 *! ((-0x1.fffffffffffd3p-2 +! dx *! 0x1.55555555543d5p-2) +! dx2 *! (-0x1.000002bb2d74ep-2 +! dx *! 0x1.999a692c56e4ep-3))
+    var lt = (b64_tgamma_t(i: 1035_u64 + 2_u64 * i1 + 1_u64) +! b64_tgamma_t(i: 1101_u64 + 2_u64 * i2 + 1_u64)) +! ed *! 0x1.62e42fef8p-1
+    var lh = lt +! dxh
+    var ll = (lt -! lh) +! dxh
+    ll = ll +! (((b64_tgamma_t(i: 1035_u64 + 2_u64 * i1) +! b64_tgamma_t(i: 1101_u64 + 2_u64 * i2)) +! 0x1.1cf79abc9e3b4p-36 *! ed) +! dxl)
+    ll = ll +! f
+    return (lh, ll)
 
 ### The sum x + y and its rounding error, assuming |x| >= |y| (or x = 0).
 ### :param x: The larger addend.
 ### :param y: The smaller addend.
 ### :returns: The (sum, error) pair.
 secret routine b64_gamma_fasttwosum(x: B64, y: B64) -> (B64, B64)
-  var s = x +! y
-  var z = s -! x
-  return (s, y -! z)
+    var s = x +! y
+    var z = s -! x
+    return (s, y -! z)
 
 ### The sum x + y and its rounding error, for any order of magnitudes.
 ### :param x: One addend.
 ### :param y: The other addend.
 ### :returns: The (sum, error) pair.
 secret routine b64_gamma_twosum(x: B64, y: B64) -> (B64, B64)
-  if x.abs() > y.abs()
-    return b64_gamma_fasttwosum(x: x, y: y)
-  return b64_gamma_fasttwosum(x: y, y: x)
+    if x.abs() > y.abs()
+        return b64_gamma_fasttwosum(x: x, y: y)
+    return b64_gamma_fasttwosum(x: y, y: x)
 
 ### The double-double sum (xh + xl) + (yh + yl), assuming |xh| >= |yh|.
 ### :param xh: The high part of the first addend.
@@ -642,8 +642,8 @@ secret routine b64_gamma_twosum(x: B64, y: B64) -> (B64, B64)
 ### :param yl: The low part of the second addend.
 ### :returns: The (high, low) pair.
 secret routine b64_gamma_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
-  var s = b64_gamma_fasttwosum(x: xh, y: yh)
-  return (s.item0, (xl +! yl) +! s.item1)
+    var s = b64_gamma_fasttwosum(x: xh, y: yh)
+    return (s.item0, (xl +! yl) +! s.item1)
 
 ### The double-double sum (xh + xl) + (yh + yl), for any order of magnitudes.
 ### :param xh: The high part of the first addend.
@@ -652,10 +652,10 @@ secret routine b64_gamma_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B6
 ### :param yl: The low part of the second addend.
 ### :returns: The (high, low) pair.
 secret routine b64_gamma_sumdd(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
-  var s = b64_gamma_fasttwosum(x: yh, y: xh)
-  if xh.abs() > yh.abs()
-    s = b64_gamma_fasttwosum(x: xh, y: yh)
-  return (s.item0, (xl +! yl) +! s.item1)
+    var s = b64_gamma_fasttwosum(x: yh, y: xh)
+    if xh.abs() > yh.abs()
+        s = b64_gamma_fasttwosum(x: xh, y: yh)
+    return (s.item0, (xl +! yl) +! s.item1)
 
 ### The double-double product (xh + xl) * (ch + cl), low-order cross terms included.
 ### :param xh: The high part of the first factor.
@@ -664,8 +664,8 @@ secret routine b64_gamma_sumdd(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
 ### :param cl: The low part of the second factor.
 ### :returns: The (high, low) pair.
 secret routine b64_gamma_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
-  var ahhh = ch *! xh
-  return (ahhh, (ch *! xl +! cl *! xh) +! LLVM::fma[B64](a: ch, b: xh, c: -ahhh))
+    var ahhh = ch *! xh
+    return (ahhh, (ch *! xl +! cl *! xh) +! LLVM::fma[B64](a: ch, b: xh, c: -ahhh))
 
 ### The double-double product (xh + xl) * (yh + yl), renormalized.
 ### :param xh: The high part of the first factor.
@@ -674,13 +674,13 @@ secret routine b64_gamma_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
 ### :param yl: The low part of the second factor.
 ### :returns: The (high, low) pair.
 secret routine b64_gamma_muldd3(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
-  var ch = xh *! yh
-  var cl1 = LLVM::fma[B64](a: xh, b: yh, c: -ch)
-  var tl0 = xl *! yl
-  var tl1 = tl0 +! xh *! yl
-  var cl2 = tl1 +! xl *! yh
-  var cl3 = cl1 +! cl2
-  return b64_gamma_fasttwosum(x: ch, y: cl3)
+    var ch = xh *! yh
+    var cl1 = LLVM::fma[B64](a: xh, b: yh, c: -ch)
+    var tl0 = xl *! yl
+    var tl1 = tl0 +! xh *! yl
+    var cl2 = tl1 +! xl *! yh
+    var cl3 = cl1 +! cl2
+    return b64_gamma_fasttwosum(x: ch, y: cl3)
 
 ### The product x * (ch + cl) of a double and a double-double.
 ### :param x: The double factor.
@@ -688,8 +688,8 @@ secret routine b64_gamma_muldd3(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64
 ### :param cl: The low part of the double-double factor.
 ### :returns: The (high, low) pair.
 secret routine b64_gamma_mulddd(x: B64, ch: B64, cl: B64) -> (B64, B64)
-  var ahhh = ch *! x
-  return (ahhh, cl *! x +! LLVM::fma[B64](a: ch, b: x, c: -ahhh))
+    var ahhh = ch *! x
+    return (ahhh, cl *! x +! LLVM::fma[B64](a: ch, b: x, c: -ahhh))
 
 # Parameters of the nine accurate-path ranges of tgamma, by range index k: offsets of the double
 # coefficients, their count, offsets of the double-double coefficients, their pair count, the reference

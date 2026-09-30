@@ -28,7 +28,7 @@ public sealed class CLinkingTests
                                    c_libraries = ["SDL2", "m"]
                                    library_paths = ["vendor/lib"]
                                    """,
-            [key: "App.rf"] = "module App\n\nroutine start()\n  return\n"
+            [key: "App.rf"] = "module App\n\nroutine start()\n    return\n"
         });
         try
         {
@@ -74,7 +74,7 @@ public sealed class CLinkingTests
                                    kind = "static"
                                    name = "physx_static"
                                    """,
-            [key: "App.rf"] = "module App\n\nroutine start()\n  return\n"
+            [key: "App.rf"] = "module App\n\nroutine start()\n    return\n"
         });
         try
         {
@@ -106,7 +106,7 @@ public sealed class CLinkingTests
         {
             [key: "config.toml"] =
                 "[package]\nname = \"t\"\nversion = \"0.0.1\"\n\n[target]\nexecutable = \"App\"\n",
-            [key: "App.rf"] = "module App\n\nroutine start()\n  return\n"
+            [key: "App.rf"] = "module App\n\nroutine start()\n    return\n"
         });
         try
         {

@@ -23,10 +23,10 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine get_value(condition: bool) -> S32
-                          if condition
-                            return 1
-                          else
-                            return 0
+                            if condition
+                                return 1
+                            else
+                                return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -41,16 +41,16 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         choice Status
-                          ACTIVE
-                          INACTIVE
-                          PENDING
+                            ACTIVE
+                            INACTIVE
+                            PENDING
 
                         routine get_description(s: Status) -> Text
-                          return when s
-                            is ACTIVE => "Running"
-                            is INACTIVE => "Stopped"
-                            is PENDING => "Waiting"
-                          return
+                            return when s
+                                is ACTIVE => "Running"
+                                is INACTIVE => "Stopped"
+                                is PENDING => "Waiting"
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -64,11 +64,11 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine find!(items: List[S32], target: S32) -> S32
-                          each item in items
-                            if item == target
-                              return item
-                          absent
-                          return
+                            each item in items
+                                if item == target
+                                    return item
+                            absent
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -82,9 +82,9 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine validate!(value: S32) -> S32
-                          unless value > 0
-                            throw ValueError("Must be positive")
-                          return value
+                            unless value > 0
+                                throw ValueError("Must be positive")
+                            return value
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -103,9 +103,9 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test() -> S32
-                          return 42
-                          var x = 10
-                          return
+                            return 42
+                            var x = 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -120,9 +120,9 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test!() -> S32
-                          absent
-                          var x = 10
-                          return
+                            absent
+                            var x = 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -136,9 +136,9 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test!() -> S32
-                          throw ValueError("error")
-                          var x = 10
-                          return
+                            throw ValueError("error")
+                            var x = 10
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -157,10 +157,10 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 10
-                            if i == 5
-                              break
-                          return
+                            each i in 0 til 10
+                                if i == 5
+                                    break
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -174,11 +174,11 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                          each i in 0 til 10
-                            if i == 5
-                              continue
-                            show(i)
-                          return
+                            each i in 0 til 10
+                                if i == 5
+                                    continue
+                                show(i)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -192,8 +192,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                          break
-                          return
+                            break
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -207,8 +207,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                          continue
-                          return
+                            continue
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -227,8 +227,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test() -> S32
-                          absent
-                          return
+                            absent
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -243,8 +243,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test() -> S32
-                          throw ValueError("error")
-                          return
+                            throw ValueError("error")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -258,8 +258,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test!() -> S32
-                          absent
-                          return
+                            absent
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -283,8 +283,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine spin() -> S32
-                          loop
-                            return 1
+                            loop
+                                return 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -301,13 +301,13 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine scan(n: S32) -> S32
-                          var i = 0
-                          loop
-                            if i >= n
-                              return 0 - 1
-                            if i == 3
-                              return i
-                            i = i + 1
+                            var i = 0
+                            loop
+                                if i >= n
+                                    return 0 - 1
+                                if i == 3
+                                    return i
+                                i = i + 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -324,9 +324,9 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine scan(n: S32) -> S32
-                          loop
-                            if n > 0
-                              break
+                            loop
+                                if n > 0
+                                    break
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -340,10 +340,10 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine scan(n: S32) -> S32
-                          loop
-                            if n > 0
-                              break
-                          return n
+                            loop
+                                if n > 0
+                                    break
+                            return n
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -360,12 +360,12 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine scan(n: S32) -> S32
-                          loop
-                            var i = 0
                             loop
-                              if i >= n
-                                break
-                              i = i + 1
+                                var i = 0
+                                loop
+                                    if i >= n
+                                        break
+                                    i = i + 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -385,8 +385,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test!() -> S32
-                          throw ValueError("error")
-                          return
+                            throw ValueError("error")
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -405,7 +405,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine fail!(value: S32) -> S32
-                          throw ValueError("bad value")
+                            throw ValueError("bad value")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -422,10 +422,10 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine validate!(value: S32) -> S32
-                          if value > 0
-                            throw ValueError("too big")
-                          else
-                            throw ValueError("too small")
+                            if value > 0
+                                throw ValueError("too big")
+                            else
+                                throw ValueError("too small")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -442,7 +442,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine lookup!(key: S32) -> S32
-                          absent
+                            absent
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -459,10 +459,10 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine always_fails!(condition: bool) -> S32
-                          if condition
-                            throw ValueError("a")
-                          else
-                            throw ValueError("b")
+                            if condition
+                                throw ValueError("a")
+                            else
+                                throw ValueError("b")
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -479,8 +479,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine fail!(value: S32) -> S32
-                          throw ValueError("error")
-                          var x = 10
+                            throw ValueError("error")
+                            var x = 10
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -501,8 +501,8 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test(condition: bool) -> S32
-                          if condition
-                            return 1
+                            if condition
+                                return 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -517,13 +517,13 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test(a: bool, b: bool) -> S32
-                          if a
-                            if b
-                              return 1
+                            if a
+                                if b
+                                    return 1
+                                else
+                                    return 2
                             else
-                              return 2
-                          else
-                            return 3
+                                return 3
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -543,12 +543,12 @@ public class ControlFlowAnalysisTests
         // Multi-statement block with becomes is valid
         string source = """
                         routine test(value: S32) -> S32
-                          var result = when value
-                            == 1 =>
-                              var x = value * 2
-                              becomes x
-                            else => 0
-                          return result
+                            var result = when value
+                                == 1 =>
+                                    var x = value * 2
+                                    becomes x
+                                else => 0
+                            return result
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -565,12 +565,12 @@ public class ControlFlowAnalysisTests
         // Multi-statement block in when expression without becomes should error
         string source = """
                         routine test(value: S32) -> S32
-                          var result = when value
-                            == 1 =>
-                              var x = value * 2
-                              x
-                            else => 0
-                          return result
+                            var result = when value
+                                == 1 =>
+                                    var x = value * 2
+                                    x
+                                else => 0
+                            return result
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -587,11 +587,11 @@ public class ControlFlowAnalysisTests
         // Block containing only 'becomes' should use => syntax instead
         string source = """
                         routine test(value: S32) -> S32
-                          var result = when value
-                            == 1 =>
-                              becomes 42
-                            else => 0
-                          return result
+                            var result = when value
+                                == 1 =>
+                                    becomes 42
+                                else => 0
+                            return result
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -608,10 +608,10 @@ public class ControlFlowAnalysisTests
         // Single expression with => is valid
         string source = """
                         routine test(value: S32) -> S32
-                          var result = when value
-                            == 1 => 42
-                            else => 0
-                          return result
+                            var result = when value
+                                == 1 => 42
+                                else => 0
+                            return result
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -628,13 +628,13 @@ public class ControlFlowAnalysisTests
         // When statement (not expression) doesn't need becomes
         string source = """
                         routine test(value: S32)
-                          when value
-                            == 1 =>
-                              var x = value * 2
-                              show(x)
-                            else =>
-                              show(value)
-                          return
+                            when value
+                                == 1 =>
+                                    var x = value * 2
+                                    show(x)
+                                else =>
+                                    show(value)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

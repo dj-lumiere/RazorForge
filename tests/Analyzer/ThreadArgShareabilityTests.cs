@@ -22,11 +22,11 @@ public class ThreadArgShareabilityTests
                                    import IO/Console
 
                                    record Point
-                                     posted x: S64
-                                     posted y: S64
+                                       posted x: S64
+                                       posted y: S64
 
                                    entity Node
-                                     value: S64
+                                       value: S64
 
                                    """;
 
@@ -35,12 +35,12 @@ public class ThreadArgShareabilityTests
     {
         string source = Prelude + """
                                   threaded routine work(n: S64) -> S64
-                                    return n + 1
+                                      return n + 1
 
                                   routine start()
-                                    var t = work(n: 5)
-                                    discard t.retrieve()
-                                    return
+                                      var t = work(n: 5)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AssertAnalyzesSa(source: source);
@@ -52,13 +52,13 @@ public class ThreadArgShareabilityTests
         // A plain value record (no interior reference) is copied by value — safe to cross.
         string source = Prelude + """
                                   threaded routine work(p: Point) -> S64
-                                    return p.x + p.y
+                                      return p.x + p.y
 
                                   routine start()
-                                    var origin = Point(x: 1, y: 2)
-                                    var t = work(p: origin)
-                                    discard t.retrieve()
-                                    return
+                                      var origin = Point(x: 1, y: 2)
+                                      var t = work(p: origin)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AssertAnalyzesSa(source: source);
@@ -70,14 +70,14 @@ public class ThreadArgShareabilityTests
         // Atomic carries its own synchronization — shared by reference across the boundary.
         string source = Prelude + """
                                   threaded routine work(cell: Atomic[S64]) -> S64
-                                    discard cell.fetch_add(delta: 1_s64)
-                                    return 0_s64
+                                      discard cell.fetch_add(delta: 1_s64)
+                                      return 0_s64
 
                                   routine start()
-                                    var counter = Atomic[S64](initial: 0_s64)
-                                    var t = work(cell: counter)
-                                    discard t.retrieve()
-                                    return
+                                      var counter = Atomic[S64](initial: 0_s64)
+                                      var t = work(cell: counter)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AssertAnalyzesSa(source: source);
@@ -89,13 +89,13 @@ public class ThreadArgShareabilityTests
         // Guarded is an atomic Arc — explicitly shareable across threads.
         string source = Prelude + """
                                   threaded routine work(s: Guarded[Node, ReadOnly]) -> S64
-                                    return 0_s64
+                                      return 0_s64
 
                                   routine start()
-                                    var s = Guarded[Node, ReadOnly](from: Node(value: 1))
-                                    var t = work(s: s.share())
-                                    discard t.retrieve()
-                                    return
+                                      var s = Guarded[Node, ReadOnly](from: Node(value: 1))
+                                      var t = work(s: s.share())
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AssertAnalyzesSa(source: source);
@@ -107,13 +107,13 @@ public class ThreadArgShareabilityTests
         // A bare entity is a heap handle — passing it would alias the same object across threads.
         string source = Prelude + """
                                   threaded routine work(node: Node) -> S64
-                                    return node.value
+                                      return node.value
 
                                   routine start()
-                                    var n = Node(value: 1)
-                                    var t = work(node: n)
-                                    discard t.retrieve()
-                                    return
+                                      var n = Node(value: 1)
+                                      var t = work(node: n)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -130,16 +130,16 @@ public class ThreadArgShareabilityTests
         // interior across threads — must use Guarded instead.
         string source = Prelude + """
                                   record Holder
-                                    posted node: Retained[Node]
+                                      posted node: Retained[Node]
 
                                   threaded routine work(h: Holder) -> S64
-                                    return 0_s64
+                                      return 0_s64
 
                                   routine start()
-                                    var h = Holder(node: Retained(from: Node(value: 1)))
-                                    var t = work(h: h)
-                                    discard t.retrieve()
-                                    return
+                                      var h = Holder(node: Retained(from: Node(value: 1)))
+                                      var t = work(h: h)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -158,16 +158,16 @@ public class ThreadArgShareabilityTests
         // just because a record wraps it. (The old hand-maintained set wrongly rejected this.)
         string source = Prelude + """
                                   record Holder
-                                    posted node: Guarded[Node, ReadOnly]
+                                      posted node: Guarded[Node, ReadOnly]
 
                                   threaded routine work(h: Holder) -> S64
-                                    return 0_s64
+                                      return 0_s64
 
                                   routine start()
-                                    var h = Holder(node: Guarded[Node, ReadOnly](from: Node(value: 1)))
-                                    var t = work(h: h)
-                                    discard t.retrieve()
-                                    return
+                                      var h = Holder(node: Guarded[Node, ReadOnly](from: Node(value: 1)))
+                                      var t = work(h: h)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AssertAnalyzesSa(source: source);
@@ -181,13 +181,13 @@ public class ThreadArgShareabilityTests
         // is the over-strictness the steal-credit removed: the type-only check rejected it before.)
         string source = Prelude + """
                                   threaded routine work(node: Node) -> S64
-                                    return node.value
+                                      return node.value
 
                                   routine start()
-                                    var n = Node(value: 1)
-                                    var t = work(node: steal n)
-                                    discard t.retrieve()
-                                    return
+                                      var n = Node(value: 1)
+                                      var t = work(node: steal n)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AssertAnalyzesSa(source: source);
@@ -199,12 +199,12 @@ public class ThreadArgShareabilityTests
         // A trivially-copyable scalar is copied by value — safe across the suspended boundary too.
         string source = Prelude + """
                                   suspended routine work(n: S64) -> S64
-                                    return n + 1
+                                      return n + 1
 
                                   routine start()
-                                    var t = work(n: 5)
-                                    discard t.retrieve()
-                                    return
+                                      var t = work(n: 5)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AssertAnalyzesSa(source: source);
@@ -218,16 +218,16 @@ public class ThreadArgShareabilityTests
         // coroutines. The same crossing rule now applies here (RF-S632).
         string source = Prelude + """
                                   record Holder
-                                    posted node: Retained[Node]
+                                      posted node: Retained[Node]
 
                                   suspended routine work(h: Holder) -> S64
-                                    return 0_s64
+                                      return 0_s64
 
                                   routine start()
-                                    var h = Holder(node: Retained(from: Node(value: 1)))
-                                    var t = work(h: h)
-                                    discard t.retrieve()
-                                    return
+                                      var h = Holder(node: Retained(from: Node(value: 1)))
+                                      var t = work(h: h)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -246,13 +246,13 @@ public class ThreadArgShareabilityTests
         // itself (RF-S617), independent of the async boundary — the honest fix is `Guarded`/`Witnessed`.
         string source = Prelude + """
                                   suspended routine work(r: Retained[Node]) -> S64
-                                    return r.value
+                                      return r.value
 
                                   routine start()
-                                    var r = Retained(from: Node(value: 1))
-                                    var t = work(r: steal r)
-                                    discard t.retrieve()
-                                    return
+                                      var r = Retained(from: Node(value: 1))
+                                      var t = work(r: steal r)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
@@ -270,16 +270,16 @@ public class ThreadArgShareabilityTests
         // is still rejected (RF-S632) — must use `Guarded`/`Witnessed`.
         string source = Prelude + """
                                   record Holder
-                                    posted node: Retained[Node]
+                                      posted node: Retained[Node]
 
                                   suspended routine work(h: Holder) -> S64
-                                    return 0_s64
+                                      return 0_s64
 
                                   routine start()
-                                    var h = Holder(node: Retained(from: Node(value: 1)))
-                                    var t = work(h: steal h)
-                                    discard t.retrieve()
-                                    return
+                                      var h = Holder(node: Retained(from: Node(value: 1)))
+                                      var t = work(h: steal h)
+                                      discard t.retrieve()
+                                      return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,

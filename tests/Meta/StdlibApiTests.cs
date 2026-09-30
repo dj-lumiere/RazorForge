@@ -352,11 +352,11 @@ public sealed partial class StdlibApiTests
         lines.Add(item: "routine start()");
         foreach ((string stem, _, string leaf) in entries)
         {
-            lines.Add(item: $"  show(\"##### {stem} #####\")");
-            lines.Add(item: $"  {leaf}.start()");
+            lines.Add(item: $"    show(\"##### {stem} #####\")");
+            lines.Add(item: $"    {leaf}.start()");
         }
 
-        lines.Add(item: "  return");
+        lines.Add(item: "    return");
         lines.Add(item: "");
         string harnessSrc = Path.Combine(path1: harnessDir, path2: bundleFileName);
         File.WriteAllText(path: harnessSrc, contents: string.Join(separator: "\n", values: lines));

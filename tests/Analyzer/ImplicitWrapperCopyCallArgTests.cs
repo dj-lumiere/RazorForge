@@ -18,16 +18,16 @@ public class ImplicitWrapperCopyCallArgTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine consume(handle: Retained[Node])
-                          return
+                            return
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          consume(handle: ra)
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            consume(handle: ra)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -42,16 +42,16 @@ public class ImplicitWrapperCopyCallArgTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine consume(handle: Retained[Node])
-                          return
+                            return
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          consume(handle: ra.share())
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            consume(handle: ra.share())
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -66,12 +66,12 @@ public class ImplicitWrapperCopyCallArgTests
     {
         string source = """
                         routine consume(x: S64)
-                          return
+                            return
 
                         routine start()
-                          var a = 42_s64
-                          consume(x: a)
-                          return
+                            var a = 42_s64
+                            consume(x: a)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -86,16 +86,16 @@ public class ImplicitWrapperCopyCallArgTests
     {
         string source = """
                         record Point
-                          x: S64
-                          y: S64
+                            x: S64
+                            y: S64
 
                         routine consume(p: Point)
-                          return
+                            return
 
                         routine start()
-                          var pt = Point(x: 1, y: 2)
-                          consume(p: pt)
-                          return
+                            var pt = Point(x: 1, y: 2)
+                            consume(p: pt)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -113,16 +113,16 @@ public class ImplicitWrapperCopyCallArgTests
     {
         string source = """
                         entity Node
-                          value: S64
+                            value: S64
 
                         routine consume(tag: S64, handle: Retained[Node])
-                          return
+                            return
 
                         routine start()
-                          var a = Node(value: 1)
-                          var ra = Retained(from: steal a)
-                          consume(tag: 7, handle: ra)
-                          return
+                            var a = Node(value: 1)
+                            var ra = Retained(from: steal a)
+                            consume(tag: 7, handle: ra)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

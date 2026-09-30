@@ -22,10 +22,10 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
-                          EAST
-                          WEST
+                            NORTH
+                            SOUTH
+                            EAST
+                            WEST
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -42,9 +42,9 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice HttpStatus
-                          OK: 200
-                          NOT_FOUND: 404
-                          ERROR: 500
+                            OK: 200
+                            NOT_FOUND: 404
+                            ERROR: 500
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -61,9 +61,9 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice ComparisonSign
-                          ME_SMALL: -1
-                          SAME: 0
-                          ME_LARGE: 1
+                            ME_SMALL: -1
+                            SAME: 0
+                            ME_LARGE: 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -83,9 +83,9 @@ public class ChoiceValidationTests
         // Values exceeding S32 range should produce overflow errors
         string source = """
                         choice BigValues
-                          SMALL: 0
-                          LARGE: 3000000000
-                          HUGE: 9000000000000000000
+                            SMALL: 0
+                            LARGE: 3000000000
+                            HUGE: 9000000000000000000
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -105,9 +105,9 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Bad
-                          FIRST: 1
-                          SECOND
-                          THIRD: 3
+                            FIRST: 1
+                            SECOND
+                            THIRD: 3
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -127,9 +127,9 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Duplicated
-                          FIRST: 1
-                          SECOND: 2
-                          THIRD: 1
+                            FIRST: 1
+                            SECOND: 2
+                            THIRD: 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -149,13 +149,13 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
+                            NORTH
+                            SOUTH
 
                         routine test()
-                          var d = NORTH
-                          var x = d + SOUTH
-                          return
+                            var d = NORTH
+                            var x = d + SOUTH
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -170,13 +170,13 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
+                            NORTH
+                            SOUTH
 
                         routine test()
-                          var d = NORTH
-                          d += SOUTH
-                          return
+                            var d = NORTH
+                            d += SOUTH
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -191,13 +191,13 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Flags
-                          A
-                          B
+                            A
+                            B
 
                         routine test()
-                          var f = A
-                          var x = f & B
-                          return
+                            var f = A
+                            var x = f & B
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -212,13 +212,13 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Priority
-                          LOW
-                          HIGH
+                            LOW
+                            HIGH
 
                         routine test()
-                          var p = LOW
-                          var x = p < HIGH
-                          return
+                            var p = LOW
+                            var x = p < HIGH
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -235,13 +235,13 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
+                            NORTH
+                            SOUTH
 
                         routine test()
-                          var d = NORTH
-                          var same = d == SOUTH
-                          return
+                            var d = NORTH
+                            var same = d == SOUTH
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -261,7 +261,7 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Singleton
-                          ONLY
+                            ONLY
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -279,9 +279,9 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Ternary
-                          NEG: -1
-                          ZERO: 0
-                          POS: 1
+                            NEG: -1
+                            ZERO: 0
+                            POS: 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -299,8 +299,8 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Alias
-                          FIRST: 5
-                          SECOND: 5
+                            FIRST: 5
+                            SECOND: 5
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -316,11 +316,11 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Direction
-                          NORTH
-                          SOUTH
+                            NORTH
+                            SOUTH
 
                         routine test(d: Direction) -> Bool
-                          return d == NORTH
+                            return d == NORTH
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -342,13 +342,13 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
 
                         routine test()
-                          var c = Color.RED
-                          return
+                            var c = Color.RED
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -365,13 +365,13 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
 
                         routine test()
-                          var c = Color.PURPLE
-                          return
+                            var c = Color.PURPLE
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -386,14 +386,14 @@ public class ChoiceValidationTests
     {
         string source = """
                         choice Color
-                          RED
-                          GREEN
-                          BLUE
+                            RED
+                            GREEN
+                            BLUE
 
                         routine test()
-                          var c = Color.RED
-                          var same = (c == Color.BLUE)
-                          return
+                            var c = Color.RED
+                            var same = (c == Color.BLUE)
+                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

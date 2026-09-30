@@ -17,60 +17,60 @@ secret preset B32_EXPM1_TD: Array[U64, 32] = [0x3FF0000000000000_u64, 0x3FF059B0
 ### `expm1(-infinity) == -1`, ±0 map to themselves and NaN maps to NaN.
 ### :returns: The correctly rounded `exp(me) - 1`.
 routine B32.expm1_unchecked() -> B32
-  var ux = me.to_bits()
-  var z = B64(from: me)
-  var ax = ux << 1
-  if ax < 0x7C400000_u32
-    # |x| < 0.15625
-    if ax < 0x676A09E8_u32
-      # |x| < 0x1.6a09e8p-24: expm1(x) rounds like x + |x| * 2^-25
-      if ax == 0
-        return me
-      return LLVM::fma[B32](a: me.abs(), b: 0x1p-25_b32, c: me)
-    var z2 = z *! z
-    var z4 = z2 *! z2
-    var p01 = 0x1.fffffffffffc2p-2 +! z *! 0x1.55555555555fep-3
-    var p23 = 0x1.555555559767fp-5 +! z *! 0x1.1111111098dc1p-7
-    var p45 = 0x1.6c16bca988aa9p-10 +! z *! 0x1.a01a07658483fp-13
-    var p67 = 0x1.a05b04d2c3503p-16 +! z *! 0x1.71de3a960b5e3p-19
-    var r0 = z +! z2 *! ((p01 +! z2 *! p23) +! z4 *! (p45 +! z2 *! p67))
-    return B32(from: r0)
-  if ax >= 0x8562E430_u32
-    # |x| >= 0x1.62e43p+6
-    if ax > 0xFF000000_u32
-      return me +! me
-    if ux >>> 31 == 1
-      # x < 0: the result is -1 or the float just above it
-      if ax == 0xFF000000_u32
-        return -1.0_b32
-      return -1.0_b32 +! 0x1p-26_b32
-    if ax == 0xFF000000_u32
-      return me *! me
-    # overflow
-    return 0x1.fffffep+127_b32 *! me
-  var a = 0x1.71547652b82fep+5 *! z
-  var ia = a.rint()
-  var h = a -! ia
-  var h2 = h *! h
-  var uu = (ia +! 0x1.8p+52).to_bits()
-  var c2 = 0x1.ebfd1b232f475p-13 +! h *! 0x1.c6b19384ecd93p-20
-  var c0 = 1.0 +! h *! 0x1.62e42fef4c4e7p-6
-  var sv = B64.from_bits(bits: B32_EXPM1_TD[uu & 0x1F_u64] +% ((uu >>> 5) << 52))
-  var r = (c0 +! h2 *! c2) *! sv -! 1.0
-  var ub = B32(from: r)
-  var lb = B32(from: r -! sv *! 0x1.3b3p-33)
-  if ub != lb
-    # the fast path cannot decide the rounding
-    if ux > 0xC18AA123_u32
-      # x < -17.32
-      return -1.0_b32 +! 0x1p-26_b32
-    var s = sv
-    h = (0x1.7154765p+5 *! z -! ia) +! 0x1.5c17f0bbbe88p-26 *! z
-    h2 = h *! h
-    var w = s *! h
-    var q01 = 0x1.62e42fefa39efp-6 +! h *! 0x1.ebfbdff82c58fp-13
-    var q23 = 0x1.c6b08d702e0edp-20 +! h *! 0x1.3b2ab6fb92e5ep-27
-    var q45 = 0x1.5d886e6d54203p-35 +! h *! 0x1.430976b8ce6efp-43
-    r = (s -! 1.0) +! w *! (q01 +! h2 *! (q23 +! h2 *! q45))
-    ub = B32(from: r)
-  return ub
+    var ux = me.to_bits()
+    var z = B64(from: me)
+    var ax = ux << 1
+    if ax < 0x7C400000_u32
+        # |x| < 0.15625
+        if ax < 0x676A09E8_u32
+            # |x| < 0x1.6a09e8p-24: expm1(x) rounds like x + |x| * 2^-25
+            if ax == 0
+                return me
+            return LLVM::fma[B32](a: me.abs(), b: 0x1p-25_b32, c: me)
+        var z2 = z *! z
+        var z4 = z2 *! z2
+        var p01 = 0x1.fffffffffffc2p-2 +! z *! 0x1.55555555555fep-3
+        var p23 = 0x1.555555559767fp-5 +! z *! 0x1.1111111098dc1p-7
+        var p45 = 0x1.6c16bca988aa9p-10 +! z *! 0x1.a01a07658483fp-13
+        var p67 = 0x1.a05b04d2c3503p-16 +! z *! 0x1.71de3a960b5e3p-19
+        var r0 = z +! z2 *! ((p01 +! z2 *! p23) +! z4 *! (p45 +! z2 *! p67))
+        return B32(from: r0)
+    if ax >= 0x8562E430_u32
+        # |x| >= 0x1.62e43p+6
+        if ax > 0xFF000000_u32
+            return me +! me
+        if ux >>> 31 == 1
+            # x < 0: the result is -1 or the float just above it
+            if ax == 0xFF000000_u32
+                return -1.0_b32
+            return -1.0_b32 +! 0x1p-26_b32
+        if ax == 0xFF000000_u32
+            return me *! me
+        # overflow
+        return 0x1.fffffep+127_b32 *! me
+    var a = 0x1.71547652b82fep+5 *! z
+    var ia = a.rint()
+    var h = a -! ia
+    var h2 = h *! h
+    var uu = (ia +! 0x1.8p+52).to_bits()
+    var c2 = 0x1.ebfd1b232f475p-13 +! h *! 0x1.c6b19384ecd93p-20
+    var c0 = 1.0 +! h *! 0x1.62e42fef4c4e7p-6
+    var sv = B64.from_bits(bits: B32_EXPM1_TD[uu & 0x1F_u64] +% ((uu >>> 5) << 52))
+    var r = (c0 +! h2 *! c2) *! sv -! 1.0
+    var ub = B32(from: r)
+    var lb = B32(from: r -! sv *! 0x1.3b3p-33)
+    if ub != lb
+        # the fast path cannot decide the rounding
+        if ux > 0xC18AA123_u32
+            # x < -17.32
+            return -1.0_b32 +! 0x1p-26_b32
+        var s = sv
+        h = (0x1.7154765p+5 *! z -! ia) +! 0x1.5c17f0bbbe88p-26 *! z
+        h2 = h *! h
+        var w = s *! h
+        var q01 = 0x1.62e42fefa39efp-6 +! h *! 0x1.ebfbdff82c58fp-13
+        var q23 = 0x1.c6b08d702e0edp-20 +! h *! 0x1.3b2ab6fb92e5ep-27
+        var q45 = 0x1.5d886e6d54203p-35 +! h *! 0x1.430976b8ce6efp-43
+        r = (s -! 1.0) +! w *! (q01 +! h2 *! (q23 +! h2 *! q45))
+        ub = B32(from: r)
+    return ub
