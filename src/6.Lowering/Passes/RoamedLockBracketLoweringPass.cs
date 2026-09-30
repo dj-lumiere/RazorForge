@@ -101,13 +101,16 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
         foreach (Statement stmt in block.Statements)
         {
             RecurseInto(stmt: stmt);
-            // An atomic-width scalar global RMW (`__globals__.n = __globals__.n.add(d)`) is emitted as a
-            // lock-free `atomicrmw` on the field address by codegen — it must NOT be bracketed, or it
-            // would needlessly take the escaped lock (and the two paths would disagree). Everything else
+            // An atomic-width scalar global RMW (`__globals__.n = __globals__.n.add(d)`) becomes one
+            // lock-free AtomicRmwStatement instead of a bracketed load-compute-store. Everything else
             // (heavy-value field RMW, plain read/write) still gets the access-lock brackets.
-            List<Expression> handles = IsAtomicGlobalRmwStatement(stmt: stmt)
-                ? new List<Expression>()
-                : FieldAccessHandles(stmt: stmt);
+            if (TryLowerAtomicGlobalRmw(stmt: stmt) is { } atomic)
+            {
+                rewritten.Add(item: atomic);
+                continue;
+            }
+
+            List<Expression> handles = FieldAccessHandles(stmt: stmt);
             foreach (Expression h in handles)
             {
                 AddBracket(into: rewritten,
@@ -136,13 +139,19 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // The Roamed[E] handle expressions of every DIRECT field access (read or write) in `stmt`'s own
-    // expressions. One entry per field-access occurrence (per-statement bracketing, see class doc).
-    // Nested statements are bracketed when the block recursion reaches them, so only this statement's
-    // own expressions are walked here (matching RoamedSpawnPromotionLoweringPass.CollectPromotes).
-    // True when the statement is the lock-free atomic-global RMW that codegen lowers to a single
-    // `atomicrmw` (shared matcher with codegen, so both agree on exactly which statements skip the lock).
-    private static bool IsAtomicGlobalRmwStatement(Statement stmt)
+    // ---- Lock-free atomic global RMW ----------------------------------------------------------------
+
+    /// <summary>
+    /// Recognizes an atomic-width scalar module-<c>global</c> read-modify-write, which
+    /// <c>GlobalEntityRewritePass</c> has turned into a field update on the hidden <c>__ModuleGlobals</c>
+    /// singleton (<c>__globals__.g = __globals__.g.add(d)</c> or <c>.sub(d)</c>), and returns the
+    /// lock-free <see cref="AtomicRmwStatement"/> that replaces it, or null when the statement doesn't
+    /// match. It matches only when the field is an atomic width (S8..S64, U8..U64, B32, B64) and the
+    /// delta reads no other module-global field (an unlocked read of a heavy field could tear). Heavy
+    /// fields (S128/S256/B16/B128/Text/Decimal/records) keep the locked path. Atomic arithmetic wraps on
+    /// overflow instead of crashing like a checked add, as atomics do everywhere.
+    /// </summary>
+    private static AtomicRmwStatement? TryLowerAtomicGlobalRmw(Statement stmt)
     {
         (Expression Target, Expression Value)? tv = stmt switch
         {
@@ -153,15 +162,108 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
             } => (b.Left, b.Right),
             _ => null
         };
-        return tv is { } p && LlvmEmit.LlvmEmitter.TryMatchAtomicModuleGlobalRmw(
-            target: p.Target,
-            value: p.Value,
-            fieldMember: out _,
-            isFloat: out _,
-            atomicOp: out _,
-            delta: out _);
+        if (tv is not { Target: MemberExpression tm } p)
+        {
+            return null;
+        }
+
+        if (ModuleGlobalsInnerEntity(t: tm.Object.ResolvedType) is null ||
+            !IsAtomicWidthScalar(t: tm.ResolvedType))
+        {
+            return null;
+        }
+
+        Expression v = p.Value is NamedArgumentExpression nav
+            ? nav.Value
+            : p.Value;
+        if (v is not CallExpression
+            {
+                Callee: MemberExpression { Object: MemberExpression vm, MemberName: var op },
+                Arguments: [{ } deltaArg]
+            })
+        {
+            return null;
+        }
+
+        AtomicRmwOperation? operation = op switch
+        {
+            "add" => AtomicRmwOperation.Add,
+            "sub" => AtomicRmwOperation.Subtract,
+            _ => null
+        };
+        if (operation is null || !IsSameSingletonField(tm: tm, vm: vm))
+        {
+            return null;
+        }
+
+        Expression delta = deltaArg is NamedArgumentExpression nad
+            ? nad.Value
+            : deltaArg;
+        if (ReferencesModuleGlobalField(e: delta))
+        {
+            return null;
+        }
+
+        return new AtomicRmwStatement(Field: tm,
+            Operation: operation.Value,
+            Delta: delta,
+            Location: stmt.Location);
     }
 
+    /// <summary>True when both member expressions name the same field on the same <c>__globals__</c>
+    /// singleton identifier.</summary>
+    private static bool IsSameSingletonField(MemberExpression tm, MemberExpression vm)
+    {
+        return tm.MemberName == vm.MemberName && tm.Object is IdentifierExpression ti &&
+               vm.Object is IdentifierExpression vi && ti.Name == vi.Name;
+    }
+
+    /// <summary>The <c>__ModuleGlobals</c> entity inside a <c>Roamed[__ModuleGlobals]</c> handle type,
+    /// or null when the type is not that handle.</summary>
+    private static EntityTypeSymbol? ModuleGlobalsInnerEntity(TypeSymbol? t)
+    {
+        EntityTypeSymbol? inner = t switch
+        {
+            WrapperTypeSymbol { Name: RuntimeContract.Roamed, InnerType: EntityTypeSymbol e } => e,
+            RecordTypeSymbol
+            {
+                GenericDefinition.Name: RuntimeContract.Roamed,
+                TypeArguments: [EntityTypeSymbol e]
+            } => e,
+            _ => null
+        };
+        return inner?.BareName == Builder.Desugaring.Passes.ModuleGlobalsSynthesisPass.ModuleGlobalsEntityName
+            ? inner
+            : null;
+    }
+
+    private static bool IsAtomicWidthScalar(TypeSymbol? t)
+    {
+        return t?.BareName is "S8" or "S16" or "S32" or "S64" or "U8" or "U16" or "U32" or "U64" or "B32"
+            or "B64";
+    }
+
+    private static bool ReferencesModuleGlobalField(Expression e)
+    {
+        bool found = false;
+        AstWalker.WalkExpressions(root: e,
+            visit: n =>
+            {
+                if (n is MemberExpression m &&
+                    ModuleGlobalsInnerEntity(t: m.Object.ResolvedType) is not null)
+                {
+                    found = true;
+                }
+            });
+        return found;
+    }
+
+    // ---- Field-access handles -----------------------------------------------------------------------
+
+    // The Roamed[E] handle expressions of every DIRECT field access (read or write) in `stmt`'s own
+    // expressions. One entry per field-access occurrence (per-statement bracketing, see class doc).
+    // Nested statements are bracketed when the block recursion reaches them, so only this statement's
+    // own expressions are walked here (matching RoamedSpawnPromotionLoweringPass.CollectPromotes).
     private static List<Expression> FieldAccessHandles(Statement stmt)
     {
         var handles = new List<Expression>();

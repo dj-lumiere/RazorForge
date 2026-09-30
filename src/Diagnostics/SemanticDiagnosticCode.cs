@@ -1,7 +1,9 @@
+using TypeModel.Enums;
+
 namespace Builder.Diagnostics;
 
 /// <summary>
-/// Semantic diagnostic codes for RazorForge (RF-S prefix).
+/// Semantic diagnostic codes for RazorForge (RF-S prefix) and Suflae (SF-S prefix, same numbers).
 /// Covers semantic analysis errors including type checking, scope resolution,
 /// and language-specific validation.
 ///
@@ -1086,12 +1088,12 @@ public enum SemanticDiagnosticCode
 public static class SemanticDiagnosticCodeExtensions
 {
     /// <summary>
-    /// Formats code as RF-Snnn (e.g., RF-S001, RF-S100) — matching the RF-G/SF-G grammar
-    /// code convention and the published documentation.
+    /// Formats code as RF-Snnn or SF-Snnn depending on language (e.g., RF-S413, SF-S436). Both
+    /// languages share one number space, so the same number means the same rule in either.
     /// </summary>
-    public static string ToCodeString(this SemanticDiagnosticCode code)
+    public static string ToCodeString(this SemanticDiagnosticCode code, Language language)
     {
-        return $"RF-S{(int)code:D3}";
+        return $"{DiagnosticLanguage.Prefix(language: language)}-S{(int)code:D3}";
     }
 
     /// <summary>

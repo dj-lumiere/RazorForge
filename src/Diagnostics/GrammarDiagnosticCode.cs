@@ -203,9 +203,6 @@ public static class GrammarDiagnosticCodeExtensions
     /// </summary>
     public static string ToCodeString(this GrammarDiagnosticCode code, Language language)
     {
-        string prefix = language == Language.RazorForge
-            ? "RF"
-            : "SF";
-        return $"{prefix}-G{(int)code:D3}";
+        return $"{DiagnosticLanguage.Prefix(language: language)}-G{(int)code:D3}";
     }
 }

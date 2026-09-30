@@ -129,6 +129,11 @@ public static class AstWalker
             {
                 s.Expression
             },
+            AtomicRmwStatement s => new object[]
+            {
+                s.Field,
+                s.Delta
+            },
             IfStatement s => IfStatementChildren(s: s),
             WhileStatement s => WhileStatementChildren(s: s),
             LoopStatement s => new object[]

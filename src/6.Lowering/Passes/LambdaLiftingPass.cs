@@ -288,6 +288,14 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                     inheritedGenericConstraints: inheritedGenericConstraints,
                     includeMe: includeMe)
             },
+            AtomicRmwStatement atomic => atomic with
+            {
+                Delta = RewriteExpression(expression: atomic.Delta,
+                    scope: scope,
+                    inheritedGenericParameters: inheritedGenericParameters,
+                    inheritedGenericConstraints: inheritedGenericConstraints,
+                    includeMe: includeMe)
+            },
             _ => statement
         };
     }
@@ -954,9 +962,12 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
         // "unregistered surface decl", leaving the dump showing a call to `__lambda_*` with no body.
         liftedRoutine.ResolvedInfo = liftedInfo;
 
+        // The reference carries the lifted routine itself, so the emitter builds the closure from it
+        // instead of looking the synthesized name up.
         return new IdentifierExpression(Name: liftedName, Location: lambda.Location)
         {
-            ResolvedType = lambda.ResolvedType
+            ResolvedType = lambda.ResolvedType,
+            ResolvedRoutine = liftedInfo
         };
     }
 
@@ -1047,7 +1058,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             IsDangerous: false);
         _liftedRoutines.Add(item: liftedRoutine);
 
-        ctx.Registry.RegisterRoutine(routine: new RoutineInfo(name: liftedName)
+        var iifeInfo = new RoutineInfo(name: liftedName)
         {
             Kind = RoutineKind.Lambda,
             Parameters = allParamInfos,
@@ -1060,7 +1071,8 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             GenericParameters = genericParameters,
             GenericConstraints = genericConstraints,
             IsSynthesized = true
-        });
+        };
+        ctx.Registry.RegisterRoutine(routine: iifeInfo);
 
         // Inject capture args (named, using original capture names) before the original call args.
         var callArgs = new List<Expression>(capacity: captureNames.Count + call.Arguments.Count);
@@ -1084,12 +1096,18 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                 includeMe: includeMe));
         }
 
-        return CopyResolvedType(rewritten: call with
+        Expression lifted = CopyResolvedType(rewritten: call with
             {
                 Callee = new IdentifierExpression(Name: liftedName, Location: lambda.Location),
                 Arguments = callArgs
             },
             original: call);
+        if (lifted is CallExpression liftedCall)
+        {
+            liftedCall.ResolvedRoutine = iifeInfo;
+        }
+
+        return lifted;
     }
 
     private static Dictionary<string, TypeSymbol> CollectCaptureTypesFromBody(Expression body,
@@ -2095,6 +2113,12 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                 break;
             case DestructuringStatement destructuring:
                 CollectLocalCapturesRecursive(expression: destructuring.Initializer,
+                    outerScope: outerScope,
+                    parameterNames: parameterNames,
+                    captures: captures);
+                break;
+            case AtomicRmwStatement atomic:
+                CollectLocalCapturesRecursive(expression: atomic.Delta,
                     outerScope: outerScope,
                     parameterNames: parameterNames,
                     captures: captures);

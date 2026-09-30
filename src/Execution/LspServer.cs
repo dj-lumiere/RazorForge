@@ -2865,7 +2865,7 @@ public static class LspServer
                 diagnostics.Add(item: MakeDiagnostic(line: e.Location.Line,
                     column: e.Location.Column,
                     severity: 1,
-                    code: e.Code.ToCodeString(),
+                    code: e.Code.ToCodeString(language: lang),
                     message: e.Message,
                     length: SpanLen(line: e.Location.Line, col: e.Location.Column)));
             }
@@ -2875,7 +2875,7 @@ public static class LspServer
                 diagnostics.Add(item: MakeDiagnostic(line: w.Location.Line,
                     column: w.Location.Column,
                     severity: 2,
-                    code: w.Code.ToCodeString(),
+                    code: w.Code.ToCodeString(language: lang),
                     message: w.Message,
                     length: SpanLen(line: w.Location.Line, col: w.Location.Column)));
             }

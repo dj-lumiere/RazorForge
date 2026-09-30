@@ -667,11 +667,6 @@ public partial class LlvmEmitter
             effectiveBody = synthStub;
         }
 
-        // Hand the routine's ever-stolen set (SA-computed, on the declaration) to ResetPerRoutineState,
-        // which runs nested inside GenerateRoutineBody and owns the per-routine guard-set reset. Drives
-        // the use-after-steal null-guard in EmitIdentifier; null → no guards (synthesized/other paths).
-        _pendingEverStolen = routine.EverStolenVariableNames;
-
         if (effectiveBody != null)
         {
             GenerateRoutineBody(sb: bodyBuilder, body: effectiveBody, routine: info);
@@ -718,17 +713,9 @@ public partial class LlvmEmitter
         _localVariables.Clear();
         _localVarLlvmNames.Clear();
         _varNameCounts.Clear();
-        _localEntityVars.Clear();
         _cfNodes.Clear();
-        _localRcRecordVars.Clear();
-        _localRetainedVars.Clear();
         _currentRoutineEntryAllocas.Clear();
         _emittedAllocaNames.Clear();
-
-        // Use-after-steal guard set for this routine (from the declaration via _pendingEverStolen; empty
-        // for synthesized bodies that never went through EmitDefinitionBody). Consume-and-reset.
-        _everStolenInCurrentRoutine = _pendingEverStolen ?? [];
-        _pendingEverStolen = null;
 
         // Set current function return type for use in EmitReturn
         _currentRoutineReturnType = routine.ReturnType;
@@ -837,16 +824,6 @@ public partial class LlvmEmitter
         EmitEntryAlloca(llvmName: paramPtr, llvmType: storeType);
         EmitLine(sb: sb, line: $"  store {storeType} %{emittedParamName}, ptr {paramPtr}");
         _localVariables[key: param.Name] = param.Type;
-
-        // A bound-entity parameter is a consuming parameter: ownership was transferred in via
-        // `steal` at the call site, so this routine is the new sole owner and must tear it down at
-        // scope exit, exactly like a local entity `var`. Borrows arrive as wrappers (RecordTypeSymbol),
-        // never bare EntityTypeSymbol, so they are correctly excluded. (ABI-Coerce is records only, so
-        // never an entity — the coerce branch never reaches here.)
-        if (coerceType == null && param.Type is EntityTypeSymbol)
-        {
-            _localEntityVars.Add(item: (param.Name, paramPtr));
-        }
     }
 
     /// <summary>
@@ -914,13 +891,11 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
-    /// Emits the implicit terminator when the body falls off the end: RC/entity cleanup, the trace
-    /// pop, and a zero-value return in the routine's ABI return form (void / sret / coerced / value).
+    /// Emits the implicit terminator when the body falls off the end: the trace pop and a zero-value
+    /// return in the routine's ABI return form (void / sret / coerced / value).
     /// </summary>
     private void EmitFallthroughReturn(StringBuilder sb, RoutineInfo routine)
     {
-        EmitRcRecordCleanup(sb: sb);
-        EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
         {
             EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");

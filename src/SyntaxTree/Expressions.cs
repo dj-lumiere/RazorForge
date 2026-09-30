@@ -32,7 +32,7 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
     /// This is null before semantic analysis and populated during type checking.
     /// Code generators should use this instead of re-inferring types.
     /// </summary>
-    public TypeSymbol? ResolvedType { get; set; }
+    public virtual TypeSymbol? ResolvedType { get; set; }
 
     /// <summary>
     /// For a collection literal (`[..]`/`{..}`) whose resolved type `obeys ListLiteral/SetLiteral/
@@ -298,6 +298,20 @@ public record IdentifierExpression(string Name, SourceLocation Location, string?
     public bool IsSynthesizedTeardownTemp { get; set; }
 
     /// <summary>
+    /// Set by <see cref="Builder.Lowering.Passes.StealGuardLoweringPass"/> on a read of a local the
+    /// routine moves out with <c>steal</c> somewhere: the emitter null-checks the loaded handle and
+    /// crashes with <c>UseAfterStealError</c> when the slot was already emptied.
+    /// </summary>
+    public bool StealGuarded { get; set; }
+
+    /// <summary>
+    /// Set by <see cref="Builder.Lowering.Passes.StealGuardLoweringPass"/> on such a read in a consuming
+    /// position (call or creator argument, variable initializer, member-variable write value): once the
+    /// value has been handed over, the emitter stores null into the local's slot.
+    /// </summary>
+    public bool NullStampAfterMove { get; set; }
+
+    /// <summary>
     /// Set by semantic analysis when this reference reads a variable that is DEAD at this point — its
     /// ownership was moved out by an earlier <c>steal</c> (or send) and it has not been re-bound since.
     /// Mirrors the analyzer's flow-sensitive deadref set (with the same if/else merge + rebind revival),
@@ -498,6 +512,17 @@ public record CallExpression(
 public record NamedArgumentExpression(string Name, Expression Value, SourceLocation Location)
     : Expression(Location: Location)
 {
+    private TypeSymbol? _ownType;
+
+    /// <summary>A named argument is only a label on its value, so its type is the value's type unless
+    /// one was stamped on the wrapper itself. Calls analyze the value directly and lowering passes
+    /// build new wrappers, so without this the wrapper would reach the emitter untyped.</summary>
+    public override TypeSymbol? ResolvedType
+    {
+        get => _ownType ?? Value.ResolvedType;
+        set => _ownType = value;
+    }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

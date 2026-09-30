@@ -2070,8 +2070,11 @@ internal static class GenericAstRewriter
 
     private static bool CallRoutineNeedsRebinding(RoutineInfo routine)
     {
+        // An ErrorTypeSymbol owner is a call the generic definition could not type yet: a member call on
+        // an `x.$nameof(m)` splice is analyzed before `expand` unrolls it into a real field access, so it
+        // resolves against the splice's deferred error type and must be rebound on the concrete receiver.
         if (routine.IsGenericDefinition || routine.OwnerType is GenericParameterTypeSymbol
-                or ProtocolTypeSymbol or { IsGenericDefinition: true })
+                or ProtocolTypeSymbol or ErrorTypeSymbol or { IsGenericDefinition: true })
         {
             // A protocol-owned memberRoutine is abstract (no body) — after monomorphization the call must
             // re-dispatch to the concrete implementer (e.g. Iterator[S64].try_emit, resolved via a
@@ -2305,6 +2308,19 @@ internal static class GenericAstRewriter
     }
 
     /// <summary>
+    /// The expression form of <see cref="DeepCloneStatement"/>: an independent copy of every node, so a
+    /// value substituted at several sites (an inlined preset) is typed and lowered separately at each.
+    /// </summary>
+    public static Expression DeepCloneExpression(Expression expr)
+    {
+        return RewriteExpression(expr: expr,
+            ctx: new RewriteContext(stringSubs: NoStringSubs, typeSubs: null, registry: null)
+            {
+                CloneOnly = true
+            });
+    }
+
+    /// <summary>
     /// Unrolls a buildtime <c>expand m in allmemvarof(T)</c> loop at monomorphization: resolves the
     /// concrete source type, then clones the body once per member variable with the handle
     /// projections folded (<c>m.name</c>→Text literal, <c>m.id</c>→U64 literal) and the
@@ -2323,6 +2339,14 @@ internal static class GenericAstRewriter
             return RewriteCaseExpand(expand: expand, source: source, ctx: ctx);
         }
 
+        // branchof(T) as a statement: one copy of the body per payload-carrying arm, with nameof(m) the arm
+        // name and typeof(m) its payload type, exactly as the `when`-arm expansion binds them. (A variant is a
+        // RecordTypeSymbol, so without this it fell into the member walk below and unrolled zero times.)
+        if (expand.SourceKind == ExpandSourceKind.Arms)
+        {
+            return RewriteBranchExpand(expand: expand, source: source, ctx: ctx);
+        }
+
         // openmemvarof/allmemvarof work over any field-carrying aggregate: records, tuples (a
         // RecordTypeSymbol subtype), and entities (their own MemberVariables list).
         List<MemberVariableInfo>? members = source switch
@@ -2339,14 +2363,6 @@ internal static class GenericAstRewriter
             packed: source is RecordTypeSymbol { IsPacked: true });
 
         // openmemvarof(T) yields only the publicly-readable members (OPEN ∪ POSTED) — a `secret` field is
-        // branchof(T) as a statement: one copy of the body per payload-carrying arm, with nameof(m) the arm
-        // name and typeof(m) its payload type, exactly as the `when`-arm expansion binds them. (A variant is a
-        // RecordTypeSymbol, so without this it fell into the member walk below and unrolled zero times.)
-        if (expand.SourceKind == ExpandSourceKind.Arms)
-        {
-            return RewriteBranchExpand(expand: expand, source: source, ctx: ctx);
-        }
-
         // filtered out. allmemvarof(T) yields every member. This visibility split is
         // the sole filter (the old `if not m.is_secret` gate is gone — pick the intrinsic instead).
         if (members != null && expand.SourceKind == ExpandSourceKind.OpenMemberVariables)
@@ -2634,22 +2650,6 @@ internal static class GenericAstRewriter
             Location: loc) { ResolvedType = ctx.Registry?.LookupType(name: "Bool") };
     }
 
-    private static WhenStatement RewriteWhenArmExpansion(WhenStatement ws, RewriteContext ctx)
-    {
-        WhenArmExpansion arm = ws.ArmExpansion!;
-        Expression subject = RewriteExpression(expr: ws.Expression, ctx: ctx);
-        TypeSymbol? source = ResolveExpandSource(sourceType: arm.SourceType, ctx: ctx);
-        string? binding = (arm.Template.Pattern as SpliceTypePattern)?.VariableName;
-        SourceLocation loc = arm.Template.Location;
-
-        // Explicit clauses written alongside the expand (e.g. `is None => …`) come first.
-        var clauses = ws.Clauses
-                        .Select(selector: c => RewriteWhenClause(clause: c, ctx: ctx))
-                        .ToList();
-        if (source is VariantTypeSymbol variant)
-        {
-            string? prevHandle = ctx.ActiveExpandHandle;
-            string? prevName = ctx.ActiveMemberName;
     /// <summary>
     /// Unrolls a statement-level <c>expand m in branchof(T)</c>: the body once per payload-carrying arm of the
     /// variant <paramref name="source"/>, in declaration order, skipping the payload-less <c>None</c> arm (the
@@ -2699,6 +2699,22 @@ internal static class GenericAstRewriter
         return new BlockStatement(Statements: outStmts, Location: expand.Location);
     }
 
+    private static WhenStatement RewriteWhenArmExpansion(WhenStatement ws, RewriteContext ctx)
+    {
+        WhenArmExpansion arm = ws.ArmExpansion!;
+        Expression subject = RewriteExpression(expr: ws.Expression, ctx: ctx);
+        TypeSymbol? source = ResolveExpandSource(sourceType: arm.SourceType, ctx: ctx);
+        string? binding = (arm.Template.Pattern as SpliceTypePattern)?.VariableName;
+        SourceLocation loc = arm.Template.Location;
+
+        // Explicit clauses written alongside the expand (e.g. `is None => …`) come first.
+        var clauses = ws.Clauses
+                        .Select(selector: c => RewriteWhenClause(clause: c, ctx: ctx))
+                        .ToList();
+        if (source is VariantTypeSymbol variant)
+        {
+            string? prevHandle = ctx.ActiveExpandHandle;
+            string? prevName = ctx.ActiveMemberName;
             long prevIndex = ctx.ActiveMemberIndex;
             TypeSymbol? prevType = ctx.ActiveMemberType;
 

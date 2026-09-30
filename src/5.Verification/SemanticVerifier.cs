@@ -1151,6 +1151,27 @@ public sealed partial class SemanticVerifier
     }
 
 
+    /// <summary>Stamps the last emitter-facing decisions on every routine body of a program: the
+    /// use-after-steal guards (<see cref="StealGuardLoweringPass"/>) and each throw's crash message
+    /// routine (<see cref="CrashMessageStampPass"/>).</summary>
+    private void AnnotateForBackend(Program program)
+    {
+        AstWalker.Walk(root: program,
+            visit: node =>
+            {
+                if (node is RoutineDeclaration { Body: { } body } routine)
+                {
+                    AnnotateBodyForBackend(body: body, everStolen: routine.EverStolenVariableNames);
+                }
+            });
+    }
+
+    private void AnnotateBodyForBackend(Statement body, HashSet<string>? everStolen)
+    {
+        StealGuardLoweringPass.Run(body: body, everStolen: everStolen);
+        CrashMessageStampPass.Run(body: body, registry: _registry);
+    }
+
     /// <summary>
     /// Phase 9: validates that postprocessing produced a backend-safe normalized AST.
     /// </summary>
@@ -1178,6 +1199,7 @@ public sealed partial class SemanticVerifier
 
         foreach ((Program program, _, _) in _registry.UserPrograms)
         {
+            AnnotateForBackend(program: program);
             reprPass.Run(program: program);
             foreach (SemanticError error in validator.ValidateProgram(program: program))
             {
@@ -1194,6 +1216,7 @@ public sealed partial class SemanticVerifier
         {
             foreach ((Program stdlibProgram, _, _) in _registry.StdlibPrograms)
             {
+                AnnotateForBackend(program: stdlibProgram);
                 reprPass.Run(program: stdlibProgram);
             }
         }
@@ -1207,6 +1230,7 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
+            AnnotateBodyForBackend(body: body, everStolen: null);
             reprPass.Run(statement: body);
             foreach (SemanticError error in validator.ValidateStatement(statement: body))
             {
@@ -1239,6 +1263,7 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
+            AnnotateBodyForBackend(body: mono.Ast.Body, everStolen: mono.Ast.EverStolenVariableNames);
             if (!mono.IsSynthesized)
             {
                 reprPass.Run(statement: mono.Ast.Body);

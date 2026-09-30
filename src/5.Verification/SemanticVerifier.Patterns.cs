@@ -109,6 +109,13 @@ public sealed partial class SemanticVerifier
 
                 _ = AnalyzeExpression(expression: cmp.Value, expectedType: matchedType);
                 break;
+
+            case ComparisonPattern cmp:
+                // `== 0 =>` / `< 0x20u32 =>`: the value is compared against the subject, so it takes the
+                // subject's type (a bare literal conforms to it, like any other comparison operand).
+                // Left unanalyzed, the literal reached the emitter untyped once `when` was lowered.
+                _ = AnalyzeExpression(expression: cmp.Value, expectedType: matchedType);
+                break;
         }
     }
 

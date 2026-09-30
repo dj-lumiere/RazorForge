@@ -33,48 +33,9 @@ include_directories(include)
 #  in docs/licenses.)
 
 # ============================================================================
-# Third-party libraries — Modules (loaded on demand)
+# Third-party libraries (the runtime links libco and libuv; a stdlib module that needs another C
+# library adds it here when it is written)
 # ============================================================================
-
-# zlib - Compression (deflate/gzip)
-# https://github.com/madler/zlib (zlib License)
-include(cmake/zlib.cmake)
-
-# zstd - Fast real-time compression
-# https://github.com/facebook/zstd (BSD + GPLv2)
-include(cmake/zstd.cmake)
-
-# SQLite3 - Embedded SQL database
-# https://www.sqlite.org/ (Public Domain)
-include(cmake/sqlite3.cmake)
-
-# libsodium - Modern cryptography
-# https://github.com/jedisct1/libsodium (ISC)
-include(cmake/libsodium.cmake)
-
-# mbedTLS - Lightweight TLS/crypto (replaces OpenSSL)
-# https://github.com/Mbed-TLS/mbedtls (Apache-2.0)
-include(cmake/openssl.cmake)
-
-# PCRE2 - Regular expressions with Unicode
-# https://github.com/PCRE2Project/pcre2 (BSD-3-Clause)
-include(cmake/pcre2.cmake)
-
-# utf8proc - Unicode properties, normalization, case mapping
-# https://github.com/JuliaStrings/utf8proc (MIT)
-include(cmake/utf8proc.cmake)
-
-# yyjson - Fast JSON parser/writer
-# https://github.com/ibireme/yyjson (MIT)
-include(cmake/yyjson.cmake)
-
-# tomlc99 - TOML v1.0 parser
-# https://github.com/cktan/tomlc99 (MIT)
-include(cmake/tomlc99.cmake)
-
-# minicsv - Tiny CSV parser
-# https://github.com/jedisct1/minicsv (BSD)
-include(cmake/minicsv.cmake)
 
 # libco - Stackful coroutine/fiber backend
 # https://github.com/rxi/libco or compatible fork (public domain / ISC-like depending on fork)
@@ -152,66 +113,6 @@ if(WIN32)
     endif()
 endif()
 
-# Link zlib if available
-if(HAVE_ZLIB)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_ZLIB)
-    target_link_libraries(razorforge_runtime rf_zlib)
-endif()
-
-# Link zstd if available
-if(HAVE_ZSTD)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_ZSTD)
-    target_link_libraries(razorforge_runtime rf_zstd)
-endif()
-
-# Link sqlite3 if available
-if(HAVE_SQLITE3)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_SQLITE3)
-    target_link_libraries(razorforge_runtime rf_sqlite3)
-endif()
-
-# Link libsodium if available
-if(HAVE_LIBSODIUM)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBSODIUM)
-    target_link_libraries(razorforge_runtime sodium)
-endif()
-
-# Link mbedTLS if available
-if(HAVE_MBEDTLS)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_MBEDTLS)
-    target_link_libraries(razorforge_runtime mbedtls mbedcrypto mbedx509)
-endif()
-
-# Link PCRE2 if available
-if(HAVE_PCRE2)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_PCRE2 PCRE2_STATIC PCRE2_CODE_UNIT_WIDTH=32)
-    target_link_libraries(razorforge_runtime pcre2-32-static)
-endif()
-
-# Link utf8proc if available
-if(HAVE_UTF8PROC)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_UTF8PROC UTF8PROC_STATIC)
-    target_link_libraries(razorforge_runtime rf_utf8proc)
-endif()
-
-# Link yyjson if available
-if(HAVE_YYJSON)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_YYJSON)
-    target_link_libraries(razorforge_runtime rf_yyjson)
-endif()
-
-# Link tomlc99 if available
-if(HAVE_TOMLC99)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_TOMLC99)
-    target_link_libraries(razorforge_runtime rf_tomlc99)
-endif()
-
-# Link minicsv if available
-if(HAVE_MINICSV)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_MINICSV)
-    target_link_libraries(razorforge_runtime rf_minicsv)
-endif()
-
 # Link libco if available
 if(HAVE_LIBCO)
     target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBCO)
@@ -276,16 +177,6 @@ install(FILES include/razorforge_runtime.h
 message(STATUS "")
 message(STATUS "RazorForge Native Configuration:")
 message(STATUS "  ── Modules ──")
-message(STATUS "  zlib (compression):               ${HAVE_ZLIB}")
-message(STATUS "  zstd (compression):               ${HAVE_ZSTD}")
-message(STATUS "  sqlite3 (database):               ${HAVE_SQLITE3}")
-message(STATUS "  libsodium (crypto):               ${HAVE_LIBSODIUM}")
-message(STATUS "  mbedTLS (TLS/crypto):             ${HAVE_MBEDTLS}")
-message(STATUS "  PCRE2 (regex):                    ${HAVE_PCRE2}")
-message(STATUS "  utf8proc (unicode):               ${HAVE_UTF8PROC}")
-message(STATUS "  yyjson (JSON):                    ${HAVE_YYJSON}")
-message(STATUS "  tomlc99 (TOML):                   ${HAVE_TOMLC99}")
-message(STATUS "  minicsv (CSV):                    ${HAVE_MINICSV}")
 message(STATUS "  libco (green-thread contexts):    ${HAVE_LIBCO}")
 message(STATUS "  libuv (async I/O loop):           ${HAVE_LIBUV}")
 message(STATUS "  ── Platform ──")

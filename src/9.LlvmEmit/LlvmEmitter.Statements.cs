@@ -71,6 +71,10 @@ public partial class LlvmEmitter
                 case WhenStatement whenStmt:
                     return EmitWhen(sb: sb, whenStmt: whenStmt);
 
+                case AtomicRmwStatement atomic:
+                    EmitAtomicRmw(sb: sb, atomic: atomic);
+                    return false;
+
                 case DiscardStatement discard:
                     // Note: creator expressions could skip evaluation entirely (creators have no observable
                     // side effects and their result is being discarded, so the allocation is wasted) — not yet implemented.
@@ -157,10 +161,7 @@ public partial class LlvmEmitter
         _localVariables[key: varDecl.Name] = varType;
         _localVarLlvmNames[key: varDecl.Name] = uniqueName;
 
-        TrackVariableForCleanup(varDecl: varDecl,
-            varType: varType,
-            varPtr: varPtr,
-            uniqueName: uniqueName);
+        ZeroInitOwnedLocalSlot(varDecl: varDecl, varType: varType, varPtr: varPtr);
 
         // Store initial value if present
         if (varDecl.Initializer == null)
@@ -202,7 +203,7 @@ public partial class LlvmEmitter
         // teardown return-spill `var __td_ret = Retained[T](ctrl)` (a CreatorExpression) as a copy,
         // injecting a spurious retain → strong 1→2 → double-free at scope exit. Removed.
 
-        ConsumeTransferredLocalOwnership(sb: sb, expr: varDecl.Initializer);
+        NullStampStolenLocal(sb: sb, expr: varDecl.Initializer);
     }
 
     /// <summary>Builds the diagnostic thrown when a variable's type cannot be determined.</summary>
@@ -241,70 +242,25 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
-    /// Registers the variable in the scope-exit cleanup sets: bare entities, records with RC fields,
-    /// and RC-wrapper-typed variables (which also zero-init their alloca and drop moved-from owners).
+    /// Zero-initializes the entry slot of an owned local: a bare entity built by a constructor (or a
+    /// lateinit placeholder) and an RC-wrapper local. A declaration inside a not-taken branch still has
+    /// its slot, and the use-after-steal null guard and teardown both read it, so it must start null.
     /// </summary>
-    private void TrackVariableForCleanup(VariableDeclaration varDecl, TypeSymbol varType,
-        string varPtr, string uniqueName)
+    private void ZeroInitOwnedLocalSlot(VariableDeclaration varDecl, TypeSymbol varType, string varPtr)
     {
-        switch (varType)
+        if (varType is EntityTypeSymbol && (IsEntityConstructorCall(expr: varDecl.Initializer) ||
+                                            varDecl.IsLateInit && varDecl.Initializer == null))
         {
-            // Track entity variables for automatic cleanup at return points. Tracked when
-            // initialized via constructor (heap allocation) or as a lateinit placeholder.
-            case EntityTypeSymbol when IsEntityConstructorCall(expr: varDecl.Initializer) ||
-                                     varDecl.IsLateInit && varDecl.Initializer == null:
-                _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
-                // Zero-init the alloca: a declaration inside a not-taken conditional still has its
-                // alloca walked by function-level cleanup — zero-init makes rf_invalidate a no-op.
-                EmitLine(sb: _currentRoutineEntryAllocas, line: $"  store ptr null, ptr {varPtr}");
-                break;
-            // Track record variables with RC wrapper fields for retain/release
-            case RecordTypeSymbol { HasRCMemberVariables: true } rcRecord:
-                _localRcRecordVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcRecord));
-                break;
+            EmitLine(sb: _currentRoutineEntryAllocas, line: $"  store ptr null, ptr {varPtr}");
+            return;
         }
 
         if (varType is RecordTypeSymbol rcWrapRecord &&
             GetGenericBaseName(type: rcWrapRecord) is { } rcWrapBase &&
             RcWrapperBaseNames.Contains(item: rcWrapBase))
         {
-            TrackRcWrapperVariable(varDecl: varDecl,
-                rcWrapRecord: rcWrapRecord,
-                varPtr: varPtr,
-                uniqueName: uniqueName);
-        }
-    }
-
-    /// <summary>
-    /// Tracks a variable whose type IS an RC wrapper (Retained[T], Guarded[T], …): registers it for
-    /// release, zero-inits the alloca, and drops the moved-from entity from cleanup on a retain/roam.
-    /// </summary>
-    private void TrackRcWrapperVariable(VariableDeclaration varDecl, RecordTypeSymbol rcWrapRecord,
-        string varPtr, string uniqueName)
-    {
-        _localRetainedVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcWrapRecord));
-
-        // Zero-init the alloca: a declaration inside a not-taken conditional still has its alloca
-        // walked by function-level cleanup, and release() would load garbage. null is a safe
-        // sentinel (RC wrappers are @llvm("ptr")) and EmitRetainedVarRelease null-checks first.
-        EmitLine(sb: _currentRoutineEntryAllocas,
-            line: $"  store {GetLlvmType(type: rcWrapRecord)} zeroinitializer, ptr {varPtr}");
-
-        // Move semantics (STRUCTURAL, name-agnostic): constructing an RC wrapper FROM a bare entity —
-        // a call whose receiver is a bare entity and whose result is an RC wrapper (Retained/Roamed/…) —
-        // moves the entity's lifetime into the wrapper, so remove the source entity from scope-exit
-        // cleanup to prevent double-free. Replaces the old `retain`/`roam` name check.
-        if (varDecl.Initializer is CallExpression
-            {
-                Callee: MemberExpression
-                {
-                    Object: IdentifierExpression { Name: var srcEntityName } srcRecv
-                }
-            } rcCall && srcRecv.ResolvedType is EntityTypeSymbol &&
-            rcCall.ResolvedType is { } rcResultType &&
-            Declaration.TypeRegistry.GetRcWrapperBaseName(type: rcResultType) is not null)
-        {
-            _localEntityVars.RemoveAll(match: e => e.Name == srcEntityName);
+            EmitLine(sb: _currentRoutineEntryAllocas,
+                line: $"  store {GetLlvmType(type: rcWrapRecord)} zeroinitializer, ptr {varPtr}");
         }
     }
 
@@ -443,18 +399,6 @@ public partial class LlvmEmitter
         }
 
         RoutineInfo? routine = call.ResolvedRoutine;
-        if (routine == null && call.Callee is IdentifierExpression id)
-        {
-            // Signature-only: resolve the overload by the call's concrete argument types.
-            routine = _registry.LookupRoutineOverload(baseName: id.Name,
-                argTypes: call.Arguments
-                              .Select(selector: a => GetExpressionType(
-                                   expr: a is NamedArgumentExpression na
-                                       ? na.Value
-                                       : a))
-                              .OfType<TypeSymbol>()
-                              .ToList());
-        }
 
         if (routine == null || call.TypeArguments is not { Count: > 0 } explicitTypeArgs)
         {
@@ -491,15 +435,6 @@ public partial class LlvmEmitter
     /// </summary>
     private void EmitAssignment(StringBuilder sb, AssignmentStatement assign)
     {
-        // Thread-safe scalar-integer global RMW: `g = g + d` / `g = g - d` on a module `global` becomes a
-        // single lock-free `atomicrmw` so parallel agents don't lose updates. Atomic arithmetic WRAPS on
-        // overflow (as everywhere — Rust/Go/C++ atomics), unlike the checked `+`; opting a global into
-        // concurrent mutation opts into wrapping atomics. Non-matching writes fall through unchanged.
-        if (TryEmitAtomicGlobalRmw(sb: sb, target: assign.Target, valueExpr: assign.Value))
-        {
-            return;
-        }
-
         // Evaluate the value first
         string value = EmitExpression(sb: sb, expr: assign.Value);
 
@@ -515,18 +450,7 @@ public partial class LlvmEmitter
                     member: member,
                     value: value,
                     valueType: GetExpressionType(expr: assign.Value));
-                // A Roamed[T] field write uses COPY semantics (retain-new + release-old, emitted in
-                // EmitEntityMemberVariableWrite), so the RHS is NOT moved into the field — it keeps its
-                // own reference and tears down normally. Consuming it here (move semantics, for the
-                // strict Retained/Tracked wrappers) would drop a ref the field just retained → underflow.
-                TypeSymbol? memberType = GetExpressionType(expr: member);
-                if (memberType == null ||
-                    GetGenericBaseName(type: memberType) is not { } targetBase ||
-                    targetBase != Declaration.RuntimeContract.Roamed)
-                {
-                    ConsumeTransferredLocalOwnership(sb: sb, expr: assign.Value);
-                }
-
+                NullStampStolenLocal(sb: sb, expr: assign.Value);
                 break;
 
             case IndexExpression index:
@@ -540,246 +464,75 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
-    /// Performs the consume transferred local ownership step for this compiler phase.
+    /// After a consuming use marked by StealGuardLoweringPass, stores null into the moved-out local's
+    /// slot so a later use of the binding hits the use-after-steal null guard instead of a stale pointer.
     /// </summary>
-    private void ConsumeTransferredLocalOwnership(StringBuilder sb, Expression expr)
+    private void NullStampStolenLocal(StringBuilder sb, Expression expr)
     {
-        // Borrowed-reference values reach here as bare identifiers / member accesses or
-        // wrapped in a steal expression. Named arguments also wrap their inner value, so
-        // peek through the wrapper to reach the underlying identifier.
         Expression unwrapped = expr is NamedArgumentExpression named
             ? named.Value
             : expr;
-        string? sourceName = unwrapped switch
+        if (unwrapped is StealExpression steal)
         {
-            StealExpression
-            {
-                Operand: IdentifierExpression { Name: var stolenName }
-            } => stolenName,
-            IdentifierExpression { Name: var identifierName } => identifierName,
-            _ => null
-        };
+            unwrapped = steal.Operand;
+        }
 
-        if (sourceName == null)
+        if (unwrapped is not IdentifierExpression { NullStampAfterMove: true } id)
         {
             return;
         }
 
-        _localEntityVars.RemoveAll(match: e => e.Name == sourceName);
-
-        if (expr is StealExpression)
-        {
-            _localRetainedVars.RemoveAll(match: e => e.Name == sourceName);
-        }
-
-        // Runtime use-after-steal net: NULL-STAMP the moved-out entity's slot so any later USE of the
-        // binding (loop/aliased/indirect — beyond what static analysis proves dead) loads null and hits
-        // the EmitIdentifier null-guard → a loud rf_crash instead of a silent stale-pointer use. Keyed on
-        // the routine's ever-stolen set (NOT `expr is StealExpression`): ExpressionLoweringPass strips the
-        // `steal` wrapper before codegen, so the wrapper is gone here — the SA-computed ever-stolen set is
-        // the robust signal, and it also matches EmitIdentifier's guard-elision key exactly. Only entity-
-        // repr locals (heap `ptr` in an alloca) get nulled; record/value locals do not. `rf_invalidate(null)`
-        // is already a no-op, so the exit-cleanup over the nulled slot is safe.
-        if (_everStolenInCurrentRoutine.Contains(item: sourceName) &&
-            _localVariables.TryGetValue(key: sourceName, value: out TypeSymbol? stolenType) &&
-            GetLlvmType(type: stolenType) == "ptr")
-        {
-            string llvmName =
-                _localVarLlvmNames.TryGetValue(key: sourceName, value: out string? unique)
-                    ? unique
-                    : sourceName;
-            EmitLine(sb: sb, line: $"  store ptr null, ptr %{llvmName}.addr");
-        }
+        string llvmName = _localVarLlvmNames.TryGetValue(key: id.Name, value: out string? unique)
+            ? unique
+            : id.Name;
+        EmitLine(sb: sb, line: $"  store ptr null, ptr %{llvmName}.addr");
     }
 
     /// <summary>
-    /// Recognizes an atomic-width scalar module-<c>global</c> read-modify-write
-    /// <c>g = g + d</c> / <c>g = g - d</c> — now lowered to a field of the hidden <c>__ModuleGlobals</c>
-    /// singleton (<c>__globals__.g = __globals__.g.add(d)</c>) — and emits a single seq-cst
-    /// <c>atomicrmw</c> on the field ADDRESS (lock-free, thread-safe) instead of the locked
-    /// load-compute-store. Returns true when handled. Only fires when the field is an atomic width
-    /// (i8..i64 / b32 / b64) and the delta touches no other global field (see
-    /// <see cref="TryMatchAtomicModuleGlobalRmw"/>); the matching statement is left UN-bracketed by
-    /// <c>RoamedLockBracketLoweringPass</c>, so this is the only code that touches the field. Heavy-value
-    /// fields (S128/S256/B16/B128/Text/Decimal/records) fall through to the ordinary locked field write.
+    /// Emits a lowered <see cref="AtomicRmwStatement"/> as one sequentially consistent <c>atomicrmw</c> on
+    /// the field's address. The instruction follows the field type: <c>fadd</c>/<c>fsub</c> for a float,
+    /// <c>add</c>/<c>sub</c> for an integer.
     /// </summary>
-    private bool TryEmitAtomicGlobalRmw(StringBuilder sb, Expression target, Expression valueExpr)
+    private void EmitAtomicRmw(StringBuilder sb, AtomicRmwStatement atomic)
     {
-        if (!TryMatchAtomicModuleGlobalRmw(target: target,
-                value: valueExpr,
-                fieldMember: out MemberExpression? fieldMember,
-                isFloat: out bool _,
-                atomicOp: out string? atomicOp,
-                delta: out Expression? delta) || fieldMember is null || atomicOp is null ||
-            delta is null)
+        string fieldPtr = EmitRoamedEntityFieldAddress(sb: sb, fieldMember: atomic.Field);
+        TypeSymbol fieldType = atomic.Field.ResolvedType ??
+                               throw new InvalidOperationException(
+                                   message: "An atomic read-modify-write field has no resolved type.");
+        string llvmType = GetValueLlvmType(type: fieldType);
+        bool isFloat = llvmType is "float" or "double";
+        string op = (atomic.Operation, isFloat) switch
         {
-            return false;
-        }
-
-        // atomicrmw needs the field ADDRESS: project the Roamed handle to the entity behind its
-        // controller, then GEP to the field. The delta is field-free (guaranteed by the matcher), so
-        // evaluating it outside any lock is safe.
-        string fieldPtr = EmitRoamedEntityFieldAddress(sb: sb, fieldMember: fieldMember);
-        string llvmType = GetValueLlvmType(type: fieldMember.ResolvedType!);
-        string deltaVal = EmitExpression(sb: sb, expr: delta);
-        string old = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {old} = atomicrmw {atomicOp} ptr {fieldPtr}, {llvmType} {deltaVal} seq_cst");
-        return true;
-    }
-
-    /// <summary>
-    /// Matches <c>__globals__.field = __globals__.field.add|sub(delta)</c> where <c>field</c> is an
-    /// atomic-width scalar (i8..i64 / b32 / b64) of the <c>__ModuleGlobals</c> singleton and <c>delta</c>
-    /// touches no global field. Shared by codegen (emits the <c>atomicrmw</c>) and
-    /// <c>RoamedLockBracketLoweringPass</c> (skips the access-lock bracket for the matched statement) so
-    /// the two agree exactly on which RMWs are lock-free.
-    /// </summary>
-    internal static bool TryMatchAtomicModuleGlobalRmw(Expression target, Expression value,
-        out MemberExpression? fieldMember, out bool isFloat, out string? atomicOp,
-        out Expression? delta)
-    {
-        fieldMember = null;
-        isFloat = false;
-        atomicOp = null;
-        delta = null;
-
-        if (target is not MemberExpression tm)
-        {
-            return false;
-        }
-
-        if (ModuleGlobalsInnerEntity(t: tm.Object.ResolvedType) is null)
-        {
-            return false;
-        }
-
-        if (!IsAtomicWidthScalar(t: tm.ResolvedType, isFloat: out isFloat))
-        {
-            return false;
-        }
-
-        Expression v = value is NamedArgumentExpression nav
-            ? nav.Value
-            : value;
-        if (v is not CallExpression
-            {
-                Callee: MemberExpression { Object: MemberExpression vm, MemberName: var op },
-                Arguments: [{ } deltaArg]
-            })
-        {
-            return false;
-        }
-
-        if (op is not ("add" or "sub"))
-        {
-            return false;
-        }
-
-        if (!IsSameSingletonField(tm: tm, vm: vm))
-        {
-            return false;
-        }
-
-        Expression d = deltaArg is NamedArgumentExpression nad
-            ? nad.Value
-            : deltaArg;
-        // A field-free delta is a literal / local / atomic snapshot — safe to read unlocked. If it read a
-        // heavy (non-atomic) field, the unlocked read could tear, so those fall back to the locked path.
-        if (ReferencesModuleGlobalField(e: d))
-        {
-            return false;
-        }
-
-        fieldMember = tm;
-        atomicOp = isFloat switch
-        {
-            true => op == "add"
-                ? "fadd"
-                : "fsub",
-            false => op == "add"
-                ? "add"
-                : "sub"
+            (AtomicRmwOperation.Add, true) => "fadd",
+            (AtomicRmwOperation.Subtract, true) => "fsub",
+            (AtomicRmwOperation.Add, false) => "add",
+            _ => "sub"
         };
-        delta = d;
-        return true;
+        string deltaVal = EmitExpression(sb: sb, expr: atomic.Delta);
+        string old = NextTemp();
+        EmitLine(sb: sb, line: $"  {old} = atomicrmw {op} ptr {fieldPtr}, {llvmType} {deltaVal} seq_cst");
     }
 
-    /// <summary>Returns true when the left-hand <paramref name="tm"/> and right-hand <paramref name="vm"/>
-    /// member expressions both name the same field on the same <c>__globals__</c> singleton identifier.</summary>
-    private static bool IsSameSingletonField(MemberExpression tm, MemberExpression vm)
+    /// <summary>Projects a field access through a <c>Roamed[E]</c> handle to the field's ADDRESS: read
+    /// the entity ptr from the roam controller's <c>data</c>, then GEP to the field.</summary>
+    private string EmitRoamedEntityFieldAddress(StringBuilder sb, MemberExpression fieldMember)
     {
-        return tm.MemberName == vm.MemberName && tm.Object is IdentifierExpression ti &&
-               vm.Object is IdentifierExpression vi && ti.Name == vi.Name;
-    }
-
-    /// <summary>The <c>__ModuleGlobals</c> entity inside a <c>Roamed[__ModuleGlobals]</c> handle type,
-    /// or null when the type is not that handle.</summary>
-    private static EntityTypeSymbol? ModuleGlobalsInnerEntity(TypeSymbol? t)
-    {
-        EntityTypeSymbol? inner = t switch
+        EntityTypeSymbol entity = fieldMember.Object.ResolvedType switch
         {
-            WrapperTypeSymbol
-            {
-                Name: Declaration.RuntimeContract.Roamed, InnerType: EntityTypeSymbol e
-            } => e,
+            WrapperTypeSymbol { Name: Declaration.RuntimeContract.Roamed, InnerType: EntityTypeSymbol e } => e,
             RecordTypeSymbol
             {
                 GenericDefinition.Name: Declaration.RuntimeContract.Roamed,
                 TypeArguments: [EntityTypeSymbol e]
             } => e,
-            _ => null
+            _ => throw new InvalidOperationException(
+                message: $"Field '{fieldMember.MemberName}' is not reached through a Roamed[E] handle.")
         };
-        return inner?.BareName == Builder.Desugaring.Passes.ModuleGlobalsSynthesisPass.ModuleGlobalsEntityName
-            ? inner
-            : null;
-    }
-
-    private static bool IsAtomicWidthScalar(TypeSymbol? t, out bool isFloat)
-    {
-        isFloat = false;
-        switch (t?.BareName)
-        {
-            case "S8" or "S16" or "S32" or "S64" or "U8" or "U16" or "U32" or "U64":
-                return true;
-            case "B32" or "B64":
-                isFloat = true;
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private static bool ReferencesModuleGlobalField(Expression e)
-    {
-        bool found = false;
-        AstWalker.WalkExpressions(root: e,
-            visit: n =>
-            {
-                if (n is MemberExpression m &&
-                    ModuleGlobalsInnerEntity(t: m.Object.ResolvedType) is not null)
-                {
-                    found = true;
-                }
-            });
-        return found;
-    }
-
-    /// <summary>Projects a <c>Roamed[__ModuleGlobals]</c> field-access member expression to the field's
-    /// ADDRESS: read the entity ptr from the roam controller's <c>data</c>, then GEP to the field.</summary>
-    private string EmitRoamedEntityFieldAddress(StringBuilder sb, MemberExpression fieldMember)
-    {
-        EntityTypeSymbol entity = ModuleGlobalsInnerEntity(t: fieldMember.Object.ResolvedType)!;
         string handle = EmitExpression(sb: sb, expr: fieldMember.Object);
-        TypeSymbol? controllerType =
-            _registry.LookupType(name: $"RoamController[{entity.FullName}]") ??
-            _registry.LookupType(name: $"Core.RoamController[{entity.FullName}]");
-        string entityPtr = controllerType is EntityTypeSymbol controllerEntity
-            ? EmitEntityMemberVariableRead(sb: sb,
-                entityPtr: handle,
-                entity: controllerEntity,
-                memberVariableName: "data")
-            : handle;
+        EntityTypeSymbol controller = _registry.GetControllerType(wrapper: fieldMember.Object.ResolvedType!) ??
+                                      throw new InvalidOperationException(
+                                          message: $"Roamed handle for '{entity.Name}' has no controller type.");
+        string entityPtr = ReadControllerData(sb: sb, handle: handle, controller: controller);
         return EmitEntityMemberVariableFieldPointer(sb: sb,
             entityPtr: entityPtr,
             entity: entity,
@@ -820,8 +573,8 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
-    /// Emits a store to a local variable.
-    /// For RC record variables, releases old value's RC fields and retains new value's RC fields.
+    /// Emits a store to a local variable. Releasing an owning old value is already in the AST
+    /// (TemporaryTeardownPass / ScopeTeardownLoweringPass), so this is a plain store.
     /// </summary>
     private void EmitVariableAssignment(StringBuilder sb, string varName, string value)
     {
@@ -845,32 +598,7 @@ public partial class LlvmEmitter
             : varName;
         string llvmType = GetValueLlvmType(type: varType);
         string varPtr = $"%{llvmName}.addr";
-
-        // Release old value's RC fields before overwrite
-        if (varType is RecordTypeSymbol { HasRCMemberVariables: true } rcRecord)
-        {
-            EmitRcRecordRelease(sb: sb, llvmAddr: varPtr, recordType: rcRecord);
-        }
-
-        // Release old RC wrapper value before overwrite
-        if (varType is RecordTypeSymbol rcWrapOld &&
-            GetGenericBaseName(type: rcWrapOld) is { } rcWrapOldBase &&
-            RcWrapperBaseNames.Contains(item: rcWrapOldBase))
-        {
-            EmitRetainedVarRelease(sb: sb, llvmAddr: varPtr, recordType: rcWrapOld);
-        }
-
         EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
-
-        // NOTE: the per-RC-field retain on an RC-field-record reassignment is now an explicit AST call
-        // inserted by RcRetainLoweringPass (Phase 8). The old-value RELEASE above stays in codegen
-        // (reassignment-overwrite is not a scope exit, so teardown lowering does not cover it).
-
-        // NOTE: no codegen strong-count bump for RC wrapper reassignment. Same reasoning as the
-        // var-binding site — implicit copy of a Retained/Tracked handle is a compile error, so the
-        // RHS is always a fresh count=1 handle (explicit `.retain()`/`.track()` or a creator), never
-        // an implicit copy needing balance. The old-value release above stays (reassignment-overwrite
-        // is not a scope exit, so ScopeTeardownLoweringPass does not cover it).
     }
 
     /// <summary>
@@ -1051,15 +779,10 @@ public partial class LlvmEmitter
     private void EmitRoamedWrapperMemberVariableWrite(StringBuilder sb, MemberExpression member,
         string value, TypeSymbol? valueType, WrapperWriteContext ctx)
     {
-        TypeSymbol? controllerType =
-            _registry.LookupType(name: $"RoamController[{ctx.InnerEntity.FullName}]") ??
-            _registry.LookupType(name: $"Core.RoamController[{ctx.InnerEntity.FullName}]");
-        string roamEntPtr = controllerType is EntityTypeSymbol controllerEntity
-            ? EmitEntityMemberVariableRead(sb: sb,
-                entityPtr: ctx.Target,
-                entity: controllerEntity,
-                memberVariableName: "data")
-            : ctx.Target;
+        EntityTypeSymbol controller = _registry.GetControllerType(wrapper: ctx.WrapperRecord) ??
+                                      throw new InvalidOperationException(
+                                          message: $"'{ctx.WrapperRecord.Name}' has no controller type.");
+        string roamEntPtr = ReadControllerData(sb: sb, handle: ctx.Target, controller: controller);
         EmitEntityMemberVariableWrite(sb: sb,
             entityPtr: roamEntPtr,
             entity: ctx.InnerEntity,
@@ -1078,21 +801,12 @@ public partial class LlvmEmitter
         RecordTypeSymbol wrapperRecord = ctx.WrapperRecord;
         EntityTypeSymbol innerEntity = ctx.InnerEntity;
 
-        // Retained[T] / Tracked[T]: pointer targets a RetainController[T]; the entity lives in
-        // its `data` field. Without this, writes would store into the controller's strong_count.
+        // A controller-backed wrapper: the entity lives in the controller's `data` field. Without this,
+        // writes would store into the controller's counts.
         if (wrapperRecord.BackendType != null &&
-            (ctx.WrapBaseName == Declaration.RuntimeContract.Retained ||
-             ctx.WrapBaseName == Declaration.RuntimeContract.Tracked))
+            _registry.GetControllerType(wrapper: wrapperRecord) is { } controller)
         {
-            TypeSymbol? controllerType =
-                _registry.LookupType(name: $"RetainController[{innerEntity.FullName}]") ??
-                _registry.LookupType(name: $"Core.RetainController[{innerEntity.FullName}]");
-            return controllerType is EntityTypeSymbol controllerEntity
-                ? EmitEntityMemberVariableRead(sb: sb,
-                    entityPtr: target,
-                    entity: controllerEntity,
-                    memberVariableName: "data")
-                : target;
+            return ReadControllerData(sb: sb, handle: target, controller: controller);
         }
 
         // Other @llvm("ptr") wrappers: the pointer IS the inner entity directly.
@@ -1165,151 +879,10 @@ public partial class LlvmEmitter
 
     #endregion
 
-    #region RC Record Cleanup
-
-    /// <summary>RC wrapper base names that require copy/release on var binding. Single source of truth is
-    /// <see cref="Declaration.RuntimeContract.RcWrapperBaseNames"/> — no local member list (this file's
-    /// line ~1050 already references the contract set directly; keep them one and the same).</summary>
+    /// <summary>RC wrapper base names, whose local slots start zeroed. Single source of truth is
+    /// <see cref="Declaration.RuntimeContract.RcWrapperBaseNames"/>.</summary>
     private static readonly IReadOnlySet<string> RcWrapperBaseNames =
         Declaration.RuntimeContract.RcWrapperBaseNames;
-
-    // NOTE: the per-RC-field retain-on-copy (formerly EmitRcRecordRetain) is now an explicit AST call
-    // inserted by RcRetainLoweringPass (Phase 8) — codegen no longer bumps refcounts itself. The
-    // matching per-field RELEASE (EmitRcRecordRelease below) stays in codegen (scope-exit teardown is
-    // AST-lowered separately, but reassignment-overwrite release is not).
-
-    /// <summary>
-    /// Emits release calls for all RC wrapper fields in a record.
-    /// Called before overwriting a record variable or at scope exit.
-    /// </summary>
-    private void EmitRcRecordRelease(StringBuilder sb, string llvmAddr, RecordTypeSymbol recordType)
-    {
-        string llvmType = GetLlvmType(type: recordType);
-        string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
-
-        // For Maybe[T] carriers, the `value` field (RC wrapper) is uninitialized when
-        // present=false. Calling release on a garbage controller AVs. Gate the entire
-        // field-release walk on the present flag.
-        string? skipLabel = null;
-        if (IsMaybeType(type: recordType))
-        {
-            MemberVariableInfo? presentField =
-                recordType.MemberVariables.FirstOrDefault(predicate: f =>
-                    f.Name == Declaration.RuntimeContract.Carrier.PresentField);
-            if (presentField != null)
-            {
-                // Maybe `present` is a Bool stored as i8 — trunc to i1 for the branch.
-                string presentByte = NextTemp();
-                EmitLine(sb: sb,
-                    line:
-                    $"  {presentByte} = extractvalue {llvmType} {loaded}, {presentField.Index}");
-                string presentVal = NextTemp();
-                EmitLine(sb: sb, line: $"  {presentVal} = trunc i8 {presentByte} to i1");
-                string doLabel = NextLabel(prefix: "rcrel_do");
-                skipLabel = NextLabel(prefix: "rcrel_skip");
-                EmitLine(sb: sb,
-                    line: $"  br i1 {presentVal}, label %{doLabel}, label %{skipLabel}");
-                EmitLine(sb: sb, line: $"{doLabel}:");
-            }
-        }
-
-        foreach (MemberVariableInfo field in recordType.MemberVariables)
-        {
-            if (field.Type is not WrapperTypeSymbol w || !RcWrapperBaseNames.Contains(item: w.Name))
-            {
-                continue;
-            }
-
-            string fieldVal = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
-
-            // Unified teardown: tear the RC-wrapper field down via its `destroy` (which forwards
-            // to `release`→controller), not `release` directly — keeps every teardown on one verb.
-            RoutineInfo? destroyMemberRoutine = _registry.LookupMemberRoutineOverload(type: w,
-                memberRoutineName: "destroy",
-                argTypes: new List<TypeSymbol>());
-            if (destroyMemberRoutine == null)
-            {
-                continue;
-            }
-
-            GenerateRoutineDeclaration(routine: destroyMemberRoutine);
-            string mangled = MangleRoutineName(routine: destroyMemberRoutine);
-            string fieldLlvm = GetParameterLlvmType(type: w);
-            EmitLine(sb: sb, line: $"  call void @{mangled}({fieldLlvm} {fieldVal})");
-        }
-
-        if (skipLabel != null)
-        {
-            EmitLine(sb: sb, line: $"  br label %{skipLabel}");
-            EmitLine(sb: sb, line: $"{skipLabel}:");
-        }
-    }
-
-    /// <summary>
-    /// Emits release calls for all tracked RC record variables at scope exit.
-    /// Called at return, throw, and absent -> before EmitEntityCleanup.
-    /// </summary>
-    private static void EmitRcRecordCleanup(StringBuilder sb)
-    {
-        // Teardown is now lowered into the AST as explicit `local.destroy()` calls by
-        // ScopeTeardownLoweringPass (Phase 8) — RC wrapper vars and RC-field records get their
-        // `destroy` (which forwards to `release`) inserted there. Codegen emits no teardown.
-        _ = sb;
-    }
-
-    // NOTE: the RC-wrapper copy-verb bump for a Roamed entity-field write (formerly
-    // EmitRetainedVarRetain) is now an explicit `field.roam()` AST call inserted by
-    // RcRetainLoweringPass (Phase 8). The release-old side (EmitRetainedVarRelease below) stays in
-    // codegen (reassignment-overwrite is not a scope exit).
-
-    /// <summary>
-    /// Tears down an RC wrapper variable at scope exit by calling its <c>destroy()</c> (which
-    /// forwards to <c>release()</c>→controller). Both Retained and Tracked expose <c>destroy</c>.
-    /// </summary>
-    private void EmitRetainedVarRelease(StringBuilder sb, string llvmAddr,
-        RecordTypeSymbol recordType)
-    {
-        if (GetGenericBaseName(type: recordType) is not { } baseName ||
-            !Declaration.RuntimeContract.RcWrapperBaseNames.Contains(item: baseName))
-        {
-            return;
-        }
-
-        RoutineInfo? releaseMemberRoutine = _registry.LookupMemberRoutineOverload(type: recordType,
-            memberRoutineName: "destroy",
-            argTypes: new List<TypeSymbol>());
-        if (releaseMemberRoutine == null)
-        {
-            return;
-        }
-
-        string llvmType = GetLlvmType(type: recordType);
-        string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
-
-        GenerateRoutineDeclaration(routine: releaseMemberRoutine);
-        string mangled = MangleRoutineName(routine: releaseMemberRoutine);
-        string rcLlvm = GetParameterLlvmType(type: recordType);
-
-        // Null-check guard: conditionally-declared RC wrapper bindings (e.g. a
-        // `when`-arm `else r => ...`) have hoisted, zero-inited allocas that the
-        // function-exit cleanup walks even when their arm never ran. Skip teardown
-        // when the controller pointer is null.
-        string isNull = NextTemp();
-        string skipLabel = NextLabel(prefix: "rcwrap_rel_skip");
-        string doLabel = NextLabel(prefix: "rcwrap_rel_do");
-        EmitLine(sb: sb, line: $"  {isNull} = icmp eq {llvmType} {loaded}, null");
-        EmitLine(sb: sb, line: $"  br i1 {isNull}, label %{skipLabel}, label %{doLabel}");
-        EmitLine(sb: sb, line: $"{doLabel}:");
-        EmitLine(sb: sb, line: $"  call void @{mangled}({rcLlvm} {loaded})");
-        EmitLine(sb: sb, line: $"  br label %{skipLabel}");
-        EmitLine(sb: sb, line: $"{skipLabel}:");
-    }
-
-    #endregion
 
     // -----------------------------------------------------------------------------
 

@@ -1,4 +1,5 @@
 using Builder.Declaration;
+using Builder.Instantiation;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -60,6 +61,10 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     private readonly TypeSymbol? _blankType = ctx.Registry.LookupType(name: "None");
     private int _counter;
 
+    /// <summary>Set while lowering monomorphized bodies: only reassignment release is added, with no
+    /// temporary spills (the generic definition's spills already ran before monomorphization).</summary>
+    private bool _reassignOnly;
+
     /// <summary>The reference primitives whose result is a borrow of a referent owned elsewhere —
     /// a temporary produced by one of these owns nothing, so it must not be torn down. Mirrors
     /// <see cref="ScopeTeardownLoweringPass"/>'s view-verb exclusion.</summary>
@@ -115,6 +120,28 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         foreach (string key in bodies.Keys.ToList())
         {
             bodies[key: key] = TransformStatement(stmt: bodies[key: key]);
+        }
+    }
+
+    /// <summary>
+    /// Adds the old-value release to reassignments in monomorphized bodies. In a generic definition a
+    /// target typed <c>T</c> has no known lifecycle, so the pre-monomorphization run leaves it alone;
+    /// once <c>T</c> is concrete (<c>Retained[E]</c>, <c>Text</c>, a record with RC fields) the
+    /// overwrite must destroy the old value. Reassignments already lowered before monomorphization end
+    /// in a marked <c>target = __rv</c> tail and are skipped, so this never releases twice. Runs after
+    /// the post-monomorphization <see cref="RecordCopyLoweringPass"/>, like the Phase 8 run.
+    /// </summary>
+    public void RunReassignOnInstantiatedGenericBodies(Dictionary<string, MonomorphizedBody> bodies)
+    {
+        _reassignOnly = true;
+        try
+        {
+            BodyDispatch.RunOnInstantiatedGenericBodies(bodies: bodies,
+                lower: (_, entry) => TransformStatement(stmt: entry.Ast.Body));
+        }
+        finally
+        {
+            _reassignOnly = false;
         }
     }
 
@@ -308,6 +335,11 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         Func<Expression, Statement> rebuildWithCondition, bool topOwning = true,
         bool isTerminator = false)
     {
+        if (_reassignOnly)
+        {
+            return owner;
+        }
+
         var spills = new List<Spill>();
         Expression rewritten = Visit(e: root, objectPos: !topOwning, spills: spills);
         if (spills.Count == 0)
@@ -367,15 +399,15 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// Lowers an assignment to an identifier target. For a MANAGED-LEAF target (Text/Decimal-style
-    /// record), the overwrite must first release the old value or it leaks — the dominant cost in
-    /// string-building loops (<c>s = s + part</c>). The new RHS is already an independent owned value
+    /// Lowers an assignment to an identifier target. For an owning record target (a managed leaf such
+    /// as Text/Decimal, a record with RC-wrapper fields, or an RC wrapper itself), the overwrite must
+    /// first release the old value or it leaks — the dominant cost in string-building loops
+    /// (<c>s = s + part</c>). The new RHS is already an independent owned value
     /// (RecordCopyLoweringPass, which has already run, turned any lvalue source into a fresh
     /// <c>store</c>; computed results are fresh), so the rewrite is:
     /// <code>var __rv = RHS ; target.destroy() ; target = __rv</code>
-    /// computing RHS (which may read the old target) BEFORE the destroy. For other targets the old
-    /// value is released elsewhere (entities by ScopeTeardownLoweringPass; HasRCMemberVariables / RC-wrapper
-    /// records by codegen's EmitVariableAssignment; scalars need nothing), so we only spill receivers.
+    /// computing RHS (which may read the old target) BEFORE the destroy. Entities are released by
+    /// ScopeTeardownLoweringPass and scalars need nothing, so for those we only spill receivers.
     /// </summary>
     private Statement LowerReassign(Statement owner, Expression rhs, IdentifierExpression target,
         Func<Expression, Statement> rebuild)
@@ -393,7 +425,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
             return owner;
         }
 
-        if (!IsManagedLeafReassignTarget(t: target.ResolvedType))
+        if (!IsReleasedOnReassign(t: target.ResolvedType))
         {
             return SpillAround(owner: owner, root: rhs, rebuildWithCondition: rebuild);
         }
@@ -402,7 +434,9 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         RoutineInfo destroy = ctx.Registry.GetLifecycle(type: t)
                                  .Destroy!;
         var spills = new List<Spill>();
-        Expression rhs2 = Visit(e: rhs, objectPos: false, spills: spills);
+        Expression rhs2 = _reassignOnly
+            ? rhs
+            : Visit(e: rhs, objectPos: false, spills: spills);
 
         var stmts = new List<Statement>(capacity: spills.Count * 2 + 3);
         foreach (Spill s in spills)
@@ -439,31 +473,30 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
             Location: loc);
     }
 
-    /// <summary>RC-wrapper base names whose reassignment release is handled by codegen's
-    /// EmitVariableAssignment (EmitRetainedVarRelease) — excluded so we never double-release.</summary>
-    private static readonly IReadOnlySet<string> RcWrapperBaseNames =
-        RuntimeContract.RcWrapperBaseNames;
-
-    /// <summary>True for a managed-leaf record target whose old value codegen does NOT release on
-    /// reassignment: a record with a retaining <c>store</c> (Text/Decimal, or one carrying such a
-    /// field) that is neither a <c>HasRCMemberVariables</c> record nor an RC wrapper (both released by
-    /// codegen). Scalars (no retaining copy) and entities (handled by ScopeTeardownLoweringPass) are
-    /// excluded.</summary>
-    private bool IsManagedLeafReassignTarget(TypeSymbol? t)
+    /// <summary>True for a record target whose old value must be destroyed on reassignment: a managed
+    /// leaf with a retaining <c>store</c> (Text/Decimal, or a record carrying such a field), a record
+    /// with an RC-wrapper field (checked structurally: a wrapper field is a record type, so the old
+    /// <c>HasRCMemberVariables</c> flag, which looks for WrapperTypeSymbol fields, never fires), or an
+    /// RC wrapper (Retained/Tracked/Guarded/Witnessed/Roamed, whose
+    /// <c>destroy</c> is a no-op on the zeroed handle a <c>lateinit</c> binding starts with). Borrow
+    /// views, scalars and plain value records are excluded, and entities are handled by
+    /// ScopeTeardownLoweringPass.</summary>
+    private bool IsReleasedOnReassign(TypeSymbol? t)
     {
-        if (t is not RecordTypeSymbol rec || rec.HasRCMemberVariables)
-        {
-            return false;
-        }
-
-        string baseName = rec.BareName;
-        if (RcWrapperBaseNames.Contains(item: baseName))
+        if (t is not RecordTypeSymbol rec)
         {
             return false;
         }
 
         TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(type: t);
-        return !lc.IsBorrow && lc.Destroy != null && lc.Store != null;
+        if (lc.IsBorrow || lc.Destroy == null)
+        {
+            return false;
+        }
+
+        return lc.Store != null || TypeRegistry.GetRcWrapperBaseName(type: rec) is not null ||
+               rec.MemberVariables.Any(predicate: f =>
+                   TypeRegistry.GetRcWrapperBaseName(type: f.Type) is not null);
     }
 
     // ---------------------------------------------------------------------------------------------

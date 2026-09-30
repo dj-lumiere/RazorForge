@@ -15,9 +15,15 @@ public sealed record SemanticError(
     SourceLocation Location)
 {
     /// <summary>
+    /// The code as the user sees it, spelled in the language of the file the error points at
+    /// (RF-S### for a .rf file, SF-S### for a .sf file).
+    /// </summary>
+    public string CodeString => Code.ToCodeString(language: DiagnosticLanguage.OfFile(fileName: Location.FileName));
+
+    /// <summary>
     /// Gets the formatted error message including diagnostic code and location.
-    /// Format: error[RF-S###]: filename:line:column: message
+    /// Format: error[RF-S###]: filename:line:column: message (SF-S### for a Suflae file)
     /// </summary>
     public string FormattedMessage =>
-        $"error[{Code.ToCodeString()}]: {Location.FileName}:{Location.Line}:{Location.Column}: {Message}";
+        $"error[{CodeString}]: {Location.FileName}:{Location.Line}:{Location.Column}: {Message}";
 }

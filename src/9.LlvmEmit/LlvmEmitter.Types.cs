@@ -723,7 +723,7 @@ public partial class LlvmEmitter
     /// when the carried routine still points at a generic definition or partial resolution.
     /// </summary>
     private RoutineInfo? NormalizeResolvedRoutineReference(RoutineInfo? routine,
-        TypeSymbol? receiverType, TypeSymbol? returnType, List<TypeSymbol> argTypes)
+        TypeSymbol? receiverType, List<TypeSymbol> argTypes)
     {
         if (routine == null)
         {
@@ -731,7 +731,6 @@ public partial class LlvmEmitter
         }
 
         receiverType = NormalizeRoutineLookupType(type: receiverType);
-        returnType = NormalizeRoutineLookupType(type: returnType);
         string lookupMemberRoutineName = GetMemberRoutineLookupName(routine: routine);
 
         bool ownerMismatch = receiverType != null &&
@@ -752,20 +751,6 @@ public partial class LlvmEmitter
             if (reboundMemberRoutine != null)
             {
                 return reboundMemberRoutine;
-            }
-        }
-
-        if (returnType != null && routine.IsCreator)
-        {
-            RoutineInfo? reboundCreator = _registry.LookupCreatorOverload(type: returnType,
-                argTypes: argTypes);
-            // Only accept the rebound when its arity matches the call. The fallback path inside
-            // LookupRoutineOverload returns the first-registered overload (often the zero-arg
-            // create) when nothing matches the arg types, which would otherwise clobber SA's
-            // correct overload resolution and emit a call to the wrong symbol.
-            if (reboundCreator != null && reboundCreator.Parameters.Count == argTypes.Count)
-            {
-                return reboundCreator;
             }
         }
 

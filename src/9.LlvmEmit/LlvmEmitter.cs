@@ -134,15 +134,6 @@ public partial class LlvmEmitter
     /// <summary>Counter for generating unique label names.</summary>
     private int _labelCounter;
 
-    /// <summary>Names stolen ANYWHERE in the routine currently being emitted — every entity (`ptr`) load
-    /// of such a name gets a use-after-steal null-guard. Reset per routine from the declaration's
-    /// <c>EverStolenVariableNames</c>; empty (no guards) for synthesized bodies with no declaration.</summary>
-    private HashSet<string> _everStolenInCurrentRoutine = [];
-
-    /// <summary>Carries the current routine declaration's ever-stolen set into <c>ResetPerRoutineState</c>
-    /// (which runs nested inside body emission and owns the per-routine reset). Set by
-    /// <c>EmitDefinitionBody</c> before body emission; null for synthesized bodies (→ no guards).</summary>
-    private HashSet<string>? _pendingEverStolen;
 
     /// <summary>Set of already-generated type declarations to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedTypes = [];
@@ -183,17 +174,6 @@ public partial class LlvmEmitter
 
     /// <summary>Counter for deduplicating variable names within a function.</summary>
     private readonly Dictionary<string, int> _varNameCounts = new();
-
-    /// <summary>List of local entity variables (name, LLVM addr name) for auto-cleanup.</summary>
-    private readonly List<(string Name, string LLVMAddr)> _localEntityVars = [];
-
-    /// <summary>List of local record variables with RC wrapper fields for retain/release.</summary>
-    private readonly List<(string Name, string LLVMAddr, RecordTypeSymbol RecordType)>
-        _localRcRecordVars = [];
-
-    /// <summary>List of local variables whose type IS an RC wrapper (Retained[T], Guarded[T], etc.).</summary>
-    private readonly List<(string Name, string LLVMAddr, RecordTypeSymbol RecordType)>
-        _localRetainedVars = [];
 
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
     // Keyed by mangled name string; a future refactor could key by RoutineInfo instead.

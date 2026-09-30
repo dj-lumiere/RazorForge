@@ -111,6 +111,14 @@ public sealed class BackendEntryValidator
             return;
         }
 
+        // A preset other than an Array[T, N] / BitArray[N] constant is inlined at every use (each use gets
+        // its own lowered copy), so its declaration's value is never emitted and is legitimately left
+        // unlowered (an f-string, a nested preset name). Only the aggregate constant is emitted from here.
+        if (node is PresetDeclaration { Value: not ListLiteralExpression })
+        {
+            return;
+        }
+
         if (TryCreateResidualError(node: node,
                 registry: registry,
                 error: out SemanticError? error))

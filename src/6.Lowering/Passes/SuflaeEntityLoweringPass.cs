@@ -947,7 +947,13 @@ internal sealed class SuflaeEntityLoweringPass
         // bare `Roamed(from: n)` (Calls.cs). `inner` is a FRESH entity rvalue (creator/literal/call), so it
         // moves into the handle with no `steal`. Callee is the type-name identifier; codegen constructs via
         // ConstructedType + ResolvedRoutine (see GenericCallLoweringPass wrapper-construction lowering).
-        RoutineInfo? create = _registry.LookupCreatorOverload(type: roamed, argTypes: [entity]);
+        // Resolve the creator on the concrete `Roamed[E]` record instance: looked up on the wrapper symbol
+        // it binds the generic definition's `Roamed.create(from:)`, which the emitter used to rebind.
+        TypeSymbol creatorOwner = _registry.LookupType(name: RuntimeContract.Roamed) is
+            { IsGenericDefinition: true } roamedDef
+            ? _registry.GetOrCreateResolution(genericDef: roamedDef, typeArguments: [entity])
+            : roamed;
+        RoutineInfo? create = _registry.LookupCreatorOverload(type: creatorOwner, argTypes: [entity]);
         return new CallExpression(
             Callee:
             new IdentifierExpression(Name: RuntimeContract.Roamed, Location: inner.Location)

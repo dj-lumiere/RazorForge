@@ -475,6 +475,13 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
         return false;
     }
 
+    public bool VisitAtomicRmwStatement(AtomicRmwStatement node)
+    {
+        Visit(e: node.Field);
+        Visit(e: node.Delta);
+        return false;
+    }
+
     public bool VisitVariableDeclaration(VariableDeclaration node)
     {
         Visit(e: node.Initializer);

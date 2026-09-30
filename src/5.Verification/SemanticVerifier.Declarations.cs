@@ -364,8 +364,14 @@ public sealed partial class SemanticVerifier
             isSecret: global.Visibility == VisibilityModifier.Secret);
     }
 
+    /// <summary>The module each collected preset was declared in, so its value is analyzed against its own
+    /// module's routines and types even when several files are analyzed in one pass.</summary>
+    private readonly Dictionary<PresetDeclaration, string?> _presetModules =
+        new(comparer: ReferenceEqualityComparer.Instance);
+
     private void CollectPresetDeclaration(PresetDeclaration preset)
     {
+        _presetModules[key: preset] = _currentModuleName ?? GetCurrentModuleName();
         TypeSymbol presetType = ResolveType(typeExpr: preset.Type);
 
         // A collection-literal preset is only Presettable as a fixed-size `Array[T, N]` or

@@ -303,6 +303,33 @@ public static class RuntimeContract
     /// <c>control</c> (which would hand out a lock-bypassing raw reference).</summary>
     public const string Roamed = "Roamed";
 
+    /// <summary>Controller behind <c>Retained[T]</c> / <c>Tracked[T]</c>.</summary>
+    public const string RetainController = "RetainController";
+
+    /// <summary>Controller behind <c>Guarded[T, P]</c> / <c>Witnessed[T, P]</c> and their
+    /// <c>Consulting</c> / <c>Amending</c> tokens.</summary>
+    public const string GuardController = "GuardController";
+
+    /// <summary>Controller behind <c>Roamed[T]</c>.</summary>
+    public const string RoamController = "RoamController";
+
+    /// <summary>
+    /// The controller a pointer-backed wrapper points at, or null when the wrapper holds the entity (or a
+    /// value) directly. The controller takes the wrapper's type arguments unchanged
+    /// (<c>Guarded[T, P]</c> → <c>GuardController[T, P]</c>). The entity itself lives in the controller's
+    /// <c>data</c> field.
+    /// </summary>
+    public static string? ControllerOf(string wrapperBaseName)
+    {
+        return wrapperBaseName switch
+        {
+            Retained or Tracked => RetainController,
+            Guarded or Witnessed or Consulting or Amending => GuardController,
+            Roamed => RoamController,
+            _ => null
+        };
+    }
+
     // Related wrapper / marker-protocol type names that appear in the same type-identity checks as
     // the nine borrow wrappers above, but are NOT part of the borrow-wrapper contract sets.
     /// <summary>Owning value wrapper (compiler-internal; not a declared stdlib type).</summary>
@@ -386,8 +413,9 @@ public static class RuntimeContract
             Retained
         };
 
-    /// <summary>RC-wrapper base names whose refcount release is owned by codegen. Mirrors
-    /// TemporaryTeardownPass.RcWrapperBaseNames.</summary>
+    /// <summary>The reference-counting wrapper base names: a value of one of these co-owns a
+    /// controller, so overwriting a local of that type destroys the old value first
+    /// (TemporaryTeardownPass).</summary>
     public static readonly IReadOnlySet<string> RcWrapperBaseNames =
         new HashSet<string>(comparer: StringComparer.Ordinal)
         {

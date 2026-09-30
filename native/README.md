@@ -248,37 +248,19 @@ It should not collapse all of that into one anonymous “heap handle” abstract
 
 ## Vendored Libraries
 
-These directories are vendored snapshots, not separate repos the runtime should expose directly.
+These directories are vendored snapshots (fetched by CI and `build.sh`), not separate repos the runtime should expose
+directly. The runtime links two:
 
-### Data and text adjacent libraries
+- `libco`: stackful coroutine contexts
+- `libuv`: the async I/O event loop
 
-- `utf8proc`
-- `yyjson`
-- `tomlc99`
-- `minicsv`
-- `pcre2`
+Libraries staged earlier for future stdlib modules were removed while nothing used them. The plan for each:
 
-### Compression and storage
+- Ported to RazorForge: `pcre2` (a linear-time regex engine is preferred over a backtracking port), `utf8proc`,
+  `yyjson`, `tomlc99`, CSV, `zlib`, and the `zstd` decoder (its encoder later, when needed).
+- Added back as C when its module is written: `sqlite3`, and cryptography/TLS (constant-time code stays in audited
+  C: `libsodium`, and a maintained TLS such as mbedTLS 3.x or the platform's own).
 
-- `zlib`
-- `zstd`
-- `sqlite3`
-
-### Crypto and TLS
-
-- `libsodium`
-- `mbedtls`
-
-### Concurrency / async backends
-
-- `libco`
-- `libuv`
-
-### GC for future Suflae runtime
-
-- `bdwgc`
-
-Not every vendored library is “fully integrated”. Some are linked today, some are only staged for future stdlib modules.
 The runtime/stdlib should expose a stable `rf_*` API either way.
 
 ## Build System
@@ -389,8 +371,8 @@ The next native work should focus on concurrency and ownership, not more one-off
 - FileSystem
 - Networking
 - Compression
-- RegularExpression via PCRE2-32
-- Json/Toml/Csv bridges where wrapping is valid
+- RegularExpression (ported, see Vendored Libraries)
+- Json/Toml/Csv (ported, see Vendored Libraries)
 
 ## Notes
 

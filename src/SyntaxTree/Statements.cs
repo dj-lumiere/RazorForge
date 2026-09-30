@@ -1,5 +1,6 @@
 using Builder.Tokenizer;
 using Builder.Instantiation;
+using TypeModel.Symbols;
 
 namespace SyntaxTree;
 
@@ -226,6 +227,13 @@ public record ThrowStatement(Expression Error, SourceLocation Location, bool IsF
     /// </summary>
     public bool IsFatal { get; init; } = IsFatal;
 
+    /// <summary>
+    /// The error type's resolved <c>crash_message()</c>, stamped by
+    /// <see cref="Builder.Lowering.Passes.CrashMessageStampPass"/> before emission. The emitter calls it
+    /// for the crash text; null when the error type has none (the crash then carries no message).
+    /// </summary>
+    public RoutineInfo? CrashMessageRoutine { get; set; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -311,6 +319,40 @@ public record DiscardStatement(Expression Expression, SourceLocation Location)
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
         return visitor.VisitDiscardStatement(node: this);
+    }
+}
+
+/// <summary>The arithmetic an <see cref="AtomicRmwStatement"/> applies to its field.</summary>
+public enum AtomicRmwOperation
+{
+    /// <summary>field = field + delta</summary>
+    Add,
+
+    /// <summary>field = field - delta</summary>
+    Subtract
+}
+
+/// <summary>
+/// A lock-free read-modify-write of one atomic-width scalar field, produced by lowering (never parsed).
+/// <c>RoamedLockBracketLoweringPass</c> turns a Suflae module-global update
+/// <c>__globals__.n = __globals__.n.add(d)</c> into this node instead of bracketing it with the access
+/// lock, and the emitter translates it to a single sequentially consistent <c>atomicrmw</c> on the
+/// field's address. The arithmetic wraps on overflow, like every atomic.
+/// </summary>
+/// <param name="Field">The field access through the Roamed handle (<c>__globals__.n</c>).</param>
+/// <param name="Operation">Add or subtract.</param>
+/// <param name="Delta">The operand. It reads no module-global field, so evaluating it unlocked is safe.</param>
+/// <param name="Location">Source location of the original assignment.</param>
+public record AtomicRmwStatement(
+    MemberExpression Field,
+    AtomicRmwOperation Operation,
+    Expression Delta,
+    SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitAtomicRmwStatement(node: this);
     }
 }
 

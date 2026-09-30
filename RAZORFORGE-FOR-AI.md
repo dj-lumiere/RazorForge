@@ -608,7 +608,8 @@ With no entry file argument, the CLI walks up from the cwd to find
 
 Format: `error[RF-S###]: file:line:col: message` plus a source excerpt with a
 caret. Families: `RF-G###` grammar/parse, `RF-S###` semantic, `RF-W###`
-warning. Frequent ones when porting habits from other languages:
+warning. A diagnostic in a Suflae file spells the same number with `SF-`
+(`SF-S436`). Frequent ones when porting habits from other languages:
 
 | Code         | Usual cause                           | Fix                                                |
 |--------------|---------------------------------------|----------------------------------------------------|

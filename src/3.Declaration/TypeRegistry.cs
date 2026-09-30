@@ -1349,6 +1349,33 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// The concrete controller entity behind a pointer-backed wrapper (<c>Retained[E]</c> →
+    /// <c>RetainController[E]</c>, <c>Consulting[E, P]</c> → <c>GuardController[E, P]</c>), derived from the
+    /// wrapper's structure: its base name picks the controller (<see cref="RuntimeContract.ControllerOf"/>)
+    /// and its type arguments instantiate it. Null when the wrapper has no controller.
+    /// </summary>
+    public EntityTypeSymbol? GetControllerType(TypeSymbol wrapper)
+    {
+        string wrapperBase = wrapper switch
+        {
+            RecordTypeSymbol { GenericDefinition: { } definition } => definition.BareName,
+            _ => wrapper.BareName
+        };
+        if (RuntimeContract.ControllerOf(wrapperBaseName: wrapperBase) is not { } controllerBase ||
+            wrapper.TypeArguments is not { Count: > 0 } typeArguments)
+        {
+            return null;
+        }
+
+        TypeSymbol controllerDefinition = LookupType(name: controllerBase) ??
+                                          throw new InvalidOperationException(
+                                              message:
+                                              $"The stdlib controller '{controllerBase}' behind '{wrapper.Name}' is not registered.");
+        return GetOrCreateResolution(genericDef: controllerDefinition, typeArguments: typeArguments.ToList()) as
+            EntityTypeSymbol;
+    }
+
+    /// <summary>
     /// Gets or creates a resolved generic type.
     /// </summary>
     /// <param name="genericDef">The generic type definition.</param>
@@ -2136,6 +2163,7 @@ public sealed partial class TypeRegistry
         {
             TypeCategory.Record => true,
             TypeCategory.Choice => true,
+            TypeCategory.Flags => true, // A flags value is its U64 bitmask, like a choice's S32
             TypeCategory.Variant => true, // Variants are value types (stack-allocated)
             _ => false
         };
@@ -2163,7 +2191,6 @@ public sealed partial class TypeRegistry
     public int MaterializeAllLazyStdlibTypes()
     {
         // Count evaluates the predicate exactly once per element, so ClearStdlibLazy runs for
-            TypeCategory.Flags => true, // A flags value is its U64 bitmask, like a choice's S32
         // every instance (its per-instance side effect is preserved) and n counts the materializations.
         return _resolutions.Values
                            .Distinct()

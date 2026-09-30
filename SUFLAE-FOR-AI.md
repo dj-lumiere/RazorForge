@@ -75,7 +75,7 @@ When unsure, consult ground truth in the repo:
    RazorForge does not (its deterministic teardown has no owning scope for one). Syntax:
    `global name: Type = initializer` — both the type annotation AND the initializer are
    REQUIRED, and there is NO `var` (a `global` is mutable by definition). A bare `var` at
-   module level is an error (RF-S435) — `var` is a routine-local binding; a module-level
+   module level is an error (SF-S435) — `var` is a routine-local binding; a module-level
    `preset` (a constant) still exists for constants. A `global` is module-scoped (read/write
    from any routine in the module by bare name), session-lifetime (the GC/cycle-collector
    reclaims it), and mutable. It is initialized ONCE at program startup, before any user code,
@@ -84,7 +84,7 @@ When unsure, consult ground truth in the repo:
    ordering is **transitive through free-routine calls** — `global a = compute()` where
    `compute` reads global `b` still orders `b` before `a`, all at build time. A dependency
    **cycle** (including a self-reference, and cycles that only show up through a call) is a
-   compile error (RF-S436). Entity initializers work: `global origin: Point = Point(x: 10,
+   compile error (SF-S436). Entity initializers work: `global origin: Point = Point(x: 10,
    y: 20)` heap-allocates once and is shared. Globals cross module boundaries — another module
    can `import Mod.the_global` and read AND write it (it is one shared storage cell). **Use it
    for process-singular state** (a logger, config, an asset registry); per-frame / per-world
@@ -146,9 +146,9 @@ routine start()
 - Mixing loose top-level statements AND an explicit `routine start()` in the same
   file is a conflict (SF-G150). Choose one.
 - Only the program's entry file may have loose top-level statements. In an
-  imported file they are an error (RF-S443) — they would start a second program.
+  imported file they are an error (SF-S443) — they would start a second program.
 - A top-level `var` belongs to the script's own top-level scope: routines in the
-  file cannot see it (RF-S444). Pass it as an argument, or make it a `global`.
+  file cannot see it (SF-S444). Pass it as an argument, or make it a `global`.
 - Routines you define are still their own scopes → they still need an explicit
   `return` (the "every scope has one definite exit → teardown anchor" rule). The
   single top-level scope's exit is EOF, so script mode needs no trailing return.
@@ -180,12 +180,12 @@ routine start()
   NOT `Maybe[Roamed[E]]`. An entity is already a reference, so absence is the null
   handle (Kotlin `T?` / Rust `Option<Box<T>>` niche). Value types still use
   `Maybe[T]` for `T?`.
-  - Dereferencing a nullable `E?` before a null-check is rejected (RF-S619) until
+  - Dereferencing a nullable `E?` before a null-check is rejected (SF-S619) until
     a check narrows it. Narrow with **capital `None`**: `if n isnot None` /
     `if n is None: return` (guard). Standardize on `None` (the type pattern);
     `isnot none` (lowercase value) does not parse.
   - Constructing/assigning `none` into a non-nullable `E` field is rejected
-    (RF-S252) — declare the field `E?` if it may be absent.
+    (SF-S252) — declare the field `E?` if it may be absent.
 - `record` is unchanged from RF: a value type, copied, no identity, no destructor.
 - **Identity comparison `===` / `!==`** — "same object?", distinct from value equality
   `==`. Because SF entities alias freely (`var b = a` shares), asking whether two
@@ -202,7 +202,7 @@ routine start()
 
   Valid on any reference-carrying operand — an `entity` (`Roamed`) or a wrapper
   (`Viewing`/`Modifying`/`Consulting`/`Amending`/`Retained`/`Guarded`/`Tracked`/
-  `Witnessed`). A `record` or scalar is a compile error (**RF-S440**): a value has no
+  `Witnessed`). A `record` or scalar is a compile error (**SF-S440**): a value has no
   identity — use `==`. It is a primitive pointer compare (not a `.eq()` call).
 
 ## 5. What Suflae deliberately HIDES
@@ -221,7 +221,7 @@ Concretely, none of these appear at the SF surface:
 - **`danger` blocks / `dangerous` routines / `Hijacked`** — SF users cannot reach
   unsafe operations at all: a `danger` block is rejected, and CALLING any
   `dangerous` routine (member OR free, e.g. `hollow[T]()`) from `.sf` user code is
-  rejected (**RF-S800**, "unsafe surface, not available in Suflae"). Entity
+  rejected (**SF-S800**, "unsafe surface, not available in Suflae"). Entity
   wrappers additionally omit their `dangerous` members from the forwarded surface.
   The RF-realm Core still uses `Hijacked`/`danger` internally — fine, because RF
   Core is analyzed in RF mode.
@@ -232,7 +232,7 @@ Mutating a collection while it is being `each`-looped is banned. At the SF
 altitude the explanation is human, not "iterator invalidation": after an
 add/remove the loop can no longer trust that its next element is really the next
 one. Direct mutation (`each x in xs { xs.add_last(...) }`) is a build-time error
-(shared with RF, RF-S625). Indirect mutation (mutation hidden behind a called
+(SF-S625, the same rule as RazorForge's RF-S625). Indirect mutation (mutation hidden behind a called
 routine) cannot be traced at build time in Suflae, because an SF container is a
 shared `Roamed` handle, so it is a runtime crash instead: the loop marks its
 list's shape as in use, and an add or remove during the loop, even inside
@@ -285,7 +285,7 @@ Fatal messages name what the PROGRAM did, never the machine (no malloc/OS/signal
   `B16..B128`, `BF16` (storage only), `D32/D64/D128`, `C64/C128/C256`, `Q128/Q256` all live in the Core
   auto-prelude and can be named in a `.sf` with no `import` — bare literals still
   default to `Integer`/`Decimal`, but writing `S32`/`B64`/`C128`/`5_s32` directly is
-  fine. (The old SF import-gate on these — RF-S636 — was removed.) Only the
+  fine. (The old SF import-gate on these — SF-S636 — was removed.) Only the
   **arbitrary-precision** `Real` and `Complex` still live in `module Numerics` and
   need an explicit `import Numerics` (the prelude imports just `Numerics { Integer }`
   so the default vocabulary resolves).
@@ -318,7 +318,7 @@ use the RF types directly — this is how SF reaches RF-realm code.
   **local**, this just works: `import Physics; var b = Body(px: 3, py: 4);
   b.move(...); var s = b.sum()` — construct it, call its methods (even mutating
   ones), no ceremony, no `steal`, no danger.
-- **A bare RF entity may NOT cross an SF routine signature (RF-S439).** Using a
+- **A bare RF entity may NOT cross an SF routine signature (SF-S439).** Using a
   bare `RF::` entity as an SF routine *parameter* or *return type* is a compile
   error: RF entities have no reference count, so an SF scope-exit teardown on a
   by-value crossing would double-free. Locals and fields are fine; only
@@ -371,14 +371,14 @@ Suflae is at v0.1, and the core is now standing end-to-end:
 
 - **Language model:** entity→`Roamed` lowering (aliasing, fields, methods,
   params/returns, chaining — teardown-safe), nullability (`E?` + `None` narrowing
-  + RF-S619 deref guard), single-thread cycle collection (multithread-safe via a
+  + SF-S619 deref guard), single-thread cycle collection (multithread-safe via a
   stop-the-world rwlock), script mode, bare-invocation run.
-- **Number model:** `Integer`/`Decimal` defaults + the `import Numerics` gate (RF-S636).
+- **Number model:** `Integer`/`Decimal` defaults + the `import Numerics` gate (SF-S636).
 - **Realm-scoped Core stdlib:** value records shared from RF; entity collections
   wrapped under `Standard/Suflae/Collections/*.sf` (List/Dict/Set/CircularList/
   PriorityQueue/Sorted{Dict,List,Set}/SplitList), auto-forwarded + re-wrapped.
 - **Approachable-surface gates:** `danger`/`extern` rejected; `dangerous` calls
-  rejected (RF-S800); `@readonly`/`@reshaping` absent.
+  rejected (SF-S800); `@readonly`/`@reshaping` absent.
 - **Verified:** the `StdlibSf/*.sf` fixtures run in the main harness (StdlibApiTests)
   with an RF-twin output-equivalence lock.
 

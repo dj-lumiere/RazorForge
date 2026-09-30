@@ -43,6 +43,7 @@ public abstract class AstRewriter
             BecomesStatement s => VisitBecomes(s: s),
             ThrowStatement s => VisitThrow(s: s),
             VariantReturnStatement s => VisitVariantReturn(s: s),
+            AtomicRmwStatement s => VisitAtomicRmw(s: s),
             DiscardStatement s => VisitDiscard(s: s),
             ExpressionStatement s => VisitExpressionStatement(s: s),
             AssignmentStatement s => VisitAssignment(s: s),
@@ -263,6 +264,30 @@ public abstract class AstRewriter
         return ReferenceEquals(objA: v, objB: s.Value)
             ? s
             : s with { Value = v };
+    }
+
+    /// <summary>
+    /// Rewrites an <see cref="AtomicRmwStatement"/> by visiting its field access and its delta.
+    /// Returns the original node when neither changed.
+    /// </summary>
+    /// <param name="s">The atomic read-modify-write statement to rewrite.</param>
+    /// <returns>The rewritten statement, or the original reference if nothing changed.</returns>
+    protected virtual Statement VisitAtomicRmw(AtomicRmwStatement s)
+    {
+        Expression field = VisitExpression(expr: s.Field);
+        Expression delta = VisitExpression(expr: s.Delta);
+        if (ReferenceEquals(objA: field, objB: s.Field) && ReferenceEquals(objA: delta, objB: s.Delta))
+        {
+            return s;
+        }
+
+        if (field is not MemberExpression member)
+        {
+            throw new InvalidOperationException(
+                message: "An atomic read-modify-write field must stay a member access after rewriting.");
+        }
+
+        return s with { Field = member, Delta = delta };
     }
 
     /// <summary>

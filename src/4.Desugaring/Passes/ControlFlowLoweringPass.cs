@@ -382,6 +382,11 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         SourceLocation loc = destruct.Location;
         int n = _iterCount++;
         string tmpName = $"_ld_tmp_{n}";
+        // A stdlib body is analyzed BEFORE this lowering, so its initializer is already typed: carry the
+        // tuple's element types onto the accesses built here, or they reach the emitter untyped. User
+        // code is lowered before analysis (no type yet) and gets typed by the analyzer instead.
+        TypeSymbol? sourceType = destruct.Initializer.ResolvedType;
+        var tupleType = sourceType as TupleTypeSymbol;
 
         var stmts = new List<Statement>(capacity: destruct.Pattern.Bindings.Count + 1)
         {
@@ -406,9 +411,17 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                     Name: bindName,
                     Type: null,
                     Initializer: new MemberExpression(
-                        Object: new IdentifierExpression(Name: tmpName, Location: loc),
+                        Object: new IdentifierExpression(Name: tmpName, Location: loc)
+                        {
+                            ResolvedType = sourceType
+                        },
                         MemberName: $"item{i}",
-                        Location: loc),
+                        Location: loc)
+                    {
+                        ResolvedType = tupleType != null && i < tupleType.ElementTypes.Count
+                            ? tupleType.ElementTypes[index: i]
+                            : null
+                    },
                     Visibility: VisibilityModifier.Secret,
                     Location: loc),
                 Location: loc));

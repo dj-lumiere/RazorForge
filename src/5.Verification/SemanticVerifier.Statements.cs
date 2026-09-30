@@ -65,6 +65,10 @@ public sealed partial class SemanticVerifier
 
                 break;
 
+            case PresetDeclaration preset:
+                AnalyzePresetValue(preset: preset);
+                break;
+
             case VariableDeclaration varDecl:
                 // A bare `var` at module level. `var` is a routine-local binding; there is no module-level
                 // `var`. Suflae uses `global` for module-level mutable state; RazorForge has none.
@@ -75,6 +79,48 @@ public sealed partial class SemanticVerifier
                     "'global' (RazorForge has no module-level mutable state).",
                     location: varDecl.Location);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Type-checks a preset's value against its declared type. Declaration collection only labels the
+    /// outermost node, so without this a preset's inner expressions (the literal in <c>Byte(0x20u8)</c>)
+    /// stayed untyped wherever the value was inlined, and a mismatched value went unreported. An
+    /// <c>Array[T, N]</c> list preset is typed element by element at collection instead.
+    /// </summary>
+    private void AnalyzePresetValue(PresetDeclaration preset)
+    {
+        if (preset.Value is ListLiteralExpression)
+        {
+            return;
+        }
+
+        string? previousModule = _currentModuleName;
+        if (_presetModules.TryGetValue(key: preset, value: out string? presetModule) && presetModule != null)
+        {
+            _currentModuleName = presetModule;
+        }
+
+        try
+        {
+            TypeSymbol presetType = ResolveType(typeExpr: preset.Type);
+            if (presetType is ErrorTypeSymbol)
+            {
+                return;
+            }
+
+            TypeSymbol valueType = AnalyzeExpression(expression: preset.Value, expectedType: presetType);
+            if (valueType is not ErrorTypeSymbol && !IsAssignableTo(source: valueType, target: presetType))
+            {
+                ReportError(code: SemanticDiagnosticCode.VariableInitializerTypeMismatch,
+                    message:
+                    $"Preset '{preset.Name}' is declared '{presetType.Name}', but its value is a '{valueType.Name}'.",
+                    location: preset.Value.Location);
+            }
+        }
+        finally
+        {
+            _currentModuleName = previousModule;
         }
     }
 

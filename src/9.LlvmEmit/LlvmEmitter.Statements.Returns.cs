@@ -67,12 +67,6 @@ public partial class LlvmEmitter
 
         string llvmType = GetLlvmType(type: retType);
 
-        string? returnedVarName = ret.Value is IdentifierExpression id &&
-                                  _localEntityVars.Any(predicate: e => e.Name == id.Name)
-            ? id.Name
-            : null;
-        EmitRcRecordCleanup(sb: sb);
-        EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
         if (_traceCurrentRoutine)
         {
             EmitLine(sb: sb, line: TracePop);
@@ -111,8 +105,6 @@ public partial class LlvmEmitter
 
     private void EmitNullValueReturn(StringBuilder sb)
     {
-        EmitRcRecordCleanup(sb: sb);
-        EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
         {
             EmitLine(sb: sb, line: TracePop);
@@ -139,8 +131,6 @@ public partial class LlvmEmitter
     // For check_/try_ variant wrappers with None (void) return, emit success carrier.
     private void EmitNoneExpressionReturn(StringBuilder sb)
     {
-        EmitRcRecordCleanup(sb: sb);
-        EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
         {
             EmitLine(sb: sb, line: TracePop);
@@ -194,23 +184,6 @@ public partial class LlvmEmitter
         };
     }
 
-    private static void EmitEntityCleanup(StringBuilder sb, string? returnedVarName)
-    {
-        // Scope-exit teardown of owned locals is lowered into the AST as explicit
-        // `local.destroy()` calls by ScopeTeardownLoweringPass (Phase 8), so codegen emits none.
-        //
-        // The entity self-free (freeing the heap allocation backing `me`) is ALSO lowered into the
-        // synthesized `destroy` body as `me.hijack().invalidate()` (see
-        // WiredRoutinePass.BuildEntitySelfFree). Codegen used to additionally emit a raw
-        // `rf_invalidate(me)` here for synthesized entity `destroy`, but that DUPLICATED the
-        // AST-level free → every synthesized entity `destroy` double-freed `me` (ASan: "double-free"
-        // / glibc "double free in tcache"), crashing programs that destroy an owned entity at scope
-        // exit (e.g. `using x.modify() as g`). The AST free is the single source of truth, so this is
-        // now a no-op; the parameters are kept for call-site compatibility.
-        _ = sb;
-        _ = returnedVarName;
-    }
-
     #endregion
 
     #region Throw / Absent / Becomes
@@ -233,9 +206,14 @@ public partial class LlvmEmitter
 
         string dataPtr = "null";
         string msgLen = "0";
-        ResolvedMemberRoutine? resolvedCrash = errorType != null
-            ? ResolveMemberRoutine(receiverType: errorType,
-                memberRoutineName: Declaration.RuntimeContract.CrashMessage)
+        ResolvedMemberRoutine? resolvedCrash = throwStmt.CrashMessageRoutine is { } crashMessage
+            ? new ResolvedMemberRoutine(Routine: crashMessage,
+                OwnerType: errorType!,
+                IsFailable: crashMessage.IsFailable,
+                ModulePath: crashMessage.ModulePath,
+                MangledName: MangleRoutineName(routine: crashMessage),
+                IsMonomorphized: false,
+                memberRoutineTypeArgs: null)
             : null;
         if (resolvedCrash != null)
         {
@@ -264,8 +242,6 @@ public partial class LlvmEmitter
             msgDataAsInt = NextTemp();
             EmitLine(sb: sb, line: $"  {msgDataAsInt} = ptrtoint ptr {dataPtr} to i64");
         }
-
-        EmitRcRecordCleanup(sb: sb);
 
         EmitLine(sb: sb,
             line:
@@ -362,7 +338,6 @@ public partial class LlvmEmitter
             string msgAsInt = NextTemp();
             EmitLine(sb: sb, line: $"  {msgAsInt} = ptrtoint ptr {msgDataPtr} to i64");
 
-            EmitRcRecordCleanup(sb: sb);
             EmitLine(sb: sb,
                 line:
                 $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {absentStmt.Location.FileName.Length}, i32 {absentStmt.Location.Line}, i32 {absentStmt.Location.Column}, i64 {msgAsInt}, i64 {msgCount})");
@@ -372,7 +347,6 @@ public partial class LlvmEmitter
 
         TypeSymbol absentRetType = _currentEmittingRoutine!.ReturnType!;
         string absentCarrierType = GetLlvmType(type: absentRetType);
-        EmitRcRecordCleanup(sb: sb);
         // Balance the routine-entry trace_push. Missing this leaks a frame on the shadow stack
         // every time a `try_X` variant returns absent (which happens at every for-loop exit).
         // Subsequent `_rf_trace_update_loc` calls in the caller then update the leaked frame's

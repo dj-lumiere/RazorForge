@@ -1,7 +1,9 @@
+using TypeModel.Enums;
+
 namespace Builder.Diagnostics;
 
 /// <summary>
-/// Semantic warning codes for RazorForge (RF-W prefix).
+/// Semantic warning codes for RazorForge (RF-W prefix) and Suflae (SF-W prefix, same numbers).
 /// Covers non-fatal issues that may indicate problems but allow building.
 ///
 /// Code ranges:
@@ -211,11 +213,12 @@ public static class SemanticWarningCodeExtensions
     extension(SemanticWarningCode code)
     {
         /// <summary>
-        /// Formats code as RF-Wnnn (e.g., RF-W001, RF-W100) — matching the RF-S/RF-G convention.
+        /// Formats code as RF-Wnnn or SF-Wnnn depending on language (e.g., RF-W007, SF-W007),
+        /// matching the S and G code families.
         /// </summary>
-        public string ToCodeString()
+        public string ToCodeString(Language language)
         {
-            return $"RF-W{(int)code:D3}";
+            return $"{DiagnosticLanguage.Prefix(language: language)}-W{(int)code:D3}";
         }
         /// <summary>
         /// Gets the warning category for grouping and documentation.

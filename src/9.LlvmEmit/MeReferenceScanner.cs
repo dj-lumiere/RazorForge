@@ -298,6 +298,11 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
         return node.Expression.Accept(visitor: this);
     }
 
+    public bool VisitAtomicRmwStatement(AtomicRmwStatement node)
+    {
+        return node.Field.Accept(visitor: this) || node.Delta.Accept(visitor: this);
+    }
+
     public bool VisitVariableDeclaration(VariableDeclaration node)
     {
         return node.Initializer?.Accept(visitor: this) ?? false;

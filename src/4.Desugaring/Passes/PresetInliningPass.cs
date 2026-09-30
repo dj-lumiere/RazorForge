@@ -1,4 +1,5 @@
 using Builder.Declaration;
+using Builder.Instantiation;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -35,6 +36,10 @@ internal sealed class PresetInliningPass(DesugaringContext ctx) : AstRewriter
     // secret presets regressed reachability (Dict/Set memberRoutine bodies pruned → 48 "never defined" in the
     // stdlib harness). Keep inlining FILE-scoped; enforce module-private access separately.
     private Dictionary<string, PresetDeclaration>? _ownPresets;
+
+    /// <summary>Presets whose value is being inlined right now, so a preset that reaches itself through
+    /// other presets is left as an identifier (reported downstream) instead of recursing forever.</summary>
+    private readonly HashSet<string> _inlining = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Every <c>preset</c> declared in the current file, keyed by name (public or secret).</summary>
     private static Dictionary<string, PresetDeclaration> CollectOwnPresets(Program program)
@@ -163,6 +168,32 @@ internal sealed class PresetInliningPass(DesugaringContext ctx) : AstRewriter
     // -----------------------------------------------------------------------------
 
     /// <summary>
+    /// Inlines a preset whose value is built from other parts (<c>f"name={NAME}"</c>, <c>Byte(0x20u8)</c>).
+    /// Each use gets its OWN copy of the value, so analysis and lowering at one site (an f-string lowered
+    /// to <c>represent</c> calls, a literal conformed to its context) cannot leak into another, and the
+    /// copy is inlined in turn so a preset it names (<c>NAME</c>) is replaced as well.
+    /// </summary>
+    private Expression InlineComposedPreset(IdentifierExpression id, Expression value,
+        TypeSymbol? resolvedType)
+    {
+        if (!_inlining.Add(item: id.Name))
+        {
+            return id;
+        }
+
+        try
+        {
+            Expression inlined = VisitExpression(expr: GenericAstRewriter.DeepCloneExpression(expr: value));
+            inlined.ResolvedType ??= resolvedType;
+            return inlined;
+        }
+        finally
+        {
+            _inlining.Remove(item: id.Name);
+        }
+    }
+
+    /// <summary>
     /// Inlines an identifier that resolves to a preset constant with its literal value, honoring
     /// secret-preset file scoping and aggregate-preset exclusion. Returns the identifier unchanged
     /// when it is not an inlinable preset.
@@ -198,9 +229,12 @@ internal sealed class PresetInliningPass(DesugaringContext ctx) : AstRewriter
             // Carry the Phase-4 ResolvedType from the identifier onto the inlined value.
             // This ensures operator-lowering and other subsequent passes see the correct type.
             TypeSymbol? resolvedType = id.ResolvedType ?? v.PresetValue.ResolvedType;
-            return v.PresetValue is LiteralExpression lit
-                ? lit with { ResolvedType = resolvedType }
-                : v.PresetValue;
+            if (v.PresetValue is LiteralExpression lit)
+            {
+                return lit with { ResolvedType = resolvedType };
+            }
+
+            return InlineComposedPreset(id: id, value: v.PresetValue, resolvedType: resolvedType);
         }
 
         return expr;

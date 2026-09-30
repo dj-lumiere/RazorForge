@@ -254,7 +254,7 @@ public partial class LlvmEmitter
         // any bare source local — matching every other moved field.
         foreach ((string _, Expression fieldExpr) in expr.MemberVariables)
         {
-            ConsumeTransferredLocalOwnership(sb: sb, expr: fieldExpr);
+            NullStampStolenLocal(sb: sb, expr: fieldExpr);
         }
 
         // Allocate and initialize
@@ -685,7 +685,6 @@ public partial class LlvmEmitter
             return EmitWrapperEntityMemberVariableRead(sb: sb,
                 target: target,
                 wrapperRecord: wrapperRecord,
-                wrapBaseName: wrapBaseName,
                 innerEntity: innerEntity,
                 memberName: memberName);
         }
@@ -763,54 +762,16 @@ public partial class LlvmEmitter
     /// struct wrapper) and reads the requested member off it.
     /// </summary>
     private string EmitWrapperEntityMemberVariableRead(StringBuilder sb, string target,
-        RecordTypeSymbol wrapperRecord, string wrapBaseName, EntityTypeSymbol innerEntity,
-        string memberName)
+        RecordTypeSymbol wrapperRecord, EntityTypeSymbol innerEntity, string memberName)
     {
-        // For @llvm("ptr") wrappers, the value IS the pointer directly
-        // For struct wrappers, extract the inner Hijacked[T] (ptr) from field 0
+        // A pointer-backed wrapper whose pointer targets a controller (Retained/Tracked, Guarded/Witnessed
+        // and their Consulting/Amending tokens, Roamed): the entity lives in the controller's `data` field,
+        // so reading straight through the handle would read the controller's counts instead. The access
+        // lock around a Roamed field touch is already an AST call (RoamedLockBracketLoweringPass).
         string innerPtr;
-        // Retained[T] / Tracked[T] are `@llvm("ptr")` but the pointer targets a
-        // RetainController[T] struct, NOT the entity directly. The entity ptr lives in the
-        // controller's `data` field. Reading the wrapped entity's field requires
-        // dereferencing the controller first; otherwise `ra.value` reads
-        // controller.strong_count (offset 0) instead of the actual field.
-        if (wrapperRecord.BackendType != null &&
-            (wrapBaseName == Declaration.RuntimeContract.Retained ||
-             wrapBaseName == Declaration.RuntimeContract.Tracked))
+        if (wrapperRecord.BackendType != null && _registry.GetControllerType(wrapper: wrapperRecord) is { } controller)
         {
-            innerPtr = ProjectEntityPtrThroughController(sb: sb,
-                target: target,
-                controllerName: $"RetainController[{innerEntity.FullName}]");
-        }
-        else if (wrapperRecord.BackendType != null &&
-                 (wrapBaseName == Declaration.RuntimeContract.Consulting ||
-                  wrapBaseName == Declaration.RuntimeContract.Amending) &&
-                 wrapperRecord.TypeArguments is { Count: > 1 })
-        {
-            // Consulting[T, P] / Amending[T, P] are `@llvm("ptr")` tokens whose pointer targets
-            // the shared GuardController[T, P], NOT the entity. The entity ptr lives in the
-            // controller's `data` field (offset after the two atomic counts). Project through it,
-            // exactly like Retained/Tracked, so `v.value` reads the guarded entity rather than
-            // controller.strong_count (offset 0).
-            string policyName = wrapperRecord.TypeArguments[index: 1].FullName;
-            innerPtr = ProjectEntityPtrThroughController(sb: sb,
-                target: target,
-                controllerName: $"GuardController[{innerEntity.FullName}, {policyName}]");
-        }
-        else if (wrapperRecord.BackendType != null &&
-                 wrapBaseName == Declaration.RuntimeContract.Roamed)
-        {
-            // Roamed[T] is an `@llvm("ptr")` handle targeting RoamController[T], NOT the entity.
-            // Project the read through the controller's `data` field. The access-lock bracket
-            // (lock_enter/lock_exit) is inserted as real AST calls around the enclosing statement
-            // by RoamedLockBracketLoweringPass — codegen just projects + loads here.
-            string roamEntPtr = ProjectEntityPtrThroughController(sb: sb,
-                target: target,
-                controllerName: $"RoamController[{innerEntity.FullName}]");
-            return EmitEntityMemberVariableRead(sb: sb,
-                entityPtr: roamEntPtr,
-                entity: innerEntity,
-                memberVariableName: memberName);
+            innerPtr = ReadControllerData(sb: sb, handle: target, controller: controller);
         }
         else if (wrapperRecord.BackendType != null)
         {
@@ -833,22 +794,14 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
-    /// Projects the inner entity pointer out of a controller handle by reading its `data` field.
-    /// Looks the controller entity up by <paramref name="controllerName"/> (bare and Core-qualified);
-    /// when the controller type is not yet emitted, falls back to <paramref name="target"/> directly
-    /// (avoids a null reference — SA should have ensured the controller exists).
+    /// Reads the entity pointer out of a controller handle: the controller's <c>data</c> field.
     /// </summary>
-    private string ProjectEntityPtrThroughController(StringBuilder sb, string target,
-        string controllerName)
+    private string ReadControllerData(StringBuilder sb, string handle, EntityTypeSymbol controller)
     {
-        TypeSymbol? controllerType = _registry.LookupType(name: controllerName) ??
-                                   _registry.LookupType(name: $"Core.{controllerName}");
-        return controllerType is EntityTypeSymbol controllerEntity
-            ? EmitEntityMemberVariableRead(sb: sb,
-                entityPtr: target,
-                entity: controllerEntity,
-                memberVariableName: "data")
-            : target;
+        return EmitEntityMemberVariableRead(sb: sb,
+            entityPtr: handle,
+            entity: controller,
+            memberVariableName: "data");
     }
 
     /// <summary>

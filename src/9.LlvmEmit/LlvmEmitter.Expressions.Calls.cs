@@ -107,12 +107,9 @@ public partial class LlvmEmitter
             loweringKind: loweringKind,
             constructedType: constructedType);
 
-        // Use semantic analyzer's resolved routine if available (e.g., generic overload)
-        // Otherwise look up the routine -> try full name first, then short name fallback
-        RoutineInfo? routine = ResolveInitialFreeCallRoutine(functionName: functionName,
-            resolvedRoutine: resolvedRoutine,
-            typeArguments: typeArguments,
-            arguments: arguments);
+        // The routine the analyzer or monomorphization stamped; none means a construction or a value.
+        RoutineInfo? routine = ResolveInitialFreeCallRoutine(resolvedRoutine: resolvedRoutine,
+            typeArguments: typeArguments);
 
         // If not found as a routine, check if the name resolves to a type and attempt construction.
         if (routine == null)
@@ -154,18 +151,6 @@ public partial class LlvmEmitter
         var argValues = new List<string>();
         var argTypes = new List<string>();
         var argTypeInfos = new List<TypeSymbol>();
-
-        // Written-order argument types for overload normalization. Mirrors the CPtr handling below
-        // so a bare-routine -> CPtr reference contributes the CPtr type (it never has its own
-        // expression type).
-        List<TypeSymbol> writtenArgTypes = GetFreeCallArgumentTypes(functionName: functionName,
-            arguments: arguments,
-            routine: routine);
-
-        routine = NormalizeResolvedRoutineReference(routine: routine,
-            receiverType: null,
-            returnType: resolvedReturnType,
-            argTypes: writtenArgTypes);
 
         if (routine != null)
         {
@@ -928,17 +913,15 @@ public partial class LlvmEmitter
         int receiverSkip = memberRoutineTakesReceiver ? 1 : 0;
         if (memberRoutine == null)
         {
-            // Signature-only lookup (name + arg types). No name-only fallback — upstream passes
-            // must make an unresolved member call unreachable here.
-            var concreteArgTypes = argTypeInfos.Skip(count: receiverSkip).ToList();
-            memberRoutine = _registry.LookupMemberRoutineOverload(type: receiverType,
-                memberRoutineName: memberRoutineName,
-                argTypes: concreteArgTypes);
+            // The analyzer or the lowering pass that built this call resolves it; the emitter does not.
+            throw new InvalidOperationException(
+                message:
+                $"Member call '{receiverType.FullName}.{memberRoutineName}' reached the LLVM emitter unresolved " +
+                $"in [{_currentRoutineDiagName}]. The pass that built it must stamp ResolvedRoutine.");
         }
 
         return NormalizeResolvedRoutineReference(routine: memberRoutine,
             receiverType: receiverType,
-            returnType: null,
             argTypes: argTypeInfos.Skip(count: receiverSkip).ToList());
     }
 
@@ -1106,29 +1089,12 @@ public partial class LlvmEmitter
     // ── Helper extracted from ResolveMemberCallSymbol to keep cognitive complexity ≤ 15 ──────────
 
     /// <summary>
-    /// When explicit type arguments are present and the routine is still a generic definition,
-    /// resolves the type arguments and requests a concrete monomorphization from the registry.
-    /// Throws when resolution fails (i.e. the routine remains a generic definition after the attempt).
+    /// Requires an explicitly type-argumented member call to arrive already monomorphized: the
+    /// instantiation happens before the emitter, which only checks it.
     /// </summary>
-    private void InstantiateGenericMemberRoutineIfNeeded(List<TypeExpression> typeArguments,
-        TypeSymbol receiverType, MemberExpression member, ref RoutineInfo memberRoutine)
+    private static void RequireConcreteMemberRoutine(TypeSymbol receiverType, MemberExpression member,
+        RoutineInfo memberRoutine)
     {
-        if (memberRoutine is { IsGenericDefinition: true, GenericParameters: { Count: > 0 } gParams }
-            && gParams.Count == typeArguments.Count)
-        {
-            var resolvedTypeArgs = typeArguments
-                                   .Select(selector: ta => ResolveTypeExpression(typeExpr: ta))
-                                   .Where(predicate: t => t != null)
-                                   .Cast<TypeSymbol>()
-                                   .ToList();
-            if (resolvedTypeArgs.Count == typeArguments.Count)
-            {
-                memberRoutine =
-                    _registry.GetOrCreateRoutineResolution(genericDef: memberRoutine,
-                        typeArguments: resolvedTypeArgs);
-            }
-        }
-
         if (memberRoutine.IsGenericDefinition)
         {
             throw new InvalidOperationException(
@@ -1636,7 +1602,7 @@ public partial class LlvmEmitter
     {
         foreach (Expression argument in arguments)
         {
-            ConsumeTransferredLocalOwnership(sb: sb, expr: argument);
+            NullStampStolenLocal(sb: sb, expr: argument);
         }
     }
 
@@ -1665,26 +1631,6 @@ public partial class LlvmEmitter
             }
 
             return EmitEntityAllocation(sb: sb, entity: hollowEntity);
-        }
-
-        if (resolvedRoutine == null && typeArguments is { Count: > 0 })
-        {
-            RoutineInfo? intrinsicRoutine = _registry.LookupRoutineOverload(baseName: functionName,
-                argTypes: arguments.Select(selector: a => GetExpressionType(
-                                        expr: a is NamedArgumentExpression na
-                                            ? na.Value
-                                            : a))
-                                   .OfType<TypeSymbol>()
-                                   .ToList());
-            if (intrinsicRoutine?.LlvmIrTemplate != null)
-            {
-                return EmitLlvmIntrinsicCall(sb: sb,
-                    routine: intrinsicRoutine,
-                    receiver: null,
-                    arguments: arguments,
-                    typeArguments: typeArguments,
-                    resolvedReturnType: resolvedReturnType);
-            }
         }
 
         if (resolvedRoutine?.LlvmIrTemplate != null)
@@ -1724,98 +1670,37 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
-    /// Resolves the initial free call routine from semantic compiler state.
+    /// The free call's routine as the analyzer or monomorphization stamped it. A call left without one is
+    /// a construction (<c>ConstructedType</c>) or a routine value, which the caller handles; the emitter
+    /// never looks a routine up by name.
     /// </summary>
-    private RoutineInfo? ResolveInitialFreeCallRoutine(string functionName,
-        RoutineInfo? resolvedRoutine, List<TypeExpression>? typeArguments,
-        List<Expression> arguments)
+    private RoutineInfo? ResolveInitialFreeCallRoutine(RoutineInfo? resolvedRoutine,
+        List<TypeExpression>? typeArguments)
     {
-        // Signature-only lookup (name + arg types) — never a name-only fallback. When SA already stamped
-        // the routine, use it; otherwise resolve the overload by the call's concrete argument types.
-        var freeArgTypes = arguments.Select(selector: a => GetExpressionType(
-                                         expr: a is NamedArgumentExpression na
-                                             ? na.Value
-                                             : a))
-                                    .OfType<TypeSymbol>()
-                                    .ToList();
-        RoutineInfo? routine = resolvedRoutine ??
-                               _registry.LookupRoutineOverload(baseName: functionName,
-                                   argTypes: freeArgTypes);
-        if (routine == null || typeArguments is not { Count: > 0 })
+        if (resolvedRoutine == null || typeArguments is not { Count: > 0 })
         {
-            return routine;
+            return resolvedRoutine;
         }
 
-        routine = ResolveGenericFreeRoutine(routine: routine, typeArguments: typeArguments);
-        return RebindGenericOwnerCreator(routine: routine,
-            typeArguments: typeArguments,
-            arguments: arguments);
+        return RequireConcreteFreeRoutine(routine: resolvedRoutine);
     }
 
     /// <summary>
-    /// Instantiates a generic free routine (no owner) from explicit type arguments when the arity
-    /// matches; otherwise returns it unchanged.
+    /// Requires a free call with explicit type arguments to arrive already monomorphized: a generic free
+    /// routine, or a <c>create</c> still owned by a generic definition, means an earlier pass skipped it.
     /// </summary>
-    private RoutineInfo ResolveGenericFreeRoutine(RoutineInfo routine,
-        List<TypeExpression> typeArguments)
+    private RoutineInfo RequireConcreteFreeRoutine(RoutineInfo routine)
     {
-        if (routine is not { OwnerType: null, IsGenericDefinition: true })
+        if (routine is { OwnerType: null, IsGenericDefinition: true } or
+            { IsCreator: true, OwnerType.IsGenericDefinition: true })
         {
-            return routine;
+            throw new InvalidOperationException(
+                message:
+                $"Generic call '{routine.FullName}' reached the LLVM emitter uninstantiated in " +
+                $"[{_currentRoutineDiagName}]. Monomorphization must bind it before emission.");
         }
 
-        List<TypeSymbol> resolvedRoutineArgs =
-            ResolveTypeExpressionsNonNull(typeArguments: typeArguments);
-        return routine.GenericParameters?.Count == resolvedRoutineArgs.Count
-            ? _registry.GetOrCreateRoutineResolution(genericDef: routine,
-                typeArguments: resolvedRoutineArgs)
-            : routine;
-    }
-
-    /// <summary>
-    /// Rebinds a <c>create</c> on a generic-definition owner to the concrete owner's matching
-    /// constructor overload (instantiated from explicit type arguments); otherwise unchanged.
-    /// </summary>
-    private RoutineInfo RebindGenericOwnerCreator(RoutineInfo routine,
-        List<TypeExpression> typeArguments, List<Expression> arguments)
-    {
-        if (routine is not { IsCreator: true, OwnerType: { IsGenericDefinition: true } genOwner })
-        {
-            return routine;
-        }
-
-        List<TypeSymbol> resolvedOwnerArgs =
-            ResolveTypeExpressionsNonNull(typeArguments: typeArguments);
-        if (resolvedOwnerArgs.Count != typeArguments.Count)
-        {
-            return routine;
-        }
-
-        TypeSymbol concreteOwner = _registry.GetOrCreateResolution(genericDef: genOwner,
-            typeArguments: resolvedOwnerArgs);
-        var ctorArgTypes = new List<TypeSymbol>();
-        foreach (Expression arg in arguments)
-        {
-            TypeSymbol? type = GetExpressionType(expr: arg);
-            if (type != null)
-            {
-                ctorArgTypes.Add(item: type);
-            }
-        }
-
-        // Signature-only: resolve the concrete-owner creator by (name, ctorArgTypes); no name-only fallback.
-        RoutineInfo? rebound = _registry.LookupCreatorOverload(type: concreteOwner,
-            argTypes: ctorArgTypes);
-        return rebound ?? routine;
-    }
-
-    /// <summary>Resolves each type expression to a TypeSymbol, dropping any that fail to resolve.</summary>
-    private List<TypeSymbol> ResolveTypeExpressionsNonNull(List<TypeExpression> typeArguments)
-    {
-        return typeArguments.Select(selector: ta => ResolveTypeExpression(typeExpr: ta))
-                            .Where(predicate: t => t != null)
-                            .Cast<TypeSymbol>()
-                            .ToList();
+        return routine;
     }
 
     private (string Receiver, TypeSymbol? ReceiverType) ResolveMemberRoutineCallReceiver(
@@ -2168,44 +2053,6 @@ public partial class LlvmEmitter
 
     }
 
-    private List<TypeSymbol> GetFreeCallArgumentTypes(string functionName,
-        List<Expression> arguments, RoutineInfo? routine)
-    {
-        var writtenArgTypes = new List<TypeSymbol>();
-        for (int argIdx = 0; argIdx < arguments.Count; argIdx++)
-        {
-            Expression arg = arguments[index: argIdx];
-            Expression argInner = arg is NamedArgumentExpression namedArg
-                ? namedArg.Value
-                : arg;
-            TypeSymbol? paramTy;
-            FindFreeArgumentParameterType(routine: routine,
-                argIdx: argIdx,
-                arg: arg,
-                paramTy: out paramTy);
-            bool ptyTakesCFnPtr = paramTy?.Name == "CPtr" ||
-                                  routine?.IsForeign == true && paramTy is RoutineTypeSymbol;
-            if (ptyTakesCFnPtr && argInner is IdentifierExpression cptrRef &&
-                _registry.LookupRoutineByName(name: cptrRef.Name) is not null)
-            {
-                writtenArgTypes.Add(item: paramTy!);
-                continue;
-            }
-
-            TypeSymbol? argType = GetExpressionType(expr: arg);
-            if (argType == null)
-            {
-                throw new InvalidOperationException(
-                    message:
-                    $"Cannot determine type for argument in function call to '{functionName}'");
-            }
-
-            writtenArgTypes.Add(item: argType);
-        }
-
-        return writtenArgTypes;
-    }
-
     private string EmitFreeCallInstruction(StringBuilder sb, List<Expression> arguments,
         RoutineInfo? routine, string functionName, bool isFailableCallSyntax,
         List<string> argValues, List<string> argTypes)
@@ -2318,8 +2165,8 @@ public partial class LlvmEmitter
     {
         if (typeArguments is { Count: > 0 } && memberRoutine != null)
         {
-            InstantiateGenericMemberRoutineIfNeeded(typeArguments: typeArguments,
-                receiverType: receiverType, member: member, memberRoutine: ref memberRoutine);
+            RequireConcreteMemberRoutine(receiverType: receiverType, member: member,
+                memberRoutine: memberRoutine);
             mangledName = MangleRoutineName(routine: memberRoutine);
         }
         else if (memberRoutine != null)
@@ -2370,19 +2217,10 @@ public partial class LlvmEmitter
             tokenRec.TypeArguments[index: 0] is EntityTypeSymbol tokenInner &&
             memberRoutineOwner.FullName == tokenInner.FullName)
         {
-            string policyName = tokenRec.TypeArguments[index: 1].FullName;
-            TypeSymbol? ctrlType =
-                _registry.LookupType(
-                    name: $"GuardController[{tokenInner.FullName}, {policyName}]") ??
-                _registry.LookupType(
-                    name: $"Core.GuardController[{tokenInner.FullName}, {policyName}]");
-            if (ctrlType is EntityTypeSymbol ctrlEntity)
-            {
-                receiver = EmitEntityMemberVariableRead(sb: sb,
-                    entityPtr: receiver,
-                    entity: ctrlEntity,
-                    memberVariableName: "data");
-            }
+            EntityTypeSymbol controller = _registry.GetControllerType(wrapper: tokenRec) ??
+                                          throw new InvalidOperationException(
+                                              message: $"'{tokenRec.Name}' has no controller type.");
+            receiver = ReadControllerData(sb: sb, handle: receiver, controller: controller);
         }
     }
 

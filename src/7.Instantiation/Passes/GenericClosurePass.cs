@@ -267,5 +267,10 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // GetLifecycle sees the concrete field types and injects the balancing store.
         new RecordCopyLoweringPass(ctx: postCtx).RunOnInstantiatedGenericBodies(
             instantiatedGenericBodies: freshBodies);
+        // Reassignment release for instantiated bodies: a generic-def local typed `T` has no known
+        // lifecycle, so the pre-mono TemporaryTeardownPass left its reassignments alone. Now that `T`
+        // is concrete, an overwrite of an owning value (RC wrapper, RC-field record, Text) destroys the
+        // old value first. After RecordCopyLoweringPass so the RHS is already an independent value.
+        new TemporaryTeardownPass(ctx: postCtx).RunReassignOnInstantiatedGenericBodies(bodies: freshBodies);
     }
 }

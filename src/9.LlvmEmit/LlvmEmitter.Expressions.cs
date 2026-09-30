@@ -724,27 +724,6 @@ public partial class LlvmEmitter
             return EmitPreResolvedRoutineValue(sb: sb, preResolved: preResolved);
         }
 
-        if (identifier.ResolvedType is RoutineTypeSymbol routineType && TryResolveRoutineReference(
-                name: identifier.Name,
-                routineType: routineType,
-                routine: out RoutineInfo? routine))
-        {
-            // A lifted lambda referenced as a VALUE (passed as an argument, returned, stored) is
-            // materialized as a heap closure object so it can carry its captures and be called
-            // through the uniform closure ABI. A plain (non-lambda) routine reference stays a bare
-            // function-pointer symbol.
-            if (routine!.IsLambda)
-            {
-                return EmitClosureValue(sb: sb, lambda: routine);
-            }
-
-            // A plain (non-lambda) routine used as a Routine VALUE must also present the uniform
-            // closure ABI so the indirect call site (which loads fn from closure[0] and passes the
-            // closure as the hidden leading arg) works. Wrap it in a captureless closure whose fn
-            // slot is an adapter thunk that drops the closure arg and forwards to the real routine.
-            return EmitRoutineValueClosure(sb: sb, routine: routine);
-        }
-
         // Look up the variable in local variables first
         if (!_localVariables.TryGetValue(key: identifier.Name, value: out TypeSymbol? varType))
         {
@@ -773,13 +752,9 @@ public partial class LlvmEmitter
         string tmp = NextTemp();
         EmitLine(sb: sb, line: $"  {tmp} = load {llvmType}, ptr %{llvmName}.addr");
 
-        // Runtime use-after-steal net: if this entity (`ptr`) local is stolen ANYWHERE in the routine,
-        // null-guard the load. `steal` null-stamps the slot, so a use of a moved-out binding (loop /
-        // aliased / indirect — past what static analysis proves dead) loads null and crashes LOUDLY
-        // instead of dereferencing a stale pointer. A never-stolen var (the common case) is unguarded.
-        // The guard on a `steal x` operand's own load also catches loop double-steal (2nd iteration
-        // reloads the nulled slot → traps) — desired.
-        if (llvmType == "ptr" && _everStolenInCurrentRoutine.Contains(item: identifier.Name))
+        // Runtime use-after-steal net, marked by StealGuardLoweringPass: a moved-out slot holds null,
+        // so a guarded load crashes loudly instead of dereferencing a stale pointer.
+        if (identifier.StealGuarded)
         {
             EmitUseAfterStealGuard(sb: sb, loadedPtr: tmp, loc: identifier.Location);
         }
@@ -866,32 +841,6 @@ public partial class LlvmEmitter
         return preResolved.IsLambda
             ? EmitClosureValue(sb: sb, lambda: preResolved)
             : EmitRoutineValueClosure(sb: sb, routine: preResolved);
-    }
-
-    /// <summary>
-    /// Attempts to resolve routine reference and reports whether it succeeded.
-    /// </summary>
-    private bool TryResolveRoutineReference(string name, RoutineTypeSymbol routineType,
-        out RoutineInfo? routine)
-    {
-        routine = null;
-        // The identifier name is bare; the failable `!` is a structured flag (routineType.IsFailable).
-        string bareName = name;
-        string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
-                             _currentEmittingRoutine?.Module;
-
-        var paramTypes = routineType.ParameterTypes.ToList();
-
-        // Signature-only: a routine VALUE's type carries its parameter types, so resolve the overload by
-        // (name, paramTypes) — no name-only fallback (which first-wins-picks the wrong overload).
-        if (moduleName != null && !bareName.Contains(value: '.'))
-        {
-            routine = _registry.LookupRoutineOverload(baseName: $"{moduleName}.{bareName}",
-                argTypes: paramTypes);
-        }
-
-        routine ??= _registry.LookupRoutineOverload(baseName: bareName, argTypes: paramTypes);
-        return routine != null;
     }
 
     /// <summary>
@@ -1369,14 +1318,6 @@ public partial class LlvmEmitter
             return "undef";
         }
 
-        // Thread-safe scalar-integer global RMW: `g = g + d` / `g = g - d` → lock-free `atomicrmw`
-        // (see TryEmitAtomicGlobalRmw). User-written assignments reach codegen as BinaryExpression(Assign),
-        // so the detection must live here too, not only in EmitAssignment.
-        if (TryEmitAtomicGlobalRmw(sb: sb, target: binary.Left, valueExpr: binary.Right))
-        {
-            return "undef";
-        }
-
         string value = EmitExpression(sb: sb, expr: binary.Right);
 
         switch (binary.Left)
@@ -1390,16 +1331,9 @@ public partial class LlvmEmitter
                     member: member,
                     value: value,
                     valueType: GetExpressionType(expr: binary.Right));
-                if (binary.Right is IdentifierExpression { Name: var srcRcName })
-                {
-                    _localRetainedVars.RemoveAll(match: e => e.Name == srcRcName);
-                }
-
-                // Ownership transfer: `me.field = local` (post-steal-strip) or `me.field = local`
-                // hands the local's heap allocation to the field. Without removing the local
-                // from _localEntityVars, the function-exit cleanup would re-free the pointer
-                // that now lives in the field → double-free at scope exit.
-                ConsumeTransferredLocalOwnership(sb: sb, expr: binary.Right);
+                // Ownership transfer: `me.field = local` hands the local's heap allocation to the
+                // field, so a stolen local's slot is null-stamped.
+                NullStampStolenLocal(sb: sb, expr: binary.Right);
 
                 break;
             }

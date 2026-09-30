@@ -1313,6 +1313,16 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         return $"{I}discard {node.Expression.Accept(visitor: this)}";
     }
 
+    /// <inheritdoc/>
+    public string VisitAtomicRmwStatement(AtomicRmwStatement node)
+    {
+        string op = node.Operation == AtomicRmwOperation.Add
+            ? "add"
+            : "sub";
+        return
+            $"{I}atomic {node.Field.Accept(visitor: this)}.{op}({node.Delta.Accept(visitor: this)})";
+    }
+
 
     /// <inheritdoc/>
     public string VisitDestructuringStatement(DestructuringStatement node)
