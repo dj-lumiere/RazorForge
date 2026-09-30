@@ -85,14 +85,21 @@ secret routine b128_log_fs(hi: U64, lo: U64) -> (U64, U64, U64)
     e = e +% (112_u64 << 48)
     # crude approximation of log2
     var l = b128_log_log2(x: mh)
+    var sig = (mh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+    var rr = b128_log_scale(sig: sig, ml: ml, l: l)
+    # The reciprocals are rounded so that m * r lands slightly above 1, but the crude log2 can overshoot an index
+    # boundary by a hair and leave m * r just below 1, which the unsigned reduced argument can't hold: CORE-MATH's
+    # logq.c is off by about 2^-20 there (m just below 2^(k / 2^20) for k = 29, 256, 285, e.g. x =
+    # 1.0000191702429175). When the product's leading bit (2^236) is clear, take the index one lower.
+    loop
+        if (b128_wide_hi(x: rr.item0) >>> 44) != 0
+            break
+        l = l -% (1_u64 << 44)
+        rr = b128_log_scale(sig: sig, ml: ml, l: l)
     var j0 = l >>> 59
     var j1 = (l >>> 54) & 31
     var j2 = (l >>> 49) & 31
     var j3 = (l >>> 44) & 31
-    mh = (mh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
-    var r01 = B128_LOG_RT1[j1] *% B128_LOG_RT0[j0]
-    var r23 = B128_LOG_RT2[j2] *% B128_LOG_RT3[j3]
-    var rr = b128_wide_mUU(a: b128_wide_u128(hi: mh, lo: ml), b: b128_wide_muu(a: r01, b: r23))
     var rhh = b128_wide_hi(x: rr.item0)
     var rhl = b128_wide_lo(x: rr.item0)
     var rlh = b128_wide_hi(x: rr.item1)
@@ -111,6 +118,16 @@ secret routine b128_log_fs(hi: U64, lo: U64) -> (U64, U64, U64)
     var res = b128_wide_mhUU(a: m, b: f)
     fs = b128_wide_add3(a0: fs.item0, a1: fs.item1, a2: fs.item2, b0: b128_wide_lo(x: res), b1: b128_wide_hi(x: res), b2: 0_u64)
     return fs
+
+### The significand (sig, ml) times the product of the four reciprocals that the digits of the crude log2 l select.
+secret routine b128_log_scale(sig: U64, ml: U64, l: U64) -> (U128, U128)
+    var j0 = l >>> 59
+    var j1 = (l >>> 54) & 31
+    var j2 = (l >>> 49) & 31
+    var j3 = (l >>> 44) & 31
+    var r01 = B128_LOG_RT1[j1] *% B128_LOG_RT0[j0]
+    var r23 = B128_LOG_RT2[j2] *% B128_LOG_RT3[j3]
+    return b128_wide_mUU(a: b128_wide_u128(hi: sig, lo: ml), b: b128_wide_muu(a: r01, b: r23))
 
 ### The B128 nearest to (-1)^neg * mag * 2^scale, when every value within err of mag rounds to it (mag and
 ### err are in units of 2^scale). mag must carry at least 120 significant bits so the 113-bit significand

@@ -1,0 +1,68 @@
+module Tests/Stdlib/SerialRoundtripApi
+import IO/Console
+
+# serialize and its reverse, the universal constructor T(from: SerialValue): every value that serializes
+# rebuilds to an equal value. Choices serialize as their case name, flags as the list of set names,
+# variants as a one-entry {arm: payload} table (None as none), and fixed-width scalars without their
+# own SerialValue arm (S128, D64, Character, ...) as their text.
+
+choice Color
+    RED
+    GREEN
+
+flags Perm
+    READ
+    WRITE
+    EXECUTE
+
+variant Shape
+    S64
+    Text
+
+variant Opt
+    None
+    S64
+
+record Point
+    x: S64
+    y: S64
+
+record Tagged
+    label: Text
+    at: Point
+    color: Color
+    perms: Perm
+    big: S128
+
+entity Player
+    name: Text
+    hp: S64
+
+routine start()
+    show(f"choice: {Color.GREEN.serialize()}")
+    show(f"flags: {(Perm.READ and Perm.EXECUTE).serialize()}")
+    show(f"s128: {S128(from: 7_s64).serialize()}")
+
+    var shape: Shape = Shape(from: 5_s64)
+    show(f"variant: {shape.serialize()}")
+    var present: Opt = Opt(from: 9_s64)
+    var absent_opt: Opt = none
+    show(f"optional: {present.serialize()} {absent_opt.serialize()}")
+
+    var tagged = Tagged(label: "origin", at: Point(x: 3, y: 4), color: Color.RED,
+                        perms: Perm.READ and Perm.WRITE, big: S128(from: 12_s64))
+    var saved = tagged.serialize()
+    show(f"record: {saved}")
+
+    var back = Tagged(from: saved)
+    show(f"record back: {back.label} ({back.at.x}, {back.at.y}) {back.color} {back.perms} {back.big}")
+    show(f"choice back: {Color(from: Color.GREEN.serialize())}")
+    show(f"flags back: {Perm(from: (Perm.READ and Perm.EXECUTE).serialize())}")
+    show(f"variant back: {Shape(from: shape.serialize())}")
+    show(f"optional back: {Opt(from: present.serialize())} {Opt(from: absent_opt.serialize())}")
+    var hero = Player(name: "hero", hp: 30)
+    var hero_back = Player(from: hero.serialize())
+    show(f"entity back: {hero_back.name} {hero_back.hp}")
+    show(f"list back: {List[S64](from: [1, 2, 3].serialize())}")
+    show(f"character back: {Character(from: Character(from: 65_u32).serialize())}")
+    return

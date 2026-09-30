@@ -39,6 +39,10 @@ When unsure, consult ground truth in the repo:
     by **realm-scoped access rules on the shared types** (§5, §7), not by wrapping.
 - The compiler selects Suflae by the `.sf` extension. `import IO/Console` +
   `show(...)` work as in RF.
+- **Type arguments are `List[Text]`, never `List<Text>`** — by design, as in RF
+  (RAZORFORGE-FOR-AI §8): `<` is a comparison and chained comparisons are one
+  expression, so `[...]` is the only unambiguous choice. Python users already
+  know this shape from `list[int]`. Do not propose `<>`.
 - SF's identity vs RF: **RF is precision/width-strict; SF is approachable,
   correct-by-default.** The differences below all follow from that.
 

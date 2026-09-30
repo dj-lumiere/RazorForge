@@ -991,6 +991,7 @@ public sealed partial class SemanticVerifier
         // owner (lt/le/gt/ge from cmp, represent/cmp/… on a plain type) — the raw template body needs types
         // resolved in the owner's context before the fresh-body lowering sweep folds its operators.
         ctx.AnalyzeMaterializedDeriveBody = AnalyzeMaterializedDeriveBodyOnDemand;
+        ctx.BuildVariantArmExtractorBody = BuildVariantArmExtractorBody;
 
         // v0.2.0 may-suspend effect analysis over the call graph RoutineReachabilityPass populated
         // (in either the timed or pipeline path above). Runs here — after both branches — so it is

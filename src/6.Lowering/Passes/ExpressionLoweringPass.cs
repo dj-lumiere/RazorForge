@@ -1168,7 +1168,18 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         // with IsSynthesized and NO body). Both must lower to the arm-shaped CreatorExpression that
         // EmitVariantConstruction inlines — emitting a CALL to the bodiless creator links undefined. A
         // user-written variant creator (IsSynthesized:false) has a real body and keeps the call.
-        if (call.ConstructedType is not VariantTypeSymbol callVariant || args.Count != 1 ||
+        // SA stamps ConstructedType on a construction it analyzed; a call resolved by the AST rewriter inside
+        // a monomorphized body (`T(from: payload)` in `variant_from_serial[Shape]`) carries only the resolved
+        // synthesized creator, whose owner is the variant.
+        VariantTypeSymbol? callVariant = call.ConstructedType as VariantTypeSymbol ??
+                                         (call.ResolvedRoutine is
+                                         {
+                                             IsCreator: true, IsSynthesized: true,
+                                             OwnerType: VariantTypeSymbol creatorOwner
+                                         }
+                                             ? creatorOwner
+                                             : null);
+        if (callVariant == null || args.Count != 1 ||
             call.ResolvedRoutine is { IsSynthesized: false })
         {
             return null;

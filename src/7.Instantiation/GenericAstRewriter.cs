@@ -1109,7 +1109,7 @@ internal static class GenericAstRewriter
     }
 
     /// <summary>Builds a <see cref="TypeExpression"/> for a (resolved) <see cref="TypeSymbol"/>.</summary>
-    private static TypeExpression TypeInfoToTypeExpr(TypeSymbol type, SourceLocation location)
+    internal static TypeExpression TypeInfoToTypeExpr(TypeSymbol type, SourceLocation location)
     {
         string baseName = type switch
         {
@@ -2339,6 +2339,14 @@ internal static class GenericAstRewriter
             packed: source is RecordTypeSymbol { IsPacked: true });
 
         // openmemvarof(T) yields only the publicly-readable members (OPEN ∪ POSTED) — a `secret` field is
+        // branchof(T) as a statement: one copy of the body per payload-carrying arm, with nameof(m) the arm
+        // name and typeof(m) its payload type, exactly as the `when`-arm expansion binds them. (A variant is a
+        // RecordTypeSymbol, so without this it fell into the member walk below and unrolled zero times.)
+        if (expand.SourceKind == ExpandSourceKind.Arms)
+        {
+            return RewriteBranchExpand(expand: expand, source: source, ctx: ctx);
+        }
+
         // filtered out. allmemvarof(T) yields every member. This visibility split is
         // the sole filter (the old `if not m.is_secret` gate is gone — pick the intrinsic instead).
         if (members != null && expand.SourceKind == ExpandSourceKind.OpenMemberVariables)
@@ -2642,6 +2650,55 @@ internal static class GenericAstRewriter
         {
             string? prevHandle = ctx.ActiveExpandHandle;
             string? prevName = ctx.ActiveMemberName;
+    /// <summary>
+    /// Unrolls a statement-level <c>expand m in branchof(T)</c>: the body once per payload-carrying arm of the
+    /// variant <paramref name="source"/>, in declaration order, skipping the payload-less <c>None</c> arm (the
+    /// same arms and the same <c>nameof</c>/<c>typeof</c> binding as <see cref="RewriteWhenArmExpansion"/>).
+    /// </summary>
+    private static BlockStatement RewriteBranchExpand(ExpandStatement expand, TypeSymbol? source,
+        RewriteContext ctx)
+    {
+        var outStmts = new List<Statement>();
+        if (source is not VariantTypeSymbol variant)
+        {
+            return new BlockStatement(Statements: outStmts, Location: expand.Location);
+        }
+
+        string? prevHandle = ctx.ActiveExpandHandle;
+        string? prevName = ctx.ActiveMemberName;
+        long prevIndex = ctx.ActiveMemberIndex;
+        TypeSymbol? prevType = ctx.ActiveMemberType;
+
+        ctx.ActiveExpandHandle = expand.HandleName;
+        foreach (VariantMemberInfo vm in variant.Members)
+        {
+            if (vm.IsNone || vm.Type is null || vm.Type.Name == "None")
+            {
+                continue;
+            }
+
+            ctx.ActiveMemberType = vm.Type;
+            ctx.ActiveMemberName = vm.Name;
+            ctx.ActiveMemberIndex = vm.Ordinal;
+
+            Statement clone = RewriteStatement(stmt: expand.Body, ctx: ctx);
+            if (clone is BlockStatement block)
+            {
+                outStmts.AddRange(collection: block.Statements);
+            }
+            else
+            {
+                outStmts.Add(item: clone);
+            }
+        }
+
+        ctx.ActiveExpandHandle = prevHandle;
+        ctx.ActiveMemberName = prevName;
+        ctx.ActiveMemberIndex = prevIndex;
+        ctx.ActiveMemberType = prevType;
+        return new BlockStatement(Statements: outStmts, Location: expand.Location);
+    }
+
             long prevIndex = ctx.ActiveMemberIndex;
             TypeSymbol? prevType = ctx.ActiveMemberType;
 

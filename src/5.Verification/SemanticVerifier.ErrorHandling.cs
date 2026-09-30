@@ -448,12 +448,30 @@ public sealed partial class SemanticVerifier
     private void EnsureVariantArmExtractorBody(RoutineInfo extractor)
     {
         string key = extractor.RegistryKey;
-        if (extractor.OwnerType is not { } armType ||
-            extractor.Parameters is not [{ Type: VariantTypeSymbol variant }] ||
-            _variantBodies.ContainsKey(key: key) ||
-            _memo.RestoredVariantKeys.Contains(item: key))
+        if (_variantBodies.ContainsKey(key: key) ||
+            _memo.RestoredVariantKeys.Contains(item: key) ||
+            BuildVariantArmExtractorBody(extractor: extractor) is not { } body)
         {
             return;
+        }
+
+        _variantBodies[key: key] = body;
+    }
+
+    /// <summary>
+    /// Builds (without storing) the body of a variant-arm extractor creator <c>Arm!(from: V)</c>, or returns
+    /// null when <paramref name="extractor"/> is not one. See <see cref="EnsureVariantArmExtractorBody"/>.
+    /// </summary>
+    private Statement? BuildVariantArmExtractorBody(RoutineInfo extractor)
+    {
+        // Only a creator whose owner IS an arm of the variant it takes is an extractor. `Pt!(from: SerialValue)`
+        // has the same shape (failable creator, lone variant parameter) but builds a Pt from its serialized
+        // form, and gets its body from the from-serial materialization instead.
+        if (extractor.OwnerType is not { } armType ||
+            extractor.Parameters is not [{ Type: VariantTypeSymbol variant }] ||
+            !variant.Members.Any(predicate: m => m.Type?.FullName == armType.FullName))
+        {
+            return null;
         }
 
         var loc = new SourceLocation(FileName: "", Line: 0, Column: 0, Position: 0);
@@ -485,7 +503,7 @@ public sealed partial class SemanticVerifier
             Pattern: new ElsePattern(VariableName: null, Location: loc),
             Body: new AbsentStatement(Location: loc),
             Location: loc);
-        _variantBodies[key: key] = new WhenStatement(Expression: fromRef,
+        return new WhenStatement(Expression: fromRef,
             Clauses: [matchClause, elseClause],
             Location: loc);
     }

@@ -417,6 +417,13 @@ relates ListEmitter[T] as Iter        # associated type binding
 
 - Constraint syntax: `T obeys SomeProtocol`. `Me` is the self type.
 - Const generics: `Array[T, N]`.
+- **Type arguments use `[...]`, never `<...>` — by design; do not propose `<>`.**
+  `f < T > (x)` is already a valid chained comparison in RF, so angle brackets
+  would force a parse-time guess (C#'s disambiguation rules, Rust's turbofish) plus
+  `>>`/`>>>` token splitting. `List[S32]` and `xs[i]` share one parse shape
+  (`postfix [ args ]`); whether the thing before `[` is a type or a value is
+  settled by name lookup after parsing (`BracketReclassifyPass`), not by a
+  heuristic. A generic argument is a type-level `getitem`.
 - Everything monomorphizes; there is **no runtime dispatch** of any kind.
 
 ## 9. Text and formatting

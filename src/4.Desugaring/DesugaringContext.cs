@@ -69,6 +69,16 @@ public sealed class DesugaringContext
         AnalyzeMaterializedDeriveBody { get; set; }
 
     /// <summary>
+    /// Builds the raw body of a variant-arm extractor creator (<c>Arm!(from: V)</c>:
+    /// <c>when from { is Arm v =&gt; return v.duplicate(), else =&gt; absent }</c>) without storing it, or null
+    /// when the routine is not one. The demand collector uses it for an extractor it reaches only from a
+    /// monomorphized body (<c>serial_decode[S64]</c> calling <c>S64(from: value)</c>), where no SA call site
+    /// minted the body; it analyzes and lowers the result like a materialized derive. Set by SemanticVerifier.
+    /// </summary>
+    public Func<TypeModel.Symbols.RoutineInfo, SyntaxTree.Statement?>?
+        BuildVariantArmExtractorBody { get; set; }
+
+    /// <summary>
     /// When true, synthesize structural derive bodies (destroy/represent/hash/…) for ALL concrete types,
     /// not just the ones reachability marked live. Used when emitting a precompiled stdlib "base" that must
     /// DEFINE every routine it references — e.g. the const-generic <c>Array[T,N]</c> destroy/represent that a

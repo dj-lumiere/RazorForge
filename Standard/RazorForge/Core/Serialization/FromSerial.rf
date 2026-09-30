@@ -1,0 +1,210 @@
+module Core
+
+import BuilderExpansion
+import Collections
+
+### Raised when a `SerialValue` does not have the shape a `T(from: SerialValue)` constructor expects: a
+### missing member variable, a text where a number was expected, an unknown choice case, and so on.
+crashable SerialShapeError
+    ### What was expected and what was found.
+    detail: Text
+
+### Returns the message for a serialized value that does not fit its target type.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine SerialShapeError.crash_message() -> Text
+    return f"The serialized value does not fit: {me.detail}"
+
+### The serialized value of member variable `name` inside a serialized record or entity (the
+### `Dict[Text, SerialValue]` that `serialize` produces).
+### :param value: The serialized record or entity.
+### :param name: The member variable to look up.
+### :returns: The member variable's serialized value.
+### :throws: {SerialShapeError} when `value` is not a member-variable table or has no entry for `name`.
+routine serial_field!(value: SerialValue, name: Text) -> SerialValue
+    when value
+        is Dict[Text, SerialValue] d =>
+            if d have name
+                return d[name].duplicate()
+            throw SerialShapeError(detail: f"member variable {name} is missing")
+        else =>
+            throw SerialShapeError(detail: f"expected a member variable table for {name}")
+
+### The text inside a serialized `Text` value.
+### :param value: The serialized value.
+### :returns: The text.
+### :throws: {SerialShapeError} when `value` is not text.
+routine serial_text!(value: SerialValue) -> Text
+    when value
+        is Text t => return t
+        else => throw SerialShapeError(detail: "expected text")
+
+### Builds a `T` from its serialized form: the generic entry point the builder-synthesized
+### `T(from: SerialValue)` constructors call for their member variables and arms. Not failable itself:
+### the `T(from:)` it calls is, so a value that does not fit crashes loudly with a `SerialShapeError`.
+### :typeparam T: The type to build.
+### :param value: The serialized value.
+### :returns: The rebuilt value.
+routine serial_decode[T](value: SerialValue) -> T
+    return T(from: value)
+
+### Builds a choice value from its serialized case name.
+### :typeparam T: The choice type.
+### :param value: The serialized case name.
+### :returns: The matching case.
+### :throws: {SerialShapeError} when the name is not a case of `T`.
+routine choice_from_serial![T](value: SerialValue) -> T
+needs ChoiceType T
+    var name = serial_text(value: value)
+    expand c in caseof(T)
+        if name == nameof(c)
+            return LLVM::reinterpret_bits[S32, T]($valueof(c))
+    throw SerialShapeError(detail: f"{name} is not a known case")
+
+### Builds a flags value from the serialized list of its set member names.
+### :typeparam T: The flags type.
+### :param value: The serialized list of member names.
+### :returns: The flags value with exactly those members set.
+### :throws: {SerialShapeError} when `value` is not a list of names or a name is not a member of `T`.
+routine flags_from_serial![T](value: SerialValue) -> T
+needs FlagsType T
+    var mask = 0u64
+    when value
+        is List[SerialValue] names =>
+            each entry in names
+                var name = serial_text(value: entry)
+                var found = false
+                expand c in caseof(T)
+                    if name == nameof(c)
+                        mask = mask.bitor(you: $valueof(c))
+                        found = true
+                if not found
+                    throw SerialShapeError(detail: f"{name} is not a known flag")
+        else =>
+            throw SerialShapeError(detail: "expected a list of flag names")
+    return LLVM::reinterpret_bits[U64, T](mask)
+
+### Builds a variant value from its serialized `{arm: payload}` table. (A variant with a `None` arm
+### handles a serialized `None` in its builder-synthesized `T(from: SerialValue)` before calling this.)
+### :typeparam T: The variant type.
+### :param value: The serialized variant.
+### :returns: The variant holding the rebuilt payload in the named arm.
+### :throws: {SerialShapeError} when `value` is not a one-entry table naming an arm of `T`.
+routine variant_from_serial![T](value: SerialValue) -> T
+needs VariantType T
+    when value
+        is Dict[Text, SerialValue] d =>
+            if d.count() != 1u64
+                throw SerialShapeError(detail: "a variant needs exactly one arm entry")
+            var arm = d.keys()[0u64]
+            var payload = d.values()[0u64].duplicate()
+            expand m in branchof(T)
+                if arm == nameof(m)
+                    return T(from: serial_decode[$typeof(m)](value: payload))
+            throw SerialShapeError(detail: f"{arm} is not an arm of this variant")
+        else =>
+            throw SerialShapeError(detail: "expected a variant arm table")
+
+# ============================================================================
+# Leaf types: one hand-written `T(from: SerialValue)` per type. A type that is itself a SerialValue
+# arm (Bool, S8..U64, B32, B64, Moment, Bytes, Text) needs none: its variant-arm extractor
+# `S64!(from: SerialValue)` already is that constructor (a routine's identity is its name and parameter
+# types, so the two would be the same routine).
+# ============================================================================
+
+### A `SerialValue` is already its own serialized form.
+### :param from: The serialized value.
+### :returns: The same value.
+routine SerialValue(from: SerialValue) -> SerialValue
+    return from
+
+### Builds a `Byte` from its serialized form (a `U8`). :throws: {SerialShapeError} on any other arm.
+routine Byte!(from: SerialValue) -> Byte
+    when from
+        is U8 v => return Byte(from: v)
+        else => throw SerialShapeError(detail: "expected a byte")
+
+### Builds a `Character` from its serialized form (a one-character `Text`).
+### :throws: {SerialShapeError} when the value is not a one-character text.
+routine Character!(from: SerialValue) -> Character
+    var t = serial_text(value: from)
+    if t.count() != 1u64
+        throw SerialShapeError(detail: "expected exactly one character")
+    return t[0u64]
+
+### Builds an `S128` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine S128!(from: SerialValue) -> S128
+    return S128(from_text: serial_text(value: from))
+
+### Builds a `U128` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine U128!(from: SerialValue) -> U128
+    return U128(from_text: serial_text(value: from))
+
+### Builds an `S256` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine S256!(from: SerialValue) -> S256
+    return S256(from_text: serial_text(value: from))
+
+### Builds a `U256` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine U256!(from: SerialValue) -> U256
+    return U256(from_text: serial_text(value: from))
+
+### Builds a `B16` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine B16!(from: SerialValue) -> B16
+    return B16(from_text: serial_text(value: from))
+
+### Builds a `BF16` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine BF16!(from: SerialValue) -> BF16
+    return BF16(from_text: serial_text(value: from))
+
+### Builds a `B128` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine B128!(from: SerialValue) -> B128
+    return B128(from_text: serial_text(value: from))
+
+### Builds a `D32` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine D32!(from: SerialValue) -> D32
+    return D32(from_text: serial_text(value: from))
+
+### Builds a `D64` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine D64!(from: SerialValue) -> D64
+    return D64(from_text: serial_text(value: from))
+
+### Builds a `D128` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine D128!(from: SerialValue) -> D128
+    return D128(from_text: serial_text(value: from))
+
+### Builds a `Decimal` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine Decimal!(from: SerialValue) -> Decimal
+    return Decimal(from_text: serial_text(value: from))
+
+### Builds a `C64` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine C64!(from: SerialValue) -> C64
+    return C64(from_text: serial_text(value: from))
+
+### Builds a `C128` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine C128!(from: SerialValue) -> C128
+    return C128(from_text: serial_text(value: from))
+
+### Builds a `C256` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine C256!(from: SerialValue) -> C256
+    return C256(from_text: serial_text(value: from))
+
+### Builds an `Address` from its serialized text. :throws: {SerialShapeError} or a parse error.
+routine Address!(from: SerialValue) -> Address
+    return Address(from_text: serial_text(value: from))
+
+# ============================================================================
+# Collections
+# ============================================================================
+
+### Builds a `List[T]` from its serialized element list.
+### :throws: {SerialShapeError} when the value is not a list or an element does not fit `T`.
+routine List[T]!(from: SerialValue) -> List[T]
+    var result = List[T]()
+    when from
+        is List[SerialValue] items =>
+            each item in items
+                result.add_last(value: serial_decode[T](value: item))
+        else =>
+            throw SerialShapeError(detail: "expected a list")
+    return steal result

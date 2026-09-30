@@ -153,6 +153,16 @@ public sealed class InstantiationContext
         AnalyzeMaterializedDeriveBody { get; set; }
 
     /// <summary>
+    /// Builds the raw body of a variant-arm extractor creator (<c>Arm!(from: V)</c>:
+    /// <c>when from { is Arm v =&gt; return v.duplicate(), else =&gt; absent }</c>) without storing it, or null
+    /// when the routine is not one. The demand collector uses it for an extractor it reaches only from a
+    /// monomorphized body (<c>serial_decode[S64]</c> calling <c>S64(from: value)</c>), where no SA call site
+    /// minted the body; it analyzes and lowers the result like a materialized derive. Set by SemanticVerifier.
+    /// </summary>
+    public Func<TypeModel.Symbols.RoutineInfo, SyntaxTree.Statement?>?
+        BuildVariantArmExtractorBody { get; set; }
+
+    /// <summary>
     /// When true, root EVERY concrete stdlib routine in reachability so monomorphization materializes the
     /// FULL stdlib generic closure, not just what the entry program reaches. Used when emitting a precompiled
     /// stdlib "base" that must define everything it references (a user's own instantiations are compiled

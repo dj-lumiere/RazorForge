@@ -545,6 +545,7 @@ public partial class Parser
     private Statement ParseWhenClauseBody()
     {
         Statement body;
+        bool savedInWhenClauseBody = _inWhenClauseBody;
         _inWhenClauseBody = true;
         if (CheckAndAdvance(type: TokenType.FatArrow))
         {
@@ -553,6 +554,9 @@ public partial class Parser
                    .Type == TokenType.Indent)
             {
                 Advance(); // consume newline
+                // An indented block holds ordinary statements, so `is`/`have`/`lack` work in it as anywhere
+                // else (`if d have name`). Only the single-line clause form restricts them.
+                _inWhenClauseBody = false;
                 body = ParseIndentedBlock();
             }
             else if (CheckAndAdvance(type: TokenType.Pass))
@@ -570,7 +574,7 @@ public partial class Parser
             body = ParseStatement();
         }
 
-        _inWhenClauseBody = false;
+        _inWhenClauseBody = savedInWhenClauseBody;
         return body;
     }
 

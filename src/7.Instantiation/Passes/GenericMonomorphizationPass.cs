@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Builder.Desugaring;
 using Builder.Declaration;
+using Builder.Tokenizer;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -1182,6 +1183,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
             BuildGenericInstanceIfNeeded(r: r, key: key);
             MaterializeDeriveTemplateBodyIfNeeded(r: r, key: key);
+            MaterializeFromSerialBodyIfNeeded(r: r, key: key);
+            MaterializeVariantArmExtractorBodyIfNeeded(r: r, key: key);
             if (!_walked.Contains(item: key) && GetBody(key: key) is { } body)
             {
                 _worklist.Enqueue(item: (key, body));
@@ -1287,6 +1290,193 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 Ast: WrapInShellDecl(name: r.Name, body: rewritten, info: r),
                 Info: r,
                 TypeSubs: typeSubs,
+                VariantStatus: null,
+                VariantInnerType: null,
+                IsSynthesized: false);
+        }
+
+        /// <summary>
+        /// Builds the body of a reached builder-registered <c>T!(from: SerialValue)</c> constructor
+        /// (registered by <c>AutoWiredRegistrationPass.MaybeRegisterFromSerialCreator</c>). A creator cannot be
+        /// a derive template and <c>expand</c> cannot splice a named-argument list, so the body is built here
+        /// as raw AST and then analyzed like a materialized derive:
+        /// <list type="bullet">
+        ///   <item>record/entity: <c>return T(f: serial_decode[F](value: serial_field(value: from, name: "f")), ...)</c></item>
+        ///   <item>choice / flags: <c>return choice_from_serial[T](value: from)</c> / <c>flags_from_serial</c></item>
+        ///   <item>variant: <c>variant_from_serial[T]</c>, behind an <c>is None => return none</c> clause when it has a <c>None</c> arm</item>
+        /// </list>
+        /// The helpers live in <c>Core/Serialization/FromSerial.rf</c>.
+        /// </summary>
+        private void MaterializeFromSerialBodyIfNeeded(RoutineInfo r, string key)
+        {
+            // Identified by shape: a synthesized failable creator on a from-serial candidate type whose lone
+            // parameter is a SerialValue. (A variant-arm extractor `Arm!(from: V)` shares the name and
+            // failability but takes the variant, and its body lives in VariantBodies.)
+            if (r is not
+                {
+                    IsCreator: true, IsFailable: true, IsSynthesized: true,
+                    Parameters: [{ Name: AutoWiredRegistrationPass.FromSerialParameterName } input0],
+                    OwnerType: { IsGenericDefinition: false } owner
+                } ||
+                input0.Type.Name != "SerialValue" ||
+                owner is GenericParameterTypeSymbol ||
+                !AutoWiredRegistrationPass.IsFromSerialCandidate(type: owner) ||
+                _ctx.InstantiatedGenericBodies.ContainsKey(key: key) ||
+                _ctx.VariantBodies.ContainsKey(key: key) ||
+                programBodies.ContainsKey(key: key))
+            {
+                return;
+            }
+
+            SourceLocation loc = owner.Location ?? new SourceLocation(FileName: "<from_serial>",
+                Line: 0,
+                Column: 0,
+                Position: 0);
+            var input = new IdentifierExpression(Name: AutoWiredRegistrationPass.FromSerialParameterName,
+                Location: loc);
+
+            Expression HelperCall(string helper, TypeSymbol typeArgument, Expression value)
+            {
+                return new GenericMemberRoutineCallExpression(
+                    Object: new IdentifierExpression(Name: helper, Location: loc),
+                    MemberRoutineName: helper,
+                    TypeArguments: [GenericAstRewriter.TypeInfoToTypeExpr(type: typeArgument, location: loc)],
+                    Arguments: [new NamedArgumentExpression(Name: "value", Value: value, Location: loc)],
+                    IsMemoryOperation: false,
+                    Location: loc);
+            }
+
+            Expression result;
+            switch (owner)
+            {
+                case ChoiceTypeSymbol:
+                    result = HelperCall(helper: "choice_from_serial", typeArgument: owner, value: input);
+                    break;
+                case FlagsTypeSymbol:
+                    result = HelperCall(helper: "flags_from_serial", typeArgument: owner, value: input);
+                    break;
+                case VariantTypeSymbol variant when variant.Members.Any(predicate: m => m.IsNone):
+                {
+                    // `when from { is None => return none, else => return variant_from_serial[T](value: from) }`
+                    // — the `none` is typed here, against the concrete variant; a generic helper could not
+                    // write `return none` for an arbitrary T.
+                    var noneClause = new WhenClause(
+                        Pattern: new TypePattern(
+                            Type: new TypeExpression(Name: "None", GenericArguments: null, Location: loc),
+                            VariableName: null,
+                            Bindings: null,
+                            Location: loc),
+                        Body: new ReturnStatement(
+                            Value: new LiteralExpression(Value: null!,
+                                LiteralType: TokenType.NoneValue,
+                                Location: loc),
+                            Location: loc),
+                        Location: loc);
+                    var armClause = new WhenClause(
+                        Pattern: new ElsePattern(VariableName: null, Location: loc),
+                        Body: new ReturnStatement(
+                            Value: HelperCall(helper: "variant_from_serial", typeArgument: owner,
+                                value: input),
+                            Location: loc),
+                        Location: loc);
+                    StoreFromSerialBody(r: r, key: key, statement: new WhenStatement(Expression: input,
+                        Clauses: [noneClause, armClause],
+                        Location: loc));
+                    return;
+                }
+                case VariantTypeSymbol:
+                    result = HelperCall(helper: "variant_from_serial", typeArgument: owner, value: input);
+                    break;
+                default:
+                    List<MemberVariableInfo> members = owner switch
+                    {
+                        RecordTypeSymbol record => record.MemberVariables,
+                        EntityTypeSymbol entity => entity.MemberVariables,
+                        _ => []
+                    };
+                    if (members.Count == 0)
+                    {
+                        return;
+                    }
+
+                    var arguments = new List<Expression>();
+                    foreach (MemberVariableInfo member in members)
+                    {
+                        var field = new CallExpression(
+                            Callee: new IdentifierExpression(Name: "serial_field", Location: loc),
+                            Arguments:
+                            [
+                                new NamedArgumentExpression(Name: "value", Value: input, Location: loc),
+                                new NamedArgumentExpression(Name: "name",
+                                    Value: new LiteralExpression(Value: member.Name,
+                                        LiteralType: TokenType.TextLiteral,
+                                        Location: loc),
+                                    Location: loc)
+                            ],
+                            Location: loc);
+                        arguments.Add(item: new NamedArgumentExpression(Name: member.Name,
+                            Value: HelperCall(helper: "serial_decode", typeArgument: member.Type,
+                                value: field),
+                            Location: loc));
+                    }
+
+                    // A plain type is constructed the way source spells it, `Pt(...)` with an identifier
+                    // callee (the emitter only accepts identifier/member callees); a generic instance keeps its
+                    // type arguments on a TypeExpression callee.
+                    Expression callee = owner.TypeArguments is { Count: > 0 }
+                        ? GenericAstRewriter.TypeInfoToTypeExpr(type: owner, location: loc)
+                        : new IdentifierExpression(Name: owner.Name, Location: loc);
+                    result = new CallExpression(Callee: callee, Arguments: arguments, Location: loc);
+                    break;
+            }
+
+            StoreFromSerialBody(r: r, key: key,
+                statement: new ReturnStatement(Value: result, Location: loc));
+        }
+
+        /// <summary>Analyzes a from-serial body built by <see cref="MaterializeFromSerialBodyIfNeeded"/> and
+        /// stores it as the routine's materialized body.</summary>
+        private void StoreFromSerialBody(RoutineInfo r, string key, Statement statement)
+        {
+            Statement body = new BlockStatement(Statements: [statement], Location: statement.Location);
+            body = _ctx.AnalyzeMaterializedDeriveBody?.Invoke(arg1: r, arg2: body) ?? body;
+
+            // Not IsSynthesized, like a materialized derive: the raw AST still needs the fresh-body lowering
+            // sweep (the generic helper calls and the constructor call are resolved there).
+            _ctx.InstantiatedGenericBodies[key: key] = new MonomorphizedBody(
+                Ast: WrapInShellDecl(name: r.Name, body: body, info: r),
+                Info: r,
+                TypeSubs: new Dictionary<string, TypeSymbol>(comparer: StringComparer.Ordinal),
+                VariantStatus: null,
+                VariantInnerType: null,
+                IsSynthesized: false);
+        }
+
+        /// <summary>
+        /// Gives a reached variant-arm extractor (<c>S64!(from: SerialValue)</c>) a body when no SA call site
+        /// minted one: a call inside a monomorphized body (<c>serial_decode[S64]</c> →
+        /// <c>S64(from: value)</c>) is resolved by the AST rewriter, which never reaches the SA hook that mints
+        /// extractor bodies, so without this the call link-fails as declared but never defined.
+        /// </summary>
+        private void MaterializeVariantArmExtractorBodyIfNeeded(RoutineInfo r, string key)
+        {
+            if (r is not { IsCreator: true, IsFailable: true, IsSynthesized: true } ||
+                _ctx.InstantiatedGenericBodies.ContainsKey(key: key) ||
+                _ctx.VariantBodies.ContainsKey(key: key) ||
+                programBodies.ContainsKey(key: key) ||
+                _ctx.BuildVariantArmExtractorBody?.Invoke(arg: r) is not { } built)
+            {
+                return;
+            }
+
+            Statement body = built is BlockStatement
+                ? built
+                : new BlockStatement(Statements: [built], Location: built.Location);
+            body = _ctx.AnalyzeMaterializedDeriveBody?.Invoke(arg1: r, arg2: body) ?? body;
+            _ctx.InstantiatedGenericBodies[key: key] = new MonomorphizedBody(
+                Ast: WrapInShellDecl(name: r.Name, body: body, info: r),
+                Info: r,
+                TypeSubs: new Dictionary<string, TypeSymbol>(comparer: StringComparer.Ordinal),
                 VariantStatus: null,
                 VariantInnerType: null,
                 IsSynthesized: false);

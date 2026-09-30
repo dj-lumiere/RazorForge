@@ -63,7 +63,8 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
                 LiveOwnerTypeNames = ctx.LiveOwnerTypeNames,
                 SynthesizeAllDerives = ctx.SeedAllStdlibRoutines,
                 AnalyzeRoutineOnDemand = ctx.AnalyzeRoutineOnDemand,
-                AnalyzeMaterializedDeriveBody = ctx.AnalyzeMaterializedDeriveBody
+                AnalyzeMaterializedDeriveBody = ctx.AnalyzeMaterializedDeriveBody,
+                BuildVariantArmExtractorBody = ctx.BuildVariantArmExtractorBody
             };
 
         List<(string Key, Statement Body)> entrySeeds = CollectEntrySeeds();

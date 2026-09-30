@@ -2163,6 +2163,7 @@ public sealed partial class TypeRegistry
     public int MaterializeAllLazyStdlibTypes()
     {
         // Count evaluates the predicate exactly once per element, so ClearStdlibLazy runs for
+            TypeCategory.Flags => true, // A flags value is its U64 bitmask, like a choice's S32
         // every instance (its per-instance side effect is preserved) and n counts the materializations.
         return _resolutions.Values
                            .Distinct()

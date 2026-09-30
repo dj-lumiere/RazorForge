@@ -272,6 +272,67 @@ internal sealed class AutoWiredRegistrationPass
 
         // Declaration-driven everywhere-derive registration.
         RegisterEverywhereDeriveMembers(type: type);
+
+        MaybeRegisterFromSerialCreator(type: type,
+            serialValueType: bundle.SerialValueType,
+            existingMemberRoutines: existingMemberRoutines);
+    }
+
+    /// <summary>The parameter name of the universal <c>T!(from: SerialValue)</c> constructor.</summary>
+    public const string FromSerialParameterName = "from";
+
+    /// <summary>
+    /// Registers the universal failable constructor <c>T!(from: SerialValue)</c>, the reverse of
+    /// <c>serialize</c>, on every choice, flags and variant type and on every record or entity whose member
+    /// variables are all publicly readable (<c>serialize</c> writes only those, so a <c>secret</c> member
+    /// could never be rebuilt). The body is built per type when the demand collector reaches the constructor
+    /// (<c>GenericMonomorphizationPass</c>'s from-serial materialization). Leaf types (scalars, <c>Text</c>,
+    /// collections) hand-write theirs in the stdlib, and a type that is a <c>SerialValue</c> arm already has
+    /// its variant-arm extractor with this exact signature, so any existing creator taking a lone
+    /// <c>SerialValue</c> (a routine's identity is its parameter types, not their names) is left alone.
+    /// </summary>
+    private void MaybeRegisterFromSerialCreator(TypeSymbol type, TypeSymbol? serialValueType,
+        List<RoutineInfo> existingMemberRoutines)
+    {
+        if (serialValueType == null || type.IsGenericDefinition || type is WrapperTypeSymbol ||
+            !IsFromSerialCandidate(type: type) ||
+            existingMemberRoutines.Concat(second: _registry.GetMemberRoutinesForType(type: type))
+                                  .Any(predicate: m =>
+                                       m.IsCreator && m.Parameters.Count == 1 &&
+                                       m.Parameters[index: 0].Type.FullName == serialValueType.FullName))
+        {
+            return;
+        }
+
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: RoutineInfo.CreatorName)
+        {
+            Kind = RoutineKind.Creator,
+            OwnerType = type,
+            Parameters = [new ParamInfo(name: FromSerialParameterName, type: serialValueType)],
+            ReturnType = type,
+            IsFailable = true,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
+            Visibility = VisibilityModifier.Open,
+            IsSynthesized = true
+        });
+    }
+
+    /// <summary>
+    /// Whether <paramref name="type"/> gets a builder-built <c>T!(from: SerialValue)</c>: a choice, flags or variant,
+    /// or a field-backed record/entity with at least one member variable and no <c>secret</c> one.
+    /// </summary>
+    public static bool IsFromSerialCandidate(TypeSymbol type)
+    {
+        List<MemberVariableInfo>? members = type switch
+        {
+            ChoiceTypeSymbol or FlagsTypeSymbol or VariantTypeSymbol => null,
+            RecordTypeSymbol { BackendType: null } record => record.MemberVariables,
+            EntityTypeSymbol entity => entity.MemberVariables,
+            _ => []
+        };
+        return members == null || members.Count > 0 &&
+            members.All(predicate: mv => mv.Visibility != VisibilityModifier.Secret);
     }
 
     /// <summary>
