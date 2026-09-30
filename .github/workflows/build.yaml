@@ -7,10 +7,10 @@ on:
     branches: [main]
 
 env:
-  # Vendored subprojects with their own CMakeLists (mbedtls 2.28 in particular)
-  # declare cmake_minimum_required < 3.5, which CMake 4.x refuses outright.
-  # This is CMake's own escape hatch; honored as an env var by CMake >= 4 and
-  # ignored by older CMakes (ubuntu-latest still ships 3.x).
+  # Safety net for a vendored subproject whose own CMakeLists declares
+  # cmake_minimum_required < 3.5, which CMake 4.x refuses outright (mbedtls 2.28
+  # did, before the unused vendored libraries were dropped). This is CMake's own
+  # escape hatch; honored as an env var by CMake >= 4 and ignored by older CMakes.
   CMAKE_POLICY_VERSION_MINIMUM: '3.5'
 
 jobs:
@@ -77,60 +77,13 @@ jobs:
         run: |
           cd native
 
-          # --- Modules (loaded on demand) ---
-          echo "::group::zlib"
-          git clone --depth 1 https://github.com/madler/zlib.git zlib
-          echo "::endgroup::"
-
-          echo "::group::zstd"
-          git clone --depth 1 https://github.com/facebook/zstd.git zstd
-          echo "::endgroup::"
-
-          echo "::group::sqlite3 (amalgamation)"
-          mkdir -p sqlite3
-          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
-          unzip -q -j sqlite3.zip -d sqlite3
-          rm sqlite3.zip
-          echo "::endgroup::"
-
-          echo "::group::libsodium"
-          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
-          echo "::endgroup::"
-
-          echo "::group::mbedtls"
-          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
-          echo "::endgroup::"
-
-          echo "::group::pcre2"
-          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
-          echo "::endgroup::"
-
-          echo "::group::utf8proc"
-          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
-          echo "::endgroup::"
-
-          echo "::group::yyjson"
-          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
-          echo "::endgroup::"
-
-          echo "::group::tomlc99"
-          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
-          echo "::endgroup::"
-
-          echo "::group::bdwgc"
-          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
-          echo "::endgroup::"
-
+          # --- Libraries the runtime links (libco, libuv) ---
           echo "::group::libuv"
           git clone --depth 1 https://github.com/libuv/libuv.git libuv
           echo "::endgroup::"
 
           echo "::group::libco"
           git clone --depth 1 https://github.com/higan-emu/libco.git libco
-          echo "::endgroup::"
-
-          echo "::group::minicsv"
-          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
           echo "::endgroup::"
 
       - name: Build native libraries
@@ -141,7 +94,7 @@ jobs:
           # default. Vendored libs normally use their own ./configure to detect
           # POSIX features and avoid the warning; we skip configure, so blanket
           # the build with -Wno-implicit-function-declaration as a safety net for
-          # libs that pull in their own CMakeLists.txt (mbedtls, pcre2, bdwgc)
+          # libs that pull in their own CMakeLists.txt (libuv)
           # — for which the per-target flags in cmake/*.cmake
           # don't apply. Pair it with _GNU_SOURCE so glibc feature-test macros
           # expose the full POSIX surface (lseek, mlock, ftruncate, etc.).
@@ -267,27 +220,11 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
           }
 
-          # --- Modules (loaded on demand) ---
-          Clone 'https://github.com/madler/zlib.git' zlib
-          Clone 'https://github.com/facebook/zstd.git' zstd
-          Fetch 'https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip' sqlite3.zip
-          New-Item -ItemType Directory -Force sqlite3 | Out-Null
+          # --- Libraries the runtime links (libco, libuv) ---
           # Windows tar.exe is bsdtar: reads zip archives, supports --strip-components
-          tar -xf sqlite3.zip -C sqlite3 --strip-components=1
-          if ($LASTEXITCODE -ne 0) { throw 'sqlite3 extract failed' }
-          Remove-Item sqlite3.zip
-          Clone 'https://github.com/jedisct1/libsodium.git' libsodium 'stable'
-          Clone 'https://github.com/Mbed-TLS/mbedtls.git' mbedtls2 'v2.28.10'
-          Clone 'https://github.com/PCRE2Project/pcre2.git' pcre2
-          Clone 'https://github.com/JuliaStrings/utf8proc.git' utf8proc
-          Clone 'https://github.com/ibireme/yyjson.git' yyjson
-          Clone 'https://github.com/cktan/tomlc99.git' tomlc99
-          Clone 'https://github.com/ivmai/bdwgc.git' bdwgc
           Clone 'https://github.com/libuv/libuv.git' libuv
           Clone 'https://github.com/higan-emu/libco.git' libco
 
-          # Optional — keep last so a failure doesn't mask required fetches
-          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv
           exit 0
 
       - name: Restore dependencies
@@ -350,22 +287,8 @@ jobs:
         run: |
           cd native
 
-          git clone --depth 1 https://github.com/madler/zlib.git zlib
-          git clone --depth 1 https://github.com/facebook/zstd.git zstd
-          mkdir -p sqlite3
-          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
-          unzip -q -j sqlite3.zip -d sqlite3
-          rm sqlite3.zip
-          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
-          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
-          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
-          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
-          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
-          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
-          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
           git clone --depth 1 https://github.com/libuv/libuv.git libuv
           git clone --depth 1 https://github.com/higan-emu/libco.git libco
-          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
 
       - name: Build native libraries
         run: |
