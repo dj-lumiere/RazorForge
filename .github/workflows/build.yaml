@@ -14,8 +14,17 @@ env:
   CMAKE_POLICY_VERSION_MINIMUM: '3.5'
 
 jobs:
+  # Two parallel Linux legs share one definition: `test` is the plain build +
+  # test gate, `sonar` repeats it under the SonarScanner (Roslyn-instrumented
+  # build, coverage-collecting test run, upload) so the analysis never sits on
+  # the test gate's critical path.
   build-linux:
+    name: build-linux (${{ matrix.leg }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [test, sonar]
 
     steps:
       - name: Checkout
@@ -146,6 +155,7 @@ jobs:
       # hosted runner can reach SONAR_HOST_URL. Requires a Tailscale OAuth
       # client (scope: auth_keys) and an ACL tag `tag:ci`.
       - name: Connect to tailnet for SonarQube
+        if: matrix.leg == 'sonar'
         uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -153,6 +163,7 @@ jobs:
           tags: tag:ci
 
       - name: Install SonarScanner for .NET
+        if: matrix.leg == 'sonar'
         run: |
           dotnet tool install --global dotnet-sonarscanner
           echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
@@ -161,6 +172,7 @@ jobs:
         run: dotnet restore
 
       - name: SonarQube Begin
+        if: matrix.leg == 'sonar'
         run: |
           dotnet sonarscanner begin \
             /k:"razorforge-suflae" \
@@ -173,17 +185,23 @@ jobs:
 
       # x86-64 cross-check: hardware `divq` baseline (expected to beat M-G here).
       - name: Benchmark div2by1 (M-G vs divq, x86-64)
+        if: matrix.leg == 'test'
         continue-on-error: true
         run: dotnet bin/Release/net10.0/RazorForge.dll buildandrun bench/div_ab_bench.rf
 
       - name: Test
+        if: matrix.leg == 'test'
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: Test with coverage
+        if: matrix.leg == 'sonar'
         run: |
           dotnet test --configuration Release --no-build --verbosity normal \
             --collect:"XPlat Code Coverage" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
       - name: SonarQube End
-        if: always()
+        if: always() && matrix.leg == 'sonar'
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
 
   build-windows:
