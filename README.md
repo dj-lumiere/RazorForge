@@ -63,7 +63,7 @@ What sets it apart:
   operation is written in the source.
 
 > **Status:** the language is still changing, and the compiler works but is incomplete. Modules are namespaces
-> (`import`, qualified paths, `alias`, `private` / `internal`; `Standard::Core` is always imported), two modules may
+> (`import`, qualified paths, `define`, `private` / `internal`; `Standard::Core` is always imported), two modules may
 > declare the same name, and symbols follow the Itanium C++ mangling. A solution is described by a `config.toml`, or
 > is every file on the command line; the stdlib is compiled in with it. The stdlib is layered so that only
 > `Standard::Os` needs libc, and a target without an operating system builds without it.
