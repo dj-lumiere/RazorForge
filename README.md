@@ -55,14 +55,18 @@ What sets it apart:
 - **Block parameters instead of phi nodes.** A loop passes its state forward (`search_right(%left_idx,
   %right_idx.add(1))`) instead of collecting it from predecessors.
 - **`=` only binds.** Memory is read and written by `load` and `store` calls, and every binding states its type.
-- **Sum types are variants.** `Option` and `Result` are variants, read with a `when` whose arms bind the payload.
+- **Sum types are variants.** `Option` and `Result` are variants, read with a `when` whose arms bind the payload;
+  choices and variants print, compare, and hash without being asked.
+- **Tuples of two to four values** (`-> (U64, U64)`, `%q, %r = div_rem(%a, %b)`) for results that are just several
+  values; a record names the parts when they mean something.
 - **Nothing hidden.** No implicit conversions, destructors, exceptions, vtables, or allocations: every runtime
   operation is written in the source.
 
-> **Status:** the language is still changing, and the compiler works but is incomplete. Modules scope name lookup
-> (`import`, qualified paths, `private` / `internal`; `Standard::Core` is always imported), but a solution manifest,
-> interface modules, and the same name in two modules aren't there yet: every file on the command line, plus the
-> stdlib, forms one solution.
+> **Status:** the language is still changing, and the compiler works but is incomplete. Modules are namespaces
+> (`import`, qualified paths, `alias`, `private` / `internal`; `Standard::Core` is always imported), two modules may
+> declare the same name, and symbols follow the Itanium C++ mangling. A solution is described by a `config.toml`, or
+> is every file on the command line; the stdlib is compiled in with it. The stdlib is layered so that only
+> `Standard::Os` needs libc, and a target without an operating system builds without it.
 
 ## Repository
 
@@ -90,16 +94,29 @@ You need the [.NET 10 SDK](https://dotnet.microsoft.com/) and clang 21 or newer 
 dotnet run --project Tessera -- run tests/hello.tess          # build and run a program
 dotnet run --project Tessera -- build prog.tess -o prog       # build an executable
 dotnet run --project Tessera -- build prog.tess --emit-llvm   # write LLVM IR instead
+dotnet run --project Tessera -- build                         # build the solution in config.toml into build/
+dotnet run --project Tessera -- check                         # type-check the whole stdlib
 dotnet run --project Tessera -- test tests playground examples  # run the golden tests
 dotnet run --project Tessera -- fmt stdlib tests examples playground          # format the sources
 ```
 
-`build` and `run` also take `--target <arch-os-abi>` and `-O`. All files on one command line form one solution,
-and the stdlib is compiled in with them.
+With files, `build` and `run` also take `--target <arch-os-abi>` and `-O`, and all the files form one solution. Without
+files they read the nearest `config.toml`, which names the package and sets the target, mode, sources, library
+directories, and link options (see [Modules → The solution manifest](https://tessera.lumi-dev.xyz/Modules/#the-solution-manifest)):
+
+```toml
+[package]
+name = "greeter"
+
+[target]
+mode = "release"
+sources = ["src"]
+```
 
 ## Tests
 
-Each test in `tests/` is `<name>.tess` with one of:
+Each test in `tests/` is `<name>.tess`, or a directory `<name>/` whose files are compiled together (several
+modules, or a `config.toml` to build from), with one of:
 
 - `<name>.expected`: the program's stdout
 - `<name>.exit`: its exit code (default 0)
