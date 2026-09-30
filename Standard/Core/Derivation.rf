@@ -429,10 +429,10 @@ needs T obeys Hashable
 ### name in declaration order (`Dict` iteration is insertion-ordered, so the output is stable).
 ###
 ### `serialize` is UNIVERSAL — EVERY type has one, so the walk calls `me.field.serialize()`
-### UNCONDITIONALLY (no capability gate, no buildtime prune): a scalar boxes its own SerialValue arm; an
-### aggregate record/entity/variant recurses; a `choice`/`flags` or zero-field opaque @llvm leaf (and a
-### routine-typed member — entities may hold one, records can't per RF-S412) boxes its `represent()` Text
-### as ITS serialize.
+### UNCONDITIONALLY (no capability gate, no buildtime prune): a scalar with its own SerialValue arm boxes
+### into that arm; a fixed-width scalar without one (S128, D64, Character, ...) boxes its `represent()`
+### Text, which its `T(from: SerialValue)` parses back; a `Byte` boxes as `U8`; an aggregate record/entity
+### recurses. `choice`/`flags`/variants override below, a routine value boxes its signature Text.
 @overridable
 routine T.serialize() -> SerialValue
 needs AnyType T
@@ -451,11 +451,57 @@ needs AnyType T
         is Moment => return SerialValue(from: me)
         is Bytes => return SerialValue(from: me)
         is Text => return SerialValue(from: me)
+        is Byte => return SerialValue(from: U8(me))
+        is Character => return SerialValue(from: me.represent())
+        is S128 => return SerialValue(from: me.represent())
+        is U128 => return SerialValue(from: me.represent())
+        is S256 => return SerialValue(from: me.represent())
+        is U256 => return SerialValue(from: me.represent())
+        is B16 => return SerialValue(from: me.represent())
+        is BF16 => return SerialValue(from: me.represent())
+        is B128 => return SerialValue(from: me.represent())
+        is D32 => return SerialValue(from: me.represent())
+        is D64 => return SerialValue(from: me.represent())
+        is D128 => return SerialValue(from: me.represent())
+        is Decimal => return SerialValue(from: me.represent())
+        is C64 => return SerialValue(from: me.represent())
+        is C128 => return SerialValue(from: me.represent())
+        is C256 => return SerialValue(from: me.represent())
+        is Address => return SerialValue(from: me.represent())
         else =>
             var __sv = Dict[Text, SerialValue]()
             expand m in openmemvarof(T)
                 discard __sv.add(key: nameof(m), value: me.$nameof(m).serialize())
             return SerialValue(steal __sv)
+
+### Choice `serialize()`: the bare case name as Text (`GREEN`), which `T(from: SerialValue)` looks up again.
+@override
+routine T.serialize() -> SerialValue
+needs ChoiceType T
+    return SerialValue(from: me.represent())
+
+### Flags `serialize()`: the list of set member names (`["READ", "WRITE"]`), empty when no bit is set.
+@override
+routine T.serialize() -> SerialValue
+needs FlagsType T
+    var names = List[SerialValue]()
+    expand c in caseof(T)
+        if (U64(from: me) & $valueof(c)) != 0u64
+            names.add_last(value: SerialValue(from: nameof(c)))
+    return SerialValue(steal names)
+
+### Variant `serialize()`: a one-entry table `{arm: payload}` naming the live arm, or `None` for the
+### absent arm, so `T(from: SerialValue)` knows which arm to rebuild.
+@override
+routine T.serialize() -> SerialValue
+needs VariantType T
+    when me
+        is None => return none
+        expand m in branchof(T)
+            is $typeof(m) v =>
+                var table = Dict[Text, SerialValue]()
+                discard table.add(key: nameof(m), value: v.serialize())
+                return SerialValue(steal table)
 
 ### The auto-derived deep `copy()` (Copyable): forwards to `store` — a bitwise copy for a pure value
 ### type, or the retaining store for a managed-leaf / retaining-field record. Same as the C# builder.
