@@ -26,7 +26,7 @@ record IndexPair
     left  : USize
     right : USize
 
-routine two_sum(%list: Ptr<List<S32>>, %target: S32) -> Option<IndexPair>
+routine two_sum(%list: @List<S32>, %target: S32) -> Option<IndexPair>
     block entry():
         jump search_left(0)
 
