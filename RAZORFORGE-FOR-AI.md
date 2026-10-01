@@ -59,7 +59,7 @@ When unsure, consult ground truth in the repo/package:
 8. **Bare integer literals adapt to context; variables do not.**
    `h << 5` and `x.clamp(0, 100)` are fine (literals conform), but mixing a
    `U64` variable with an `S64` variable needs explicit conversion.
-   Out-of-range literals are compile errors (RF-S010): `-1` never fits an
+   Out-of-range literals are build errors (RF-S010): `-1` never fits an
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
 9. **Ignored Bool returns need `discard`**: `discard seen.add(value: v)` (RF-W007).
 10. **Indentation is 4 spaces and blocks are indentation-delimited.** No braces.
@@ -95,7 +95,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
 - **RazorForge has NO "borrow" concept** (that is Rust). Do not use the word
   "borrow" in prose or API names. Ownership is expressed via entities + `steal`
   + RC wrappers + **access tokens** (below).
-- compiler-synthesized per-type routines are **wired routines** (`represent`,
+- builder-synthesized per-type routines are **wired routines** (`represent`,
   `diagnose`, `serialize`, the constructor, `eq`, `cmp`, `hash`, …) — named with **NO
   sigil**; wired-ness is INFERRED from protocol conformance. Not
   "derives"/"macros"/"trait impls". (The `$` sigil is a separate, unrelated
@@ -177,7 +177,7 @@ binding RazorForge has.
 - Collections: `List[T]`, `Dict[K,V]`, `Set[T]`, `CircularList[T]`, `BitList`, `PriorityQueue[TPriority, TElement]`,
   `SortedDict[K, V]`, `SortedList[T]`, `SortedSet[T]`, fixed-size `Array[T, N]`, `BitArray[N]`
 - Tuples: `(T, U)` / `Tuple[T, U]`, with fields `item0`, `item1`, ...
-- Carriers: `Maybe[T]`, `Check[T]`, `Lookup[T]` (compiler-synthesized only —
+- Carriers: `Maybe[T]`, `Check[T]`, `Lookup[T]` (builder-synthesized only —
   user routines cannot declare them as return types; you obtain one by wrapping a
   failable call with the `try`/`grab`/`lookup` keyword).
 - Typed literal suffixes exist: `7s32`, `0_s64`, `1.5f32` (underscore optional)
@@ -288,7 +288,7 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   `try get_text(n: 0)` → `Maybe[Text]`/`Text?`; `grab get_text(n: 0)` → `Check[Text]`
   (keeps the `Crashable`); `lookup get_text(n: 0)` → `Lookup[Text]` (T | absent |
   `Crashable`). A bare `get_text(n: 0)` crashes loudly on failure.
-- **Wired routines** are compiler-synthesized lifecycle/operator hooks (NO sigil):
+- **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
   the constructor `T(...)`, `destroy`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
@@ -317,7 +317,7 @@ entity Resource       # HEAP type: single owner, deterministic destroy
     tag: S64
 
 var b = Resource(tag: 7s32)
-consume(r: steal b)   # ownership moves; using b afterwards = compile error
+consume(r: steal b)   # ownership moves; using b afterwards = build error
 # destroy runs exactly once, at the owner's scope exit (anchored at `return`)
 ```
 
@@ -367,7 +367,7 @@ using c.modify() as m        # Modifying[Counter], write intent
 - **Identity comparison `===` / `!==`** — "are these two the SAME object?", distinct
   from value equality `==`. Valid only on reference-carrying operands: an `entity` or
   a forwarding wrapper (`Viewing`/`Modifying`/`Consulting`/`Amending`/`Retained`/
-  `Guarded`/`Tracked`/`Witnessed`). A value type (record/scalar) is a compile error
+  `Guarded`/`Tracked`/`Witnessed`). A value type (record/scalar) is a build error
   (**RF-S440**) — values have no identity; use `==`. `Hijacked` is excluded (its `==`
   is already identity — you `peek` to see its value). It is a primitive pointer
   compare, never a `.eq()` call, so it is not overloadable. For single-owner entities
@@ -384,7 +384,7 @@ show(a === make_other())    # false — different objects
 
 > **Decided direction (2026-09-22, NOT yet built — do not assume the builder does this today).**
 > Full rationale in `internal-wiki/record-entity-finite-representation.md`.
-> - **A recursive record is a compile error; recursion belongs to entity.** Surface rule: *a record is a
+> - **A recursive record is a build error; recursion belongs to entity.** Surface rule: *a record is a
 >   copied value, an infinitely-sized value cannot be copied, so a record cannot contain itself.*
 >   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
 >   nullable pointer; unique ownership makes the structure a tree = acyclic = deterministic teardown).
@@ -604,7 +604,7 @@ show-build-stages = false   # optional: print build/check stage banners
 With no entry file argument, the CLI walks up from the cwd to find
 `config.toml` — `cd` into a project and `razorforge buildandrun` works.
 
-## 12. Reading compiler errors
+## 12. Reading build errors
 
 Format: `error[RF-S###]: file:line:col: message` plus a source excerpt with a
 caret. Families: `RF-G###` grammar/parse, `RF-S###` semantic, `RF-W###`
@@ -765,7 +765,7 @@ routine start()
 
   The registration retains the handle for the process lifetime (a `Roamed` context is
   also promoted to its atomic escaped mode). One overload set accepts either handle
-  type — the compiler picks by the argument type.
+  type — the builder picks by the argument type.
 
 ## 15. Foreign functions and conditional compilation
 
@@ -817,7 +817,7 @@ The reflection **sources** `openmemvarof` `allmemvarof` `branchof` `caseof` (the
 keywords** — they tokenize as ordinary identifiers and are recognized in SA only when
 `import BuilderExpansion` is in effect (bare `nameof(m)` or `$`-spliced `me.$nameof(m)`),
 each reading a buildtime property off the active `expand` handle or a type. Without that
-import, using `expand` or any source/accessor is a compile error (RF-S952).
+import, using `expand` or any source/accessor is a build error (RF-S952).
 
 `$` (wired-routine marker / `${…}` buildtime splice) and `!` (failable marker) are
 **structural sigils on a name, not keywords** — the name stays bare (RoutineInfo

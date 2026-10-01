@@ -83,7 +83,7 @@ ownership runtime and an approachable surface. It ships alongside RazorForge 0.4
 - `text[a til b]` range/slice indexing via `getitem(range: Range[U64])`; `Range[T]` is a record with a
   `RangeEmittable[T]` iterator, and range/slice indexing works across collections.
 - Single-hole `_` lambda sugar; named-argument punning (field-init shorthand).
-- SoA collections `SplitList` / `SplitArray`; `is <Name>Type` compiler-group constraints.
+- SoA collections `SplitList` / `SplitArray`; `is <Name>Type` builder-group constraints.
 - Zero-initialization routines `blank()` / `hollow()`.
 - Carrier lowering: `Try`/`Check`/`Lookup` failable variants lower to `Maybe`/`Result`/`Lookup`
   values (the internal `#carrier` representation is eliminated program-wide; payload is a single
@@ -187,7 +187,7 @@ ownership runtime and an approachable surface. It ships alongside RazorForge 0.4
   the type's own copy DERIVE handle RC lifecycle.
 - Codegen was moved off stdlib-encroachment: monomorphization completes before codegen (no codegen
   type-substitution), and Roamed lock/promote/projection + roam-hook refs moved to dedicated lowering
-  passes. The 10 pipeline-stage source folders and compiler phases are renumbered to execution order.
+  passes. The 10 pipeline-stage source folders and builder phases are renumbered to execution order.
 
 ### Performance
 

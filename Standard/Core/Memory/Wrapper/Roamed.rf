@@ -12,13 +12,13 @@ import BuilderQuery
 ### **Access is coerced through `control`/`access`, with the lock applied TRANSPARENTLY.** `Roamed`
 ### `obeys Controlling[T]`: a deref (method dispatch on a `Roamed` receiver, or passing one to a
 ### `Controlling[T]`/`Accessing[T]` parameter) coerces to the inner entity via `control()`/`access()`.
-### That coercion does NOT bypass serialization — the compiler's lock-bracket lowering wraps the
+### That coercion does NOT bypass serialization — the builder's lock-bracket lowering wraps the
 ### enclosing access scope in `lock_enter`/`lock_exit` (no-op in LOCAL mode, a reentrant task-keyed
 ### acquire once ESCAPED), so Suflae code never sees the lock while access stays serialized. Holding a
 ### handle is a strong reference, so the inner is never dangling. (The scope is per-access on the
 ### explicit RazorForge side, per-access-scope on the Suflae side, chosen by the lock-bracket pass.)
 ###
-### **Insertion is compiler-driven in Suflae.** `Roamed` IS registered as an RC wrapper
+### **Insertion is builder-driven in Suflae.** `Roamed` IS registered as an RC wrapper
 ### (`RuntimeContract.RcWrapperBaseNames` / `RcCopyVerb`); the aliasing `roam()`, spawn-boundary
 ### `promote()`, and field-access `lock_enter()`/`lock_exit()` are auto-inserted — `roam` by
 ### `SuflaeEntityLoweringPass` on entity bindings, `promote`/`lock_enter`/`lock_exit` by codegen
@@ -83,7 +83,7 @@ routine Roamed[T].share() -> Roamed[T]
 
 
 # ============================================================================
-# Escape + access lock. In Stage 2 the compiler inserts these automatically (promote at the
+# Escape + access lock. In Stage 2 the builder inserts these automatically (promote at the
 # concurrency-boundary site; lock_enter/lock_exit around member-routine entry/return). Manual here.
 # ============================================================================
 
@@ -136,7 +136,7 @@ routine Roamed[T].watch() -> Watching[T]
         ctrl.observe()
         return Watching[T](ctrl: me.controller_address())
 
-### Reports this handle's controller to the collector as a traced child. The compiler-synthesized
+### Reports this handle's controller to the collector as a traced child. The builder-synthesized
 ### `roam_trace` calls this for each `Roamed` field of an entity, so the collector sees the
 ### object graph's strong edges. A none handle owns no edge and is skipped. Runs inside the (dangerous)
 ### synthesized trace, so no `danger` here.
@@ -169,7 +169,7 @@ dangerous routine Roamed[T].roam_free()
 routine Roamed[T].controller_address() -> Address
     return Hijacked[RoamController[T]](me).get_address()
 
-### The inner entity as a raw reference. Real access is lock-wrapped by the compiler's lock-bracket
+### The inner entity as a raw reference. Real access is lock-wrapped by the builder's lock-bracket
 ### lowering around the enclosing access scope, so this coercion is safe: it is the deref half, the
 ### bracket pass is the lock half. Kept as the low-level plumbing name behind `access`/`control`.
 ### :returns: The inner entity.
@@ -179,7 +179,7 @@ dangerous routine Roamed[T].raw_inner() -> T
 
 # ============================================================================
 # Marker-protocol coercion (access/control) — yields the inner entity as T. The access lock is applied
-# transparently by the compiler's lock-bracket lowering around the enclosing scope (see class doc),
+# transparently by the builder's lock-bracket lowering around the enclosing scope (see class doc),
 # so these do NOT bypass escaped-mode serialization.
 # ============================================================================
 

@@ -4,7 +4,7 @@ using Builder.Verification;
 namespace RazorForge.Tests.Meta;
 
 /// <summary>
-/// Validates the managed <see cref="NumericLiteralParser.EncodeDecimalCanonical"/> (compile-time
+/// Validates the managed <see cref="NumericLiteralParser.EncodeDecimalCanonical"/> (buildtime
 /// decimal literal → finite-only CANONICAL 34-digit BID decimal128 bits) by round-trip: decoding
 /// the produced i128 back to (sign, exp, coeff) — exactly as <c>Core.D128</c> <c>decode()</c> does
 /// — must reproduce the literal (exact for ≤34 significant digits, with fractional trailing zeros

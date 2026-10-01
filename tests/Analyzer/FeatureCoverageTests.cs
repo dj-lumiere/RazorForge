@@ -13,12 +13,12 @@ using static TestHelpers;
 /// Drives the full in-process compile pipeline (parse → semantic analysis + lowering + monomorphization
 /// → LLVM IR emission) over feature-rich RazorForge and Suflae programs. Unlike the spawned
 /// <c>buildandrun</c> stdlib harness (whose child process is not coverage-instrumented), these run the
-/// compiler IN the test host, so they exercise — and count coverage for — the lowering/instantiation/
+/// builder IN the test host, so they exercise — and count coverage for — the lowering/instantiation/
 /// codegen passes that only fire for constructs like pattern matching, lambdas, generics, error-handling
 /// variants, iterator inlining, and Suflae module globals.
 ///
 /// Each case asserts the program analyzes without errors and emits non-empty IR; the point is breadth of
-/// executed compiler paths, not output shape (the stdlib harness owns behavioral snapshots).
+/// executed builder paths, not output shape (the stdlib harness owns behavioral snapshots).
 /// </summary>
 public class FeatureCoverageTests
 {

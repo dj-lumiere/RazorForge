@@ -35,7 +35,7 @@ class RazorForgeLspServerSupportProvider : LspServerSupportProvider {
 
 /**
  * Describes the one language server shared across the whole project (RF/SF analysis is
- * whole-program). Locates the compiler DLL, then runs it under `dotnet` with the `--lsp` verb.
+ * whole-program). Locates the builder DLL, then runs it under `dotnet` with the `--lsp` verb.
  */
 class RazorForgeLspServerDescriptor(project: Project) :
     ProjectWideLspServerDescriptor(project, "RazorForge") {
@@ -74,7 +74,7 @@ class RazorForgeLspServerDescriptor(project: Project) :
         val devBuild = File(base, "RazorForge/bin/Debug/net10.0/RazorForge.dll")
         if (!devBuild.exists()) {
             LOG.warn("RazorForge.dll not found at ${devBuild.absolutePath} — " +
-                "build the compiler (dotnet build) or set RAZORFORGE_LSP_DLL.")
+                "build the builder (dotnet build) or set RAZORFORGE_LSP_DLL.")
         }
         return devBuild
     }

@@ -7,9 +7,9 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// `$iter`, `$access`, and `$control` are dunder-private — only the compiler's lowering
+/// `$iter`, `$access`, and `$control` are dunder-private — only the builder's lowering
 /// passes may emit them (for-loop → $iter; argument coercion → $access/$control). User
-/// code calling them directly is a compile error; otherwise the borrow / iterator could
+/// code calling them directly is a build error; otherwise the borrow / iterator could
 /// be stored in a var and outlive its source. Defining the dunder is still allowed.
 /// </summary>
 public class IterPrivacyTests
@@ -83,7 +83,7 @@ public class IterPrivacyTests
     [Fact]
     public void ReferringParam_CallSiteCoercion_Resolves()
     {
-        // The compiler injects `.access()` automatically at the Accessing[T] param.
+        // The builder injects `.access()` automatically at the Accessing[T] param.
         // No user-visible $access call appears in source; the check must not fire on the
         // synthesized coercion.
         string source = """

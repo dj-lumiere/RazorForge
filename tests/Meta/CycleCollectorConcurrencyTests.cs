@@ -60,7 +60,7 @@ public sealed partial class CycleCollectorConcurrencyTests
         AssertCleanStderr(stderr: stderr);
     }
 
-    /// <summary>Fails on any compiler diagnostic or runtime fault on stderr (mirrors StdlibApiTests' gate),
+    /// <summary>Fails on any builder diagnostic or runtime fault on stderr (mirrors StdlibApiTests' gate),
     /// so a fault that somehow left a zero exit is still caught.</summary>
     [GeneratedRegex(
         pattern:

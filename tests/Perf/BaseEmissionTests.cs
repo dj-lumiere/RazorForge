@@ -705,7 +705,7 @@ public sealed partial class BaseEmissionTests
                 }).Generate();
         }
 
-        // A fresh per-test cache dir (fixed fingerprint — the two runs share the same stdlib/compiler).
+        // A fresh per-test cache dir (fixed fingerprint — the two runs share the same stdlib/builder).
         string cacheDir = Path.Combine(path1: Path.GetTempPath(),
             path2: "rf_jit_ir_cache_test_" + Guid.NewGuid().ToString(format: "N"));
 

@@ -9,7 +9,7 @@ unless it earns its place at Suflae's altitude.
 This is a **preview**: single-threaded Suflae programs run end-to-end today. Concurrency (a multi-threaded
 collector) is the next milestone and is intentionally out of scope here — see **Scope & limits** below.
 
-The compiler is the same binary as RazorForge. Run Suflae with the `suflae` command (or `sf`), or by
+The builder is the same binary as RazorForge. Run Suflae with the `suflae` command (or `sf`), or by
 handing any `.sf` file to `razorforge`:
 
 ```

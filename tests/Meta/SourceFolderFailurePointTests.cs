@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace RazorForge.Tests.Meta;
 
 /// <summary>
-/// Verifies that each compiler source folder retains explicit handling for its known failure points.
+/// Verifies that each builder source folder retains explicit handling for its known failure points.
 /// </summary>
 public sealed partial class SourceFolderFailurePointTests
 {

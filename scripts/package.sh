@@ -64,7 +64,7 @@ ln -sf Suflae "$OUT/suflae"
 ln -sf Suflae "$OUT/sf"
 
 echo "=== bundle self-contained LLVM toolchain ==="
-# The compiler resolves <package>/toolchain/bin before PATH (ResolveToolchainTool),
+# The builder resolves <package>/toolchain/bin before PATH (ResolveToolchainTool),
 # and uses that toolchain's ld.lld/ld64.lld for linking. Linux still needs the
 # host's libc dev files (crt1.o); macOS needs the Command Line Tools SDK stubs —
 # both documented in QUICKSTART.md.

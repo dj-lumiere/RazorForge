@@ -11,7 +11,7 @@ using Xunit.Abstractions;
 namespace RazorForge.Tests.Perf;
 
 /// <summary>
-/// Milestone-1 de-risk: measures the compile-time ceiling when the stdlib is processed ONCE and
+/// Milestone-1 de-risk: measures the build-time ceiling when the stdlib is processed ONCE and
 /// reused via the registry snapshot, versus the cold path that reprocesses the stdlib every run.
 /// Not a correctness assertion — it prints timings via test output and always passes.
 /// </summary>

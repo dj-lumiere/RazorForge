@@ -11,10 +11,10 @@ fi
 SOURCE_FILE=$1
 BASE_NAME="${SOURCE_FILE%.rf}"
 
-echo "=== RazorForge Bootstrap Compiler ==="
+echo "=== RazorForge Bootstrap Builder ==="
 echo "Source: $SOURCE_FILE"
 
-# Step 1: Run C# compiler to generate LLVM IR
+# Step 1: Run C# builder to generate LLVM IR
 echo "Step 1: Generating LLVM IR..."
 dotnet run -- "$SOURCE_FILE"
 

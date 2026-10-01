@@ -3,10 +3,10 @@
 The realm release. v0.2.0 shipped the execution model, v0.3.0 the communication layer. v0.4.0 is a
 **language-maturity** release built around one idea that turned out to connect everything else:
 **realms**. A realm is the namespace a name lives in — `RF::` for RazorForge, `C::` for foreign C,
-`LLVM::` for intrinsics, and `SF::` for the new sister language **Suflae**. Foreign calls, compiler
+`LLVM::` for intrinsics, and `SF::` for the new sister language **Suflae**. Foreign calls, builder
 intrinsics, and cross-language interop all became one mechanism instead of three ad-hoc ones.
 
-On top of that foundation this release lands a **reworked ownership & copy model**, a **compile-time
+On top of that foundation this release lands a **reworked ownership & copy model**, a **buildtime
 reflection surface**, a matured **C FFI** (struct-by-value including float structs, platform-width C
 types, conditional compilation), and native **SIMD vectors**. Suflae ships as its own **v0.1 preview**
 release alongside this one — see the Suflae release notes.
@@ -53,7 +53,7 @@ The value/copy rules were reworked into one coherent model.
 - **Three-rules parameter model:** a `record` parameter borrows; a value moved to a destination
   (constructor field, store primitive) transfers; the caller tears down rvalue arguments. Container and
   aggregate element reads copy on keep (`var x = a[i]` copies), and taking a bare entity out of a
-  container without a copy is a compile error rather than a silent alias/double-free.
+  container without a copy is a build error rather than a silent alias/double-free.
 - **Construction verbs are gone.** The three entity→wrapper "constructors" that masqueraded as methods
   (`.retain()`, `.share[P]()`, `.roam()`) are abolished — you write `Retained(from: steal n)` /
   `Roamed(from: n)`, and the definition reads as the type.
@@ -137,7 +137,7 @@ progress and not part of this release.
   `Shared[T, P](from: steal n)` / `Roamed(from: n)`.
 - **RC verbs:** `retain`/`release` → `hold`/`unhold`, weak `track`/`watch` → `observe`, the wrapper copy
   verb → `share`, `refer()` → `access()`; a wrapper's `release()` is now just `destroy()`.
-- **Annotations & keywords:** `@migratable` → `@reshaping`; in your own compiler-adjacent code/prose,
+- **Annotations & keywords:** `@migratable` → `@reshaping`; in your own builder-adjacent code/prose,
   `Field`/`Method`/`Copy`/`Blank` → `MemberVariable`/`MemberRoutine`/`Store`/`None`.
 - **Protocols removed:** drop `obeys Representable` / `Diagnosable` / `Serializable` — `represent` /
   `diagnose` / `serialize` are universal now.

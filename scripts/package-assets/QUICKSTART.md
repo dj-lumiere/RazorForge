@@ -1,6 +1,6 @@
 # RazorForge Quick Start
 
-This package is **self-contained**: the compiler, the standard library, the
+This package is **self-contained**: the builder, the standard library, the
 native runtime, and the LLVM toolchain (clang/opt/lld) are all inside this
 folder. You do not need to install anything else to build and run RazorForge
 programs.
@@ -115,6 +115,6 @@ https://github.com/dj-lumiere/RazorForge/issues
 
 ## Using your own LLVM instead
 
-The compiler prefers the bundled `toolchain/` folder. To use a system LLVM,
+The builder prefers the bundled `toolchain/` folder. To use a system LLVM,
 set `RAZORFORGE_LLVM_HOME` to its root (the directory containing `bin/clang`),
 or delete the `toolchain/` folder to fall back to PATH lookup.

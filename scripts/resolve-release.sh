@@ -5,8 +5,8 @@
 # Two tag families feed the same release workflow (RazorForge's .github/workflows/release.yaml, which the
 # Suflae repository calls for its tags). Runs from the workspace root that holds the projects side by side.
 #   v*      -> RazorForge release. Artifacts named for the tag version.
-#   sf-v*   -> Suflae release. The SAME compiler artifacts (one binary runs both
-#              languages), named for the csproj compiler version — NOT the sf tag,
+#   sf-v*   -> Suflae release. The SAME builder artifacts (one binary runs both
+#              languages), named for the csproj builder version — NOT the sf tag,
 #              whose "0.1.0" would collide with the existing v0.1.0 release — and
 #              published with the Suflae notes and title.
 set -euo pipefail
@@ -18,7 +18,7 @@ csproj_version() {
 tag="${GITHUB_REF_NAME:?GITHUB_REF_NAME is not set}"
 
 if [[ "$tag" == sf-v* ]]; then
-  pkg_version="$(csproj_version)"                 # e.g. 0.4.0 — the compiler that runs .sf
+  pkg_version="$(csproj_version)"                 # e.g. 0.4.0 — the builder that runs .sf
   release_name="Suflae v${tag#sf-v} (preview)"    # e.g. Suflae v0.1.0 (preview)
   release_notes="RazorForge/scripts/package-assets/RELEASE_NOTES_SF.md"
 else

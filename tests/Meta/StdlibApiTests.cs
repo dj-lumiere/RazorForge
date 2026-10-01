@@ -107,7 +107,7 @@ public sealed partial class StdlibApiTests
             $"--- stdout ---\n{run.Stdout}\n--- stderr ---\n{run.Stderr}");
 
         // 2b) stderr must be CLEAN. The build's own progress banners go to stdout; anything on stderr is
-        // a diagnostic — a compiler warning/error or a runtime fault. These are silently swallowed if we
+        // a diagnostic — a builder warning/error or a runtime fault. These are silently swallowed if we
         // only check stdout+exit (that is exactly how a flood of "Synthesized body codegen failed" /
         // "Unresolved generic memberRoutine 'Core.Dict.create'" warnings hid for so long). Fail on any of them.
         string[] offending = run.Stderr
@@ -293,7 +293,7 @@ public sealed partial class StdlibApiTests
         Assert.True(condition: rc == 0,
             userMessage:
             $"In-process compile of {bundleFileName} failed (exit={rc}). " +
-            "See the compiler diagnostics printed above.");
+            "See the builder diagnostics printed above.");
         Assert.False(condition: string.IsNullOrWhiteSpace(value: ir),
             userMessage: $"In-process compile of {bundleFileName} produced no IR.");
     }
@@ -464,8 +464,8 @@ public sealed partial class StdlibApiTests
     /// Builds and runs a fixture, returning its stdout. Retries a SPURIOUS external kill — a
     /// `buildandrun` process terminated mid-compile by the environment (SIGTERM/SIGKILL under
     /// transient memory/scheduling pressure during a long sequential run), recognisable by a
-    /// non-zero exit with NO stdout AND NO stderr (no compiler diagnostic, no program output).
-    /// Genuine failures are NOT retried: a real compile error prints diagnostics to stderr and a
+    /// non-zero exit with NO stdout AND NO stderr (no builder diagnostic, no program output).
+    /// Genuine failures are NOT retried: a real build error prints diagnostics to stderr and a
     /// real runtime crash prints output / a trace, so they carry output and are deterministic — the
     /// retry gate (empty output) never matches them, so a broken fixture still fails on attempt 1.
     /// </summary>
@@ -526,7 +526,7 @@ public sealed partial class StdlibApiTests
             userMessage:
             $"buildandrun for {fixture} was killed with no output (exit={last.ExitCode}) on all " +
             $"{MaxRunAttempts} attempts — likely sustained environmental resource pressure, not a " +
-            $"fixture failure (it produced no compiler diagnostic and no program output).");
+            $"fixture failure (it produced no builder diagnostic and no program output).");
     }
 
     private readonly record struct FixtureRun(
@@ -538,7 +538,7 @@ public sealed partial class StdlibApiTests
 
     private static FixtureRun RunFixtureOnce(string rfPath)
     {
-        // Invoke the already-built compiler assembly directly. Using
+        // Invoke the already-built builder assembly directly. Using
         // `dotnet run --project …` here would re-evaluate the project file on
         // every fixture (~1-3s of SDK startup × ~150 fixtures = several minutes
         // of pure overhead).

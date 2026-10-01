@@ -146,7 +146,7 @@ public class CompilerPipelineInputEdgeCaseTests
     /// Repro source mirrored at <c>playground/deeply_nested_repro.rf</c>.
     /// </remarks>
     // Runs SYNCHRONOUSLY with no per-test timeout: the actual work for depth 32 is sub-second
-    // (measured Analyze ≈ 0.9 s cold-JIT, codegen ≈ 35 ms; the compiler is O(depth) — even depth 100
+    // (measured Analyze ≈ 0.9 s cold-JIT, codegen ≈ 35 ms; the builder is O(depth) — even depth 100
     // codegens in the same ~2.4 s a trivial file does). The former `Task.Run` + `[Fact(Timeout)]`
     // guard flaked on contended CI: it wrapped <1 s of work in a thread-pool task whose scheduling
     // could be starved past the cap by parallel tests, spuriously "timing out" the first heavy test

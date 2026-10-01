@@ -10,10 +10,10 @@ if "%~1"=="" (
 set SOURCE_FILE=%~1
 set BASE_NAME=%~n1
 
-echo === RazorForge Bootstrap Compiler ===
+echo === RazorForge Bootstrap Builder ===
 echo Source: %SOURCE_FILE%
 
-REM Step 1: Run C# compiler to generate LLVM IR
+REM Step 1: Run C# builder to generate LLVM IR
 echo Step 1: Generating LLVM IR...
 dotnet run -- "%SOURCE_FILE%"
 

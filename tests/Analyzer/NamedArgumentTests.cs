@@ -243,7 +243,7 @@ public class NamedArgumentTests
     [Fact]
     public void Analyze_TwoParams_MixedPositionalNamed_ReportsMixed()
     {
-        // Any mix of positional and named args is a compile error (all-or-nothing), even at
+        // Any mix of positional and named args is a build error (all-or-nothing), even at
         // 2 params where all-positional would only warn.
         string source = """
                         routine add(a: S32, b: S32) -> S32

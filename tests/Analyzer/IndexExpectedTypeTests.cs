@@ -61,7 +61,7 @@ public class IndexExpectedTypeTests
         Assert.Equal(expected: "Core.U32", actual: indexType!.FullName);
     }
 
-    /// <summary>Verifies that an integer literal overflowing the U8 indexer range reports a compile error.</summary>
+    /// <summary>Verifies that an integer literal overflowing the U8 indexer range reports a build error.</summary>
     [Fact]
     public void IndexLiteralOverflow_OnU8Indexer_ReportsError()
     {

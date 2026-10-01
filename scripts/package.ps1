@@ -67,7 +67,7 @@ Copy-Item "$Out\Suflae.exe" "$Out\sf.exe"
 Write-Host '=== bundle self-contained LLVM toolchain (llvm-mingw + opt) ==='
 # llvm-mingw gives a fully redistributable clang + ld.lld + mingw CRT/import libs,
 # so produced executables link without Visual Studio or the Windows SDK. The
-# compiler resolves <package>\toolchain\bin before PATH (see ResolveToolchainTool).
+# builder resolves <package>\toolchain\bin before PATH (see ResolveToolchainTool).
 $LlvmMingwTag = '20260602'   # llvm-mingw release built from LLVM 22.1.7
 $LlvmVersion  = '22.1.7'
 $CacheDir = 'dist\_cache'

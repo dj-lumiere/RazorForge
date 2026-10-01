@@ -54,7 +54,7 @@ show_help() {
     echo "Options:"
     echo "  --unit-only       Run only unit tests"
     echo "  --integration-only Run only integration tests"
-    echo "  --compiler-only   Run only compiler tests"
+    echo "  --compiler-only   Run only builder tests"
     echo "  --examples-only   Run only example tests"
     echo "  --coverage        Generate code coverage report"
     echo "  --verbose         Enable verbose output"
@@ -66,7 +66,7 @@ show_help() {
     echo "  BUILD_TYPE        Build configuration (Release|Debug)"
     echo "  RUN_UNIT          Run unit tests (true|false)"
     echo "  RUN_INTEGRATION   Run integration tests (true|false)"
-    echo "  RUN_COMPILER      Run compiler tests (true|false)"
+    echo "  RUN_COMPILER      Run builder tests (true|false)"
     echo "  RUN_EXAMPLES      Run example tests (true|false)"
 }
 
@@ -200,9 +200,9 @@ run_dotnet_tests() {
     fi
 }
 
-# Function to run RazorForge compiler tests
+# Function to run RazorForge builder tests
 run_compiler_tests() {
-    print_info "Running RazorForge compiler tests..."
+    print_info "Running RazorForge builder tests..."
 
     local test_files=()
     while IFS= read -r -d '' file; do
@@ -234,7 +234,7 @@ run_compiler_tests() {
         fi
     done
 
-    print_info "RazorForge compiler tests: $passed passed, $failed failed"
+    print_info "RazorForge builder tests: $passed passed, $failed failed"
     TOTAL_TESTS=$((TOTAL_TESTS + passed + failed))
     PASSED_TESTS=$((PASSED_TESTS + passed))
     FAILED_TESTS=$((FAILED_TESTS + failed))
@@ -308,7 +308,7 @@ if [ "$RUN_INTEGRATION" = "true" ]; then
     fi
 fi
 
-# Run compiler tests
+# Run builder tests
 if [ "$RUN_COMPILER" = "true" ]; then
     if ! run_compiler_tests; then
         OVERALL_SUCCESS=false

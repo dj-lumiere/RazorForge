@@ -5,7 +5,7 @@ using Builder.Execution;
 namespace RazorForge.Tests.Execution;
 
 /// <summary>
-/// Drives the compiler CLI (<c>src/Execution/Program.cs</c>) in-process via <see cref="Program.Main"/> for
+/// Drives the builder CLI (<c>src/Execution/Program.cs</c>) in-process via <see cref="Program.Main"/> for
 /// the non-spawning verbs — <c>version</c>, <c>help</c>, <c>tokenize</c>, <c>parse</c>, <c>codegen</c>,
 /// <c>check</c>, <c>validate-stdlib</c> — plus the arg-handling and error branches. These verbs run entirely
 /// in the test host (no clang/opt/link subprocess), so they are coverage-instrumented; <c>build</c> /

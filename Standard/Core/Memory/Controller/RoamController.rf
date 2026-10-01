@@ -12,7 +12,7 @@ choice RoamState
     ### Buffered as a possible cycle root.
     SUSPECTED: 3
 
-### Compiler intrinsic: yields a closure over this type's synthesized `roam_trace` cycle-collector
+### Builder intrinsic: yields a closure over this type's synthesized `roam_trace` cycle-collector
 ### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
 ### routine-value reference to that hook; the `cptr_none()` body is a never-used fallback (NOT `@innate`
 ### — an unrecognized `@innate` T-method is folded to a default before the rewrite runs).
@@ -20,7 +20,7 @@ choice RoamState
 routine T.roam_trace_ref() -> CPtr
     return cptr_none()
 
-### Compiler intrinsic: yields a closure over this type's synthesized `roam_free` hook (tears down
+### Builder intrinsic: yields a closure over this type's synthesized `roam_free` hook (tears down
 ### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass; `cptr_none()` fallback.
 routine T.roam_free_ref() -> CPtr
     return cptr_none()
@@ -72,11 +72,11 @@ entity RoamController[EntityType T]
     secret state: RoamState
     ### `true` while this controller sits in the collector's roots buffer — dedups `mark_cycle_candidate`.
     secret buffered: Bool
-    ### Address of the compiler-generated per-type trace function for `T` (visits `T`'s `Roamed`
+    ### Address of the builder-generated per-type trace function for `T` (visits `T`'s `Roamed`
     ### fields). `cptr_none()` = no trace wired yet / `T` has no `Roamed` fields (cannot form a cycle).
     ### Called as `fn(controller_address)`; reinterprets and `rf_cyclic_visit_child`s each `Roamed` field.
     secret trace_hook: CPtr
-    ### Address of the compiler-generated per-type free function for `T`. Called as
+    ### Address of the builder-generated per-type free function for `T`. Called as
     ### `fn(controller_address)` when the collector reaps a GARBAGE node: runs the managed
     ### entity's `destroy` (type-correct) then frees the controller. `cptr_none()` until wired.
     secret free_hook: CPtr
@@ -161,7 +161,7 @@ routine RoamController[T].unhold()
 ### point — only `Roamed` decrements reach it, which is what scopes the collector to `Roamed`.
 dangerous routine RoamController[T].mark_cycle_candidate()
     # Acyclic-type fast out (standard Bacon-Rajan optimization): a `T` with no `Roamed` fields cannot be
-    # part of a cycle, and the compiler wires its `trace_hook` to `cptr_none()` (see `create`). Skipping
+    # part of a cycle, and the builder wires its `trace_hook` to `cptr_none()` (see `create`). Skipping
     # the candidate buffer here keeps the common non-zero decrement off the collector's books entirely.
     if me.trace_hook.is_none()
         return
@@ -181,7 +181,7 @@ dangerous routine RoamController[T].mark_cycle_candidate()
 # type-erased `RoamController[RoamErased]` — every field below sits at a T-independent offset, so these
 # read/write correctly through the erased view. Count adjustment is non-atomic: the collector runs
 # single-threaded (core-local), so trial deletion touches the same count the RC uses without atomics.
-# `cyclic_set_hooks` is a test/wiring hatch (compiler auto-wires trace_hook/free_hook in Stage 2).
+# `cyclic_set_hooks` is a test/wiring hatch (builder auto-wires trace_hook/free_hook in Stage 2).
 # ============================================================================
 
 ### The address of the managed entity — the collector passes this to the entity-based trace/free
@@ -319,7 +319,7 @@ dangerous routine RoamController[T].cyclic_finalize()
 # ============================================================================
 
 ### Flips to ESCAPED (idempotent). Runs on the owner BEFORE the handle is published to another
-### thread (the compiler inserts it at the escape site, pre-spawn), so no concurrent access races
+### thread (the builder inserts it at the escape site, pre-spawn), so no concurrent access races
 ### the flip. After this, `count` is atomic and the reentrant lock is live.
 ### Escape is a GRAPH property, not per-object: everything reachable through this object's lock is
 ### reachable by the crossing task too, so it must escape as well (a one-object flip would leave a LOCAL

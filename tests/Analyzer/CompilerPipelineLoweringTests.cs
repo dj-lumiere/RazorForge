@@ -16,7 +16,7 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Contains tests for compiler pipeline lowering.
+/// Contains tests for builder pipeline lowering.
 /// </summary>
 public class CompilerPipelineLoweringTests
 {

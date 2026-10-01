@@ -1,6 +1,6 @@
 # RazorForge / Suflae — Rider (JetBrains) plugin
 
-Brings `.rf` / `.sf` language support into Rider by driving the compiler's built-in language
+Brings `.rf` / `.sf` language support into Rider by driving the builder's built-in language
 server (`dotnet RazorForge.dll --lsp`) through the IntelliJ Platform **LSP client API**. This is
 the Rider counterpart to `../vscode-extension` — the LSP server is the same process; only the
 client that launches it differs.
@@ -16,7 +16,7 @@ client that launches it differs.
 
 ## Prerequisites
 
-1. Build the compiler so the DLL + its sibling `Standard/` stdlib exist:
+1. Build the builder so the DLL + its sibling `Standard/` stdlib exist:
    ```
    dotnet build       # from the repo root — produces RazorForge/bin/Debug/net10.0/RazorForge.dll
    ```
