@@ -103,7 +103,7 @@ razorforge buildandrun hello.rf
 ### From source
 
 RazorForge is built from four repositories checked out side by side: the builder core
-([Anvila](https://github.com/dj-lumiere/Anvila)), the native runtime
+([Anvila](https://github.com/dj-lumiere/Anvila)), the shared library
 ([Ingrid](https://github.com/dj-lumiere/Ingrid)), and the two language front ends (this repository
 and [Suflae](https://github.com/dj-lumiere/Suflae)).
 
@@ -273,7 +273,7 @@ RazorForge/
 ```
 
 The builder itself (parser, analysis, lowering, LLVM emission) is
-[Anvila](https://github.com/dj-lumiere/Anvila), and the C runtime is
+[Anvila](https://github.com/dj-lumiere/Anvila), and the shared library under the standard library is
 [Ingrid](https://github.com/dj-lumiere/Ingrid).
 
 ## Roadmap
