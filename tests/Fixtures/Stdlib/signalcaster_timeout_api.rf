@@ -9,7 +9,7 @@ module Tests/Stdlib/SignalCasterTimeoutApi
 # signalcaster_predicate_api) — so the woken result is race-free at N>1 workers. Without it, a cast that
 # lands before the waiter parks is lost (casts to no waiter are dropped by design), and the wait would
 # run the full deadline and report a timeout. The predicate cell is a raw `Hijacked[S64]` aliasing a slot
-# on start()'s frame, shared by value across the two cooperative coroutines (only one touches it at a time).
+# on start()'s frame, shared by value across the two coroutines and written under the monitor lock.
 
 import IO/Console
 
@@ -35,8 +35,10 @@ suspended routine wait_for_cast(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     return if woken then 1 else 0
 
 suspended routine caster(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+    sig.lock()
     danger
-        cell.poke(value: 1_s64)           # make the predicate true...
+        cell.poke(value: 1_s64)           # make the predicate true under the lock...
+    sig.unlock()
     sig.cast_one()                       # ...then wake the waiter
     return 0
 

@@ -1,30 +1,42 @@
 module Tests/Stdlib/SignalCasterApi
 
 # v0.3.0 SignalCaster — wake handoff. A waiter coroutine takes the monitor lock and `wait`s, which
-# parks it (releasing the lock); a caster coroutine then `cast_one`s, waking it. Driving the waiter
-# with retrieve! runs both on this thread's scheduler: the waiter parks first (FIFO), the caster casts,
-# the waiter resumes and finishes. If the cast did not wake the wait, the waiter would hang forever, so
-# the program completing at all is the assertion. Handles are clones of one monitor.
+# parks it (releasing the lock); a caster coroutine then `cast_one`s, waking it. If the cast did not wake
+# the wait, the waiter would hang forever, so the program completing at all is the assertion. Handles are
+# clones of one monitor.
+#
+# The waiter tests a shared flag under the lock and only waits while it is unset. Workers run the two
+# coroutines in parallel, so the caster may cast before the waiter parks; a cast to no waiter is dropped
+# by design, and without the flag that waiter would then park forever. The flag cell is a raw
+# `Hijacked[S64]` aliasing a slot on start()'s frame, written by the caster under the same lock.
 
 import IO/Console
 
-suspended routine waiter(sig: SignalCaster) -> S64
+suspended routine waiter(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     sig.lock()
-    sig.wait()        # parks here until a cast wakes us; the lock is released while parked
+    danger
+        while cell.peek() == 0_s64    # the flag, tested under the lock
+            sig.wait()                     # parks until a cast wakes us, the lock released meanwhile
     sig.unlock()
     return 1
 
-suspended routine caster(sig: SignalCaster) -> S64
-    sig.cast_one()    # wake the parked waiter (called without holding the lock)
+suspended routine caster(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+    sig.lock()
+    danger
+        cell.poke(value: 1_s64)       # make the flag true under the lock...
+    sig.unlock()
+    sig.cast_one()                     # ...then wake the parked waiter (called without holding the lock)
     return 2
 
 routine start()
+    var slot = 0_s64
     var sig = SignalCaster()
 
     danger
+        var cell = slot.hijack()         # raw pointer to `slot`, copyable -> both coroutines share it
         # LAZY: launch waiter + caster TOGETHER (`gather`) so the waiter can park on `wait` and the caster
         # can `cast_one` to wake it. Retrieving the waiter ALONE would hang — the caster would never be
         # launched to cast. gather returns results in input order: [waiter, caster].
-        var results = [waiter(sig: steal sig.duplicate()), caster(sig: steal sig)].gather()
+        var results = [waiter(sig: steal sig.duplicate(), cell: cell), caster(sig: steal sig, cell: cell)].gather()
         show(f"waiter={results[0]} caster={results[1]}")
     return

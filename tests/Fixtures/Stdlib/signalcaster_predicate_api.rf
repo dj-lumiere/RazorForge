@@ -7,8 +7,8 @@ module Tests/Stdlib/SignalCasterPredicateApi
 # The predicate cell is a raw `Hijacked[S64]` aliasing a slot on start()'s frame. Coroutines pass
 # value-records BY VALUE (a copy), so an `Atomic[S64]` argument would NOT be shared the way it is
 # across `threaded` workers (those marshal struct args by reference, see shared_counter_api); a raw
-# pointer is the simplest cell two coroutines can share. It needs no atomics because cooperative
-# coroutines never run simultaneously — only one touches the slot at a time.
+# pointer is the simplest cell two coroutines can share. Workers may run the two coroutines in parallel,
+# so the producer writes the cell under the same monitor lock the consumer reads it under.
 
 import IO/Console
 
@@ -22,8 +22,10 @@ suspended routine consumer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
         return cell.peek()
 
 suspended routine producer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+    sig.lock()
     danger
-        cell.poke(value: 42_s64)       # make the predicate true...
+        cell.poke(value: 42_s64)       # make the predicate true under the lock...
+    sig.unlock()
     sig.cast_one()                     # ...then wake the waiter
     return 1
 
