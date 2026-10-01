@@ -166,7 +166,9 @@ routine int_to_text(mag: U64, negative: Bool) -> Text
         return Text(from_span: p.stride(count: idx), count: LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 21_s64, b: idx)))
 
 ### Decodes UTF-8 text from a null-terminated C string.
-### Invalid byte sequences are replaced with the Unicode replacement character.
+### A malformed sequence (a missing or stray continuation byte, an overlong encoding, a surrogate, or a
+### code point past U+10FFFF) becomes one U+FFFD replacement character per offending lead byte, the same
+### rule `Bytes.decode_as_utf8_lossy` follows.
 ### :param from: The source C string.
 ### :returns: The resulting `Text` value.
 routine Text(from: CStr) -> Text
@@ -182,37 +184,41 @@ routine Text(from: CStr) -> Text
         loop
             if i >= len
                 break
-            var b0 = from[i]
+            var b0 = U32(from[i])
+            # A malformed sequence leaves the replacement character and consumes only its lead byte.
+            var codepoint = 0xFFFDu32
+            var width = 1u64
 
-            if b0 <= Byte(0x7Fu8)
-                # ASCII: single byte
-                list.add_last(Character(U32(b0)))
-                i = i + 1u64
-            elseif Byte(0xC0u8) <= b0 <= Byte(0xDFu8) and i + 1u64 < len
-                # 2-byte sequence
-                var b1 = from[i + 1u64]
-                var cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
-                list.add_last(Character(cp))
-                i = i + 2u64
-            elseif Byte(0xE0u8) <= b0 <= Byte(0xEFu8) and i + 2u64 < len
-                # 3-byte sequence
-                var b1 = from[i + 1u64]
-                var b2 = from[i + 2u64]
-                var cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
-                list.add_last(Character(cp))
-                i = i + 3u64
-            elseif Byte(0xF0u8) <= b0 <= Byte(0xF7u8) and i + 3u64 < len
-                # 4-byte sequence
-                var b1 = from[i + 1u64]
-                var b2 = from[i + 2u64]
-                var b3 = from[i + 3u64]
-                var cp = ((U32(b0) & 0x07u32) << 18u32) | ((U32(b1) & 0x3Fu32) << 12u32) | ((U32(b2) & 0x3Fu32) << 6u32) | (U32(b3) & 0x3Fu32)
-                list.add_last(Character(cp))
-                i = i + 4u64
-            else
-                # Invalid byte — replacement character
-                list.add_last(Character(0xFFFDu32))
-                i = i + 1u64
+            if b0 <= 0x7Fu32
+                codepoint = b0
+            elseif (b0 & 0xE0u32) == 0xC0u32 and i + 1u64 < len
+                var b1 = U32(from[i + 1u64])
+                # C0 and C1 leads can only spell an overlong ASCII character.
+                if (b1 & 0xC0u32) == 0x80u32 and b0 >= 0xC2u32
+                    codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
+                    width = 2u64
+            elseif (b0 & 0xF0u32) == 0xE0u32 and i + 2u64 < len
+                var b1 = U32(from[i + 1u64])
+                var b2 = U32(from[i + 2u64])
+                if (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32
+                    var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
+                    # Below U+0800 is overlong, and U+D800..U+DFFF are surrogates, never characters.
+                    if candidate >= 0x800u32 and (candidate < 0xD800u32 or candidate > 0xDFFFu32)
+                        codepoint = candidate
+                        width = 3u64
+            elseif (b0 & 0xF8u32) == 0xF0u32 and i + 3u64 < len
+                var b1 = U32(from[i + 1u64])
+                var b2 = U32(from[i + 2u64])
+                var b3 = U32(from[i + 3u64])
+                if (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32 and (b3 & 0xC0u32) == 0x80u32
+                    var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
+                    # Below U+10000 is overlong, and past U+10FFFF is outside Unicode.
+                    if 0x10000u32 <= candidate <= 0x10FFFFu32
+                        codepoint = candidate
+                        width = 4u64
+
+            list.add_last(Character(codepoint))
+            i = i + width
         return Text(from_list: steal list)
 
 # Core operations
