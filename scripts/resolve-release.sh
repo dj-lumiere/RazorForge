@@ -2,7 +2,8 @@
 # Resolve the packaging version and GitHub-release branding from the pushed tag,
 # writing PKG_VERSION / RELEASE_NAME / RELEASE_NOTES to $GITHUB_ENV for later steps.
 #
-# Two tag families feed the same release workflow (see .github/workflows/release.yaml):
+# Two tag families feed the same release workflow (RazorForge's .github/workflows/release.yaml, which the
+# Suflae repository calls for its tags). Runs from the workspace root that holds the projects side by side.
 #   v*      -> RazorForge release. Artifacts named for the tag version.
 #   sf-v*   -> Suflae release. The SAME compiler artifacts (one binary runs both
 #              languages), named for the csproj compiler version — NOT the sf tag,
@@ -19,11 +20,11 @@ tag="${GITHUB_REF_NAME:?GITHUB_REF_NAME is not set}"
 if [[ "$tag" == sf-v* ]]; then
   pkg_version="$(csproj_version)"                 # e.g. 0.4.0 — the compiler that runs .sf
   release_name="Suflae v${tag#sf-v} (preview)"    # e.g. Suflae v0.1.0 (preview)
-  release_notes="scripts/package-assets/RELEASE_NOTES_SF.md"
+  release_notes="RazorForge/scripts/package-assets/RELEASE_NOTES_SF.md"
 else
   pkg_version="${tag#v}"                          # e.g. 0.4.0
   release_name="RazorForge ${tag}"
-  release_notes="scripts/package-assets/RELEASE_NOTES.md"
+  release_notes="RazorForge/scripts/package-assets/RELEASE_NOTES.md"
 fi
 
 {

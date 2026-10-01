@@ -8,8 +8,12 @@ name: Release
 # The Windows/macOS jobs run after the Linux one so exactly one job creates the
 # release; later invocations of action-gh-release just append their attachments.
 # If a platform job fails, the release still exists with the other platforms'
-# artifacts — build the missing package locally with scripts/package.ps1 (or
-# package.sh) and attach it manually as a fallback.
+# artifacts — build the missing package locally with RazorForge/scripts/package.ps1
+# (or package.sh) from the workspace and attach it manually as a fallback.
+#
+# The Suflae repository's release workflow calls this one for its sf-v* tags, so
+# both languages ship from one definition; the release lands in the repository
+# that pushed the tag.
 #
 # Releases are created with the workflow's own GITHUB_TOKEN (contents: write);
 # no PAT/RELEASE_TOKEN secret is needed.
@@ -18,7 +22,7 @@ on:
   push:
     tags:
       - 'v*'       # RazorForge release  (e.g. v0.4.0)
-      - 'sf-v*'    # Suflae release      (e.g. sf-v0.1.0) — same compiler artifacts, SF branding
+  workflow_call:   # Suflae release (sf-v* tags in the Suflae repository) — same artifacts, SF branding
 
 permissions:
   contents: write
@@ -33,10 +37,8 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout the workspace
+        uses: dj-lumiere/Anvila/.github/actions/checkout-workspace@master
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -84,13 +86,6 @@ jobs:
           path: dist/_cache/*.tar.xz
           key: pkg-llvm-22.1.7-linux-x64
 
-      - name: Fetch native library sources
-        run: |
-          cd Ingrid/native
-
-          git clone --depth 1 https://github.com/libuv/libuv.git libuv
-          git clone --depth 1 https://github.com/higan-emu/libco.git libco
-
       - name: Build native libraries
         run: |
           cd Ingrid/native
@@ -102,16 +97,16 @@ jobs:
           ./build.sh
 
       - name: Resolve version and release branding
-        run: bash scripts/resolve-release.sh
+        run: bash RazorForge/scripts/resolve-release.sh
 
       - name: Package linux-x64
         run: |
-          chmod +x scripts/package.sh
+          chmod +x RazorForge/scripts/package.sh
           # PKG_VERSION is the tag version for a RazorForge tag, and the csproj
           # compiler version for a Suflae tag (an sf tag ships the same compiler,
           # so its artifacts are named for the compiler, not the sf-v0.1.0 tag —
           # which would otherwise collide with the existing v0.1.0 release name).
-          VERSION="$PKG_VERSION" scripts/package.sh
+          VERSION="$PKG_VERSION" RazorForge/scripts/package.sh
           # Per-platform checksum names: all jobs attach to the same release,
           # and identical filenames would collide.
           mv dist/checksums.txt dist/checksums-linux-x64.txt
@@ -133,10 +128,8 @@ jobs:
     needs: release-linux
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout the workspace
+        uses: dj-lumiere/Anvila/.github/actions/checkout-workspace@master
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -178,36 +171,16 @@ jobs:
             dist/_cache/opt-*.exe
           key: pkg-llvm-mingw-20260602-win-x64
 
-      - name: Fetch native library sources
-        shell: pwsh
-        run: |
-          Set-Location Ingrid\native
-          function Clone($url, $dir, $branch) {
-            $cloneArgs = @('clone', '--depth', '1')
-            if ($branch) { $cloneArgs += @('-b', $branch) }
-            git @cloneArgs $url $dir
-            if ($LASTEXITCODE -ne 0) { throw "clone failed: $url" }
-          }
-          function Fetch($url, $out) {
-            curl.exe -L -o $out $url
-            if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
-          }
-
-          Clone 'https://github.com/libuv/libuv.git' libuv
-          Clone 'https://github.com/higan-emu/libco.git' libco
-
-          exit 0
-
       - name: Resolve version and release branding
         shell: bash
-        run: bash scripts/resolve-release.sh
+        run: bash RazorForge/scripts/resolve-release.sh
 
       - name: Package win-x64
         shell: pwsh
         run: |
           # package.ps1 honors $env:VERSION; PKG_VERSION is resolved for both tag families.
           $env:VERSION = $env:PKG_VERSION
-          pwsh -NoProfile -File scripts/package.ps1
+          pwsh -NoProfile -File RazorForge/scripts/package.ps1
           if ($LASTEXITCODE -ne 0) { throw "package.ps1 failed ($LASTEXITCODE)" }
           Move-Item dist/checksums.txt dist/checksums-win-x64.txt
 
@@ -226,10 +199,8 @@ jobs:
     needs: release-linux
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout the workspace
+        uses: dj-lumiere/Anvila/.github/actions/checkout-workspace@master
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -249,13 +220,6 @@ jobs:
           path: dist/_cache/*.tar.xz
           key: pkg-llvm-22.1.7-osx-arm64
 
-      - name: Fetch native library sources
-        run: |
-          cd Ingrid/native
-
-          git clone --depth 1 https://github.com/libuv/libuv.git libuv
-          git clone --depth 1 https://github.com/higan-emu/libco.git libco
-
       - name: Build native libraries
         run: |
           cd Ingrid/native
@@ -265,12 +229,12 @@ jobs:
           ./build.sh
 
       - name: Resolve version and release branding
-        run: bash scripts/resolve-release.sh
+        run: bash RazorForge/scripts/resolve-release.sh
 
       - name: Package osx-arm64
         run: |
-          chmod +x scripts/package.sh
-          VERSION="$PKG_VERSION" scripts/package.sh
+          chmod +x RazorForge/scripts/package.sh
+          VERSION="$PKG_VERSION" RazorForge/scripts/package.sh
           mv dist/checksums.txt dist/checksums-osx-arm64.txt
 
       - name: Attach osx-arm64 artifacts to the release
