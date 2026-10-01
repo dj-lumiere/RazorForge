@@ -74,9 +74,9 @@ What sets it apart:
 |------|----------|
 | `Tessera/` | The compiler, in C#. It emits LLVM IR text and links through `clang`. |
 | `stdlib/` | The standard library, written in Tessera. It's the source of truth for the current design. |
-| `tests/` | Golden tests for the compiler. |
+| `tests/` | Golden tests for the compiler, including larger programs: Dijkstra, a lazy segment tree, SHA-256, a calculator, and more. |
 | `examples/` | Introductory programs, one idea each: FizzBuzz, binary search, a Caesar cipher, a prime sieve, word count, and more. |
-| `playground/` | Larger programs: Dijkstra, a lazy segment tree, SHA-256, a calculator, and more. |
+| `playground/` | Gitignored: your own programs to build and run (the Rider configuration *Playground* runs `playground/main.tess`). |
 | `Tessera.tmbundle/` | A TextMate grammar for syntax highlighting. |
 
 The language reference lives in the [docs](https://tessera.lumi-dev.xyz): start with
@@ -96,8 +96,8 @@ dotnet run --project Tessera -- build prog.tess -o prog       # build an executa
 dotnet run --project Tessera -- build prog.tess --emit-llvm   # write LLVM IR instead
 dotnet run --project Tessera -- build                         # build the solution in config.toml into build/
 dotnet run --project Tessera -- check                         # type-check the whole stdlib
-dotnet run --project Tessera -- test tests playground examples  # run the golden tests
-dotnet run --project Tessera -- fmt stdlib tests examples playground          # format the sources
+dotnet run --project Tessera -- test tests examples             # run the golden tests
+dotnet run --project Tessera -- fmt stdlib tests examples        # format the sources
 ```
 
 With files, `build` and `run` also take `--target <arch-os-abi>` and `-O`, and all the files form one solution. Without
@@ -122,4 +122,4 @@ modules, or a `config.toml` to build from), with one of:
 - `<name>.exit`: its exit code (default 0)
 - `<name>.error`: text the compile error must contain
 
-The programs in `examples/` and `playground/` carry `<name>.expected` files too, so they run as tests alongside `tests/`.
+The programs in `examples/` carry `<name>.expected` files too, so they run as tests alongside `tests/`.
