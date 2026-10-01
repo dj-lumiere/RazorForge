@@ -53,7 +53,7 @@ foreach ($dir in 'RazorForge-Wiki', 'Suflae-Wiki') {
     if (Test-Path "$Out\$dir") { Remove-Item -Recurse -Force "$Out\$dir" }
 }
 Get-ChildItem $Out -Recurse -Filter '*.pdb' | Remove-Item -Force
-Copy-Item RazorForgeicense, razorforgereadme.md, razorforgethird-party-notices.md $out
+Copy-Item RazorForge\LICENSE, RazorForge\README.md, RazorForge\THIRD-PARTY-NOTICES.md $Out
 
 # Short alias next to the canonical binary (apphost stub is small; payload DLLs are
 # shared in-directory). Users preferring `forge` can alias it themselves — that name
