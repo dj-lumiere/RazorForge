@@ -797,7 +797,7 @@ public class CompilerPipelineLoweringTests
         string llvmIr = generator.Generate();
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
             functionMarker:
-            "define internal %\"Record.Core.Maybe[Core.U8]\" @\"[member] Collections.BitList.try_to_u8");
+            "define internal %\"Record.Core.Maybe[Core.U8]\" @\"[member, try] Collections.BitList.to_u8");
         Assert.Contains(
             expectedSubstring: "call i64 @\"[dangerous, member] Core.Hijacked[Core.U64].peek()\"",
             actualString: tryToU8Body);
@@ -835,29 +835,49 @@ public class CompilerPipelineLoweringTests
         TypeSymbol maybeS64 = result.Registry.GetOrCreateResolution(genericDef: maybeDef,
             typeArguments: [s64Type]);
 
+        var fromS8Base = new RoutineInfo(name: RoutineInfo.CreatorName)
+        {
+            Kind = RoutineKind.Creator,
+            OwnerType = s64Type,
+            Parameters = [new ParamInfo(name: "from", type: s8Type)],
+            ReturnType = s64Type,
+            IsFailable = true
+        };
+        var fromTextBase = new RoutineInfo(name: RoutineInfo.CreatorName)
+        {
+            Kind = RoutineKind.Creator,
+            OwnerType = s64Type,
+            Parameters = [new ParamInfo(name: "from_text", type: textType)],
+            ReturnType = s64Type,
+            IsFailable = true
+        };
         string fromS8 = LlvmEmitter.MangleRoutineName(
-            routine: new RoutineInfo(name: "try_create")
+            routine: new RoutineInfo(name: RoutineInfo.CreatorName)
             {
+                Kind = RoutineKind.CommonRoutine,
                 OwnerType = s64Type,
-                Parameters = [new ParamInfo(name: "from", type: s8Type)],
+                Parameters = fromS8Base.Parameters,
                 ReturnType = maybeS64,
-                OriginalName = "$create",
+                RecoveryOf = fromS8Base,
+                Recovery = RecoveryKind.Try,
                 IsSynthesized = true
             });
 
         string fromText = LlvmEmitter.MangleRoutineName(
-            routine: new RoutineInfo(name: "try_create")
+            routine: new RoutineInfo(name: RoutineInfo.CreatorName)
             {
+                Kind = RoutineKind.CommonRoutine,
                 OwnerType = s64Type,
-                Parameters = [new ParamInfo(name: "from_text", type: textType)],
+                Parameters = fromTextBase.Parameters,
                 ReturnType = maybeS64,
-                OriginalName = "$create",
+                RecoveryOf = fromTextBase,
+                Recovery = RecoveryKind.Try,
                 IsSynthesized = true
             });
 
-        Assert.Equal(expected: "\"[member] Core.S64.try_create(from: Core.S8)\"", actual: fromS8);
-        Assert.Equal(expected: "\"[member] Core.S64.try_create(from_text: Core.Text)\"",
-            actual: fromText);
+        Assert.Contains(expectedSubstring: "try", actualString: fromS8);
+        Assert.Contains(expectedSubstring: "from: Core.S8", actualString: fromS8);
+        Assert.Contains(expectedSubstring: "from_text: Core.Text", actualString: fromText);
         Assert.NotEqual(expected: fromS8, actual: fromText);
     }
 
@@ -1069,9 +1089,9 @@ public class CompilerPipelineLoweringTests
 
         var matchingBodies = result.SynthesizedBodies
                                    .Where(predicate: pair =>
-                                        pair.Key.Contains(value: "BytesUtf8Emittable.try_emit",
+                                        pair.Key.Contains(value: "BytesUtf8Emittable.emit?try",
                                             comparisonType: StringComparison.Ordinal) ||
-                                        pair.Key.Contains(value: "BytesUtf8Emittable.lookup_emit",
+                                        pair.Key.Contains(value: "BytesUtf8Emittable.emit?lookup",
                                             comparisonType: StringComparison.Ordinal))
                                    .ToList();
 

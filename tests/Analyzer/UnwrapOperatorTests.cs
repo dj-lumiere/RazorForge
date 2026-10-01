@@ -34,7 +34,7 @@ public class UnwrapOperatorTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         // Variant is synthesized ON DEMAND — the `try` keyword above generates try_get.
-        RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get");
+        RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "get")!, kind: RecoveryKind.Try);
         Assert.NotNull(@object: tryVariant);
         Assert.IsType<RecordTypeSymbol>(@object: tryVariant.ReturnType);
     }

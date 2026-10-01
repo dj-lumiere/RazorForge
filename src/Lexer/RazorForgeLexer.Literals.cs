@@ -494,7 +494,7 @@ public partial class Tokenizer
                 break;
             // Prefixed string literals (b"..", r"..", f"..", rf"..", br"..") —
             // mirror Tokenizer.Scanning so nested literals work inside f-string
-            // interpolation holes, e.g. f"{try_parse(bytes: b"42")}".
+            // interpolation holes, e.g. f"{try parse(bytes: b"42")}".
             case 'r' or 'f':
                 ScanInsertionTextPrefixOrIdentifier();
                 break;

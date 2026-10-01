@@ -1,3 +1,4 @@
+using SyntaxTree;
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 using TypeModel.Symbols;
@@ -43,7 +44,7 @@ public class ErrorVariantGenerationTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         // Variants are synthesized ON DEMAND — the `try` keyword above generates try_get.
-        RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get");
+        RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "get")!, kind: RecoveryKind.Try);
         Assert.NotNull(@object: tryVariant);
         // Return type should be Maybe[User] / User?
     }
@@ -86,11 +87,11 @@ public class ErrorVariantGenerationTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         // Variants are synthesized ON DEMAND — the `grab`/`try` keywords above generate check_/try_validate.
-        RoutineInfo? checkVariant = result.Registry.GetRoutine(name: "check_validate");
+        RoutineInfo? checkVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "validate")!, kind: RecoveryKind.Grab);
         Assert.NotNull(@object: checkVariant);
 
         // Should also generate try_validate variant
-        RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_validate");
+        RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "validate")!, kind: RecoveryKind.Try);
         Assert.NotNull(@object: tryVariant);
     }
 
@@ -143,11 +144,11 @@ public class ErrorVariantGenerationTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         // Variants are synthesized ON DEMAND — the `lookup`/`try` keywords above generate lookup_/try_get_user.
-        RoutineInfo? lookupVariant = result.Registry.GetRoutine(name: "lookup_get_user");
+        RoutineInfo? lookupVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "get_user")!, kind: RecoveryKind.Lookup);
         Assert.NotNull(@object: lookupVariant);
 
         // Should also generate try_get_user variant
-        RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get_user");
+        RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "get_user")!, kind: RecoveryKind.Try);
         Assert.NotNull(@object: tryVariant);
     }
 
@@ -177,7 +178,7 @@ public class ErrorVariantGenerationTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         // Variants are synthesized ON DEMAND — the `try` keyword above generates Cache.try_get.
-        RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "Cache.try_get");
+        RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "Cache.get")!, kind: RecoveryKind.Try);
         Assert.NotNull(@object: tryVariant);
     }
 
@@ -199,9 +200,9 @@ public class ErrorVariantGenerationTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         // Should NOT generate try_add, check_add, or lookup_add
-        Assert.Null(@object: result.Registry.GetRoutine(name: "try_add"));
-        Assert.Null(@object: result.Registry.GetRoutine(name: "check_add"));
-        Assert.Null(@object: result.Registry.GetRoutine(name: "lookup_add"));
+        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Try));
+        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Grab));
+        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Lookup));
     }
     /// <summary>
     /// Verifies semantic analysis behavior for failable with no throw or absent warns or errors.
@@ -325,8 +326,8 @@ public class ErrorVariantGenerationTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         // Variants are synthesized ON DEMAND — the `grab`/`try` keywords above generate check_/try_parse_number.
-        RoutineInfo? checkVariant = result.Registry.GetRoutine(name: "check_parse_number");
-        RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_parse_number");
+        RoutineInfo? checkVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "parse_number")!, kind: RecoveryKind.Grab);
+        RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "parse_number")!, kind: RecoveryKind.Try);
 
         Assert.NotNull(@object: checkVariant);
         Assert.NotNull(@object: tryVariant);

@@ -370,27 +370,21 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Verifies that a hand-written try_/check_/lookup_ routine colliding with the variant the
-    /// compiler generates for a failable base of the same signature is rejected (RF-S409).
+    /// A recovery form of a failable routine is not a name: `try_parse`, `check_parse` and `lookup_parse` are
+    /// ordinary routines even next to a failable `parse!` whose `try`/`grab`/`lookup` forms the builder
+    /// generates, and calling either never reaches the other.
     /// </summary>
-    /// <param name="routineName">The colliding variant name.</param>
-    /// <param name="failStatement">
-    /// The failure statement in `parse!` that drives which variant is synthesized: `absent` -> try_,
-    /// `throw x` -> try_+check_, both -> try_+lookup_.
-    /// </param>
+    /// <param name="routineName">The routine name.</param>
     [Theory]
-    [InlineData("try_parse", "absent")]
-    [InlineData("check_parse", "throw x")]
-    [InlineData("lookup_parse", "absent\n    throw x")]
-    public void Analyze_ReservedGeneratedRoutinePrefix_CollidingWithFailableBase_ReportsError(
-        string routineName, string failStatement)
+    [InlineData("try_parse")]
+    [InlineData("check_parse")]
+    [InlineData("lookup_parse")]
+    public void Analyze_RecoveryFormNamedRoutine_IsOrdinary(string routineName)
     {
-        // `parse!` is failable, so the compiler synthesizes the matching try_/check_/lookup_ variant
-        // with parse!'s exact signature — the hand-written routine below collides with it.
         string source = $"""
                          routine parse!(x: S32) -> S32
                              if x < 0
-                                 {failStatement}
+                                 absent
                              return x
                          routine {routineName}(x: S32) -> S32
                              return x
@@ -398,33 +392,8 @@ public class WikiLanguageBreakageTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
+        Assert.Empty(collection: result.Errors);
     }
-
-    /// <summary>
-    /// Verifies the reserved prefixes are collision-only: a try_/check_/lookup_ routine with no
-    /// failable base of the same signature (e.g. the industry lock idiom <c>try_lock</c>) is
-    /// allowed and never reported as a reserved-prefix error.
-    /// </summary>
-    /// <param name="routineName">The routine name.</param>
-    [Theory]
-    [InlineData("try_lock")]
-    [InlineData("check_status")]
-    [InlineData("lookup_row")]
-    public void Analyze_ReservedGeneratedRoutinePrefix_NoFailableBase_Allowed(string routineName)
-    {
-        string source = $"""
-                         routine {routineName}() -> S32
-                             return 1
-                         """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
-    }
-
 
     /// <summary>
     /// Verifies that break cannot appear outside a loop.

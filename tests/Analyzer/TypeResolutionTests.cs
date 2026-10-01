@@ -303,56 +303,6 @@ public class TypeResolutionTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
-    /// <summary>
-    /// The try_/check_/lookup_ prefixes are collision-only: with no failable base of the same
-    /// signature to shadow, a try_-prefixed routine is allowed (e.g. the lock idiom `try_lock`).
-    /// </summary>
-    [Fact]
-    public void Analyze_ReservedFunctionPrefix_NoFailableBase_Allowed()
-    {
-        string source = """
-                        routine try_something()
-                            pass
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
-    }
-    /// <summary>
-    /// A check_-prefixed routine is allowed when no failable base of the same signature exists.
-    /// </summary>
-    [Fact]
-    public void Analyze_ReservedFunctionPrefix_Check_NoFailableBase_Allowed()
-    {
-        string source = """
-                        routine check_value()
-                            pass
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
-    }
-    /// <summary>
-    /// A lookup_-prefixed routine is allowed when no failable base of the same signature exists.
-    /// </summary>
-    [Fact]
-    public void Analyze_ReservedFunctionPrefix_Lookup_NoFailableBase_Allowed()
-    {
-        string source = """
-                        routine lookup_item()
-                            pass
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
-    }
-
     #endregion
 
     #region Constraint Validation

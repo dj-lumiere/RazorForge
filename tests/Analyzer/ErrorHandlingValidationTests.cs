@@ -1,3 +1,4 @@
+using SyntaxTree;
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 using TypeModel.Symbols;
@@ -156,9 +157,9 @@ public class ErrorHandlingValidationTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         // Should NOT generate try_, check_, or lookup_ variants
-        Assert.Null(@object: result.Registry.GetRoutine(name: "try_crash_routine"));
-        Assert.Null(@object: result.Registry.GetRoutine(name: "check_crash_routine"));
-        Assert.Null(@object: result.Registry.GetRoutine(name: "lookup_crash_routine"));
+        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Try));
+        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Grab));
+        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Lookup));
     }
     /// <summary>
     /// Verifies semantic analysis behavior for non crash only generates variants.
@@ -179,7 +180,7 @@ public class ErrorHandlingValidationTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         // Without @crash_only, variants are synthesized ON DEMAND — the `try` keyword above generates it.
-        RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_normal_routine");
+        RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "normal_routine")!, kind: RecoveryKind.Try);
         Assert.NotNull(@object: tryVariant);
     }
 
