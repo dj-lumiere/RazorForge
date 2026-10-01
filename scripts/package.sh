@@ -152,7 +152,7 @@ if [[ -n "$LLVM_ASSET" ]]; then
 fi
 
 echo "=== add install script + quickstart + AI reference ==="
-cp scripts/package-assets/install.sh scripts/package-assets/QUICKSTART.md RAZORFORGE-FOR-AI.md "$OUT/"
+cp scripts/package-assets/install.sh scripts/package-assets/QUICKSTART.md RazorForge/RAZORFORGE-FOR-AI.md "$OUT/"
 chmod +x "$OUT/install.sh"
 
 echo "=== smoke test: self-contained buildandrun (system toolchain hidden) ==="

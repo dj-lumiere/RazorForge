@@ -65,7 +65,7 @@ public sealed class UseAfterStealTests
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.sln")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
             {
                 return dir;
             }
@@ -80,6 +80,6 @@ public sealed class UseAfterStealTests
         }
 
         throw new InvalidOperationException(
-            message: "Could not locate RazorForge.sln walking up from test assembly directory.");
+            message: "Could not locate RazorForge.csproj walking up from test assembly directory.");
     }
 }

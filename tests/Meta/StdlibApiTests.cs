@@ -77,90 +77,6 @@ public sealed partial class StdlibApiTests
     }
 
     /// <summary>
-    /// Suflae (.sf) sibling of the stdlib harness. Bundles every <c>StdlibSf/*.sf</c> fixture into one
-    /// <c>all_suflae.sf</c> (an SF project — entry extension picks the language), compiles + runs it
-    /// ONCE over the shared RazorForge stdlib, and diffs each fixture's section against its snapshot.
-    /// Proves SF programs behave correctly on the borrowed RF Core; where a <c>StdlibSf</c> fixture
-    /// shares a stem with a <c>Stdlib</c> fixture, the equivalence test below locks their snapshots
-    /// identical so the two frontends are held to the same observable behavior.
-    /// </summary>
-    [Fact]
-    public void SuflaeHarness_AllFixturesOutputMatchExpected()
-    {
-        if (!Directory.Exists(path: SuflaeFixturesDir) || !Directory
-                                                          .EnumerateFiles(path: SuflaeFixturesDir,
-                                                               searchPattern: "*.sf")
-                                                          .Any())
-        {
-            return; // No SF fixtures authored yet — nothing to assert.
-        }
-
-        int fixtureCount = RunFixtureBundle(fixturesDir: SuflaeFixturesDir,
-            glob: "*.sf",
-            harnessDir: SuflaeHarnessDir,
-            harnessModule: SuflaeHarnessModule,
-            bundleFileName: "all_suflae.sf",
-            packageName: "suflae-harness",
-            libraryRel: "../StdlibSf");
-        // The early return above guarantees at least one .sf fixture; confirm the bundle actually ran it.
-        Assert.True(condition: fixtureCount > 0,
-            userMessage: "SF fixtures exist but the harness discovered none to run.");
-    }
-
-    /// <summary>
-    /// Equivalence lock: every fixture stem present in BOTH <c>Stdlib</c> (.rf) and <c>StdlibSf</c>
-    /// (.sf) must have byte-identical (normalized) expected output. This is what makes the SF fixture
-    /// an equivalence test rather than a standalone one — porting a .rf fixture to .sf and keeping the
-    /// same snapshot asserts the two frontends produce the SAME observable behavior over the shared
-    /// stdlib. If the SF output legitimately differs (e.g. a genuinely SF-only surface), give that
-    /// fixture a stem with no .rf counterpart so it is exempt.
-    /// </summary>
-    [Fact]
-    public void SuflaeAndRazorForge_SharedFixtures_HaveIdenticalExpected()
-    {
-        if (!Directory.Exists(path: SuflaeFixturesDir))
-        {
-            return;
-        }
-
-        var mismatches = new List<string>();
-        foreach (string sfExpected in Directory.EnumerateFiles(path: SuflaeFixturesDir,
-                     searchPattern: "*.expected.txt"))
-        {
-            string stem = Path.GetFileName(path: sfExpected);
-            string rfExpected = Path.Combine(path1: FixturesDir, path2: stem);
-            if (!File.Exists(path: rfExpected))
-            {
-                continue; // SF-only fixture — exempt.
-            }
-
-            // Canonicalize the namespace before comparing. SF fixtures live under `Tests/StdlibSf/*`
-            // (their own namespace so the SF bundle's prefix import pulls only `.sf` files), so any
-            // fixture that prints its own fully-qualified type name (via `diagnose` / `:?`) emits
-            // `Tests/StdlibSf/...` where its `.rf` twin emits `Tests/Stdlib/...`. That's a naming
-            // artifact of the split, NOT a behavioral difference — fold it out so equivalence tracks
-            // real observable behavior only.
-            static string Canon(string s)
-            {
-                return NormalizeForCompare(s: s)
-                   .Replace(oldValue: "Tests/StdlibSf", newValue: "Tests/Stdlib");
-            }
-
-            if (Canon(s: File.ReadAllText(path: rfExpected)) !=
-                Canon(s: File.ReadAllText(path: sfExpected)))
-            {
-                mismatches.Add(item: stem);
-            }
-        }
-
-        Assert.True(condition: mismatches.Count == 0,
-            userMessage:
-            "Guarded RF/SF fixtures have divergent expected output (equivalence broken): " +
-            string.Join(separator: ", ", values: mismatches) +
-            ". Reconcile the snapshots, or rename the SF fixture stem to exempt it.");
-    }
-
-    /// <summary>
     /// Generates a single-program harness from every fixture in <paramref name="fixturesDir"/> matching
     /// <paramref name="glob"/> (importing each by its declared module, calling its <c>start()</c> via the
     /// module leaf), compiles + runs the ONE program, splits combined stdout on the
@@ -266,22 +182,6 @@ public sealed partial class StdlibApiTests
             bundleFileName: "all_stdlib_inproc.rf",
             packageName: "stdlib-harness-inproc",
             libraryRel: "../Stdlib");
-    }
-
-    /// <summary>Suflae in-process compile twin — see <see cref="StdlibHarness_InProcessCompileSucceeds"/>.</summary>
-    [Fact]
-    public void SuflaeHarness_InProcessCompileSucceeds()
-    {
-        AssertBundleCompilesInProcess(fixturesDir: SuflaeFixturesDir,
-            glob: "*.sf",
-            harnessDir: Path.Combine(path1: RepoRoot,
-                path2: "tests",
-                path3: "Fixtures",
-                path4: "SuflaeHarnessInProc"),
-            harnessModule: "SuflaeHarnessInProc",
-            bundleFileName: "all_suflae_inproc.sf",
-            packageName: "suflae-harness-inproc",
-            libraryRel: "../StdlibSf");
     }
 
     /// <summary>

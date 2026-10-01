@@ -24,16 +24,6 @@ public sealed class StdlibSnapshotCacheTests
     }
 
     [Fact]
-    public void ComputeStdlibHash_DiffersByLanguageRealm()
-    {
-        string? rf = StdlibSnapshotCache.ComputeStdlibHash(language: Language.RazorForge);
-        string? sf = StdlibSnapshotCache.ComputeStdlibHash(language: Language.Suflae);
-
-        Assert.False(condition: string.IsNullOrWhiteSpace(value: rf));
-        Assert.False(condition: string.IsNullOrWhiteSpace(value: sf));
-    }
-
-    [Fact]
     public void LoadOrCapture_ReturnsUsableState_AndMemoizes()
     {
         SemanticVerifier.CompiledStdlibState first =

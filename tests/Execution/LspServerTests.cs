@@ -393,24 +393,4 @@ public sealed class LspServerTests
         Assert.NotNull(@object: LspTestHarness.ReplyWithId(replies: replies, id: 20));
     }
 
-    [Fact]
-    public void SuflaeDocument_Analyzes()
-    {
-        const string sf =
-            "module Test/LspSf\n" +
-            "import IO/Console\n" +
-            "\n" +
-            "routine start()\n" +
-            "    var x = 41\n" +
-            "    var y = x + 1\n" +
-            "    show(f\"{y}\")\n" +
-            "    return\n";
-
-        IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
-            LspTestHarness.DidOpen(uri: "file:///test/Sample.sf", text: sf, languageId: "suflae"),
-            LspTestHarness.DocRequest(id: 21, method: "textDocument/documentSymbol", uri: "file:///test/Sample.sf"),
-            Exit);
-
-        Assert.NotNull(@object: LspTestHarness.ReplyWithId(replies: replies, id: 21));
-    }
 }

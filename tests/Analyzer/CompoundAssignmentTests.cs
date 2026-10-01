@@ -473,26 +473,5 @@ public class CompoundAssignmentTests
                 or SemanticDiagnosticCode.ArgumentTypeMismatch);
     }
 
-    /// <summary>
-    /// A Suflae <c>Integer += S64</c> needs an explicit conversion. Unchecked, the emitter passed the raw
-    /// <c>i64</c> where <c>Integer.add</c> takes an <c>Integer</c> record and the program crashed.
-    /// </summary>
-    [Fact]
-    public void Analyze_SuflaeIntegerPlusFixedWidthCompoundAssignment_ReportsError()
-    {
-        string source = """
-                        import Numerics
-
-                        routine accumulate(start_value: Integer, v: S64)
-                            var t = start_value
-                            t += v
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSaSuflae(source: source);
-        Assert.Single(collection: result.Errors,
-            predicate: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
-    }
-
     #endregion
 }

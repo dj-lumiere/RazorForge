@@ -33,19 +33,6 @@ public sealed class TargetGateTests
     }
 
     [Fact]
-    public void NonRfFile_NeverGated()
-    {
-        // A `.sf` file is Suflae — never subject to conditional compilation, even with a directive.
-        string f = WriteTemp(name: "x.sf", body: "@target(os: \"windows\")\nmodule M\n");
-        try
-        {
-            Assert.True(condition: TargetGate.ShouldCompile(filePath: f,
-                target: Target(os: "linux", arch: "x86_64")));
-        }
-        finally { File.Delete(path: f); }
-    }
-
-    [Fact]
     public void MatchingOs_Compiles_NonMatchingExcluded()
     {
         string f = WriteTemp(name: "win.rf", body: "@target(os: \"windows\")\nmodule M\n");

@@ -19,12 +19,4 @@ public sealed class StdlibValidationTests
         Assert.Empty(collection: errors);
     }
 
-    /// <summary>Verifies that all Suflae stdlib bodies pass semantic analysis.</summary>
-    [Fact]
-    public void Suflae_Stdlib_Validates()
-    {
-        var analyzer = new SemanticVerifier(language: Language.Suflae);
-        List<SemanticError> errors = analyzer.ValidateStdlibBodies();
-        Assert.Empty(collection: errors);
-    }
 }

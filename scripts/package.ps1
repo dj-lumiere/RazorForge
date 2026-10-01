@@ -125,7 +125,7 @@ Write-Host '=== add install script + quickstart + AI reference ==='
 Copy-Item "$PSScriptRoot\package-assets\install.ps1" $Out
 Copy-Item "$PSScriptRoot\package-assets\install.cmd" $Out
 Copy-Item "$PSScriptRoot\package-assets\QUICKSTART.md" $Out
-Copy-Item "$PSScriptRoot\..\RAZORFORGE-FOR-AI.md" $Out
+Copy-Item "$PSScriptRoot\..\RazorForge\RAZORFORGE-FOR-AI.md" $Out
 
 Write-Host '=== smoke test: self-contained buildandrun (system toolchain hidden) ==='
 & "$Out\RazorForge.exe" version

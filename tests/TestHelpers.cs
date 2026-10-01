@@ -20,17 +20,14 @@ public static class TestHelpers
     [ModuleInitializer]
     internal static void RegisterFrontends()
     {
-        Suflae.SuflaeFrontend.Register();
+        RazorForge.RazorForgeFrontend.Register();
     }
 
-    /// <summary>The toolchain that builds <paramref name="sourcePath"/>: <c>Suflae.dll</c> for a <c>.sf</c>
-    /// file, <c>RazorForge.dll</c> otherwise, from this test assembly's output directory.</summary>
+    /// <summary>The toolchain that builds <paramref name="sourcePath"/>: <c>RazorForge.dll</c> from this test
+    /// assembly's output directory.</summary>
     public static string ToolchainDll(string sourcePath)
     {
-        return Path.Combine(path1: AppContext.BaseDirectory,
-            path2: sourcePath.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase)
-                ? "Suflae.dll"
-                : "RazorForge.dll");
+        return Path.Combine(path1: AppContext.BaseDirectory, path2: "RazorForge.dll");
     }
 
     private const string ExpectedAtLeastOneError = "Expected at least one error";
