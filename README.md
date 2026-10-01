@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="branding/razorforge-suflae-icon.svg" alt="RazorForge and Suflae" width="112">
+  <img src="RazorForge/branding/razorforge-suflae-icon.svg" alt="RazorForge and Suflae" width="112">
 </p>
 
 <h1 align="center">RazorForge &amp; Suflae</h1>
@@ -18,7 +18,7 @@ one standard library, and one builder. They part ways on how much of the machine
 <tr>
 <td width="50%" valign="top">
 
-<img src="branding/razorforge.svg" alt="RazorForge logo" width="56">
+<img src="RazorForge/branding/razorforge.svg" alt="RazorForge logo" width="56">
 
 **RazorForge** · *Make programming sharp again.*
 
@@ -31,8 +31,8 @@ is chosen per operator, and the few operations that can break memory sit in `dan
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="branding/suflae-dark.svg">
-  <img src="branding/suflae.svg" alt="Suflae logo" width="56">
+  <source media="(prefers-color-scheme: dark)" srcset="Suflae/branding/suflae-dark.svg">
+  <img src="Suflae/branding/suflae.svg" alt="Suflae logo" width="56">
 </picture>
 
 **Suflae** · *Make programming sweet again.*
@@ -87,7 +87,7 @@ routine start()
 
 ## RazorForge
 
-<img src="branding/razorforge.svg" alt="RazorForge logo" width="72">
+<img src="RazorForge/branding/razorforge.svg" alt="RazorForge logo" width="72">
 
 RazorForge is built around precision: in what a program means, in how it fails, and in the numbers
 it computes. It is meant for application work where you want native code and predictable memory
@@ -126,8 +126,8 @@ into reference counting with `Retained[T]`, `Guarded[T, P]`, or the weak `Tracke
 ## Suflae
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="branding/suflae-dark.svg">
-  <img src="branding/suflae.svg" alt="Suflae logo" width="72">
+  <source media="(prefers-color-scheme: dark)" srcset="Suflae/branding/suflae-dark.svg">
+  <img src="Suflae/branding/suflae.svg" alt="Suflae logo" width="72">
 </picture>
 
 Suflae is for building applications without managing memory by hand. It keeps RazorForge's grammar,

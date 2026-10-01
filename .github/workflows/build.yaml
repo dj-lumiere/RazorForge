@@ -75,7 +75,7 @@ jobs:
 
       - name: Fetch native library sources
         run: |
-          cd native
+          cd Ingrid/native
 
           # --- Libraries the runtime links (libco, libuv) ---
           echo "::group::libuv"
@@ -88,7 +88,7 @@ jobs:
 
       - name: Build native libraries
         run: |
-          cd native
+          cd Ingrid/native
           chmod +x build.sh
           # Clang 16+ promoted -Wimplicit-function-declaration to an error by
           # default. Vendored libs normally use their own ./configure to detect
@@ -140,7 +140,7 @@ jobs:
       - name: Benchmark div2by1 (M-G vs divq, x86-64)
         if: matrix.leg == 'test'
         continue-on-error: true
-        run: dotnet bin/Release/net10.0/RazorForge.dll buildandrun bench/div_ab_bench.rf
+        run: dotnet RazorForge/bin/Release/net10.0/RazorForge.dll buildandrun RazorForge/bench/div_ab_bench.rf
 
       - name: Test
         if: matrix.leg == 'test'
@@ -208,7 +208,7 @@ jobs:
       - name: Fetch native library sources
         shell: pwsh
         run: |
-          Set-Location native
+          Set-Location Ingrid\native
           function Clone($url, $dir, $branch) {
             $cloneArgs = @('clone', '--depth', '1')
             if ($branch) { $cloneArgs += @('-b', $branch) }
@@ -231,7 +231,7 @@ jobs:
         shell: pwsh
         run: dotnet restore
 
-      # native\build.bat runs automatically via the csproj BuildNativeLibraries target
+      # Ingrid\native\build.bat runs automatically via the Anvila csproj BuildNativeLibraries target
       - name: Build
         shell: pwsh
         run: dotnet build --configuration Release --no-restore
@@ -242,12 +242,12 @@ jobs:
       - name: Diagnose native runtime deps
         shell: pwsh
         run: |
-          Get-ChildItem bin\Release\net10.0 -Filter '*.dll' |
+          Get-ChildItem RazorForge\bin\Release\net10.0 -Filter '*.dll' |
             Where-Object Name -notmatch '^(Microsoft|System)' |
             Select-Object Name, Length | Format-Table
-          C:\llvm22\bin\llvm-objdump.exe -p bin\Release\net10.0\razorforge_runtime.dll | Select-String 'DLL Name'
+          C:\llvm22\bin\llvm-objdump.exe -p RazorForge\bin\Release\net10.0\razorforge_runtime.dll | Select-String 'DLL Name'
           try {
-            [System.Runtime.InteropServices.NativeLibrary]::Load("$pwd\bin\Release\net10.0\razorforge_runtime.dll") | Out-Null
+            [System.Runtime.InteropServices.NativeLibrary]::Load("$pwd\RazorForge\bin\Release\net10.0\razorforge_runtime.dll") | Out-Null
             Write-Host 'razorforge_runtime.dll loads OK'
           } catch {
             Write-Host "LOAD FAILED: $($_.Exception.Message)"
@@ -285,14 +285,14 @@ jobs:
 
       - name: Fetch native library sources
         run: |
-          cd native
+          cd Ingrid/native
 
           git clone --depth 1 https://github.com/libuv/libuv.git libuv
           git clone --depth 1 https://github.com/higan-emu/libco.git libco
 
       - name: Build native libraries
         run: |
-          cd native
+          cd Ingrid/native
           chmod +x build.sh
           export CC=clang
           export CXX=clang++
@@ -308,7 +308,7 @@ jobs:
       # This measures M-G div2by1 vs __udivti3 — the comparison that justifies the change.
       - name: Benchmark div2by1 (M-G vs __udivti3, arm64)
         continue-on-error: true
-        run: dotnet bin/Release/net10.0/RazorForge.dll buildandrun bench/div_ab_bench.rf
+        run: dotnet RazorForge/bin/Release/net10.0/RazorForge.dll buildandrun RazorForge/bench/div_ab_bench.rf
 
       - name: Test
         run: dotnet test --configuration Release --no-build --verbosity normal
