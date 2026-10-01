@@ -52,7 +52,7 @@ done
 echo "=== prune dev-only artifacts ==="
 rm -rf "$OUT/RazorForge-Wiki" "$OUT/Suflae-Wiki"
 find "$OUT" -name '*.pdb' -delete
-cp LICENSE README.md "$OUT/"
+cp RazorForge/LICENSE RazorForge/README.md RazorForge/THIRD-PARTY-NOTICES.md "$OUT/"
 
 # Short alias next to the canonical binary. (Users preferring `forge` can alias it
 # themselves — the name is deliberately not shipped to avoid colliding with
