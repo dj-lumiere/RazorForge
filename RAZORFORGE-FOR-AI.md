@@ -652,8 +652,9 @@ routine start()
 
 ## 14. Concurrency
 
-Two kinds of concurrent routine. **Calling one starts it immediately and returns an `Agent[T]`
-handle** (not the value) — there is no separate `spawn`/`async` keyword:
+Two kinds of concurrent routine. **Calling one returns an `Agent[T]`, a recipe (the routine with its
+arguments bound), and starts nothing.** A verb on the Agent runs it — `retrieve` runs it and waits for
+the value, `execute` runs it in the background. There is no separate `spawn`/`async` keyword:
 
 - `suspended routine f(...) -> T` — a stackful coroutine on this thread's scheduler. Cheap; you can
   have very many. *Cooperative*: it yields to siblings only when it **parks** (at `waitfor`,
@@ -670,31 +671,31 @@ suspended routine fetch(id: S64) -> S64
     return id * 10
 
 routine start()
-    var a = fetch(id: 1)           # call = start NOW + get an Agent[S64]
-    show(f"result => {a.retrieve!()}")   # drive to completion, get the value
+    var a = fetch(id: 1)           # builds the recipe, an Agent[S64]; nothing runs yet
+    show(f"result => {a.retrieve()}")    # run it to completion, get the value
     return
 ```
 
 Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
 
-- `agent.retrieve!() -> T` — wait for it and take the value. **Uncolored**: inside a coroutine it
-  PARKS (siblings keep running); on a plain thread it blocks. Same call, both contexts. Failable.
+- `agent.retrieve() -> T` — run it, wait for it and take the value. **Uncolored**: inside a coroutine
+  it PARKS (siblings keep running); on a plain thread it blocks. Same call, both contexts. Failable.
+- `agent.execute()` — run it in the background and return at once; the value is discarded.
 - `waitfor(d)` — wait `d` (parks in a coroutine, sleeps on a thread). Durations: `50ms`, `5s`, or
   `Duration.from_milliseconds(ms: n)`.
-- `agent.waitfor(d).retrieve!()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
+- `agent.waitfor(d).retrieve()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
   `try agent.waitfor(d).retrieve()` returns `None` on timeout instead of throwing.
-- `race![T](of: List[Agent[T]]) -> T` — drive all, return the FIRST finisher; losers abandoned.
-- `gather![T](of: List[Agent[T]]) -> List[T]` — drive all, wait for ALL; results in input order.
-- `race!`/`gather!` **consume** the list — pass it with `steal`: `gather!(of: steal agents)`.
+- `agents.race() -> T` — run every Agent of a `List[Agent[T]]` concurrently, return the FIRST finisher.
+- `agents.gather() -> List[T]` — run them all concurrently, wait for ALL; results in input order.
+- `race`/`gather` work on the list in place; the list is torn down by its owner as usual.
 - A `List[Agent[T]]` may mix coroutine- and thread-backed agents (one `Agent[T]` type backs both).
-- **Dropping** an Agent without retrieving ABANDONS it: a parked coroutine runs its `destroy`
-  teardown; a running thread is joined then discarded.
+- **Dropping** an Agent that no verb ran runs nothing: the routine body never executes.
 
 ```razorforge
 var jobs = List[Agent[S64]]()
 jobs.add_last(value: fetch(id: 1))
 jobs.add_last(value: fetch(id: 2))
-var results = gather!(of: steal jobs)   # both run concurrently; wait for all
+var results = jobs.gather()     # both run concurrently; wait for all
 show(f"{results[0]} {results[1]}")
 ```
 

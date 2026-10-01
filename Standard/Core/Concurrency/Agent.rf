@@ -1,5 +1,7 @@
 module Core
 
+import BuilderQuery
+
 # TaskSpawnError / TaskTimeoutError are defined in Core/Errors/Common.rf (alongside the other
 # Core crashables) so their synthesized represent/diagnose resolve crash_message correctly.
 
@@ -19,20 +21,19 @@ choice AgentKind
 ### `retrieve()` and `waitfor()` branch on `kind`, reusing the coroutine-park and thread-wait paths.
 ### The metaphor: you delegate to an agent, it runs on its own, you only fetch the result.
 ###
-### LAZY model: a `suspended routine` call CREATES the coroutine but does NOT start it — the coroutine
-### is inert (rf_coro_create allocates the context; nothing runs) until a verb spawns it. A `threaded
-### routine` call spawns its OS thread at the call site (a thread cannot be created "inert"). The verb
-### is what STARTS a coroutine: `retrieve()`/`gather()`/`race()` spawn it and drive it, `execute()`
-### spawns it DETACHED (background, self-freeing) and returns immediately. `suspended`/`threaded` MARK a
-### deferred, schedulable unit, so "run it in the background" (`execute`) is a distinct, explicit choice
-### from "run it and wait" (`retrieve`) — neither happens implicitly on the call.
+### RECIPE model: an Agent is a recipe, the routine with its arguments bound. A `suspended` or `threaded`
+### routine call builds the recipe (the arguments boxed into a heap recipe, the task block that will hold
+### the result, and for a coroutine its inert context) and starts NOTHING. A verb starts the work:
+### `retrieve()`/`gather()`/`race()` launch it and drive it, `execute()` launches it DETACHED (background,
+### self-freeing) and returns immediately. Both substrates have the same lifecycle, only the place the work
+### runs differs: a coroutine on this thread's implicit scheduler, a thread on its own OS thread.
 ###
 ### Teardown: `destroy` is a NO-OP. The single consuming verb (`retrieve!`/`execute!`/`race!`/`gather!`)
 ### owns the whole lifecycle — it spawns, then reaps (coroutine deleted/abandoned, result block freed).
 ### A handle copy (from `waitfor`, or a `List[Agent]` element read as a temporary) tearing down frees
-### nothing → no double-free even when the same coroutine/worker is aliased across copies. A coroutine
-### created but never spawned (a recipe you never invoke) leaks its context — rare, and the routine
-### body never runs, which is the point of laziness.
+### nothing → no double-free even when the same coroutine/worker is aliased across copies. A recipe no
+### verb ever runs leaks its task, recipe and (coroutine) context — rare, and the routine body never runs,
+### which is the point of laziness.
 record Agent[AnyType T] obeys Assignable
     ### CORO = coroutine-backed (suspended routine); THREAD = thread-backed (threaded routine).
     secret kind: AgentKind
@@ -45,8 +46,98 @@ record Agent[AnyType T] obeys Assignable
     secret deadline: Duration
     ### Whether a deadline has been attached via `waitfor`.
     secret has_deadline: Bool
-    ### Whether the OS thread was spawned successfully (THREAD).
-    secret spawned: Bool
+    ### The routine a verb starts the worker thread on (THREAD). A coroutine got its entry at creation.
+    secret entry: CPtr
+    ### The recipe: slot 0 holds the task, slot k the boxed k-th argument. The run routine reads the
+    ### arguments out and frees it.
+    secret recipe: Address
+
+### The size of one recipe slot (an `Address`).
+### :returns: the slot size.
+routine recipe_slot_size() -> ByteSize
+    return Address.data_size()
+
+### Allocates a recipe with `slots` Address slots (slot 0 is the task, the rest are the arguments).
+### Builder plumbing for `suspended`/`threaded` calls.
+### :returns: the recipe's address.
+dangerous routine recipe_new(slots: U64) -> Address
+    return rf_allocate_dynamic(size: recipe_slot_size() * slots)
+
+### Moves `value` into its own heap cell and stores the cell in recipe slot `slot` (like
+### `List.add_last` storing an element). Builder plumbing for `suspended`/`threaded` calls.
+dangerous routine recipe_put[V](recipe: Address, slot: U64, value: V)
+    var cell = Hijacked[V](rf_allocate_dynamic(size: V.data_size()))
+    cell.poke(value)
+    Hijacked[Address](recipe).poke_at_offset(at: recipe_slot_size() * slot, value: cell.address())
+    return
+
+### Moves the value out of recipe slot `slot` and frees its cell (like `List.remove_last`). Builder
+### plumbing for the routine that runs a recipe.
+### :returns: the argument value.
+dangerous routine recipe_take[V](recipe: Address, slot: U64) -> V
+    var cell = Hijacked[Address](recipe).peek_at_offset(offset: recipe_slot_size() * slot)
+    var value = Hijacked[V](cell).peek()
+    rf_invalidate(ptr: cell)
+    return value
+
+### The task block of a recipe (slot 0).
+### :returns: the rf_task* as an Address.
+dangerous routine recipe_task(recipe: Address) -> Address
+    return Hijacked[Address](recipe).peek()
+
+### Builds the coroutine-backed Agent for a `suspended` call: creates the result task (stored in recipe
+### slot 0) and the INERT coroutine that will run `entry(recipe)`. Nothing runs until a verb.
+### :returns: the Agent recipe.
+dangerous routine agent_suspended[R](entry: CPtr, recipe: Address) -> Agent[R]
+    var task = C::rf_task_create(kind: 0_u32)
+    Hijacked[Address](recipe).poke(value: task)
+    var coro = C::rf_coro_create(entry: entry, userdata: CPtr(from: recipe), stack_size: 0)
+    return Agent[R](kind: AgentKind.CORO, coro: coro, agent: task,
+                    deadline: Duration(seconds: 0, nanoseconds: 0_u32), has_deadline: false,
+                    entry: cptr_none(), recipe: recipe)
+
+### Builds the thread-backed Agent for a `threaded` call: creates the result task (stored in recipe slot 0)
+### and remembers `entry`. The thread is started by the first verb that runs the Agent.
+### :returns: the Agent recipe.
+dangerous routine agent_threaded[R](entry: CPtr, recipe: Address) -> Agent[R]
+    var task = C::rf_task_create(kind: 1_u32)
+    Hijacked[Address](recipe).poke(value: task)
+    return Agent[R](kind: AgentKind.THREAD, coro: cptr_none(), agent: task,
+                    deadline: Duration(seconds: 0, nanoseconds: 0_u32), has_deadline: false,
+                    entry: entry, recipe: recipe)
+
+### Completes a recipe's task with the value its routine returned and frees the recipe. A detached
+### (`execute`) task has no reader, so the value is not boxed: it is torn down like any argument the
+### routine does not keep. Builder plumbing for the routine that runs a recipe.
+dangerous routine agent_finish[R](recipe: Address, value: R)
+    var task = recipe_task(recipe: recipe)
+    rf_invalidate(ptr: recipe)
+    if C::rf_task_is_detached(task: task) != 0_u8
+        C::rf_task_complete_value(task: task, result: Address(0))
+        return
+    var cell = Hijacked[R](rf_allocate_dynamic(size: R.data_size()))
+    cell.poke(value)
+    C::rf_task_complete_value(task: task, result: cell.address())
+    return
+
+### `agent_finish` for a routine that returns nothing.
+dangerous routine agent_finish_none(recipe: Address)
+    var task = recipe_task(recipe: recipe)
+    rf_invalidate(ptr: recipe)
+    C::rf_task_complete_value(task: task, result: Address(0))
+    return
+
+### Starts the work if it has not started yet: schedules the coroutine, or starts the worker thread.
+### Idempotent, so every verb can call it. Takes `me` by value: the handles it uses are shared by every
+### copy of this Agent.
+### :returns: false if the work could not be started.
+dangerous routine Agent[T].launch() -> Bool
+    if me.kind == AgentKind.CORO
+        if me.coro.is_none()
+            return false
+        C::rf_sched_spawn_default(coro: me.coro)
+        return true
+    return C::rf_task_spawn_threaded(task: me.agent, entry: me.entry, userdata: me.recipe) != 0_s32
 
 ### Whether this Agent is coroutine-backed (kind CORO). Internal plumbing for `race!`, which dispatches
 ### on kind while reading List elements as temporaries (a direct `agent.kind` field read on a generic
@@ -76,8 +167,6 @@ routine Agent[T].is_done() -> Bool
             return true
         danger
             return C::rf_coro_status_get(coro: me.coro) == 3_u32
-    if not me.spawned
-        return false
     danger
         return C::rf_task_status_get(task: me.agent) == 4_u32
 
@@ -98,8 +187,7 @@ dangerous routine Agent[T].request_cancel()
         if not me.coro.is_none()
             C::rf_coro_request_cancel(coro: me.coro)
         return
-    if me.spawned
-        C::rf_task_request_cancel(task: me.agent)
+    C::rf_task_request_cancel(task: me.agent)
     return
 
 ### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve()` on a
@@ -109,7 +197,7 @@ dangerous routine Agent[T].request_cancel()
 ### :returns: A copy of this handle carrying the deadline.
 routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
     return Agent[T](kind: me.kind, coro: me.coro, agent: me.agent,
-                    deadline: deadline, has_deadline: true, spawned: me.spawned)
+                    deadline: deadline, has_deadline: true, entry: me.entry, recipe: me.recipe)
 
 ### Drives the work to completion and returns its produced value. UNCOLORED: a thread-backed Agent
 ### awaited inside a scheduler-driven coroutine PARKS (siblings run meanwhile) instead of blocking;
@@ -127,9 +215,9 @@ routine Agent[T].retrieve!() -> T
         if me.coro.is_none()
             throw TaskSpawnError()
         danger
-            # LAZY: the recipe's coroutine was created inert at the call site — launch it now, then drive
-            # this thread's pool until it finishes.
-            C::rf_sched_spawn_default(coro: me.coro)
+            # The recipe's coroutine was created inert at the call site: launch it now, then drive this
+            # thread's pool until it finishes.
+            discard me.launch()
             C::rf_sched_run_until_default(coro: me.coro)
             var payload = C::rf_task_result_payload(task: me.agent)
             var value = Hijacked[T](from: payload).peek()
@@ -138,9 +226,9 @@ routine Agent[T].retrieve!() -> T
             me.reap()
             return value
 
-    if not me.spawned
-        throw TaskSpawnError()
     danger
+        if not me.launch()
+            throw TaskSpawnError()
         if me.has_deadline
             var total = me.deadline.total_nanoseconds()
             if C::rf_in_coroutine() != 0_u32
@@ -203,16 +291,14 @@ routine Agent[T].execute!()
             # destroy does not run yet — a discard thunk is the follow-up; None/trivial returns are exact).
             C::rf_coro_set_detached(coro: me.coro)
             C::rf_task_set_detached(task: me.agent)
-            C::rf_sched_spawn_default(coro: me.coro)
+            discard me.launch()
         return
-    # THREAD: the OS thread is already running (spawned eagerly at the call site). Mark its task detached
-    # and return immediately — the worker frees the task + unread result box itself on exit, no consumer.
-    # rf_task_set_detached coordinates under the task lock with the worker's self-reap, so it is race-safe
-    # even if the worker completes before (or during) this call.
-    if not me.spawned
-        throw TaskSpawnError()
+    # THREAD: mark the task detached BEFORE starting the worker, so it frees the task itself on exit and
+    # its result is torn down instead of boxed (no consumer), then start it and return immediately.
     danger
         C::rf_task_set_detached(task: me.agent)
+        if not me.launch()
+            throw TaskSpawnError()
     return
 
 ### Reaps this agent's work — the SOLE freeing path, called EXACTLY ONCE by the consumer that is done
@@ -291,9 +377,10 @@ routine List[Agent[V]].race!() -> V
         var race = C::rf_race_begin()
         var i = 0_u64
         while i < n
+            # Launch each recipe so the whole set runs CONCURRENTLY, then race.
+            if not me[i].launch()
+                throw TaskSpawnError()
             if me[i].is_coro()
-                # LAZY: spawn each recipe's inert coroutine so the whole set runs CONCURRENTLY, then race.
-                C::rf_sched_spawn_default(coro: me[i].coro_handle())
                 C::rf_race_add_coro(race: race, coro: me[i].coro_handle())
             else
                 C::rf_race_add_task(race: race, task: me[i].task_handle())
@@ -328,14 +415,13 @@ routine List[Agent[V]].race!() -> V
 routine List[Agent[V]].gather!() -> List[V]
     danger
         var n = me.count()
-        # LAZY: launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
-        # one-by-one would serialize timing-heavy children (park/resume) into N× the wall-clock. retrieve!'s
-        # own spawn is IDEMPOTENT (rf_sched_spawn guards the initial enqueue), so its re-spawn below is a
-        # no-op on these already-launched coroutines. (THREAD recipes are spawned at the call site.)
+        # Launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
+        # one-by-one would serialize the children into N× the wall-clock. Launching is idempotent, so
+        # retrieve!'s own launch below is a no-op on these already-started recipes.
         var i = 0_u64
         while i < n
-            if me[i].is_coro()
-                C::rf_sched_spawn_default(coro: me[i].coro_handle())
+            if not me[i].launch()
+                throw TaskSpawnError()
             i = i + 1
         var results = List[V]()
         i = 0_u64
@@ -361,12 +447,12 @@ routine List[Agent[V]].cancel_all!() -> List[V]
         while i < n
             me[i].request_cancel()
             i = i + 1
-        # LAZY: launch the whole set CONCURRENTLY (so they run + observe the cancel together), then drive
-        # each to its wind-down. retrieve!'s spawn is idempotent, so re-spawning these is a no-op.
+        # Launch the whole set CONCURRENTLY (so they run + observe the cancel together), then drive each
+        # to its wind-down. Launching is idempotent, so retrieve!'s own launch is a no-op on these.
         i = 0u64
         while i < n
-            if me[i].is_coro()
-                C::rf_sched_spawn_default(coro: me[i].coro_handle())
+            if not me[i].launch()
+                throw TaskSpawnError()
             i = i + 1
         var results = List[V]()
         i = 0u64

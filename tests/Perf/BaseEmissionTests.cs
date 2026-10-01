@@ -151,8 +151,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
             instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys,
-            registry: r.Registry);
+            maySuspendKeys: r.MaySuspendRoutineKeys);
 
         // The full reachable set (bare mangled names) — the "everything already materialized" universe.
         (string _, IReadOnlyCollection<string> allDefs) = new LlvmEmitter(
@@ -217,8 +216,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
             instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys,
-            registry: r.Registry);
+            maySuspendKeys: r.MaySuspendRoutineKeys);
 
         // BASE: empty user programs + null live set (⇒ non-pruned) + stdlib present. Runs to completion
         // over the full stdlib (the non-pruned-emission risk) and emits no @main.
@@ -306,8 +304,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,
             instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys,
-            registry: baseR.Registry);
+            maySuspendKeys: baseR.MaySuspendRoutineKeys);
 
         var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
             registry: baseR.Registry,
@@ -389,8 +386,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,
             instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys,
-            registry: baseR.Registry);
+            maySuspendKeys: baseR.MaySuspendRoutineKeys);
 
         var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
             registry: baseR.Registry,
@@ -431,8 +427,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,
             instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys,
-            registry: baseR.Registry);
+            maySuspendKeys: baseR.MaySuspendRoutineKeys);
 
         var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
             registry: baseR.Registry,
@@ -471,8 +466,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,
             instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys,
-            registry: baseR.Registry);
+            maySuspendKeys: baseR.MaySuspendRoutineKeys);
         var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
             registry: baseR.Registry,
             options: new LlvmEmitterOptions
@@ -491,8 +485,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
             instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys,
-            registry: r.Registry);
+            maySuspendKeys: r.MaySuspendRoutineKeys);
         string deltaIr = DeltaBuild(r: r, residentSymbols: baseSyms);
 
         int rc = Builder.Execution.OrcJitExecutor.JitAndRunSplit(baseIr: baseIr,
@@ -524,8 +517,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,
             instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys,
-            registry: baseR.Registry);
+            maySuspendKeys: baseR.MaySuspendRoutineKeys);
         var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
             registry: baseR.Registry,
             options: new LlvmEmitterOptions
@@ -552,8 +544,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
             instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys,
-            registry: r.Registry);
+            maySuspendKeys: r.MaySuspendRoutineKeys);
         string deltaIr = DeltaBuild(r: r, residentSymbols: baseSyms);
 
         int rc = Builder.Execution.OrcJitExecutor.JitAndRunSplitWithBaseObject(
@@ -584,8 +575,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
             instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys,
-            registry: r.Registry);
+            maySuspendKeys: r.MaySuspendRoutineKeys);
 
         // name → body index over every instantiated (stdlib/synthesized) body. A `declare`d symbol is the
         // UNQUOTED content of `@"..."`, while MangleRoutineName returns the IR-`@`-form that QUOTES names with
@@ -677,8 +667,7 @@ public sealed partial class BaseEmissionTests
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
             instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys,
-            registry: r.Registry);
+            maySuspendKeys: r.MaySuspendRoutineKeys);
 
         var index = new Dictionary<string, MonomorphizedBody>(comparer: StringComparer.Ordinal);
         var allQuoted = new HashSet<string>(comparer: StringComparer.Ordinal);
