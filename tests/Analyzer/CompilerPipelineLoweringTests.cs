@@ -555,7 +555,9 @@ public class CompilerPipelineLoweringTests
             });
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "__lambda_", actualString: llvmIr);
+        // The lifted lambda is defined, taking its bound payload as the trailing `__bound` parameter.
+        Assert.Contains(expectedSubstring: "[lambda]", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: "ptr %__bound", actualString: llvmIr);
     }
 
     /// <summary>

@@ -1,0 +1,37 @@
+module Core
+
+import BuilderQuery
+
+# A capturing lambda's bound payload: one Address slot per captured value, each pointing at the value's
+# own heap cell. The builder writes the calls (LambdaLiftingPass): the lambda value is built as
+# `closure_put[..](bound: closure_put[..](bound: closure_new(slots: 2), slot: 0, value: a), slot: 1, value: b)`
+# and the lifted routine starts with `var a = closure_get[..](bound: __bound, slot: 0)` per capture.
+# The payload keeps its copies for as long as the program runs: a routine value has no teardown.
+
+### Allocates a closure's bound payload with one slot per captured value.
+### :param slots: The number of captured values.
+### :returns: The payload.
+dangerous routine closure_new(slots: U64) -> CPtr
+    return CPtr(from: rf_allocate_dynamic(size: Address.data_size() * slots))
+
+### Copies a captured value into its own heap cell (like `List.add_last` storing an element) and stores
+### the cell in payload slot `slot`.
+### :param bound: The payload.
+### :param slot: The captured value's slot.
+### :param value: The captured value.
+### :returns: The payload, so the captures of one lambda chain in a single expression.
+dangerous routine closure_put[V](bound: CPtr, slot: U64, value: V) -> CPtr
+    var cell = Hijacked[V](rf_allocate_dynamic(size: V.data_size()))
+    cell.poke(value)
+    Hijacked[Address](bound.get_address()).poke_at_offset(at: Address.data_size() * slot,
+                                                          value: cell.address())
+    return bound
+
+### A copy of the captured value in payload slot `slot`; the payload keeps its own.
+### :param bound: The payload.
+### :param slot: The captured value's slot.
+### :returns: The captured value.
+dangerous routine closure_get[V](bound: CPtr, slot: U64) -> V
+needs V obeys Assignable
+    var cell = Hijacked[Address](bound.get_address()).peek_at_offset(offset: Address.data_size() * slot)
+    return Hijacked[V](cell).peek().assign()
