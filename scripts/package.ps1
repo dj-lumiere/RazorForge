@@ -138,8 +138,8 @@ module PackageSmoke
 import IO/Console
 
 routine start()
-  show("packaged razorforge works")
-  return
+    show("packaged razorforge works")
+    return
 '@ | Set-Content -Path "$smokeDir\smoke.rf" -Encoding utf8NoBOM
 # Stage a copy of the package OUTSIDE the repo (buildandrun's dev-checkout
 # detection walks up from the exe and would find the repo's native/build tree
