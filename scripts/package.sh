@@ -49,6 +49,12 @@ for sub in Ingrid/native/build/bin Ingrid/native/build/lib; do
     fi
 done
 
+echo "=== Ingrid's Tessera library (installed layout) ==="
+# Every build links ingrid_tessera.ll from next to the executable. An installed layout has no Tessera sources to
+# compile it from, so the package ships it: the packaged builder compiles it here, finding Ingrid/tessera up the tree.
+"$OUT/RazorForge" emit-ingrid
+test -f "$OUT/ingrid_tessera.ll"
+
 echo "=== prune dev-only artifacts ==="
 rm -rf "$OUT/RazorForge-Wiki" "$OUT/Suflae-Wiki"
 find "$OUT" -name '*.pdb' -delete
