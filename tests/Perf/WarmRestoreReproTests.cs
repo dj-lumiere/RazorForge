@@ -29,8 +29,7 @@ public sealed class WarmRestoreReproTests
     private static Program Parse(string src, string file)
     {
         return new Builder.Parser.Parser(
-            tokens: new Tokenizer(source: src, fileName: file, language: Language.RazorForge)
-               .Tokenize(),
+            tokens: Lexers.Tokenize(source: src, fileName: file, language: Language.RazorForge),
             language: Language.RazorForge,
             fileName: file).Parse();
     }

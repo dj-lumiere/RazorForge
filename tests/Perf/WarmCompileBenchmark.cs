@@ -37,8 +37,7 @@ public sealed partial class WarmCompileBenchmark
     private static Program ParseTrivial()
     {
         List<Token> tokens =
-            new Tokenizer(source: Trivial, fileName: "bench.rf", language: Language.RazorForge)
-               .Tokenize();
+            Lexers.Tokenize(source: Trivial, fileName: "bench.rf", language: Language.RazorForge);
         return new Builder.Parser.Parser(tokens: tokens,
             language: Language.RazorForge,
             fileName: "bench.rf").Parse();
@@ -245,9 +244,9 @@ public sealed partial class WarmCompileBenchmark
         Program ParseB()
         {
             return new Builder.Parser.Parser(
-                tokens: new Tokenizer(source: SrcB,
+                tokens: Lexers.Tokenize(source: SrcB,
                     fileName: "b.rf",
-                    language: Language.RazorForge).Tokenize(),
+                    language: Language.RazorForge),
                 language: Language.RazorForge,
                 fileName: "b.rf").Parse();
         }

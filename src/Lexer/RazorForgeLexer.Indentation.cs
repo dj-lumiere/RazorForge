@@ -1,9 +1,11 @@
 using Builder.Diagnostics;
 
-namespace Builder.Tokenizer;
+using Builder.Tokenizer;
+
+namespace RazorForge.Lexer;
 
 /// <summary>
-/// Partial class containing indentation and newline handling memberRoutines for the unified tokenizer.
+/// Partial class containing indentation and newline handling memberRoutines for the RazorForge lexer.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,7 +19,7 @@ namespace Builder.Tokenizer;
 ///   <item><description>Determining which newlines are significant</description></item>
 /// </list>
 /// </remarks>
-public partial class Tokenizer
+public partial class RazorForgeLexer
 {
     #region Indentation Handling
 

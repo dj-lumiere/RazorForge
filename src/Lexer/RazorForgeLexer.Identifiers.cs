@@ -1,7 +1,9 @@
-namespace Builder.Tokenizer;
+using Builder.Tokenizer;
+
+namespace RazorForge.Lexer;
 
 /// <summary>
-/// Partial class containing identifier, keyword, and comment scanning memberRoutines for the unified tokenizer.
+/// Partial class containing identifier, keyword, and comment scanning memberRoutines for the RazorForge lexer.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,7 +25,7 @@ namespace Builder.Tokenizer;
 /// This file also handles script mode detection by tracking definition keywords.
 /// </para>
 /// </remarks>
-public partial class Tokenizer
+public partial class RazorForgeLexer
 {
     #region Identifier Scanning
 

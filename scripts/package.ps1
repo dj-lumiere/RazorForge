@@ -15,7 +15,7 @@ Set-Location (Join-Path $PSScriptRoot '..')
 
 $Rid = 'win-x64'
 $Version = if ($env:VERSION) { $env:VERSION } else {
-    (Select-String -Path 'RazorForge.csproj' -Pattern '<Version>(.*)</Version>').Matches[0].Groups[1].Value
+    (Select-String -Path 'RazorForge\RazorForge.csproj' -Pattern '<Version>(.*)</Version>').Matches[0].Groups[1].Value
 }
 $Name = "razorforge-v$Version-$Rid"
 $Out = "dist\$Name"
@@ -25,33 +25,28 @@ if (Test-Path $Out) { Remove-Item -Recurse -Force $Out }
 if (Test-Path "dist\$Name.zip") { Remove-Item -Force "dist\$Name.zip" }
 New-Item -ItemType Directory -Force -Path dist | Out-Null
 
-Write-Host '=== build native runtime first ==='
-# The csproj's Content globs for native\build\bin|lib are evaluated BEFORE the
-# BuildNativeLibraries target runs during publish — on a fresh checkout the
-# directories don't exist yet and publish would silently ship no native
-# artifacts. Build them up front so the globs see real files.
-Push-Location native
+Write-Host "=== build Ingrid's native runtime ==="
+Push-Location Ingrid\native
 cmd /c build.bat
 $nativeExit = $LASTEXITCODE
 Pop-Location
 if ($nativeExit -ne 0) { throw "native build failed ($nativeExit)" }
 
-Write-Host '=== dotnet publish (self-contained) ==='
-dotnet publish RazorForge.csproj -c Release -r $Rid --self-contained true -o $Out --verbosity minimal
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
+Write-Host '=== dotnet publish razorforge + suflae (self-contained, one directory) ==='
+# Both command lines share Anvila and the runtime, so they publish into the same directory.
+foreach ($proj in 'RazorForge\RazorForge.csproj', 'Suflae\Suflae.csproj') {
+    dotnet publish $proj -c Release -r $Rid --self-contained true -o $Out --verbosity minimal
+    if ($LASTEXITCODE -ne 0) { throw "dotnet publish $proj failed ($LASTEXITCODE)" }
+}
 
-Write-Host '=== flatten native runtime artifacts (installed layout) ==='
-# `dotnet publish` keeps Content items under their source-relative paths
-# (native\build\bin|lib). The installed layout — and the compiler's own P/Invoke
-# probing + buildandrun's prebuilt-layout detection — expect them FLAT next to
-# the executable, matching the dev bin/ output.
-foreach ($sub in 'native\build\bin', 'native\build\lib') {
-    $src = Join-Path $Out $sub
-    if (Test-Path $src) {
-        Get-ChildItem $src -File | Move-Item -Destination $Out -Force
+Write-Host '=== native runtime artifacts (installed layout) ==='
+# The installed layout — and the toolchain's own P/Invoke probing + buildandrun's prebuilt-layout
+# detection — expect them FLAT next to the executables, matching the dev bin/ output.
+foreach ($sub in 'Ingrid\native\build\bin', 'Ingrid\native\build\lib') {
+    if (Test-Path $sub) {
+        Get-ChildItem $sub -File | Copy-Item -Destination $Out -Force
     }
 }
-if (Test-Path "$Out\native") { Remove-Item -Recurse -Force "$Out\native" }
 
 Write-Host '=== prune dev-only artifacts ==='
 foreach ($dir in 'RazorForge-Wiki', 'Suflae-Wiki') {
@@ -65,11 +60,9 @@ Copy-Item LICENSE, README.md $Out
 # is deliberately not shipped to avoid colliding with Foundry's `forge`.
 Copy-Item "$Out\RazorForge.exe" "$Out\rf.exe"
 
-# Suflae aliases — copies of the apphost (the binary keys its Suflae branding + default
-# language off its own invoked name). The stub launches RazorForge.dll by name from its
-# own directory, so the renamed copies still run the same compiler.
-Copy-Item "$Out\RazorForge.exe" "$Out\suflae.exe"
-Copy-Item "$Out\RazorForge.exe" "$Out\sf.exe"
+# Suflae has its own command line; `sf` is its short alias (a copy of the apphost, which launches
+# Suflae.dll by name from its own directory).
+Copy-Item "$Out\Suflae.exe" "$Out\sf.exe"
 
 Write-Host '=== bundle self-contained LLVM toolchain (llvm-mingw + opt) ==='
 # llvm-mingw gives a fully redistributable clang + ld.lld + mingw CRT/import libs,

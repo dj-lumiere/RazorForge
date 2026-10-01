@@ -239,7 +239,7 @@ public sealed partial class SourceFolderFailurePointTests
 
         while (!string.IsNullOrEmpty(value: current))
         {
-            string candidate = Path.Combine(path1: current, path2: "src");
+            string candidate = Path.Combine(path1: current, path2: "Anvila", path3: "src");
             if (Directory.Exists(path: candidate) &&
                 Directory.Exists(path: Path.Combine(path1: candidate, path2: "1.Tokenizer")))
             {

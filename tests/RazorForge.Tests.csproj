@@ -21,7 +21,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RazorForge.csproj"/>
+    <ProjectReference Include="..\Anvila\Anvila.csproj"/>
+    <ProjectReference Include="..\RazorForge\RazorForge.csproj"/>
+    <ProjectReference Include="..\Suflae\Suflae.csproj"/>
   </ItemGroup>
 
   <!-- Test/tooling packages live ONLY here so they never reach the compiler publish. -->
@@ -34,32 +36,15 @@
     <PackageReference Include="coverlet.collector" Version="6.0.2"/>
   </ItemGroup>
 
-  <!-- StdlibApiTests spawns `RazorForge.dll buildandrun` from this project's output
+  <!-- StdlibApiTests spawns `RazorForge.dll`/`Suflae.dll buildandrun` from this project's output
        directory (AppContext.BaseDirectory), and F128EncoderTests P/Invokes razorforge_runtime
-       directly. ProjectReference copies RazorForge.dll but NOT the compiler's Content items, so
-       mirror the Standard copy here; the native-runtime DLLs are staged by the build-time target
-       below. -->
+       directly. A project reference copies the assemblies but NOT their Content items, so mirror the
+       standard libraries here and stage Ingrid's native runtime at build time. -->
   <ItemGroup>
-    <Content Include="..\Standard\**\*" LinkBase="Standard" CopyToOutputDirectory="PreserveNewest"/>
+    <Content Include="..\RazorForge\Standard\**\*" LinkBase="Standard\RazorForge" CopyToOutputDirectory="PreserveNewest"/>
+    <Content Include="..\Suflae\Standard\**\*" LinkBase="Standard\Suflae" CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
 
-  <!-- Stage the native runtime DLLs at BUILD TIME, not via an evaluation-time Content glob.
-       On a clean build, ..\native\build\bin does not exist yet when this project is EVALUATED
-       (it is produced by RazorForge's native build, which races this project under parallel
-       `dotnet build`), so an evaluation-time `<Content Include="...**" Condition="Exists(...)">`
-       captures nothing and the razorforge_runtime P/Invoke fails with DllNotFoundException
-       (0x8007007E) — the flaky Windows CI failure. Resolving the files when this target RUNS,
-       after the ProjectReference (RazorForge, which builds the native runtime) has completed,
-       is reliable on both clean and incremental builds. -->
-  <Target Name="StageNativeRuntimeDlls" AfterTargets="Build">
-    <ItemGroup>
-      <_NativeRuntimeDll Include="..\native\build\bin\**\*.*"/>
-      <_NativeRuntimeDll Include="..\native\build\lib\**\*.*"/>
-    </ItemGroup>
-    <Copy SourceFiles="@(_NativeRuntimeDll)"
-          DestinationFiles="@(_NativeRuntimeDll->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true"
-          Condition="'@(_NativeRuntimeDll)' != ''"/>
-  </Target>
+  <Import Project="..\Ingrid\StageIngridRuntime.targets"/>
 
 </Project>

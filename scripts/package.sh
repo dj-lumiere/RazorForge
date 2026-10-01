@@ -22,7 +22,7 @@ case "$(uname -s)" in
         exit 1
         ;;
 esac
-VERSION="${VERSION:-$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' RazorForge.csproj | head -1)}"
+VERSION="${VERSION:-$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' RazorForge/RazorForge.csproj | head -1)}"
 NAME="razorforge-v${VERSION}-${RID}"
 OUT="dist/${NAME}"
 
@@ -30,27 +30,24 @@ echo "=== RazorForge ${VERSION} -> ${NAME} ==="
 rm -rf "$OUT" "dist/${NAME}.tar.gz"
 mkdir -p dist
 
-echo "=== build native runtime first ==="
-# The csproj's Content globs for native/build/bin|lib are evaluated BEFORE the
-# native build runs during publish — on a fresh checkout publish would silently
-# ship no native artifacts. Build them up front so the globs see real files.
-(cd native && bash build.sh)
+echo "=== build Ingrid's native runtime ==="
+(cd Ingrid/native && bash build.sh)
 
-echo "=== dotnet publish (self-contained) ==="
-dotnet publish RazorForge.csproj -c Release -r "$RID" --self-contained true -o "$OUT" \
+echo "=== dotnet publish razorforge + suflae (self-contained, one directory) ==="
+# Both command lines share Anvila and the runtime, so they publish into the same directory.
+dotnet publish RazorForge/RazorForge.csproj -c Release -r "$RID" --self-contained true -o "$OUT" \
+    --verbosity minimal
+dotnet publish Suflae/Suflae.csproj -c Release -r "$RID" --self-contained true -o "$OUT" \
     --verbosity minimal
 
-echo "=== flatten native runtime artifacts (installed layout) ==="
-# `dotnet publish` keeps Content items under their source-relative paths
-# (native/build/bin|lib). The installed layout — and the compiler's own P/Invoke
-# probing + buildandrun's prebuilt-layout detection — expect them FLAT next to
-# the executable, matching the dev bin/ output.
-for sub in native/build/bin native/build/lib; do
-    if [ -d "$OUT/$sub" ]; then
-        mv "$OUT/$sub"/* "$OUT/" 2>/dev/null || true
+echo "=== native runtime artifacts (installed layout) ==="
+# The installed layout — and the toolchain's own P/Invoke probing + buildandrun's prebuilt-layout
+# detection — expect them FLAT next to the executables, matching the dev bin/ output.
+for sub in Ingrid/native/build/bin Ingrid/native/build/lib; do
+    if [ -d "$sub" ]; then
+        cp -a "$sub"/. "$OUT/"
     fi
 done
-rm -rf "$OUT/native"
 
 echo "=== prune dev-only artifacts ==="
 rm -rf "$OUT/RazorForge-Wiki" "$OUT/Suflae-Wiki"
@@ -62,13 +59,9 @@ cp LICENSE README.md "$OUT/"
 # Foundry's `forge`.)
 ln -sf RazorForge "$OUT/rf"
 
-# Suflae aliases. COPIES, not symlinks: the binary keys its Suflae branding + default
-# language off its own invoked name (Environment.ProcessPath), and on Linux ProcessPath
-# resolves a symlink back to RazorForge — a copy preserves the `suflae`/`sf` name. The
-# apphost stub locates RazorForge.dll by name in its own directory, so the renamed copy
-# still launches the same compiler.
-cp "$OUT/RazorForge" "$OUT/suflae"
-cp "$OUT/RazorForge" "$OUT/sf"
+# Suflae has its own command line; `suflae` and `sf` point at it.
+ln -sf Suflae "$OUT/suflae"
+ln -sf Suflae "$OUT/sf"
 
 echo "=== bundle self-contained LLVM toolchain ==="
 # The compiler resolves <package>/toolchain/bin before PATH (ResolveToolchainTool),

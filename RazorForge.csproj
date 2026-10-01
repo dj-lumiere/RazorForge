@@ -1,61 +1,47 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- RazorForge: the RazorForge front end (its lexer) and the `razorforge` command line, over the Anvila
+       builder core. Ships the RazorForge standard library, which Suflae builds also use. -->
   <PropertyGroup>
     <SonarQubeTestProject>false</SonarQubeTestProject>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <GenerateProgramFile>false</GenerateProgramFile>
-    <Version>0.4.0</Version>
-    <RazorForgeVersion>0.4.0</RazorForgeVersion>
-    <SuflaeVersion>0.1.0</SuflaeVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>0.4.0</Version>
+    <AssemblyName>RazorForge</AssemblyName>
+    <RootNamespace>RazorForge</RootNamespace>
     <PackAsTool>true</PackAsTool>
     <!-- Canonical command name. `forge` is deliberately NOT used: it collides with
          Foundry's forge (Ethereum toolchain) on developer machines. Users who want
          `forge` can alias it locally; packages also ship an `rf` short alias. -->
     <ToolCommandName>razorforge</ToolCommandName>
     <PackageId>RazorForge</PackageId>
-    <Description>The RazorForge compiler toolchain.</Description>
+    <Description>The RazorForge toolchain.</Description>
   </PropertyGroup>
 
-  <!-- Native library integration -->
-  <PropertyGroup>
-    <NativeLibraryPath>$(MSBuildProjectDirectory)\native\build</NativeLibraryPath>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-  </PropertyGroup>
-
-  <!-- Expose internal entry points (e.g. Program.CompileEntryToIrForTests) to the test project so
-       the coverage harness can drive the compile pipeline IN-PROCESS rather than via a subprocess. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="RazorForge.Tests" />
+    <ProjectReference Include="..\Anvila\Anvila.csproj"/>
   </ItemGroup>
 
-  <!-- Kill any lingering resident daemon BEFORE the build. A daemon (spawned by a non-jit build/buildandrun)
-       runs the OLD RazorForge.dll and holds an open handle to it, so a subsequent `dotnet build` cannot
-       overwrite bin\...\RazorForge.dll (MSB3021 "being used by another process"). The daemon is stale after
-       any C# change anyway (it would be shut down as stale on the next ping), so killing it here is free —
-       the next run cold-spawns a fresh warm daemon. Best-effort (ContinueOnError): no daemon → no-op. -->
-  <Target Name="StopResidentDaemonBeforeBuild" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT'">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\build-support\stop-resident-daemon.ps1&quot;"
-          ContinueOnError="true"/>
-  </Target>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Suflae"/>
+    <InternalsVisibleTo Include="RazorForge.Tests"/>
+  </ItemGroup>
 
-  <!-- Build native libraries before main build -->
-  <Target Name="BuildNativeLibraries" BeforeTargets="BeforeBuild" Condition="'$(SkipNative)' != 'true'">
-    <Exec Command="$(MSBuildProjectDirectory)\native\build.bat" WorkingDirectory="$(MSBuildProjectDirectory)\native" Condition="'$(OS)' == 'Windows_NT'"/>
-    <Exec Command="bash $(MSBuildProjectDirectory)/native/build.sh" WorkingDirectory="$(MSBuildProjectDirectory)/native" Condition="'$(OS)' != 'Windows_NT'"/>
-  </Target>
+  <!-- The RazorForge standard library, laid out as Standard\RazorForge next to the executable. -->
+  <ItemGroup>
+    <Content Include="Standard\**\*" Link="Standard\RazorForge\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true"/>
+    <None Remove="Standard\**\*"/>
+  </ItemGroup>
 
   <!-- Emit the modular compiled-stdlib .pbrf artifacts as a BUILD BYPRODUCT (the daemon/cold path LOADS
-       them instead of paying a ~8s stdlib capture on first run). Runs the JUST-BUILT compiler after Build.
-       MSBuild Inputs/Outputs make this INCREMENTAL: when no stdlib source and no compiler dll changed since
+       them instead of paying a ~8s stdlib capture on first run). Runs the JUST-BUILT toolchain after Build.
+       MSBuild Inputs/Outputs make this INCREMENTAL: when no stdlib source and no toolchain dll changed since
        the last emit, the whole target is SKIPPED (no process launch → zero per-build cost). Disable with
-       -p:EmitPbrf=false. Best-effort (ContinueOnError) so a compiler hiccup never fails the build. -->
+       -p:EmitPbrf=false. Best-effort (ContinueOnError) so a toolchain hiccup never fails the build. -->
   <ItemGroup>
-    <RfStdlibSource Include="Standard\RazorForge\**\*.rf"/>
+    <RfStdlibSource Include="Standard\**\*.rf"/>
   </ItemGroup>
   <Target Name="EmitModularPbrf" AfterTargets="Build"
           Condition="'$(EmitPbrf)' != 'false' and Exists('$(TargetPath)')"
@@ -64,63 +50,5 @@
     <Exec Command="dotnet &quot;$(TargetPath)&quot; emit-pbrf" WorkingDirectory="$(TargetDir)" ContinueOnError="true"/>
   </Target>
 
-  <!-- Include native libraries in output -->
-  <ItemGroup>
-    <Content Include="native\build\bin\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\bin')"/>
-    <Content Include="native\build\lib\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\lib')"/>
-    <Content Include="Standard\**\*" LinkBase="Standard" CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true"/>
-  </ItemGroup>
-  <ItemGroup>
-    <AssemblyMetadata Include="RazorForgeVersion" Value="$(RazorForgeVersion)"/>
-    <AssemblyMetadata Include="SuflaeVersion" Value="$(SuflaeVersion)"/>
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Remove="native\**\*.cs"/>
-    <!-- Vendored native third-party sources (libco, libuv) are fetched into native/ at build
-         time and compiled by native/build.sh (CMake), not by MSBuild. Drop them from the SDK's
-         default None glob so SonarScanner doesn't list them under sonar.sources — a vendored tree
-         (e.g. a .clang-format inside it) otherwise fails Sonar's source-path validation. The
-         explicit native\build\bin|lib Content includes above are unaffected. -->
-    <None Remove="native\**\*"/>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="DebugUtils.CSharp" Version="1.8.0"/>
-    <PackageReference Include="dotnet-framework-sonarscanner" Version="9.2.0"/>
-    <PackageReference Include="LLVMSharp" Version="20.1.2"/>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
-    <PackageReference Include="Tomlyn" Version="0.17.0"/>
-  </ItemGroup>
-
-  <!-- Tests live in their own project (tests\RazorForge.Tests.csproj) so the compiler
-       publish never ships test code or test/tooling assemblies. Keep tests\ out of the
-       compiler's default Compile glob. -->
-  <ItemGroup>
-    <Compile Remove="tests\**\*.cs"/>
-  </ItemGroup>
-
-  <!-- playground\ and test_playground\ are gitignored scratch areas: a C# file parked there (a
-       rolled-back pass kept for reference) is not part of the compiler. -->
-  <ItemGroup>
-    <Compile Remove="playground\**\*.cs"/>
-    <Compile Remove="test_playground\**\*.cs"/>
-  </ItemGroup>
-
-  <!-- Tessera\ is the Tessera language's own solution (Tessera\Tessera.sln), built separately. -->
-  <ItemGroup>
-    <Compile Remove="Tessera\**\*.cs"/>
-    <None Remove="Tessera\**\*"/>
-    <Content Remove="Tessera\**\*"/>
-    <EmbeddedResource Remove="Tessera\**\*"/>
-  </ItemGroup>
-
-  <!-- The test assembly accesses internal compiler members. -->
-  <ItemGroup>
-    <InternalsVisibleTo Include="RazorForge.Tests"/>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="src\"/>
-  </ItemGroup>
-
+  <Import Project="..\Ingrid\StageIngridRuntime.targets"/>
 </Project>

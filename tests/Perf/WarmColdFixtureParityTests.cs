@@ -38,7 +38,7 @@ public sealed partial class WarmColdFixtureParityTests
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.sln")))
             {
                 return dir;
             }
@@ -52,7 +52,7 @@ public sealed partial class WarmColdFixtureParityTests
             dir = parent;
         }
 
-        throw new InvalidOperationException(message: "Could not locate RazorForge.csproj.");
+        throw new InvalidOperationException(message: "Could not locate RazorForge.sln.");
     }
 
     // Captured ONCE (the daemon's resident stdlib) and shared across all cases in this class.
@@ -157,7 +157,7 @@ public sealed partial class WarmColdFixtureParityTests
     private static Program Parse(string src, string path)
     {
         List<Token> tokens =
-            new Tokenizer(source: src, fileName: path, language: Language.RazorForge).Tokenize();
+            Lexers.Tokenize(source: src, fileName: path, language: Language.RazorForge);
         return new Builder.Parser.Parser(tokens: tokens,
             language: Language.RazorForge,
             fileName: path).Parse();

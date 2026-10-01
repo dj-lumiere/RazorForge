@@ -12,9 +12,6 @@ public sealed class UseAfterStealTests
 {
     private static readonly string RepoRoot = LocateRepoRoot();
 
-    private static readonly string CompilerDll =
-        Path.Combine(path1: AppContext.BaseDirectory, path2: "RazorForge.dll");
-
     [Fact]
     public void StealInLoop_CrashesWithUseAfterSteal()
     {
@@ -34,7 +31,7 @@ public sealed class UseAfterStealTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { CompilerDll, "buildandrun", rfPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rfPath), "buildandrun", rfPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
@@ -68,7 +65,7 @@ public sealed class UseAfterStealTests
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.sln")))
             {
                 return dir;
             }
@@ -83,6 +80,6 @@ public sealed class UseAfterStealTests
         }
 
         throw new InvalidOperationException(
-            message: "Could not locate RazorForge.csproj walking up from test assembly directory.");
+            message: "Could not locate RazorForge.sln walking up from test assembly directory.");
     }
 }

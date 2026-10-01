@@ -58,7 +58,7 @@ public sealed class ProgramCliTests : IDisposable
         try
         {
             Console.SetOut(newOut: sw);
-            int code = Program.Main(args: args);
+            int code = Program.Run(args: args, cliLanguage: global::TypeModel.Enums.Language.RazorForge);
             return (code, sw.ToString());
         }
         finally

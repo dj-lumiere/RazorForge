@@ -1,12 +1,14 @@
 using System.Text;
 using Builder.Diagnostics;
 
-namespace Builder.Tokenizer;
+using Builder.Tokenizer;
+
+namespace RazorForge.Lexer;
 
 /// <summary>
-/// Partial class containing string and character literal scanning memberRoutines for the unified tokenizer.
+/// Partial class containing string and character literal scanning memberRoutines for the RazorForge lexer.
 /// </summary>
-public partial class Tokenizer
+public partial class RazorForgeLexer
 {
     #region String Literals
 

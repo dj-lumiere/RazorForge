@@ -15,6 +15,24 @@ namespace RazorForge.Tests;
 /// </summary>
 public static class TestHelpers
 {
+    /// <summary>Registers both front ends' lexers with the builder core before any test runs (the
+    /// command lines do this at startup).</summary>
+    [ModuleInitializer]
+    internal static void RegisterFrontends()
+    {
+        Suflae.SuflaeFrontend.Register();
+    }
+
+    /// <summary>The toolchain that builds <paramref name="sourcePath"/>: <c>Suflae.dll</c> for a <c>.sf</c>
+    /// file, <c>RazorForge.dll</c> otherwise, from this test assembly's output directory.</summary>
+    public static string ToolchainDll(string sourcePath)
+    {
+        return Path.Combine(path1: AppContext.BaseDirectory,
+            path2: sourcePath.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase)
+                ? "Suflae.dll"
+                : "RazorForge.dll");
+    }
+
     private const string ExpectedAtLeastOneError = "Expected at least one error";
 
     #region Stdlib Snapshots
@@ -36,10 +54,9 @@ public static class TestHelpers
     /// </summary>
     public static List<Token> Tokenize(string source, [CallerMemberName] string? fileName = null)
     {
-        var tokenizer = new Tokenizer(source: source,
+        return Lexers.Tokenize(source: source,
             fileName: fileName ?? "test",
             language: Language.RazorForge);
-        return tokenizer.Tokenize();
     }
 
     /// <summary>
@@ -153,10 +170,9 @@ public static class TestHelpers
     public static List<Token> TokenizeSuflae(string source,
         [CallerMemberName] string? fileName = null)
     {
-        var tokenizer = new Tokenizer(source: source,
+        return Lexers.Tokenize(source: source,
             fileName: fileName ?? "test",
             language: Language.Suflae);
-        return tokenizer.Tokenize();
     }
 
     /// <summary>

@@ -36,8 +36,7 @@ public sealed partial class PbrfRoundTripTests
     private static Program ParseTrivial()
     {
         List<Token> tokens =
-            new Tokenizer(source: Trivial, fileName: "bench.rf", language: Language.RazorForge)
-               .Tokenize();
+            Lexers.Tokenize(source: Trivial, fileName: "bench.rf", language: Language.RazorForge);
         return new Builder.Parser.Parser(tokens: tokens,
             language: Language.RazorForge,
             fileName: "bench.rf").Parse();

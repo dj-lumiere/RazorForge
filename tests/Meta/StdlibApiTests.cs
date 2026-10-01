@@ -19,9 +19,6 @@ public sealed partial class StdlibApiTests
         path3: "Fixtures",
         path4: "Stdlib");
 
-    private static readonly string CompilerDll =
-        Path.Combine(path1: AppContext.BaseDirectory, path2: "RazorForge.dll");
-
     // The per-fixture `Fixture_OutputMatchesExpected` [Theory] (one full-stdlib compile per fixture,
     // ~165× ≈ 15 min, load-flaky) was replaced by the single-compile harness below.
     private static readonly string HarnessDir = Path.Combine(path1: RepoRoot,
@@ -467,7 +464,7 @@ public sealed partial class StdlibApiTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { CompilerDll, "buildandrun", harnessRf },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: harnessRf), "buildandrun", harnessRf },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             // The compiled program writes UTF-8 (e.g. an em-dash in a fixture string). Without pinning
@@ -644,7 +641,7 @@ public sealed partial class StdlibApiTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { CompilerDll, "buildandrun", rfPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rfPath), "buildandrun", rfPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -713,7 +710,7 @@ public sealed partial class StdlibApiTests
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.sln")))
             {
                 return dir;
             }
@@ -729,6 +726,6 @@ public sealed partial class StdlibApiTests
 
         throw new InvalidOperationException(
             message:
-            "Could not locate RazorForge.csproj walking up from test assembly directory.");
+            "Could not locate RazorForge.sln walking up from test assembly directory.");
     }
 }

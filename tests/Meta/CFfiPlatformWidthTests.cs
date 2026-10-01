@@ -25,9 +25,6 @@ namespace RazorForge.Tests.Meta;
 /// </summary>
 public sealed class CFfiPlatformWidthTests
 {
-    private static readonly string CompilerDll =
-        Path.Combine(path1: AppContext.BaseDirectory, path2: "RazorForge.dll");
-
     private static bool IsWindows =>
         RuntimeInformation.IsOSPlatform(osPlatform: OSPlatform.Windows);
 
@@ -221,7 +218,7 @@ public sealed class CFfiPlatformWidthTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { CompilerDll, "buildandrun", rfPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rfPath), "buildandrun", rfPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

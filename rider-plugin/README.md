@@ -18,7 +18,7 @@ client that launches it differs.
 
 1. Build the compiler so the DLL + its sibling `Standard/` stdlib exist:
    ```
-   dotnet build       # from the repo root — produces bin/Debug/net10.0/RazorForge.dll
+   dotnet build       # from the repo root — produces RazorForge/bin/Debug/net10.0/RazorForge.dll
    ```
 2. `dotnet` on PATH.
 3. A local Gradle (or generate the wrapper — see below).
@@ -51,7 +51,7 @@ Install it in your real Rider via **Settings → Plugins → ⚙ → Install Plu
 
 1. `RAZORFORGE_LSP_DLL` — an absolute path to the DLL (set this for a Release build, or when a
    game project references RazorForge from another location).
-2. `<project>/bin/Debug/net10.0/RazorForge.dll` — the repo dev build (default).
+2. `<project>/RazorForge/bin/Debug/net10.0/RazorForge.dll` — the repo dev build (default).
 
 The server is launched with its working directory set to the DLL's folder so the sibling
 `Standard/` stdlib is found; `FORGE_STDLIB` still overrides the stdlib path if you need it.

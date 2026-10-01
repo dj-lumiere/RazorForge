@@ -25,7 +25,7 @@ public sealed class WarmLeakDiagTests
     private static Program Parse(string src, string path)
     {
         List<Token> tokens =
-            new Tokenizer(source: src, fileName: path, language: Language.RazorForge).Tokenize();
+            Lexers.Tokenize(source: src, fileName: path, language: Language.RazorForge);
         return new Builder.Parser.Parser(tokens: tokens, language: Language.RazorForge,
             fileName: path).Parse();
     }

@@ -58,7 +58,7 @@ class RazorForgeLspServerDescriptor(project: Project) :
     /**
      * Finds `RazorForge.dll`, in order:
      *   1. the `RAZORFORGE_LSP_DLL` env var (absolute path to the DLL), then
-     *   2. the repo dev build at `<project>/bin/Debug/net10.0/RazorForge.dll`.
+     *   2. the repo dev build at `<project>/RazorForge/bin/Debug/net10.0/RazorForge.dll`.
      * Adjust #2 or set the env var if your layout differs (e.g. a Release build, or a game
      * project that references RazorForge from elsewhere).
      */
@@ -71,7 +71,7 @@ class RazorForgeLspServerDescriptor(project: Project) :
             ?: error("Cannot locate RazorForge.dll: the project has no base path. " +
                 "Set the RAZORFORGE_LSP_DLL environment variable to the DLL path.")
 
-        val devBuild = File(base, "bin/Debug/net10.0/RazorForge.dll")
+        val devBuild = File(base, "RazorForge/bin/Debug/net10.0/RazorForge.dll")
         if (!devBuild.exists()) {
             LOG.warn("RazorForge.dll not found at ${devBuild.absolutePath} — " +
                 "build the compiler (dotnet build) or set RAZORFORGE_LSP_DLL.")

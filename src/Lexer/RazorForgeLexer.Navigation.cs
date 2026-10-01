@@ -1,9 +1,11 @@
-namespace Builder.Tokenizer;
+using Builder.Tokenizer;
+
+namespace RazorForge.Lexer;
 
 /// <summary>
-/// Partial class containing character navigation and token management memberRoutines for the unified tokenizer.
+/// Partial class containing character navigation and token management memberRoutines for the RazorForge lexer.
 /// </summary>
-public partial class Tokenizer
+public partial class RazorForgeLexer
 {
     #region Character Navigation
 

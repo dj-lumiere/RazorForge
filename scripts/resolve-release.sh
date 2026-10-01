@@ -11,7 +11,7 @@
 set -euo pipefail
 
 csproj_version() {
-  sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' RazorForge.csproj | head -1
+  sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' RazorForge/RazorForge.csproj | head -1
 }
 
 tag="${GITHUB_REF_NAME:?GITHUB_REF_NAME is not set}"

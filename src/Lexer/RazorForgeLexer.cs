@@ -2,20 +2,16 @@ using Builder.Diagnostics;
 using System.Globalization;
 using TypeModel.Enums;
 
-namespace Builder.Tokenizer;
+using Builder.Tokenizer;
+
+namespace RazorForge.Lexer;
 
 /// <summary>
-/// Unified tokenizer for both RazorForge and Suflae programming languages.
+/// The RazorForge lexer. It uses significant indentation and newlines for block structure, and the numeric,
+/// bytesize and duration literal suffixes. The builder core reaches it through
+/// <see cref="Builder.Tokenizer.Lexers"/>, where <see cref="RazorForgeFrontend"/> registers it.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This tokenizer handles both language variants through a shared keyword map with
-/// language-conditional entries. Both languages use significant indentation and
-/// newlines for block structure. Suffix mappings for numeric,
-/// bytesize, and duration literals are shared between both languages.
-/// </para>
-/// </remarks>
-public partial class Tokenizer
+public partial class RazorForgeLexer
 {
     #region Fields
 
@@ -118,13 +114,13 @@ public partial class Tokenizer
     #region Constructor and Properties
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Tokenizer"/> class.
+    /// Initializes a new instance of the <see cref="RazorForgeLexer"/> class.
     /// </summary>
     /// <param name="source">The source code to tokenize.</param>
     /// <param name="fileName">The source code's file name being tokenized.</param>
-    /// <param name="language">The language variant (RazorForge or Suflae).</param>
-    public Tokenizer(string source, string fileName, Language language)
+    public RazorForgeLexer(string source, string fileName)
     {
+        const Language language = Language.RazorForge;
         _fileName = fileName;
         _source = NormalizeAndValidateSource(source: source ??
                                                      throw new ArgumentNullException(
@@ -241,21 +237,18 @@ public partial class Tokenizer
             [key: "everywhere"] = TokenType.Everywhere
         };
 
-        // RF-only keywords
-        if (_language == Language.RazorForge)
-        {
-            _keywords[key: "danger"] = TokenType.Danger;
-            _keywords[key: "dangerous"] = TokenType.Dangerous;
-            _keywords[key: "steal"] = TokenType.Steal;
-            _keywords[key: "threaded"] = TokenType.Threaded;
-            // Buildtime reflection is RF's model (monomorph unroll). Suflae's reflection is the runtime
-            // ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via wholesale Core
-            // reuse, so it never needs `expand` itself. `expand` is the ONLY reflection keyword; the sources
-            // (`openmemvarof`/`allmemvarof`/`caseof`/`branchof`) and accessors (`nameof`/`typeof`/…)
-            // tokenize as plain identifiers and are classified in SA (see ExpandSources / the
-            // BuilderExpansion import gate), not here.
-            _keywords[key: "expand"] = TokenType.Expand;
-        }
+        // RazorForge-only keywords
+        _keywords[key: "danger"] = TokenType.Danger;
+        _keywords[key: "dangerous"] = TokenType.Dangerous;
+        _keywords[key: "steal"] = TokenType.Steal;
+        _keywords[key: "threaded"] = TokenType.Threaded;
+        // Buildtime reflection is RF's model (monomorph unroll). Suflae's reflection is the runtime
+        // ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via wholesale Core
+        // reuse, so it never needs `expand` itself. `expand` is the ONLY reflection keyword; the sources
+        // (`openmemvarof`/`allmemvarof`/`caseof`/`branchof`) and accessors (`nameof`/`typeof`/…)
+        // tokenize as plain identifiers and are classified in SA (see ExpandSources / the
+        // BuilderExpansion import gate), not here.
+        _keywords[key: "expand"] = TokenType.Expand;
 
         // Numeric suffix map - shared between both languages
         _numericSuffixToTokenType = new Dictionary<string, TokenType>
