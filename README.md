@@ -1,177 +1,127 @@
 <p align="center">
-  <img src="branding/razorforge-suflae-icon.svg" alt="RazorForge and Suflae" width="112">
+  <img src="branding/razorforge.svg" alt="RazorForge logo" width="112">
 </p>
 
-<h1 align="center">RazorForge &amp; Suflae</h1>
+<h1 align="center">RazorForge</h1>
 
-<p align="center"><strong>Two languages, one builder.</strong></p>
+<p align="center"><strong>Make programming sharp again.</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/status-early%20alpha-orange.svg" alt="Status">
+  <img src="https://img.shields.io/badge/version-0.4.0-informational.svg" alt="Version 0.4.0">
+  <img src="https://img.shields.io/badge/status-early%20alpha-orange.svg" alt="Status: early alpha">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
 </p>
 
-RazorForge (`.rf`) and Suflae (`.sf`) are two natively compiled languages that share one grammar,
-one standard library, and one builder. They part ways on how much of the machinery you see.
+<p align="center">
+  <a href="https://razorforge.lumi-dev.xyz/">Documentation</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="RAZORFORGE-FOR-AI.md">Reference for AI assistants</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="https://github.com/dj-lumiere/Suflae">Suflae</a>
+</p>
 
-<table>
-<tr>
-<td width="50%" valign="top">
-
-<img src="branding/razorforge.svg" alt="RazorForge logo" width="56">
-
-**RazorForge** · *Make programming sharp again.*
-
-You own every entity and hand it over with `steal`. Cleanup is deterministic, overflow behavior
-is chosen per operator, and the few operations that can break memory sit in `danger` blocks.
-
-[More below](#razorforge) · [Docs](https://razorforge.lumi-dev.xyz/)
-
-</td>
-<td width="50%" valign="top">
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Suflae/branding/suflae-dark.svg">
-  <img src="https://raw.githubusercontent.com/dj-lumiere/Suflae/master/branding/suflae.svg" alt="Suflae logo" width="56">
-</picture>
-
-**Suflae** · *Make programming sweet again.*
-
-Entities are shared handles with a cycle collector, bare numbers are exact `Integer` and
-`Decimal`, and a file can be just its statements. The fixed-width types are there when you ask.
-
-[More below](#suflae) · [Docs](https://suflae.lumi-dev.xyz/)
-
-</td>
-</tr>
-</table>
-
-Both compile to native code through LLVM and link against the same runtime library. A `.sf` file
-can import `.rf` modules and use their types, so one program can mix the two. Neither is a kernel
-or bare-metal language, and there is no freestanding mode.
-
-> RazorForge (0.4) and Suflae (0.1) are early alpha. The builder, runtime, and standard library
-> work, and about 1,500 unit tests and 230+ end-to-end snapshot fixtures in both languages pass in
-> CI on every commit. The languages are still young, though: APIs will change, and you will find
-> bugs.
-
-## What they share
-
-1. **Failure is loud by default, and recovery takes one keyword.** A routine that `throw`s or goes
-   `absent` is failable. A bare call to it crashes with a message. To recover, put a keyword in
-   front of the call: `try parse(...)` gives `Maybe[T]`, `grab parse(...)` gives `Check[T]` (which
-   keeps the error), and `lookup parse(...)` gives `Lookup[T]`. There are no exceptions to declare
-   or catch.
-2. **Calls are readable by default.** Multi-parameter calls use named arguments, and ignoring a
-   return value takes an explicit `discard`.
-3. **One standard library.** Collections, `Text`, the numeric types, concurrency, and file I/O are
-   the same code in both languages.
+RazorForge (`.rf`) is a natively compiled language built around precision: in what a program means,
+in how it fails, and in the numbers it computes. It is meant for application work where you want
+native code and predictable memory behavior: command-line tools, services, games, and data and
+numeric tools. It is not a kernel or bare-metal language; programs link against a runtime library,
+and there is no freestanding mode.
 
 ```razorforge
-# A routine that can `throw` is declared with `!`; call sites don't write it.
-routine get_text!(n: S64) -> Text
-    when n
-        == 0 => throw DivisionByZeroError()
-        == 1 => return "hello"
-        else => return "world"
+import IO/Console
 
-routine start()
-    var m = try get_text(n: 0)   # `try` recovers -> Maybe[Text]
-    when m
-        is None => show("absent")
-        else v  => show(f"present: {v}")
-    show(get_text(n: 1))         # a bare call crashes loudly if it fails
-    var g = gcd(a: 252, b: 105)  # multi-parameter calls name their arguments
-    return
-```
-
-## RazorForge
-
-<img src="branding/razorforge.svg" alt="RazorForge logo" width="72">
-
-RazorForge is built around precision: in what a program means, in how it fails, and in the numbers
-it computes. It is meant for application work where you want native code and predictable memory
-behavior: CLIs, services, games, and data and numeric tools.
-
-1. **Single ownership without a borrow checker.** Containment is ownership, every transfer is
-   marked with `steal`, and you reach an entity you don't own through scope-bound access tokens.
-   Cleanup is deterministic and use after move is rejected, with no lifetime annotations and no
-   garbage collector.
-2. **Numbers mean what they say.** Overflow is checked unless you choose wrapping (`+%`) or
-   clamping (`+^`). Decimal floats (`D32`/`D64`/`D128`) and arbitrary-precision `Integer`/`Decimal`
-   sit next to the binary floats, and the float math is correctly rounded.
-3. **Markers go where a danger is silent.** Ownership transfers are marked with `steal`, and the few
-   operations that can actually break memory safety live in `danger` blocks.
-
-```razorforge
 entity Resource
     tag: S64
 
 routine consume(r: Resource)
     show(f"consuming tag={r.tag}")
     return
-    # r is destroyed here — exactly once, deterministically
+    # r is destroyed here, exactly once
+
+routine parse_digit!(c: Character) -> S64
+    unless "0123456789" have c
+        absent                      # fail without an error object
+    return S64(from_text: Text(from: c))
 
 routine start()
     var b = Resource(tag: 7)
-    consume(r: steal b)   # ownership transferred; using `b` afterwards is a compile error
+    consume(r: steal b)             # ownership moves; using `b` afterwards is a build error
+
+    var d = try parse_digit(c: 'x') # `try` recovers the failure as Maybe[S64]
+    when d
+        is None => show("not a digit")
+        else n  => show(f"digit {n}")
+
+    show(200u8 +^ 100u8)            # clamping add: 255
     return
 ```
 
-An entity has a single owner, and handing it over requires `steal` (otherwise you get `RF-S413`).
-Access tokens (`view()`/`modify()`, which give `Viewing[T]`/`Modifying[T]`) let you read or write
-an entity without taking ownership and without lifetime syntax. When you do want sharing, you opt
-into reference counting with `Retained[T]`, `Guarded[T, P]`, or the weak `Tracked[T]`/`Witnessed[T]`.
+> **Early alpha.** The builder, runtime, and standard library work, and every commit passes about
+> 1,500 unit tests and 240+ end-to-end programs (RazorForge and Suflae) on Windows, Linux, and
+> macOS in CI. APIs will still change between releases, and you will find bugs.
 
-## Suflae
+## What it is like
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Suflae/branding/suflae-dark.svg">
-  <img src="https://raw.githubusercontent.com/dj-lumiere/Suflae/master/branding/suflae.svg" alt="Suflae logo" width="72">
-</picture>
+**Single ownership, no borrow checker.** Containment is ownership. An entity has one owner, every
+transfer is marked with `steal`, and cleanup runs deterministically at scope exit. To use an entity
+you don't own, you take a scope-bound access token (`view()` / `modify()`), which needs no lifetime
+syntax and cannot outlive the call or `using` block it appears in. When you want sharing, you opt
+into reference counting with `Retained[T]`, `Guarded[T, P]`, or the weak `Tracked[T]` /
+`Witnessed[T]`.
 
-Suflae is for building applications without managing memory by hand. It keeps RazorForge's grammar,
-standard library, and loud failures, and hides the ownership machinery.
+**Failure is loud by default, and recovery takes one keyword.** A routine that can `throw` or go
+`absent` carries `!` on its declaration, never at its call sites. A bare call that fails crashes the
+program with a message and a stack trace (exit status 82). To recover, put a keyword in front of the
+call: `try` gives `Maybe[T]`, `grab` gives `Check[T]` (which keeps the error), and `lookup` gives
+`Lookup[T]`. There are no exceptions to declare or catch.
 
-1. **Entities are shared.** A Suflae `entity` is a reference-counted handle. It switches to
-   thread-safe counting when it escapes to another task, and a cycle collector reclaims reference
-   cycles. There is no `steal`, no access tokens, and no `danger`.
-2. **Numbers are exact by default.** A bare `42` is an arbitrary-precision `Integer` and a bare
-   `3.14` is a base-10 `Decimal`. The fixed-width types are still there when you name them.
-3. **A file can be just its statements.** Top-level statements need no `start()`, and `global`
-   gives you module-level state that parallel tasks can safely touch.
+**Numbers mean what they say.** `+ - *` are checked and crash on overflow; wrapping (`+%`) and
+clamping (`+^`) are separate operators you choose. Integers go from `S8`/`U8` to `S256`/`U256`, and
+next to the binary floats `B16`–`B128` sit decimal floats `D32`/`D64`/`D128` and arbitrary-precision
+`Integer`, `Decimal`, and `Real`. The float math library is correctly rounded, and a float prints as
+the shortest text that reads back as the same value.
 
-```suflae
-entity Point
-    x: Integer
-    y: Integer
+**Markers go where a danger is silent.** Ownership transfers are marked (`steal`), overflow behavior
+is chosen per operator, and the few operations that can actually break memory safety live in
+`danger` blocks. Everything else stays quiet: no lifetime annotations, no `unsafe` around ordinary
+code.
 
-var p = Point(x: 3, y: 4)
-var q = p                 # both names refer to the same Point — no `steal`
-q.x = 10
-show(f"{p.x}")            # 10
-show(0.1 + 0.2 == 0.3)    # true — bare numbers are Integer and Decimal
-```
-
-The REPL, runtime reflection, and hot reload aren't there yet. See
-[`SUFLAE-FOR-AI.md`](https://github.com/dj-lumiere/Suflae/blob/master/SUFLAE-FOR-AI.md) for the current state.
+**Calls read on their own.** Multi-parameter calls name their arguments (`gcd(a: 252, b: 105)`), an
+ignored `Bool` result takes an explicit `discard`, and blocks are indentation, four spaces each.
 
 ## Quick start
 
-### Prerequisites
+### From a release package
 
-- .NET SDK 10.0+
-- LLVM 20+ (`clang` and `opt` on PATH)
-- CMake 3.20+ and a C compiler (for the native runtime)
-
-### Build from source
+Prebuilt packages for win-x64, linux-x64, and osx-arm64 are on the
+[releases page](https://github.com/dj-lumiere/RazorForge/releases). Each one bundles the LLVM
+toolchain it needs, so unpack it, put it on your `PATH`, and run:
 
 ```bash
-git clone https://github.com/dj-lumiere/RazorForge.git
-cd RazorForge
+razorforge buildandrun hello.rf
+```
 
-dotnet build        # builds the builder AND the native runtime (via CMake)
-dotnet test         # optional: run the test suite
+### From source
+
+RazorForge is built from four repositories checked out side by side: the builder core
+([Anvila](https://github.com/dj-lumiere/Anvila)), the native runtime
+([Ingrid](https://github.com/dj-lumiere/Ingrid)), and the two language front ends (this repository
+and [Suflae](https://github.com/dj-lumiere/Suflae)).
+
+You need the .NET 10 SDK, LLVM 22 (`clang` and `opt` on `PATH`), CMake 3.20+, and Ninja on Windows.
+
+```bash
+mkdir LumiFoundry && cd LumiFoundry
+git clone https://github.com/dj-lumiere/Anvila.git
+git clone https://github.com/dj-lumiere/Ingrid.git
+git clone https://github.com/dj-lumiere/RazorForge.git
+git clone https://github.com/dj-lumiere/Suflae.git
+
+# The native runtime builds against libuv and libco, which are not vendored.
+git clone --depth 1 https://github.com/libuv/libuv.git Ingrid/native/libuv
+git clone --depth 1 https://github.com/higan-emu/libco.git Ingrid/native/libco
+
+dotnet build RazorForge/RazorForge.csproj      # also builds the native runtime
+dotnet test RazorForge/tests/RazorForge.Tests.csproj   # optional
 ```
 
 ### Hello, world
@@ -185,52 +135,38 @@ routine start()
     return
 ```
 
-```suflae
-# hello.sf
-import IO/Console
-
-show("Hello from Suflae!")
-```
-
 ```bash
-./bin/Debug/net10.0/RazorForge buildandrun hello.rf
-./bin/Debug/net10.0/RazorForge buildandrun hello.sf
-# Windows: .\bin\Debug\net10.0\RazorForge.exe buildandrun hello.rf
+./RazorForge/bin/Debug/net10.0/RazorForge buildandrun hello.rf
+# Windows: .\RazorForge\bin\Debug\net10.0\RazorForge.exe buildandrun hello.rf
 ```
 
-The file extension picks the language. Release packages also ship a `suflae` command: a bare
-`suflae hello.sf` builds and runs the file, like `python hello.py`.
-
-`module` is optional in both languages. Without it, the module path comes from the file's location.
-A single-file program can skip `routine start()` and put its statements at the top level (script
-mode), as `hello.sf` does.
+Every routine ends with an explicit `return`; scope teardown is anchored there. A single-file
+program may also skip `routine start()` and put its statements at the top level (script mode), and
+`module` is optional: without it, the module path comes from the file's location.
 
 ### Using an AI assistant?
 
-RazorForge and Suflae aren't in any model's training data yet, so assistants tend to guess
-Rust- or Python-flavored syntax that doesn't build. Point yours at
-[`RAZORFORGE-FOR-AI.md`](RAZORFORGE-FOR-AI.md) and [`SUFLAE-FOR-AI.md`](https://github.com/dj-lumiere/Suflae/blob/master/SUFLAE-FOR-AI.md), which
-also ship inside every release package. They are compact lists of where those guesses go wrong,
-with pointers to the CI-verified example programs in [`tests/Fixtures/Stdlib/`](tests/Fixtures/Stdlib/)
-and [`tests/Fixtures/StdlibSf/`](https://github.com/dj-lumiere/Suflae/tree/master/tests/Fixtures/StdlibSf).
+RazorForge is not in any model's training data yet, so assistants tend to guess Rust- or
+Python-flavored syntax that does not build. Point yours at
+[`RAZORFORGE-FOR-AI.md`](RAZORFORGE-FOR-AI.md), which also ships in every release package. It is a
+compact list of where those guesses go wrong, with pointers to the CI-verified programs in
+[`tests/Fixtures/Stdlib/`](tests/Fixtures/Stdlib/).
 
-### CLI reference
+## Command line
 
 ```
-RazorForge <source-file>                  Parse file and show AST summary
-RazorForge parse <source-file>            Parse file and show AST summary
-RazorForge tokenize <source-file>         Tokenize file and show tokens
-RazorForge codegen [entry-file] [out.ll]  Build up to LLVM IR only (no opt/link)
-RazorForge build [entry-file]             Build a native executable (no run)
-RazorForge buildandrun [entry-file]       Build, link, and execute
-RazorForge check [entry-file]             Type-check only (no codegen)
-RazorForge validate-stdlib [rf|sf]        Validate stdlib routine bodies
-RazorForge --lsp                          Run the language server (stdio)
-RazorForge help                           Show usage
-RazorForge version                        Show compiler version
+razorforge buildandrun [entry-file]       Build, link, and run
+razorforge build [entry-file]             Build a native executable for this OS (no run)
+razorforge check [entry-file]             Type-check only
+razorforge codegen [entry-file] [out.ll]  Stop at LLVM IR
+razorforge parse <source-file>            Parse and show an AST summary
+razorforge tokenize <source-file>         Show the tokens
+razorforge validate-stdlib [language]     Check the standard library's routine bodies
+razorforge --lsp                          Run the language server over stdio
+razorforge help | version
 ```
 
-There are no build flags. All build configuration lives in the single `[target]` section of the
+There are no build flags. All build configuration lives in the `[target]` section of a
 `config.toml` manifest:
 
 ```toml
@@ -239,173 +175,137 @@ name = "my-app"
 
 [target]
 executable = "MainModule"          # entry module (by module path, not file path)
-library = ["../shared-utils"]      # external dependency directories (optional)
+library = ["../shared-utils"]      # directories whose modules join the import search space
 mode = "debug"                     # debug -O0 | release -O2 | release-time -O3 | release-space -Os
 ```
 
-Each `library` entry is a directory, relative to the manifest, whose modules join the import search
-space, much like requirements.txt. Once the package manager lands, entries will also accept
-versioned packages from the package site (for example `"json-utils@1.2.0"`), fetched into a cache
-that builds read the same way. If you give no entry file, the CLI looks for `config.toml` in the
-current directory and its parents, so you can `cd` into a project and run `razorforge buildandrun`.
+With no entry file, the command looks for `config.toml` in the current directory and its parents,
+so `cd` into a project and run `razorforge buildandrun`.
 
 ## What works today
 
-- **Builder pipeline:** tokenizer, parser, declaration and name resolution, desugaring, semantic
-  analysis, type-aware lowering, monomorphization, LLVM IR, native binary, for both languages.
-  Diagnostics come in `error[RF-S###]: file:line:col` format with source excerpts, spelled
-  `SF-S###` in a Suflae file. Only code
-  reachable from `start()` is built.
-- **Memory model:** in RazorForge, single-ownership entities with deterministic `destroy`, explicit
-  `steal` transfer, scope-bound access tokens, `Retained`/`Guarded`/`Tracked`/`Witnessed` reference
-  counting, and `danger` blocks for the few operations that can actually break memory safety. In
-  Suflae, shared entities with biased reference counting, promotion to thread-safe counting on
-  escape, and a cycle collector.
-- **Error handling:** failable routines (`throw`/`absent`), the `try`/`grab`/`lookup` recovery
-  keywords, `Maybe[T]`/`Check[T]`/`Lookup[T]` carriers, and `when` pattern matching. Every crash
-  exits with status 82 and prints a message and stack trace to stderr.
-- **Numerics:** `S8`–`S256`, `U8`–`U256`, binary floats `B16`–`B128` (plus `BF16` for storage),
-  decimal floats `D32`/`D64`/`D128`, arbitrary-precision `Integer`/`Decimal`/`Real`, complex
-  `C64`/`C128`/`C256`, quaternions, vectors, and native SIMD `Vector[T, N]`, all with checked,
-  wrapping, and clamping arithmetic.
-- **Collections:** `List`, `Dict`, `Set`, `CircularList`, `BitList`, `PriorityQueue`, sorted
-  collections, `SplitList` (struct-of-arrays), fixed-size `Array[T, N]`, and iterator adapters
-  (`select`, `where`, `zip`, `enumerate`, …). Changing a collection while an `each` loop walks it
-  is a buildtime error in RazorForge and a runtime error in Suflae.
-- **Text:** a UTF-32 `Text` type, f-string interpolation with format specs, `Bytes` with UTF-8
-  iteration, and range slicing (`text[a til b]`).
-- **Generics and protocols:** type parameters with protocol constraints (`needs T obeys P`),
-  const generics (`Array[T, N]`), associated types, and monomorphization.
+- **Builder pipeline:** tokenizing, parsing, name and type resolution, desugaring, semantic
+  analysis, type-aware lowering, monomorphization, LLVM IR, and a native executable. Only code
+  reachable from `start()` is built. Diagnostics read `error[RF-S###]: file:line:col: message` with a
+  source excerpt.
+- **Memory model:** single-ownership entities with deterministic `destroy`, `steal` transfers,
+  scope-bound access tokens, the `Retained` / `Guarded` / `Tracked` / `Witnessed` reference-counted
+  wrappers, and `danger` blocks.
+- **Error handling:** failable routines (`throw` / `absent`), the `try` / `grab` / `lookup` recovery
+  keywords, and `when` pattern matching with exhaustiveness checks.
+- **Numerics:** `S8`–`S256`, `U8`–`U256`, `B16`–`B128` (plus `BF16` for storage), `D32` / `D64` /
+  `D128`, arbitrary-precision `Integer` / `Decimal` / `Real`, complex `C64` / `C128` / `C256`,
+  quaternions, vectors, and SIMD `Vector[T, N]`, with checked, wrapping, and clamping arithmetic.
+- **Collections:** `List`, `Dict`, `Set`, `CircularList`, `BitList`, `PriorityQueue`, the sorted
+  collections, `SplitList` (struct of arrays), fixed-size `Array[T, N]`, and lazy iterator adapters
+  (`select`, `where`, `zip`, `enumerate`, …). Changing a collection while an `each` loop walks it is
+  a build error, including when the change is hidden behind a call.
+- **Text:** UTF-32 `Text`, f-strings, `Bytes` with UTF-8 helpers, and range slicing
+  (`text[a til b]`).
+- **Generics and protocols:** type parameters with protocol constraints (`needs T obeys P`), const
+  generics (`Array[T, N]`), associated types. Everything monomorphizes; there is no runtime dispatch.
 - **Concurrency:** stackful coroutines (`suspended routine`) and OS threads (`threaded routine`)
-  behind one `Agent[T]` handle, `gather`/`race`, typed channels with backpressure, async file I/O,
-  and OS signal handlers (`Signals`). Async networking (sockets, HTTP) is not implemented yet.
-- **Interop and build:** realm-qualified `C::` foreign routines, linking against external C
-  libraries, file-level conditional compilation (`@target`), buildtime reflection (`expand`), and
-  Suflae files importing RazorForge modules.
-- **Tooling:** a built-in language server for both languages (diagnostics, hover, go-to-definition,
-  rename, completion, inlay hints, …) with a VS Code extension and a Rider plugin.
-- **Testing:** every commit runs about 1,500 unit tests plus 230+ end-to-end fixtures, in both
-  RazorForge and Suflae, that build, link, and run programs and diff their output against snapshots.
+  behind one `Agent[T]` handle, `gather` / `race`, typed channels with backpressure, async file I/O,
+  and OS signal handlers. Async networking is not implemented yet.
+- **Interop and build:** realm-qualified `C::` foreign routines and linking against C libraries,
+  file-level conditional compilation (`@target`), and buildtime reflection (`expand`).
+- **Tooling:** a language server (diagnostics, hover, go-to-definition, rename, completion, inlay
+  hints, …), with setup scripts for VS Code (`setup-vscode`) and a Rider plugin
+  ([`rider-plugin/`](rider-plugin/)).
 
-### Platform support
+### Platforms
 
-| Platform                    | Status                                       |
-|-----------------------------|----------------------------------------------|
-| Windows x86-64              | Working (CI-verified on every commit)        |
-| Linux x86-64                | Working (CI-verified on every commit)        |
-| macOS ARM64 (Apple Silicon) | Working (CI-verified on every commit)        |
-| Linux ARM64, macOS x86-64   | Target definitions exist, **not yet tested** |
+| Platform                    | Status                                 |
+|-----------------------------|----------------------------------------|
+| Windows x86-64              | Working, tested in CI on every commit  |
+| Linux x86-64                | Working, tested in CI on every commit  |
+| macOS ARM64 (Apple Silicon) | Working, tested in CI on every commit  |
+| Linux ARM64, macOS x86-64   | Target definitions exist, not tested   |
 
 On x86-64, programs target x86-64-v3 (Intel Haswell 2013+, AMD Excavator 2015+, every Ryzen),
-because the correctly rounded float math relies on hardware FMA. Older CPUs, and low-end
-Pentium/Celeron/Atom parts without AVX, can't run the output.
+because the correctly rounded float math relies on hardware FMA. CPUs without AVX2 and FMA,
+including low-end Pentium, Celeron, and Atom parts, cannot run the output.
+
+## RazorForge and Suflae
+
+[Suflae](https://github.com/dj-lumiere/Suflae) (`.sf`) is RazorForge's sibling. It shares the
+grammar, the standard library, and the loud failures, and hides the ownership machinery: its
+entities are shared reference-counted handles with a cycle collector, bare numbers are exact
+`Integer` and `Decimal`, and it has thread-safe module `global`s. A `.sf` file can import `.rf`
+modules, so one program can mix the two. Pick RazorForge when you want control over ownership and
+widths, Suflae when you would rather not think about either.
 
 ## Documentation
 
-Each language has its own documentation site, built from `RazorForge-Wiki/` and `Suflae-Wiki/`.
-
-**RazorForge** · [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/)
+The documentation lives at [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/):
 
 - [Hello World](https://razorforge.lumi-dev.xyz/Hello-World) ·
   [Data Types](https://razorforge.lumi-dev.xyz/Data-Types) ·
   [Pattern Matching](https://razorforge.lumi-dev.xyz/Pattern-Matching)
-- [Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model): ownership, access tokens, `steal`
-- [Error Handling](https://razorforge.lumi-dev.xyz/Error-Handling): failable routines and carriers
+- [Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) ·
+  [Error Handling](https://razorforge.lumi-dev.xyz/Error-Handling) ·
+  [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks)
 - [Collections](https://razorforge.lumi-dev.xyz/Collections) ·
   [Numeric Types](https://razorforge.lumi-dev.xyz/Numeric-Types) ·
   [Generics](https://razorforge.lumi-dev.xyz/Generics) ·
   [Protocols](https://razorforge.lumi-dev.xyz/Protocols)
-- [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks) ·
-  [C Subsystem](https://razorforge.lumi-dev.xyz/C-Subsystem) ·
-  [Build System](https://razorforge.lumi-dev.xyz/Build-System)
+- [C Subsystem](https://razorforge.lumi-dev.xyz/C-Subsystem) ·
+  [Build System](https://razorforge.lumi-dev.xyz/Build-System) ·
+  [Design Philosophy](https://razorforge.lumi-dev.xyz/Design-Philosophy)
 
-**Suflae** · [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/)
+The programs in [`tests/Fixtures/Stdlib/`](tests/Fixtures/Stdlib/) run on every commit and are
+diffed against their `.expected.txt` output, so they double as working examples for nearly every
+language feature and standard library API.
 
-- [Hello World](https://suflae.lumi-dev.xyz/Hello-World) ·
-  [Entities](https://suflae.lumi-dev.xyz/Entities) ·
-  [Numeric Types](https://suflae.lumi-dev.xyz/Numeric-Types)
-- [Error Handling](https://suflae.lumi-dev.xyz/Error-Handling) ·
-  [Collections](https://suflae.lumi-dev.xyz/Collections) ·
-  [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model)
-- [Choosing a Language](https://suflae.lumi-dev.xyz/Choosing-Language) ·
-  [RazorForge Interop](https://suflae.lumi-dev.xyz/RazorForge-Interop)
-
-The end-to-end fixtures in `tests/Fixtures/Stdlib/*.rf` and `tests/Fixtures/StdlibSf/*.sf` pass on
-every commit, so they also work as a runnable example for nearly every language feature.
-
-## Project structure
+## This repository
 
 ```
 RazorForge/
-├── src/                   # Builder (C#), folders numbered by pipeline stage
-│   ├── 1.Tokenizer/       #   Tokenizing (RazorForge & Suflae)
-│   ├── 2.Parser/          #   Parsing
-│   ├── 3.Declaration/     #   Declaration collection, name and type resolution
-│   ├── 4.Desugaring/      #   Syntactic, type-independent desugaring
-│   ├── 5.Verification/    #   Semantic analysis & diagnostics
-│   ├── 6.Lowering/        #   Type-aware lowering (operators, f-strings, patterns, teardown)
-│   ├── 7.Instantiation/   #   Generic monomorphization, wired-routine synthesis
-│   ├── 8.Collection/      #   Demand collection from start()
-│   ├── 9.LlvmEmit/        #   LLVM IR emission
-│   └── Execution/         #   CLI driver, build pipeline (opt + clang + run), language server
-├── Standard/RazorForge/   # Shared standard library (.rf sources, used by both languages)
-├── Standard/Suflae/       # Suflae-side standard library (.sf sources)
-├── native/                # C runtime + vendored libs (libco, libuv)
-├── tests/                 # Unit tests + end-to-end snapshot fixtures
-├── vscode-extension/      # VS Code extension
-├── rider-plugin/          # Rider plugin
-├── RazorForge-Wiki/       # RazorForge documentation sources
-└── Suflae-Wiki/           # Suflae documentation sources
+├── src/                  # The RazorForge front end: lexer, language rules, `razorforge` command line
+├── Standard/             # The standard library (.rf), used by RazorForge and Suflae builds
+├── tests/                # RazorForge.Tests: unit tests and end-to-end fixtures
+│   └── Fixtures/Stdlib/  #   programs with expected output
+├── scripts/              # Packaging and maintenance scripts
+├── rider-plugin/         # Rider plugin
+├── RazorForge.tmbundle/  # TextMate grammar
+├── RAZORFORGE-FOR-AI.md  # Reference for AI assistants
+└── CHANGELOG.md          # Release notes for RazorForge and Suflae
 ```
+
+The builder itself (parser, analysis, lowering, LLVM emission) is
+[Anvila](https://github.com/dj-lumiere/Anvila), and the C runtime is
+[Ingrid](https://github.com/dj-lumiere/Ingrid).
 
 ## Roadmap
 
-### Shipped (latest release: RazorForge 0.4.0 · Suflae 0.1.0)
+**Shipped** (latest release: RazorForge 0.4.0)
 
-- [x] Builder, LLVM, and native pipeline on Windows/Linux x86-64 and macOS ARM64
-- [x] RazorForge: ownership model, failable routines with recovery keywords, generics,
-  collections, 256-bit integers, decimal and 128-bit floats
-- [x] Suflae: shared entities with cycle collection, exact default numbers, script mode, `global`
-- [x] Concurrency: coroutines and threads behind `Agent[T]`, channels, async file I/O, signals
-- [x] Language server with VS Code and Rider integrations
-- [x] Prebuilt release packages (win-x64, linux-x64, osx-arm64)
+- Native builds on Windows and Linux x86-64 and macOS ARM64, with prebuilt packages
+- Ownership model, failable routines with recovery keywords, generics, collections, 256-bit
+  integers, decimal and 128-bit floats
+- Coroutines and threads behind `Agent[T]`, channels, async file I/O, signals
+- Language server with VS Code and Rider integration
 
-### Next
+**Next**
 
-- Suflae REPL, and a fast edit-and-rerun loop for RazorForge
-- Async networking (TCP, then HTTP), then higher-level protocols
-- Linux ARM64 support
+- A fast edit-and-rerun loop
+- Async networking (TCP, then HTTP)
+- Linux ARM64
 - Package management
 
-### Future
+**Later**
 
-- Self-hosting builder
-- Native debug info (DWARF/PDB)
-- WASM backend
-
-## Philosophy
-
-- Total development cost over raw runtime performance
-- Clear, descriptive words over obscure historical terms
-- Explicit markers where a danger is silent (ownership transfers, memory-unsafe operations,
-  overflow behavior), and quiet everywhere else
-- Honest claims over marketing, in this README too
-
-More in the Design Philosophy pages for [RazorForge](https://razorforge.lumi-dev.xyz/Design-Philosophy)
-and [Suflae](https://suflae.lumi-dev.xyz/Design-Philosophy).
+- Native debug info (DWARF / PDB)
+- A WASM backend
+- A self-hosting builder
 
 ## Contributing
 
-Bug reports, feature suggestions, documentation fixes, and code are all welcome. A good place to
-start is running the fixture suite (`dotnet test`) and reading `tests/Fixtures/Stdlib/` and
-`tests/Fixtures/StdlibSf/` for working examples of both languages.
+Bug reports, feature suggestions, documentation fixes, and code are all welcome. A good start is to
+build from source, run the tests, and read a few programs in `tests/Fixtures/Stdlib/`. Report bugs
+at [github.com/dj-lumiere/RazorForge/issues](https://github.com/dj-lumiere/RazorForge/issues).
 
 ## License
 
-Dual-licensed under MIT and Apache-2.0. You can choose either.
-
-## Community
-
-- GitHub: [github.com/dj-lumiere/RazorForge](https://github.com/dj-lumiere/RazorForge)
-- Issues: [Report bugs or request features](https://github.com/dj-lumiere/RazorForge/issues)
-- Docs: [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/) · [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/)
+MIT; see [`LICENSE`](LICENSE). Third-party components are listed in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
