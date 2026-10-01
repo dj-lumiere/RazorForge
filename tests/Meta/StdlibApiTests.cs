@@ -380,7 +380,10 @@ public sealed partial class StdlibApiTests
             WorkingDirectory = RepoRoot,
             Environment =
             {
-                [key: "DOTNET_gcServer"] = "0", [key: "DOTNET_GCConserveMemory"] = "9"
+                [key: "DOTNET_gcServer"] = "0", [key: "DOTNET_GCConserveMemory"] = "9",
+                // The compiled program flushes every line, so output written before a hang or a
+                // crash (the last ##### fixture ##### marker) reaches the failure message.
+                [key: "RF_FLUSH_STDOUT"] = "1"
             }
         };
         using var p = Process.Start(startInfo: psi)!;
@@ -556,7 +559,10 @@ public sealed partial class StdlibApiTests
             // footprint; it stays single-fixture sequential, so the small GC-throughput trade is invisible.
             Environment =
             {
-                [key: "DOTNET_gcServer"] = "0", [key: "DOTNET_GCConserveMemory"] = "9"
+                [key: "DOTNET_gcServer"] = "0", [key: "DOTNET_GCConserveMemory"] = "9",
+                // The compiled program flushes every line, so output written before a hang or a
+                // crash (the last ##### fixture ##### marker) reaches the failure message.
+                [key: "RF_FLUSH_STDOUT"] = "1"
             }
         };
         using var p = Process.Start(startInfo: psi)!;

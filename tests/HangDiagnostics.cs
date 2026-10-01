@@ -7,7 +7,8 @@ namespace RazorForge.Tests;
 /// What a hung child process was doing when a test gave up on it: the process tree under it (the builder,
 /// or the opt/clang/linker or compiled program it started) and the thread stacks of each process. Taken
 /// just before the test kills the tree, so an intermittent hang leaves its location in the CI log.
-/// Managed stacks come from <c>dotnet-stack</c> and native ones from <c>gdb</c> (Linux); a tool that is
+/// Managed stacks come from <c>dotnet-stack</c> and native ones from <c>gdb</c> (Linux) or <c>lldb</c>
+/// (macOS); a tool that is
 /// not installed is skipped, never failing the test for it.
 /// </summary>
 internal static class HangDiagnostics
@@ -43,7 +44,9 @@ internal static class HangDiagnostics
                 ? Run(file: "dotnet-stack", arguments: ["report", "--process-id", pid.ToString()])
                 : OperatingSystem.IsLinux()
                     ? Run(file: "gdb", arguments: ["-batch", "-p", pid.ToString(), "-ex", "thread apply all bt"])
-                    : "(native stacks are only taken on Linux)");
+                    : OperatingSystem.IsMacOS()
+                        ? Run(file: "lldb", arguments: ["--batch", "-p", pid.ToString(), "-o", "thread backtrace all"])
+                        : "(native stacks are taken on Linux and macOS)");
         }
 
         return report.ToString();
