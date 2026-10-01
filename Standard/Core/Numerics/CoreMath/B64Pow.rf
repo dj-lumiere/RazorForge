@@ -598,7 +598,14 @@ secret routine b64_pow_exact_pow(x: B64, y: B64, z: B64PowDint, exact: Bool) -> 
             var r = 1.0
             if z.sgn != 0_u64
                 r = -1.0
-            return b64_pow_pow2(x: r, e: LLVM::float_to_signed[B64, S64](g))
+            # g = y log2(x) may not fit S64 (|y| >= 2^1014 when the 128-bit rounding test fails), where the
+            # C conversion is undefined; clamping to +-2000 still gives the overflowed or underflowed result
+            var gc = g
+            if gc > 2000.0
+                gc = 2000.0
+            if gc < -2000.0
+                gc = -2000.0
+            return b64_pow_pow2(x: r, e: LLVM::float_to_signed[B64, S64](gc))
         return nan
     if y < 0.0 or y > 34.0
         return nan
