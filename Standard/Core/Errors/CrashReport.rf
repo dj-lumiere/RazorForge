@@ -1,5 +1,17 @@
 module Core
 
+# The crash report is written here, in RazorForge: the C runtime only writes bytes to the error stream,
+# flushes, and exits. Nothing on this path may crash or allocate (it runs because something already
+# crashed, possibly out of memory), so it uses wrapping arithmetic, the raw primitives and stack buffers.
+
+### One frame of the crash trace, as the builder's trace helpers keep it: the routine's name and the source
+### file (NUL-terminated C strings), and the line and column the routine has reached.
+record TraceFrame
+    routine_name: Address
+    file: Address
+    line: S32
+    column: S32
+
 ### Ends the program with a crash report: the error type's name, its message, where it was raised, then
 ### the call trace, and exit status 82. The builder calls it for a `throw` nothing recovers and for an
 ### `absent` in a failable routine, so every crash report has this one shape.
@@ -10,7 +22,141 @@ module Core
 ### :param column: The source column.
 @untraced
 routine crash_report(type_name: Text, message: Text, file: Text, line: S32, column: S32)
-    C::rf_crash_text(type_name: type_name.data.address(), type_len: type_name.count,
-                     file: file.data.address(), file_len: file.count, line: line, col: column,
-                     message: message.data.address(), message_len: message.count)
+    C::rf_flush_output()
+    crash_write(text: "\x1B[91m")
+    crash_write(text: type_name)
+    crash_write(text: ": ")
+    crash_write(text: message)
+    crash_write(text: "\nat ")
+    crash_write(text: file)
+    crash_write(text: ":")
+    crash_write_number(value: line)
+    crash_write(text: ":")
+    crash_write_number(value: column)
+    crash_write(text: "\n")
+    crash_write_trace()
+    crash_write(text: "\x1B[0m")
+    C::rf_crash_exit()
+    return
+
+### Writes the calling thread's crash trace, most recent frame first: the trace keeps the last 32 frames
+### and says how many there were in all when there were more. Writes nothing when the build keeps no trace.
+@untraced
+routine crash_write_trace()
+    var depth = LLVM::trace_depth()
+    if depth <= 0_s32
+        return
+    crash_write(text: "Stack trace:\n")
+    var shown = depth
+    if shown > 32_s32
+        shown = 32_s32
+    var frames = LLVM::trace_frames()
+    var i = 0_s32
+    while i < shown
+        # The frames are a ring of 32: the most recent is at (depth - 1) mod 32.
+        var index = LLVM::bit_and(a: depth -% 1_s32 -% i, b: 31_s32)
+        danger
+            var frame = frames.stride(count: LLVM::sign_extend[S32, S64](index)).peek()
+            crash_write(text: "  ")
+            crash_write_number(value: i)
+            crash_write(text: ": at ")
+            crash_write_c_text(text: frame.routine_name)
+            crash_write(text: " (")
+            crash_write_c_text(text: frame.file)
+            crash_write(text: ":")
+            crash_write_number(value: frame.line)
+            crash_write(text: ":")
+            crash_write_number(value: frame.column)
+            crash_write(text: ")\n")
+        i = i +% 1_s32
+    if depth > 32_s32
+        crash_write(text: "  ... (")
+        crash_write_number(value: depth)
+        crash_write(text: " frames total)\n")
+    return
+
+### Writes a text to the error stream as UTF-8, one character at a time.
+### :param text: The text to write.
+@untraced
+routine crash_write(text: Text)
+    var i = 0_u64
+    while i < text.count
+        danger
+            var letter = text.data.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek()
+            crash_write_code_point(code: letter.codepoint())
+        i = i +% 1_u64
+    return
+
+### Writes one Unicode code point to the error stream as its one to four UTF-8 bytes.
+### :param code: The code point.
+@untraced
+routine crash_write_code_point(code: U32)
+    var bytes = Array[Byte, 4]()
+    var count = 1_u64
+    if code <= 0x7Fu32
+        bytes = LLVM::set_byte_at(array: bytes, index: 0_u64, value: LLVM::int_truncate[U32, U8](code))
+    elseif code <= 0x7FFu32
+        bytes = LLVM::set_byte_at(array: bytes, index: 0_u64, value: crash_utf8_byte(lead: 0xC0u32, code: code, shift: 6u32))
+        bytes = LLVM::set_byte_at(array: bytes, index: 1_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32))
+        count = 2_u64
+    elseif code <= 0xFFFFu32
+        bytes = LLVM::set_byte_at(array: bytes, index: 0_u64, value: crash_utf8_byte(lead: 0xE0u32, code: code, shift: 12u32))
+        bytes = LLVM::set_byte_at(array: bytes, index: 1_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32))
+        bytes = LLVM::set_byte_at(array: bytes, index: 2_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32))
+        count = 3_u64
+    else
+        bytes = LLVM::set_byte_at(array: bytes, index: 0_u64, value: crash_utf8_byte(lead: 0xF0u32, code: code, shift: 18u32))
+        bytes = LLVM::set_byte_at(array: bytes, index: 1_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 12u32))
+        bytes = LLVM::set_byte_at(array: bytes, index: 2_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32))
+        bytes = LLVM::set_byte_at(array: bytes, index: 3_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32))
+        count = 4_u64
+    danger
+        C::rf_console_error(ptr: bytes.hijack().recast_as[Byte](), len: count)
+    return
+
+### One UTF-8 byte: the lead bits, then the code point's bits from `shift` up (six of them, or all that
+### remain under a lead byte).
+### :param lead: The byte's fixed high bits.
+### :param code: The code point.
+### :param shift: How far the code point is shifted right for this byte.
+### :returns: The byte.
+@untraced
+routine crash_utf8_byte(lead: U32, code: U32, shift: U32) -> U8
+    var bits = LLVM::shift_right_unsigned(code, shift)
+    if lead == 0x80u32
+        bits = LLVM::bit_and(a: bits, b: 0x3Fu32)
+    return LLVM::int_truncate[U32, U8](LLVM::bit_or(a: lead, b: bits))
+
+### Writes a number in decimal to the error stream, with a minus sign when it is negative.
+### :param value: The number.
+@untraced
+routine crash_write_number(value: S32)
+    var magnitude = LLVM::reinterpret_bits[S32, U32](value)
+    if value < 0_s32
+        crash_write(text: "-")
+        magnitude = 0_u32 -% magnitude
+    var digits = Array[Byte, 10]()
+    var position = 10_u64
+    loop
+        position = position -% 1_u64
+        var digit = LLVM::unsigned_rem(a: magnitude, b: 10_u32)
+        digits = LLVM::set_byte_at(array: digits, index: position, value: LLVM::int_truncate[U32, U8](48_u32 +% digit))
+        magnitude = LLVM::unsigned_div(a: magnitude, b: 10_u32)
+        if magnitude == 0_u32
+            break
+    danger
+        var first = digits.hijack().recast_as[Byte]().stride(count: LLVM::reinterpret_bits[U64, S64](position))
+        C::rf_console_error(ptr: first, len: 10_u64 -% position)
+    return
+
+### Writes a NUL-terminated C string (a trace frame's routine name or file) to the error stream.
+### :param text: The address of the string's first byte.
+@untraced
+routine crash_write_c_text(text: Address)
+    danger
+        var first = Hijacked[Byte](text)
+        var length = 0_u64
+        while LLVM::reinterpret_bits[Byte, U8](first.stride(count: LLVM::reinterpret_bits[U64, S64](length)).peek()) != 0_u8
+            length = length +% 1_u64
+        C::rf_console_error(ptr: first, len: length)
     return
