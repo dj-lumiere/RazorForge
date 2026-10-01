@@ -2109,6 +2109,13 @@ public class CompilerPipelineLoweringTests
                 }
 
                 yield break;
+            case TaggedCreatorExpression { Payload: { } payload }:
+                foreach (Expression e in EnumerateExpressions(expression: payload))
+                {
+                    yield return e;
+                }
+
+                yield break;
             case MemberExpression member:
                 foreach (Expression e in EnumerateExpressions(expression: member.Object))
                 {
