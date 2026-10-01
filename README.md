@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="RazorForge/branding/razorforge-suflae-icon.svg" alt="RazorForge and Suflae" width="112">
+  <img src="branding/razorforge-suflae-icon.svg" alt="RazorForge and Suflae" width="112">
 </p>
 
 <h1 align="center">RazorForge &amp; Suflae</h1>
@@ -18,7 +18,7 @@ one standard library, and one builder. They part ways on how much of the machine
 <tr>
 <td width="50%" valign="top">
 
-<img src="RazorForge/branding/razorforge.svg" alt="RazorForge logo" width="56">
+<img src="branding/razorforge.svg" alt="RazorForge logo" width="56">
 
 **RazorForge** · *Make programming sharp again.*
 
@@ -32,7 +32,7 @@ is chosen per operator, and the few operations that can break memory sit in `dan
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Suflae/branding/suflae-dark.svg">
-  <img src="Suflae/branding/suflae.svg" alt="Suflae logo" width="56">
+  <img src="https://raw.githubusercontent.com/dj-lumiere/Suflae/master/branding/suflae.svg" alt="Suflae logo" width="56">
 </picture>
 
 **Suflae** · *Make programming sweet again.*
@@ -87,7 +87,7 @@ routine start()
 
 ## RazorForge
 
-<img src="RazorForge/branding/razorforge.svg" alt="RazorForge logo" width="72">
+<img src="branding/razorforge.svg" alt="RazorForge logo" width="72">
 
 RazorForge is built around precision: in what a program means, in how it fails, and in the numbers
 it computes. It is meant for application work where you want native code and predictable memory
@@ -127,7 +127,7 @@ into reference counting with `Retained[T]`, `Guarded[T, P]`, or the weak `Tracke
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Suflae/branding/suflae-dark.svg">
-  <img src="Suflae/branding/suflae.svg" alt="Suflae logo" width="72">
+  <img src="https://raw.githubusercontent.com/dj-lumiere/Suflae/master/branding/suflae.svg" alt="Suflae logo" width="72">
 </picture>
 
 Suflae is for building applications without managing memory by hand. It keeps RazorForge's grammar,
@@ -154,7 +154,7 @@ show(0.1 + 0.2 == 0.3)    # true — bare numbers are Integer and Decimal
 ```
 
 The REPL, runtime reflection, and hot reload aren't there yet. See
-[`SUFLAE-FOR-AI.md`](SUFLAE-FOR-AI.md) for the current state.
+[`SUFLAE-FOR-AI.md`](https://github.com/dj-lumiere/Suflae/blob/master/SUFLAE-FOR-AI.md) for the current state.
 
 ## Quick start
 
@@ -209,10 +209,10 @@ mode), as `hello.sf` does.
 
 RazorForge and Suflae aren't in any model's training data yet, so assistants tend to guess
 Rust- or Python-flavored syntax that doesn't build. Point yours at
-[`RAZORFORGE-FOR-AI.md`](RAZORFORGE-FOR-AI.md) and [`SUFLAE-FOR-AI.md`](SUFLAE-FOR-AI.md), which
+[`RAZORFORGE-FOR-AI.md`](RAZORFORGE-FOR-AI.md) and [`SUFLAE-FOR-AI.md`](https://github.com/dj-lumiere/Suflae/blob/master/SUFLAE-FOR-AI.md), which
 also ship inside every release package. They are compact lists of where those guesses go wrong,
 with pointers to the CI-verified example programs in [`tests/Fixtures/Stdlib/`](tests/Fixtures/Stdlib/)
-and [`tests/Fixtures/StdlibSf/`](tests/Fixtures/StdlibSf/).
+and [`tests/Fixtures/StdlibSf/`](https://github.com/dj-lumiere/Suflae/tree/master/tests/Fixtures/StdlibSf).
 
 ### CLI reference
 

@@ -96,7 +96,7 @@ fi
 format_csharp() {
     print_info "Formatting C# code..."
 
-    local cmd="dotnet format RazorForge.sln"
+    local cmd="dotnet format RazorForge.csproj"
 
     if [ "$VERIFY_ONLY" = "true" ]; then
         cmd="$cmd --verify-no-changes"

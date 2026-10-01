@@ -87,7 +87,7 @@ echo.
 
 REM Build the project
 echo [INFO] Running dotnet build...
-dotnet build RazorForge.sln
+dotnet build RazorForge.csproj
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

@@ -12,7 +12,7 @@
 # Prerequisites: .NET 10 SDK; clang + cmake + ninja (native runtime build); the
 # vendored native sources under native/ (CI fetches them; dev checkouts have them).
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 case "$(uname -s)" in
     Linux)  RID=linux-x64 ;;
@@ -152,7 +152,7 @@ if [[ -n "$LLVM_ASSET" ]]; then
 fi
 
 echo "=== add install script + quickstart + AI reference ==="
-cp scripts/package-assets/install.sh scripts/package-assets/QUICKSTART.md RazorForge/RAZORFORGE-FOR-AI.md "$OUT/"
+cp RazorForge/scripts/package-assets/install.sh RazorForge/scripts/package-assets/QUICKSTART.md RazorForge/RAZORFORGE-FOR-AI.md "$OUT/"
 chmod +x "$OUT/install.sh"
 
 echo "=== smoke test: self-contained buildandrun (system toolchain hidden) ==="

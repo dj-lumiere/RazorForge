@@ -28,7 +28,7 @@ echo ""
 
 # Build the project
 echo "[INFO] Running dotnet build..."
-dotnet build RazorForge.sln
+dotnet build RazorForge.csproj
 
 if [ $? -ne 0 ]; then
     echo ""
