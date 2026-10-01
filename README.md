@@ -167,8 +167,8 @@ The REPL, runtime reflection, and hot reload aren't there yet. See
 ### Build from source
 
 ```bash
-git clone https://github.com/dj-lumiere/razorforge-suflae.git
-cd razorforge-suflae
+git clone https://github.com/dj-lumiere/RazorForge.git
+cd RazorForge
 
 dotnet build        # builds the builder AND the native runtime (via CMake)
 dotnet test         # optional: run the test suite
@@ -336,7 +336,7 @@ every commit, so they also work as a runnable example for nearly every language 
 ## Project structure
 
 ```
-razorforge-suflae/
+RazorForge/
 ├── src/                   # Builder (C#), folders numbered by pipeline stage
 │   ├── 1.Tokenizer/       #   Tokenizing (RazorForge & Suflae)
 │   ├── 2.Parser/          #   Parsing
@@ -406,6 +406,6 @@ Dual-licensed under MIT and Apache-2.0. You can choose either.
 
 ## Community
 
-- GitHub: [github.com/dj-lumiere/razorforge-suflae](https://github.com/dj-lumiere/razorforge-suflae)
-- Issues: [Report bugs or request features](https://github.com/dj-lumiere/razorforge-suflae/issues)
+- GitHub: [github.com/dj-lumiere/RazorForge](https://github.com/dj-lumiere/RazorForge)
+- Issues: [Report bugs or request features](https://github.com/dj-lumiere/RazorForge/issues)
 - Docs: [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/) · [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/)

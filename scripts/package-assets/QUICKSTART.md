@@ -111,7 +111,7 @@ razorforge version                  Show version
 ```
 
 Docs: https://razorforge.lumi-dev.xyz/ · Issues:
-https://github.com/dj-lumiere/razorforge-suflae/issues
+https://github.com/dj-lumiere/RazorForge/issues
 
 ## Using your own LLVM instead
 
