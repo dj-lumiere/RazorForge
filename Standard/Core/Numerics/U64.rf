@@ -796,6 +796,7 @@ routine U64.diagnose() -> Text
 ### :param from_text: A non-empty string of ASCII decimal digits.
 ### :returns: The parsed `U64` value.
 ### :throws: {InvalidValueError} if the text is empty or contains non-digit characters.
+### :throws: {IntegerOverflowError} if the value does not fit in `U64`.
 routine U64!(from_text: Text) -> U64
     if from_text.count() == 0u64
         throw InvalidValueError(input: from_text, target: "U64")
@@ -804,7 +805,11 @@ routine U64!(from_text: Text) -> U64
     while i < from_text.count()
         var ch = from_text[i]
         if ch.is_numeric()
-            result = result * 10u64 + U64(ch.digit_value())
+            var digit = U64(ch.digit_value())
+            # Stop before `result * 10 + digit` passes U64's maximum.
+            if result > 1844674407370955161u64 or (result == 1844674407370955161u64 and digit > 5u64)
+                throw IntegerOverflowError()
+            result = result * 10u64 + digit
         else
             throw InvalidValueError(input: from_text, target: "U64")
         i = i + 1u64

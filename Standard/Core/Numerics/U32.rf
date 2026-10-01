@@ -799,6 +799,7 @@ routine U32.diagnose() -> Text
 ### :param from_text: The decimal string to parse (no sign, no prefix).
 ### :returns: The parsed `U32` value.
 ### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
+### :throws: {IntegerOverflowError} if the value does not fit in `U32`.
 routine U32!(from_text: Text) -> U32
     if from_text.count() == 0u64
         throw InvalidValueError(input: from_text, target: "U32")
@@ -807,7 +808,11 @@ routine U32!(from_text: Text) -> U32
     while i < from_text.count()
         var ch = from_text[i]
         if ch.is_numeric()
-            result = result * 10u32 + U32(ch.digit_value())
+            var digit = U32(ch.digit_value())
+            # Stop before `result * 10 + digit` passes U32's maximum.
+            if result > 429496729u32 or (result == 429496729u32 and digit > 5u32)
+                throw IntegerOverflowError()
+            result = result * 10u32 + digit
         else
             throw InvalidValueError(input: from_text, target: "U32")
         i = i + 1u64

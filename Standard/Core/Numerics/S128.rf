@@ -937,6 +937,7 @@ routine S128.diagnose() -> Text
 ### :param from_text: The decimal string to parse.
 ### :returns: The parsed `S128` value.
 ### :throws: {InvalidValueError} if `from_text` is empty, sign-only, or contains non-digit characters.
+### :throws: {IntegerOverflowError} if the value does not fit in `S128`.
 routine S128!(from_text: Text) -> S128
     if from_text.count() == 0u64
         throw InvalidValueError(input: from_text, target: "S128")
@@ -951,17 +952,22 @@ routine S128!(from_text: Text) -> S128
     if start >= from_text.count()
         throw InvalidValueError(input: from_text, target: "S128")
     var result = 0u128
+    var last_limit = 7u128
+    if negative
+        last_limit = 8u128
     var i = start
     while i < from_text.count()
         var ch = from_text[i]
         if ch.is_numeric()
-            result = result * 10u128 + U128(ch.digit_value())
+            var digit = U128(ch.digit_value())
+            # Stop before `result * 10 + digit` passes the largest magnitude the sign allows.
+            if result > 17014118346046923173168730371588410572u128 or (result == 17014118346046923173168730371588410572u128 and digit > last_limit)
+                throw IntegerOverflowError()
+            result = result * 10u128 + digit
         else
             throw InvalidValueError(input: from_text, target: "S128")
         i = i + 1u64
     if negative
-        if result > 170141183460469231731687303715884105728u128
-            throw IntegerOverflowError()
         return LLVM::reinterpret_bits[U128, S128](0u128 -% result)
     return S128(result)
 

@@ -790,6 +790,7 @@ routine U16.diagnose() -> Text
 ### :param from_text: The decimal string to parse (no sign, no prefix).
 ### :returns: The parsed `U16` value.
 ### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
+### :throws: {IntegerOverflowError} if the value does not fit in `U16`.
 routine U16!(from_text: Text) -> U16
     if from_text.count() == 0u64
         throw InvalidValueError(input: from_text, target: "U16")
@@ -798,7 +799,11 @@ routine U16!(from_text: Text) -> U16
     while i < from_text.count()
         var ch = from_text[i]
         if ch.is_numeric()
-            result = result * 10u32 + U32(ch.digit_value())
+            var digit = U32(ch.digit_value())
+            # Stop before `result * 10 + digit` passes U16's maximum.
+            if result > 6553u32 or (result == 6553u32 and digit > 5u32)
+                throw IntegerOverflowError()
+            result = result * 10u32 + digit
         else
             throw InvalidValueError(input: from_text, target: "U16")
         i = i + 1u64

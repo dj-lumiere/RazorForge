@@ -899,6 +899,7 @@ routine U256.low128() -> U128
 ### :param from_text: The decimal string to parse (no sign, no prefix).
 ### :returns: The parsed `U256` value.
 ### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
+### :throws: {IntegerOverflowError} if the value does not fit in `U256`.
 routine U256!(from_text: Text) -> U256
     if from_text.count() == 0u64
         throw InvalidValueError(input: from_text, target: "U256")
@@ -907,7 +908,11 @@ routine U256!(from_text: Text) -> U256
     while i < from_text.count()
         var ch = from_text[i]
         if ch.is_numeric()
-            result = result * 10u256 + U256(ch.digit_value())
+            var digit = U256(ch.digit_value())
+            # Stop before `result * 10 + digit` passes U256's maximum.
+            if result > 11579208923731619542357098500868790785326998466564056403945758400791312963993u256 or (result == 11579208923731619542357098500868790785326998466564056403945758400791312963993u256 and digit > 5u256)
+                throw IntegerOverflowError()
+            result = result * 10u256 + digit
         else
             throw InvalidValueError(input: from_text, target: "U256")
         i = i + 1u64
