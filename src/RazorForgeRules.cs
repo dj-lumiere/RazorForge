@@ -38,7 +38,6 @@ public sealed class RazorForgeRules : LanguageRules
     public override bool HasTargetDirectives => true;
     public override bool DefaultsToArbitraryPrecision => false;
     public override bool HasDataSizeQuery => true;
-    public override bool HasMemoryWrappers => true;
 
     public override bool EntitiesAreShared => false;
     public override bool ChecksOwnership => true;
