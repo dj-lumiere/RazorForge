@@ -400,9 +400,15 @@ secret routine b128_expfam_finish(fs0: U64, fs1: U64, fs2: U64, x0: U128, kind: 
                 var acc2 = b128_expfam_accurate(x0: x0, kind: kind)
                 el = acc2.item0
                 res = acc2.item1
+            # the accurate path may land one binade lower than the fast one, so sh2 can reach 127; shifting
+            # by sh2 and then by 1 keeps every shift below 128 (res >>> (sh2 + 1) was poison at 127)
             var sh2 = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](-16372 -% el))
-            rnd = b128_expfam_lo(u: res >>> sh2) & 1
-            res = res >>> (sh2 +% 1)
+            if sh2 > 127_u32
+                rnd = 0_u64
+                res = 0_u128
+            else
+                rnd = b128_expfam_lo(u: res >>> sh2) & 1
+                res = (res >>> sh2) >>> 1
         else
             rnd = 0_u64
             res = 0_u128
