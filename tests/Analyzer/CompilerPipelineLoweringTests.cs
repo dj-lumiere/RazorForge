@@ -2189,7 +2189,6 @@ public class CompilerPipelineLoweringTests
 
         return type switch
         {
-            WrapperTypeSymbol wrapper => ContainsGenericPlaceholder(type: wrapper.InnerType),
             TupleTypeSymbol tuple => tuple.ElementTypes.Any(predicate: ContainsGenericPlaceholder),
             VariantTypeSymbol variant => variant.Members.Any(predicate: member =>
                 member.Type != null && ContainsGenericPlaceholder(type: member.Type)),
