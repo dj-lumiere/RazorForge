@@ -24,8 +24,9 @@ public sealed partial class SourceFolderFailurePointTests
         // 3 declarations · 4 syntactic desugar · 5 verification · 6 type-aware lowering · 7 monomorphize ·
         // 8 demand collect · 9 LLVM IR. (4.Desugaring = syntactic/DesugaringPipeline; 6.Lowering =
         // type-aware/PostprocessingPipeline.)
+        // The lexer is RazorForge's own (RazorForge/src/Lexer), not the builder core's.
         {
-            "1.Tokenizer",
+            "Lexer",
             "source validation rejects ambiguous bytes and whitespace before scanning",
             [
                 "NormalizeAndValidateSource", "Source contains a null byte",
@@ -216,7 +217,14 @@ public sealed partial class SourceFolderFailurePointTests
 
     private static string ReadSourceFolder(string folder)
     {
+        // A builder-core folder (Anvila/src), else one of RazorForge's own (RazorForge/src).
         string folderPath = Path.Combine(path1: FindSourceRoot(), path2: folder);
+        if (!Directory.Exists(path: folderPath))
+        {
+            folderPath = Path.GetFullPath(path: Path.Combine(FindSourceRoot(), "..", "..", "RazorForge", "src",
+                folder));
+        }
+
         Assert.True(condition: Directory.Exists(path: folderPath),
             userMessage: $"Missing source folder '{folder}'.");
 

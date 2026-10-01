@@ -1,16 +1,14 @@
-using Builder.Tokenizer;
-using RazorForge.Lexer;
-using TypeModel.Enums;
+using Builder.Frontends;
 
 namespace RazorForge;
 
-/// <summary>The RazorForge front end: registers the RazorForge lexer with the builder core.</summary>
+/// <summary>The RazorForge front end: registers RazorForge's rules (its lexer, surface and checks) with the
+/// builder core.</summary>
 public static class RazorForgeFrontend
 {
-    /// <summary>Registers the RazorForge lexer (idempotent).</summary>
+    /// <summary>Registers RazorForge's rules (idempotent).</summary>
     public static void Register()
     {
-        Lexers.Register(language: Language.RazorForge,
-            tokenize: (source, fileName) => new RazorForgeLexer(source: source, fileName: fileName).Tokenize());
+        Languages.Register(rules: RazorForgeRules.Instance);
     }
 }
