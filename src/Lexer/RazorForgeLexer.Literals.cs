@@ -902,9 +902,10 @@ public partial class RazorForgeLexer
     }
 
     /// <summary>
-    /// Parses an escape sequence and returns the actual character value.
+    /// Parses an escape sequence and returns the text it stands for (one character, or the surrogate pair of a code
+    /// point above U+FFFF).
     /// </summary>
-    private char ParseEscapeSequence(int escapeStart)
+    private string ParseEscapeSequence(int escapeStart)
     {
         char c = _source[index: escapeStart + 1];
 
@@ -912,7 +913,7 @@ public partial class RazorForgeLexer
         {
             string hexStr = _source.Substring(startIndex: escapeStart + 2, length: 2);
             int byteValue = Convert.ToInt32(value: hexStr, fromBase: 16);
-            return (char)byteValue;
+            return ((char)byteValue).ToString();
         }
 
         if (c == 'u')
@@ -930,10 +931,15 @@ public partial class RazorForgeLexer
                     language: _language);
             }
 
-            return (char)codePoint;
+            // A code point above U+FFFF is two UTF-16 units (a surrogate pair). A surrogate code point written as an
+            // escape has no pair and stays one unit.
+            return codePoint is > 0xFFFF and <= 0x10FFFF
+                ? char.ConvertFromUtf32(utf32: codePoint)
+                : ((char)codePoint).ToString();
         }
 
-        return EscapeCharacter(c: c);
+        return EscapeCharacter(c: c)
+           .ToString();
     }
 
     /// <summary>

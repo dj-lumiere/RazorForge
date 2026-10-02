@@ -70,9 +70,8 @@ public partial class RazorForgeLexer
             return;
         }
 
-        // Leading-operator line continuation: when the first token on this line is an
-        // infix/continuation operator (`and`, `or`, `but`, arithmetic/comparison/bitwise
-        // symbols, `.`, `??`), the line continues the previous logical line instead of
+        // Leading-operator line continuation: when the first token on this line is a
+        // continuation operator (`and`, `or`, `but`, or a member-access `.`), the line continues the previous logical line instead of
         // starting a new statement. Drop the newline that terminated the previous line
         // and skip INDENT/DEDENT for this line — no block boundary, no indent-stack change.
         //
@@ -205,18 +204,16 @@ public partial class RazorForgeLexer
     }
 
     /// <summary>
-    /// Peeks (without consuming) whether the upcoming token on the current line is a
-    /// word logical operator (<c>and</c>/<c>or</c>/<c>but</c>), indicating this line
-    /// continues the previous one. Leading whitespace has already been consumed by the
-    /// caller, so <c>Peek()</c> returns the first content character.
+    /// Peeks (without consuming) whether the upcoming token on the current line continues the previous one: a
+    /// word logical operator (<c>and</c>/<c>or</c>/<c>but</c>) or a member access <c>.</c> (a call chain broken
+    /// before each <c>.</c>). Leading whitespace has already been consumed by the caller, so <c>Peek()</c> returns
+    /// the first content character.
     /// </summary>
     /// <remarks>
-    /// Only the WORD logical operators qualify. Symbolic operators (<c>==</c>, <c>&lt;</c>,
-    /// <c>.</c>, …) are deliberately excluded: a <c>when</c> expression writes its arms as
-    /// leading comparison/case patterns (<c>== 0x22 =&gt;</c>, <c>.RED =&gt;</c>), so
-    /// treating a line-leading symbol as a continuation would swallow those arms. No valid
-    /// statement or <c>when</c> arm begins with <c>and</c>/<c>or</c>/<c>but</c>, so these
-    /// are unambiguous.
+    /// Other symbolic operators (<c>==</c>, <c>&lt;</c>, …) are deliberately excluded: a <c>when</c> writes its
+    /// arms as leading comparison patterns (<c>== 0x22 =&gt;</c>), so treating such a line as a continuation would
+    /// swallow those arms. No statement or <c>when</c> arm begins with <c>and</c>/<c>or</c>/<c>but</c> or with a
+    /// single <c>.</c>, so these are unambiguous. A <c>...</c> and a <c>.</c> before a digit are not member access.
     /// </remarks>
     private bool StartsWithContinuationOperator()
     {
@@ -227,6 +224,7 @@ public partial class RazorForgeLexer
             'a' => MatchesKeywordAhead(word: "and"),
             'o' => MatchesKeywordAhead(word: "or"),
             'b' => MatchesKeywordAhead(word: "but"),
+            '.' => Peek(offset: 1) != '.' && !char.IsDigit(c: Peek(offset: 1)),
             _ => false
         };
     }
