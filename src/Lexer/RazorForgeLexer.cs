@@ -204,7 +204,6 @@ public partial class RazorForgeLexer
             [key: "as"] = TokenType.As,
             [key: "define"] = TokenType.Define,
             [key: "pass"] = TokenType.Pass,
-            [key: "with"] = TokenType.With,
             [key: "given"] = TokenType.Given,
             [key: "in"] = TokenType.In,
             [key: "isnot"] = TokenType.IsNot,

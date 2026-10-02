@@ -804,7 +804,7 @@ you are writing another language.
   `while` `each` `break` `continue` `return` `throw` `pierce` `absent` `becomes`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
-- **Other statements**: `using` `as` `define` `pass` `with` `given` `discard`
+- **Other statements**: `using` `as` `define` `pass` `given` `discard`
 - **Logical operators**: `and` `or` `not` `but`
 - **Literals**: `true` `false` `None` `none`
 - **Concurrency**: `suspended` `threaded`†

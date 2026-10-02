@@ -48,7 +48,28 @@ dangerous routine Maybe[T].destroy()
 ### duplicated; use `strip_out` to MOVE it out instead.
 ### :returns: The contained `T` value (an independent duplicate).
 ### :throws: {AbsentValueError} if this `Maybe` is absent.
+@overridable
 routine Maybe[T].unwrap!() -> T
+needs AnyType T
+needs T obeys Assignable
+    if not me.is_present()
+        throw AbsentValueError()
+    return me.value
+
+### `unwrap` for a single-owner entity: it cannot be shared, so the caller gets an independent duplicate,
+### which needs the entity to declare it can be copied.
+@override
+routine Maybe[T].unwrap!() -> T
+needs EntityType T
+needs T obeys Copyable
+    if not me.is_present()
+        throw AbsentValueError()
+    return me.value.duplicate()
+
+### `unwrap` for a variant: one with an entity arm cannot be shared, so the caller gets a duplicate.
+@override
+routine Maybe[T].unwrap!() -> T
+needs VariantType T
 needs T obeys Copyable
     if not me.is_present()
         throw AbsentValueError()
@@ -60,7 +81,27 @@ needs T obeys Copyable
 ### exit like any other unconsumed local.
 ### :param fallback: The fallback value to return when absent.
 ### :returns: The contained `T` value (a co-owning copy), or `fallback` if this `Maybe` is absent.
+@overridable
 routine Maybe[T].unwrap_or(fallback: T) -> T
+needs AnyType T
+needs T obeys Assignable
+    if not me.is_present()
+        return fallback
+    return me.value
+
+### `unwrap_or` for a single-owner entity: the present value comes back as a duplicate (see `unwrap`).
+@override
+routine Maybe[T].unwrap_or(fallback: T) -> T
+needs EntityType T
+needs T obeys Copyable
+    if not me.is_present()
+        return fallback
+    return me.value.duplicate()
+
+### `unwrap_or` for a variant: the present value comes back as a duplicate (see `unwrap`).
+@override
+routine Maybe[T].unwrap_or(fallback: T) -> T
+needs VariantType T
 needs T obeys Copyable
     if not me.is_present()
         return fallback

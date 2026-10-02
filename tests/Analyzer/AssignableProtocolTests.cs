@@ -16,8 +16,6 @@ using static TestHelpers;
 ///   * Choice / Flags auto-derive Assignable unconditionally (scalar layout).
 ///   * Tuples cascade — Assignable iff every element is Assignable.
 ///   * Raw-pointer wrappers (Hijacked[T], CPtr) opt in with a one-line assign body.
-///   * <c>with</c> expression now requires Assignable on the base; gate diagnostic
-///     is <c>WithBaseNotAssignable</c> (S785).
 /// </summary>
 public class AssignableProtocolTests
 {
@@ -228,99 +226,6 @@ public class AssignableProtocolTests
 
     #endregion
 
-    #region `with` expression — Assignable gate (S785)
-
-    [Fact]
-    public void Analyze_With_OnPrimitiveRecord_NoAssignableError()
-    {
-        string source = """
-                        record Point
-                            x: S32
-                            y: S32
-
-                        routine start()
-                            var p = Point(x: 1, y: 2)
-                            var q = p with .x = 5
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.WithBaseNotAssignable);
-    }
-
-    [Fact]
-    public void Analyze_With_OnRecordWithRetainedField_ReportsAssignableError()
-    {
-        string source = """
-                        entity Node
-                            value: S64
-
-                        record Box
-                            handle: Retained[Node]
-                            tag: S64
-
-                        routine start()
-                            var a = Node(value: 1)
-                            var b = Box(handle: Retained(from: steal a), tag: 0)
-                            var c = b with .tag = 42
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.WithBaseNotAssignable);
-    }
-
-    [Fact]
-    public void Analyze_With_OnNestedPrimitiveRecord_NoAssignableError()
-    {
-        string source = """
-                        record Inner
-                            v: S32
-
-                        record Outer
-                            inner: Inner
-                            tag: S64
-
-                        routine start()
-                            var a = Outer(inner: Inner(v: 1), tag: 42)
-                            var b = a with .tag = 99
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.WithBaseNotAssignable);
-    }
-
-    [Fact]
-    public void Analyze_With_DiagnosticMentionsObeysAssignable()
-    {
-        string source = """
-                        entity Node
-                            value: S64
-
-                        record Box
-                            handle: Retained[Node]
-                            tag: S64
-
-                        routine start()
-                            var a = Node(value: 1)
-                            var b = Box(handle: Retained(from: steal a), tag: 0)
-                            var c = b with .tag = 42
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.WithBaseNotAssignable &&
-                         e.Message.Contains(value: "Assignable",
-                             comparisonType: StringComparison.Ordinal));
-    }
-
-    #endregion
-
     #region Call-arg / return enforcement (access tokens still rejected; RC now shares)
 
     [Fact]
@@ -431,10 +336,10 @@ public class AssignableProtocolTests
     }
 
     [Fact]
-    public void Analyze_CopyMemberRoutine_DirectCall_OnRecordWithRetained_NoMemberRoutineFound()
+    public void Analyze_CopyMemberRoutine_DirectCall_OnRecordWithRetained_Resolves()
     {
-        // Record with Retained field doesn't auto-derive Assignable → no synthesized $assign.
-        // User-written $assign would be required; without it the direct call fails to resolve.
+        // A record with a Retained field auto-derives Assignable (the field's copy is one more share), so
+        // a direct `assign()` call resolves.
         string source = """
                         entity Node
                             value: S64
@@ -450,7 +355,7 @@ public class AssignableProtocolTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.NotEmpty(collection: result.Errors);
+        Assert.Empty(collection: result.Errors);
     }
 
     #endregion

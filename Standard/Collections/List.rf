@@ -42,7 +42,7 @@ secret preset SORT_MIN_RUN: U64 = 32u64
 entity List[T]
 relates ListEmittable[T] as Iter
 obeys Iterable[T], MutableIndexable[T], Sized, Container, Equatable,
-    Copyable onlyif T obeys Copyable, ListLiteral[T]
+    Copyable onlyif T obeys Assignable, ListLiteral[T]
     ### Stores the backing buffer.
     secret data: Hijacked[T]
     ### Stores the number of initialized elements.
@@ -97,7 +97,7 @@ routine List[T](capacity: U64) -> List[T]
 ### :param fill_value: The value to copy into each slot.
 ### :returns: A list containing `count` copies of `fill_value`.
 routine List[T](count: U64, fill_value: T) -> List[T]
-needs T obeys Copyable
+needs T obeys Assignable
     if count == 0u64
         return List[T]()
 
@@ -122,8 +122,10 @@ needs T obeys Copyable
 common routine List[T].from_literal(elements...: T) -> List[T]
     var result = List[T]()
     var i = 0u64
+    # Each element moves into the list: `add_last` makes the list's holder, and the caller releases the
+    # literal's own afterwards.
     while i < elements.count()
-        result.add_last(elements[i])
+        result.add_last(elements.get_raw(index: i))
         i = i +% 1u64
     return result
 
@@ -290,20 +292,20 @@ routine List[T].remove_at!(index: U64) -> T
 ### :absent: The list is empty.
 @readonly
 routine List[T].first!() -> T
-needs T obeys Copyable
+needs T obeys Assignable
     if me.is_empty()
         absent
-    return me.get_raw(index: 0u64).duplicate()
+    return me.get_raw(index: 0u64).assign()
 
 ### Returns the last element without removing it.
 ### :returns: The current last element.
 ### :absent: The list is empty.
 @readonly
 routine List[T].last!() -> T
-needs T obeys Copyable
+needs T obeys Assignable
     if me.is_empty()
         absent
-    return me.get_raw(index: me.count - 1u64).duplicate()
+    return me.get_raw(index: me.count - 1u64).assign()
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -315,13 +317,11 @@ needs T obeys Copyable
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
 routine List[T].getitem!(index: U64) -> T
-needs T obeys Copyable
+needs T obeys Assignable
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
-    # Copy OUT while the list keeps its own element: `duplicate` is retain-aware (managed leaves like
-    # Text bump their refcount; elided for trivially-copyable T). A raw `peek` would hand back a
-    # non-owning view typed as owned -> the caller's scope-exit destroy double-frees the shared Text.
-    return me.get_raw(index: index).duplicate()
+    # A holder of its own: the list keeps its element, the caller gets one more (a share for a counted value).
+    return me.get_raw(index: index).assign()
 
 ### Replaces the element at `index` with `value`.
 ### :param index: The zero-based position to update.
@@ -369,11 +369,11 @@ needs EntityType T
 ### :returns: A new `List[T]` owning copies of the selected elements.
 @readonly
 routine List[T].getitem(range: Range[U64]) -> List[T]
-needs T obeys Copyable
+needs T obeys Assignable
     var result = List[T]()
     each i in range
         if i < me.count
-            result.add_last(value: me.get_raw(index: i).duplicate())
+            result.add_last(value: me.get_raw(index: i))
     return steal result
 
 # ============================================================================
@@ -501,7 +501,7 @@ routine List[T].diagnose() -> Text
 ### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
 @reshaping
 routine List[T].add_range!(source: Accessing[List[T]], from: U64, count: U64)
-needs T obeys Copyable
+needs T obeys Assignable
     if count == 0u64
         return
     if from + count > source.count()
@@ -522,7 +522,7 @@ needs T obeys Copyable
     # elements are owned independently. The prior bitwise copy aliased buffer pointers (double-free).
     var i = 0u64
     while i < count
-        me.add_last(value: source[from + i].duplicate())
+        me.add_last(value: source[from + i])
         i = i + 1u64
     return
 
@@ -532,11 +532,11 @@ needs T obeys Copyable
 ### the builder inserts when a `List[T]` is an owned arm of a value being copied.
 ### :returns: A new `List[T]` owning independent copies of every element.
 routine List[T].duplicate() -> List[T]
-needs T obeys Copyable
+needs T obeys Assignable
     var result = List[T](capacity: me.count)
     var i = 0u64
     while i < me.count
-        result.add_last(value: me[i].duplicate())
+        result.add_last(value: me[i])
         i = i +% 1u64
     return steal result
 

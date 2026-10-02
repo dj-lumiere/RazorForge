@@ -717,8 +717,8 @@ public class CompilerPipelineLoweringTests
     /// A write into a value element (`grid[1][0] = v`) goes through a copy of the element that is stored
     /// back. The copy lives in a variable made after scope teardown was inserted, so it is never destroyed:
     /// storing it back must MOVE it, not copy it again, or each write leaks one reference of every managed
-    /// field. Of the two `Array[Text, 2].assign` copies left, one is the write-back read and one is the
-    /// later `grid[1][0]` read, none is the store.
+    /// field. `getitem` makes the copy itself, so `start` holds two outer `getitem` reads (the write-back
+    /// read and the later `grid[1][0]` read) and no `assign` of its own: the store adds none.
     /// </summary>
     [Fact]
     public void LlvmEmitter_NestedValueWrite_StoresTheCopyBackWithoutCopyingAgain()
@@ -751,7 +751,9 @@ public class CompilerPipelineLoweringTests
         string llvmIr = generator.Generate();
         string body = ExtractFunctionDefinition(llvmIr: llvmIr, functionMarker: "start()\"");
         int copies = body.Split(separator: "Array[Core.Text, 2].assign()").Length - 1;
-        Assert.Equal(expected: 2, actual: copies);
+        int reads = body.Split(separator: "Array[Core.Array[Core.Text, 2], 2].getitem(").Length - 1;
+        Assert.Equal(expected: 0, actual: copies);
+        Assert.Equal(expected: 2, actual: reads);
     }
 
     /// <summary>
@@ -1721,11 +1723,6 @@ public class CompilerPipelineLoweringTests
                 ContainsLambda(expression: generic.Object) ||
                 generic.Arguments.Any(predicate: ContainsLambda),
             NamedArgumentExpression named => ContainsLambda(expression: named.Value),
-            WithExpression withExpr => ContainsLambda(expression: withExpr.Base) ||
-                                       withExpr.Updates.Any(predicate: update =>
-                                           ContainsLambda(expression: update.Value) ||
-                                           update.Index != null &&
-                                           ContainsLambda(expression: update.Index)),
             ListLiteralExpression list => list.Elements.Any(predicate: ContainsLambda),
             SetLiteralExpression set => set.Elements.Any(predicate: ContainsLambda),
             DictLiteralExpression dict => dict.Pairs.Any(predicate: pair =>

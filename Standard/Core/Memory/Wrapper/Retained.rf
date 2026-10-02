@@ -6,7 +6,7 @@ import BuilderQuery
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
 record Retained[T]
-obeys Controlling[T]
+obeys Controlling[T], Assignable, Copyable onlyif T obeys Copyable
 needs EntityType T
     pass
 
@@ -34,11 +34,18 @@ routine Retained[T].share() -> Retained[T]
         ctrl.hold()
     return me
 
-### A copy of this handle is one more co-owner of the same entity, so duplicating it shares it. A
-### collection copies an element out this way (`List.getitem`).
+### Binds one more handle to the same entity (`b = a`): every handle can be assigned, whatever the entity.
 ### :returns: A new handle sharing the same underlying entity.
-routine Retained[T].duplicate() -> Retained[T]
+routine Retained[T].assign() -> Retained[T]
     return me.share()
+
+### An independent copy: a new entity duplicated from this one, in a handle of its own. Only an entity that
+### declares it can be copied (`obeys Copyable`) has one; `share` (and `b = a`) is one more handle to the same
+### entity.
+### :returns: A handle to a new entity equal to this one.
+routine Retained[T].duplicate() -> Retained[T]
+needs T obeys Copyable
+    return Retained[T](from: me.access().duplicate())
 
 ### Creates a weak reference to the same entity.
 ### :returns: A new weak handle to the same entity's controller.

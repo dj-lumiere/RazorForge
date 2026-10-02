@@ -35,7 +35,7 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 entity Dict[K, V]
 relates DictEmittable[K, V] as Iter, K as Key, V as Value
 obeys Iterable[DictEntry[K, V]], KeyFindable, Container,
-    Copyable onlyif (K obeys Copyable, V obeys Copyable), DictLiteral[K, V]
+    Copyable onlyif (K obeys Assignable, V obeys Assignable), DictLiteral[K, V]
 needs K obeys Hashable, Equatable
     secret ctrl: Hijacked[U8]
     secret indices: Hijacked[U64]
@@ -75,8 +75,10 @@ common routine Dict[K, V].from_literal(pairs...: DictEntry[K, V]) -> Dict[K, V]
 needs K obeys Hashable, Equatable
     var result = Dict[K, V]()
     var i = 0u64
+    # Each pair is read in place: `add` makes the dictionary's holders, and the caller releases the
+    # literal's own afterwards.
     while i < pairs.count()
-        discard result.add(key: pairs[i].key, value: pairs[i].value)
+        discard result.add(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
         i = i +% 1u64
     return result
 
@@ -441,10 +443,11 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 
 @readonly
 routine Dict[K, V].getitem!(key: Accessing[K]) -> V
+needs V obeys Assignable
     var slot = me.find_slot(key)
     if slot >= me.capacity
         absent
-    return me.read_val_at(me.read_index(slot))
+    return me.read_val_at(me.read_index(slot)).assign()
 
 routine Dict[K, V].setitem!(key: Accessing[K], value: V)
     if me lack key
@@ -564,11 +567,11 @@ routine DictEmittable[K, V].emit!() -> DictEntry[K, V]
 ### the builder inserts when a `Dict[K, V]` is an owned arm of a value being copied.
 ### :returns: A new `Dict[K, V]` owning independent copies of every entry.
 routine Dict[K, V].duplicate() -> Dict[K, V]
-needs K obeys Copyable
-needs V obeys Copyable
+needs K obeys Assignable
+needs V obeys Assignable
     var result = Dict[K, V]()
     each entry in me
-        discard result.add(key: entry.key.duplicate(), value: entry.value.duplicate())
+        discard result.add(key: entry.key, value: entry.value)
     return steal result
 
 # ============================================================================

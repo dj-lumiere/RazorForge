@@ -85,7 +85,7 @@ needs TPriority obeys Comparable
     var result = PriorityQueue[TPriority, TElement]()
     var i = 0u64
     while i < pairs.count()
-        result.add(element: pairs[i].value, priority: pairs[i].key)
+        result.add(element: pairs.get_raw(index: i).value, priority: pairs.get_raw(index: i).key)
         i = i +% 1u64
     return result
 
@@ -392,14 +392,13 @@ routine PriorityQueue[TPriority, TElement].add_all(
     elements: Accessing[List[TElement]],
     priorities: Accessing[List[TPriority]],
 )
-needs TElement obeys Copyable
-needs TPriority obeys Copyable
+needs TElement obeys Assignable
+needs TPriority obeys Assignable
     var i = 0u64
     var limit = if elements.count() < priorities.count() then elements.count() else priorities.count()
     while i < limit
-        # `clone` out of the read-only borrows (elided for trivial types; retain-aware via `store` for
-        # RC records) — `add` takes ownership, so aliasing would double-free when both pools drop.
-        me.add(element: elements[i].duplicate(), priority: priorities[i].duplicate())
+        # `elements[i]` is a holder of its own (the read makes it), which `add` copies into the queue.
+        me.add(element: elements[i], priority: priorities[i])
         i = i +% 1u64
     return
 

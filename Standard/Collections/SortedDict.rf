@@ -480,8 +480,10 @@ common routine SortedDict[K, V].from_literal(pairs...: DictEntry[K, V]) -> Sorte
 needs K obeys Comparable
     var result = SortedDict[K, V]()
     var i = 0u64
+    # Each pair is read in place: `add` makes the dictionary's holders, and the caller releases the
+    # literal's own afterwards.
     while i < pairs.count()
-        discard result.add(key: pairs[i].key, value: pairs[i].value)
+        discard result.add(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
         i = i +% 1u64
     return result
 
@@ -564,11 +566,12 @@ routine SortedDict[K, V].search_node(node: Accessing[BTreeDictNode[K, V]], key: 
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
 routine SortedDict[K, V].getitem!(key: Accessing[K]) -> V
+needs V obeys Assignable
     if me.root is None
         throw KeyNotFoundError(key: key.represent())
     danger
         var root_ref = me.root!!.as_entity()
-        return me.get_from_node(node: root_ref, key: key)
+        return me.get_from_node(node: root_ref, key: key).assign()
 
 ### Descends `node` to retrieve the value for `key`, throwing if not found.
 ### :param node: The subtree root to search.

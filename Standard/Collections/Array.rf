@@ -59,18 +59,48 @@ needs U64 N
 # Indexing with Integral (forward index)
 # ============================================================================
 
-### Returns the element at `index`.
+### Returns the element at `index`, as a holder of its own (a share for a counted value).
 ### :param index: The zero-based position to read.
 ### :returns: The element stored at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @readonly
 @inline
 routine Array[T, N].getitem!(index: U64) -> T
+needs T obeys Assignable
     if index >= N
         throw IndexOutOfBoundsError(index: index, count: me.count())
     # Read in place through the storage pointer — no whole-array copy.
     danger
+        var element: T = LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
+        return element.assign()
+
+### Returns the element at `index` as the array holds it, without bounds checking and without a holder of
+### its own. Only call this when the index is already proven to be in range.
+@readonly
+@inline
+routine Array[T, N].get_raw(index: U64) -> T
+    danger
         return LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
+
+### Returns a write token on the entity stored at `index`, so one call or field write through it changes the
+### element in place: `cells[0].v = 5` lowers to `cells.modify_at(index: 0).v = 5`. Entity elements only (a
+### plain `getitem` hands back a holder of its own, which a single-owner entity cannot have).
+routine Array[T, N].modify_at!(index: U64) -> Modifying[T]
+needs EntityType T
+    if index >= N
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        return Modifying[T](LLVM::load_element_ref[Array[T, N], T](me.hijack(), index).hijack())
+
+### Returns a read token on the entity stored at `index`, so one call or field read through it reads the
+### element without copying it: `cells[0].v` lowers to `cells.view_at(index: 0).v`. Entity elements only.
+@readonly
+routine Array[T, N].view_at!(index: U64) -> Viewing[T]
+needs EntityType T
+    if index >= N
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        return Viewing[T](LLVM::load_element_ref[Array[T, N], T](me.hijack(), index).hijack())
 
 ### Replaces the element at `index` with `value`, mutating this `Array` in place.
 ### `me` is received by reference (struct-record `setitem!`), so the single-element write through
@@ -96,11 +126,11 @@ routine Array[T, N].setitem!(index: U64, value: T)
 ### :returns: A `List[T]` owning copies of the selected elements.
 @readonly
 routine Array[T, N].getitem(range: Range[U64]) -> List[T]
-needs T obeys Copyable
+needs T obeys Assignable
     var result = List[T]()
     each i in range
         if i < N
-            result.add_last(value: me[i].duplicate())
+            result.add_last(value: me[i])
     return steal result
 
 ### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
@@ -154,11 +184,11 @@ needs T obeys Assignable
 ### cascades: `Array[T, N]` is copyable iff `T` is.
 @readonly
 routine Array[T, N].duplicate() -> Array[T, N]
-needs T obeys Copyable
+needs T obeys Assignable
     var result = Array[T, N]()
     var i = 0u64
     while i < N
-        result[i] = me[i].duplicate()
+        result[i] = me[i]
         i = i + 1u64
     return result
 
