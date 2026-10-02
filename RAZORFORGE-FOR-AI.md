@@ -558,7 +558,17 @@ owns its items, so a variable goes in with `steal` too: `(steal z, 1)`). Take an
 element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
 explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
 where it sits. A new variable (`var x = boxes[0]`) is the exception: it holds a
-read token on the element (see access tokens).
+read token on the element (see access tokens). Calling the reading routines
+yourself copies instead: `boxes.getitem(index: 0)`, `boxes.first()` and
+`boxes.last()` on single-owner ENTITY elements return an independent
+`duplicate()` (the entity must `obeys Copyable`, else RF-S150), so
+`var f = boxes.first()` then `f.n = 9` leaves `boxes[0].n` unchanged. On value
+or RC elements they return the element's `assign()` (a copy / a share). Element
+calls and field access (`cells[0].v = 5`, `grid[0].add_last(value: 1)`) still act
+in place through `modify_at`/`view_at`, `var c = cells[0]` is still a read
+token, and passing an entity element to an owning parameter
+(`keep(c: cells[1])`) is still RF-S413 even when Copyable: write
+`keep(c: cells[1].duplicate())`.
 
 ## 10b. Filesystem and paths (`IO/File`, `IO/FileSystem`)
 

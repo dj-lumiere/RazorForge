@@ -1285,6 +1285,11 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 Collect(operand: arg);
             }
 
+            if (_reporting)
+            {
+                owner.CheckReadTokenWrites(call: call);
+            }
+
             List<(string Path, string Callee)> writes = owner.CallWrites(call: call, tokenOrigins: Held);
             if (_reporting && inUse.Count > 0)
             {
@@ -1319,6 +1324,66 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         ? $"may have changed: '{callee}()' can change what is inside '{Shown(path: path)}'"
                         : $"may have been replaced by '{callee}()', which replaces '{Shown(path: path)}'";
                 End(written: path, why: why, at: call.Location);
+            }
+        }
+    }
+
+    /// <summary>Whether a token only lets its holder read: <c>Viewing[T]</c>, or the lock-held <c>Consulting[T]</c>.</summary>
+    private static bool IsReadToken(TypeSymbol? type)
+    {
+        return type?.BareName is RuntimeContract.Viewing or RuntimeContract.Consulting;
+    }
+
+    /// <summary>
+    /// RF-S456: a call that can change what a READ token points at, through that token: the receiver
+    /// (`v.set_to(n: 2)`, `xs.view().add_last(...)`) or an argument handed to a parameter the callee changes. A
+    /// routine changes a slot when its body writes into it or hands it on to something that does (the same
+    /// summary that tells which parts a routine may replace), and a stdlib routine when it is not `@readonly`.
+    /// Taking a write token through a read one (`v.modify_at(...)`) is rejected the same way. Reads, and routines
+    /// that only read, go through.
+    /// </summary>
+    private void CheckReadTokenWrites(CallExpression call)
+    {
+        if (IsRoutineValueCall(call: call) || call.ResolvedRoutine is not { } callee)
+        {
+            return;
+        }
+
+        Dictionary<string, HashSet<string>> effects = CalleeEffects(callee: callee);
+        bool mintsWriteToken = callee.ReturnType?.BareName is RuntimeContract.Modifying or RuntimeContract.Amending;
+        if (TakesReceiver(callee: callee) && call.Callee is MemberExpression { Object: var receiver } &&
+            IsReadToken(type: receiver.ResolvedType) &&
+            (effects.ContainsKey(key: MeSlot) || mintsWriteToken))
+        {
+            report(code: SemanticDiagnosticCode.WritableMemberRoutineThroughReadOnlyWrapper,
+                message:
+                $"You are calling '{callee.Name}()' through a read token ('{receiver.ResolvedType!.Name}'), but " +
+                (mintsWriteToken
+                    ? $"'{callee.Name}()' hands out a write token on it."
+                    : $"'{callee.Name}()' can change what the token points at.") +
+                " A read token only lets you read. Take a write token instead ('.modify()', or a 'Modifying[T]' " +
+                "parameter), or mark the routine @readonly if it does not change anything.",
+                location: call.Location);
+            return;
+        }
+
+        foreach ((string param, Expression arg) in BoundArguments(call: call, callee: callee))
+        {
+            // A read-token parameter is checked inside the callee: a write through it is reported there.
+            if (callee.Parameters.FirstOrDefault(predicate: p => p.Name == param) is { } declared &&
+                IsReadToken(type: declared.Type))
+            {
+                continue;
+            }
+
+            if (IsReadToken(type: arg.ResolvedType) && effects.ContainsKey(key: param))
+            {
+                report(code: SemanticDiagnosticCode.WritableMemberRoutineThroughReadOnlyWrapper,
+                    message:
+                    $"You are handing a read token ('{arg.ResolvedType!.Name}') to '{param}' of '{callee.Name}', " +
+                    $"which can change it. A read token only lets you read: pass a write token instead.",
+                    location: arg.Location);
+                return;
             }
         }
     }
