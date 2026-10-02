@@ -1,7 +1,7 @@
 # RazorForge / Suflae — Rider (JetBrains) plugin
 
 Brings `.rf` / `.sf` language support into Rider by driving the builder's built-in language
-server (`dotnet RazorForge.dll --lsp`) through the IntelliJ Platform **LSP client API**. This is
+servers (`dotnet RazorForge.dll lsp` for `.rf`, `dotnet Suflae.dll lsp` for `.sf`) through the IntelliJ Platform **LSP client API**. This is
 the Rider counterpart to `../vscode-extension` — the LSP server is the same process; only the
 client that launches it differs.
 
@@ -11,7 +11,7 @@ client that launches it differs.
 ## What it does
 
 - Registers the `RazorForge` (`.rf`, `.razorforge`) and `Suflae` (`.sf`) file types.
-- On opening such a file, launches `dotnet <RazorForge.dll> --lsp` and connects as an LSP client,
+- On opening such a file, launches that language's server (`dotnet <RazorForge.dll> lsp` or `dotnet <Suflae.dll> lsp`) and connects as an LSP client,
   surfacing the server's diagnostics, hover, go-to-definition, references and completion.
 
 ## Prerequisites
@@ -66,5 +66,5 @@ rider-plugin/
   src/main/resources/META-INF/plugin.xml   file types + lsp serverSupportProvider registration
   src/main/kotlin/com/razorforge/lsp/
     Languages.kt                       RazorForge/Suflae Language + LanguageFileType
-    RazorForgeLspServerSupportProvider.kt  launches `dotnet RazorForge.dll --lsp`
+    RazorForgeLspServerSupportProvider.kt  launches each language's server (`<Name>.dll lsp`)
 ```

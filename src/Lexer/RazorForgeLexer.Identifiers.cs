@@ -222,8 +222,22 @@ public partial class RazorForgeLexer
     /// </remarks>
     private void ScanComment()
     {
+        // The first `#` is consumed: the comment starts one character back, and never spans a line.
+        int commentStart = _position - 1;
+        int commentColumn = _column - 1;
+        int commentLine = _line;
+        bool isDoc = Peek() == '#' && Peek(offset: 1) == '#';
+        int end = _position;
+        while (end < _source.Length && _source[index: end] != '\n')
+        {
+            end++;
+        }
+
+        Comments.Add(item: new CommentTrivia(Line: commentLine, Column: commentColumn,
+            Text: _source[commentStart..end], IsDoc: isDoc, Position: commentStart));
+
         // Check for doc comment (###)
-        if (Peek() == '#' && Peek(offset: 1) == '#')
+        if (isDoc)
         {
             Advance(); // consume second #
             Advance(); // consume third #

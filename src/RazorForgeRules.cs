@@ -31,6 +31,17 @@ public sealed class RazorForgeRules : LanguageRules
         return new RazorForgeLexer(source: source, fileName: fileName).Tokenize();
     }
 
+    /// <inheritdoc/>
+    public override LanguageServerProfile LanguageServer { get; } = new RazorForgeLanguageServer();
+
+    /// <inheritdoc/>
+    public override (List<Token> Tokens, List<CommentTrivia> Comments) TokenizeWithComments(string source,
+        string fileName)
+    {
+        var lexer = new RazorForgeLexer(source: source, fileName: fileName);
+        return (lexer.Tokenize(), lexer.Comments);
+    }
+
     public override bool AllowsUnsafeCode => true;
     public override bool HasPassStatement => true;
     public override bool HasThreadedRoutines => true;

@@ -38,7 +38,8 @@ internal static class LspTestHarness
         input.Position = 0;
         using var output = new MemoryStream();
 
-        LspServer.Run(stdin: input, stdout: output);
+        LspServer.Run(stdin: input, stdout: output,
+            profile: global::Builder.Frontends.Languages.For(language: global::TypeModel.Enums.Language.RazorForge).LanguageServer);
 
         return ParseFrames(bytes: output.ToArray());
     }
