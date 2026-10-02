@@ -21,4 +21,11 @@ internal sealed class RazorForgeLanguageServer : LanguageServerProfile
 
     /// <inheritdoc/>
     public override IReadOnlyList<string> Keywords => RazorForgeLexer.KeywordSpellings;
+
+    /// <inheritdoc/>
+    public override string? Format(string text, string fileName)
+    {
+        return Builder.Formatting.SourceFormatter.Format(source: text, fileName: fileName, language: Language)
+                      .Output;
+    }
 }
