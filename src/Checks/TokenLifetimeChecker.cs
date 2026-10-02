@@ -1288,14 +1288,17 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             List<(string Path, string Callee)> writes = owner.CallWrites(call: call, tokenOrigins: Held);
             if (_reporting && inUse.Count > 0)
             {
-                foreach ((string path, string callee) in writes.Concat(second: ends.Select(selector: e => (e, ""))))
+                // A `steal` among the arguments is RF-S615 at the stolen variable's other use in the call (the
+                // builder's own use-after-steal check says it moves out in the same call), so only the call's own
+                // effects are checked here.
+                foreach ((string path, string callee) in writes)
                 {
                     if (inUse.FirstOrDefault(predicate: u => u.Origin != UnknownOrigin && Ends(written: path, origin: u.Origin)) is
                         { Operand: not null } hit)
                     {
                         string by = callee.Length > 0
                             ? $"'{callee}()' can replace '{Shown(path: path)}'"
-                            : $"'{Shown(path: path)}' is replaced while the arguments are evaluated";
+                            : $"a routine value it is handed may replace '{Shown(path: path)}'";
                         owner.Report(code: SemanticDiagnosticCode.TokenSourceReplaced,
                             message:
                             $"This call is handed a token taken from '{Shown(path: hit.Origin)}', but {by} while the " +
