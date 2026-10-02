@@ -54,7 +54,8 @@ routine signed_radix_text(value: S64, radix: S32) -> Text
         return radix_text(mag: 0u64 -% raw, negative: true, radix: radix)
     return radix_text(mag: raw, negative: false, radix: radix)
 
-### `radix_text` for a wide unsigned magnitude (`U128`, `U256`), dividing in the value's own width.
+### `radix_text` for a wide unsigned magnitude (`U128`, `U256`), dividing in the value's own width through its
+### `//` and `%` (Knuth division, never a 128-bit or 256-bit LLVM divide).
 routine wide_radix_text[T](mag: T, negative: Bool, radix: S32) -> Text
 needs T obeys FloorDivisible
     check_radix(radix: radix)
@@ -66,9 +67,9 @@ needs T obeys FloorDivisible
     var m = mag
     while LLVM::int_ne(a: m, b: zero)
         reversed.add_last(
-            value: radix_digit(d: LLVM::int_truncate[T, U64](LLVM::unsigned_rem(a: m, b: base))),
+            value: radix_digit(d: LLVM::int_truncate[T, U64](m % base)),
         )
-        m = LLVM::unsigned_div(a: m, b: base)
+        m = m // base
     if negative
         reversed.add_last(value: '-')
     var digits = List[Character]()
