@@ -108,8 +108,8 @@ public sealed class LspServerTests
                 character: character + 1),
             Exit);
 
-        // `danger` is a RazorForge keyword (the Suflae lexer has none of the RF-only ones).
-        Assert.Contains(expected: "danger", collection: CompletionLabels(reply: LspTestHarness.ReplyWithId(replies: replies, id: 40)));
+        // `steal` is a RazorForge keyword (Suflae has no ownership transfer).
+        Assert.Contains(expected: "steal", collection: CompletionLabels(reply: LspTestHarness.ReplyWithId(replies: replies, id: 40)));
     }
 
     [Fact]
