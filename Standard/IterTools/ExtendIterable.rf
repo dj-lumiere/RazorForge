@@ -24,15 +24,15 @@ routine ExtendIterable[T, S1, S2].iter() -> ExtendEmittable[T, S1/Iter, S2/Iter]
 
 ### Iterates over an `ExtendIterable` by exhausting the first source before moving to the second.
 ### :typeparam T: The element type produced by the concatenated sequence.
-### :typeparam SE1: The concrete first source iterator type (borrowed).
-### :typeparam SE2: The concrete second source iterator type (borrowed).
+### :typeparam SE1: The concrete first source iterator type (owned).
+### :typeparam SE2: The concrete second source iterator type (owned).
 entity ExtendEmittable[AnyType T, AnyType SE1, AnyType SE2] obeys Emittable[T]
 needs SE1 obeys Emittable[T]
 needs SE2 obeys Emittable[T]
-    ### Stores the iterator for the first source (borrowed).
-    secret first: Hijacked[SE1]
-    ### Stores the iterator for the second source (borrowed).
-    secret second: Hijacked[SE2]
+    ### Stores the iterator for the first source (owned; destroyed with the adapter).
+    secret first: SE1
+    ### Stores the iterator for the second source (owned; destroyed with the adapter).
+    secret second: SE2
     ### Stores whether iteration has already advanced into the second source.
     secret in_second: Bool
 
@@ -42,12 +42,12 @@ needs SE2 obeys Emittable[T]
 routine ExtendEmittable[T, SE1, SE2].emit!() -> T
     danger
         if not me.in_second
-            var result = try me.first.as_entity().emit()
+            var result = try me.first.emit()
             when result
                 is None => me.in_second = true
                 else item =>
                     return item
-        return me.second.as_entity().emit()
+        return me.second.emit()
 
 ### Returns a lazy concatenation of this iterable and `other`.
 ### :param other: The iterable to consume after `me`.

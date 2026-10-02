@@ -22,11 +22,11 @@ routine SkipWhileIterable[T, S].iter() -> SkipWhileEmittable[T, S/Iter]
 
 ### Iterates over a source sequence after dropping its leading predicate-matching prefix.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam SE: The concrete source iterator type (borrowed).
+### :typeparam SE: The concrete source iterator type (owned).
 entity SkipWhileEmittable[AnyType T, AnyType SE] obeys Emittable[T]
 needs SE obeys Emittable[T]
-    ### Stores the underlying source iterator (borrowed).
-    secret source: Hijacked[SE]
+    ### Stores the underlying source iterator (owned; destroyed with the adapter).
+    secret source: SE
     ### Stores the predicate used while skipping.
     secret predicate: Routine[(T,), Bool]
     ### Stores whether the emitter is still discarding leading values.
@@ -39,11 +39,11 @@ routine SkipWhileEmittable[T, SE].emit!() -> T
     danger
         if me.skipping
             loop
-                var item = me.source.as_entity().emit()
+                var item = me.source.emit()
                 if not me.predicate(item)
                     me.skipping = false
                     return item
-        return me.source.as_entity().emit()
+        return me.source.emit()
 
 ### Returns a lazy adapter that skips values while `predicate` returns `true`.
 ### :param predicate: The predicate that controls the initial skipping phase.
