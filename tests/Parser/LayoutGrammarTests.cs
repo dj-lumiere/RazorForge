@@ -247,6 +247,41 @@ public class LayoutGrammarTests
                                  """);
     }
 
+    /// <summary>Verifies that `needs P1, P2 everywhere` gates each protocol, like one line per protocol.</summary>
+    [Fact]
+    public void Parse_EverywhereList()
+    {
+        Program program = AssertParses(source: """
+                                               routine T.eq(you: T) -> Bool
+                                               needs Equatable, Hashable[T] everywhere
+                                                   return true
+                                               """);
+        List<GenericConstraintDeclaration> constraints =
+            GetDeclaration<RoutineDeclaration>(program: program).GenericConstraints!;
+        Assert.Equal(expected: 2, actual: constraints.Count);
+        Assert.All(collection: constraints,
+            action: c => Assert.Equal(expected: ConstraintKind.Everywhere, actual: c.ConstraintType));
+        Assert.Equal(expected: "Hashable", actual: constraints[index: 1].ConstraintTypes![index: 0].Name);
+    }
+
+    /// <summary>Verifies that one `relates` clause takes a list, in a type header and in a protocol body.</summary>
+    [Fact]
+    public void Parse_RelatesList()
+    {
+        Program program = AssertParses(source: """
+                                               entity Pair[A]
+                                               relates PairEmitter[A] as Iter, A as Key
+                                                   first: A
+
+                                               protocol Keyed
+                                                   relates Key obeys Hashable, Value
+                                                   routine Me.size() -> U64
+                                               """);
+        Assert.Equal(expected: 2, actual: GetDeclaration<EntityDeclaration>(program: program).AssociatedTypes!.Count);
+        List<AssociatedTypeDeclaration> slots = GetDeclaration<ProtocolDeclaration>(program: program).AssociatedTypes!;
+        Assert.Equal(expected: ["Key", "Value"], actual: slots.Select(selector: a => a.Name));
+    }
+
     private static Expression Initializer(Statement statement)
     {
         return ((VariableDeclaration)((DeclarationStatement)statement).Declaration).Initializer!;
