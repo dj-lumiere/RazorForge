@@ -152,85 +152,6 @@ routine C::rf_current_thread_id() -> U64
 ### Safe: takes no pointers. :returns: a per-context id, equal across calls in the same coroutine/thread.
 routine C::rf_current_task_id() -> U64
 
-### §4 nested-monitor deadlock detector (opt-in via RF_DEADLOCK_DETECT=1). Called on a CONTENDED
-### escaped-lock spin: registers that `self` is blocked waiting for the task `holder`, then walks the
-### wait graph and LOUD-aborts if the wait forms a cycle (opposite-order lock acquisition). No-op
-### unless the env flag is set. Safe: takes no pointers, only task ids.
-routine C::rf_deadlock_wait_begin(self: U64, holder: U64)
-
-### Clears `self`'s registered wait once the lock is acquired (the §4 detector counterpart).
-routine C::rf_deadlock_wait_end(self: U64)
-
-### Cycle collector (Bacon-Rajan) — the SOLE entry point. A {Roamed} strong-decrement that leaves the
-### count > 0 reports the controller here as a possible cycle root (RF dedups via `buffered` first).
-### See internal-wiki/v0.4.x-cycle-collector.md.
-dangerous routine C::rf_cyclic_add_candidate(obj: Address)
-
-### Number of candidate controllers currently in the roots buffer.
-dangerous routine C::rf_cyclic_roots_count() -> U64
-
-### The i-th candidate controller in the roots buffer (`Address(0)` if out of range).
-dangerous routine C::rf_cyclic_roots_at(i: U64) -> Address
-
-### Empties the roots buffer (after a CollectCycles pass consumes it).
-dangerous routine C::rf_cyclic_roots_clear()
-
-### Drops the first `n` (processed) candidates, keeping any appended after the pass snapshotted `n`
-### (e.g. a candidate reported by a finalizer during reap). Prevents dropping late arrivals.
-dangerous routine C::rf_cyclic_roots_remove_front(n: U64)
-
-### Drops one candidate about to be freed — a buffered controller reaching count 0 is freed eagerly, so
-### its roots entry must go first or the collector would dereference freed memory.
-dangerous routine C::rf_cyclic_roots_remove(ptr: Address)
-
-### Resets the scratch buffer before tracing one controller's children.
-dangerous routine C::rf_cyclic_scratch_reset()
-
-### Number of children collected into the scratch buffer by the last trace.
-dangerous routine C::rf_cyclic_scratch_count() -> U64
-
-### The i-th child controller in the scratch buffer (`Address(0)` if out of range).
-dangerous routine C::rf_cyclic_scratch_at(i: U64) -> Address
-
-### Called by a builder-generated per-type trace, once per {Roamed} field, with its controller.
-dangerous routine C::rf_cyclic_visit_child(child_ctrl: Address)
-
-### Pushes a collected white controller onto the deferred-free (reap) buffer.
-dangerous routine C::rf_cyclic_reap_push(ctrl: Address)
-
-### Number of controllers awaiting deferred free in the reap buffer.
-dangerous routine C::rf_cyclic_reap_count() -> U64
-
-### The i-th controller in the reap buffer (`Address(0)` if out of range).
-dangerous routine C::rf_cyclic_reap_at(i: U64) -> Address
-
-### Empties the reap buffer.
-dangerous routine C::rf_cyclic_reap_clear()
-
-### The sole trace indirect-call site: runs the per-type trace hook over a controller, filling scratch
-### with its child controllers.
-dangerous routine C::rf_cyclic_trace_into_scratch(trace_hook: Address, controller: Address)
-
-### The free indirect-call site: runs the per-type free hook over a white (garbage) controller —
-### type-correct entity `destroy` then controller free.
-dangerous routine C::rf_cyclic_invoke_free(free_hook: Address, controller: Address)
-
-### Whether a collection pass should run now (candidate set reached the threshold, none in progress).
-dangerous routine C::rf_cyclic_should_collect() -> Bool
-
-### Marks a collection pass in progress (guards against re-entrant auto-triggering).
-dangerous routine C::rf_cyclic_enter_collect()
-
-### Marks the collection pass finished.
-dangerous routine C::rf_cyclic_exit_collect()
-
-### Takes the collector's SHARED stop-the-world lock around a mutator refcount op (a no-op on the
-### collector's own thread, which already holds it EXCLUSIVE). RoamController.hold/unhold bracket with these.
-dangerous routine C::rf_cyclic_lock_shared()
-
-### Releases the SHARED stop-the-world lock — the `rf_cyclic_lock_shared` counterpart.
-dangerous routine C::rf_cyclic_unlock_shared()
-
 ### The runtime's monotonic nanosecond clock (the one the scheduler's timers use) — a steady counter
 ### for measuring elapsed intervals (unaffected by wall-clock adjustments; not an absolute time). Safe:
 ### a pure read, so no `dangerous`. :returns: nanoseconds since an unspecified fixed origin.
@@ -511,6 +432,55 @@ routine C::rf_random_u64() -> U64
 ### :param x: The running splitmix64 accumulator.
 ### :returns: The next well-mixed `U64` output.
 routine C::ingrid_splitmix64(x: U64) -> U64
+
+# ============================================================================
+# Roamed runtime (Ingrid/tessera/roam.tess)
+# ============================================================================
+# Each takes the address of a `RoamController[T]`, whose layout Ingrid's `RoamHeader` repeats field for field.
+# The bodies are llvm-linked into every module, and the hot ones (hold, unhold, the lock) inline.
+
+### Adds a strong handle. :param header: the controller.
+dangerous routine C::ingrid_roam_hold(header: CPtr)
+
+### Drops a strong handle. The last one destroys the entity and frees the controller unless a weak observer
+### remains; any other release reports the entity to the cycle collector. :param header: the controller.
+dangerous routine C::ingrid_roam_unhold(header: CPtr)
+
+### The strong count, a snapshot. :param header: the controller. :returns: the count.
+dangerous routine C::ingrid_roam_strong_count(header: CPtr) -> U64
+
+### Adds a weak observer. :param header: the controller.
+dangerous routine C::ingrid_roam_observe(header: CPtr)
+
+### Drops a weak observer, freeing a dead controller with the last one. :param header: the controller.
+dangerous routine C::ingrid_roam_unobserve(header: CPtr)
+
+### Whether the entity's data has been freed. :param header: the controller. :returns: true once it is gone.
+dangerous routine C::ingrid_roam_is_destroyed(header: CPtr) -> Bool
+
+### Whether the entity has escaped to another task. :param header: the controller. :returns: true if escaped.
+dangerous routine C::ingrid_roam_is_escaped(header: CPtr) -> Bool
+
+### Promotes the entity and everything it reaches through Roamed fields to escaped. :param header: the controller.
+dangerous routine C::ingrid_roam_promote(header: CPtr)
+
+### Enters the task-keyed reentrant lock when escaped. :param header: the controller.
+dangerous routine C::ingrid_roam_lock_enter(header: CPtr)
+
+### Leaves one level of the lock when escaped. :param header: the controller.
+dangerous routine C::ingrid_roam_lock_exit(header: CPtr)
+
+### Called by a type's synthesized trace routine for each of the entity's `Roamed` fields: records that field's
+### controller as a child for the cycle collector (Ingrid/tessera/cycle.tess). :param child: the child controller.
+dangerous routine C::ingrid_cyclic_visit_child(child: CPtr)
+
+### Runs one cycle-collection pass (Bacon-Rajan trial deletion, stop-the-world) and frees the cyclic garbage.
+### :returns: how many entities it freed.
+dangerous routine C::ingrid_cyclic_collect() -> U64
+
+### The byte offset of Ingrid's `RoamHeader` field `i`, for the test that checks it matches `RoamController[T]`.
+### :param i: The field index in declaration order. :returns: its offset, or `U64_MAX` past the last field.
+routine C::ingrid_roam_field_offset(i: U64) -> U64
 
 # ============================================================================
 # C String Operations (CStr / char*)

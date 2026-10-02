@@ -62,12 +62,15 @@ needs EntityType T
     secret buffered: Bool
     ### Address of the builder-generated per-type trace function for `T` (visits `T`'s `Roamed`
     ### fields). `cptr_none()` = no trace wired yet / `T` has no `Roamed` fields (cannot form a cycle).
-    ### Called as `fn(controller_address)`; reinterprets and `rf_cyclic_visit_child`s each `Roamed` field.
+    ### Called as `fn(controller_address)`; reinterprets and reports each `Roamed` field through `ingrid_cyclic_visit_child`.
     secret trace_hook: CPtr
     ### Address of the builder-generated per-type free function for `T`. Called as
     ### `fn(controller_address)` when the collector reaps a GARBAGE node: runs the managed
     ### entity's `destroy` (type-correct) then frees the controller. `cptr_none()` until wired.
     secret free_hook: CPtr
+    ### Address of the managed entity type's own `destroy`, run by the last strong release. Ingrid's Roamed
+    ### runtime (`Ingrid/tessera/roam.tess`) cannot name `T`, so it calls the entity's teardown through this.
+    secret drop_hook: CPtr
 
 ### Builder intrinsic: yields a closure over this type's synthesized `roam_trace` cycle-collector
 ### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
@@ -80,6 +83,11 @@ routine T.roam_trace_ref() -> CPtr
 ### Builder intrinsic: yields a closure over this type's synthesized `roam_free` hook (tears down
 ### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass; `cptr_none()` fallback.
 routine T.roam_free_ref() -> CPtr
+    return cptr_none()
+
+### Builder intrinsic: yields this type's `destroy` as a native code address (RoamHookRefLoweringPass), the
+### drop hook the last strong release runs. `cptr_none()` fallback.
+routine T.roam_drop_ref() -> CPtr
     return cptr_none()
 
 ### Creates a controller with one strong reference in LOCAL mode (unlocked, non-atomic).
@@ -99,152 +107,43 @@ dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
         buffered: false,
         trace_hook: data.as_entity().roam_trace_ref(),
         free_hook: data.as_entity().roam_free_ref(),
+        drop_hook: data.as_entity().roam_drop_ref(),
     )
 
 # ============================================================================
-# Biased reference counting — branches on mode: non-atomic (LOCAL) vs atomic (ESCAPED).
+# Biased reference counting — branches on mode: non-atomic (LOCAL) vs atomic (ESCAPED). The work happens in
+# Ingrid's Roamed runtime (Ingrid/tessera/roam.tess), shared with Suflae; these methods pass it this controller.
 # ============================================================================
+
+### This controller's address, as Ingrid's Roamed routines take it (their `RoamHeader` repeats this layout).
+secret routine RoamController[T].header() -> CPtr
+    danger
+        return CPtr(from: me.hijack().get_address())
 
 ### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED. The count mutation is bracketed
 ### in the collector's SHARED stop-the-world lock so a concurrent cycle-collection pass (which trial-
 ### deletes counts non-atomically) can never race it. On the collector's own thread the lock is a no-op.
 routine RoamController[T].hold()
     danger
-        C::rf_cyclic_lock_shared()
-        if me.escaped.load() == 1_u8
-            discard LLVM::atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
-        else
-            me.count = me.count + 1
-        C::rf_cyclic_unlock_shared()
+        C::ingrid_roam_hold(header: me.header())
     return
 
 ### Drops an alias. At zero the managed entity is destroyed immediately (deterministic teardown).
 ### A decrement that does NOT reach zero registers the object as a cycle-collection candidate.
 ### The whole decrement — count drop, the buffered/eager-free branch, and the candidate report — runs
 ### under the collector's SHARED stop-the-world lock, so a collection pass can neither race the count nor
-### free a controller it is mid-traversal over. `mark_cycle_candidate` and the eager free run WITHIN this
-### bracket (no nested acquire). On the collector's own thread (a finalizer release) the lock is a no-op.
+### free a controller it is mid-traversal over. The entity is destroyed through `drop_hook`. On the collector's
+### own thread (a finalizer release) the lock is a no-op.
 routine RoamController[T].unhold()
     danger
-        C::rf_cyclic_lock_shared()
-        if me.escaped.load() == 1_u8
-            var previous = LLVM::atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
-            if previous == 1_u64
-                # Dead at zero — free eagerly (deterministic teardown). If it was a buffered cycle candidate,
-                # first drop its roots entry so the collector never dereferences this freed controller.
-                if me.buffered
-                    C::rf_cyclic_roots_remove(ptr: me.hijack().get_address())
-                me.drop_data()
-                me.dead.store(desired: 1_u8)
-                # Keep the controller as a tombstone while weak observers remain, so `is_destroyed()` can safely
-                # report the death (ESCAPED: atomic weak read). Freed only when weak also hits zero. This whole
-                # branch runs under the SHARED lock, so it cannot race the collector's EXCLUSIVE pass.
-                if LLVM::atomic_load[U64](ptr: me.weak_count.hijack()) == 0_u64
-                    me.destroy()
-            else
-                me.mark_cycle_candidate()
-        else
-            me.count = me.count - 1
-            if me.count == 0_u64
-                if me.buffered
-                    C::rf_cyclic_roots_remove(ptr: me.hijack().get_address())
-                me.drop_data()
-                me.dead.store(desired: 1_u8)
-                # Tombstone while weak observers remain (LOCAL: plain weak read; see the ESCAPED branch above).
-                if me.weak_count == 0_u64
-                    me.destroy()
-            else
-                me.mark_cycle_candidate()
-        C::rf_cyclic_unlock_shared()
-    return
-
-### Reports this object to the cycle collector as a possible cycle root. The SOLE collector entry
-### point — only `Roamed` decrements reach it, which is what scopes the collector to `Roamed`.
-dangerous routine RoamController[T].mark_cycle_candidate()
-    # Acyclic-type fast out (standard Bacon-Rajan optimization): a `T` with no `Roamed` fields cannot be
-    # part of a cycle, and the builder wires its `trace_hook` to `cptr_none()` (see `create`). Skipping
-    # the candidate buffer here keeps the common non-zero decrement off the collector's books entirely.
-    if me.trace_hook.is_none()
-        return
-    if me.buffered
-        return
-    me.buffered = true
-    me.state = RoamState.SUSPECTED
-    C::rf_cyclic_add_candidate(obj: me.hijack().get_address())
-    # NO inline auto-collect: this runs under `unhold`'s SHARED stop-the-world lock, and a collection pass
-    # takes the same lock EXCLUSIVE — triggering one here would deadlock (shared cannot upgrade to
-    # exclusive). Collection is driven explicitly (`cyclic_collect()`) at a safe point; the threshold hook
-    # (`rf_cyclic_should_collect`) is retained for a future safepoint-driven trigger outside any bracket.
-    return
-
-# ============================================================================
-# Cycle-collector accessors. The collector (Core/Memory/CycleCollector.rf) holds each candidate as a
-# type-erased `RoamController[RoamErased]` — every field below sits at a T-independent offset, so these
-# read/write correctly through the erased view. Count adjustment is non-atomic: the collector runs
-# single-threaded (core-local), so trial deletion touches the same count the RC uses without atomics.
-# `cyclic_set_hooks` is a test/wiring hatch (builder auto-wires trace_hook/free_hook in Stage 2).
-# ============================================================================
-
-### The address of the managed entity — the collector passes this to the entity-based trace/free
-### hooks (`roam_trace` / `roam_free`, whose `me` is the entity). :returns: the entity address.
-routine RoamController[T].cyclic_data_addr() -> Address
-    danger
-        return me.data.get_address()
-
-### The collector state. :returns: this controller's `RoamState`.
-routine RoamController[T].cyclic_state() -> RoamState
-    return me.state
-
-### Sets the collector state. :param c: the new state.
-dangerous routine RoamController[T].cyclic_set_state(c: RoamState)
-    me.state = c
-    return
-
-### Whether this controller is buffered as a root. :returns: the `buffered` flag.
-routine RoamController[T].cyclic_buffered() -> Bool
-    return me.buffered
-
-### Sets the buffered flag. :param b: the new value.
-dangerous routine RoamController[T].cyclic_set_buffered(b: Bool)
-    me.buffered = b
-    return
-
-### Non-atomic strong count. :returns: the current count.
-routine RoamController[T].cyclic_count() -> U64
-    return me.count
-
-### Trial-deletion decrement (non-atomic).
-dangerous routine RoamController[T].cyclic_dec()
-    me.count = me.count - 1
-    return
-
-### Trial-deletion restore increment (non-atomic).
-dangerous routine RoamController[T].cyclic_inc()
-    me.count = me.count + 1
-    return
-
-### The per-type trace function address. :returns: `trace_hook`.
-routine RoamController[T].cyclic_trace_hook() -> CPtr
-    return me.trace_hook
-
-### The per-type free function address. :returns: `free_hook`.
-routine RoamController[T].cyclic_free_hook() -> CPtr
-    return me.free_hook
-
-### Wires the per-type trace/free hooks (test/Stage-1 hatch). :param trace: trace fn. :param free: free fn.
-dangerous routine RoamController[T].cyclic_set_hooks(trace: CPtr, free: CPtr)
-    me.trace_hook = trace
-    me.free_hook = free
+        C::ingrid_roam_unhold(header: me.header())
     return
 
 ### Returns the current strong count. Snapshot only.
 ### :returns: The number of live strong handles.
 routine RoamController[T].strong_count() -> U64
     danger
-        if me.escaped.load() == 1_u8
-            return LLVM::atomic_load[U64](ptr: me.count.hijack())
-        else
-            return me.count
+        return C::ingrid_roam_strong_count(header: me.header())
 
 # ============================================================================
 # EXPERIMENT — object-level liveness (weak observation + tombstone). LOCAL/single-thread only.
@@ -258,62 +157,28 @@ routine RoamController[T].strong_count() -> U64
 ### SAFE PRECONDITION: only ever called through an already-kept reference (a live strong handle or another
 ### weak observer), so the controller is guaranteed alive at entry — no observe-races-free window.
 dangerous routine RoamController[T].observe()
-    C::rf_cyclic_lock_shared()
-    if me.escaped.load() == 1_u8
-        discard LLVM::atomic_add[U64](ptr: me.weak_count.hijack(), value: 1_u64)
-    else
-        me.weak_count = me.weak_count + 1
-    C::rf_cyclic_unlock_shared()
+    C::ingrid_roam_observe(header: me.header())
     return
 
 ### Drops a weak observer. When the LAST observer leaves a DEAD (tombstoned) controller, the controller
 ### struct is finally freed. If the entity is still alive, only the observer count drops. Bracketed +
 ### atomic like `unhold` (last-drop detected by the atomic-sub's previous value in ESCAPED mode).
 dangerous routine RoamController[T].unobserve()
-    C::rf_cyclic_lock_shared()
-    var last = false
-    if me.escaped.load() == 1_u8
-        var previous = LLVM::atomic_sub[U64](ptr: me.weak_count.hijack(), value: 1_u64)
-        if previous == 1_u64
-            last = true
-    else
-        me.weak_count = me.weak_count - 1
-        if me.weak_count == 0_u64
-            last = true
-    if last and me.dead.load() == 1_u8
-        me.destroy()
-    C::rf_cyclic_unlock_shared()
+    C::ingrid_roam_unobserve(header: me.header())
     return
 
 ### Whether the observed entity is still alive. Safe on a tombstone (reads the atomic `dead` flag, never
 ### `data`). A lock-free snapshot, like `strong_count`. :returns: `true` until the entity's data is freed.
 routine RoamController[T].is_alive() -> Bool
     danger
-        return me.dead.load() == 0_u8
+        return not C::ingrid_roam_is_destroyed(header: me.header())
 
 ### Whether the observed entity has been destroyed. Path-agnostic: true once the entity DATA is freed by
 ### the RC-drop (`unhold`) OR the cycle-collect (`cyclic_finalize`) path — NOT keyed on the strong count,
 ### which a cycle-collected node keeps non-zero via its internal edges. :returns: `true` once it is gone.
 routine RoamController[T].is_destroyed() -> Bool
     danger
-        return me.dead.load() == 1_u8
-
-### Cycle-collect finalizer counterpart to the RC-drop tombstone in `unhold`: the collector calls this
-### AFTER the free hook has torn down the entity data. Marks the controller dead and frees the controller
-### struct only when no weak observer remains — otherwise it lives on as a tombstone so `is_destroyed()`
-### stays answerable. Runs UNDER the collector's EXCLUSIVE lock (the finalizer path), so it takes NO
-### shared lock (that would self-deadlock, per the §2 `rf_in_collector` rule) and the weak read needs no
-### bracket — no mutator runs concurrently. :remarks: T-independent fields only → sound via the erased view.
-dangerous routine RoamController[T].cyclic_finalize()
-    me.dead.store(desired: 1_u8)
-    var w = 0_u64
-    if me.escaped.load() == 1_u8
-        w = LLVM::atomic_load[U64](ptr: me.weak_count.hijack())
-    else
-        w = me.weak_count
-    if w == 0_u64
-        me.destroy()
-    return
+        return C::ingrid_roam_is_destroyed(header: me.header())
 
 # ============================================================================
 # Escape — one-way LOCAL -> ESCAPED promotion.
@@ -325,94 +190,31 @@ dangerous routine RoamController[T].cyclic_finalize()
 ### Escape is a GRAPH property, not per-object: everything reachable through this object's lock is
 ### reachable by the crossing task too, so it must escape as well (a one-object flip would leave a LOCAL
 ### child — non-atomic count, no lock — that both the owner and the crossing task then touch, a data race).
-### Transitive escape walks the `Roamed` children via the per-type trace hook. ITERATIVE (explicit worklist,
-### NOT recursion) — a deep Roamed graph would otherwise overflow the call stack. The escaped-check prunes
-### already-escaped nodes, so cyclic graphs terminate and repeated promotion is amortized. Children are
-### viewed through `RoamController[T]` purely for the fields touched here (`escaped`/`holder_task`/`depth`/
-### `trace_hook`/`data`, all at a T-INDEPENDENT offset) — reusing `T` on a differently-typed child is a
-### sound reinterpretation. A type with no `Roamed` fields (`trace_hook` = `cptr_none()`) owns no edge.
+### Transitive escape walks the `Roamed` children through the per-type trace hook, iteratively (a deep graph
+### would overflow the stack), and stops at already-escaped nodes, so cycles terminate.
 dangerous routine RoamController[T].promote()
-    if me.escaped.load() == 1_u8
-        return
-    var work = List[Address]()
-    work.add_last(value: me.hijack().get_address())
-    while not work.is_empty()
-        var addr = work.remove_last()
-        var node = Hijacked[RoamController[T]](addr).as_entity()
-        if node.escaped.load() == 0_u8
-            node.holder_task.store(desired: 0_u64)
-            node.depth = 0_u64
-            node.escaped.store(desired: 1_u8)
-            # Trace THIS node's children into the shared native scratch, then drain immediately into the
-            # worklist before the next iteration's trace clobbers it (same discipline as `cyclic_children`).
-            if not node.trace_hook.is_none()
-                C::rf_cyclic_scratch_reset()
-                C::rf_cyclic_trace_into_scratch(
-                    trace_hook: node.trace_hook.get_address(),
-                    controller: node.data.get_address(),
-                )
-                var n = C::rf_cyclic_scratch_count()
-                var i = 0_u64
-                while i < n
-                    work.add_last(value: C::rf_cyclic_scratch_at(i: i))
-                    i = i + 1_u64
+    C::ingrid_roam_promote(header: me.header())
     return
 
 ### Whether this object has escaped. Drives `Roamed`'s access-lock wrapping.
 ### :returns: `true` if ESCAPED.
 routine RoamController[T].is_escaped() -> Bool
-    return me.escaped.load() == 1_u8
+    danger
+        return C::ingrid_roam_is_escaped(header: me.header())
 
 # ============================================================================
 # Reentrant, task-keyed exclusive lock — active only in ESCAPED mode.
 # ============================================================================
 
-### Acquires the exclusive lock, spinning while another task holds it. If the CALLING task already
-### holds it, this is a re-entry: the depth is bumped and it returns without re-acquiring — so a
-### member routine calling itself (normal class recursion) never self-deadlocks. Keyed to the
-### task/coroutine id, not the OS thread, so a migrated coroutine still recognizes its own hold.
-dangerous routine RoamController[T].reentrant_acquire()
-    var tid = C::rf_current_task_id()
-    loop
-        if me.holder_task.load() == tid and me.locked.load() == 1_u8
-            me.depth = me.depth + 1
-            break
-        if me.locked.compare_exchange(expected: 0_u8, desired: 1_u8)
-            me.holder_task.store(desired: tid)
-            me.depth = 1_u64
-            break
-        # Contended by another task. Register the wait (waiting for the current holder) so the opt-in §4
-        # deadlock detector can spot an opposite-order lock cycle and abort LOUDLY rather than hang; a
-        # no-op unless RF_DEADLOCK_DETECT is set. Then yield instead of a bare spin: under M:N the holder
-        # may be a coroutine parked on this very worker (or awaiting reschedule after migration), and a
-        # tight spin would pin the worker and livelock when workers are scarce. `rf_coro_yield` re-queues
-        # this coroutine so the holder can run; off a coroutine (top-level thread) it is a no-op busy-spin.
-        C::rf_deadlock_wait_begin(self: tid, holder: me.holder_task.load())
-        C::rf_coro_yield()
-    # Acquired (fresh or re-entrant): clear any wait we registered while contended.
-    C::rf_deadlock_wait_end(self: tid)
-    return
-
-### Releases one level of the lock. The lock is freed only when the outermost holder releases (depth
-### reaches zero); the holder is cleared before the flag so a waiter never observes the old id.
-dangerous routine RoamController[T].reentrant_release()
-    me.depth = me.depth - 1
-    if me.depth == 0_u64
-        me.holder_task.store(desired: 0_u64)
-        me.locked.store(desired: 0_u8)
-    return
-
 ### Mode-checked lock entry: acquires the reentrant lock only when ESCAPED (a no-op in LOCAL mode,
 ### where there is no contention). Drives `Roamed`'s access wrapping and the `Roaming[T]` guard token.
 dangerous routine RoamController[T].guard_enter()
-    if me.escaped.load() == 1_u8
-        me.reentrant_acquire()
+    C::ingrid_roam_lock_enter(header: me.header())
     return
 
 ### Mode-checked lock exit: the `guard_enter` counterpart.
 dangerous routine RoamController[T].guard_exit()
-    if me.escaped.load() == 1_u8
-        me.reentrant_release()
+    C::ingrid_roam_lock_exit(header: me.header())
     return
 
 # ============================================================================
