@@ -817,6 +817,13 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
     private sealed class Flow(TokenLifetimeChecker owner, RoutineDeclaration routine)
     {
         private readonly HashSet<string> _reported = new(comparer: StringComparer.Ordinal);
+
+        /// <summary>The iterators of `each` loops over a read token (`each item in v` with `v: Viewing[List[T]]`).</summary>
+        private readonly HashSet<string> _readIterators = new(comparer: StringComparer.Ordinal);
+
+        /// <summary>The loop variables those iterators hand out, while their loop body runs: an element seen
+        /// through a read token is read-only too.</summary>
+        private readonly HashSet<string> _readElements = new(comparer: StringComparer.Ordinal);
         private readonly Stack<(List<State?> Breaks, List<State?> Continues)> _loops = new();
         private readonly Stack<List<string>> _blockLocals = new();
         private State? _state;
@@ -920,6 +927,17 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         Expr(expr: v.Initializer);
                     }
 
+                    // `each item in v` over a read token starts with `var _lf_iter_N = v.iter()`.
+                    if (v.Initializer is CallExpression
+                        {
+                            Callee: MemberExpression { Object: var iterated, MemberName: "iter" }
+                        } && (IsReadToken(type: iterated.ResolvedType) ||
+                              iterated is IdentifierExpression { Name: var readName } &&
+                              _readElements.Contains(item: readName)))
+                    {
+                        _readIterators.Add(item: v.Name);
+                    }
+
                     if (IsTrackedToken(type: v.Initializer?.ResolvedType))
                     {
                         Bind(name: v.Name, value: v.Initializer!, index: index);
@@ -986,10 +1004,27 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     Expr(expr: whenStmt.Expression);
                     State entry = _state.Clone();
                     State? merged = entry.Clone();
+                    // The step of an `each` loop over a read token (`try _lf_iter_N.emit()`) binds a read-only element.
+                    Expression step = whenStmt.Expression is RecoveryExpression recovery
+                        ? recovery.LoweredCall ?? recovery.Inner
+                        : whenStmt.Expression;
+                    bool readStep = step is CallExpression
+                    {
+                        Callee: MemberExpression { Object: IdentifierExpression { Name: var stepIter } }
+                    } && _readIterators.Contains(item: stepIter);
                     foreach (WhenClause clause in whenStmt.Clauses)
                     {
                         _state = entry.Clone();
+                        string? element = readStep && clause.Pattern is ElsePattern { VariableName: { } bound }
+                            ? bound
+                            : null;
+                        bool added = element != null && _readElements.Add(item: element);
                         Statement(stmt: clause.Body);
+                        if (added)
+                        {
+                            _readElements.Remove(item: element!);
+                        }
+
                         merged = State.Merge(a: merged, b: _state);
                     }
 
@@ -1147,6 +1182,16 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
         private void Assign(Expression target, Expression value, int index, SourceLocation at)
         {
+            if (_reporting && target is MemberExpression && RootIdentifier(expr: target) is { } root &&
+                _readElements.Contains(item: root))
+            {
+                owner.Report(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
+                    message:
+                    $"You are writing to '{root}', an element of a loop over a read token. The loop only lets you " +
+                    "read its elements. Loop over a write token instead ('.modify()', or a 'Modifying[T]' parameter).",
+                    location: at);
+            }
+
             if (target is IdentifierExpression id && _state?.Tokens.ContainsKey(key: id.Name) == true)
             {
                 Bind(name: id.Name, value: value, index: index);
@@ -1172,6 +1217,17 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     End(written: w, why: $"was replaced by the assignment to '{Shown(path: w)}'", at: at);
                 }
             }
+        }
+
+        private static string? RootIdentifier(Expression expr)
+        {
+            return expr switch
+            {
+                IdentifierExpression id => id.Name,
+                MemberExpression m => RootIdentifier(expr: m.Object),
+                IndexExpression ix => RootIdentifier(expr: ix.Object),
+                _ => null
+            };
         }
 
         // -- expressions --
@@ -1287,7 +1343,8 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
             if (_reporting)
             {
-                owner.CheckReadTokenWrites(call: call);
+                owner.CheckReadTokenWrites(call: call,
+                    isReadElement: e => e is IdentifierExpression { Name: var n } && _readElements.Contains(item: n));
             }
 
             List<(string Path, string Callee)> writes = owner.CallWrites(call: call, tokenOrigins: Held);
@@ -1342,7 +1399,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
     /// Taking a write token through a read one (`v.modify_at(...)`) is rejected the same way. Reads, and routines
     /// that only read, go through.
     /// </summary>
-    private void CheckReadTokenWrites(CallExpression call)
+    private void CheckReadTokenWrites(CallExpression call, Func<Expression, bool> isReadElement)
     {
         if (IsRoutineValueCall(call: call) || call.ResolvedRoutine is not { } callee)
         {
@@ -1352,15 +1409,20 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         Dictionary<string, HashSet<string>> effects = CalleeEffects(callee: callee);
         bool mintsWriteToken = callee.ReturnType?.BareName is RuntimeContract.Modifying or RuntimeContract.Amending;
         if (TakesReceiver(callee: callee) && call.Callee is MemberExpression { Object: var receiver } &&
-            IsReadToken(type: receiver.ResolvedType) &&
+            (IsReadToken(type: receiver.ResolvedType) || isReadElement(arg: receiver)) &&
             (effects.ContainsKey(key: MeSlot) || mintsWriteToken))
         {
+            string through = IsReadToken(type: receiver.ResolvedType)
+                ? $"a read token ('{receiver.ResolvedType!.Name}')"
+                : $"'{(receiver as IdentifierExpression)?.Name}', an element of a loop over a read token";
             report(code: SemanticDiagnosticCode.WritableMemberRoutineThroughReadOnlyWrapper,
                 message:
-                $"You are calling '{callee.Name}()' through a read token ('{receiver.ResolvedType!.Name}'), but " +
+                $"You are calling '{callee.Name}()' through {through}, but " +
                 (mintsWriteToken
                     ? $"'{callee.Name}()' hands out a write token on it."
-                    : $"'{callee.Name}()' can change what the token points at.") +
+                    : IsReadToken(type: receiver.ResolvedType)
+                        ? $"'{callee.Name}()' can change what the token points at."
+                        : $"'{callee.Name}()' can change it.") +
                 " A read token only lets you read. Take a write token instead ('.modify()', or a 'Modifying[T]' " +
                 "parameter), or mark the routine @readonly if it does not change anything.",
                 location: call.Location);
