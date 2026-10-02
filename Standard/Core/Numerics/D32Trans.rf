@@ -1,6 +1,110 @@
 module Core
 
 # ============================================================================
+# B64 and B128 fast paths. A D32 operand becomes a B64 with one rounding (d32_to_b64: the 7-digit
+# coefficient is exact in B64 and so is 10^e for |e| <= 22), the correctly rounded B64 CORE-MATH routine
+# evaluates it, and the result is within (1 + cond) * 2^-53 relative of the true value, cond being an
+# upper bound on the function's condition number |x f'(x) / f(x)| (the input's rounding scaled by it,
+# plus the routine's own half ulp). When every value in that band rounds to one D32 (d32_from_b64_band),
+# that D32 is the correctly rounded result. Otherwise a function with a fast CORE-MATH B128 port runs the
+# same test on B128 (2^-113 per rounding, d32_round_within), and failing that the D64 route decides.
+# ============================================================================
+
+### 10^q for q in [-120, 120] (index q + 120), each correctly rounded; exact for 0 <= q <= 22.
+secret preset D32_B64_P10W: Array[B64, 241] = [
+    0x1.4A8729FC3DDB7p-399_b64, 0x1.9D28F47B4D525p-396_b64, 0x1.023998CD10537p-392_b64,
+    0x1.42C7FF0054685p-389_b64, 0x1.9379FEC069826p-386_b64, 0x1.F8587E7083E30p-383_b64,
+    0x1.3B374F06526DEp-379_b64, 0x1.8A0522C7E7095p-376_b64, 0x1.EC866B79E0CBAp-373_b64,
+    0x1.33D4032C2C7F5p-369_b64, 0x1.80C903F7379F2p-366_b64, 0x1.E0FB44F50586Ep-363_b64,
+    0x1.2C9D0B1923745p-359_b64, 0x1.77C44DDF6C516p-356_b64, 0x1.D5B561574765Bp-353_b64,
+    0x1.25915CD68C9F9p-349_b64, 0x1.6EF5B40C2FC77p-346_b64, 0x1.CAB3210F3BB95p-343_b64,
+    0x1.1EAFF4A98553Dp-339_b64, 0x1.665BF1D3E6A8Dp-336_b64, 0x1.BFF2EE48E0530p-333_b64,
+    0x1.17F7D4ED8C33Ep-329_b64, 0x1.5DF5CA28EF40Dp-326_b64, 0x1.B5733CB32B111p-323_b64,
+    0x1.116805EFFAEAAp-319_b64, 0x1.55C2076BF9A55p-316_b64, 0x1.AB328946F80EAp-313_b64,
+    0x1.0AFF95CC5B092p-309_b64, 0x1.4DBF7B3F71CB7p-306_b64, 0x1.A12F5A0F4E3E5p-303_b64,
+    0x1.04BD984990E6Fp-299_b64, 0x1.45ECFE5BF520Bp-296_b64, 0x1.97683DF2F268Dp-293_b64,
+    0x1.FD424D6FAF031p-290_b64, 0x1.3E497065CD61Fp-286_b64, 0x1.8DDBCC7F40BA6p-283_b64,
+    0x1.F152BF9F10E90p-280_b64, 0x1.36D3B7C36A91Ap-276_b64, 0x1.8488A5B445360p-273_b64,
+    0x1.E5AACF2156838p-270_b64, 0x1.2F8AC174D6123p-266_b64, 0x1.7B6D71D20B96Cp-263_b64,
+    0x1.DA48CE468E7C7p-260_b64, 0x1.286D80EC190DCp-256_b64, 0x1.7288E1271F513p-253_b64,
+    0x1.CF2B1970E7258p-250_b64, 0x1.217AEFE690777p-246_b64, 0x1.69D9ABE034955p-243_b64,
+    0x1.C45016D841BAAp-240_b64, 0x1.1AB20E472914Ap-236_b64, 0x1.615E91D8F359Dp-233_b64,
+    0x1.B9B6364F30304p-230_b64, 0x1.1411E1F17E1E3p-226_b64, 0x1.59165A6DDDA5Bp-223_b64,
+    0x1.AF5BF109550F2p-220_b64, 0x1.0D9976A5D5297p-216_b64, 0x1.50FFD44F4A73Dp-213_b64,
+    0x1.A53FC9631D10Dp-210_b64, 0x1.0747DDDDF22A8p-206_b64, 0x1.4919D5556EB52p-203_b64,
+    0x1.9B604AAACA626p-200_b64, 0x1.011C2EAABE7D8p-196_b64, 0x1.41633A556E1CEp-193_b64,
+    0x1.91BC08EAC9A41p-190_b64, 0x1.F62B0B257C0D2p-187_b64, 0x1.39DAE6F76D883p-183_b64,
+    0x1.8851A0B548EA4p-180_b64, 0x1.EA6608E29B24Dp-177_b64, 0x1.327FC58DA0F70p-173_b64,
+    0x1.7F1FB6F10934Cp-170_b64, 0x1.DEE7A4AD4B81Fp-167_b64, 0x1.2B50C6EC4F313p-163_b64,
+    0x1.7624F8A762FD8p-160_b64, 0x1.D3AE36D13BBCEp-157_b64, 0x1.244CE242C5561p-153_b64,
+    0x1.6D601AD376AB9p-150_b64, 0x1.C8B8218854567p-147_b64, 0x1.1D7314F534B61p-143_b64,
+    0x1.64CFDA3281E39p-140_b64, 0x1.BE03D0BF225C7p-137_b64, 0x1.16C262777579Cp-133_b64,
+    0x1.5C72FB1552D83p-130_b64, 0x1.B38FB9DAA78E4p-127_b64, 0x1.1039D428A8B8Fp-123_b64,
+    0x1.54484932D2E72p-120_b64, 0x1.A95A5B7F87A0Fp-117_b64, 0x1.09D8792FB4C49p-113_b64,
+    0x1.4C4E977BA1F5Cp-110_b64, 0x1.9F623D5A8A733p-107_b64, 0x1.039D665896880p-103_b64,
+    0x1.4484BFEEBC2A0p-100_b64, 0x1.95A5EFEA6B347p-97_b64, 0x1.FB0F6BE506019p-94_b64,
+    0x1.3CE9A36F23C10p-90_b64, 0x1.8C240C4AECB14p-87_b64, 0x1.EF2D0F5DA7DD9p-84_b64,
+    0x1.357C299A88EA7p-80_b64, 0x1.82DB34012B251p-77_b64, 0x1.E392010175EE6p-74_b64,
+    0x1.2E3B40A0E9B4Fp-70_b64, 0x1.79CA10C924223p-67_b64, 0x1.D83C94FB6D2ACp-64_b64,
+    0x1.2725DD1D243ACp-60_b64, 0x1.70EF54646D497p-57_b64, 0x1.CD2B297D889BCp-54_b64,
+    0x1.203AF9EE75616p-50_b64, 0x1.6849B86A12B9Bp-47_b64, 0x1.C25C268497682p-44_b64,
+    0x1.19799812DEA11p-40_b64, 0x1.5FD7FE1796495p-37_b64, 0x1.B7CDFD9D7BDBBp-34_b64,
+    0x1.12E0BE826D695p-30_b64, 0x1.5798EE2308C3Ap-27_b64, 0x1.AD7F29ABCAF48p-24_b64,
+    0x1.0C6F7A0B5ED8Dp-20_b64, 0x1.4F8B588E368F1p-17_b64, 0x1.A36E2EB1C432Dp-14_b64,
+    0x1.0624DD2F1A9FCp-10_b64, 0x1.47AE147AE147Bp-7_b64, 0x1.999999999999Ap-4_b64,
+    0x1.0000000000000p+0_b64, 0x1.4000000000000p+3_b64, 0x1.9000000000000p+6_b64,
+    0x1.F400000000000p+9_b64, 0x1.3880000000000p+13_b64, 0x1.86A0000000000p+16_b64,
+    0x1.E848000000000p+19_b64, 0x1.312D000000000p+23_b64, 0x1.7D78400000000p+26_b64,
+    0x1.DCD6500000000p+29_b64, 0x1.2A05F20000000p+33_b64, 0x1.74876E8000000p+36_b64,
+    0x1.D1A94A2000000p+39_b64, 0x1.2309CE5400000p+43_b64, 0x1.6BCC41E900000p+46_b64,
+    0x1.C6BF526340000p+49_b64, 0x1.1C37937E08000p+53_b64, 0x1.6345785D8A000p+56_b64,
+    0x1.BC16D674EC800p+59_b64, 0x1.158E460913D00p+63_b64, 0x1.5AF1D78B58C40p+66_b64,
+    0x1.B1AE4D6E2EF50p+69_b64, 0x1.0F0CF064DD592p+73_b64, 0x1.52D02C7E14AF6p+76_b64,
+    0x1.A784379D99DB4p+79_b64, 0x1.08B2A2C280291p+83_b64, 0x1.4ADF4B7320335p+86_b64,
+    0x1.9D971E4FE8402p+89_b64, 0x1.027E72F1F1281p+93_b64, 0x1.431E0FAE6D721p+96_b64,
+    0x1.93E5939A08CEAp+99_b64, 0x1.F8DEF8808B024p+102_b64, 0x1.3B8B5B5056E17p+106_b64,
+    0x1.8A6E32246C99Cp+109_b64, 0x1.ED09BEAD87C03p+112_b64, 0x1.3426172C74D82p+116_b64,
+    0x1.812F9CF7920E3p+119_b64, 0x1.E17B84357691Bp+122_b64, 0x1.2CED32A16A1B1p+126_b64,
+    0x1.78287F49C4A1Dp+129_b64, 0x1.D6329F1C35CA5p+132_b64, 0x1.25DFA371A19E7p+136_b64,
+    0x1.6F578C4E0A061p+139_b64, 0x1.CB2D6F618C879p+142_b64, 0x1.1EFC659CF7D4Cp+146_b64,
+    0x1.66BB7F0435C9Ep+149_b64, 0x1.C06A5EC5433C6p+152_b64, 0x1.18427B3B4A05Cp+156_b64,
+    0x1.5E531A0A1C873p+159_b64, 0x1.B5E7E08CA3A8Fp+162_b64, 0x1.11B0EC57E649Ap+166_b64,
+    0x1.561D276DDFDC0p+169_b64, 0x1.ABA4714957D30p+172_b64, 0x1.0B46C6CDD6E3Ep+176_b64,
+    0x1.4E1878814C9CEp+179_b64, 0x1.A19E96A19FC41p+182_b64, 0x1.05031E2503DA9p+186_b64,
+    0x1.4643E5AE44D13p+189_b64, 0x1.97D4DF19D6057p+192_b64, 0x1.FDCA16E04B86Dp+195_b64,
+    0x1.3E9E4E4C2F344p+199_b64, 0x1.8E45E1DF3B015p+202_b64, 0x1.F1D75A5709C1Bp+205_b64,
+    0x1.3726987666191p+209_b64, 0x1.84F03E93FF9F5p+212_b64, 0x1.E62C4E38FF872p+215_b64,
+    0x1.2FDBB0E39FB47p+219_b64, 0x1.7BD29D1C87A19p+222_b64, 0x1.DAC74463A989Fp+225_b64,
+    0x1.28BC8ABE49F64p+229_b64, 0x1.72EBAD6DDC73Dp+232_b64, 0x1.CFA698C95390Cp+235_b64,
+    0x1.21C81F7DD43A7p+239_b64, 0x1.6A3A275D49491p+242_b64, 0x1.C4C8B1349B9B5p+245_b64,
+    0x1.1AFD6EC0E1411p+249_b64, 0x1.61BCCA7119916p+252_b64, 0x1.BA2BFD0D5FF5Bp+255_b64,
+    0x1.145B7E285BF99p+259_b64, 0x1.59725DB272F7Fp+262_b64, 0x1.AFCEF51F0FB5Fp+265_b64,
+    0x1.0DE1593369D1Bp+269_b64, 0x1.5159AF8044462p+272_b64, 0x1.A5B01B605557Bp+275_b64,
+    0x1.078E111C3556Dp+279_b64, 0x1.4971956342AC8p+282_b64, 0x1.9BCDFABC1357Ap+285_b64,
+    0x1.0160BCB58C16Cp+289_b64, 0x1.41B8EBE2EF1C7p+292_b64, 0x1.922726DBAAE39p+295_b64,
+    0x1.F6B0F092959C7p+298_b64, 0x1.3A2E965B9D81Dp+302_b64, 0x1.88BA3BF284E24p+305_b64,
+    0x1.EAE8CAEF261ADp+308_b64, 0x1.32D17ED577D0Cp+312_b64, 0x1.7F85DE8AD5C4Fp+315_b64,
+    0x1.DF67562D8B363p+318_b64, 0x1.2BA095DC7701Ep+322_b64, 0x1.7688BB5394C25p+325_b64,
+    0x1.D42AEA2879F2Ep+328_b64, 0x1.249AD2594C37Dp+332_b64, 0x1.6DC186EF9F45Cp+335_b64,
+    0x1.C931E8AB87173p+338_b64, 0x1.1DBF316B346E8p+342_b64, 0x1.652EFDC6018A2p+345_b64,
+    0x1.BE7ABD3781ECAp+348_b64, 0x1.170CB642B133Fp+352_b64, 0x1.5CCFE3D35D80Ep+355_b64,
+    0x1.B403DCC834E12p+358_b64, 0x1.108269FD210CBp+362_b64, 0x1.54A3047C694FEp+365_b64,
+    0x1.A9CBC59B83A3Dp+368_b64, 0x1.0A1F5B8132466p+372_b64, 0x1.4CA732617ED80p+375_b64,
+    0x1.9FD0FEF9DE8E0p+378_b64, 0x1.03E29F5C2B18Cp+382_b64, 0x1.44DB473335DEFp+385_b64,
+    0x1.961219000356Bp+388_b64, 0x1.FB969F40042C5p+391_b64, 0x1.3D3E2388029BBp+395_b64,
+    0x1.8C8DAC6A0342Ap+398_b64,
+]
+### 10^q for q in [0, 22], every one exact in B64.
+secret preset D32_B64_P10: Array[B64, 23] = [
+    1.0_b64, 10.0_b64, 100.0_b64, 1000.0_b64, 10000.0_b64, 100000.0_b64, 1000000.0_b64,
+    10000000.0_b64, 100000000.0_b64, 1000000000.0_b64, 10000000000.0_b64, 100000000000.0_b64,
+    1000000000000.0_b64, 10000000000000.0_b64, 100000000000000.0_b64, 1000000000000000.0_b64,
+    10000000000000000.0_b64, 100000000000000000.0_b64, 1000000000000000000.0_b64,
+    10000000000000000000.0_b64, 100000000000000000000.0_b64, 1000000000000000000000.0_b64,
+    10000000000000000000000.0_b64,
+]
+
+# ============================================================================
 # D32Trans — decimal32 (Pmax=7) transcendentals and the rest of the math surface. Each function tries, in order:
 # 1. B64: the operands rounded once to B64 and the correctly rounded B64 CORE-MATH routine; the result is
 #    kept when its error band ((1 + condition number) * 2^-53) rounds to one D32.
@@ -16,7 +120,19 @@ module Core
 ### dec -> bin: D32 value as a B64, correctly rounded (see decimal_to_binary_bits).
 routine B64(from: D32) -> B64
     var d = from.decode()
-    return B64.from_bits(bits: LLVM::int_truncate[U128, U64](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 53_s64, emin: -1022_s64, emax: 1023_s64)))
+    return B64.from_bits(
+        bits: LLVM::int_truncate[U128, U64](
+            decimal_to_binary_bits(
+                sign: d.sign,
+                special: d.special,
+                coeff: d.coeff,
+                exp: d.exp,
+                p: 53_s64,
+                emin: -1022_s64,
+                emax: 1023_s64,
+            ),
+        ),
+    )
 
 ### bin -> dec: B64 value as a D32, correctly rounded (exact widening to B128, then b128_to_d32).
 routine D32(from: B64) -> D32
@@ -89,7 +205,9 @@ secret routine d64_to_d32_round_down(r: D64) -> D32
     var kept = div_pow10_u64(x: p.coeff, k: drop)
     if p.sign
         kept = LLVM::add(a: kept, b: 1_u64)
-    return d32_of_parts(p: decfin32(sign: p.sign, coeff: kept, exp: LLVM::add(a: p.exp, b: drop), pref: 90_s64))
+    return d32_of_parts(
+        p: decfin32(sign: p.sign, coeff: kept, exp: LLVM::add(a: p.exp, b: drop), pref: 90_s64),
+    )
 
 ### The D32 result when the D64 result `r` sits exactly on a D32 midpoint, given the same operation
 ### evaluated in D128 as `wide`. Off the midpoint in D128, `wide` decides the direction; still on it, the
@@ -122,22 +240,6 @@ secret routine d64_to_d32_round(r: D64) -> D32
     if LLVM::int_eq(a: p.coeff, b: 0_u64)
         return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64))
     return d32_of_parts(p: decfin32(sign: p.sign, coeff: p.coeff, exp: p.exp, pref: 90_s64))
-
-# ============================================================================
-# B64 and B128 fast paths. A D32 operand becomes a B64 with one rounding (d32_to_b64: the 7-digit
-# coefficient is exact in B64 and so is 10^e for |e| <= 22), the correctly rounded B64 CORE-MATH routine
-# evaluates it, and the result is within (1 + cond) * 2^-53 relative of the true value, cond being an
-# upper bound on the function's condition number |x f'(x) / f(x)| (the input's rounding scaled by it,
-# plus the routine's own half ulp). When every value in that band rounds to one D32 (d32_from_b64_band),
-# that D32 is the correctly rounded result. Otherwise a function with a fast CORE-MATH B128 port runs the
-# same test on B128 (2^-113 per rounding, d32_round_within), and failing that the D64 route decides.
-# ============================================================================
-
-### 10^q for q in [-120, 120] (index q + 120), each correctly rounded; exact for 0 <= q <= 22.
-secret preset D32_B64_P10W: Array[B64, 241] = [0x1.4a8729fc3ddb7p-399_b64, 0x1.9d28f47b4d525p-396_b64, 0x1.023998cd10537p-392_b64, 0x1.42c7ff0054685p-389_b64, 0x1.9379fec069826p-386_b64, 0x1.f8587e7083e30p-383_b64, 0x1.3b374f06526dep-379_b64, 0x1.8a0522c7e7095p-376_b64, 0x1.ec866b79e0cbap-373_b64, 0x1.33d4032c2c7f5p-369_b64, 0x1.80c903f7379f2p-366_b64, 0x1.e0fb44f50586ep-363_b64, 0x1.2c9d0b1923745p-359_b64, 0x1.77c44ddf6c516p-356_b64, 0x1.d5b561574765bp-353_b64, 0x1.25915cd68c9f9p-349_b64, 0x1.6ef5b40c2fc77p-346_b64, 0x1.cab3210f3bb95p-343_b64, 0x1.1eaff4a98553dp-339_b64, 0x1.665bf1d3e6a8dp-336_b64, 0x1.bff2ee48e0530p-333_b64, 0x1.17f7d4ed8c33ep-329_b64, 0x1.5df5ca28ef40dp-326_b64, 0x1.b5733cb32b111p-323_b64, 0x1.116805effaeaap-319_b64, 0x1.55c2076bf9a55p-316_b64, 0x1.ab328946f80eap-313_b64, 0x1.0aff95cc5b092p-309_b64, 0x1.4dbf7b3f71cb7p-306_b64, 0x1.a12f5a0f4e3e5p-303_b64, 0x1.04bd984990e6fp-299_b64, 0x1.45ecfe5bf520bp-296_b64, 0x1.97683df2f268dp-293_b64, 0x1.fd424d6faf031p-290_b64, 0x1.3e497065cd61fp-286_b64, 0x1.8ddbcc7f40ba6p-283_b64, 0x1.f152bf9f10e90p-280_b64, 0x1.36d3b7c36a91ap-276_b64, 0x1.8488a5b445360p-273_b64, 0x1.e5aacf2156838p-270_b64, 0x1.2f8ac174d6123p-266_b64, 0x1.7b6d71d20b96cp-263_b64, 0x1.da48ce468e7c7p-260_b64, 0x1.286d80ec190dcp-256_b64, 0x1.7288e1271f513p-253_b64, 0x1.cf2b1970e7258p-250_b64, 0x1.217aefe690777p-246_b64, 0x1.69d9abe034955p-243_b64, 0x1.c45016d841baap-240_b64, 0x1.1ab20e472914ap-236_b64, 0x1.615e91d8f359dp-233_b64, 0x1.b9b6364f30304p-230_b64, 0x1.1411e1f17e1e3p-226_b64, 0x1.59165a6ddda5bp-223_b64, 0x1.af5bf109550f2p-220_b64, 0x1.0d9976a5d5297p-216_b64, 0x1.50ffd44f4a73dp-213_b64, 0x1.a53fc9631d10dp-210_b64, 0x1.0747ddddf22a8p-206_b64, 0x1.4919d5556eb52p-203_b64, 0x1.9b604aaaca626p-200_b64, 0x1.011c2eaabe7d8p-196_b64, 0x1.41633a556e1cep-193_b64, 0x1.91bc08eac9a41p-190_b64, 0x1.f62b0b257c0d2p-187_b64, 0x1.39dae6f76d883p-183_b64, 0x1.8851a0b548ea4p-180_b64, 0x1.ea6608e29b24dp-177_b64, 0x1.327fc58da0f70p-173_b64, 0x1.7f1fb6f10934cp-170_b64, 0x1.dee7a4ad4b81fp-167_b64, 0x1.2b50c6ec4f313p-163_b64, 0x1.7624f8a762fd8p-160_b64, 0x1.d3ae36d13bbcep-157_b64, 0x1.244ce242c5561p-153_b64, 0x1.6d601ad376ab9p-150_b64, 0x1.c8b8218854567p-147_b64, 0x1.1d7314f534b61p-143_b64, 0x1.64cfda3281e39p-140_b64, 0x1.be03d0bf225c7p-137_b64, 0x1.16c262777579cp-133_b64, 0x1.5c72fb1552d83p-130_b64, 0x1.b38fb9daa78e4p-127_b64, 0x1.1039d428a8b8fp-123_b64, 0x1.54484932d2e72p-120_b64, 0x1.a95a5b7f87a0fp-117_b64, 0x1.09d8792fb4c49p-113_b64, 0x1.4c4e977ba1f5cp-110_b64, 0x1.9f623d5a8a733p-107_b64, 0x1.039d665896880p-103_b64, 0x1.4484bfeebc2a0p-100_b64, 0x1.95a5efea6b347p-97_b64, 0x1.fb0f6be506019p-94_b64, 0x1.3ce9a36f23c10p-90_b64, 0x1.8c240c4aecb14p-87_b64, 0x1.ef2d0f5da7dd9p-84_b64, 0x1.357c299a88ea7p-80_b64, 0x1.82db34012b251p-77_b64, 0x1.e392010175ee6p-74_b64, 0x1.2e3b40a0e9b4fp-70_b64, 0x1.79ca10c924223p-67_b64, 0x1.d83c94fb6d2acp-64_b64, 0x1.2725dd1d243acp-60_b64, 0x1.70ef54646d497p-57_b64, 0x1.cd2b297d889bcp-54_b64, 0x1.203af9ee75616p-50_b64, 0x1.6849b86a12b9bp-47_b64, 0x1.c25c268497682p-44_b64, 0x1.19799812dea11p-40_b64, 0x1.5fd7fe1796495p-37_b64, 0x1.b7cdfd9d7bdbbp-34_b64, 0x1.12e0be826d695p-30_b64, 0x1.5798ee2308c3ap-27_b64, 0x1.ad7f29abcaf48p-24_b64, 0x1.0c6f7a0b5ed8dp-20_b64, 0x1.4f8b588e368f1p-17_b64, 0x1.a36e2eb1c432dp-14_b64, 0x1.0624dd2f1a9fcp-10_b64, 0x1.47ae147ae147bp-7_b64, 0x1.999999999999ap-4_b64, 0x1.0000000000000p+0_b64, 0x1.4000000000000p+3_b64, 0x1.9000000000000p+6_b64, 0x1.f400000000000p+9_b64, 0x1.3880000000000p+13_b64, 0x1.86a0000000000p+16_b64, 0x1.e848000000000p+19_b64, 0x1.312d000000000p+23_b64, 0x1.7d78400000000p+26_b64, 0x1.dcd6500000000p+29_b64, 0x1.2a05f20000000p+33_b64, 0x1.74876e8000000p+36_b64, 0x1.d1a94a2000000p+39_b64, 0x1.2309ce5400000p+43_b64, 0x1.6bcc41e900000p+46_b64, 0x1.c6bf526340000p+49_b64, 0x1.1c37937e08000p+53_b64, 0x1.6345785d8a000p+56_b64, 0x1.bc16d674ec800p+59_b64, 0x1.158e460913d00p+63_b64, 0x1.5af1d78b58c40p+66_b64, 0x1.b1ae4d6e2ef50p+69_b64, 0x1.0f0cf064dd592p+73_b64, 0x1.52d02c7e14af6p+76_b64, 0x1.a784379d99db4p+79_b64, 0x1.08b2a2c280291p+83_b64, 0x1.4adf4b7320335p+86_b64, 0x1.9d971e4fe8402p+89_b64, 0x1.027e72f1f1281p+93_b64, 0x1.431e0fae6d721p+96_b64, 0x1.93e5939a08ceap+99_b64, 0x1.f8def8808b024p+102_b64, 0x1.3b8b5b5056e17p+106_b64, 0x1.8a6e32246c99cp+109_b64, 0x1.ed09bead87c03p+112_b64, 0x1.3426172c74d82p+116_b64, 0x1.812f9cf7920e3p+119_b64, 0x1.e17b84357691bp+122_b64, 0x1.2ced32a16a1b1p+126_b64, 0x1.78287f49c4a1dp+129_b64, 0x1.d6329f1c35ca5p+132_b64, 0x1.25dfa371a19e7p+136_b64, 0x1.6f578c4e0a061p+139_b64, 0x1.cb2d6f618c879p+142_b64, 0x1.1efc659cf7d4cp+146_b64, 0x1.66bb7f0435c9ep+149_b64, 0x1.c06a5ec5433c6p+152_b64, 0x1.18427b3b4a05cp+156_b64, 0x1.5e531a0a1c873p+159_b64, 0x1.b5e7e08ca3a8fp+162_b64, 0x1.11b0ec57e649ap+166_b64, 0x1.561d276ddfdc0p+169_b64, 0x1.aba4714957d30p+172_b64, 0x1.0b46c6cdd6e3ep+176_b64, 0x1.4e1878814c9cep+179_b64, 0x1.a19e96a19fc41p+182_b64, 0x1.05031e2503da9p+186_b64, 0x1.4643e5ae44d13p+189_b64, 0x1.97d4df19d6057p+192_b64, 0x1.fdca16e04b86dp+195_b64, 0x1.3e9e4e4c2f344p+199_b64, 0x1.8e45e1df3b015p+202_b64, 0x1.f1d75a5709c1bp+205_b64, 0x1.3726987666191p+209_b64, 0x1.84f03e93ff9f5p+212_b64, 0x1.e62c4e38ff872p+215_b64, 0x1.2fdbb0e39fb47p+219_b64, 0x1.7bd29d1c87a19p+222_b64, 0x1.dac74463a989fp+225_b64, 0x1.28bc8abe49f64p+229_b64, 0x1.72ebad6ddc73dp+232_b64, 0x1.cfa698c95390cp+235_b64, 0x1.21c81f7dd43a7p+239_b64, 0x1.6a3a275d49491p+242_b64, 0x1.c4c8b1349b9b5p+245_b64, 0x1.1afd6ec0e1411p+249_b64, 0x1.61bcca7119916p+252_b64, 0x1.ba2bfd0d5ff5bp+255_b64, 0x1.145b7e285bf99p+259_b64, 0x1.59725db272f7fp+262_b64, 0x1.afcef51f0fb5fp+265_b64, 0x1.0de1593369d1bp+269_b64, 0x1.5159af8044462p+272_b64, 0x1.a5b01b605557bp+275_b64, 0x1.078e111c3556dp+279_b64, 0x1.4971956342ac8p+282_b64, 0x1.9bcdfabc1357ap+285_b64, 0x1.0160bcb58c16cp+289_b64, 0x1.41b8ebe2ef1c7p+292_b64, 0x1.922726dbaae39p+295_b64, 0x1.f6b0f092959c7p+298_b64, 0x1.3a2e965b9d81dp+302_b64, 0x1.88ba3bf284e24p+305_b64, 0x1.eae8caef261adp+308_b64, 0x1.32d17ed577d0cp+312_b64, 0x1.7f85de8ad5c4fp+315_b64, 0x1.df67562d8b363p+318_b64, 0x1.2ba095dc7701ep+322_b64, 0x1.7688bb5394c25p+325_b64, 0x1.d42aea2879f2ep+328_b64, 0x1.249ad2594c37dp+332_b64, 0x1.6dc186ef9f45cp+335_b64, 0x1.c931e8ab87173p+338_b64, 0x1.1dbf316b346e8p+342_b64, 0x1.652efdc6018a2p+345_b64, 0x1.be7abd3781ecap+348_b64, 0x1.170cb642b133fp+352_b64, 0x1.5ccfe3d35d80ep+355_b64, 0x1.b403dcc834e12p+358_b64, 0x1.108269fd210cbp+362_b64, 0x1.54a3047c694fep+365_b64, 0x1.a9cbc59b83a3dp+368_b64, 0x1.0a1f5b8132466p+372_b64, 0x1.4ca732617ed80p+375_b64, 0x1.9fd0fef9de8e0p+378_b64, 0x1.03e29f5c2b18cp+382_b64, 0x1.44db473335defp+385_b64, 0x1.961219000356bp+388_b64, 0x1.fb969f40042c5p+391_b64, 0x1.3d3e2388029bbp+395_b64, 0x1.8c8dac6a0342ap+398_b64]
-
-### 10^q for q in [0, 22], every one exact in B64.
-secret preset D32_B64_P10: Array[B64, 23] = [1.0_b64, 10.0_b64, 100.0_b64, 1000.0_b64, 10000.0_b64, 100000.0_b64, 1000000.0_b64, 10000000.0_b64, 100000000.0_b64, 1000000000.0_b64, 10000000000.0_b64, 100000000000.0_b64, 1000000000000.0_b64, 10000000000000.0_b64, 100000000000000.0_b64, 1000000000000000.0_b64, 10000000000000000.0_b64, 100000000000000000.0_b64, 1000000000000000000.0_b64, 10000000000000000000.0_b64, 100000000000000000000.0_b64, 1000000000000000000000.0_b64, 10000000000000000000000.0_b64]
 
 ### x as a B64 rounded once (correctly rounded): the coefficient times or divided by an exact power of ten
 ### while |exponent| <= 22, the general conversion otherwise (and for infinities and NaN).
@@ -188,17 +290,21 @@ secret routine d32_from_b64_band(y: B64, k: S64) -> (Bool, D32)
     if y.is_nan()
         return (true, D32.quiet_nan())
     if y.is_zero()
-        return (true, d32_of_parts(p: D32Parts(sign: neg, special: 0_u64, exp: 0_s64, coeff: 0_u64)))
+        return (
+            true, d32_of_parts(p: D32Parts(sign: neg, special: 0_u64, exp: 0_s64, coeff: 0_u64)),
+        )
     if k < 10_s64
         return (false, D32.quiet_nan())
     var a = y.abs()
     if a >= 2e97_b64
         return (true, D32.infinity(sign: neg))
     if a <= 4e-102_b64
-        return (true, d32_of_parts(p: D32Parts(sign: neg, special: 0_u64, exp: 0_s64, coeff: 0_u64)))
+        return (
+            true, d32_of_parts(p: D32Parts(sign: neg, special: 0_u64, exp: 0_s64, coeff: 0_u64)),
+        )
     if k < 27_s64
         return (false, D32.quiet_nan())
-    var e10 = (b64_exponent(x: a) *% 315653_s64) >> 20
+    var e10 = b64_exponent(x: a) *% 315653_s64 >> 20
     var q = 6_s64 -% e10
     var t = d32_b64_scale_w(a: a, q: q)
     if t >= 10000000.0_b64
@@ -254,7 +360,9 @@ secret routine d32_gamma_cond(x: B64) -> B64
     if not (x < 0.0_b64)
         return B64.from_bits(bits: 0x7FF0000000000000_u64)
     # reflection: digamma(x) = digamma(1 - x) - pi cot(pi x), with |digamma(1 - x)| <= log(1 - x) + 1
-    return x.abs() *! ((1.0_b64 -! x).log_unchecked() +! 1.0_b64 +! 3.2_b64 /! x.tanpi().abs()) +! 2.0_b64
+    return x.abs() *! ((1.0_b64 -! x).log_unchecked() +! 1.0_b64 +! 3.2_b64 /! x
+        .tanpi()
+        .abs()) +! 2.0_b64
 
 # ============================================================================
 # Transcendentals — B64, then B128, then D64 (see the top of this file). Out-of-domain operands come out
@@ -538,7 +646,10 @@ routine D32.cbrt() -> D32
 routine D32.pow_unchecked(you: D32) -> D32
     var xb = d32_to_b64(x: me)
     var eb = d32_to_b64(x: you)
-    var cond = eb.abs() *! (xb.abs().log_unchecked().abs() +! 1.0_b64)
+    var cond = eb.abs() *! (xb
+        .abs()
+        .log_unchecked()
+        .abs() +! 1.0_b64)
     var (fast, v) = d32_from_b64_band(y: xb.pow_unchecked(exp: eb), k: d32_b64_k(cond: cond))
     if fast
         return v
@@ -565,10 +676,16 @@ routine hypot!(x: D32, y: D32) -> D32
 ### :param y: The second leg.
 ### :returns: The Euclidean length, possibly +inf.
 routine hypot_unchecked(x: D32, y: D32) -> D32
-    var (fast, v) = d32_from_b64_band(y: hypot_unchecked(x: d32_to_b64(x: x), y: d32_to_b64(x: y)), k: 51_s64)
+    var (fast, v) = d32_from_b64_band(
+        y: hypot_unchecked(x: d32_to_b64(x: x), y: d32_to_b64(x: y)),
+        k: 51_s64,
+    )
     if fast
         return v
-    var (wide_ok, w) = d32_round_within(r: hypot_unchecked(x: B128(from: x), y: B128(from: y)), k: 110_s64)
+    var (wide_ok, w) = d32_round_within(
+        r: hypot_unchecked(x: B128(from: x), y: B128(from: y)),
+        k: 110_s64,
+    )
     if wide_ok
         return w
     var r = hypot_unchecked(x: d32_to_d64_exact(x: x), y: d32_to_d64_exact(x: y))
@@ -596,12 +713,22 @@ routine hypot!(x: D32, y: D32, z: D32) -> D32
 ### :param z: The third leg.
 ### :returns: The 3D Euclidean length, possibly +inf.
 routine hypot_unchecked(x: D32, y: D32, z: D32) -> D32
-    var (fast, v) = d32_from_b64_band(y: hypot_unchecked(x: d32_to_b64(x: x), y: d32_to_b64(x: y), z: d32_to_b64(x: z)), k: 51_s64)
+    var (fast, v) = d32_from_b64_band(
+        y: hypot_unchecked(x: d32_to_b64(x: x), y: d32_to_b64(x: y), z: d32_to_b64(x: z)),
+        k: 51_s64,
+    )
     if fast
         return v
-    var r = hypot_unchecked(x: d32_to_d64_exact(x: x), y: d32_to_d64_exact(x: y), z: d32_to_d64_exact(x: z))
+    var r = hypot_unchecked(
+        x: d32_to_d64_exact(x: x),
+        y: d32_to_d64_exact(x: y),
+        z: d32_to_d64_exact(x: z),
+    )
     if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: hypot_unchecked(x: D128(from: x), y: D128(from: y), z: D128(from: z)))
+        return d32_settle_tie(
+            r: r,
+            wide: hypot_unchecked(x: D128(from: x), y: D128(from: y), z: D128(from: z)),
+        )
     return d64_to_d32_round(r: r)
 
 ### Fused multiply-add me*b + c, single rounding,. Crashes if non-finite.
@@ -626,12 +753,21 @@ routine D32.fma_unchecked(b: D32, c: D32) -> D32
     var bb = d32_to_b64(x: b)
     var cb = d32_to_b64(x: c)
     var yb = xb.fma_unchecked(b: bb, c: cb)
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: ((xb *! bb).abs() +! cb.abs()) /! yb.abs()))
+    var (fast, v) = d32_from_b64_band(
+        y: yb,
+        k: d32_b64_k(cond: ((xb *! bb).abs() +! cb.abs()) /! yb.abs()),
+    )
     if fast
         return v
-    var r = d32_to_d64_exact(x: me).fma_unchecked(b: d32_to_d64_exact(x: b), c: d32_to_d64_exact(x: c))
+    var r = d32_to_d64_exact(x: me).fma_unchecked(
+        b: d32_to_d64_exact(x: b),
+        c: d32_to_d64_exact(x: c),
+    )
     if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).fma_unchecked(b: D128(from: b), c: D128(from: c)))
+        return d32_settle_tie(
+            r: r,
+            wide: D128(from: me).fma_unchecked(b: D128(from: b), c: D128(from: c)),
+        )
     return d64_to_d32_round(r: r)
 
 ### Arcsine asin(me). Crashes if non-finite (|me|>1).
@@ -650,7 +786,10 @@ routine D32.asin!() -> D32
 routine D32.asin_unchecked() -> D32
     var xb = d32_to_b64(x: me)
     var yb = xb.asin_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 1.0_b64 /! ((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked()))
+    var (fast, v) = d32_from_b64_band(
+        y: yb,
+        k: d32_b64_k(cond: 1.0_b64 /! ((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked()),
+    )
     if fast
         return v
     var k128 = d32_b128_k(cond: 1.0_b64 /! ((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked())
@@ -679,7 +818,10 @@ routine D32.acos!() -> D32
 routine D32.acos_unchecked() -> D32
     var xb = d32_to_b64(x: me)
     var yb = xb.acos_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs() /! (((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked() *! yb.abs())))
+    var (fast, v) = d32_from_b64_band(
+        y: yb,
+        k: d32_b64_k(cond: xb.abs() /! (((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked() *! yb.abs())),
+    )
     if fast
         return v
     var k128 = d32_b128_k(cond: xb.abs() /! (((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked() *! yb.abs()))
@@ -822,7 +964,10 @@ routine D32.acosh!() -> D32
 routine D32.acosh_unchecked() -> D32
     var xb = d32_to_b64(x: me)
     var yb = xb.acosh_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs() /! (((xb -! 1.0_b64) *! (xb +! 1.0_b64)).sqrt_unchecked() *! yb.abs())))
+    var (fast, v) = d32_from_b64_band(
+        y: yb,
+        k: d32_b64_k(cond: xb.abs() /! (((xb -! 1.0_b64) *! (xb +! 1.0_b64)).sqrt_unchecked() *! yb.abs())),
+    )
     if fast
         return v
     var r = d32_to_d64_exact(x: me).acosh_unchecked()
@@ -846,7 +991,10 @@ routine D32.atanh!() -> D32
 routine D32.atanh_unchecked() -> D32
     var xb = d32_to_b64(x: me)
     var yb = xb.atanh_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs() /! ((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs()) *! yb.abs())))
+    var (fast, v) = d32_from_b64_band(
+        y: yb,
+        k: d32_b64_k(cond: xb.abs() /! ((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs()) *! yb.abs())),
+    )
     if fast
         return v
     var r = d32_to_d64_exact(x: me).atanh_unchecked()
@@ -936,7 +1084,9 @@ routine D32.is_negative() -> Bool
 ### True if me is strictly positive (not signed, not zero).
 routine D32.is_positive() -> Bool
     var p = me.decode()
-    return not p.sign and LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_ne(a: p.coeff, b: 0_u64)
+    return not p.sign
+        and LLVM::int_eq(a: p.special, b: 0_u64)
+        and LLVM::int_ne(a: p.coeff, b: 0_u64)
 
 ### True if me is a finite, nonzero subnormal: quantum exponent at the minimum (-101)
 ### with a coefficient below 10^6 (fewer than the full 7 significant digits).
@@ -952,7 +1102,9 @@ routine D32.modf() -> (D32, D32)
         return (me, me)
     var p = me.decode()
     if LLVM::int_eq(a: p.special, b: 1_u64)
-        return (me, d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64)))
+        return (
+            me, d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64)),
+        )
     var ip = me.trunc()
     return (ip, me - ip)
 
@@ -998,7 +1150,10 @@ routine D32.total_order(you: D32) -> Bool
     var pa = me.decode()
     var pb = you.decode()
     if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-        return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
+        return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(
+            sign: pb.sign,
+            special: pb.special,
+        )
     var c = me.cmp(you: you)
     if c != SAME
         return c == ME_SMALL
@@ -1018,14 +1173,18 @@ routine D32.total_order_mag(you: D32) -> Bool
 ### :returns: `me` with its sign flipped.
 routine D32.neg() -> D32
     var p = me.decode()
-    return d32_of_parts(p: D32Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
+    return d32_of_parts(
+        p: D32Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff),
+    )
 
 ### IEEE 754 copySign: me's magnitude with you's sign bit. Never crashes.
 ### :param you: The value supplying the sign.
 ### :returns: `|me|` carrying `you`'s sign.
 routine D32.copysign(you: D32) -> D32
     var p = me.decode()
-    return d32_of_parts(p: D32Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
+    return d32_of_parts(
+        p: D32Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff),
+    )
 
 ### Returns -1, 0, or +1 indicating the sign of `me`; NaN propagates; ±0 -> +0.
 routine D32.signum() -> D32
@@ -1199,7 +1358,8 @@ routine D32.same_quantum(you: D32) -> Bool
     var pa = me.decode()
     var pb = you.decode()
     if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-        return LLVM::unsigned_ge(a: pa.special, b: 2_u64) and LLVM::unsigned_ge(a: pb.special, b: 2_u64)
+        return LLVM::unsigned_ge(a: pa.special, b: 2_u64)
+            and LLVM::unsigned_ge(a: pb.special, b: 2_u64)
     if LLVM::int_eq(a: pa.special, b: 1_u64) or LLVM::int_eq(a: pb.special, b: 1_u64)
         return LLVM::int_eq(a: pa.special, b: 1_u64) and LLVM::int_eq(a: pb.special, b: 1_u64)
     return LLVM::int_eq(a: pa.exp, b: pb.exp)
@@ -1224,10 +1384,18 @@ routine D32.quantize(you: D32) -> D32
         return me
     if LLVM::signed_gt(a: pa.exp, b: target)
         var shift = LLVM::sub(a: pa.exp, b: target)
-        if LLVM::int_ne(a: pa.coeff, b: 0_u64) and LLVM::signed_gt(a: LLVM::add(a: digits10_u64(c: pa.coeff), b: shift), b: 7_s64)
+        if LLVM::int_ne(a: pa.coeff, b: 0_u64)
+            and LLVM::signed_gt(a: LLVM::add(a: digits10_u64(c: pa.coeff), b: shift), b: 7_s64)
             return D32.quiet_nan()
         var scaled = LLVM::mul(a: LLVM::zero_extend[U64, U256](pa.coeff), b: pow10b(k: shift))
-        return d32_of_parts(p: D32Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::int_truncate[U256, U64](scaled)))
+        return d32_of_parts(
+            p: D32Parts(
+                sign: pa.sign,
+                special: 0_u64,
+                exp: target,
+                coeff: LLVM::int_truncate[U256, U64](scaled),
+            ),
+        )
     var drop = LLVM::sub(a: target, b: pa.exp)
     if LLVM::signed_gt(a: drop, b: 7_s64)
         return d32_of_parts(p: D32Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: 0_u64))
@@ -1238,9 +1406,20 @@ routine D32.quantize(you: D32) -> D32
     var twice = LLVM::mul(a: r, b: LLVM::zero_extend[U64, U256](2_u64))
     if LLVM::unsigned_gt(a: twice, b: divp)
         q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
-    elseif LLVM::int_eq(a: twice, b: divp) and LLVM::int_ne(a: LLVM::bit_and(a: q, b: LLVM::zero_extend[U64, U256](1_u64)), b: LLVM::zero_extend[U64, U256](0_u64))
+    elseif LLVM::int_eq(a: twice, b: divp)
+        and LLVM::int_ne(
+            a: LLVM::bit_and(a: q, b: LLVM::zero_extend[U64, U256](1_u64)),
+            b: LLVM::zero_extend[U64, U256](0_u64),
+        )
         q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
-    return d32_of_parts(p: D32Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: LLVM::int_truncate[U256, U64](q)))
+    return d32_of_parts(
+        p: D32Parts(
+            sign: pa.sign,
+            special: 0_u64,
+            exp: target,
+            coeff: LLVM::int_truncate[U256, U64](q),
+        ),
+    )
 
 ### IEEE 754 remainder: `me - you * n` with `n` the nearest integer to `me / you` (ties even).
 ### NaN if `me` infinite or `you` zero; `me` if `you` infinite. Never crashes.
@@ -1297,7 +1476,7 @@ routine d32_round_int(x: D32, mode: S64) -> D32
     if LLVM::int_eq(a: mode, b: 1_s64)
         inc = p.sign and rnz
     elseif LLVM::int_eq(a: mode, b: 2_s64)
-        inc = (not p.sign) and rnz
+        inc = not p.sign and rnz
     elseif LLVM::int_eq(a: mode, b: 3_s64)
         inc = gthalf or half
     elseif LLVM::int_eq(a: mode, b: 4_s64)

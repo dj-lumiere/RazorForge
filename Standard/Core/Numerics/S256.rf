@@ -1,5 +1,11 @@
 module Core
 
+# Constants for S256 limits
+preset S256_MIN: S256 = -57896044618658097711785492504343953926634992332820282019728792003956564819968_s256
+preset S256_MAX: S256 = 57896044618658097711785492504343953926634992332820282019728792003956564819967_s256
+preset S256_ZERO: S256 = 0_s256
+preset S256_ONE: S256 = 1_s256
+
 ### A 256-bit signed integer in the range −2²⁵⁵ to 2²⁵⁵−1.
 ###
 ### `S256` provides the widest signed integer range in RazorForge's fixed-width
@@ -8,14 +14,9 @@ module Core
 ### implement `AtomicType` because hardware atomic operations on 256-bit values
 ### are not available.
 @llvm("i256")
-record S256 obeys SignedIntegral, Ordered, ConstCompatible, Assignable, Copyable, Splittable
+record S256
+obeys SignedIntegral, Ordered, ConstCompatible, Assignable, Copyable, Splittable
     pass
-
-# Constants for S256 limits
-preset S256_MIN: S256 = -57896044618658097711785492504343953926634992332820282019728792003956564819968_s256
-preset S256_MAX: S256 = 57896044618658097711785492504343953926634992332820282019728792003956564819967_s256
-preset S256_ZERO: S256 = 0_s256
-preset S256_ONE: S256 = 1_s256
 
 # ============================================================================
 # Checked Creators (crash on overflow)
@@ -117,7 +118,9 @@ routine S256!(from: B32) -> S256
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^255, 2^255-1].
 routine S256!(from: B64) -> S256
-    if from.is_nan() or from < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0_b64 or from >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0_b64
+    if from.is_nan()
+        or from < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0_b64
+        or from >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0_b64
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B64, S256](from)
 
@@ -128,7 +131,9 @@ routine S256!(from: B64) -> S256
 routine S256!(from: B128) -> S256
     var bits = from.to_bits()
     var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127_u128))
-    var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
+    var biased = LLVM::int_truncate[U128, U64](
+        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128),
+    )
     var frac = LLVM::bit_and(a: bits, b: b128_mant_mask())
     if biased == 0x7FFF_u64
         if LLVM::int_eq(a: frac, b: 0_u128)
@@ -146,9 +151,15 @@ routine S256!(from: B128) -> S256
     var sig = LLVM::zero_extend[U128, U256](LLVM::bit_or(a: b128_implicit(), b: frac))
     lateinit var int_part: U256
     if actual_exp <= 112_u64
-        int_part = LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U256](LLVM::sub(a: 112_u64, b: actual_exp)))
+        int_part = LLVM::shift_right_unsigned(
+            sig,
+            LLVM::zero_extend[U64, U256](LLVM::sub(a: 112_u64, b: actual_exp)),
+        )
     else
-        int_part = LLVM::shift_left(sig, LLVM::zero_extend[U64, U256](LLVM::sub(a: actual_exp, b: 112_u64)))
+        int_part = LLVM::shift_left(
+            sig,
+            LLVM::zero_extend[U64, U256](LLVM::sub(a: actual_exp, b: 112_u64)),
+        )
     if sign == 1_u64
         return LLVM::sub(a: 0_s256, b: LLVM::reinterpret_bits[U256, S256](int_part))
     return LLVM::reinterpret_bits[U256, S256](int_part)
@@ -701,7 +712,7 @@ routine S256.is_odd() -> Bool
 ### Returns `true` if this value is an exact power of two.
 ### Negative values always return `false`.
 routine S256.is_power_of_two() -> Bool
-    return me > 0_s256 and (me & (me -% 1_s256)) == 0_s256
+    return me > 0_s256 and (me & me -% 1_s256) == 0_s256
 
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
@@ -736,7 +747,11 @@ routine S256.represent() -> Text
 routine S256.to_text(radix: S32) -> Text
     var raw = LLVM::reinterpret_bits[S256, U256](me)
     if me < 0_s256
-        return wide_radix_text[U256](mag: LLVM::zero_extend[U64, U256](0_u64) -% raw, negative: true, radix: radix)
+        return wide_radix_text[U256](
+            mag: LLVM::zero_extend[U64, U256](0_u64) -% raw,
+            negative: true,
+            radix: radix,
+        )
     return wide_radix_text[U256](mag: raw, negative: false, radix: radix)
 
 ### Returns a type-tagged debug rendering of this value.
@@ -773,7 +788,9 @@ routine S256!(from_text: Text) -> S256
         if ch.is_numeric()
             var digit = U256(ch.digit_value())
             # Stop before `result * 10 + digit` passes the largest magnitude the sign allows.
-            if result > 5789604461865809771178549250434395392663499233282028201972879200395656481996u256 or (result == 5789604461865809771178549250434395392663499233282028201972879200395656481996u256 and digit > last_limit)
+            if result > 5789604461865809771178549250434395392663499233282028201972879200395656481996u256
+                or (result == 5789604461865809771178549250434395392663499233282028201972879200395656481996u256
+                    and digit > last_limit)
                 throw IntegerOverflowError()
             result = result * 10u256 + digit
         else

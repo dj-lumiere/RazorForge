@@ -1,16 +1,17 @@
 module Core
 
-### A 64-bit unsigned integer in the range 0 to 18,446,744,073,709,551,615.
-### `U64` is the default word-sized counter and index type in RazorForge.
-@llvm("i64")
-record U64 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable, Splittable
-    pass
-
 # Constants for U64 limits
 preset U64_MIN: U64 = 0u64
 preset U64_MAX: U64 = 18_446_744_073_709_551_615_u64
 preset U64_ZERO: U64 = 0u64
 preset U64_ONE: U64 = 1_u64
+
+### A 64-bit unsigned integer in the range 0 to 18,446,744,073,709,551,615.
+### `U64` is the default word-sized counter and index type in RazorForge.
+@llvm("i64")
+record U64
+obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable, Splittable
+    pass
 
 # ============================================================================
 # Creators
@@ -696,7 +697,7 @@ routine U64.swap_bytes() -> U64
 ### Returns true if this value is an exact power of two.
 ### :returns: `true` if `me != 0 and (me & (me - 1)) == 0`.
 routine U64.is_power_of_two() -> Bool
-    return me != 0u64 and (me & (me -% 1_u64)) == 0u64
+    return me != 0u64 and (me & me -% 1_u64) == 0u64
 
 ### Returns this value rotated left by `bits` positions.
 ### :param bits: The number of bit positions to rotate.
@@ -739,7 +740,10 @@ common routine U64.from_bytes_le(bytes: Array[Byte, 8]) -> U64
     var result = 0_u64
     var i = 0_u64
     while i < 8_u64
-        var part = LLVM::shift_left(LLVM::zero_extend[U8, U64](LLVM::byte_at(array: bytes, index: i)), i * 8_u64)
+        var part = LLVM::shift_left(
+            LLVM::zero_extend[U8, U64](LLVM::byte_at(array: bytes, index: i)),
+            i * 8_u64,
+        )
         result = LLVM::bit_or(a: result, b: part)
         i = i + 1_u64
     return result
@@ -807,7 +811,8 @@ routine U64!(from_text: Text) -> U64
         if ch.is_numeric()
             var digit = U64(ch.digit_value())
             # Stop before `result * 10 + digit` passes U64's maximum.
-            if result > 1844674407370955161u64 or (result == 1844674407370955161u64 and digit > 5u64)
+            if result > 1844674407370955161u64
+                or (result == 1844674407370955161u64 and digit > 5u64)
                 throw IntegerOverflowError()
             result = result * 10u64 + digit
         else
@@ -825,4 +830,3 @@ routine U64!(from_text: Text) -> U64
 ### :returns: The 64-bit keyed hash.
 routine U64.hash(k0: U64, k1: U64) -> U64
     return __secure_hash_u64(v: me, k0: k0, k1: k1)
-

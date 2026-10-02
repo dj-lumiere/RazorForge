@@ -327,28 +327,31 @@ secret preset B128_LGAMMA2_QC: Array[S128, 627] = [
     -54608542698480291175976999123247_s128, 20234172643716680017966162057704_s128,
     -7542672325467505694462385066760_s128, 2825973450056187956914064220439_s128,
     -1063391745983705753432599355663_s128, 401649358111876152799745741565_s128,
-    -152203813924935538833428806134_s128
+    -152203813924935538833428806134_s128,
 ]
-
 # B_2k / (2k (2k - 1) 24^(2k - 1)) for k = 1 .. 20 in units of 2^-126: the Stirling sum is sum e_k u^(2k-1)
 # with u = 24/x.
 secret preset B128_STIRLING_E: Array[S128, 20] = [
     295383999063314638423068235617854350_s128, -17093981427275152686520152524181_s128,
     8479157454005532086567535974_s128, -11040569601569703237718146_s128,
-    27105775536962655255341_s128, -107200611813422589179_s128,
-    622169493912320563_s128, -4979410364455887_s128,
-    52553538307720_s128, -707196209446_s128,
-    11817918481_s128, -240104703_s128,
-    5828509_s128, -166605_s128,
-    5539_s128, -212_s128,
-    9_s128, 0_s128,
-    0_s128, 0_s128
+    27105775536962655255341_s128, -107200611813422589179_s128, 622169493912320563_s128,
+    -4979410364455887_s128, 52553538307720_s128, -707196209446_s128, 11817918481_s128,
+    -240104703_s128, 5828509_s128, -166605_s128, 5539_s128, -212_s128, 9_s128, 0_s128, 0_s128,
+    0_s128,
 ]
-
 # ln(2 pi) / 2 in units of 2^-148 (hi, lo words).
 secret preset B128_HALF_LN_2PI_HI: U128 = 0x000000000000000000000000000EB3F8_u128
 secret preset B128_HALF_LN_2PI_LO: U128 = 0xE4325F5A53494BC900144192023CFB09_u128
-
+# Thresholds as B128 bit patterns: 1/2, 3/2, 5/2, 24, 2^20 and 1756 (beyond it tgamma overflows).
+secret preset B128_GAMMA_HALF: U128 = 0x3FFE0000000000000000000000000000_u128
+secret preset B128_GAMMA_3HALF: U128 = 0x3FFF8000000000000000000000000000_u128
+secret preset B128_GAMMA_5HALF: U128 = 0x40004000000000000000000000000000_u128
+secret preset B128_GAMMA_24: U128 = 0x40038000000000000000000000000000_u128
+secret preset B128_GAMMA_2P20: U128 = 0x40130000000000000000000000000000_u128
+secret preset B128_GAMMA_MAX: U128 = 0x4009B700000000000000000000000000_u128
+# pi as a 128-bit significand (exponent -126) and ln(pi) likewise (exponent -127), rounded.
+secret preset B128_GAMMA_PI_M: U128 = 0xC90FDAA22168C234C4C6628B80DC1CD1_u128
+secret preset B128_GAMMA_LNPI_M: U128 = 0x928682473D0DE85EAFCAB635421FA4CC_u128
 
 ### ln(x) for a positive normal B128 x as a B128Fx: the CORE-MATH fixed-point value (12 units of 2^-148),
 ### or log1p(x - 1) within 2^-21 of 1 (x - 1 is exact there).
@@ -412,7 +415,7 @@ secret routine b128_lgamma2_q_fx(zf: B128Fx) -> B128Fx
         if zf.neg
             zs = 0_s128 -% zs
     # the centre i/32 nearest z (|z| <= 1/2, so -16 <= i <= 16) and t = z - i/32, exact in these units
-    var i = (zs +% (1_s128 << 120_u32)) >> 121_u32
+    var i = zs +% (1_s128 << 120_u32) >> 121_u32
     var ts = zs -% (i << 121_u32)
     var base = LLVM::int_truncate[S128, U64](i +% 16_s128) *% 19_u64
     var acc = B128_LGAMMA2_QC[base +% 18_u64]
@@ -423,7 +426,12 @@ secret routine b128_lgamma2_q_fx(zf: B128Fx) -> B128Fx
     var extra = 0.0
     if zf.m != 0_u128 and zf.rel > 0.0
         extra = zf.rel *! b128fx_b64(v: zf) *! 0x1p126 *! 1.001
-    return b128fx_norm(neg: false, mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](acc)), scale: -126_s64, abserr: 4.0 +! extra)
+    return b128fx_norm(
+        neg: false,
+        mag: LLVM::zero_extend[U128, U256](LLVM::reinterpret_bits[S128, U128](acc)),
+        scale: -126_s64,
+        abserr: 4.0 +! extra,
+    )
 
 ### The Stirling sum sum e_k u^(2k-1) (e_k = B_2k / (2k (2k - 1) 24^(2k - 1)), 20 terms, u = 24/x <= 1, the
 ### rest below the first omitted term, 2^-134) as a signed value in units of 2^-126 and its error bound
@@ -431,7 +439,10 @@ secret routine b128_lgamma2_q_fx(zf: B128Fx) -> B128Fx
 ### units in all, plus the error of u (it moves the sum by less than its own size, below 1/12, times u's
 ### relative error).
 secret routine b128_stirling_sum(x: B128) -> (Bool, S128)
-    var (oku, u) = b128fx_div(a: B128Fx(neg: false, m: 3_u128 << 126_u32, e: -123_s64, rel: 0.0), b: b128fx_of(x: x))
+    var (oku, u) = b128fx_div(
+        a: B128Fx(neg: false, m: 3_u128 << 126_u32, e: -123_s64, rel: 0.0),
+        b: b128fx_of(x: x),
+    )
     if not oku
         return (false, 0_s128)
     var sh = 0_s64 -% (u.e +% 126_s64)
@@ -483,21 +494,13 @@ secret routine b128_lgamma_fixed(x: B128) -> (Bool, S256, B64)
     var err = 12.0 *! b128fx_b64(v: yf) +! 4.0 +! 33.0 *! 0x1p22
     return (true, z, err)
 
-# Thresholds as B128 bit patterns: 1/2, 3/2, 5/2, 24, 2^20 and 1756 (beyond it tgamma overflows).
-secret preset B128_GAMMA_HALF: U128 = 0x3FFE0000000000000000000000000000_u128
-secret preset B128_GAMMA_3HALF: U128 = 0x3FFF8000000000000000000000000000_u128
-secret preset B128_GAMMA_5HALF: U128 = 0x40004000000000000000000000000000_u128
-secret preset B128_GAMMA_24: U128 = 0x40038000000000000000000000000000_u128
-secret preset B128_GAMMA_2P20: U128 = 0x40130000000000000000000000000000_u128
-secret preset B128_GAMMA_MAX: U128 = 0x4009B700000000000000000000000000_u128
-
 ### For 5/2 <= x < 24: z = x - m with m = round(x) (|z| <= 1/2, exact) and the product (x - 1)(x - 2) ...
 ### (x - m + 2), so that Gamma(x) = Gamma(2 + z) P. x is exact in units of 2^-112 there, so every factor
 ### is an exact integer in those units and each product keeps its top 128 bits (2^-127 each).
 secret routine b128_gamma_shift(x: B128) -> (B128, B128Fx)
     var xf = b128fx_of(x: x)
     var xx = xf.m >>> b128_trig_sh(n: 0_s64 -% xf.e -% 112_s64)
-    var m = (xx +% (1_u128 << 111_u32)) >>> 112_u32
+    var m = xx +% (1_u128 << 111_u32) >>> 112_u32
     # z = x - m in units of 2^-112, back to an exact B128
     var zz = LLVM::reinterpret_bits[U128, S128](xx) -% LLVM::reinterpret_bits[U128, S128](m << 112_u32)
     var z = B128.from_bits(bits: 0_u128)
@@ -508,7 +511,7 @@ secret routine b128_gamma_shift(x: B128) -> (B128, B128Fx)
             zmag = 0_u128 -% zmag
         var lead = 127_s64 -% b128_trig_clz128(x: zmag)
         var sig = zmag << b128_trig_sh(n: 112_s64 -% lead)
-        var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead -% 112_s64 +% 16383_s64)) << 112_u32) | (sig -% (1_u128 << 112_u32))
+        var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead -% 112_s64 +% 16383_s64)) << 112_u32) | sig -% (1_u128 << 112_u32)
         if zneg
             bits = bits | (1_u128 << 127_u32)
         z = B128.from_bits(bits: bits)
@@ -577,7 +580,10 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
         if z.is_zero()
             r = lp
         else
-            var (ok2, s) = b128fx_add(a: lp, b: b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z)))
+            var (ok2, s) = b128fx_add(
+                a: lp,
+                b: b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z)),
+            )
             if not ok2
                 return (false, b128fx_one())
             r = s
@@ -585,7 +591,12 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
         var (okf, zf, err) = b128_lgamma_fixed(x: x)
         if not okf or zf <= 0_s256
             return (false, b128fx_one())
-        r = b128fx_norm(neg: false, mag: LLVM::reinterpret_bits[S256, U256](zf), scale: -148_s64, abserr: err)
+        r = b128fx_norm(
+            neg: false,
+            mag: LLVM::reinterpret_bits[S256, U256](zf),
+            scale: -148_s64,
+            abserr: err,
+        )
     else
         # (x - 1/2) ln x - x + ln(2 pi)/2 + the Stirling sum, all positive-dominated from here
         var (okl, lx) = b128_ln_fx(x: x)
@@ -596,13 +607,21 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
         # it is formed in B128Fx, whose 128-bit significand holds it exactly
         var xh = b128fx_of(x: x -! B128.from_bits(bits: 0x3FFE_u128 << 112_u32))
         if u >= (0x406F_u128 << 112_u32)
-            var (okh, xhf) = b128fx_add(a: b128fx_of(x: x), b: b128fx_of(x: B128.from_bits(bits: 0xBFFE_u128 << 112_u32)))
+            var (okh, xhf) = b128fx_add(
+                a: b128fx_of(x: x),
+                b: b128fx_of(x: B128.from_bits(bits: 0xBFFE_u128 << 112_u32)),
+            )
             if not okh
                 return (false, b128fx_one())
             xh = xhf
         var a = b128fx_mul(a: xh, b: lx)
         var (ok1, b) = b128fx_add(a: a, b: b128fx_neg(v: b128fx_of(x: x)))
-        var c = b128fx_norm(neg: false, mag: (LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_HI) << 128_u32) | LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_LO), scale: -148_s64, abserr: 1.0)
+        var c = b128fx_norm(
+            neg: false,
+            mag: (LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_HI) << 128_u32) | LLVM::zero_extend[U128, U256](B128_HALF_LN_2PI_LO),
+            scale: -148_s64,
+            abserr: 1.0,
+        )
         var (ok2, d) = b128fx_add(a: b, b: c)
         if not ok1 or not ok2
             return (false, b128fx_one())
@@ -612,7 +631,15 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
             var smag = LLVM::reinterpret_bits[S128, U128](s)
             if sneg
                 smag = 0_u128 -% smag
-            var (ok3, e) = b128fx_add(a: d, b: b128fx_norm(neg: sneg, mag: LLVM::zero_extend[U128, U256](smag), scale: -126_s64, abserr: 33.0))
+            var (ok3, e) = b128fx_add(
+                a: d,
+                b: b128fx_norm(
+                    neg: sneg,
+                    mag: LLVM::zero_extend[U128, U256](smag),
+                    scale: -126_s64,
+                    abserr: 33.0,
+                ),
+            )
             if not ok3
                 return (false, b128fx_one())
             r = e
@@ -648,15 +675,18 @@ secret routine b128_tgamma_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
         var lead = 255_s64 -% LLVM::int_truncate[U256, S64](LLVM::leading_zeros(zm))
         var sh = b128_trig_sh(n: lead -% 112_s64)
         var zsig = LLVM::int_truncate[U256, U128](zm >>> sh)
-        var rest = zm & ((1_u256 << sh) -% 1_u256)
+        var rest = zm & (1_u256 << sh) -% 1_u256
         var biased = lead -% 148_s64 +% 16383_s64
-        var zb = B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112_u32) | (zsig -% (1_u128 << 112_u32)))
+        var zb = B128.from_bits(bits: (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](biased)) << 112_u32) | zsig -% (1_u128 << 112_u32))
         var (oke, ez) = b128_exp_fx(x: zb, acc: acc)
         if not oke
             return (false, b128fx_one())
         var r = B128Fx(neg: false, m: ez.m, e: ez.e, rel: ez.rel +! err *! 1.001 *! 0x1p-148)
         if rest != 0_u256
-            var (oko, onep) = b128fx_add(a: b128fx_one(), b: b128fx_norm(neg: false, mag: rest, scale: -148_s64, abserr: err))
+            var (oko, onep) = b128fx_add(
+                a: b128fx_one(),
+                b: b128fx_norm(neg: false, mag: rest, scale: -148_s64, abserr: err),
+            )
             if not oko
                 return (false, b128fx_one())
             var rr = b128fx_mul(a: ez, b: onep)
@@ -682,7 +712,10 @@ secret routine b128_tgamma_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
         num = p
     var g = b128fx_one()
     if not z.is_zero()
-        var (okg, eg) = b128fx_exp_small(w: b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z)), acc: acc)
+        var (okg, eg) = b128fx_exp_small(
+            w: b128fx_mul(a: b128fx_of(x: z), b: b128_lgamma2_q(z: z)),
+            acc: acc,
+        )
         if not okg
             return (false, b128fx_one())
         g = eg
@@ -691,15 +724,16 @@ secret routine b128_tgamma_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
         return (false, b128fx_one())
     return (true, q)
 
-
 ### (n - 1)! for a B128 x that is an integer n in [1, 57] (so the product fits in 256 bits), or false.
 secret routine b128_gamma_int(x: B128) -> (Bool, U256)
     var u = x.to_bits()
-    if (u >>> 127_u32) != 0_u128 or u < (0x3FFF_u128 << 112_u32) or u >= 0x4004D000000000000000000000000000_u128
+    if (u >>> 127_u32) != 0_u128
+        or u < (0x3FFF_u128 << 112_u32)
+        or u >= 0x4004D000000000000000000000000000_u128
         return (false, 0_u256)
     var xf0 = b128fx_of(x: x)
     var sh0 = 0_s64 -% xf0.e
-    if (xf0.m & ((1_u128 << b128_trig_sh(n: sh0)) -% 1_u128)) != 0_u128
+    if (xf0.m & (1_u128 << b128_trig_sh(n: sh0)) -% 1_u128) != 0_u128
         return (false, 0_u256)
     var n = xf0.m >>> b128_trig_sh(n: sh0)
     var f = 1_u256
@@ -726,16 +760,12 @@ secret routine b128_tgamma_fast(x: B128) -> (Bool, B128)
         return (false, x)
     return b128fx_round(v: ra)
 
-# pi as a 128-bit significand (exponent -126) and ln(pi) likewise (exponent -127), rounded.
-secret preset B128_GAMMA_PI_M: U128 = 0xC90FDAA22168C234C4C6628B80DC1CD1_u128
-secret preset B128_GAMMA_LNPI_M: U128 = 0x928682473D0DE85EAFCAB635421FA4CC_u128
-
 ### Gamma(x) for a negative non-integer B128 x as a B128Fx, or false. Above -1/2 by the small-x formula
 ### (Gamma(2 + x) / (x (1 + x)), the series taking a negative z too), from -1 to -1/2 as Gamma(2 + z) /
 ### (x z (1 + z)) with z = x + 1 exact, and below -1 by reflection, pi / (sin(pi x) Gamma(1 - x)) with
 ### Gamma(1 - x) = |x| Gamma(|x|) (|x| is exact where 1 - x may round).
 secret routine b128_tgamma_neg_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
-    var a = x.to_bits() & ((1_u128 << 127_u32) -% 1_u128)
+    var a = x.to_bits() & (1_u128 << 127_u32) -% 1_u128
     if a == 0_u128 or a >= (0x7FFF_u128 << 112_u32)
         return (false, b128fx_one())
     var one = B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
@@ -761,7 +791,10 @@ secret routine b128_tgamma_neg_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
     var (okg3, g3) = b128_tgamma_fx(x: B128.from_bits(bits: a), acc: acc)
     if not oks or not okg3
         return (false, xf)
-    var den = b128fx_mul(a: b128fx_mul(a: sn, b: g3), b: B128Fx(neg: false, m: xf.m, e: xf.e, rel: 0.0))
+    var den = b128fx_mul(
+        a: b128fx_mul(a: sn, b: g3),
+        b: B128Fx(neg: false, m: xf.m, e: xf.e, rel: 0.0),
+    )
     return b128fx_div(a: B128Fx(neg: false, m: B128_GAMMA_PI_M, e: -126_s64, rel: 0x1p-128), b: den)
 
 ### lgamma(x) = ln|Gamma(x)| for a negative non-integer B128 x as a B128Fx, or false, by the forms of
@@ -769,7 +802,7 @@ secret routine b128_tgamma_neg_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
 ### ln(1 + z) from -1 to -1/2, and ln(pi) - ln|sin(pi x)| - lgamma(1 - x) below -1 (which cancels near the zeros of
 ### lgamma between the poles, where the band widens).
 secret routine b128_lgamma_neg_fx(x: B128) -> (Bool, B128Fx)
-    var a = x.to_bits() & ((1_u128 << 127_u32) -% 1_u128)
+    var a = x.to_bits() & (1_u128 << 127_u32) -% 1_u128
     if a == 0_u128 or a >= (0x7FFF_u128 << 112_u32)
         return (false, b128fx_one())
     var one = B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
@@ -812,7 +845,10 @@ secret routine b128_lgamma_neg_fx(x: B128) -> (Bool, B128Fx)
         var (okl, ls) = b128fx_ln(w: B128Fx(neg: false, m: sn.m, e: sn.e, rel: sn.rel))
         if not okl
             return (false, xf)
-        var (oka, t) = b128fx_add(a: B128Fx(neg: false, m: B128_GAMMA_LNPI_M, e: -127_s64, rel: 0x1p-128), b: b128fx_neg(v: ls))
+        var (oka, t) = b128fx_add(
+            a: B128Fx(neg: false, m: B128_GAMMA_LNPI_M, e: -127_s64, rel: 0x1p-128),
+            b: b128fx_neg(v: ls),
+        )
         if not oka
             return (false, xf)
         return b128fx_add(a: t, b: b128fx_neg(v: lg))

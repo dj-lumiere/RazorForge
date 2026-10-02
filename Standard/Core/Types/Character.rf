@@ -1,10 +1,22 @@
 module Core
 
+# Unicode constants
+preset CHARACTER_NULL: Character = Character(0x0000u32)
+preset CHARACTER_SPACE: Character = Character(0x0020u32)
+preset CHARACTER_NEWLINE: Character = Character(0x000Au32)
+preset CHARACTER_TAB: Character = Character(0x0009u32)
+preset CHARACTER_REPLACEMENT: Character = Character(0xFFFDu32)
+preset CHARACTER_MAX_UNICODE: Character = Character(0x10FFFFu32)
+# Surrogate range (invalid for standalone codepoints)
+preset CHARACTER_SURROGATE_START: U32 = 0xD800
+preset CHARACTER_SURROGATE_END: U32 = 0xDFFF
+
 ### Represents one Unicode scalar value.
 ### `Character` stores a code point-sized payload and models text characters
 ### rather than arbitrary binary bytes.
 @llvm("i32")
-record Character obeys ConstCompatible, Comparable, Assignable, Copyable
+record Character
+obeys ConstCompatible, Comparable, Assignable, Copyable
     pass
 
 # Creators
@@ -22,18 +34,6 @@ routine Character(from: Character) -> Character
 ### :returns: The resulting `Character` value.
 routine Character(from: U32) -> Character
     return LLVM::reinterpret_bits[U32, Character](value: from)
-
-# Unicode constants
-preset CHARACTER_NULL: Character = Character(0x0000u32)
-preset CHARACTER_SPACE: Character = Character(0x0020u32)
-preset CHARACTER_NEWLINE: Character = Character(0x000Au32)
-preset CHARACTER_TAB: Character = Character(0x0009u32)
-preset CHARACTER_REPLACEMENT: Character = Character(0xFFFDu32)
-preset CHARACTER_MAX_UNICODE: Character = Character(0x10FFFFu32)
-
-# Surrogate range (invalid for standalone codepoints)
-preset CHARACTER_SURROGATE_START: U32 = 0xD800
-preset CHARACTER_SURROGATE_END: U32 = 0xDFFF
 
 # ============================================================================
 # Character protocol implementation
@@ -116,14 +116,23 @@ routine Character.is_whitespace() -> Bool
     var is_em_quad = v == 0x2001u32
     var is_en_space = v == 0x2002u32
     var is_em_space = v == 0x2003u32
-    return is_space or is_tab or is_lf or is_cr or is_ff or is_nbsp or is_en_quad or is_em_quad or is_en_space or is_em_space
+    return is_space
+        or is_tab
+        or is_lf
+        or is_cr
+        or is_ff
+        or is_nbsp
+        or is_en_quad
+        or is_em_quad
+        or is_en_space
+        or is_em_space
 
 ### Returns `true` when this character is an ASCII or Latin-1 control code.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Character.is_control() -> Bool
     var v = U32(me)
-    return (v <= 0x001Fu32) or (0x007Fu32 <= v <= 0x009Fu32)
+    return v <= 0x001Fu32 or 0x007Fu32 <= v <= 0x009Fu32
 
 ### Converts this value to uppercase when the implementation has a matching
 ### uppercase form.
@@ -181,7 +190,8 @@ routine Character.to_byte() -> Byte
 ### Returns the display form of this character.
 ### The display form emits the character itself rather than its numeric code.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Character.represent() -> Text
     var list = List[Character]()
     list.add_last(me)
@@ -191,7 +201,8 @@ routine Character.represent() -> Text
 ### The diagnostic form includes both the printable character and its numeric
 ### code point.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Character.diagnose() -> Text
     return "Character(" + me.represent() + ", " + U32(me).represent() + ")"
 
@@ -226,7 +237,8 @@ routine Character.is_printable() -> Bool
 @readonly
 routine Character.is_bmp() -> Bool
     # Basic Multilingual Plane: U+0000 to U+FFFF (excluding surrogates)
-    return U32(me) <= 0xFFFFu32 and not (CHARACTER_SURROGATE_START <= U32(me) <= CHARACTER_SURROGATE_END)
+    return U32(me) <= 0xFFFFu32
+        and not (CHARACTER_SURROGATE_START <= U32(me) <= CHARACTER_SURROGATE_END)
 
 ### Returns `true` when this character is in one of the Unicode supplementary
 ### planes.

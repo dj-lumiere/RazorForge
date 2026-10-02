@@ -1,7 +1,6 @@
 module Core
 
 import BuilderQuery
-
 ### Represents an unmanaged typed raw pointer.
 ### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and access rules.
 ### Use it for FFI, allocators, explicit memory layout work, and runtime plumbing where safety is intentionally bypassed.
@@ -11,7 +10,8 @@ import BuilderQuery
 ### :typeparam T: The pointee type.
 ### :see: {Address}, {Modifying[T]}, {Viewing[T]}, {Memory-Types}
 @llvm("ptr")
-record Hijacked[AnyType T] obeys Assignable, Copyable
+record Hijacked[AnyType T]
+obeys Assignable, Copyable
     pass
 
 ### Returns the raw address carried by this pointer.
@@ -279,13 +279,15 @@ routine Hijacked[T].hash(k0: U64, k1: U64) -> U64
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Hijacked[T].represent() -> Text
     return me.type_name()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Hijacked[T].diagnose() -> Text
     return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"
 
@@ -308,7 +310,7 @@ dangerous routine scan_to_byte(buf: Hijacked[Byte], target: Byte, from: U64, lim
     while i +% 8u64 <= limit
         var word = buf.stride(count: S64(i)).peek_unaligned_as[U64]()
         var x = word ^ bcast
-        var mask = (x -% ones) & (x ^ all_ones) & high
+        var mask = x -% ones & (x ^ all_ones) & high
         if mask != 0u64
             return i +% (LLVM::trailing_zeros(value: mask) >> 3)
         i = i +% 8u64

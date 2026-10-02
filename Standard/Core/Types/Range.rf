@@ -3,7 +3,9 @@ module Core
 ### Represents the `Range` record.
 ### `Range[T]` describes a lazily iterated arithmetic progression between two bounds.
 ### :typeparam T: The type argument bound to `T`.
-record Range[AnyType T] obeys Iterable[T], Container needs T obeys Comparable, Addable, Subtractable
+record Range[AnyType T]
+obeys Iterable[T], Container
+needs T obeys Comparable, Addable, Subtractable
 relates RangeEmittable[T] as Iter
     ### Stores the first value in the progression.
     start: T
@@ -13,6 +15,28 @@ relates RangeEmittable[T] as Iter
     step: T
     ### Stores whether the terminating bound is included.
     inclusive: Bool  # true for 'to', false for 'til'
+
+# ============================================================================
+# Iterable protocol support
+# ============================================================================
+
+### Represents the `RangeEmittable` entity.
+### `RangeEmittable[T]` holds the mutable iteration state for a `Range[T]`.
+### :typeparam T: The type argument bound to `T`.
+entity RangeEmittable[AnyType T]
+needs T obeys Comparable, Addable, Subtractable
+    ### Stores the next value to yield.
+    current: T
+    ### Stores the terminating bound.
+    end: T
+    ### Stores the step size between yielded values.
+    step: T
+    ### Stores whether iteration is moving upward.
+    ascending: Bool
+    ### Stores whether the terminating bound may be yielded.
+    inclusive: Bool
+    ### Stores whether iteration has already completed.
+    done: Bool
 
 ### Creates an inclusive range from `start` to `end` using a step of `1`.
 ### :param start: The inclusive starting position.
@@ -87,27 +111,6 @@ needs T obeys FloorDivisible
         return false
     return (me.start - value).mod(you: me.step) == zero
 
-# ============================================================================
-# Iterable protocol support
-# ============================================================================
-
-### Represents the `RangeEmittable` entity.
-### `RangeEmittable[T]` holds the mutable iteration state for a `Range[T]`.
-### :typeparam T: The type argument bound to `T`.
-entity RangeEmittable[AnyType T] needs T obeys Comparable, Addable, Subtractable
-    ### Stores the next value to yield.
-    current: T
-    ### Stores the terminating bound.
-    end: T
-    ### Stores the step size between yielded values.
-    step: T
-    ### Stores whether iteration is moving upward.
-    ascending: Bool
-    ### Stores whether the terminating bound may be yielded.
-    inclusive: Bool
-    ### Stores whether iteration has already completed.
-    done: Bool
-
 ### Creates an iterator for this value.
 ### The emitter starts at `me.start`.
 ### :returns: The resulting `RangeEmittable[T]` value.
@@ -119,7 +122,7 @@ routine Range[T].iter() -> RangeEmittable[T]
         step: me.step,
         ascending: me.is_ascending(),
         inclusive: me.inclusive,
-        done: me.is_empty()
+        done: me.is_empty(),
     )
 
 ### Returns the next value from this iterator.

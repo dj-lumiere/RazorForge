@@ -1,8 +1,7 @@
 module Collections
 
-import BuilderQuery
 import BuilderExpansion
-
+import BuilderQuery
 ### A fixed-size, struct-of-arrays (SoA) array of `N` records with value semantics.
 ###
 ### `SplitArray[T, N]` is the SoA counterpart of {Array[T, N]}: instead of storing `N` whole `T`
@@ -36,12 +35,30 @@ import BuilderExpansion
 ### :typeparam N: The buildtime element count, supplied as a `U64` literal.
 ### :see: {Array[T, N]} for the array-of-structs counterpart.
 ### :see: {SplitList[T]} for the growable, heap-backed SoA sequence.
-record SplitArray[AnyType T, U64 N] obeys Comparable, Iterable[T], MutableIndexable[T], Sized, Container
+record SplitArray[AnyType T, U64 N]
+obeys Comparable, Iterable[T], MutableIndexable[T], Sized, Container
 needs T obeys Splittable
 relates SplitArrayEmittable[T, N] as Iter
     expand m in allmemvarof(T)
         ### One inline column holding this field across every element.
         secret $nameof(m): Array[$typeof(m), N]
+
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+### Walks the elements of a fixed-size `SplitArray[T, N]` from index 0 to N - 1, reconstructing each
+### `T` from the columns in order. Because `SplitArray` is a record type, the iterator holds its own
+### copy of the column data.
+### :typeparam T: The element type yielded by the iterator.
+### :typeparam N: The buildtime element count.
+entity SplitArrayEmittable[AnyType T, U64 N]
+obeys Emittable[T]
+needs T obeys Splittable
+    ### Stores the split array being iterated.
+    source: SplitArray[T, N]
+    ### Stores the next logical index to read.
+    index: U64
 
 # ============================================================================
 # Indexing
@@ -133,22 +150,6 @@ needs T obeys Equatable
             return i
     absent
 
-# ============================================================================
-# Iteration Support
-# ============================================================================
-
-### Walks the elements of a fixed-size `SplitArray[T, N]` from index 0 to N - 1, reconstructing each
-### `T` from the columns in order. Because `SplitArray` is a record type, the iterator holds its own
-### copy of the column data.
-### :typeparam T: The element type yielded by the iterator.
-### :typeparam N: The buildtime element count.
-entity SplitArrayEmittable[AnyType T, U64 N] obeys Emittable[T]
-needs T obeys Splittable
-    ### Stores the split array being iterated.
-    source: SplitArray[T, N]
-    ### Stores the next logical index to read.
-    index: U64
-
 @readonly
 routine SplitArray[T, N].iter() -> SplitArrayEmittable[T, N]
     return SplitArrayEmittable[T, N](source: me, index: 0u64)
@@ -167,7 +168,8 @@ routine SplitArrayEmittable[T, N].emit!() -> T
 # Display
 # ============================================================================
 
-@[readonly, override]
+@readonly
+@override
 routine SplitArray[T, N].represent() -> Text
     var result = "SplitArray(["
     each i in 0u64 til N
@@ -177,7 +179,8 @@ routine SplitArray[T, N].represent() -> Text
     result = result + "])"
     return result
 
-@[readonly, override]
+@readonly
+@override
 routine SplitArray[T, N].diagnose() -> Text
     var result = me.full_type_name() + "(["
     each i in 0u64 til N

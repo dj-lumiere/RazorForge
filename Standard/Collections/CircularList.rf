@@ -1,7 +1,6 @@
 module Collections
 
 import BuilderQuery
-
 ### A growable, rotatable sequence backed by a power-of-two circular buffer.
 ###
 ### `CircularList[T]` supports O(1) amortized insertion and removal at both the front
@@ -37,7 +36,8 @@ import BuilderQuery
 ### :typeparam T: The element type stored in the circular list.
 ### :see: {List[T]} for a simpler growable sequence optimized for back-only append.
 ### :see: {PriorityQueue[TPriority, TElement]} for priority-ordered removal.
-entity CircularList[AnyType T] obeys Iterable[T], MutableIndexable[T], Sized, ListLiteral[T]
+entity CircularList[AnyType T]
+obeys Iterable[T], MutableIndexable[T], Sized, ListLiteral[T]
 relates CircularListEmittable[T] as Iter
     ### Stores the circular buffer backing the circular list.
     ### Elements are laid out in allocation order and interpreted through
@@ -53,6 +53,27 @@ relates CircularListEmittable[T] as Iter
     ### How many `each` loops and in-place element accesses are using the element positions right now.
     ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
     secret shape_users: U64
+
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+### Walks the elements of a `CircularList[T]` from logical front to back.
+### The iterator captures a raw pointer, the start index, element count, and capacity
+### at creation time so the source circular list does not need to remain alive during iteration.
+### :typeparam T: The element type yielded by the iterator.
+entity CircularListEmittable[AnyType T]
+obeys Emittable[T]
+    ### Raw pointer into the source circular list's circular buffer.
+    secret data: Hijacked[T]
+    ### Front-of-queue physical index captured at iterator creation.
+    secret start: U64
+    ### Element count captured at iterator creation.
+    secret count: U64
+    ### Buffer capacity captured at iterator creation.
+    secret capacity: U64
+    ### Current logical position.
+    secret index: U64
 
 # ============================================================================
 # Creators
@@ -79,7 +100,7 @@ routine CircularList[T]() -> CircularList[T]
         start: 0u64,
         count: 0u64,
         capacity: 0u64,
-        shape_users: 0u64
+        shape_users: 0u64,
     )
 
 ### Creates an empty circular list with storage pre-allocated for at least `capacity` elements.
@@ -97,7 +118,7 @@ routine CircularList[T](capacity: U64) -> CircularList[T]
             start: 0u64,
             count: 0u64,
             capacity: actual,
-            shape_users: 0u64
+            shape_users: 0u64,
         )
 
 # ============================================================================
@@ -110,7 +131,7 @@ routine CircularList[T](capacity: U64) -> CircularList[T]
 @readonly
 routine CircularList[T].wrap_index(index: U64) -> U64
     # Capacity is always a power of 2 — use bitmask instead of modulo.
-    return index & (me.capacity -% 1u64)
+    return index & me.capacity -% 1u64
 
 ### Converts a logical position (0 = front) to the physical slot in the ring buffer.
 ### :param logical_index: The zero-based distance from the logical front.
@@ -224,7 +245,10 @@ routine CircularList[T].keep_last(n: U64)
     var i = 0u64
     danger
         while i < drop
-            me.data.offset(T.data_size() * me.start).peek().destroy()
+            me.data
+                .offset(T.data_size() * me.start)
+                .peek()
+                .destroy()
             me.start = me.wrap_index(me.start +% 1u64)
             i = i +% 1u64
     me.count = n
@@ -245,7 +269,10 @@ routine CircularList[T].keep_first(n: U64)
     danger
         while i < me.count
             var physical = me.wrap_index(me.start +% i)
-            me.data.offset(T.data_size() * physical).peek().destroy()
+            me.data
+                .offset(T.data_size() * physical)
+                .peek()
+                .destroy()
             i = i +% 1u64
     me.count = n
     return
@@ -383,7 +410,9 @@ needs EntityType T
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
     danger
-        return Modifying[T](me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]]())
+        return Modifying[T](
+            me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]](),
+        )
 
 ### Returns a read token on the entity stored at logical position `index`, so one call through it reads the
 ### element without copying it: `ring[0].count()` lowers to `ring.view_at(index: 0).count()`. A plain
@@ -396,7 +425,9 @@ needs EntityType T
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
     danger
-        return Viewing[T](me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]]())
+        return Viewing[T](
+            me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]](),
+        )
 
 ### Returns a NEW circular list holding independent copies of the elements in `range` — the slice form of
 ### indexing (`circular list[a til b]`), over LOGICAL positions (front = 0). A half-open `a til b` yields
@@ -447,26 +478,6 @@ routine CircularList[T].rotate_right(n: U64)
         me.start = me.start -% shift
     return
 
-# ============================================================================
-# Iteration Support
-# ============================================================================
-
-### Walks the elements of a `CircularList[T]` from logical front to back.
-### The iterator captures a raw pointer, the start index, element count, and capacity
-### at creation time so the source circular list does not need to remain alive during iteration.
-### :typeparam T: The element type yielded by the iterator.
-entity CircularListEmittable[AnyType T] obeys Emittable[T]
-    ### Raw pointer into the source circular list's circular buffer.
-    secret data: Hijacked[T]
-    ### Front-of-queue physical index captured at iterator creation.
-    secret start: U64
-    ### Element count captured at iterator creation.
-    secret count: U64
-    ### Buffer capacity captured at iterator creation.
-    secret capacity: U64
-    ### Current logical position.
-    secret index: U64
-
 @readonly
 routine CircularList[T].iter() -> CircularListEmittable[T]
     danger
@@ -475,7 +486,7 @@ routine CircularList[T].iter() -> CircularListEmittable[T]
             start: me.start,
             count: me.count,
             capacity: me.capacity,
-            index: 0u64
+            index: 0u64,
         )
 
 ### Returns the next element from the iterator in front-to-back order.
@@ -484,7 +495,7 @@ routine CircularList[T].iter() -> CircularListEmittable[T]
 routine CircularListEmittable[T].emit!() -> T
     if me.index >= me.count
         absent
-    var physical = (me.start +% me.index) & (me.capacity -% 1u64)
+    var physical = me.start +% me.index & me.capacity -% 1u64
     lateinit var _result: T
     danger
         _result = me.data.offset(T.data_size() * physical).peek()
@@ -531,7 +542,8 @@ needs T obeys Equatable
 # Comparison Operations
 # ============================================================================
 
-@[readonly, override]
+@readonly
+@override
 routine CircularList[T].represent() -> Text
     var result = me.type_name() + "(["
     var i = 0u64
@@ -543,7 +555,8 @@ routine CircularList[T].represent() -> Text
     result = result + "])"
     return steal result
 
-@[readonly, override]
+@readonly
+@override
 routine CircularList[T].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
     var i = 0u64
@@ -576,8 +589,11 @@ dangerous routine CircularList[T].destroy()
     # (mirrors CircularListEmittable.emit!). No-op for value types; frees owned entity elements.
     var i = 0u64
     while i < me.count
-        var physical = (me.start +% i) & (me.capacity -% 1u64)
-        me.data.offset(T.data_size() * physical).peek().destroy()
+        var physical = me.start +% i & me.capacity -% 1u64
+        me.data
+            .offset(T.data_size() * physical)
+            .peek()
+            .destroy()
         i = i + 1u64
     me.data.invalidate()
     me.hijack().invalidate()
@@ -590,8 +606,11 @@ dangerous routine CircularList[T].destroy()
 dangerous routine CircularList[T].roam_trace()
     var i = 0u64
     while i < me.count
-        var physical = (me.start +% i) & (me.capacity -% 1u64)
-        me.data.offset(T.data_size() * physical).peek().cyclic_visit()
+        var physical = me.start +% i & me.capacity -% 1u64
+        me.data
+            .offset(T.data_size() * physical)
+            .peek()
+            .cyclic_visit()
         i = i + 1u64
     return
 
@@ -605,7 +624,8 @@ dangerous routine CircularList[T].roam_free()
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, override]
+@readonly
+@override
 routine CircularList[T].serialize() -> SerialValue
     var __sv = List[SerialValue]()
     each __x in me

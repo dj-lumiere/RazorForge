@@ -1,12 +1,12 @@
 module Core
 
 import BuilderQuery
-
 ### Single-threaded strong reference. Thin pointer to {RetainController[T]}.
 ### Equivalent to `Rc[T]` in Rust. Copying bumps the strong count; dropping decrements it.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
-record Retained[EntityType T] obeys Controlling[T]
+record Retained[EntityType T]
+obeys Controlling[T]
     pass
 
 # ============================================================================
@@ -72,7 +72,8 @@ routine Retained[T].weak_count() -> U32
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
 ### :returns: The inner entity as `T`.
-@[readonly, inline]
+@readonly
+@inline
 routine Retained[T].access() -> T
     danger
         var ctrl = Hijacked[RetainController[T]](me).as_entity()
@@ -93,22 +94,30 @@ routine Retained[T].control() -> T
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Retained[T].represent() -> Text
     danger
         var ctrl = Hijacked[RetainController[T]](me).as_entity()
-        return ctrl.raw_data().as_entity().represent()
+        return ctrl
+            .raw_data()
+            .as_entity()
+            .represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Retained[T].diagnose() -> Text
     danger
         var ctrl = Hijacked[RetainController[T]](me).as_entity()
         var rc = ctrl.strong_count()
         var weak = ctrl.weak_count()
         var addr = ctrl.raw_data().get_address()
-        return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ", " + ctrl.raw_data().as_entity().diagnose() + ")"
+        return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ", " + ctrl
+            .raw_data()
+            .as_entity()
+            .diagnose() + ")"
 
 ### Decrements the strong count, tearing down the entity at zero (and the controller when both counts
 ### reach zero). This IS the decrement — there is no separate `release` verb; `destroy` is the teardown.

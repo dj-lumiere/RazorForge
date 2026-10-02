@@ -1,7 +1,6 @@
 module Core
 
 import BuilderQuery
-
 ### Represents temporary thread-safe read-only access to data guarded by a {Guarded[T, P]}.
 ### `Consulting[T]` is the non-Assignable token produced by `Guarded.consult()` for shared (multi-reader)
 ### observation. It holds the shared {GuardController[T, P]} pointer; entering its `using` scope
@@ -13,8 +12,10 @@ import BuilderQuery
 ### :typeparam P: The access-discipline lock policy of the originating `Guarded`.
 ### :see: {Amending[T]}, {Viewing[T]}, {Guarded[T, P]}, {Access-Types}
 @llvm("ptr")
-record Consulting[AnyType T, AnyType P] obeys Accessing[T], Enterable
-needs EntityType T, P obeys LockPolicy
+record Consulting[AnyType T, AnyType P]
+obeys Accessing[T], Enterable
+needs EntityType T
+needs P obeys LockPolicy
     pass
 
 # NOTE: No creators, no manual methods — the token is produced only by `Guarded.consult()`, which
@@ -58,7 +59,8 @@ routine Consulting[T, P].exit()
 ### Inserted implicitly at call sites whose parameter is `Accessing[T]`. Projects through the
 ### controller to reach the managed entity.
 ### :returns: The guarded entity as `T`.
-@[readonly, inline]
+@readonly
+@inline
 routine Consulting[T, P].access() -> T
     danger
         var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
@@ -70,19 +72,27 @@ routine Consulting[T, P].access() -> T
 
 ### Returns the display form of the consulted entity.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Consulting[T, P].represent() -> Text
     danger
         var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
-        return ctrl.raw_data().as_entity().represent()
+        return ctrl
+            .raw_data()
+            .as_entity()
+            .represent()
 
 ### Returns the diagnostic form of the consulted entity.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Consulting[T, P].diagnose() -> Text
     danger
         var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
-        return me.type_name() + "(" + ctrl.raw_data().as_entity().diagnose() + ")"
+        return me.type_name() + "(" + ctrl
+            .raw_data()
+            .as_entity()
+            .diagnose() + ")"
 
 ### No-op: the token owns no heap (it only aliases the controller), and the reader hold is
 ### released by `exit`. Releasing here too would double-release the lock.

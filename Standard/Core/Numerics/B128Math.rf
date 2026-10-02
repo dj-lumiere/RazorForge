@@ -16,7 +16,7 @@ secret routine b128_is_int(a: B128) -> Bool
     var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
     if be == 0x7FFF_s64
         return false
-    var f = bits & ((1_u128 << 112_u32) -% 1_u128)
+    var f = bits & (1_u128 << 112_u32) -% 1_u128
     if be == 0_s64
         return f == 0_u128
     var e = be -% 16383_s64
@@ -24,7 +24,7 @@ secret routine b128_is_int(a: B128) -> Bool
         return true
     if e < 0_s64
         return false
-    return (f & ((1_u128 << b128_trig_sh(n: 112_s64 -% e)) -% 1_u128)) == 0_u128
+    return (f & (1_u128 << b128_trig_sh(n: 112_s64 -% e)) -% 1_u128) == 0_u128
 
 ### Whether a finite B128 integer is odd (every B128 from 2^113 on is even).
 secret routine b128_integer_is_odd(a: B128) -> Bool
@@ -32,7 +32,7 @@ secret routine b128_integer_is_odd(a: B128) -> Bool
     var e = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128) -% 16383_s64
     if e < 0_s64 or e > 112_s64
         return false
-    var m = (bits & ((1_u128 << 112_u32) -% 1_u128)) | (1_u128 << 112_u32)
+    var m = bits & (1_u128 << 112_u32) -% 1_u128 | (1_u128 << 112_u32)
     return ((m >>> b128_trig_sh(n: 112_s64 -% e)) & 1_u128) == 1_u128
 
 ### f(x) on the 384-bit tier for a B128 whose fast path left the rounding open: 0 tan, 1 sinh, 2 cosh,
@@ -242,7 +242,13 @@ routine B128.log2_unchecked() -> B128
         return nv
     var (ok, hi, lo) = b128_log_scaled_ok(x: me)
     if ok
-        var (fast, v) = b128_log_scaled(hi: hi, lo: lo, c1: 0xB8AA3B295C17F0BB_u64, c0: 0xBE87FED0691D3E89_u64, p: 127_u32)
+        var (fast, v) = b128_log_scaled(
+            hi: hi,
+            lo: lo,
+            c1: 0xB8AA3B295C17F0BB_u64,
+            c0: 0xBE87FED0691D3E89_u64,
+            p: 127_u32,
+        )
         if fast
             return v
     return b128_wide(x: me, which: 7_u64)
@@ -263,7 +269,13 @@ routine B128.log10_unchecked() -> B128
         return nv
     var (ok, hi, lo) = b128_log_scaled_ok(x: me)
     if ok
-        var (fast, v) = b128_log_scaled(hi: hi, lo: lo, c1: 0xDE5BD8A937287195_u64, c0: 0x355BAAAFAD33DC32_u64, p: 129_u32)
+        var (fast, v) = b128_log_scaled(
+            hi: hi,
+            lo: lo,
+            c1: 0xDE5BD8A937287195_u64,
+            c0: 0x355BAAAFAD33DC32_u64,
+            p: 129_u32,
+        )
         if fast
             return v
     return b128_wide(x: me, which: 8_u64)
@@ -344,11 +356,19 @@ routine B128.pow_unchecked(you: B128) -> B128
         return posinf
     if me.is_infinite() and me.is_negative() and you.is_negative() and yisoddint
         return negzero
-    if me.is_infinite() and me.is_negative() and you.is_negative() and not you.is_zero() and not yisoddint
+    if me.is_infinite()
+        and me.is_negative()
+        and you.is_negative()
+        and not you.is_zero()
+        and not yisoddint
         return poszero
     if me.is_infinite() and me.is_negative() and not you.is_negative() and yisoddint
         return neginf
-    if me.is_infinite() and me.is_negative() and not you.is_negative() and not you.is_zero() and not yisoddint
+    if me.is_infinite()
+        and me.is_negative()
+        and not you.is_negative()
+        and not you.is_zero()
+        and not yisoddint
         return posinf
     if me.is_infinite() and not me.is_negative() and you.is_negative() and not you.is_zero()
         return poszero
@@ -494,7 +514,7 @@ routine B128.tan() -> B128
 secret routine b128_int_parts(x: B128) -> (U128, S64)
     var bits = x.to_bits()
     var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
-    var f = bits & ((1_u128 << 112_u32) -% 1_u128)
+    var f = bits & (1_u128 << 112_u32) -% 1_u128
     if be == 0_s64
         return (f, -16494_s64)
     return (f | (1_u128 << 112_u32), be -% 16495_s64)
@@ -505,7 +525,14 @@ secret routine b128_int_parts(x: B128) -> (U128, S64)
 ### have at most 226 significant bits), so the sum keeps its top within one bit of the larger one's and the
 ### sticky bit sits far below any rounding place. A subtraction that drops bits takes one more unit off: the
 ### true value then lies strictly between that and the next unit up.
-secret routine b128_exact_sum(neg_a: Bool, a: (U128, U128, U128), ea: S64, neg_b: Bool, b: (U128, U128, U128), eb: S64) -> B128Wx
+secret routine b128_exact_sum(
+    neg_a: Bool,
+    a: (U128, U128, U128),
+    ea: S64,
+    neg_b: Bool,
+    b: (U128, U128, U128),
+    eb: S64,
+) -> B128Wx
     var wa = wx_make(neg: neg_a, t: a, e: ea, rel: 0.0)
     var wb = wx_make(neg: neg_b, t: b, e: eb, rel: 0.0)
     if wx_is_zero(w: wb)
@@ -568,17 +595,22 @@ secret routine b128_fma_fast(a: U128, b: U128, c: U128) -> (Bool, U128)
     var signmask = 1_u128 << 127_u32
     var expmask = 0x7FFF_u128 << 112_u32
     var fracmask = (1_u128 << 112_u32) -% 1_u128
-    var aa = a & (signmask -% 1_u128)
-    var ba = b & (signmask -% 1_u128)
-    var ca = c & (signmask -% 1_u128)
-    if aa == 0_u128 or ba == 0_u128 or ca == 0_u128 or aa >= expmask or ba >= expmask or ca >= expmask
+    var aa = a & signmask -% 1_u128
+    var ba = b & signmask -% 1_u128
+    var ca = c & signmask -% 1_u128
+    if aa == 0_u128
+        or ba == 0_u128
+        or ca == 0_u128
+        or aa >= expmask
+        or ba >= expmask
+        or ca >= expmask
         return (false, 0_u128)
     if aa < (1_u128 << 112_u32) or ba < (1_u128 << 112_u32) or ca < (1_u128 << 112_u32)
         return (false, 0_u128)
     # value = m 2^e with m the 113-bit significand and e the exponent of its last bit
-    var ma = (aa & fracmask) | (1_u128 << 112_u32)
-    var mb = (ba & fracmask) | (1_u128 << 112_u32)
-    var mc = (ca & fracmask) | (1_u128 << 112_u32)
+    var ma = aa & fracmask | (1_u128 << 112_u32)
+    var mb = ba & fracmask | (1_u128 << 112_u32)
+    var mc = ca & fracmask | (1_u128 << 112_u32)
     var ea = LLVM::int_truncate[U128, S64](aa >>> 112_u32) -% 16495_s64
     var eb = LLVM::int_truncate[U128, S64](ba >>> 112_u32) -% 16495_s64
     var ec = LLVM::int_truncate[U128, S64](ca >>> 112_u32) -% 16495_s64
@@ -638,7 +670,7 @@ secret routine b128_fma_fast(a: U128, b: U128, c: U128) -> (Bool, U128)
         return (false, 0_u128)
     # the top 113 bits, rounded to nearest even on the 143 below
     var q = LLVM::int_truncate[U256, U128](sum >>> 143_u32)
-    var rem = sum & ((1_u256 << 143_u32) -% 1_u256)
+    var rem = sum & (1_u256 << 143_u32) -% 1_u256
     var half = 1_u256 << 142_u32
     var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead +% 16383_s64)) << 112_u32) +% (q -% (1_u128 << 112_u32))
     if rem > half or (rem == half and (q & 1_u128) == 1_u128)
@@ -682,7 +714,14 @@ routine B128.fma_unchecked(b: B128, c: B128) -> B128
     if c.is_zero()
         return wx_b128(w: wx_make(neg: pneg, t: pt, e: pe, rel: 0.0))
     var (mc, ec) = b128_int_parts(x: c)
-    var sum = b128_exact_sum(neg_a: pneg, a: pt, ea: pe, neg_b: c.is_negative(), b: (0_u128, 0_u128, mc), eb: ec -% 256_s64)
+    var sum = b128_exact_sum(
+        neg_a: pneg,
+        a: pt,
+        ea: pe,
+        neg_b: c.is_negative(),
+        b: (0_u128, 0_u128, mc),
+        eb: ec -% 256_s64,
+    )
     if wx_is_zero(w: sum)
         return B128.from_bits(bits: 0_u128)
     return wx_b128(w: sum)
@@ -719,7 +758,14 @@ secret routine b128_add_square(sum: B128Wx, x: B128) -> B128Wx
     var sq = (0_u128, p.item1, p.item0)
     if wx_is_zero(w: sum)
         return wx_make(neg: false, t: sq, e: 2_s64 *% e -% 128_s64, rel: 0.0)
-    return b128_exact_sum(neg_a: false, a: wx_t(w: sum), ea: sum.e, neg_b: false, b: sq, eb: 2_s64 *% e -% 128_s64)
+    return b128_exact_sum(
+        neg_a: false,
+        a: wx_t(w: sum),
+        ea: sum.e,
+        neg_b: false,
+        b: sq,
+        eb: 2_s64 *% e -% 128_s64,
+    )
 
 ### `sqrt(x^2 + y^2 + z^2)`, correctly rounded, with raw IEEE (any inf -> +inf, any NaN -> qNaN). No crash.
 ### The squares are exact and their sum exact up to a sticky bit; the root of its top 229 or 230 bits (an
@@ -732,7 +778,10 @@ routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
         return B128.from_bits(bits: b128_inf(sign: 0_u64))
     if x.is_nan() or y.is_nan() or z.is_nan()
         return B128.from_bits(bits: b128_qnan())
-    var sum = b128_add_square(sum: b128_add_square(sum: b128_add_square(sum: wx_zero(rel: 0.0), x: x), x: y), x: z)
+    var sum = b128_add_square(
+        sum: b128_add_square(sum: b128_add_square(sum: wx_zero(rel: 0.0), x: x), x: y),
+        x: z,
+    )
     if wx_is_zero(w: sum)
         return B128.from_bits(bits: 0_u128)
     # sum = n * 2^s + rest with n its top 230 or 229 bits and s even
@@ -751,7 +800,9 @@ routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
     var rt = LLVM::int_truncate[U256, U128](root) << 2_u32
     if sticky
         rt = rt | 1_u128
-    return wx_b128(w: wx_make(neg: false, t: (0_u128, 0_u128, rt), e: (s >> 1) -% 258_s64, rel: 0.0))
+    return wx_b128(
+        w: wx_make(neg: false, t: (0_u128, 0_u128, rt), e: (s >> 1) -% 258_s64, rel: 0.0),
+    )
 
 ### Returns `sin(pi*me)`: sin(pi*n) is ±0 with the sign of me.
 routine B128.sinpi() -> B128

@@ -12,19 +12,6 @@ choice RoamState
     ### Buffered as a possible cycle root.
     SUSPECTED: 3
 
-### Builder intrinsic: yields a closure over this type's synthesized `roam_trace` cycle-collector
-### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
-### routine-value reference to that hook; the `cptr_none()` body is a never-used fallback (NOT `@innate`
-### — an unrecognized `@innate` T-method is folded to a default before the rewrite runs).
-### See internal-wiki/v0.4.x-cycle-collector.md §9.3.
-routine T.roam_trace_ref() -> CPtr
-    return cptr_none()
-
-### Builder intrinsic: yields a closure over this type's synthesized `roam_free` hook (tears down
-### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass; `cptr_none()` fallback.
-routine T.roam_free_ref() -> CPtr
-    return cptr_none()
-
 ### Biased reference-counting controller for {Roamed[T]} — the hybrid of {RetainController[T]}
 ### (non-atomic, single-thread) and {GuardController[T, P]} (atomic + lock). Starts in LOCAL mode:
 ### one non-atomic `count`, no lock, owner only. On the first escape across a concurrency boundary
@@ -81,6 +68,19 @@ entity RoamController[EntityType T]
     ### entity's `destroy` (type-correct) then frees the controller. `cptr_none()` until wired.
     secret free_hook: CPtr
 
+### Builder intrinsic: yields a closure over this type's synthesized `roam_trace` cycle-collector
+### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
+### routine-value reference to that hook; the `cptr_none()` body is a never-used fallback (NOT `@innate`
+### — an unrecognized `@innate` T-method is folded to a default before the rewrite runs).
+### See internal-wiki/v0.4.x-cycle-collector.md §9.3.
+routine T.roam_trace_ref() -> CPtr
+    return cptr_none()
+
+### Builder intrinsic: yields a closure over this type's synthesized `roam_free` hook (tears down
+### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass; `cptr_none()` fallback.
+routine T.roam_free_ref() -> CPtr
+    return cptr_none()
+
 ### Creates a controller with one strong reference in LOCAL mode (unlocked, non-atomic).
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `RoamController[T]` value.
@@ -97,7 +97,7 @@ dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
         state: RoamState.LIVE,
         buffered: false,
         trace_hook: data.as_entity().roam_trace_ref(),
-        free_hook: data.as_entity().roam_free_ref()
+        free_hook: data.as_entity().roam_free_ref(),
     )
 
 # ============================================================================
@@ -346,7 +346,10 @@ dangerous routine RoamController[T].promote()
             # worklist before the next iteration's trace clobbers it (same discipline as `cyclic_children`).
             if not node.trace_hook.is_none()
                 C::rf_cyclic_scratch_reset()
-                C::rf_cyclic_trace_into_scratch(trace_hook: node.trace_hook.get_address(), controller: node.data.get_address())
+                C::rf_cyclic_trace_into_scratch(
+                    trace_hook: node.trace_hook.get_address(),
+                    controller: node.data.get_address(),
+                )
                 var n = C::rf_cyclic_scratch_count()
                 var i = 0_u64
                 while i < n

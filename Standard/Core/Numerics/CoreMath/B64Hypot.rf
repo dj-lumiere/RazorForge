@@ -36,7 +36,7 @@ routine hypot_unchecked(x: B64, y: B64) -> B64
         var xqnan = (wx >>> 52) == 0xFFF_u64
         var yqnan = (wy >>> 52) == 0xFFF_u64
         # IEEE 754: hypot(±infinity, qNaN) = hypot(qNaN, ±infinity) = +infinity
-        if (xinf != yinf) and (xqnan != yqnan)
+        if xinf != yinf and xqnan != yqnan
             return B64.from_bits(bits: 0x7FF0000000000000_u64)
         return b64_hypot_nan_add(x: ax, y: ay)
     # u = max(|x|, |y|), v = min(|x|, |y|)
@@ -59,7 +59,7 @@ routine hypot_unchecked(x: B64, y: B64) -> B64
         var nz = ey.leading_zeros()
         ey = ey << LLVM::int_truncate[U64, U32](nz - 11)
         ey = ey & 0x000FFFFFFFFFFFFF_u64
-        ey = ey -% ((nz - 12) << 52)
+        ey = ey -% (nz - 12 << 52)
         yd = ey
     var de = xd -% yd
     if de > 0x01B0000000000000_u64
@@ -75,7 +75,7 @@ routine hypot_unchecked(x: B64, y: B64) -> B64
     var dy2 = LLVM::fma[B64](a: sy, b: sy, c: -y2)
     var r2 = x2 +! y2
     var ir2 = 0.5 /! r2
-    var dr2 = ((x2 -! r2) +! y2) +! (dx2 +! dy2)
+    var dr2 = x2 -! r2 +! y2 +! (dx2 +! dy2)
     var th = r2.sqrt_unchecked()
     var rsqrt = th *! ir2
     var dz = dr2 -! LLVM::fma[B64](a: th, b: th, c: -r2)
@@ -89,8 +89,8 @@ routine hypot_unchecked(x: B64, y: B64) -> B64
     ex = thu & emsk
     ey = tl.abs().to_bits()
     var aidr = ey +% 0x3FE0000000000000_u64 -% ex
-    var mid = (aidr -% 0x3C90000000000000_u64 +% 16) >>> 5
-    var midm = (aidr -% 0x3C80000000000000_u64 +% 16) >>> 5
+    var mid = aidr -% 0x3C90000000000000_u64 +% 16 >>> 5
+    var midm = aidr -% 0x3C80000000000000_u64 +% 16 >>> 5
     if mid == 0 or midm == 0 or aidr < 0x39B0000000000000_u64 or aidr > 0x3C9FFFFFFFFFFF80_u64
         thu = b64_hypot_hard(x: sx, y: sy).to_bits()
     thu = thu -% off
@@ -143,8 +143,8 @@ secret routine b64_hypot_denorm(a: U64, b: U64) -> B64
 secret routine b64_hypot_hard(x: B64, y: B64) -> B64
     var xu = x.to_bits()
     var yu = y.to_bits()
-    var bm = (xu & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
-    var lm = (yu & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
+    var bm = xu & 0x000FFFFFFFFFFFFF_u64 | 0x0010000000000000_u64
+    var lm = yu & 0x000FFFFFFFFFFFFF_u64 | 0x0010000000000000_u64
     var be = LLVM::reinterpret_bits[U64, S64](xu >>> 52)
     var le = LLVM::reinterpret_bits[U64, S64](yu >>> 52)
     var ri = (x *! x +! y *! y).sqrt_unchecked().to_bits()

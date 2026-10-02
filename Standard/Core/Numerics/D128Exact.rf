@@ -30,7 +30,7 @@ secret preset D128X_ZETA_K: Array[U128, 30] = [
     0x09D8ECB8FE2CC261A79F81B6C2036AFF_u128, 0x1C896E05D44BB2D86FD211CB0C075578_u128,
     0x0924B6FC19062FB9E9695C0817D0A644_u128, 0x16623B1742E8EDEA528B61D64256D9DD_u128,
     0x088899A3B73FF01DC9A4FF396EE34EC2_u128, 0x31069EA2D71851D5342B8610850A589C_u128,
-    0x08000803266F5917879D0156AFFDBC10_u128, 0xB5834005BD89BCE2341CDD75F45C7D80_u128
+    0x08000803266F5917879D0156AFFDBC10_u128, 0xB5834005BD89BCE2341CDD75F45C7D80_u128,
 ]
 # (zeta(k) - 1) / k for k = 2 .. 16 in units of 2^-255 (hi, lo), rounded.
 secret preset D128X_ZETAM1_K: Array[U128, 30] = [
@@ -48,7 +48,7 @@ secret preset D128X_ZETAM1_K: Array[U128, 30] = [
     0x00004F2F258F38890A15A919382ACD75_u128, 0x43EBE42D36C1DA3AE5F974413369CB9F_u128,
     0x000024B2F473E69557203775CEAC13FA_u128, 0xF1CFF1F2B09FC9580966CF8D1DC490B8_u128,
     0x0000111B2EB76795411C76B0E65AC639_u128, 0xA87E161A4E8FC94CABA2FD87FC81D013_u128,
-    0x00000803266F5917879D0156AFFDBC10_u128, 0xB5834005BD89BCE2341CDD75F45C7D80_u128
+    0x00000803266F5917879D0156AFFDBC10_u128, 0xB5834005BD89BCE2341CDD75F45C7D80_u128,
 ]
 
 ### (a * b) / 2^254 truncated toward zero, for signed fixed-point values below 1 in magnitude (units of
@@ -62,7 +62,7 @@ secret routine d128x_smul(a: S256, b: S256) -> S256
     if b < 0_s256
         ub = 0_u256 -% ub
     var r = LLVM::reinterpret_bits[U256, S256](u256_mulhi(a: ua << 2_u32, b: ub))
-    if (a < 0_s256) != (b < 0_s256)
+    if a < 0_s256 != b < 0_s256
         return 0_s256 -% r
     return r
 
@@ -77,10 +77,10 @@ secret routine d128x_div_small(a: S256, k: U64) -> S256
     var i = 4_u32
     while i > 0_u32
         i = i -% 1_u32
-        var cur = (rem << 64_u32) | LLVM::zero_extend[U64, U128](LLVM::int_truncate[U256, U64](u >>> (i *% 64_u32)))
+        var cur = (rem << 64_u32) | LLVM::zero_extend[U64, U128](LLVM::int_truncate[U256, U64](u >>> i *% 64_u32))
         var qq = cur // LLVM::zero_extend[U64, U128](k)
         rem = cur -% qq *% LLVM::zero_extend[U64, U128](k)
-        q = q | (LLVM::zero_extend[U128, U256](qq) << (i *% 64_u32))
+        q = q | (LLVM::zero_extend[U128, U256](qq) << i *% 64_u32)
     var r = LLVM::reinterpret_bits[U256, S256](q)
     if neg
         return 0_s256 -% r
@@ -134,7 +134,7 @@ secret routine d128x_round_product(neg: Bool, d: U128, q: S64, f: U256, ferr: U1
         var top = ph.item0 +% cy
         # the integer part (N >> 254) and the 254-bit fraction
         var ip = (top << 2_u32) | (mid >>> 126_u32)
-        var frac = ((LLVM::zero_extend[U128, U256](mid & ((1_u128 << 126_u32) -% 1_u128))) << 128_u32) | LLVM::zero_extend[U128, U256](pl.item1)
+        var frac = (LLVM::zero_extend[U128, U256](mid & (1_u128 << 126_u32) -% 1_u128) << 128_u32) | LLVM::zero_extend[U128, U256](pl.item1)
         var err = LLVM::zero_extend[U128, U256](ferr) *% LLVM::zero_extend[U128, U256](dd) +% 2_u256
         if ip >= hi34
             # divide the whole 384-bit product by 10 (a unit more of error)
@@ -157,7 +157,7 @@ secret routine d128x_round_product(neg: Bool, d: U128, q: S64, f: U256, ferr: U1
             mid = (LLVM::zero_extend[U64, U128](limbs[3_u64]) << 64_u32) | LLVM::zero_extend[U64, U128](limbs[2_u64])
             var low = (LLVM::zero_extend[U64, U128](limbs[1_u64]) << 64_u32) | LLVM::zero_extend[U64, U128](limbs[0_u64])
             ip = (top << 2_u32) | (mid >>> 126_u32)
-            frac = ((LLVM::zero_extend[U128, U256](mid & ((1_u128 << 126_u32) -% 1_u128))) << 128_u32) | LLVM::zero_extend[U128, U256](low)
+            frac = (LLVM::zero_extend[U128, U256](mid & (1_u128 << 126_u32) -% 1_u128) << 128_u32) | LLVM::zero_extend[U128, U256](low)
             err = err +% 1_u256
             s = s -% 1_s64
             if ip >= hi34 or ip < lo34
@@ -207,7 +207,13 @@ secret routine d128x_log1p_tiny(t: D128Parts) -> (Bool, D128)
     if p != 0_s256
         return (false, zero)
     var kk = LLVM::zero_extend[U64, U128](k)
-    return d128x_round_product(neg: t.sign, d: t.coeff, q: t.exp, f: LLVM::reinterpret_bits[S256, U256](f), ferr: 2_u128 *% (kk +% 1_u128) *% (kk +% 1_u128) +% 8_u128)
+    return d128x_round_product(
+        neg: t.sign,
+        d: t.coeff,
+        q: t.exp,
+        f: LLVM::reinterpret_bits[S256, U256](f),
+        ferr: 2_u128 *% (kk +% 1_u128) *% (kk +% 1_u128) +% 8_u128,
+    )
 
 ### lgamma(1 + z) (two false) or lgamma(2 + z) (two true) for a D128 z with |z| < 10^-6, rounded to 34
 ### digits, or false: z * G with G = -gamma + sum (-1)^k zeta(k)/k z^(k-1) (or 1 - gamma and (zeta(k) - 1)/k)
@@ -260,7 +266,13 @@ secret routine d128x_expm1_tiny(t: D128Parts) -> (Bool, D128)
     if term != 0_s256
         return (false, zero)
     var kk = LLVM::zero_extend[U64, U128](k)
-    return d128x_round_product(neg: t.sign, d: t.coeff, q: t.exp, f: LLVM::reinterpret_bits[S256, U256](f), ferr: 2_u128 *% kk +% 8_u128)
+    return d128x_round_product(
+        neg: t.sign,
+        d: t.coeff,
+        q: t.exp,
+        f: LLVM::reinterpret_bits[S256, U256](f),
+        ferr: 2_u128 *% kk +% 8_u128,
+    )
 
 ### cos (hyperbolic false) or cosh (true) of a D128 x with |x| < 10^-6, rounded to 34 digits, or false: the
 ### value is 1 -+ u with u = x^2/2 -+ x^4/24 + ... in 256-bit fixed point (within 2K + 8 units of 2^-254),
@@ -276,7 +288,10 @@ secret routine d128x_cos_tiny(x: D128Parts, hyperbolic: Bool) -> (Bool, D128)
     var u = term
     var k = 1_u64
     while k < 12_u64 and term != 0_s256
-        term = d128x_div_small(a: d128x_smul(a: term, b: w), k: (2_u64 *% k +% 1_u64) *% (2_u64 *% k +% 2_u64))
+        term = d128x_div_small(
+            a: d128x_smul(a: term, b: w),
+            k: (2_u64 *% k +% 1_u64) *% (2_u64 *% k +% 2_u64),
+        )
         if hyperbolic or (k & 1_u64) == 0_u64
             u = u +% term
         else
@@ -294,7 +309,7 @@ secret routine d128x_cos_tiny(x: D128Parts, hyperbolic: Bool) -> (Bool, D128)
     var (mid, cy) = b128t_add(a: ph.item1, b: pl.item0, cin: 0_u128)
     var top = ph.item0 +% cy
     var ip = (top << 2_u32) | (mid >>> 126_u32)
-    var frac = ((LLVM::zero_extend[U128, U256](mid & ((1_u128 << 126_u32) -% 1_u128))) << 128_u32) | LLVM::zero_extend[U128, U256](pl.item1)
+    var frac = (LLVM::zero_extend[U128, U256](mid & (1_u128 << 126_u32) -% 1_u128) << 128_u32) | LLVM::zero_extend[U128, U256](pl.item1)
     var err = LLVM::zero_extend[U128, U256](scale) *% LLVM::zero_extend[U64, U256](2_u64 *% k +% 8_u64) +% 2_u256
     var half = 1_u256 << 253_u32
     if frac +% err >= half and frac <= half +% err
@@ -340,7 +355,10 @@ secret routine d128x_log1p_wide(t: D128Parts) -> (Bool, Bool, U256, S64, B64)
             pm = 0_s256 -% p
         if pm <= small
             break
-        var term = d128x_smul(a: p, b: LLVM::reinterpret_bits[U256, S256](B128_LOG1P_RECIP[k -% 1_u64]))
+        var term = d128x_smul(
+            a: p,
+            b: LLVM::reinterpret_bits[U256, S256](B128_LOG1P_RECIP[k -% 1_u64]),
+        )
         if (k & 1_u64) == 1_u64
             f = f -% term
         else
@@ -358,8 +376,13 @@ secret routine d128x_log1p_wide(t: D128Parts) -> (Bool, Bool, U256, S64, B64)
         return (false, false, 0_u256, 0_s64, 0.0)
     var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(l))
     var kk = B64(from: k)
-    var tv = b128fx_wide_b64(hi: LLVM::int_truncate[U256, U128](tm >>> 128_u32), lo: LLVM::int_truncate[U256, U128](tm))
-    var tail = 2.0 *! b128fx_wide_b64(hi: LLVM::int_truncate[U256, U128](LLVM::reinterpret_bits[S256, U256](pl) >>> 128_u32), lo: LLVM::int_truncate[U256, U128](LLVM::reinterpret_bits[S256, U256](pl)))
+    var tv = b128fx_wide_b64(
+        hi: LLVM::int_truncate[U256, U128](tm >>> 128_u32),
+        lo: LLVM::int_truncate[U256, U128](tm),
+    )
+    var tail = 2.0 *! b128fx_wide_b64(
+        hi: LLVM::int_truncate[U256, U128](LLVM::reinterpret_bits[S256, U256](pl) >>> 128_u32),
+        lo: LLVM::int_truncate[U256, U128](LLVM::reinterpret_bits[S256, U256](pl)),
+    )
     var rel = 3.0 /! tv +! (3.0 *! (kk +! 1.0) *! (kk +! 1.0) +! 8.0 +! tail) *! 0x1p-253
     return (true, t.sign, l << b128_trig_sh(n: lz), -252_s64 -% lz, rel)
-

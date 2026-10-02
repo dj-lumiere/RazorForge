@@ -1,5 +1,27 @@
 module IO/Console
+
 import IO/Stream
+# ============================================================================
+# Console streams — concrete Source / Sink over the process-global std streams
+# ============================================================================
+# The console is NOT a {File}: there is no persistent, addressable content underneath it — nothing to
+# `expose`. (A terminal's escape-sequence handling is a program-to-program convention, the same layer
+# as PNG's magic bytes, NOT the medium imposing a format — so that is NOT the disqualifier. The absence
+# of persistent, addressable content is.) So stdin/stdout/stderr are born as {Source}/{Sink} directly.
+# They are process-global and never closed, so they do NOT obey {Enterable} — use them inline, never
+# `using`. They are cheap `record`s (copying one just re-refers to the same global stream).
+
+### stdin as a {Source}. Consume forward with `load`; an empty result signals EOF.
+record ConsoleIn
+obeys Source
+    ### The standard-input descriptor (0). Present for identity; `load` reads stdin via the runtime.
+    secret fd: S32
+
+### stdout or stderr as a {Sink}, discriminated by `fd` (1 = stdout, 2 = stderr).
+record ConsoleOut
+obeys Sink
+    ### The standard stream descriptor: 1 = stdout, 2 = stderr.
+    secret fd: S32
 
 # ============================================================================
 # Output: show() - Standard Output (stdout)
@@ -138,26 +160,6 @@ routine ask_bytes(count: U64) -> Bytes
     if ptr.is_none()
         return Bytes()
     return Bytes(ptr: ptr)
-
-# ============================================================================
-# Console streams — concrete Source / Sink over the process-global std streams
-# ============================================================================
-# The console is NOT a {File}: there is no persistent, addressable content underneath it — nothing to
-# `expose`. (A terminal's escape-sequence handling is a program-to-program convention, the same layer
-# as PNG's magic bytes, NOT the medium imposing a format — so that is NOT the disqualifier. The absence
-# of persistent, addressable content is.) So stdin/stdout/stderr are born as {Source}/{Sink} directly.
-# They are process-global and never closed, so they do NOT obey {Enterable} — use them inline, never
-# `using`. They are cheap `record`s (copying one just re-refers to the same global stream).
-
-### stdin as a {Source}. Consume forward with `load`; an empty result signals EOF.
-record ConsoleIn obeys Source
-    ### The standard-input descriptor (0). Present for identity; `load` reads stdin via the runtime.
-    secret fd: S32
-
-### stdout or stderr as a {Sink}, discriminated by `fd` (1 = stdout, 2 = stderr).
-record ConsoleOut obeys Sink
-    ### The standard stream descriptor: 1 = stdout, 2 = stderr.
-    secret fd: S32
 
 ### The standard-input source.
 ### :returns: A {ConsoleIn} over stdin.

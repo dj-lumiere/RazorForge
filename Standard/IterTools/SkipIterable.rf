@@ -3,13 +3,25 @@ module IterTools
 ### Represents a lazy adapter that discards the first `count` elements from a sequence.
 ### :typeparam T: The element type produced by the source sequence.
 ### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity SkipIterable[AnyType T, AnyType S] obeys Iterable[T]
+entity SkipIterable[AnyType T, AnyType S]
+obeys Iterable[T]
 needs S obeys Iterable[T]
 relates SkipEmittable[T, S/Iter] as Iter
     ### Stores the source iterable (borrowed, not owned).
     secret source: Hijacked[S]
     ### Stores how many leading values should be skipped.
     secret count: U64
+
+### Iterates over a source sequence after discarding an initial prefix.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam SE: The concrete source iterator type (owned).
+entity SkipEmittable[AnyType T, AnyType SE]
+obeys Emittable[T]
+needs SE obeys Emittable[T]
+    ### Stores the underlying source iterator (owned; destroyed with the adapter).
+    secret source: SE
+    ### Stores how many items still need to be discarded.
+    secret remaining: U64
 
 ### Returns the stateful iterator that discards the configured prefix lazily.
 ### The returned emitter defers the actual skipping until iteration begins.
@@ -18,16 +30,6 @@ relates SkipEmittable[T, S/Iter] as Iter
 routine SkipIterable[T, S].iter() -> SkipEmittable[T, S/Iter]
     danger
         return SkipEmittable[T, S/Iter](source: me.source.as_entity().iter(), remaining: me.count)
-
-### Iterates over a source sequence after discarding an initial prefix.
-### :typeparam T: The element type produced by the source sequence.
-### :typeparam SE: The concrete source iterator type (owned).
-entity SkipEmittable[AnyType T, AnyType SE] obeys Emittable[T]
-needs SE obeys Emittable[T]
-    ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: SE
-    ### Stores how many items still need to be discarded.
-    secret remaining: U64
 
 ### Returns the next value after any remaining skipped prefix has been consumed.
 ### Values are discarded only until `remaining` reaches zero.

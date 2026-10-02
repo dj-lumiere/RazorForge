@@ -1,6 +1,6 @@
 module Tests/Stdlib/RecordInplaceApi
-import IO/Console
 
+import IO/Console
 # Locks the v0.0.4 by-ref-`me` boundary across all three record representations:
 #   - @llvm-type record  -> me is BY VALUE (the raw primitive), value semantics
 #   - single-field record -> me is BY REF, in-place mutation propagates
@@ -13,6 +13,31 @@ import IO/Console
 record Tagged
     pass
 
+# (2) single-field struct record: by-ref, mutation propagates.
+record Counter
+    posted value: S64
+
+# (3) multi-field struct record: by-ref, mutation propagates.
+record Point
+    posted x: S64
+    posted y: S64
+
+# (4) nested record field mutation, two ways the by-ref address recursion is exercised:
+#     - direct nested assignment `me.inner.n = ...` (LHS address GEP-chains me -> .inner -> .n)
+#     - a method call on the nested field `me.inner.incr(...)` (receiver address GEP-chains me -> .inner)
+record Inner
+    posted n: S64
+
+record Outer
+    posted inner: Inner
+    posted tag: S64
+
+# (5) hijack: a method writes through `me.value.hijack()`. Because `me` is by reference,
+#     hijacking the field yields the caller's storage address — the injected write is visible
+#     after the call (the original `=> 99` probe, now a committed regression guard).
+record Box
+    posted value: S64
+
 routine Tagged(from: S64) -> Tagged
     return LLVM::reinterpret_bits[S64, Tagged](from)
 
@@ -24,10 +49,6 @@ routine Tagged.value() -> S64
 routine Tagged.with_added(n: S64) -> Tagged
     return Tagged(from: me.value() + n)
 
-# (2) single-field struct record: by-ref, mutation propagates.
-record Counter
-    posted value: S64
-
 routine Counter.bump()
     me.value += 1
     return
@@ -36,29 +57,14 @@ routine Counter.add(n: S64)
     me.value += n
     return
 
-# (3) multi-field struct record: by-ref, mutation propagates.
-record Point
-    posted x: S64
-    posted y: S64
-
 routine Point.move_by(dx: S64, dy: S64)
     me.x += dx
     me.y += dy
     return
 
-# (4) nested record field mutation, two ways the by-ref address recursion is exercised:
-#     - direct nested assignment `me.inner.n = ...` (LHS address GEP-chains me -> .inner -> .n)
-#     - a method call on the nested field `me.inner.incr(...)` (receiver address GEP-chains me -> .inner)
-record Inner
-    posted n: S64
-
 routine Inner.incr(amount: S64)
     me.n += amount
     return
-
-record Outer
-    posted inner: Inner
-    posted tag: S64
 
 routine Outer.bump_inner()
     me.inner.n += 1
@@ -67,12 +73,6 @@ routine Outer.bump_inner()
 routine Outer.incr_inner(amount: S64)
     me.inner.incr(amount: amount)
     return
-
-# (5) hijack: a method writes through `me.value.hijack()`. Because `me` is by reference,
-#     hijacking the field yields the caller's storage address — the injected write is visible
-#     after the call (the original `=> 99` probe, now a committed regression guard).
-record Box
-    posted value: S64
 
 routine Box.set_via_hijack(v: S64)
     danger

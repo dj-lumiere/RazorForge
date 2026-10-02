@@ -1,5 +1,12 @@
 module Math3D
 
+# Math routines use the component B32's `_unchecked` ops (raw IEEE, no overflow
+# checks); NaN/±inf therefore propagate through the quaternion result per IEEE 754.
+
+# Quaternion constants
+preset Q128_ZERO: Q128 = Q128(w: 0.0_b32, x: 0.0_b32, y: 0.0_b32, z: 0.0_b32)
+preset Q128_IDENTITY: Q128 = Q128(w: 1.0_b32, x: 0.0_b32, y: 0.0_b32, z: 0.0_b32)
+
 ### A single-precision quaternion `w + x·i + y·j + z·k` with `B32` components.
 ### `Q128` is the standard rotation type for graphics-facing code; use `Q256` when
 ### double precision is needed. A quaternion is a value record (four `B32`
@@ -8,7 +15,8 @@ module Math3D
 ### Quaternions form a (non-commutative) division ring, so `Q128` obeys the
 ### arithmetic protocols `Addable`, `Subtractable`, `Multiplicable` (the Hamilton
 ### product — note `a·b ≠ b·a`), `Divisible`, `Negatable`, plus `Equatable`.
-record Q128 obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Equatable, Hashable
+record Q128
+obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Equatable, Hashable
     ### The real (scalar) component.
     w: B32
     ### The i (x) component.
@@ -17,13 +25,6 @@ record Q128 obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Eq
     y: B32
     ### The k (z) component.
     z: B32
-
-# Math routines use the component B32's `_unchecked` ops (raw IEEE, no overflow
-# checks); NaN/±inf therefore propagate through the quaternion result per IEEE 754.
-
-# Quaternion constants
-preset Q128_ZERO: Q128 = Q128(w: 0.0_b32, x: 0.0_b32, y: 0.0_b32, z: 0.0_b32)
-preset Q128_IDENTITY: Q128 = Q128(w: 1.0_b32, x: 0.0_b32, y: 0.0_b32, z: 0.0_b32)
 
 # ============================================================================
 # Creators
@@ -76,7 +77,12 @@ routine Q128.sub(you: Q128) -> Q128
 ### :returns: The Hamilton product.
 routine Q128.mul(you: Q128) -> Q128
     # Hamilton product of (w1,x1,y1,z1)·(w2,x2,y2,z2).
-    return Q128(w: me.w * you.w - me.x * you.x - me.y * you.y - me.z * you.z, x: me.w * you.x + me.x * you.w + me.y * you.z - me.z * you.y, y: me.w * you.y - me.x * you.z + me.y * you.w + me.z * you.x, z: me.w * you.z + me.x * you.y - me.y * you.x + me.z * you.w)
+    return Q128(
+        w: me.w * you.w - me.x * you.x - me.y * you.y - me.z * you.z,
+        x: me.w * you.x + me.x * you.w + me.y * you.z - me.z * you.y,
+        y: me.w * you.y - me.x * you.z + me.y * you.w + me.z * you.x,
+        z: me.w * you.z + me.x * you.y - me.y * you.x + me.z * you.w,
+    )
 
 ### Returns the quotient `me / you = me · you⁻¹`.
 ### :param you: The divisor.
@@ -256,7 +262,12 @@ common routine Q128.from_to(from: Vector3D, target: Vector3D) -> Q128
         var pl = (px * px + py * py + pz * pz).sqrt_unchecked()
         return Q128(w: 0.0_b32, x: px / pl, y: py / pl, z: pz / pl)
     # (1 + a.b, a cross b), normalized, is the rotation from a to b.
-    return Q128(w: 1.0_b32 + d, x: uy * vz - uz * vy, y: uz * vx - ux * vz, z: ux * vy - uy * vx).normalize()
+    return Q128(
+        w: 1.0_b32 + d,
+        x: uy * vz - uz * vy,
+        y: uz * vx - ux * vz,
+        z: ux * vy - uy * vx,
+    ).normalize()
 
 ### Returns the normalized linear interpolation between `me` (at `t = 0`) and `you` (at `t = 1`) along
 ### the shorter arc: cheaper than `slerp`, with a non-constant angular speed.
@@ -315,15 +326,26 @@ common routine Q128.from_euler(roll: B32, pitch: B32, yaw: B32) -> Q128
     var sp = (pitch * 0.5_b32).sin()
     var cy = (yaw * 0.5_b32).cos()
     var sy = (yaw * 0.5_b32).sin()
-    return Q128(w: cr * cp * cy + sr * sp * sy, x: sr * cp * cy - cr * sp * sy, y: cr * sp * cy + sr * cp * sy, z: cr * cp * sy - sr * sp * cy)
+    return Q128(
+        w: cr * cp * cy + sr * sp * sy,
+        x: sr * cp * cy - cr * sp * sy,
+        y: cr * sp * cy + sr * cp * sy,
+        z: cr * cp * sy - sr * sp * cy,
+    )
 
 ### Returns the Z-Y-X Euler angles `(roll, pitch, yaw)` of this unit quaternion, the inverse of
 ### `from_euler`. At pitch +-90 degrees (gimbal lock) roll and yaw are not unique; pitch is clamped there.
 ### :returns: A tuple `(roll, pitch, yaw)` in radians.
 routine Q128.to_euler() -> (B32, B32, B32)
-    var roll = atan2(y: 2.0_b32 * (me.w * me.x + me.y * me.z), x: 1.0_b32 - 2.0_b32 * (me.x * me.x + me.y * me.y))
+    var roll = atan2(
+        y: 2.0_b32 * (me.w * me.x + me.y * me.z),
+        x: 1.0_b32 - 2.0_b32 * (me.x * me.x + me.y * me.y),
+    )
     var pitch = q128_clamp_unit(v: 2.0_b32 * (me.w * me.y - me.z * me.x)).asin_unchecked()
-    var yaw = atan2(y: 2.0_b32 * (me.w * me.z + me.x * me.y), x: 1.0_b32 - 2.0_b32 * (me.y * me.y + me.z * me.z))
+    var yaw = atan2(
+        y: 2.0_b32 * (me.w * me.z + me.x * me.y),
+        x: 1.0_b32 - 2.0_b32 * (me.y * me.y + me.z * me.z),
+    )
     return (roll, pitch, yaw)
 
 # ============================================================================
@@ -334,14 +356,25 @@ routine Q128.to_euler() -> (B32, B32, B32)
 ### :returns: The resulting `Text` value.
 @override
 routine Q128.represent() -> Text
-    return me.w.represent() + __q32_term(v: me.x, unit: "i") + __q32_term(v: me.y, unit: "j") + __q32_term(v: me.z, unit: "k")
+    return me.w.represent() + __q32_term(v: me.x, unit: "i") + __q32_term(
+        v: me.y,
+        unit: "j",
+    ) + __q32_term(v: me.z, unit: "k")
 
 ### Formats this quaternion as `w+xi+yj+zk` with exactly `places` digits after the point in each part
 ### (see `B32.fixed`).
 ### :param places: The number of digits after the point.
 ### :returns: The resulting `Text` value.
 routine Q128.fixed(places: U64) -> Text
-    return me.w.fixed(places) + q128_fixed_term(v: me.x, unit: "i", places: places) + q128_fixed_term(v: me.y, unit: "j", places: places) + q128_fixed_term(v: me.z, unit: "k", places: places)
+    return me.w.fixed(places) + q128_fixed_term(
+        v: me.x,
+        unit: "i",
+        places: places,
+    ) + q128_fixed_term(v: me.y, unit: "j", places: places) + q128_fixed_term(
+        v: me.z,
+        unit: "k",
+        places: places,
+    )
 
 ### One imaginary term of `fixed`, with an explicit leading sign.
 routine q128_fixed_term(v: B32, unit: Text, places: U64) -> Text

@@ -1,16 +1,6 @@
 module Core
 
 import Collections
-# Core B16 type definition - maps to LLVM half
-
-### Represents a 16-bit IEEE 754 binary floating-point value.
-### `B16` trades away precision and range for compact storage, which makes it a
-### good fit for packed numeric data, graphics formats, and bandwidth-sensitive
-### workloads.
-@llvm("half")
-record B16 obeys Numeric, Ordered, Assignable, Copyable, Splittable
-    pass
-
 # IEEE 754 half precision constants
 preset B16_EPSILON: B16 = 9.765625e-4_b16
 preset B16_MIN: B16 = -65504.0_b16
@@ -20,11 +10,21 @@ preset B16_ZERO: B16 = 0.0_b16
 preset B16_ONE: B16 = 1.0_b16
 preset B16_INFINITY: B16 = inf_b16
 preset B16_NAN: B16 = nan_b16
-
 # Mathematical constants
 preset B16_PI: B16 = 3.140625_b16
 preset B16_E: B16 = 2.71875_b16
 preset B16_SQRT_2: B16 = 1.414063_b16
+
+# Core B16 type definition - maps to LLVM half
+
+### Represents a 16-bit IEEE 754 binary floating-point value.
+### `B16` trades away precision and range for compact storage, which makes it a
+### good fit for packed numeric data, graphics formats, and bandwidth-sensitive
+### workloads.
+@llvm("half")
+record B16
+obeys Numeric, Ordered, Assignable, Copyable, Splittable
+    pass
 
 ### Converts an `S8` into half-precision floating-point form.
 ### :param from: The signed 8-bit integer to convert.
@@ -135,14 +135,38 @@ routine B16(from: B128) -> B16
 ### :returns: The closest representable `B16` value.
 routine B16(from: D32) -> B16
     var d = from.decode()
-    return B16.from_bits(bits: LLVM::int_truncate[U128, U16](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 11_s64, emin: -14_s64, emax: 15_s64)))
+    return B16.from_bits(
+        bits: LLVM::int_truncate[U128, U16](
+            decimal_to_binary_bits(
+                sign: d.sign,
+                special: d.special,
+                coeff: d.coeff,
+                exp: d.exp,
+                p: 11_s64,
+                emin: -14_s64,
+                emax: 15_s64,
+            ),
+        ),
+    )
 
 ### Converts a decimal64 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B16` value.
 routine B16(from: D64) -> B16
     var d = from.decode()
-    return B16.from_bits(bits: LLVM::int_truncate[U128, U16](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 11_s64, emin: -14_s64, emax: 15_s64)))
+    return B16.from_bits(
+        bits: LLVM::int_truncate[U128, U16](
+            decimal_to_binary_bits(
+                sign: d.sign,
+                special: d.special,
+                coeff: d.coeff,
+                exp: d.exp,
+                p: 11_s64,
+                emin: -14_s64,
+                emax: 15_s64,
+            ),
+        ),
+    )
 
 ### Converts a decimal128 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
@@ -487,7 +511,11 @@ routine B16.fixed(places: U64) -> Text
 routine B16.diagnose() -> Text
     if me.is_signaling()
         return "B16(snan)"
-    return format_binary_shortest_wrapped(raw: LLVM::zero_extend[U16, U64](me.to_bits()), fmt: 2_s32, wrap: "B16")
+    return format_binary_shortest_wrapped(
+        raw: LLVM::zero_extend[U16, U64](me.to_bits()),
+        fmt: 2_s32,
+        wrap: "B16",
+    )
 
 ### Implements the wired routine behavior for this value.
 ### :param from_text: The `from_text` value.
@@ -519,7 +547,11 @@ routine B16.to_bytes_le() -> Array[Byte, 2]
     var raw = LLVM::reinterpret_bits[B16, U16](me)
     var result = Array[Byte, 2]()
     result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U16, U8](raw))
-    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](LLVM::shift_right_unsigned(raw, 8_u16)))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1_u64,
+        value: LLVM::int_truncate[U16, U8](LLVM::shift_right_unsigned(raw, 8_u16)),
+    )
     return result
 
 ### Returns the raw bytes of this value in big-endian order.
@@ -528,7 +560,11 @@ routine B16.to_bytes_be() -> Array[Byte, 2]
     var raw = LLVM::byte_swap(LLVM::reinterpret_bits[B16, U16](me))
     var result = Array[Byte, 2]()
     result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U16, U8](raw))
-    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](LLVM::shift_right_unsigned(raw, 8_u16)))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1_u64,
+        value: LLVM::int_truncate[U16, U8](LLVM::shift_right_unsigned(raw, 8_u16)),
+    )
     return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -536,7 +572,11 @@ routine B16.to_bytes_be() -> Array[Byte, 2]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine B16.hash(k0: U64, k1: U64) -> U64
-    return __secure_hash_u64(v: LLVM::zero_extend[U16, U64](LLVM::reinterpret_bits[B16, U16](me)), k0: k0, k1: k1)
+    return __secure_hash_u64(
+        v: LLVM::zero_extend[U16, U64](LLVM::reinterpret_bits[B16, U16](me)),
+        k0: k0,
+        k1: k1,
+    )
 
 # ============================================================================
 # Full libm parity — RF-native via the B32 path (no b16_functions.c runtime).
@@ -738,9 +778,9 @@ routine B16.fma_unchecked(b: B16, c: B16) -> B16
     var s = p +! cd
     if s.is_finite()
         var bv = s -! p
-        var err = (p -! (s -! bv)) +! (cd -! bv)
+        var err = p -! (s -! bv) +! (cd -! bv)
         var sb = s.to_bits()
-        if err != 0.0 and sb & 1_u64 == 0
+        if err != 0.0 and (sb & 1_u64) == 0
             # step one ulp toward the exact sum, the truncated value, whose last bit is odd
             if (err > 0.0) == (s > 0.0)
                 sb = sb +% 1
@@ -880,7 +920,10 @@ routine B16.total_order(you: B16) -> Bool
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine B16.total_order_mag(you: B16) -> Bool
-    return LLVM::bit_and(a: me.to_bits(), b: 0x7FFF_u16) <= LLVM::bit_and(a: you.to_bits(), b: 0x7FFF_u16)
+    return LLVM::bit_and(a: me.to_bits(), b: 0x7FFF_u16) <= LLVM::bit_and(
+        a: you.to_bits(),
+        b: 0x7FFF_u16,
+    )
 
 # ============================================================================
 # IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding

@@ -10,7 +10,8 @@ module Numerics
 ### `a % b` satisfy `a == b * (a // b) + a % b` with `0 <= a % b < |b|`. The bitwise operators act on
 ### the two's-complement form.
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
-record Integer obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable
+record Integer
+obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable
     ### True when the value is negative (never true for zero).
     secret neg: Bool
     ### The number of 64-bit magnitude limbs (0 for zero).
@@ -33,7 +34,12 @@ secret routine integer_view(v: Integer) -> IntV
 secret routine integer_from_view(x: IntV) -> Integer
     danger
         if x.len == 0u64
-            return Integer(neg: false, len: 0u64, tab: hijacked_none[U64](), ctrl: hijacked_none[FrozenController]())
+            return Integer(
+                neg: false,
+                len: 0u64,
+                tab: hijacked_none[U64](),
+                ctrl: hijacked_none[FrozenController](),
+            )
         var tab = Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8u64 *% x.len))
         var i = 0u64
         while i < x.len
@@ -45,11 +51,18 @@ secret routine integer_from_view(x: IntV) -> Integer
 # region and the copy-out that the other operations pay.
 secret routine integer_sum(a: IntV, b: IntV) -> Integer
     danger
-        var tab = Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8u64 *% bigint_add_capacity(a: a, b: b)))
+        var tab = Hijacked[U64](
+            from: C::rf_allocate_dynamic_uninit(size: 8u64 *% bigint_add_capacity(a: a, b: b)),
+        )
         var x = bigint_add_into(a: a, b: b, r: tab)
         if x.len == 0u64
             tab.invalidate()
-            return Integer(neg: false, len: 0u64, tab: hijacked_none[U64](), ctrl: hijacked_none[FrozenController]())
+            return Integer(
+                neg: false,
+                len: 0u64,
+                tab: hijacked_none[U64](),
+                ctrl: hijacked_none[FrozenController](),
+            )
         return Integer(neg: x.neg, len: x.len, tab: tab, ctrl: fresh_frozen_controller())
 
 # ============================================================================
@@ -93,6 +106,7 @@ routine integer_of_s64(v: S64) -> Integer
         var r = integer_from_view(x: bigint_from_s64(v: v))
         C::rf_region_release(mark: mark)
         return r
+
 routine integer_of_u64(v: U64) -> Integer
     danger
         var mark = C::rf_region_mark()
@@ -107,18 +121,26 @@ routine integer_of_u64(v: U64) -> Integer
 ### :returns: The equal `Integer` value.
 routine Integer(from: S8) -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S8, S64](from))
+
 routine Integer(from: S16) -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S16, S64](from))
+
 routine Integer(from: S32) -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S32, S64](from))
+
 routine Integer(from: S128) -> Integer
     var neg = LLVM::signed_lt[S128](a: from, b: 0_s128)
-    var mag = if neg then LLVM::reinterpret_bits[S128, U128](LLVM::sub[S128](a: 0_s128, b: from)) else LLVM::reinterpret_bits[S128, U128](from)
+    var mag = if neg then LLVM::reinterpret_bits[S128, U128](
+        LLVM::sub[S128](a: 0_s128, b: from),
+    ) else LLVM::reinterpret_bits[S128, U128](from)
     var r = Integer(from: mag)
     return if neg then r.neg() else r
+
 routine Integer(from: S256) -> Integer
     var neg = LLVM::signed_lt[S256](a: from, b: 0_s256)
-    var mag = if neg then LLVM::reinterpret_bits[S256, U256](LLVM::sub[S256](a: 0_s256, b: from)) else LLVM::reinterpret_bits[S256, U256](from)
+    var mag = if neg then LLVM::reinterpret_bits[S256, U256](
+        LLVM::sub[S256](a: 0_s256, b: from),
+    ) else LLVM::reinterpret_bits[S256, U256](from)
     var r = Integer(from: mag)
     return if neg then r.neg() else r
 
@@ -127,15 +149,19 @@ routine Integer(from: S256) -> Integer
 ### :returns: The equal `Integer` value.
 routine Integer(from: U8) -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U8, U64](from))
+
 routine Integer(from: U16) -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U16, U64](from))
+
 routine Integer(from: U32) -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U32, U64](from))
+
 routine Integer(from: U128) -> Integer
     # value = hi * 2^64 + lo, from the two 64-bit limbs.
     var hi = integer_of_u64(v: LLVM::int_truncate[U128, U64](from >>> 64u32))
     var lo = integer_of_u64(v: LLVM::int_truncate[U128, U64](from))
     return hi.shl(bits: 64_s32).add(other: lo)
+
 routine Integer(from: U256) -> Integer
     # value = hi * 2^128 + lo, reusing the U128 widening for each 128-bit half.
     var hi = Integer(from: LLVM::int_truncate[U256, U128](from >>> 128u32))
@@ -179,7 +205,8 @@ common routine Integer.from_literal(text: Text) -> Integer
 ### The limb buffer is shared; no big-integer data is copied. For zero (no
 ### controller) the copy is a bitwise duplicate with no atomic op.
 ### :returns: The resulting `Integer` value.
-@[readonly, inline]
+@readonly
+@inline
 routine Integer.assign() -> Integer
     danger
         if not me.ctrl.is_none()
@@ -238,7 +265,9 @@ routine Integer.floordiv!(other: Integer) -> Integer
         throw DivisionByZeroError()
     danger
         var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_divmod(a: integer_view(v: me), b: integer_view(v: other)).item0)
+        var r = integer_from_view(
+            x: bigint_divmod(a: integer_view(v: me), b: integer_view(v: other)).item0,
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -293,7 +322,9 @@ routine Integer.cmp(you: Integer) -> ComparisonSign
 secret routine integer_bitop(a: Integer, b: Integer, op: U32) -> Integer
     danger
         var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_bitop(a: integer_view(v: a), b: integer_view(v: b), op: op))
+        var r = integer_from_view(
+            x: bigint_bitop(a: integer_view(v: a), b: integer_view(v: b), op: op),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -323,7 +354,9 @@ secret routine integer_shift(a: Integer, bits: U64, left: Bool) -> Integer
     danger
         var mark = C::rf_region_mark()
         var view = integer_view(v: a)
-        var r = integer_from_view(x: if left then bigint_shl(a: view, bits: bits) else bigint_shr(a: view, bits: bits))
+        var r = integer_from_view(
+            x: if left then bigint_shl(a: view, bits: bits) else bigint_shr(a: view, bits: bits),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -486,7 +519,7 @@ routine Integer.bit_length() -> U64
         return 0_u64
     danger
         var top = me.tab.stride(count: S64(from: me.len -% 1u64)).peek()
-        return (me.len *% 64u64) -% LLVM::leading_zeros(top)
+        return me.len *% 64u64 -% LLVM::leading_zeros(top)
 
 ### Returns the smaller of this value and `other`.
 ### :param other: The value to compare against.
@@ -586,13 +619,15 @@ routine U64!(from: Integer) -> U64
 ### Formats this value as base-10 text. Standard `represent` shape (no args)
 ### so the f-string machinery can dispatch without supplying a radix.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Integer.represent() -> Text
     return me.represent_radix(radix: 10_s32)
 
 ### Serializes this value as its base-10 text, which `Integer(from: SerialValue)` parses back exactly.
 ### :returns: The `SerialValue` text arm.
-@[readonly, override]
+@readonly
+@override
 routine Integer.serialize() -> SerialValue
     return SerialValue(from: me.represent())
 

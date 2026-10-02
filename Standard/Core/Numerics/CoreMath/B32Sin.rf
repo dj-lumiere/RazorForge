@@ -11,7 +11,16 @@ module Core
 # The argument reductions and the tables here are shared with `B32.cos()` (B32Cos.rf).
 
 ### `sin(i*pi/16)` for i in 0..31, as B64 bit patterns.
-secret preset B32_SIN_TB: Array[U64, 32] = [0x0000000000000000_u64, 0x3FC8F8B83C69A60B_u64, 0x3FD87DE2A6AEA963_u64, 0x3FE1C73B39AE68C8_u64, 0x3FE6A09E667F3BCD_u64, 0x3FEA9B66290EA1A3_u64, 0x3FED906BCF328D46_u64, 0x3FEF6297CFF75CB0_u64, 0x3FF0000000000000_u64, 0x3FEF6297CFF75CB0_u64, 0x3FED906BCF328D46_u64, 0x3FEA9B66290EA1A3_u64, 0x3FE6A09E667F3BCD_u64, 0x3FE1C73B39AE68C8_u64, 0x3FD87DE2A6AEA963_u64, 0x3FC8F8B83C69A60B_u64, 0x0000000000000000_u64, 0xBFC8F8B83C69A60B_u64, 0xBFD87DE2A6AEA963_u64, 0xBFE1C73B39AE68C8_u64, 0xBFE6A09E667F3BCD_u64, 0xBFEA9B66290EA1A3_u64, 0xBFED906BCF328D46_u64, 0xBFEF6297CFF75CB0_u64, 0xBFF0000000000000_u64, 0xBFEF6297CFF75CB0_u64, 0xBFED906BCF328D46_u64, 0xBFEA9B66290EA1A3_u64, 0xBFE6A09E667F3BCD_u64, 0xBFE1C73B39AE68C8_u64, 0xBFD87DE2A6AEA963_u64, 0xBFC8F8B83C69A60B_u64]
+secret preset B32_SIN_TB: Array[U64, 32] = [
+    0x0000000000000000_u64, 0x3FC8F8B83C69A60B_u64, 0x3FD87DE2A6AEA963_u64, 0x3FE1C73B39AE68C8_u64,
+    0x3FE6A09E667F3BCD_u64, 0x3FEA9B66290EA1A3_u64, 0x3FED906BCF328D46_u64, 0x3FEF6297CFF75CB0_u64,
+    0x3FF0000000000000_u64, 0x3FEF6297CFF75CB0_u64, 0x3FED906BCF328D46_u64, 0x3FEA9B66290EA1A3_u64,
+    0x3FE6A09E667F3BCD_u64, 0x3FE1C73B39AE68C8_u64, 0x3FD87DE2A6AEA963_u64, 0x3FC8F8B83C69A60B_u64,
+    0x0000000000000000_u64, 0xBFC8F8B83C69A60B_u64, 0xBFD87DE2A6AEA963_u64, 0xBFE1C73B39AE68C8_u64,
+    0xBFE6A09E667F3BCD_u64, 0xBFEA9B66290EA1A3_u64, 0xBFED906BCF328D46_u64, 0xBFEF6297CFF75CB0_u64,
+    0xBFF0000000000000_u64, 0xBFEF6297CFF75CB0_u64, 0xBFED906BCF328D46_u64, 0xBFEA9B66290EA1A3_u64,
+    0xBFE6A09E667F3BCD_u64, 0xBFE1C73B39AE68C8_u64, 0xBFD87DE2A6AEA963_u64, 0xBFC8F8B83C69A60B_u64,
+]
 
 ### Returns the sine of this value, interpreting it as radians, correctly rounded: the exact sine rounded
 ### to the nearest `B32` (ties to even), identical on every platform. ±infinity gives NaN, NaN maps to NaN
@@ -28,7 +37,7 @@ routine B32.sin() -> B32
                 if ax == 0_u32
                     return me
                 return LLVM::fma[B32](a: -me, b: me.abs(), c: me)
-            return (-0x1.555556p-3_b32 *! me) *! (me *! me) +! me
+            return -0x1.555556p-3_b32 *! me *! (me *! me) +! me
         return b32_sin_big(x: me)
     var z0 = B64(from: me)
     var red = (0.0, 0_u64)
@@ -44,11 +53,11 @@ routine B32.sin() -> B32
     var ia = red.item1
     var z2 = z *! z
     var z4 = z2 *! z2
-    var aa = (0x1.921fb54442d17p-3 +! z2 *! -0x1.4abbce6256a39p-10) +! z4 *! (0x1.466bc5a518c16p-19 +! z2 *! -0x1.32bdc61074ff6p-29)
-    var bb = (0x1.3bd3cc9be45dcp-6 +! z2 *! -0x1.03c1f081b0833p-14) +! z4 *! (0x1.55d3c6fc9ac1fp-24 +! z2 *! -0x1.e1d3ff281b40dp-35)
+    var aa = 0x1.921FB54442D17p-3 +! z2 *! -0x1.4ABBCE6256A39p-10 +! z4 *! (0x1.466BC5A518C16p-19 +! z2 *! -0x1.32BDC61074FF6p-29)
+    var bb = 0x1.3BD3CC9BE45DCp-6 +! z2 *! -0x1.03C1F081B0833p-14 +! z4 *! (0x1.55D3C6FC9AC1Fp-24 +! z2 *! -0x1.E1D3FF281B40Dp-35)
     var s0 = B64.from_bits(bits: B32_SIN_TB[ia & 31_u64])
-    var c0 = B64.from_bits(bits: B32_SIN_TB[(ia +% 8_u64) & 31_u64])
-    var r = (s0 +! aa *! (z *! c0)) -! bb *! (z2 *! s0)
+    var c0 = B64.from_bits(bits: B32_SIN_TB[ia +% 8_u64 & 31_u64])
+    var r = s0 +! aa *! (z *! c0) -! bb *! (z2 *! s0)
     return B32(from: r)
 
 ### The sine of the four arguments whose fast path is not correctly rounded.
@@ -56,16 +65,16 @@ routine B32.sin() -> B32
 ### :returns: The correctly rounded sine.
 secret routine b32_sin_database(x: B32) -> B32
     var ax = x.to_bits() & 0x7FFFFFFF_u32
-    var rh = -0x1.99bc5ap-26_b32
+    var rh = -0x1.99BC5Ap-26_b32
     var rl = -0x1p-51_b32
     if ax == 0x46199998_u32
-        rh = -0x1.63f4bap-2_b32
+        rh = -0x1.63F4BAp-2_b32
         rl = -0x1p-27_b32
     if ax == 0x3F3ADC51_u32
-        rh = 0x1.55688ap-1_b32
+        rh = 0x1.55688Ap-1_b32
         rl = -0x1p-26_b32
     if ax == 0x3FA7832A_u32
-        rh = 0x1.ee836cp-1_b32
+        rh = 0x1.EE836Cp-1_b32
         rl = -0x1p-26_b32
     var sgn = 1.0_b32.copysign(sign: x)
     return sgn *! rh +! sgn *! rl
@@ -77,7 +86,7 @@ secret routine b32_sin_big(x: B32) -> B32
     var t = x.to_bits()
     var ax = t << 1
     if ax >= 0xFF000000_u32
-        if ax << 8 != 0_u32
+        if (ax << 8) != 0_u32
             return x +! x
         return B32.from_bits(bits: 0xFFC00000_u32)
     var red = b32_trig_reduce_big(u: t, bias: 147_u64)
@@ -85,10 +94,10 @@ secret routine b32_sin_big(x: B32) -> B32
     var ia = red.item1
     var z2 = z *! z
     var z4 = z2 *! z2
-    var aa = (0x1.921fb54442d17p-3 +! z2 *! -0x1.4abbce6256a39p-10) +! z4 *! (0x1.466bc5a518c16p-19 +! z2 *! -0x1.32bdc61074ff6p-29)
-    var bb = (0x1.3bd3cc9be45dcp-6 +! z2 *! -0x1.03c1f081b0833p-14) +! z4 *! (0x1.55d3c6fc9ac1fp-24 +! z2 *! -0x1.e1d3ff281b40dp-35)
+    var aa = 0x1.921FB54442D17p-3 +! z2 *! -0x1.4ABBCE6256A39p-10 +! z4 *! (0x1.466BC5A518C16p-19 +! z2 *! -0x1.32BDC61074FF6p-29)
+    var bb = 0x1.3BD3CC9BE45DCp-6 +! z2 *! -0x1.03C1F081B0833p-14 +! z4 *! (0x1.55D3C6FC9AC1Fp-24 +! z2 *! -0x1.E1D3FF281B40Dp-35)
     var s0 = B64.from_bits(bits: B32_SIN_TB[ia & 31_u64])
-    var c0 = B64.from_bits(bits: B32_SIN_TB[(ia +% 8_u64) & 31_u64])
+    var c0 = B64.from_bits(bits: B32_SIN_TB[ia +% 8_u64 & 31_u64])
     var r = s0 +! z *! (aa *! c0 -! bb *! (z *! s0))
     return B32(from: r)
 
@@ -96,7 +105,7 @@ secret routine b32_sin_big(x: B32) -> B32
 ### :param x: The argument, exactly converted from B32.
 ### :returns: `(z, q)` with |z| <= 1/2; only the low bits of `q` are meaningful.
 secret routine b32_trig_reduce_small(x: B64) -> (B64, U64)
-    var idh = 0x1.45f306dc9c883p+2 *! x
+    var idh = 0x1.45F306DC9C883p+2 *! x
     # adding 1.5*2^52 rounds idh to an integer (ties to even) and leaves it in the low mantissa bits
     var q = 0x1.8p52 +! idh
     var id = q -! 0x1.8p52
@@ -106,11 +115,11 @@ secret routine b32_trig_reduce_small(x: B64) -> (B64, U64)
 ### :param x: The argument, exactly converted from B32.
 ### :returns: `(z, q)` with |z| <= 1/2; only the low bits of `q` are meaningful.
 secret routine b32_trig_reduce_medium(x: B64) -> (B64, U64)
-    var idl = -0x1.b1bbead603d8bp-29 *! x
-    var idh = 0x1.45f306ep+2 *! x
+    var idl = -0x1.B1BBEAD603D8Bp-29 *! x
+    var idh = 0x1.45F306Ep+2 *! x
     var q = 0x1.8p52 +! idh
     var id = q -! 0x1.8p52
-    return ((idh -! id) +! idl, q.to_bits())
+    return (idh -! id +! idl, q.to_bits())
 
 ### Reduces a large finite B32 (|x| > 2^26) modulo pi/2^k with a 256-bit 2/pi (Payne-Hanek).
 ### :param u: The argument's bit pattern.
@@ -118,7 +127,7 @@ secret routine b32_trig_reduce_medium(x: B64) -> (B64, U64)
 ### :returns: `(z, q)` with |z| <= 1/2 (z in units of the reduction step); only the low bits of `q` matter.
 secret routine b32_trig_reduce_big(u: U32, bias: U64) -> (B64, U64)
     var e = LLVM::zero_extend[U32, U64]((u >>> 23) & 0xFF_u32)
-    var m = LLVM::zero_extend[U64, U128](LLVM::zero_extend[U32, U64]((u & 0x7FFFFF_u32) | 0x800000_u32))
+    var m = LLVM::zero_extend[U64, U128](LLVM::zero_extend[U32, U64](u & 0x7FFFFF_u32 | 0x800000_u32))
     var p0 = m *% LLVM::zero_extend[U64, U128](0xFE5163ABDEBBC562_u64)
     var p1 = m *% LLVM::zero_extend[U64, U128](0xDB6295993C439041_u64)
     p1 = p1 +% (p0 >>> 64)
@@ -146,10 +155,10 @@ secret routine b32_trig_reduce_big(u: U32, bias: U64) -> (B64, U64)
         a = (p2l << sl) | (p1l >>> sr)
     # sgn is all ones for a negative argument, else 0
     var sgn = 0_u64
-    if u >>> 31 == 1_u32
+    if (u >>> 31) == 1_u32
         sgn = U64_MAX
     # sm is all ones when the fraction a is negative (rounds the quotient up)
-    if a >>> 63 == 1_u64
+    if (a >>> 63) == 1_u64
         i = i +% 1_u64
     var z = LLVM::signed_to_float[S64, B64](LLVM::reinterpret_bits[U64, S64](a ^ sgn)) *! 0x1p-64
     i = (i ^ sgn) -% sgn

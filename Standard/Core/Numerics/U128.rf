@@ -1,5 +1,11 @@
 module Core
 
+# Constants for U128 limits
+preset U128_MIN: U128 = 0_u128
+preset U128_MAX: U128 = 340282366920938463463374607431768211455_u128
+preset U128_ZERO: U128 = 0_u128
+preset U128_ONE: U128 = 1_u128
+
 ### A 128-bit unsigned integer in the range 0 to
 ### 340,282,366,920,938,463,463,374,607,431,768,211,455.
 ###
@@ -8,14 +14,9 @@ module Core
 ### implement `AtomicType` because hardware atomic operations on 128-bit
 ### values are not universally available.
 @llvm("i128")
-record U128 obeys UnsignedIntegral, Ordered, ConstCompatible, Assignable, Copyable, Splittable
+record U128
+obeys UnsignedIntegral, Ordered, ConstCompatible, Assignable, Copyable, Splittable
     pass
-
-# Constants for U128 limits
-preset U128_MIN: U128 = 0_u128
-preset U128_MAX: U128 = 340282366920938463463374607431768211455_u128
-preset U128_ZERO: U128 = 0_u128
-preset U128_ONE: U128 = 1_u128
 
 # ============================================================================
 # Creators
@@ -146,7 +147,9 @@ routine U128!(from: B64) -> U128
 routine U128!(from: B128) -> U128
     var bits = from.to_bits()
     var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127_u128))
-    var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
+    var biased = LLVM::int_truncate[U128, U64](
+        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128),
+    )
     var frac = LLVM::bit_and(a: bits, b: b128_mant_mask())
     if biased == 0x7FFF_u64
         if LLVM::int_eq(a: frac, b: 0_u128)
@@ -161,7 +164,10 @@ routine U128!(from: B128) -> U128
         throw NumericOverflowError(description: "B128 value out of range for U128")
     var sig = LLVM::bit_or(a: b128_implicit(), b: frac)
     if actual_exp <= 112_u64
-        return LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U128](LLVM::sub(a: 112_u64, b: actual_exp)))
+        return LLVM::shift_right_unsigned(
+            sig,
+            LLVM::zero_extend[U64, U128](LLVM::sub(a: 112_u64, b: actual_exp)),
+        )
     return LLVM::shift_left(sig, LLVM::zero_extend[U64, U128](LLVM::sub(a: actual_exp, b: 112_u64)))
 
 ### Converts a `D32` to `U128`, truncating toward zero.
@@ -245,10 +251,14 @@ routine u128_floordiv(a: U128, b: U128) -> U128
         var q = knuth_divide[2](
             a: LLVM::reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
             b: LLVM::reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
-            rem: rem.hijack())
+            rem: rem.hijack(),
+        )
         qlo = LLVM::load_element_ref[Array[U64, 2], U64](q.hijack(), 0_u64)
         qhi = LLVM::load_element_ref[Array[U64, 2], U64](q.hijack(), 1_u64)
-    return LLVM::bit_or(LLVM::shift_left(LLVM::zero_extend[U64, U128](qhi), 64_u128), LLVM::zero_extend[U64, U128](qlo))
+    return LLVM::bit_or(
+        LLVM::shift_left(LLVM::zero_extend[U64, U128](qhi), 64_u128),
+        LLVM::zero_extend[U64, U128](qlo),
+    )
 
 ### Returns `me // you` (integer division), throwing if `you` is zero.
 ### :param you: The divisor.
@@ -273,10 +283,14 @@ routine u128_mod(a: U128, b: U128) -> U128
         var q = knuth_divide[2](
             a: LLVM::reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
             b: LLVM::reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
-            rem: rem.hijack())
+            rem: rem.hijack(),
+        )
         rlo = LLVM::load_element_ref[Array[U64, 2], U64](rem.hijack(), 0_u64)
         rhi = LLVM::load_element_ref[Array[U64, 2], U64](rem.hijack(), 1_u64)
-    return LLVM::bit_or(LLVM::shift_left(LLVM::zero_extend[U64, U128](rhi), 64_u128), LLVM::zero_extend[U64, U128](rlo))
+    return LLVM::bit_or(
+        LLVM::shift_left(LLVM::zero_extend[U64, U128](rhi), 64_u128),
+        LLVM::zero_extend[U64, U128](rlo),
+    )
 
 ### Remainder of `me` divided by `you`.
 ### :param you: The divisor.
@@ -300,13 +314,20 @@ routine u128_divmod(a: U128, b: U128) -> (U128, U128)
         var q = knuth_divide[2](
             a: LLVM::reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
             b: LLVM::reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
-            rem: rem.hijack())
+            rem: rem.hijack(),
+        )
         qlo = LLVM::load_element_ref[Array[U64, 2], U64](q.hijack(), 0_u64)
         qhi = LLVM::load_element_ref[Array[U64, 2], U64](q.hijack(), 1_u64)
         rlo = LLVM::load_element_ref[Array[U64, 2], U64](rem.hijack(), 0_u64)
         rhi = LLVM::load_element_ref[Array[U64, 2], U64](rem.hijack(), 1_u64)
-    var qv = LLVM::bit_or(LLVM::shift_left(LLVM::zero_extend[U64, U128](qhi), 64_u128), LLVM::zero_extend[U64, U128](qlo))
-    var rv = LLVM::bit_or(LLVM::shift_left(LLVM::zero_extend[U64, U128](rhi), 64_u128), LLVM::zero_extend[U64, U128](rlo))
+    var qv = LLVM::bit_or(
+        LLVM::shift_left(LLVM::zero_extend[U64, U128](qhi), 64_u128),
+        LLVM::zero_extend[U64, U128](qlo),
+    )
+    var rv = LLVM::bit_or(
+        LLVM::shift_left(LLVM::zero_extend[U64, U128](rhi), 64_u128),
+        LLVM::zero_extend[U64, U128](rlo),
+    )
     return (qv, rv)
 
 ### (quotient, remainder) of `me // you` and `me % you` from ONE Knuth-D pass — half the work of
@@ -789,21 +810,27 @@ routine U128.swap_bytes() -> U128
 ### Returns `true` if this value is an exact power of two.
 ### :returns: `true` if `me` is 1, 2, 4, ..., 2¹²⁷; `false` otherwise (including zero).
 routine U128.is_power_of_two() -> Bool
-    return me != 0_u128 and (me & (me - 1_u128)) == 0_u128
+    return me != 0_u128 and (me & me - 1_u128) == 0_u128
 
 ### Returns this value rotated left by `bits` positions.
 routine U128.rotate_left(bits: U32) -> U128
     var n = bits % 128_u32
     if n == 0_u32
         return me
-    return LLVM::bit_or(a: LLVM::shift_left(me, U128(n)), b: LLVM::shift_right_unsigned(me, U128(128_u32 -% n)))
+    return LLVM::bit_or(
+        a: LLVM::shift_left(me, U128(n)),
+        b: LLVM::shift_right_unsigned(me, U128(128_u32 -% n)),
+    )
 
 ### Returns this value rotated right by `bits` positions.
 routine U128.rotate_right(bits: U32) -> U128
     var n = bits % 128_u32
     if n == 0_u32
         return me
-    return LLVM::bit_or(a: LLVM::shift_right_unsigned(me, U128(n)), b: LLVM::shift_left(me, U128(128_u32 -% n)))
+    return LLVM::bit_or(
+        a: LLVM::shift_right_unsigned(me, U128(n)),
+        b: LLVM::shift_left(me, U128(128_u32 -% n)),
+    )
 
 ### Returns the raw byte representation of this value in little-endian order.
 routine U128.to_bytes_le() -> Array[Byte, 16]
@@ -824,7 +851,10 @@ common routine U128.from_bytes_le(bytes: Array[Byte, 16]) -> U128
     var result = 0_u128
     var i = 0_u64
     while i < 16_u64
-        var part = LLVM::shift_left(LLVM::zero_extend[U8, U128](LLVM::byte_at(array: bytes, index: i)), U128(i * 8_u64))
+        var part = LLVM::shift_left(
+            LLVM::zero_extend[U8, U128](LLVM::byte_at(array: bytes, index: i)),
+            U128(i * 8_u64),
+        )
         result = LLVM::bit_or(a: result, b: part)
         i = i + 1_u64
     return result
@@ -911,7 +941,8 @@ routine U128!(from_text: Text) -> U128
         if ch.is_numeric()
             var digit = U128(ch.digit_value())
             # Stop before `result * 10 + digit` passes U128's maximum.
-            if result > 34028236692093846346337460743176821145u128 or (result == 34028236692093846346337460743176821145u128 and digit > 5u128)
+            if result > 34028236692093846346337460743176821145u128
+                or (result == 34028236692093846346337460743176821145u128 and digit > 5u128)
                 throw IntegerOverflowError()
             result = result * 10u128 + digit
         else

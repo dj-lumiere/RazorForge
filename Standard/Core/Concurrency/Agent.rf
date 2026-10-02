@@ -1,7 +1,6 @@
 module Core
 
 import BuilderQuery
-
 # TaskSpawnError / TaskTimeoutError are defined in Core/Errors/Common.rf (alongside the other
 # Core crashables) so their synthesized represent/diagnose resolve crash_message correctly.
 
@@ -34,7 +33,8 @@ choice AgentKind
 ### nothing → no double-free even when the same coroutine/worker is aliased across copies. A recipe no
 ### verb ever runs leaks its task, recipe and (coroutine) context — rare, and the routine body never runs,
 ### which is the point of laziness.
-record Agent[AnyType T] obeys Assignable
+record Agent[AnyType T]
+obeys Assignable
     ### CORO = coroutine-backed (suspended routine); THREAD = thread-backed (threaded routine).
     secret kind: AgentKind
     ### The coroutine handle (rf_coro*) — created INERT at the call site (kind CORO), spawned by a verb.
@@ -92,9 +92,15 @@ dangerous routine agent_suspended[R](entry: CPtr, recipe: Address) -> Agent[R]
     var task = C::rf_task_create(kind: 0_u32)
     Hijacked[Address](recipe).poke(value: task)
     var coro = C::rf_coro_create(entry: entry, userdata: CPtr(from: recipe), stack_size: 0)
-    return Agent[R](kind: AgentKind.CORO, coro: coro, agent: task,
-                    deadline: Duration(seconds: 0, nanoseconds: 0_u32), has_deadline: false,
-                    entry: cptr_none(), recipe: recipe)
+    return Agent[R](
+        kind: AgentKind.CORO,
+        coro: coro,
+        agent: task,
+        deadline: Duration(seconds: 0, nanoseconds: 0_u32),
+        has_deadline: false,
+        entry: cptr_none(),
+        recipe: recipe,
+    )
 
 ### Builds the thread-backed Agent for a `threaded` call: creates the result task (stored in recipe slot 0)
 ### and remembers `entry`. The thread is started by the first verb that runs the Agent.
@@ -102,9 +108,15 @@ dangerous routine agent_suspended[R](entry: CPtr, recipe: Address) -> Agent[R]
 dangerous routine agent_threaded[R](entry: CPtr, recipe: Address) -> Agent[R]
     var task = C::rf_task_create(kind: 1_u32)
     Hijacked[Address](recipe).poke(value: task)
-    return Agent[R](kind: AgentKind.THREAD, coro: cptr_none(), agent: task,
-                    deadline: Duration(seconds: 0, nanoseconds: 0_u32), has_deadline: false,
-                    entry: entry, recipe: recipe)
+    return Agent[R](
+        kind: AgentKind.THREAD,
+        coro: cptr_none(),
+        agent: task,
+        deadline: Duration(seconds: 0, nanoseconds: 0_u32),
+        has_deadline: false,
+        entry: entry,
+        recipe: recipe,
+    )
 
 ### Completes a recipe's task with the value its routine returned and frees the recipe. A detached
 ### (`execute`) task has no reader, so the value is not boxed: it is torn down like any argument the
@@ -196,8 +208,15 @@ dangerous routine Agent[T].request_cancel()
 ### :param deadline: The maximum time `retrieve!` will wait.
 ### :returns: A copy of this handle carrying the deadline.
 routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
-    return Agent[T](kind: me.kind, coro: me.coro, agent: me.agent,
-                    deadline: deadline, has_deadline: true, entry: me.entry, recipe: me.recipe)
+    return Agent[T](
+        kind: me.kind,
+        coro: me.coro,
+        agent: me.agent,
+        deadline: deadline,
+        has_deadline: true,
+        entry: me.entry,
+        recipe: me.recipe,
+    )
 
 ### Drives the work to completion and returns its produced value. UNCOLORED: a thread-backed Agent
 ### awaited inside a scheduler-driven coroutine PARKS (siblings run meanwhile) instead of blocking;
@@ -320,7 +339,7 @@ dangerous routine Agent[T].reap()
             # M:N use-after-free (worker co_switch()es a freed stack → jump to NULL → SIGSEGV); deferring lets the
             # worker free it from its completion path instead. A plain `unschedule + free` cannot see the mid-pop
             # window and races that resume.
-            if status == 3_u32                # RF_CORO_COMPLETED
+            if status == 3_u32  # RF_CORO_COMPLETED
                 if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
                     C::rf_coro_delete(coro: me.coro)
             else

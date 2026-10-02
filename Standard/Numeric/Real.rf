@@ -9,7 +9,8 @@ module Numerics
 ### about 308 decimal digits) under round-to-nearest-ties-to-even, or to a requested number of decimal
 ### digits in the `precision:` variants.
 ### :see: {Integer}, {Decimal}
-record Real obeys Assignable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable
+record Real
+obeys Assignable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable
     ### The sign (true = negative). Zero and infinity carry a sign too.
     secret sign: Bool
     ### The binary exponent: the value is 0.mantissa * 2^expn. Zero, infinity and NaN use reserved values.
@@ -34,14 +35,25 @@ secret routine real_bf(r: Real) -> BfT
 secret routine real_from_bf(x: BfT) -> Real
     danger
         if x.len == 0u64
-            return Real(sign: x.sign, expn: x.expn, len: 0u64, tab: hijacked_none[U64](),
-                ctrl: hijacked_none[FrozenController]())
+            return Real(
+                sign: x.sign,
+                expn: x.expn,
+                len: 0u64,
+                tab: hijacked_none[U64](),
+                ctrl: hijacked_none[FrozenController](),
+            )
         var tab = Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8u64 *% x.len))
         var i = 0u64
         while i < x.len
             tab.stride(count: S64(from: i)).poke(value: x.tab.stride(count: S64(from: i)).peek())
             i = i +% 1u64
-        return Real(sign: x.sign, expn: x.expn, len: x.len, tab: tab, ctrl: fresh_frozen_controller())
+        return Real(
+            sign: x.sign,
+            expn: x.expn,
+            len: x.len,
+            tab: tab,
+            ctrl: fresh_frozen_controller(),
+        )
 
 # ============================================================================
 # Construction
@@ -120,7 +132,8 @@ common routine Real.from_literal(text: Text) -> Real
 
 ### Returns a copy with the underlying refcount bumped; the limb buffer is shared.
 ### :returns: The resulting `Real` value.
-@[readonly, inline]
+@readonly
+@inline
 routine Real.assign() -> Real
     danger
         if not me.ctrl.is_none()
@@ -149,7 +162,9 @@ dangerous routine Real.destroy()
 routine Real.add(you: Real) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_add(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_add(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -160,7 +175,9 @@ routine Real.add(you: Real) -> Real
 routine Real.sub(you: Real) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_sub(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_sub(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -186,7 +203,9 @@ routine Real.sub(you: Complex) -> Complex
 routine Real.mul(you: Real) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_mul(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_mul(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -197,7 +216,9 @@ routine Real.mul(you: Real) -> Real
 routine Real.truediv(you: Real) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_div(a: real_bf(r: me), b: real_bf(r: you), prec: real_prec(), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_div(a: real_bf(r: me), b: real_bf(r: you), prec: real_prec(), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -388,7 +409,14 @@ routine Real.cbrt() -> Real
 routine Real.divide(you: Real, precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_div(a: real_bf(r: me), b: real_bf(r: you), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_div(
+                a: real_bf(r: me),
+                b: real_bf(r: you),
+                prec: real_prec_bits(digits: precision),
+                fl: 0u32,
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -397,7 +425,9 @@ routine Real.divide(you: Real, precision: S32) -> Real
 routine Real.sqrt(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_sqrt(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_sqrt(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -406,7 +436,9 @@ routine Real.sqrt(precision: S32) -> Real
 routine Real.exp(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_exp(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_exp(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -415,7 +447,9 @@ routine Real.exp(precision: S32) -> Real
 routine Real.log(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_log(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_log(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -424,7 +458,14 @@ routine Real.log(precision: S32) -> Real
 routine Real.pow(exp: Real, precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_pow(x: real_bf(r: me), y: real_bf(r: exp), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_pow(
+                x: real_bf(r: me),
+                y: real_bf(r: exp),
+                prec: real_prec_bits(digits: precision),
+                fl: 0u32,
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -433,7 +474,9 @@ routine Real.pow(exp: Real, precision: S32) -> Real
 routine Real.sin(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_sin(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_sin(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -442,7 +485,9 @@ routine Real.sin(precision: S32) -> Real
 routine Real.cos(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_cos(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_cos(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -451,7 +496,9 @@ routine Real.cos(precision: S32) -> Real
 routine Real.tan(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_tan(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_tan(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -460,7 +507,9 @@ routine Real.tan(precision: S32) -> Real
 routine Real.asin(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_asin(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_asin(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -469,7 +518,9 @@ routine Real.asin(precision: S32) -> Real
 routine Real.acos(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_acos(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_acos(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -478,7 +529,9 @@ routine Real.acos(precision: S32) -> Real
 routine Real.atan(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_atan(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_atan(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -488,7 +541,14 @@ routine Real.atan(precision: S32) -> Real
 routine atan2(y: Real, x: Real, precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_atan2(y: real_bf(r: y), x: real_bf(r: x), prec: real_prec_bits(digits: precision), fl: 0u32))
+        var r = real_from_bf(
+            x: bf_atan2(
+                y: real_bf(r: y),
+                x: real_bf(r: x),
+                prec: real_prec_bits(digits: precision),
+                fl: 0u32,
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -497,7 +557,13 @@ routine atan2(y: Real, x: Real, precision: S32) -> Real
 routine Real.sinh(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_sinhcosh(a: real_bf(r: me), prec: real_prec_bits(digits: precision), is_cosh: false))
+        var r = real_from_bf(
+            x: bf_sinhcosh(
+                a: real_bf(r: me),
+                prec: real_prec_bits(digits: precision),
+                is_cosh: false,
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -506,7 +572,13 @@ routine Real.sinh(precision: S32) -> Real
 routine Real.cosh(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_sinhcosh(a: real_bf(r: me), prec: real_prec_bits(digits: precision), is_cosh: true))
+        var r = real_from_bf(
+            x: bf_sinhcosh(
+                a: real_bf(r: me),
+                prec: real_prec_bits(digits: precision),
+                is_cosh: true,
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -524,7 +596,13 @@ routine Real.tanh(precision: S32) -> Real
 routine Real.asinh(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_asinh_acosh(a: real_bf(r: me), prec: real_prec_bits(digits: precision), is_acosh: false))
+        var r = real_from_bf(
+            x: bf_asinh_acosh(
+                a: real_bf(r: me),
+                prec: real_prec_bits(digits: precision),
+                is_acosh: false,
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -533,7 +611,13 @@ routine Real.asinh(precision: S32) -> Real
 routine Real.acosh(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_asinh_acosh(a: real_bf(r: me), prec: real_prec_bits(digits: precision), is_acosh: true))
+        var r = real_from_bf(
+            x: bf_asinh_acosh(
+                a: real_bf(r: me),
+                prec: real_prec_bits(digits: precision),
+                is_acosh: true,
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -542,7 +626,9 @@ routine Real.acosh(precision: S32) -> Real
 routine Real.atanh(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_atanh(a: real_bf(r: me), prec: real_prec_bits(digits: precision)))
+        var r = real_from_bf(
+            x: bf_atanh(a: real_bf(r: me), prec: real_prec_bits(digits: precision)),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -551,7 +637,13 @@ routine Real.atanh(precision: S32) -> Real
 routine Real.log2(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_logbase(a: real_bf(r: me), prec: real_prec_bits(digits: precision), base10: false))
+        var r = real_from_bf(
+            x: bf_logbase(
+                a: real_bf(r: me),
+                prec: real_prec_bits(digits: precision),
+                base10: false,
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -560,7 +652,9 @@ routine Real.log2(precision: S32) -> Real
 routine Real.log10(precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_logbase(a: real_bf(r: me), prec: real_prec_bits(digits: precision), base10: true))
+        var r = real_from_bf(
+            x: bf_logbase(a: real_bf(r: me), prec: real_prec_bits(digits: precision), base10: true),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -570,7 +664,13 @@ routine Real.log10(precision: S32) -> Real
 routine hypot(x: Real, y: Real, precision: S32) -> Real
     danger
         var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_hypot(a: real_bf(r: x), b: real_bf(r: y), prec: real_prec_bits(digits: precision)))
+        var r = real_from_bf(
+            x: bf_hypot(
+                a: real_bf(r: x),
+                b: real_bf(r: y),
+                prec: real_prec_bits(digits: precision),
+            ),
+        )
         C::rf_region_release(mark: mark)
         return r
 
@@ -725,7 +825,8 @@ routine Real.to_b64() -> B64
 
 ### Serializes this value as its shortest round-tripping decimal text (see `represent`).
 ### :returns: The `SerialValue` text arm.
-@[readonly, override]
+@readonly
+@override
 routine Real.serialize() -> SerialValue
     return SerialValue(from: me.represent())
 
@@ -739,7 +840,8 @@ routine Real!(from: SerialValue) -> Real
 ### Formats this value as base-10 decimal text: the fewest digits that read back to exactly this value
 ### at the working precision.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Real.represent() -> Text
     danger
         var mark = C::rf_region_mark()
@@ -773,7 +875,10 @@ routine Real.represent_with_places(decimal_places: S32) -> Text
     while k < n
         scale = scale.mul(you: ten)
         k = k + 1u64
-    var scaled = me.abs().mul(you: scale).round()
+    var scaled = me
+        .abs()
+        .mul(you: scale)
+        .round()
     var digits = scaled.represent()
     # Guarantee at least one integer digit before the point (e.g. 0.5 with places=2 -> "050").
     while digits.count() <= n

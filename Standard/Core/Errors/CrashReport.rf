@@ -23,7 +23,7 @@ record TraceFrame
 @untraced
 routine crash_report(type_name: Text, message: Text, file: Text, line: S32, column: S32)
     C::rf_flush_output()
-    crash_write(text: "\x1B[91m")
+    crash_write(text: "\u00001B[91m")
     crash_write(text: type_name)
     crash_write(text: ": ")
     crash_write(text: message)
@@ -35,7 +35,7 @@ routine crash_report(type_name: Text, message: Text, file: Text, line: S32, colu
     crash_write_number(value: column)
     crash_write(text: "\n")
     crash_write_trace()
-    crash_write(text: "\x1B[0m")
+    crash_write(text: "\u00001B[0m")
     C::rf_crash_exit()
     return
 
@@ -94,21 +94,61 @@ routine crash_write_code_point(code: U32)
     var bytes = Array[Byte, 4]()
     var count = 1_u64
     if code <= 0x7Fu32
-        bytes = LLVM::set_byte_at(array: bytes, index: 0_u64, value: LLVM::int_truncate[U32, U8](code))
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 0_u64,
+            value: LLVM::int_truncate[U32, U8](code),
+        )
     elseif code <= 0x7FFu32
-        bytes = LLVM::set_byte_at(array: bytes, index: 0_u64, value: crash_utf8_byte(lead: 0xC0u32, code: code, shift: 6u32))
-        bytes = LLVM::set_byte_at(array: bytes, index: 1_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32))
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 0_u64,
+            value: crash_utf8_byte(lead: 0xC0u32, code: code, shift: 6u32),
+        )
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 1_u64,
+            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32),
+        )
         count = 2_u64
     elseif code <= 0xFFFFu32
-        bytes = LLVM::set_byte_at(array: bytes, index: 0_u64, value: crash_utf8_byte(lead: 0xE0u32, code: code, shift: 12u32))
-        bytes = LLVM::set_byte_at(array: bytes, index: 1_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32))
-        bytes = LLVM::set_byte_at(array: bytes, index: 2_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32))
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 0_u64,
+            value: crash_utf8_byte(lead: 0xE0u32, code: code, shift: 12u32),
+        )
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 1_u64,
+            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32),
+        )
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 2_u64,
+            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32),
+        )
         count = 3_u64
     else
-        bytes = LLVM::set_byte_at(array: bytes, index: 0_u64, value: crash_utf8_byte(lead: 0xF0u32, code: code, shift: 18u32))
-        bytes = LLVM::set_byte_at(array: bytes, index: 1_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 12u32))
-        bytes = LLVM::set_byte_at(array: bytes, index: 2_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32))
-        bytes = LLVM::set_byte_at(array: bytes, index: 3_u64, value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32))
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 0_u64,
+            value: crash_utf8_byte(lead: 0xF0u32, code: code, shift: 18u32),
+        )
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 1_u64,
+            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 12u32),
+        )
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 2_u64,
+            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32),
+        )
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 3_u64,
+            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32),
+        )
         count = 4_u64
     danger
         C::rf_console_error(ptr: bytes.hijack().recast_as[Byte](), len: count)
@@ -140,12 +180,19 @@ routine crash_write_number(value: S32)
     loop
         position = position -% 1_u64
         var digit = LLVM::unsigned_rem(a: magnitude, b: 10_u32)
-        digits = LLVM::set_byte_at(array: digits, index: position, value: LLVM::int_truncate[U32, U8](48_u32 +% digit))
+        digits = LLVM::set_byte_at(
+            array: digits,
+            index: position,
+            value: LLVM::int_truncate[U32, U8](48_u32 +% digit),
+        )
         magnitude = LLVM::unsigned_div(a: magnitude, b: 10_u32)
         if magnitude == 0_u32
             break
     danger
-        var first = digits.hijack().recast_as[Byte]().stride(count: LLVM::reinterpret_bits[U64, S64](position))
+        var first = digits
+            .hijack()
+            .recast_as[Byte]()
+            .stride(count: LLVM::reinterpret_bits[U64, S64](position))
         C::rf_console_error(ptr: first, len: 10_u64 -% position)
     return
 
@@ -156,7 +203,9 @@ routine crash_write_c_text(text: Address)
     danger
         var first = Hijacked[Byte](text)
         var length = 0_u64
-        while LLVM::reinterpret_bits[Byte, U8](first.stride(count: LLVM::reinterpret_bits[U64, S64](length)).peek()) != 0_u8
+        while LLVM::reinterpret_bits[Byte, U8](
+            first.stride(count: LLVM::reinterpret_bits[U64, S64](length)).peek(),
+        ) != 0_u8
             length = length +% 1_u64
         C::rf_console_error(ptr: first, len: length)
     return

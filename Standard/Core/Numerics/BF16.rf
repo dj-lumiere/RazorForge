@@ -9,7 +9,8 @@ module Core
 ### stored. It carries no arithmetic. Widen it to `B32` or `B64` (exactly) to compute, and narrow the result
 ### back with `BF16(from:)`, which rounds once to the nearest value (ties to even).
 @llvm("i16")
-record BF16 obeys Ordered, Assignable, Copyable, Splittable
+record BF16
+obeys Ordered, Assignable, Copyable, Splittable
     pass
 
 # ============================================================================
@@ -37,7 +38,11 @@ routine BF16.to_bytes_le() -> Array[Byte, 2]
     var raw = me.to_bits()
     var result = Array[Byte, 2]()
     result = LLVM::set_byte_at(array: result, index: 0_u64, value: LLVM::int_truncate[U16, U8](raw))
-    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](raw >>> 8_u32))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1_u64,
+        value: LLVM::int_truncate[U16, U8](raw >>> 8_u32),
+    )
     return result
 
 ### Returns the raw bytes of this value in big-endian order.
@@ -45,7 +50,11 @@ routine BF16.to_bytes_le() -> Array[Byte, 2]
 routine BF16.to_bytes_be() -> Array[Byte, 2]
     var raw = me.to_bits()
     var result = Array[Byte, 2]()
-    result = LLVM::set_byte_at(array: result, index: 0_u64, value: LLVM::int_truncate[U16, U8](raw >>> 8_u32))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 0_u64,
+        value: LLVM::int_truncate[U16, U8](raw >>> 8_u32),
+    )
     result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](raw))
     return result
 
@@ -65,7 +74,7 @@ routine BF16(from: B32) -> BF16
     # add just under half of the dropped unit, plus one more when the kept part is odd (ties to even); a carry
     # into the exponent is the correct rounding up, to infinity past the largest finite value
     var bias = 0x7FFF_u32 +% ((u >>> 16_u32) & 1_u32)
-    return BF16.from_bits(bits: LLVM::int_truncate[U32, U16]((u +% bias) >>> 16_u32))
+    return BF16.from_bits(bits: LLVM::int_truncate[U32, U16](u +% bias >>> 16_u32))
 
 ### Narrows a double-precision float to bfloat16 in one rounding, to the nearest value, ties to even (not
 ### through `B32`, whose own rounding could land on a bfloat16 midpoint). Values below half the smallest
@@ -96,7 +105,7 @@ routine BF16(from: B64) -> BF16
         # below half of 2^lsb: rounds to zero
         return BF16.from_bits(bits: sign)
     var q = m >>> LLVM::int_truncate[S64, U32](s)
-    var rest = m & ((1_u64 << LLVM::int_truncate[S64, U32](s)) -% 1_u64)
+    var rest = m & (1_u64 << LLVM::int_truncate[S64, U32](s)) -% 1_u64
     var half = 1_u64 << LLVM::int_truncate[S64, U32](s -% 1_s64)
     if rest > half or (rest == half and (q & 1_u64) != 0_u64)
         q = q +% 1_u64
@@ -110,7 +119,7 @@ routine BF16(from: B64) -> BF16
     var ex = lsb +% 134_s64
     if ex >= 255_s64
         return BF16.from_bits(bits: sign | 0x7F80_u16)
-    var field = (LLVM::reinterpret_bits[S64, U64](ex) << 7_u32) | (q -% 128_u64)
+    var field = (LLVM::reinterpret_bits[S64, U64](ex) << 7_u32) | q -% 128_u64
     return BF16.from_bits(bits: sign | LLVM::int_truncate[U64, U16](field))
 
 # ============================================================================
@@ -176,7 +185,11 @@ routine BF16.represent() -> Text
 routine BF16.diagnose() -> Text
     if me.is_signaling()
         return "BF16(snan)"
-    return format_binary_shortest_wrapped(raw: LLVM::zero_extend[U16, U64](me.to_bits()), fmt: 3_s32, wrap: "BF16")
+    return format_binary_shortest_wrapped(
+        raw: LLVM::zero_extend[U16, U64](me.to_bits()),
+        fmt: 3_s32,
+        wrap: "BF16",
+    )
 
 ### Parses decimal text into the nearest `BF16` (one rounding from the exact decimal value, ties to even).
 ### Accepts the forms `B32(from_text:)` accepts, including `nan` and `inf`.

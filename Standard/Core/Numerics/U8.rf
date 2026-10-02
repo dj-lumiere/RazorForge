@@ -1,18 +1,19 @@
 module Core
 
-### An 8-bit unsigned integer in the range 0 to 255.
-###
-### `U8` is the standard byte-sized unsigned integer type in RazorForge, used
-### for raw byte manipulation, character codes, and compact numeric data.
-@llvm("i8")
-record U8 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable, Splittable
-    pass
-
 # Constants for U8 limits
 preset U8_MIN: U8 = 0_u8
 preset U8_MAX: U8 = 255_u8
 preset U8_ZERO: U8 = 0_u8
 preset U8_ONE: U8 = 1_u8
+
+### An 8-bit unsigned integer in the range 0 to 255.
+###
+### `U8` is the standard byte-sized unsigned integer type in RazorForge, used
+### for raw byte manipulation, character codes, and compact numeric data.
+@llvm("i8")
+record U8
+obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable, Splittable
+    pass
 
 # ============================================================================
 # Checked Creators (crash on overflow)
@@ -709,21 +710,27 @@ routine U8.swap_bytes() -> U8
 ### Returns `true` if this value is an exact power of two.
 ### :returns: `true` if `me` is 1, 2, 4, 8, ..., 128; `false` otherwise (including zero).
 routine U8.is_power_of_two() -> Bool
-    return me != 0_u8 and (me & (me - 1_u8)) == 0_u8
+    return me != 0_u8 and (me & me - 1_u8) == 0_u8
 
 ### Returns this value rotated left by `bits` positions.
 routine U8.rotate_left(bits: U32) -> U8
     var n = bits % 8_u32
     if n == 0_u32
         return me
-    return LLVM::bit_or(a: LLVM::shift_left(me, U8(n)), b: LLVM::shift_right_unsigned(me, U8(8_u32 -% n)))
+    return LLVM::bit_or(
+        a: LLVM::shift_left(me, U8(n)),
+        b: LLVM::shift_right_unsigned(me, U8(8_u32 -% n)),
+    )
 
 ### Returns this value rotated right by `bits` positions.
 routine U8.rotate_right(bits: U32) -> U8
     var n = bits % 8_u32
     if n == 0_u32
         return me
-    return LLVM::bit_or(a: LLVM::shift_right_unsigned(me, U8(n)), b: LLVM::shift_left(me, U8(8_u32 -% n)))
+    return LLVM::bit_or(
+        a: LLVM::shift_right_unsigned(me, U8(n)),
+        b: LLVM::shift_left(me, U8(8_u32 -% n)),
+    )
 
 ### Returns the raw byte representation of this value in little-endian order.
 routine U8.to_bytes_le() -> Array[Byte, 1]
@@ -866,4 +873,3 @@ routine U8!(from_text: Text) -> U8
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine U8.hash(k0: U64, k1: U64) -> U64
     return __secure_hash_u64(v: LLVM::zero_extend[U8, U64](me), k0: k0, k1: k1)
-

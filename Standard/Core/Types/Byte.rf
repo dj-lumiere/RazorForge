@@ -1,10 +1,17 @@
 module Core
 
+# Common byte constants
+preset BYTE_NULL: Byte = Byte(0x00u8)
+preset BYTE_SPACE: Byte = Byte(0x20u8)
+preset BYTE_NEWLINE: Byte = Byte(0x0Au8)
+preset BYTE_TAB: Byte = Byte(0x09u8)
+
 ### Represents one raw 8-bit byte.
 ### `Byte` is a binary payload type, not a text character, so its display form
 ### always uses an escaped hexadecimal representation.
 @llvm("i8")
-record Byte obeys ConstCompatible, Assignable, Copyable
+record Byte
+obeys ConstCompatible, Assignable, Copyable
     pass
 
 # Creators
@@ -22,12 +29,6 @@ routine Byte(from: Byte) -> Byte
 ### :returns: The resulting `Byte` value.
 routine Byte(from: U8) -> Byte
     return LLVM::reinterpret_bits[U8, Byte](value: from)
-
-# Common byte constants
-preset BYTE_NULL: Byte = Byte(0x00u8)
-preset BYTE_SPACE: Byte = Byte(0x20u8)
-preset BYTE_NEWLINE: Byte = Byte(0x0Au8)
-preset BYTE_TAB: Byte = Byte(0x09u8)
 
 # ============================================================================
 # Comparison operations
@@ -116,10 +117,10 @@ routine Byte.is_hex_digit() -> Bool
 @readonly
 routine Byte.hex_value!() -> U8
     var v = U8(me)
-    when true
-        0x30u8 <= v <= 0x39u8 => return v - 0x30u8   # 0-9
-        0x41u8 <= v <= 0x46u8 => return v - 0x37u8   # A-F (10-15)
-        0x61u8 <= v <= 0x66u8 => return v - 0x57u8   # a-f (10-15)
+    when
+        0x30u8 <= v <= 0x39u8 => return v - 0x30u8  # 0-9
+        0x41u8 <= v <= 0x46u8 => return v - 0x37u8  # A-F (10-15)
+        0x61u8 <= v <= 0x66u8 => return v - 0x57u8  # a-f (10-15)
         else => throw InvalidHexDigitError()
 
 # ============================================================================
@@ -130,7 +131,8 @@ routine Byte.hex_value!() -> U8
 ### Raw bytes are rendered as `\\xHH` so output remains unambiguous regardless of
 ### encoding context.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Byte.represent() -> Text
     var digits = List[Character]()
     digits.add_last(Character(0x005Cu32))  # \
@@ -152,7 +154,8 @@ routine Byte.represent() -> Text
 ### The diagnostic form includes both the unsigned numeric value and the escaped
 ### byte representation.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Byte.diagnose() -> Text
     return "Byte(" + U8(me).represent() + ", " + me.represent() + ")"
 

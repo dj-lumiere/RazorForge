@@ -1,7 +1,6 @@
 module Collections
 
 import BuilderQuery
-
 # B-tree order (max children per node)
 # B = 64 means each node has 31-63 keys (except root)
 secret preset BTREE_ORDER: U64 = 64u64
@@ -12,12 +11,59 @@ secret preset MIN_KEYS: U64 = 31u64  # B/2 - 1
 ### :typeparam T: The stored element type.
 entity BTreeSetNode[AnyType T]
 needs T obeys Comparable
-    keys: Array[T, 63]                           # Keys in this node (fixed capacity)
+    keys: Array[T, 63]  # Keys in this node (fixed capacity)
     children: Array[Hijacked[BTreeSetNode[T]], 64]  # Child pointers (empty for leaf)
-    key_count: U64                               # Active key count (0 to 63)
-    child_count: U64                             # Active child count (0 to 64)
-    subtree_size: U64                            # Total elements in this subtree
+    key_count: U64  # Active key count (0 to 63)
+    child_count: U64  # Active child count (0 to 64)
+    subtree_size: U64  # Total elements in this subtree
     is_leaf: Bool
+
+### A sorted, duplicate-free collection backed by a B-tree of order 64.
+###
+### `SortedSet[T]` automatically maintains its elements in ascending order.
+### Inserting a value that already exists is a no-op. Insertion, deletion,
+### membership testing, and rank-based indexed access all run in O(log n) time.
+### Iteration visits elements in ascending sorted order.
+###
+### **When to use**
+### - You need a sorted set with no duplicates.
+### - You need O(log n) insertion, removal, and membership testing.
+### - You need O(log n) indexed access by sorted rank.
+### - You need efficient range queries over a sorted value space.
+### - Use {SortedList[T]} instead when duplicate values must be preserved.
+### - Use {Set[T]} instead when iteration order does not matter and throughput is critical.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add` | O(log n) |
+### | `remove` | O(log n) |
+### | `contains` | O(log n) |
+### | `min!` / `max!` | O(log n) |
+### | `get_by_rank!` | O(log n) |
+### | `range` | O(log n + k) |
+### | Iteration | O(n) |
+###
+### :typeparam T: The stored element type. Must obey {Comparable}.
+### :see: {SortedList[T]} for a sorted list that allows duplicates.
+### :see: {Set[T]} for an unsorted, hash-table-backed set with O(1) operations.
+### :see: {SortedDict[K, V]} for a sorted mapping from keys to values.
+entity SortedSet[AnyType T]
+obeys Iterable[T], Container, SetLiteral[T]
+needs T obeys Comparable
+relates SortedSetEmittable[T] as Iter
+    secret root: Hijacked[BTreeSetNode[T]]?
+    secret count: U64
+
+### Walks the elements of a `SortedSet[T]` in ascending sorted order.
+### Each call to `emit!` resolves the element at the current rank from the source set.
+### :typeparam T: The element type yielded by the iterator.
+entity SortedSetEmittable[AnyType T]
+obeys Emittable[T]
+    ### The source set being iterated (NON-OWNING borrow — a cursor borrows its container).
+    set: Hijacked[SortedSet[T]]
+    ### The next sorted rank to yield.
+    index: U64
 
 # ============================================================================
 # Node buffer helpers — hide the inline-buffer plumbing behind readable names.
@@ -50,7 +96,11 @@ routine BTreeSetNode[T].keys_base() -> Hijacked[T]
 ### Returns a raw pointer to the start of this node's child-pointer buffer.
 @readonly
 routine BTreeSetNode[T].children_base() -> Hijacked[Hijacked[BTreeSetNode[T]]]
-    return me.hijack().recast_as[T]().stride(count: 63_s64).recast_as[Hijacked[BTreeSetNode[T]]]()
+    return me
+        .hijack()
+        .recast_as[T]()
+        .stride(count: 63_s64)
+        .recast_as[Hijacked[BTreeSetNode[T]]]()
 
 ### Returns the key at position `i` without bounds checking.
 ### :param i: The zero-based position within the key buffer.
@@ -58,14 +108,20 @@ routine BTreeSetNode[T].children_base() -> Hijacked[Hijacked[BTreeSetNode[T]]]
 @readonly
 routine BTreeSetNode[T].keys_get(i: U64) -> T
     danger
-        return me.keys_base().stride(count: i.S64()).peek()
+        return me
+            .keys_base()
+            .stride(count: i.S64())
+            .peek()
 
 ### Writes `value` into the key buffer at position `i` without bounds checking.
 ### :param i: The zero-based position within the key buffer.
 ### :param value: The key to store.
 routine BTreeSetNode[T].keys_set(i: U64, value: T)
     danger
-        me.keys_base().stride(count: i.S64()).poke(value: value)
+        me
+            .keys_base()
+            .stride(count: i.S64())
+            .poke(value: value)
     return
 
 ### Returns the child at position `i` without bounds checking.
@@ -74,7 +130,10 @@ routine BTreeSetNode[T].keys_set(i: U64, value: T)
 @readonly
 routine BTreeSetNode[T].children_get(i: U64) -> Hijacked[BTreeSetNode[T]]
     danger
-        return me.children_base().stride(count: i.S64()).peek()
+        return me
+            .children_base()
+            .stride(count: i.S64())
+            .peek()
 
 ### Recursively frees this node's subtree (post-order): destroys each child node, tears down each
 ### stored key, then frees this node's own allocation. Visited inline (never bound to a `var`) so
@@ -84,7 +143,10 @@ dangerous routine BTreeSetNode[T].destroy()
     if not me.is_leaf
         var ci = 0u64
         while ci < me.child_count
-            me.children_get(ci).as_entity().destroy()
+            me
+                .children_get(ci)
+                .as_entity()
+                .destroy()
             ci = ci + 1u64
     var ki = 0u64
     while ki < me.key_count
@@ -100,7 +162,10 @@ dangerous routine BTreeSetNode[T].roam_trace()
     if not me.is_leaf
         var ci = 0u64
         while ci < me.child_count
-            me.children_get(ci).as_entity().roam_trace()
+            me
+                .children_get(ci)
+                .as_entity()
+                .roam_trace()
             ci = ci + 1u64
     var ki = 0u64
     while ki < me.key_count
@@ -115,7 +180,10 @@ dangerous routine BTreeSetNode[T].roam_free()
     if not me.is_leaf
         var ci = 0u64
         while ci < me.child_count
-            me.children_get(ci).as_entity().roam_free()
+            me
+                .children_get(ci)
+                .as_entity()
+                .roam_free()
             ci = ci + 1u64
     me.hijack().invalidate()
     return
@@ -154,14 +222,20 @@ dangerous routine SortedSet[T].roam_free()
 ### :param value: The child node to store.
 routine BTreeSetNode[T].children_set(i: U64, value: Hijacked[BTreeSetNode[T]])
     danger
-        me.children_base().stride(count: i.S64()).poke(value: value)
+        me
+            .children_base()
+            .stride(count: i.S64())
+            .poke(value: value)
     return
 
 ### Appends `value` to the end of the key buffer and increments the key count.
 ### :param value: The key to append.
 routine BTreeSetNode[T].keys_add_last(value: T)
     danger
-        me.keys_base().stride(count: me.key_count.S64()).poke(value: value)
+        me
+            .keys_base()
+            .stride(count: me.key_count.S64())
+            .poke(value: value)
     me.key_count = me.key_count +% 1u64
     return
 
@@ -169,7 +243,10 @@ routine BTreeSetNode[T].keys_add_last(value: T)
 ### :param value: The child node to append.
 routine BTreeSetNode[T].children_add_last(value: Hijacked[BTreeSetNode[T]])
     danger
-        me.children_base().stride(count: me.child_count.S64()).poke(value: value)
+        me
+            .children_base()
+            .stride(count: me.child_count.S64())
+            .poke(value: value)
     me.child_count = me.child_count +% 1u64
     return
 
@@ -260,58 +337,38 @@ routine BTreeSetNode[T].keys_add_range_from(you: Accessing[BTreeSetNode[T]], sta
     if count > 0u64
         danger
             var elem_size = T.data_size()
-            var src_addr = you.keys_base().stride(count: start.S64()).get_address()
-            var dst_addr = me.keys_base().stride(count: me.key_count.S64()).get_address()
+            var src_addr = you
+                .keys_base()
+                .stride(count: start.S64())
+                .get_address()
+            var dst_addr = me
+                .keys_base()
+                .stride(count: me.key_count.S64())
+                .get_address()
             rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * count)
     me.key_count = me.key_count +% count
     return
 
 # Append `count` children from `you.children[start..start+count)` to me.children.
-routine BTreeSetNode[T].children_add_range_from(you: Accessing[BTreeSetNode[T]], start: U64, count: U64)
+routine BTreeSetNode[T].children_add_range_from(
+    you: Accessing[BTreeSetNode[T]],
+    start: U64,
+    count: U64,
+)
     if count > 0u64
         danger
             var elem_size = Address.data_size()
-            var src_addr = you.children_base().stride(count: start.S64()).get_address()
-            var dst_addr = me.children_base().stride(count: me.child_count.S64()).get_address()
+            var src_addr = you
+                .children_base()
+                .stride(count: start.S64())
+                .get_address()
+            var dst_addr = me
+                .children_base()
+                .stride(count: me.child_count.S64())
+                .get_address()
             rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * count)
     me.child_count = me.child_count +% count
     return
-
-### A sorted, duplicate-free collection backed by a B-tree of order 64.
-###
-### `SortedSet[T]` automatically maintains its elements in ascending order.
-### Inserting a value that already exists is a no-op. Insertion, deletion,
-### membership testing, and rank-based indexed access all run in O(log n) time.
-### Iteration visits elements in ascending sorted order.
-###
-### **When to use**
-### - You need a sorted set with no duplicates.
-### - You need O(log n) insertion, removal, and membership testing.
-### - You need O(log n) indexed access by sorted rank.
-### - You need efficient range queries over a sorted value space.
-### - Use {SortedList[T]} instead when duplicate values must be preserved.
-### - Use {Set[T]} instead when iteration order does not matter and throughput is critical.
-###
-### **Complexity**
-### | Operation | Time |
-### |---|---|
-### | `add` | O(log n) |
-### | `remove` | O(log n) |
-### | `contains` | O(log n) |
-### | `min!` / `max!` | O(log n) |
-### | `get_by_rank!` | O(log n) |
-### | `range` | O(log n + k) |
-### | Iteration | O(n) |
-###
-### :typeparam T: The stored element type. Must obey {Comparable}.
-### :see: {SortedList[T]} for a sorted list that allows duplicates.
-### :see: {Set[T]} for an unsorted, hash-table-backed set with O(1) operations.
-### :see: {SortedDict[K, V]} for a sorted mapping from keys to values.
-entity SortedSet[AnyType T] obeys Iterable[T], Container, SetLiteral[T]
-needs T obeys Comparable
-relates SortedSetEmittable[T] as Iter
-    secret root: Hijacked[BTreeSetNode[T]]?
-    secret count: U64
 
 # ============================================================================
 # Node Creators
@@ -328,7 +385,7 @@ routine BTreeSetNode[T](is_leaf: Bool) -> BTreeSetNode[T]
         key_count: 0u64,
         child_count: 0u64,
         subtree_size: 0u64,
-        is_leaf: is_leaf
+        is_leaf: is_leaf,
     )
 
 # ============================================================================
@@ -338,10 +395,7 @@ routine BTreeSetNode[T](is_leaf: Bool) -> BTreeSetNode[T]
 ### Creates an empty sorted set with no root node.
 ### :returns: The resulting `SortedSet[T]` value.
 routine SortedSet[T]() -> SortedSet[T]
-    return SortedSet[T](
-        root: none,
-        count: 0u64
-    )
+    return SortedSet[T](root: none, count: 0u64)
 
 ### Creates a sorted set containing the given `elements` (duplicates collapsed, stored in sorted order).
 ### Variadic constructor behind the `{a, b, c}` set-literal syntax (the `SetLiteral` opt-in).
@@ -478,7 +532,10 @@ routine SortedSet[T].add(value: T) -> Bool
             me.split_child(parent_node: new_root, child_idx: 0u64)
             # Compute new root's subtree_size from its children before transferring ownership.
             # After a split, new_root has 1 key and 2 children.
-            new_root.subtree_size = new_root.children_get(0u64).as_entity().subtree_size +% new_root.children_get(1u64).as_entity().subtree_size +% 1u64
+            new_root.subtree_size = new_root.children_get(0u64).as_entity().subtree_size +% new_root
+                .children_get(1u64)
+                .as_entity()
+                .subtree_size +% 1u64
 
     # Single-pass insert: returns false if duplicate found during descent.
     var inserted = false
@@ -512,7 +569,10 @@ routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]], value: 
             return true
         else
             # Split child if full (proactive split on the way down).
-            if node.children_get(i).as_entity().keys_count() >= BTREE_ORDER -% 1u64
+            if node
+                .children_get(i)
+                .as_entity()
+                .keys_count() >= BTREE_ORDER -% 1u64
                 me.split_child(parent_node: node, child_idx: i)
                 # After split, the median key was promoted to keys[i].
                 # Decide which side of the split our value belongs on.
@@ -548,11 +608,19 @@ routine SortedSet[T].split_child(parent_node: Controlling[BTreeSetNode[T]], chil
         var new_node = new_node_ptr.as_entity()
 
         # Copy the upper keys (indices mid+1 .. end) into the new node.
-        new_node.keys_add_range_from(you: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
+        new_node.keys_add_range_from(
+            you: child,
+            start: mid +% 1u64,
+            count: child.keys_count() -% mid -% 1u64,
+        )
 
         # For internal nodes, copy the upper children (indices mid+1 .. end).
         if not child.is_leaf
-            new_node.children_add_range_from(you: child, start: mid +% 1u64, count: child.children_count() -% mid -% 1u64)
+            new_node.children_add_range_from(
+                you: child,
+                start: mid +% 1u64,
+                count: child.children_count() -% mid -% 1u64,
+            )
 
         # Save the median key before truncating — it will be promoted to the parent.
         var mid_key = child.keys_get(mid)
@@ -675,7 +743,10 @@ routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value:
                 else
                     # Case 2c: both children at minimum — merge them.
                     me.merge_children_at(node: node, i: i)
-                    var removed = me.remove_from_node(node: node.children_get(i).as_entity(), value: value)
+                    var removed = me.remove_from_node(
+                        node: node.children_get(i).as_entity(),
+                        value: value,
+                    )
                     if removed
                         node.subtree_size = node.subtree_size -% 1u64
                     return removed
@@ -755,16 +826,27 @@ routine SortedSet[T].merge_children_at(node: Controlling[BTreeSetNode[T]], i: U6
 routine SortedSet[T].fix_child(node: Controlling[BTreeSetNode[T]], i: U64) -> U64
     danger
         # Fast path: already sufficient.
-        if node.children_get(i).as_entity().keys_count() > MIN_KEYS
+        if node
+            .children_get(i)
+            .as_entity()
+            .keys_count() > MIN_KEYS
             return i
 
         # Try to borrow from the left sibling via right rotation.
-        if i > 0u64 and node.children_get(i -% 1u64).as_entity().keys_count() > MIN_KEYS
+        if i > 0u64
+            and node
+                .children_get(i -% 1u64)
+                .as_entity()
+                .keys_count() > MIN_KEYS
             me.rotate_right_at(node: node, i: i)
             return i
 
         # Try to borrow from the right sibling via left rotation.
-        if i +% 1u64 < node.children_count() and node.children_get(i +% 1u64).as_entity().keys_count() > MIN_KEYS
+        if i +% 1u64 < node.children_count()
+            and node
+                .children_get(i +% 1u64)
+                .as_entity()
+                .keys_count() > MIN_KEYS
             me.rotate_left_at(node: node, i: i)
             return i
 
@@ -789,7 +871,13 @@ routine SortedSet[T].rotate_right_at(node: Controlling[BTreeSetNode[T]], i: U64)
 
         # For internal nodes, move left's rightmost child to child's front.
         if not child.is_leaf
-            child.children_add_at(i: 0u64, value: left.children_get(left.children_count() -% 1u64).as_entity().hijack())
+            child.children_add_at(
+                i: 0u64,
+                value: left
+                    .children_get(left.children_count() -% 1u64)
+                    .as_entity()
+                    .hijack(),
+            )
             left.children_remove_last()
 
         # Promote left's rightmost key to become the new parent separator.
@@ -820,7 +908,12 @@ routine SortedSet[T].rotate_left_at(node: Controlling[BTreeSetNode[T]], i: U64)
 
         # For internal nodes, move right's leftmost child to child's end.
         if not child.is_leaf
-            child.children_add_last(right.children_get(0u64).as_entity().hijack())
+            child.children_add_last(
+                right
+                    .children_get(0u64)
+                    .as_entity()
+                    .hijack(),
+            )
             right.children_remove_at(0u64)
 
         # Promote right's leftmost key to become the new parent separator.
@@ -888,7 +981,10 @@ routine SortedSet[T].get_at_subtree_rank(node: Accessing[BTreeSetNode[T]], rank:
             var child_size = node.children_get(i).as_entity().subtree_size
 
             if remaining < child_size
-                return me.get_at_subtree_rank(node: node.children_get(i).as_entity(), rank: remaining)
+                return me.get_at_subtree_rank(
+                    node: node.children_get(i).as_entity(),
+                    rank: remaining,
+                )
 
             remaining = remaining -% child_size
 
@@ -928,13 +1024,23 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
 ### :param max_val: The inclusive upper bound.
 ### :param result: The destination list for matching values.
 @readonly
-routine SortedSet[T].range_collect(node: Accessing[BTreeSetNode[T]], min_val: T, max_val: T, result: Controlling[List[T]])
+routine SortedSet[T].range_collect(
+    node: Accessing[BTreeSetNode[T]],
+    min_val: T,
+    max_val: T,
+    result: Controlling[List[T]],
+)
     danger
         var i = 0u64
 
         while i < node.keys_count()
             if not node.is_leaf and (i == 0u64 or node.keys_get(i -% 1u64) >= min_val)
-                me.range_collect(node: node.children_get(i).as_entity(), min_val: min_val, max_val: max_val, result: result)
+                me.range_collect(
+                    node: node.children_get(i).as_entity(),
+                    min_val: min_val,
+                    max_val: max_val,
+                    result: result,
+                )
 
             var key = node.keys_get(i)
             if key >= min_val and key <= max_val
@@ -943,7 +1049,12 @@ routine SortedSet[T].range_collect(node: Accessing[BTreeSetNode[T]], min_val: T,
             i = i +% 1u64
 
         if not node.is_leaf
-            me.range_collect(node: node.children_get(node.children_count() -% 1u64).as_entity(), min_val: min_val, max_val: max_val, result: result)
+            me.range_collect(
+                node: node.children_get(node.children_count() -% 1u64).as_entity(),
+                min_val: min_val,
+                max_val: max_val,
+                result: result,
+            )
         return
 
 # ============================================================================
@@ -1028,17 +1139,11 @@ routine SortedSet[T].collect_inorder(node: Accessing[BTreeSetNode[T]], result: C
             result.add_last(node.keys_get(i))
             i = i +% 1u64
         if not node.is_leaf
-            me.collect_inorder(node: node.children_get(node.children_count() -% 1u64).as_entity(), result: result)
+            me.collect_inorder(
+                node: node.children_get(node.children_count() -% 1u64).as_entity(),
+                result: result,
+            )
         return
-
-### Walks the elements of a `SortedSet[T]` in ascending sorted order.
-### Each call to `emit!` resolves the element at the current rank from the source set.
-### :typeparam T: The element type yielded by the iterator.
-entity SortedSetEmittable[AnyType T] obeys Emittable[T]
-    ### The source set being iterated (NON-OWNING borrow — a cursor borrows its container).
-    set: Hijacked[SortedSet[T]]
-    ### The next sorted rank to yield.
-    index: U64
 
 ### Returns the next element in ascending set order.
 ### :returns: The element at the current sorted rank.
@@ -1055,7 +1160,8 @@ routine SortedSetEmittable[T].emit!() -> T
 # Comparison
 # ============================================================================
 
-@[readonly, override]
+@readonly
+@override
 routine SortedSet[T].represent() -> Text
     var result = me.type_name() + "({"
     var i = 0u64
@@ -1069,7 +1175,8 @@ routine SortedSet[T].represent() -> Text
 
 ### Returns a diagnostic form that includes the runtime type name and element count.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine SortedSet[T].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
     var i = 0u64
@@ -1091,14 +1198,15 @@ routine SortedSet[T].eq(you: Accessing[SortedSet[T]]) -> Bool
         return false
     var i = 0u64
     while i < me.count
-        if (try me.get_by_rank(rank: i))!! != (try you.get_by_rank(rank: i))!!
+        if (try me.get_by_rank(rank: i))!! != try you.get_by_rank(rank: i)!!
             return false
         i = i +% 1u64
     return true
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, override]
+@readonly
+@override
 routine SortedSet[T].serialize() -> SerialValue
     var __sv = List[SerialValue]()
     each __x in me

@@ -1,7 +1,6 @@
 module Core
 
 import BuilderQuery
-
 ### Represents immutable UTF-32 text with constant-time character indexing.
 ###
 ### Layout:
@@ -15,7 +14,8 @@ import BuilderQuery
 ### frees the buffer + controller. When `ctrl` is null (`hijacked_none[...]()`),
 ### the value represents an empty or static-literal string and `store`/`destroy`
 ### are no-ops.
-record Text obeys Assignable, Copyable, Addable, Ordered, Hashable, TextRepeatable, Iterable[Character], Container
+record Text
+obeys Assignable, Copyable, Addable, Ordered, Hashable, TextRepeatable, Iterable[Character], Container
 relates TextEmittable as Iter
     ### Stores the character buffer.
     secret data: Hijacked[Character]
@@ -24,12 +24,22 @@ relates TextEmittable as Iter
     ### Atomic strong-count controller (null for empty / static-literal values).
     secret ctrl: Hijacked[FrozenController]
 
+### Represents the iterator used to traverse a `Text` value.
+### The iterator reads the text sequentially from the first character to the
+### last.
+entity TextEmittable
+    ### Stores the source text.
+    text: Text
+    ### Stores the current character index.
+    index: U64
+
 ### Returns a copy of this value with the underlying refcount bumped.
 ### The buffer is shared; no character data is copied. For values with a null
 ### controller (empty or static literals) the copy is a bitwise duplicate with
 ### no atomic op.
 ### :returns: The resulting `Text` value.
-@[readonly, inline]
+@readonly
+@inline
 routine Text.assign() -> Text
     danger
         if not me.ctrl.is_none()
@@ -40,7 +50,8 @@ routine Text.assign() -> Text
 ### never mutated, so a deep byte-copy would be wasteful). Defined explicitly — Text is a managed leaf
 ### (its logical value is the buffer behind a ptr, not a field tuple), so the field-walk auto-derive does
 ### not apply; it declares `obeys Copyable` and implements `copy` here.
-@[readonly, inline]
+@readonly
+@inline
 routine Text.duplicate() -> Text
     return me.assign()
 
@@ -67,7 +78,7 @@ routine Text() -> Text
     return Text(
         data: hijacked_none[Character](),
         count: 0u64,
-        ctrl: hijacked_none[FrozenController]()
+        ctrl: hijacked_none[FrozenController](),
     )
 
 ### Allocates ONE block — a `FrozenController` (strong count = 1) header immediately followed by `count`
@@ -88,7 +99,7 @@ routine text_alloc(count: U64) -> Text
         return Text(
             data: ctrl.recast_as[Character]().offset(bytes: header),
             count: count,
-            ctrl: ctrl
+            ctrl: ctrl,
         )
 
 ### Creates text from a list of characters.
@@ -135,7 +146,9 @@ routine Text(from_span: Hijacked[Character], count: U64) -> Text
         loop
             if i >= count
                 break
-            result.data.stride(count: LLVM::reinterpret_bits[U64, S64](i)).poke(value: from_span.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek())
+            result.data
+                .stride(count: LLVM::reinterpret_bits[U64, S64](i))
+                .poke(value: from_span.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek())
             i += 1u64
     return result
 
@@ -164,7 +177,10 @@ routine int_to_text(mag: U64, negative: Bool) -> Text
         if negative
             idx = LLVM::sub(a: idx, b: 1_s64)
             p.stride(count: idx).poke(value: Character(0x002Du32))
-        return Text(from_span: p.stride(count: idx), count: LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 21_s64, b: idx)))
+        return Text(
+            from_span: p.stride(count: idx),
+            count: LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 21_s64, b: idx)),
+        )
 
 ### Decodes UTF-8 text from a null-terminated C string.
 ### A malformed sequence (a missing or stray continuation byte, an overlong encoding, a surrogate, or a
@@ -196,13 +212,13 @@ routine Text(from: CStr) -> Text
                 var b1 = U32(from[i + 1u64])
                 # C0 and C1 leads can only spell an overlong ASCII character.
                 if (b1 & 0xC0u32) == 0x80u32 and b0 >= 0xC2u32
-                    codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
+                    codepoint = ((b0 & 0x1Fu32) << 6u32) | b1 & 0x3Fu32
                     width = 2u64
             elseif (b0 & 0xF0u32) == 0xE0u32 and i + 2u64 < len
                 var b1 = U32(from[i + 1u64])
                 var b2 = U32(from[i + 2u64])
                 if (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32
-                    var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
+                    var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | b2 & 0x3Fu32
                     # Below U+0800 is overlong, and U+D800..U+DFFF are surrogates, never characters.
                     if candidate >= 0x800u32 and (candidate < 0xD800u32 or candidate > 0xDFFFu32)
                         codepoint = candidate
@@ -211,8 +227,10 @@ routine Text(from: CStr) -> Text
                 var b1 = U32(from[i + 1u64])
                 var b2 = U32(from[i + 2u64])
                 var b3 = U32(from[i + 3u64])
-                if (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32 and (b3 & 0xC0u32) == 0x80u32
-                    var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
+                if (b1 & 0xC0u32) == 0x80u32
+                    and (b2 & 0xC0u32) == 0x80u32
+                    and (b3 & 0xC0u32) == 0x80u32
+                    var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | b3 & 0x3Fu32
                     # Below U+10000 is overlong, and past U+10FFFF is outside Unicode.
                     if 0x10000u32 <= candidate <= 0x10FFFFu32
                         codepoint = candidate
@@ -318,10 +336,18 @@ routine Text.concat(other: Text) -> Text
     var result = text_alloc(count: n)
     danger
         if me.count > 0u64
-            rf_copy_bytes_at(dest: result.data.address(), src: me.data.address(), size: Character.data_size() * me.count)
+            rf_copy_bytes_at(
+                dest: result.data.address(),
+                src: me.data.address(),
+                size: Character.data_size() * me.count,
+            )
         var other_count = other.count()
         if other_count > 0u64
-            rf_copy_bytes_at(dest: result.data.stride(count: S64(me.count)).address(), src: other.data.address(), size: Character.data_size() * other_count)
+            rf_copy_bytes_at(
+                dest: result.data.stride(count: S64(me.count)).address(),
+                src: other.data.address(),
+                size: Character.data_size() * other_count,
+            )
     return result
 
 ### Returns the sum of this value and the other value.
@@ -349,7 +375,11 @@ routine Text.mul[I obeys Integral](count: I) -> Text
             if t >= times
                 break
             var dest = result.data.stride(count: S64(t * me.count))
-            rf_copy_bytes_at(dest: dest.address(), src: me.data.address(), size: Character.data_size() * me.count)
+            rf_copy_bytes_at(
+                dest: dest.address(),
+                src: me.data.address(),
+                size: Character.data_size() * me.count,
+            )
             t += 1u64
     return result
 
@@ -576,7 +606,7 @@ routine Text.find_last!(other: Text) -> U64
 routine Text.split_once!(separator: Text) -> (Text, Text)
     var pos = me.find(separator)
     var before = me[0u64 til pos]
-    var after = me[(pos + separator.count()) til ^0]
+    var after = me[pos + separator.count() til ^0]
     return (before, after)
 
 # Transform
@@ -742,7 +772,7 @@ routine Text.replace_first(old: Text, new: Text) -> Text
     if pos == me.count
         return me
     var before = me[0u64 til pos]
-    var after = me[(pos + oc) til ^0]
+    var after = me[pos + oc til ^0]
     return before.concat(new).concat(after)
 
 ### Returns a copy without the matching prefix.
@@ -953,25 +983,18 @@ routine Text.words() -> List[Text]
 ### Returns the display form of this text.
 ### For `Text`, the display form is the value itself.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Text.represent() -> Text
     return me
 
 ### Returns the diagnostic representation of this text.
 ### The result includes the type name and character count for debugging.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Text.diagnose() -> Text
     return f"Text(count: {me.count}, \"{me}\")"
-
-### Represents the iterator used to traverse a `Text` value.
-### The iterator reads the text sequentially from the first character to the
-### last.
-entity TextEmittable
-    ### Stores the source text.
-    text: Text
-    ### Stores the current character index.
-    index: U64
 
 ### Returns an iterator over this text value.
 ### The iterator starts at index `0`.

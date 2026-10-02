@@ -13,8 +13,17 @@ module Core
 # Inputs whose accurate phase is still too close to a rounding boundary: the angle index, then the reduced
 # argument, the correctly rounded result and a tiny correction that fixes the rounding direction (as IEEE 754
 # bit patterns).
-secret preset B64_COSPI_DB_IQ: Array[U64, 8] = [903_u64, 1029_u64, 1078_u64, 1217_u64, 1025_u64, 1026_u64, 1033_u64, 1235_u64]
-secret preset B64_COSPI_DB: Array[U64, 24] = [0xBFDBDD02D1AD6000_u64, 0x3FEF72C906962631_u64, 0x3C80000000000000_u64, 0xBFCA4AD070549D00_u64, 0x3FEFFFC4D2C6CA51_u64, 0x3C80000000000000_u64, 0x3FCFBDB79CA3DA00_u64, 0x3FEFE3C8219054C3_u64, 0x3C80000000000000_u64, 0x3FEC0CCEE4ADA200_u64, 0x3FEE99FD53791BCF_u64, 0xBC80000000000000_u64, 0x3FDB536647B1FE98_u64, 0x3FEFFFFC5DDD0738_u64, 0x3C80000000000000_u64, 0xBFDDC93EAAD12A18_u64, 0x3FEFFFF84B21C731_u64, 0x3C80000000000000_u64, 0x3FEE78F0E592B360_u64, 0x3FEFFF2270422604_u64, 0xBC80000000000000_u64, 0x3FDF13412A48D800_u64, 0x3FEE55A7FA9A24C4_u64, 0xBC80000000000000_u64]
+secret preset B64_COSPI_DB_IQ: Array[U64, 8] = [
+    903_u64, 1029_u64, 1078_u64, 1217_u64, 1025_u64, 1026_u64, 1033_u64, 1235_u64,
+]
+secret preset B64_COSPI_DB: Array[U64, 24] = [
+    0xBFDBDD02D1AD6000_u64, 0x3FEF72C906962631_u64, 0x3C80000000000000_u64, 0xBFCA4AD070549D00_u64,
+    0x3FEFFFC4D2C6CA51_u64, 0x3C80000000000000_u64, 0x3FCFBDB79CA3DA00_u64, 0x3FEFE3C8219054C3_u64,
+    0x3C80000000000000_u64, 0x3FEC0CCEE4ADA200_u64, 0x3FEE99FD53791BCF_u64, 0xBC80000000000000_u64,
+    0x3FDB536647B1FE98_u64, 0x3FEFFFFC5DDD0738_u64, 0x3C80000000000000_u64, 0xBFDDC93EAAD12A18_u64,
+    0x3FEFFFF84B21C731_u64, 0x3C80000000000000_u64, 0x3FEE78F0E592B360_u64, 0x3FEFFF2270422604_u64,
+    0xBC80000000000000_u64, 0x3FDF13412A48D800_u64, 0x3FEE55A7FA9A24C4_u64, 0xBC80000000000000_u64,
+]
 
 ### Returns cos(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
 ### identical on every platform. It is exact at integers (±1) and half-integers (+0),
@@ -28,7 +37,7 @@ routine B64.cospi() -> B64
         return 1.0
     # 2^(e-1023) <= |x| < 2^(e-1022)
     var e = LLVM::reinterpret_bits[U64, S64](ax >>> 52)
-    var m = (ixu & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
+    var m = ixu & 0x000FFFFFFFFFFFFF_u64 | 0x0010000000000000_u64
     # 2^(40-s) <= |x| < 2^(41-s)
     var s = 1063 - e
     if s < 0
@@ -53,12 +62,12 @@ routine B64.cospi() -> B64
             return 1.0 -! 0x1p-55
         var x2 = x *! x
         var x4 = x2 *! x2
-        var eps = x2 *! 0x1.ap-48
-        var c01 = -0x1.3bd3cc9be45dcp+2 +! x2 *! 0x1.03c1f081b0833p+2
-        var c23 = -0x1.55d3c6fc9af15p+0 +! x2 *! 0x1.e1d3ff2ae3f9ap-3
+        var eps = x2 *! 0x1.Ap-48
+        var c01 = -0x1.3BD3CC9BE45DCp+2 +! x2 *! 0x1.03C1F081B0833p+2
+        var c23 = -0x1.55D3C6FC9AF15p+0 +! x2 *! 0x1.E1D3FF2AE3F9Ap-3
         var p = x2 *! (c01 +! x4 *! c23)
-        var lb0 = (p -! eps) +! 1.0
-        var ub0 = (p +! eps) +! 1.0
+        var lb0 = p -! eps +! 1.0
+        var ub0 = p +! eps +! 1.0
         if lb0 == ub0
             return lb0
         return b64_cospi_zero(x: x)
@@ -68,23 +77,23 @@ routine B64.cospi() -> B64
             # x is an integer or a half-integer
             if (m << LLVM::int_truncate[S64, U32](si)) == 0_u64
                 # x is an integer: t = 1 when it is odd
-                var t = (m << LLVM::int_truncate[S64, U32](si - 1)) >>> 63
+                var t = m << LLVM::int_truncate[S64, U32](si - 1) >>> 63
                 if t == 1_u64
                     return -1.0
                 return 1.0
             return 0.0
-    var iq = ((m >>> LLVM::int_truncate[S64, U32](s)) +% 2048_u64) & 8191_u64
-    iq = (iq + 1_u64) >>> 1
+    var iq = (m >>> LLVM::int_truncate[S64, U32](s)) +% 2048_u64 & 8191_u64
+    iq = iq + 1_u64 >>> 1
     var k = LLVM::reinterpret_bits[U64, S64](m << LLVM::int_truncate[S64, U32](e - 1000))
     var z = LLVM::signed_to_float[S64, B64](k)
     var z2 = z *! z
-    var fs = 0x1.921fb54442d18p-74 +! z2 *! (-0x1.4abbce625be51p-223 +! z2 *! 0x1.466bc6044ba16p-374)
-    var fc = -0x1.3bd3cc9be45dbp-148 +! z2 *! 0x1.03c1f00186416p-298
+    var fs = 0x1.921FB54442D18p-74 +! z2 *! (-0x1.4ABBCE625BE51p-223 +! z2 *! 0x1.466BC6044BA16p-374)
+    var fc = -0x1.3BD3CC9BE45DBp-148 +! z2 *! 0x1.03C1F00186416p-298
     var b = b64_trigpi_sincosn(s: iq)
     var er = z.abs() *! 0x1p-123 +! 0x1p-78
-    var r = (b.item1 +! b.item0 *! (z2 *! fc)) +! b.item2 *! (z *! fs)
-    var lb = (r -! er) +! b.item0
-    var ub = (r +! er) +! b.item0
+    var r = b.item1 +! b.item0 *! (z2 *! fc) +! b.item2 *! (z *! fs)
+    var lb = r -! er +! b.item0
+    var ub = r +! er +! b.item0
     if lb == ub
         return lb
     return b64_cospi_refine(iq: iq, z: z)
@@ -96,9 +105,16 @@ routine B64.cospi() -> B64
 secret routine b64_cospi_zero(x: B64) -> B64
     var x2 = x *! x
     var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
-    var fl = x2 *! (-0x1.55d3c7e3cbff9p+0 +! x2 *! 0x1.e1f50604fa0ffp-3)
-    var f = b64_trigpi_poly_start(c0: 0x1.03c1f081b5ac4p+2, c1: -0x1.32b33fda9113cp-52, l: fl)
-    f = b64_trigpi_poly_step(xh: x2, xl: dx2, h: f.item0, l: f.item1, c0: -0x1.3bd3cc9be45dep+2, c1: -0x1.692b71366cc04p-52)
+    var fl = x2 *! (-0x1.55D3C7E3CBFF9p+0 +! x2 *! 0x1.E1F50604FA0FFp-3)
+    var f = b64_trigpi_poly_start(c0: 0x1.03C1F081B5AC4p+2, c1: -0x1.32B33FDA9113Cp-52, l: fl)
+    f = b64_trigpi_poly_step(
+        xh: x2,
+        xl: dx2,
+        h: f.item0,
+        l: f.item1,
+        c0: -0x1.3BD3CC9BE45DEp+2,
+        c1: -0x1.692B71366CC04p-52,
+    )
     f = b64_trigpi_muldd_acc(xh: x2, xl: dx2, ch: f.item0, cl: f.item1)
     var s0 = b64_trigpi_fasttwosum(x: 1.0, y: f.item0)
     var s1 = b64_trigpi_fasttwosum(x: s0.item1, y: f.item1)

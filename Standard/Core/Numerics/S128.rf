@@ -1,5 +1,11 @@
 module Core
 
+# Constants for S128 limits
+preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728_s128
+preset S128_MAX: S128 = 170_141_183_460_469_231_731_687_303_715_884_105_727_s128
+preset S128_ZERO: S128 = 0_s128
+preset S128_ONE: S128 = 1_s128
+
 ### A 128-bit signed integer in the range −170,141,183,460,469,231,731,687,303,715,884,105,728
 ### to 170,141,183,460,469,231,731,687,303,715,884,105,727.
 ###
@@ -8,14 +14,9 @@ module Core
 ### values that can't fit in `S64`. Note that `S128` does not implement `AtomicType`
 ### because hardware atomic operations on 128-bit values are not universally available.
 @llvm("i128")
-record S128 obeys SignedIntegral, Ordered, ConstCompatible, Assignable, Copyable, Splittable
+record S128
+obeys SignedIntegral, Ordered, ConstCompatible, Assignable, Copyable, Splittable
     pass
-
-# Constants for S128 limits
-preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728_s128
-preset S128_MAX: S128 = 170_141_183_460_469_231_731_687_303_715_884_105_727_s128
-preset S128_ZERO: S128 = 0_s128
-preset S128_ONE: S128 = 1_s128
 
 # ============================================================================
 # Checked Creators (crash on overflow)
@@ -114,7 +115,9 @@ routine S128!(from: B16) -> S128
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^127, 2^127-1].
 routine S128!(from: B32) -> S128
-    if from.is_nan() or from < -170141183460469231731687303715884105728.0_b32 or from >= 170141183460469231731687303715884105728.0_b32
+    if from.is_nan()
+        or from < -170141183460469231731687303715884105728.0_b32
+        or from >= 170141183460469231731687303715884105728.0_b32
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B32, S128](from)
 
@@ -123,7 +126,9 @@ routine S128!(from: B32) -> S128
 ### :returns: The integer part of `from` as an `S128`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^127, 2^127-1].
 routine S128!(from: B64) -> S128
-    if from.is_nan() or from < -170141183460469231731687303715884105728.0_b64 or from >= 170141183460469231731687303715884105728.0_b64
+    if from.is_nan()
+        or from < -170141183460469231731687303715884105728.0_b64
+        or from >= 170141183460469231731687303715884105728.0_b64
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B64, S128](from)
 
@@ -134,7 +139,9 @@ routine S128!(from: B64) -> S128
 routine S128!(from: B128) -> S128
     var bits = from.to_bits()
     var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127_u128))
-    var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
+    var biased = LLVM::int_truncate[U128, U64](
+        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128),
+    )
     var frac = LLVM::bit_and(a: bits, b: b128_mant_mask())
     if biased == 0x7FFF_u64
         if LLVM::int_eq(a: frac, b: 0_u128)
@@ -152,9 +159,15 @@ routine S128!(from: B128) -> S128
     var sig = LLVM::bit_or(a: b128_implicit(), b: frac)
     lateinit var int_part: U128
     if actual_exp <= 112_u64
-        int_part = LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U128](LLVM::sub(a: 112_u64, b: actual_exp)))
+        int_part = LLVM::shift_right_unsigned(
+            sig,
+            LLVM::zero_extend[U64, U128](LLVM::sub(a: 112_u64, b: actual_exp)),
+        )
     else
-        int_part = LLVM::shift_left(sig, LLVM::zero_extend[U64, U128](LLVM::sub(a: actual_exp, b: 112_u64)))
+        int_part = LLVM::shift_left(
+            sig,
+            LLVM::zero_extend[U64, U128](LLVM::sub(a: actual_exp, b: 112_u64)),
+        )
     if sign == 1_u64
         return LLVM::sub(a: 0_s128, b: LLVM::reinterpret_bits[U128, S128](int_part))
     return LLVM::reinterpret_bits[U128, S128](int_part)
@@ -889,7 +902,7 @@ routine S128.is_odd() -> Bool
 ### Returns `true` if this value is an exact power of two.
 ### Negative values always return `false`.
 routine S128.is_power_of_two() -> Bool
-    return me > 0_s128 and (me & (me -% 1_s128)) == 0_s128
+    return me > 0_s128 and (me & me -% 1_s128) == 0_s128
 
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
@@ -924,7 +937,11 @@ routine S128.represent() -> Text
 routine S128.to_text(radix: S32) -> Text
     var raw = LLVM::reinterpret_bits[S128, U128](me)
     if me < 0s128
-        return wide_radix_text[U128](mag: LLVM::zero_extend[U64, U128](0_u64) -% raw, negative: true, radix: radix)
+        return wide_radix_text[U128](
+            mag: LLVM::zero_extend[U64, U128](0_u64) -% raw,
+            negative: true,
+            radix: radix,
+        )
     return wide_radix_text[U128](mag: raw, negative: false, radix: radix)
 
 ### Returns a type-tagged debug rendering of this value.
@@ -961,7 +978,8 @@ routine S128!(from_text: Text) -> S128
         if ch.is_numeric()
             var digit = U128(ch.digit_value())
             # Stop before `result * 10 + digit` passes the largest magnitude the sign allows.
-            if result > 17014118346046923173168730371588410572u128 or (result == 17014118346046923173168730371588410572u128 and digit > last_limit)
+            if result > 17014118346046923173168730371588410572u128
+                or (result == 17014118346046923173168730371588410572u128 and digit > last_limit)
                 throw IntegerOverflowError()
             result = result * 10u128 + digit
         else

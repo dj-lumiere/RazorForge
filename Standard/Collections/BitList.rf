@@ -1,7 +1,6 @@
 module Collections
 
 import BuilderQuery
-
 ### A growable, densely packed sequence of boolean values stored in machine words.
 ###
 ### `BitList` packs up to 64 bits per `U64` word, making it significantly more
@@ -30,18 +29,30 @@ import BuilderQuery
 ### | Iteration | O(N) |
 ###
 ### :see: {BitArray[N]} for a buildtime-sized, value-semantic alternative.
-entity BitList obeys Iterable[Bool], MutableIndexable[Bool], Sized, ListLiteral[Bool]
+entity BitList
+obeys Iterable[Bool], MutableIndexable[Bool], Sized, ListLiteral[Bool]
 relates BitListEmittable as Iter
     ### Stores the heap-allocated word buffer that packs the bits.
-    secret data: Hijacked[U64]      # Heap-allocated word array (64 bits per U64)
+    secret data: Hijacked[U64]  # Heap-allocated word array (64 bits per U64)
     ### Stores the number of logical bits currently present in the list.
-    secret count: U64              # Current number of bits
+    secret count: U64  # Current number of bits
     ### Stores the number of bits that can be appended before growth is required.
     ### Capacity is tracked in bits rather than words.
-    secret capacity: U64           # Total bit capacity (in bits, not words)
+    secret capacity: U64  # Total bit capacity (in bits, not words)
     ### How many `each` loops and in-place element accesses are using the element positions right now.
     ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
     secret shape_users: U64
+
+### Represents an iterator over the logical bits stored in a `BitList`.
+### The iterator walks the packed word buffer in ascending logical index order.
+entity BitListEmittable
+obeys Emittable[Bool]
+    ### Raw pointer into the source bit list's packed word buffer.
+    secret data: Hijacked[U64]
+    ### Bit count captured at iterator creation.
+    secret count: U64
+    ### Current bit position.
+    secret index: U64
 
 # ============================================================================
 # Creators
@@ -52,12 +63,7 @@ relates BitListEmittable as Iter
 ### :returns: An empty `BitList`.
 routine BitList() -> BitList
     # Create empty bit list with default capacity
-    return BitList(
-        data: hijacked_none[U64](),
-        count: 0u64,
-        capacity: 0u64,
-        shape_users: 0u64
-    )
+    return BitList(data: hijacked_none[U64](), count: 0u64, capacity: 0u64, shape_users: 0u64)
 
 ### Creates a bit list containing exactly the given `elements`, in order. Variadic constructor behind the
 ### `[a, b, c]` list-literal syntax (the `ListLiteral` opt-in).
@@ -78,17 +84,12 @@ common routine BitList.from_literal(elements...: Bool) -> BitList
 ### :returns: An empty `BitList` with preallocated storage.
 routine BitList(capacity: U64) -> BitList
     # Create bit list with pre-allocated capacity (in bits)
-    var word_size = (capacity +% 63u64) >> 6u32
+    var word_size = capacity +% 63u64 >> 6u32
     danger
         var data_ptr = Hijacked[U64](C::rf_allocate_dynamic_uninit(word_size *% 8u64))
         # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
         # and mid-word appends only read bits we've already written ourselves.
-        return BitList(
-            data: data_ptr,
-            count: 0u64,
-            capacity: capacity,
-            shape_users: 0u64
-        )
+        return BitList(data: data_ptr, count: 0u64, capacity: capacity, shape_users: 0u64)
 
 # ============================================================================
 # Internal Helpers
@@ -139,7 +140,7 @@ routine BitList.set_bit_internal(index: U64, value: Bool)
         set_mask = mask
     danger
         var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-        word_ptr.poke((word_ptr.peek() & ~mask) | set_mask)
+        word_ptr.poke(word_ptr.peek() & ~mask | set_mask)
     return
 
 # ============================================================================
@@ -191,7 +192,7 @@ routine BitList.add_last(value: Bool)
         if bit_off == 0u8
             word_ptr.poke(set_mask)
         else
-            word_ptr.poke((word_ptr.peek() & ~mask) | set_mask)
+            word_ptr.poke(word_ptr.peek() & ~mask | set_mask)
     me.count = me.count +% 1u64
     return
 
@@ -213,15 +214,19 @@ routine BitList.remove_last!() -> Bool
 routine BitList.reserve(new_capacity: U64)
     # Ensure capacity is at least new_capacity (in bits)
     if new_capacity > me.capacity
-        var new_word_size = (new_capacity +% 63u64) >> 6u32
+        var new_word_size = new_capacity +% 63u64 >> 6u32
         danger
             var new_data = Hijacked[U64](C::rf_allocate_dynamic_uninit(new_word_size *% 8u64))
 
             # Copy existing words; remainder stays uninitialized — add_last overwrites
             # whole words at word boundaries, so the untouched tail is never read.
             if me.count > 0u64
-                var copy_words = (me.count +% 63u64) >> 6u32
-                C::rf_copy_bytes_at(dest: new_data.get_address(), src: me.data.get_address(), size: copy_words *% 8u64)
+                var copy_words = me.count +% 63u64 >> 6u32
+                C::rf_copy_bytes_at(
+                    dest: new_data.get_address(),
+                    src: me.data.get_address(),
+                    size: copy_words *% 8u64,
+                )
 
             me.data = new_data
         me.capacity = new_capacity
@@ -267,7 +272,7 @@ routine BitList.setitem!(index: U64, value: Bool)
 ### :param value: The value to write into every logical bit.
 routine BitList.set_all(value: Bool)
     # Set all bits to the same value
-    var byte_count = (me.count +% 7u64) >> 3u32
+    var byte_count = me.count +% 7u64 >> 3u32
     var fill_byte = if value then 0xFFu8 else 0x00u8
     danger
         C::rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
@@ -289,7 +294,7 @@ routine BitList.flip!(index: U64)
 ### logical range.
 routine BitList.flip_all()
     # Toggle all bits word-at-a-time
-    var word_count = (me.count +% 63u64) >> 6u32
+    var word_count = me.count +% 63u64 >> 6u32
     var i = 0u64
     while i < word_count
         danger
@@ -435,16 +440,6 @@ routine BitList.iter() -> BitListEmittable
     danger
         return BitListEmittable(data: me.data, count: me.count(), index: 0u64)
 
-### Represents an iterator over the logical bits stored in a `BitList`.
-### The iterator walks the packed word buffer in ascending logical index order.
-entity BitListEmittable obeys Emittable[Bool]
-    ### Raw pointer into the source bit list's packed word buffer.
-    secret data: Hijacked[U64]
-    ### Bit count captured at iterator creation.
-    secret count: U64
-    ### Current bit position.
-    secret index: U64
-
 ### Returns the next bit from the iterator.
 ### :returns: The resulting `Bool` value.
 ### :absent: Returns absent when the iterator reaches the captured bit count.
@@ -457,7 +452,7 @@ routine BitListEmittable.emit!() -> Bool
     danger
         var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
         word_val = ptr.peek()
-    var _result = (word_val >> bit_idx) & 1u64 != 0u64
+    var _result = ((word_val >> bit_idx) & 1u64) != 0u64
     me.index = me.index + 1u64
     return _result
 
@@ -617,7 +612,8 @@ common routine BitList.from_u32(value: U32) -> BitList
         i = i + 1u32
     return steal result
 
-@[readonly, override]
+@readonly
+@override
 routine BitList.represent() -> Text
     var result = me.type_name() + "(["
     var i = 0u64
@@ -631,7 +627,8 @@ routine BitList.represent() -> Text
 
 ### Returns a diagnostic form that includes the bit count, one-bit count, and contents.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine BitList.diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
     var i = 0u64

@@ -1,6 +1,6 @@
 module Tests/Stdlib/NarrowReadApi
-import IO/Console
 
+import IO/Console
 # Flow narrowing: a carrier/variant variable, once proven to be a single arm/payload, is usable
 # WITHOUT rebinding — the read extracts the payload. Arm exclusions accumulate down an if/elseif
 # chain, so the branch where exactly one arm remains narrows to it.
@@ -19,6 +19,16 @@ variant Shape
     Text
     None
 
+# Nested variant narrowing: Outer narrows to Inner, then to Inner's arm — payload extraction
+# chains through both levels (Outer -> Inner -> S32).
+variant Inner
+    S32
+    Text
+
+variant Outer
+    Inner
+    None
+
 # A binding/destructuring chain desugars to `when`, so the narrowing also lives in when's else:
 # once the preceding arms are excluded and one remains, the subject narrows there too.
 routine describe(s: Shape) -> Text
@@ -34,24 +44,14 @@ routine describe(s: Shape) -> Text
 routine tag(s: Shape) -> Text
     when s
         is Point => return f"pt {s.x},{s.y}"
-        is Text  => return f"tx {s}"
-        else     => return "nil"
+        is Text => return f"tx {s}"
+        else => return "nil"
 
 # `isnot`: the else proves the arm, narrowing without a binding (guard-clause form).
 routine viaIsnot(s: Shape) -> Text
     if s isnot Point
         return "not-pt"
     return f"isnot pt {s.x}"
-
-# Nested variant narrowing: Outer narrows to Inner, then to Inner's arm — payload extraction
-# chains through both levels (Outer -> Inner -> S32).
-variant Inner
-    S32
-    Text
-
-variant Outer
-    Inner
-    None
 
 routine peel(o: Outer) -> Text
     if o is None
@@ -77,7 +77,7 @@ routine peel_cmp(o: Outer) -> Text
         return "pc-text"
     when o
         == 0 => return "pc zero"
-        < 0  => return "pc neg"
+        < 0 => return "pc neg"
         else => return "pc pos"
 
 # Literal patterns on a nested-narrowed subject (matched against constant values).

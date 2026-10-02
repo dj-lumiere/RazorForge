@@ -4,13 +4,27 @@ module IterTools
 ### Iteration stops permanently after the first predicate failure.
 ### :typeparam T: The element type produced by the source sequence.
 ### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity TakeWhileIterable[AnyType T, AnyType S] obeys Iterable[T]
+entity TakeWhileIterable[AnyType T, AnyType S]
+obeys Iterable[T]
 needs S obeys Iterable[T]
 relates TakeWhileEmittable[T, S/Iter] as Iter
     ### Stores the source iterable (borrowed, not owned).
     secret source: Hijacked[S]
     ### Stores the predicate that determines whether iteration should continue.
     secret predicate: Routine[(T,), Bool]
+
+### Iterates over a source sequence until the continuation predicate fails.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam SE: The concrete source iterator type (owned).
+entity TakeWhileEmittable[AnyType T, AnyType SE]
+obeys Emittable[T]
+needs SE obeys Emittable[T]
+    ### Stores the underlying source iterator (owned; destroyed with the adapter).
+    secret source: SE
+    ### Stores the continuation predicate.
+    secret predicate: Routine[(T,), Bool]
+    ### Stores whether iteration has already terminated.
+    secret done: Bool
 
 ### Returns the stateful iterator that enforces the continuation predicate.
 ### The emitted iterator remembers when the predicate has already failed so it
@@ -19,19 +33,11 @@ relates TakeWhileEmittable[T, S/Iter] as Iter
 @readonly
 routine TakeWhileIterable[T, S].iter() -> TakeWhileEmittable[T, S/Iter]
     danger
-        return TakeWhileEmittable[T, S/Iter](source: me.source.as_entity().iter(), predicate: me.predicate, done: false)
-
-### Iterates over a source sequence until the continuation predicate fails.
-### :typeparam T: The element type produced by the source sequence.
-### :typeparam SE: The concrete source iterator type (owned).
-entity TakeWhileEmittable[AnyType T, AnyType SE] obeys Emittable[T]
-needs SE obeys Emittable[T]
-    ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: SE
-    ### Stores the continuation predicate.
-    secret predicate: Routine[(T,), Bool]
-    ### Stores whether iteration has already terminated.
-    secret done: Bool
+        return TakeWhileEmittable[T, S/Iter](
+            source: me.source.as_entity().iter(),
+            predicate: me.predicate,
+            done: false,
+        )
 
 ### Returns the next value while the continuation predicate still succeeds.
 ### Once `done` becomes true, the iterator remains exhausted for all later

@@ -1,6 +1,5 @@
 module Core
 
-
 # ============================================================================
 # Record definition
 # ============================================================================
@@ -9,9 +8,10 @@ module Core
 ### `Moment` is stored as Unix-epoch seconds plus a normalized nanosecond component and uses the proleptic Gregorian calendar.
 ### It is the canonical UTC time-point type for timestamps, deadlines, and duration arithmetic.
 ### :see: {Duration}, {LocalMoment}, {Temporal-Types}
-record Moment obeys Ordered, DurationAddable, DurationSubtractable
+record Moment
+obeys Ordered, DurationAddable, DurationSubtractable
     ### Stores the whole seconds since the Unix epoch.
-    secret seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
+    secret seconds: S64  # Seconds since Unix epoch (1970-01-01), negative for dates before
     ### Stores the normalized nanoseconds within the current second.
     secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
@@ -66,7 +66,10 @@ routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
     var doy = LLVM::signed_div(153_s64 *% m +% 2_s64, 5_s64) +% day -% 1_s64
 
     # Day of era
-    var doe = era_year *% 365_s64 +% LLVM::signed_div(era_year, 4_s64) -% LLVM::signed_div(era_year, 100_s64) +% doy
+    var doe = era_year *% 365_s64 +% LLVM::signed_div(era_year, 4_s64) -% LLVM::signed_div(
+        era_year,
+        100_s64,
+    ) +% doy
 
     # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
     return era *% 146097_s64 +% doe -% 719468_s64
@@ -78,9 +81,18 @@ routine days_to_year(days_since_epoch: S64) -> S64
     var z = days_since_epoch +% 719468_s64
     var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
     var doe = z -% era *% 146097_s64
-    var yoe = LLVM::signed_div(doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(doe, 36524_s64) -% LLVM::signed_div(doe, 146096_s64), 365_s64)
+    var yoe = LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(
+            doe,
+            36524_s64,
+        ) -% LLVM::signed_div(doe, 146096_s64),
+        365_s64,
+    )
     var y = yoe +% era *% 400_s64
-    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(yoe, 100_s64))
+    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(
+        yoe,
+        100_s64,
+    ))
     var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
     var m = mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
     if m <= 2_s64
@@ -94,8 +106,17 @@ routine days_to_month(days_since_epoch: S64) -> S64
     var z = days_since_epoch +% 719468_s64
     var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
     var doe = z -% era *% 146097_s64
-    var yoe = LLVM::signed_div(doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(doe, 36524_s64) -% LLVM::signed_div(doe, 146096_s64), 365_s64)
-    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(yoe, 100_s64))
+    var yoe = LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(
+            doe,
+            36524_s64,
+        ) -% LLVM::signed_div(doe, 146096_s64),
+        365_s64,
+    )
+    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(
+        yoe,
+        100_s64,
+    ))
     var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
     return mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
 
@@ -106,8 +127,17 @@ routine days_to_day(days_since_epoch: S64) -> S64
     var z = days_since_epoch +% 719468_s64
     var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
     var doe = z -% era *% 146097_s64
-    var yoe = LLVM::signed_div(doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(doe, 36524_s64) -% LLVM::signed_div(doe, 146096_s64), 365_s64)
-    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(yoe, 100_s64))
+    var yoe = LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(
+            doe,
+            36524_s64,
+        ) -% LLVM::signed_div(doe, 146096_s64),
+        365_s64,
+    )
+    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(
+        yoe,
+        100_s64,
+    ))
     var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
     return doy -% LLVM::signed_div(153_s64 *% mp +% 2_s64, 5_s64) +% 1_s64
 
@@ -213,7 +243,10 @@ routine Moment.millisecond() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.microsecond() -> S64
-    return LLVM::signed_div(LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
+    return LLVM::signed_div(
+        LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MILLISECOND),
+        NS_PER_MICROSECOND,
+    )
 
 ### Returns the nanosecond component within the current microsecond.
 ### :returns: The resulting `S64` value.
@@ -246,7 +279,10 @@ routine Moment.timestamp_ms() -> S64
 ### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.add_duration(duration: Duration) -> Moment
-    return normalize_moment(seconds: me.seconds +% duration.total_seconds(), nanoseconds: S64(me.nanoseconds) +% S64(duration.subsec_nanoseconds()))
+    return normalize_moment(
+        seconds: me.seconds +% duration.total_seconds(),
+        nanoseconds: S64(me.nanoseconds) +% S64(duration.subsec_nanoseconds()),
+    )
 
 ### Returns this moment shifted backward by `duration`.
 ### :param duration: The time span to subtract.
@@ -261,7 +297,10 @@ routine Moment.subtract_duration(duration: Duration) -> Moment
 ### :returns: The resulting `Duration` value.
 @readonly
 routine Moment.elapsed_since(earlier: Moment) -> Duration
-    return normalize_duration(seconds: me.seconds -% earlier.seconds, nanoseconds: S64(me.nanoseconds) -% S64(earlier.nanoseconds))
+    return normalize_duration(
+        seconds: me.seconds -% earlier.seconds,
+        nanoseconds: S64(me.nanoseconds) -% S64(earlier.nanoseconds),
+    )
 
 ### Returns the moment reached by advancing this one by `you`.
 ### :param you: The duration to advance by.

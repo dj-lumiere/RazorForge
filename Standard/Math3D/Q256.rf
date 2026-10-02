@@ -1,5 +1,12 @@
 module Math3D
 
+# Math routines use the component B64's `_unchecked` ops (raw IEEE, no overflow
+# checks); NaN/±inf therefore propagate through the quaternion result per IEEE 754.
+
+# Quaternion constants
+preset Q256_ZERO: Q256 = Q256(w: 0.0_b64, x: 0.0_b64, y: 0.0_b64, z: 0.0_b64)
+preset Q256_IDENTITY: Q256 = Q256(w: 1.0_b64, x: 0.0_b64, y: 0.0_b64, z: 0.0_b64)
+
 ### A double-precision quaternion `w + x·i + y·j + z·k` with `B64` components.
 ### `Q256` is the high-precision rotation type; use `Q128` for graphics-facing code
 ### that prefers single precision. A quaternion is a value record (four `B64`
@@ -9,7 +16,8 @@ module Math3D
 ### arithmetic protocols `Addable`, `Subtractable`, `Multiplicable` (the Hamilton
 ### product — note `a·b ≠ b·a`), `Divisible`, `Negatable`, plus `Equatable`.
 ### Geometry interop uses the shared `B32` `Vector3D`, converting at the boundary.
-record Q256 obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Equatable, Hashable
+record Q256
+obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Equatable, Hashable
     ### The real (scalar) component.
     w: B64
     ### The i (x) component.
@@ -18,13 +26,6 @@ record Q256 obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Eq
     y: B64
     ### The k (z) component.
     z: B64
-
-# Math routines use the component B64's `_unchecked` ops (raw IEEE, no overflow
-# checks); NaN/±inf therefore propagate through the quaternion result per IEEE 754.
-
-# Quaternion constants
-preset Q256_ZERO: Q256 = Q256(w: 0.0_b64, x: 0.0_b64, y: 0.0_b64, z: 0.0_b64)
-preset Q256_IDENTITY: Q256 = Q256(w: 1.0_b64, x: 0.0_b64, y: 0.0_b64, z: 0.0_b64)
 
 # ============================================================================
 # Creators
@@ -80,7 +81,12 @@ routine Q256.sub(you: Q256) -> Q256
 ### :returns: The Hamilton product.
 routine Q256.mul(you: Q256) -> Q256
     # Hamilton product of (w1,x1,y1,z1)·(w2,x2,y2,z2).
-    return Q256(w: me.w * you.w - me.x * you.x - me.y * you.y - me.z * you.z, x: me.w * you.x + me.x * you.w + me.y * you.z - me.z * you.y, y: me.w * you.y - me.x * you.z + me.y * you.w + me.z * you.x, z: me.w * you.z + me.x * you.y - me.y * you.x + me.z * you.w)
+    return Q256(
+        w: me.w * you.w - me.x * you.x - me.y * you.y - me.z * you.z,
+        x: me.w * you.x + me.x * you.w + me.y * you.z - me.z * you.y,
+        y: me.w * you.y - me.x * you.z + me.y * you.w + me.z * you.x,
+        z: me.w * you.z + me.x * you.y - me.y * you.x + me.z * you.w,
+    )
 
 ### Returns the quotient `me / you = me · you⁻¹`.
 ### :param you: The divisor.
@@ -261,7 +267,12 @@ common routine Q256.from_to(from: Vector3D, target: Vector3D) -> Q256
         var pl = (px * px + py * py + pz * pz).sqrt_unchecked()
         return Q256(w: 0.0_b64, x: px / pl, y: py / pl, z: pz / pl)
     # (1 + a.b, a cross b), normalized, is the rotation from a to b.
-    return Q256(w: 1.0_b64 + d, x: uy * vz - uz * vy, y: uz * vx - ux * vz, z: ux * vy - uy * vx).normalize()
+    return Q256(
+        w: 1.0_b64 + d,
+        x: uy * vz - uz * vy,
+        y: uz * vx - ux * vz,
+        z: ux * vy - uy * vx,
+    ).normalize()
 
 ### Returns the normalized linear interpolation between `me` (at `t = 0`) and `you` (at `t = 1`) along
 ### the shorter arc: cheaper than `slerp`, with a non-constant angular speed.
@@ -320,15 +331,26 @@ common routine Q256.from_euler(roll: B64, pitch: B64, yaw: B64) -> Q256
     var sp = (pitch * 0.5_b64).sin()
     var cy = (yaw * 0.5_b64).cos()
     var sy = (yaw * 0.5_b64).sin()
-    return Q256(w: cr * cp * cy + sr * sp * sy, x: sr * cp * cy - cr * sp * sy, y: cr * sp * cy + sr * cp * sy, z: cr * cp * sy - sr * sp * cy)
+    return Q256(
+        w: cr * cp * cy + sr * sp * sy,
+        x: sr * cp * cy - cr * sp * sy,
+        y: cr * sp * cy + sr * cp * sy,
+        z: cr * cp * sy - sr * sp * cy,
+    )
 
 ### Returns the Z-Y-X Euler angles `(roll, pitch, yaw)` of this unit quaternion, the inverse of
 ### `from_euler`. At pitch +-90 degrees (gimbal lock) roll and yaw are not unique; pitch is clamped there.
 ### :returns: A tuple `(roll, pitch, yaw)` in radians.
 routine Q256.to_euler() -> (B64, B64, B64)
-    var roll = atan2(y: 2.0_b64 * (me.w * me.x + me.y * me.z), x: 1.0_b64 - 2.0_b64 * (me.x * me.x + me.y * me.y))
+    var roll = atan2(
+        y: 2.0_b64 * (me.w * me.x + me.y * me.z),
+        x: 1.0_b64 - 2.0_b64 * (me.x * me.x + me.y * me.y),
+    )
     var pitch = q256_clamp_unit(v: 2.0_b64 * (me.w * me.y - me.z * me.x)).asin_unchecked()
-    var yaw = atan2(y: 2.0_b64 * (me.w * me.z + me.x * me.y), x: 1.0_b64 - 2.0_b64 * (me.y * me.y + me.z * me.z))
+    var yaw = atan2(
+        y: 2.0_b64 * (me.w * me.z + me.x * me.y),
+        x: 1.0_b64 - 2.0_b64 * (me.y * me.y + me.z * me.z),
+    )
     return (roll, pitch, yaw)
 
 # ============================================================================
@@ -339,14 +361,25 @@ routine Q256.to_euler() -> (B64, B64, B64)
 ### :returns: The resulting `Text` value.
 @override
 routine Q256.represent() -> Text
-    return me.w.represent() + __q64_term(v: me.x, unit: "i") + __q64_term(v: me.y, unit: "j") + __q64_term(v: me.z, unit: "k")
+    return me.w.represent() + __q64_term(v: me.x, unit: "i") + __q64_term(
+        v: me.y,
+        unit: "j",
+    ) + __q64_term(v: me.z, unit: "k")
 
 ### Formats this quaternion as `w+xi+yj+zk` with exactly `places` digits after the point in each part
 ### (see `B64.fixed`).
 ### :param places: The number of digits after the point.
 ### :returns: The resulting `Text` value.
 routine Q256.fixed(places: U64) -> Text
-    return me.w.fixed(places) + q256_fixed_term(v: me.x, unit: "i", places: places) + q256_fixed_term(v: me.y, unit: "j", places: places) + q256_fixed_term(v: me.z, unit: "k", places: places)
+    return me.w.fixed(places) + q256_fixed_term(
+        v: me.x,
+        unit: "i",
+        places: places,
+    ) + q256_fixed_term(v: me.y, unit: "j", places: places) + q256_fixed_term(
+        v: me.z,
+        unit: "k",
+        places: places,
+    )
 
 ### One imaginary term of `fixed`, with an explicit leading sign.
 routine q256_fixed_term(v: B64, unit: Text, places: U64) -> Text

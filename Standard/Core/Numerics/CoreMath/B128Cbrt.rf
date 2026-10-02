@@ -1,5 +1,20 @@
 module Core
 
+secret preset B128_CBRT_KNST: Array[U64, 16] = [
+    0xD3ED1E72EFD6337B_u64, 0xB8BCBB918F877572_u64, 0xA244650B6F3E7F80_u64, 0x8F8418C89EFA9D5E_u64,
+    0x7FB3D5217EBB3895_u64, 0x724398C31E7FD263_u64, 0x66C3629B4E47FF19_u64, 0x5CD331CA2E136288_u64,
+    0x543B0596EDE1AD3B_u64, 0x4CBADD683DB29A42_u64, 0x4622B8BD8D85ED78_u64, 0x4052972A5D5B7219_u64,
+    0x3B327852AD32F99E_u64, 0x369A5BE7FD0C5AD6_u64, 0x328241A6BCE7711B_u64, 0x2EDA2954ACC41BB2_u64,
+]
+secret preset B128_CBRT_KNSTH: Array[U64, 16] = [
+    0xA0_u64, 0x83_u64, 0x6D_u64, 0x5C_u64, 0x4E_u64, 0x42_u64, 0x39_u64, 0x31_u64, 0x2B_u64,
+    0x25_u64, 0x21_u64, 0x1D_u64, 0x1A_u64, 0x17_u64, 0x15_u64, 0x13_u64,
+]
+# 2^63 / cbrt(2^i)
+secret preset B128_CBRT_RCBRT_I: Array[U64, 3] = [
+    0x8000000000000000_u64, 0x6597FA94F5B8F20B_u64, 0x50A28BE635CA2B89_u64,
+]
+
 # ============================================================================
 # Correctly rounded cube root of B128
 # ============================================================================
@@ -35,7 +50,10 @@ routine B128.cbrt() -> B128
         e = LLVM::reinterpret_bits[S64, U64](121 -% ns)
         e3 = e // 3 +% 10882
         i = e % 3
-        u = b128_cbrt_u128(hi: hi, lo: lo) << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](ns))
+        u = b128_cbrt_u128(
+            hi: hi,
+            lo: lo,
+        ) << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](ns))
     elseif e == 0x7FFF
         # NaN or ±infinity: a signaling NaN is quieted, the rest map to themselves
         if ((hi << 16) | lo) != 0 and (hi & 0x0000800000000000_u64) == 0
@@ -62,7 +80,7 @@ secret routine b128_cbrt_u128(hi: U64, lo: U64) -> U128
 ### The high word of the unsigned 64x64-bit product.
 @inline
 secret routine b128_cbrt_mhuu(a: U64, b: U64) -> U64
-    return LLVM::int_truncate[U128, U64]((LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)) >>> 64)
+    return LLVM::int_truncate[U128, U64](LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b) >>> 64)
 
 ### The high word of the signed 64x64-bit product (operands and result as two's-complement bits).
 @inline
@@ -89,7 +107,7 @@ secret routine b128_cbrt_mhUU(a: U128, b: U128) -> U128
     var a1b0 = LLVM::zero_extend[U64, U128](a1) *% LLVM::zero_extend[U64, U128](b0)
     var a0b1 = LLVM::zero_extend[U64, U128](a0) *% LLVM::zero_extend[U64, U128](b1)
     var a1b1 = LLVM::zero_extend[U64, U128](a1) *% LLVM::zero_extend[U64, U128](b1)
-    return (a1b1 +% (a1b0 >>> 64)) +% (a0b1 >>> 64)
+    return a1b1 +% (a1b0 >>> 64) +% (a0b1 >>> 64)
 
 ### High part of the 64x128-bit product.
 @inline
@@ -116,7 +134,7 @@ secret routine b128_cbrt_mUU(a: U128, b: U128) -> (U128, U128)
     var clo = 0_u128
     if lo < a0b0
         clo = 1_u128
-    return (((a1b1 +% (mid >>> 64)) +% cmid) +% clo, lo)
+    return (a1b1 +% (mid >>> 64) +% cmid +% clo, lo)
 
 ### 1 + r ~ 1/cbrt(m), with r signed (two's-complement bits), from the high significand word m.
 secret routine b128_cbrt_rcbrt(m: U64) -> U64
@@ -124,12 +142,12 @@ secret routine b128_cbrt_rcbrt(m: U64) -> U64
     var cc = B128_CBRT_KNST[indx]
     var c3 = B128_CBRT_KNSTH[indx]
     var c0 = cc << 36
-    var c1 = (cc << 13) >>> 37
+    var c1 = cc << 13 >>> 37
     var c2 = cc >>> 42
     var d = b128_cbrt_sar(x: (m << 4) -% 0x8000000000000000_u64, s: 32)
-    var d2 = (d *% d) >>> 32
-    var re = c0 +% (d2 *% c2)
-    var ro = d *% (c1 +% ((d2 *% c3) >>> 22))
+    var d2 = d *% d >>> 32
+    var re = c0 +% d2 *% c2
+    var ro = d *% (c1 +% (d2 *% c3 >>> 22))
     var r = re -% ro
     var r2 = b128_cbrt_mhuu(a: r, b: r)
     var r3 = b128_cbrt_mhuu(a: r2, b: r)
@@ -158,17 +176,17 @@ secret routine b128_cbrt_icbrt(x: U128, i: U64) -> U128
     var mm = LLVM::zero_extend[U64, U128](m) | (LLVM::zero_extend[U64, U128](m) << 64)
     var xy1 = (sx >>> 64) *% LLVM::zero_extend[U64, U128](h3)
     var xy0 = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](sx)) *% LLVM::zero_extend[U64, U128](h3)
-    var t = (xy1 -% (mm & sx)) +% (xy0 >>> 64)
+    var t = xy1 -% (mm & sx) +% (xy0 >>> 64)
     var ds = LLVM::reinterpret_bits[S128, U128](LLVM::reinterpret_bits[U128, S128](t) >> 53)
     sx = sx << 5
     var sx1 = sx -% ds
-    var dd = ((LLVM::int_truncate[U128, U64](sx1) << 1) +% 511_u64) & 0xFFFF_u64
+    var dd = (LLVM::int_truncate[U128, U64](sx1) << 1) +% 511_u64 & 0xFFFF_u64
     if dd < 1023
         # the result may be close to a rounding boundary: decide it exactly from c^3 - x
-        var c = ((sx1 +% (1_u128 << 14)) >>> 15) | (1_u128 << 113)
+        var c = (sx1 +% (1_u128 << 14) >>> 15) | (1_u128 << 113)
         var cc = b128_cbrt_mUU(a: c, b: c)
         var p = b128_cbrt_mUU(a: cc.item1, b: c)
-        var r31 = ((cc.item0 *% c) +% p.item0) -% (xs << 86)
+        var r31 = cc.item0 *% c +% p.item0 -% (xs << 86)
         var r30 = p.item1
         sx1 = c << 15
         if (r31 >>> 127) != 0
@@ -178,8 +196,3 @@ secret routine b128_cbrt_icbrt(x: U128, i: U64) -> U128
         elseif r30 != 0
             sx1 = sx1 -% 1_u128
     return sx1
-
-secret preset B128_CBRT_KNST: Array[U64, 16] = [0xD3ED1E72EFD6337B_u64, 0xB8BCBB918F877572_u64, 0xA244650B6F3E7F80_u64, 0x8F8418C89EFA9D5E_u64, 0x7FB3D5217EBB3895_u64, 0x724398C31E7FD263_u64, 0x66C3629B4E47FF19_u64, 0x5CD331CA2E136288_u64, 0x543B0596EDE1AD3B_u64, 0x4CBADD683DB29A42_u64, 0x4622B8BD8D85ED78_u64, 0x4052972A5D5B7219_u64, 0x3B327852AD32F99E_u64, 0x369A5BE7FD0C5AD6_u64, 0x328241A6BCE7711B_u64, 0x2EDA2954ACC41BB2_u64]
-secret preset B128_CBRT_KNSTH: Array[U64, 16] = [0xA0_u64, 0x83_u64, 0x6D_u64, 0x5C_u64, 0x4E_u64, 0x42_u64, 0x39_u64, 0x31_u64, 0x2B_u64, 0x25_u64, 0x21_u64, 0x1D_u64, 0x1A_u64, 0x17_u64, 0x15_u64, 0x13_u64]
-# 2^63 / cbrt(2^i)
-secret preset B128_CBRT_RCBRT_I: Array[U64, 3] = [0x8000000000000000_u64, 0x6597FA94F5B8F20B_u64, 0x50A28BE635CA2B89_u64]

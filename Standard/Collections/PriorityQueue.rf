@@ -1,7 +1,6 @@
 module Collections
 
 import BuilderQuery
-
 ### Pairs an element with the priority that determines its position in a {PriorityQueue}.
 ### Used for iteration, bulk inspection, and conversion to list form.
 ### :typeparam TPriority: The type used to order entries in the heap.
@@ -42,13 +41,33 @@ needs TPriority obeys Comparable
 ### :typeparam TElement: The value type stored alongside each priority.
 ### :see: {SortedList[T]} for sorted traversal without removing elements.
 ### :see: {CircularList[T]} for both-ended, rotatable sequencing without priority.
-entity PriorityQueue[TPriority, AnyType TElement] obeys Iterable[PQEntry[TPriority, TElement]], DictLiteral[TPriority, TElement]
+entity PriorityQueue[TPriority, AnyType TElement]
+obeys Iterable[PQEntry[TPriority, TElement]], DictLiteral[TPriority, TElement]
 needs TPriority obeys Comparable
 relates PriorityQueueEmittable[TPriority, TElement] as Iter
     secret priorities: Hijacked[TPriority]
     secret elements: Hijacked[TElement]
     secret count: U64
     secret capacity: U64
+
+# ============================================================================
+# Iteration (heap order, NOT priority order)
+# ============================================================================
+
+### Walks the heap's current backing array in storage order.
+### Iteration order is heap order — NOT priority-sorted order.
+### :typeparam TPriority: The priority type carried by yielded entries.
+### :typeparam TElement: The element type carried by yielded entries.
+entity PriorityQueueEmittable[AnyType TPriority, AnyType TElement]
+obeys Emittable[PQEntry[TPriority, TElement]]
+    ### Raw pointer into the source pool's priority buffer.
+    secret priorities: Hijacked[TPriority]
+    ### Raw pointer into the source pool's element buffer.
+    secret elements: Hijacked[TElement]
+    ### Entry count captured at iterator creation.
+    secret count: U64
+    ### Current heap position.
+    secret index: U64
 
 # ============================================================================
 # Creators
@@ -75,7 +94,7 @@ routine PriorityQueue[TPriority, TElement]() -> PriorityQueue[TPriority, TElemen
         priorities: hijacked_none[TPriority](),
         elements: hijacked_none[TElement](),
         count: 0u64,
-        capacity: 0u64
+        capacity: 0u64,
     )
 
 ### Creates an empty priority pool with storage pre-allocated for `capacity` entries.
@@ -91,7 +110,7 @@ routine PriorityQueue[TPriority, TElement](capacity: U64) -> PriorityQueue[TPrio
             priorities: Hijacked[TPriority](priority_ptr),
             elements: Hijacked[TElement](element_ptr),
             count: 0u64,
-            capacity: capacity
+            capacity: capacity,
         )
 
 # ============================================================================
@@ -141,14 +160,17 @@ routine PriorityQueue[TPriority, TElement].set_element_raw(index: U64, value: TE
 routine PriorityQueue[TPriority, TElement].get_entry_raw(index: U64) -> PQEntry[TPriority, TElement]
     return PQEntry[TPriority, TElement](
         priority: me.get_priority_raw(index),
-        element: me.get_element_raw(index)
+        element: me.get_element_raw(index),
     )
 
 ### Writes both the priority and element of `entry` into the heap buffers at `index`.
 ### :param index: The zero-based heap position to update.
 ### :param entry: The entry whose priority and element to store.
 @inline
-routine PriorityQueue[TPriority, TElement].set_entry_raw(index: U64, entry: PQEntry[TPriority, TElement])
+routine PriorityQueue[TPriority, TElement].set_entry_raw(
+    index: U64,
+    entry: PQEntry[TPriority, TElement],
+)
     me.set_priority_raw(index: index, value: entry.priority)
     me.set_element_raw(index: index, value: entry.element)
     return
@@ -167,14 +189,20 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
                 var ptr = rf_allocate_dynamic_uninit(priority_byte_size)
                 me.priorities = Hijacked[TPriority](ptr)
             else
-                var ptr = rf_reallocate_dynamic(ptr: LLVM::pointer_to_int[TPriority, Address](me.priorities), size: priority_byte_size)
+                var ptr = rf_reallocate_dynamic(
+                    ptr: LLVM::pointer_to_int[TPriority, Address](me.priorities),
+                    size: priority_byte_size,
+                )
                 me.priorities = Hijacked[TPriority](ptr)
 
             if me.elements.is_none()
                 var ptr = rf_allocate_dynamic_uninit(element_byte_size)
                 me.elements = Hijacked[TElement](ptr)
             else
-                var ptr = rf_reallocate_dynamic(ptr: LLVM::pointer_to_int[TElement, Address](me.elements), size: element_byte_size)
+                var ptr = rf_reallocate_dynamic(
+                    ptr: LLVM::pointer_to_int[TElement, Address](me.elements),
+                    size: element_byte_size,
+                )
                 me.elements = Hijacked[TElement](ptr)
 
         me.capacity = new_capacity
@@ -185,7 +213,13 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
 ### Both the priority and element buffers grow together via `reserve`.
 routine PriorityQueue[TPriority, TElement].grow()
     # Size the growth off the priority buffer's element size; the element buffer grows in lockstep.
-    me.reserve(next_grow_capacity(current: me.capacity, min_needed: me.capacity +% 1u64, element_size: TPriority.data_size().byte_size()))
+    me.reserve(
+        next_grow_capacity(
+            current: me.capacity,
+            min_needed: me.capacity +% 1u64,
+            element_size: TPriority.data_size().byte_size(),
+        ),
+    )
     return
 
 # ============================================================================
@@ -354,7 +388,10 @@ routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, T
 ### Only pairs up to the length of the shorter list are inserted; any extra values are ignored.
 ### :param elements: The elements to add.
 ### :param priorities: The priorities to assign at matching positions.
-routine PriorityQueue[TPriority, TElement].add_all(elements: Accessing[List[TElement]], priorities: Accessing[List[TPriority]])
+routine PriorityQueue[TPriority, TElement].add_all(
+    elements: Accessing[List[TElement]],
+    priorities: Accessing[List[TPriority]],
+)
 needs TElement obeys Copyable
 needs TPriority obeys Copyable
     var i = 0u64
@@ -405,24 +442,6 @@ routine List[PQEntry[TPriority, TElement]](source: PriorityQueue[TPriority, TEle
         i = i +% 1u64
     return steal result
 
-# ============================================================================
-# Iteration (heap order, NOT priority order)
-# ============================================================================
-
-### Walks the heap's current backing array in storage order.
-### Iteration order is heap order — NOT priority-sorted order.
-### :typeparam TPriority: The priority type carried by yielded entries.
-### :typeparam TElement: The element type carried by yielded entries.
-entity PriorityQueueEmittable[AnyType TPriority, AnyType TElement] obeys Emittable[PQEntry[TPriority, TElement]]
-    ### Raw pointer into the source pool's priority buffer.
-    secret priorities: Hijacked[TPriority]
-    ### Raw pointer into the source pool's element buffer.
-    secret elements: Hijacked[TElement]
-    ### Entry count captured at iterator creation.
-    secret count: U64
-    ### Current heap position.
-    secret index: U64
-
 @readonly
 routine PriorityQueue[TPriority, TElement].iter() -> PriorityQueueEmittable[TPriority, TElement]
     danger
@@ -430,7 +449,7 @@ routine PriorityQueue[TPriority, TElement].iter() -> PriorityQueueEmittable[TPri
             priorities: me.priorities,
             elements: me.elements,
             count: me.count(),
-            index: 0u64
+            index: 0u64,
         )
 
 ### Returns the next heap entry in storage order.
@@ -448,7 +467,8 @@ routine PriorityQueueEmittable[TPriority, TElement].emit!() -> PQEntry[TPriority
     me.index = me.index + 1u64
     return _result
 
-@[readonly, override]
+@readonly
+@override
 routine PriorityQueue[TPriority, TElement].represent() -> Text
     var result = me.type_name() + "(["
     var i = 0u64
@@ -460,7 +480,8 @@ routine PriorityQueue[TPriority, TElement].represent() -> Text
     result = result + "])"
     return steal result
 
-@[readonly, override]
+@readonly
+@override
 routine PriorityQueue[TPriority, TElement].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
     var i = 0u64
@@ -478,8 +499,14 @@ dangerous routine PriorityQueue[TPriority, TElement].destroy()
     # types; frees owned entity priorities/elements.
     var i = 0u64
     while i < me.count
-        me.priorities.offset(TPriority.data_size() * i).peek().destroy()
-        me.elements.offset(TElement.data_size() * i).peek().destroy()
+        me.priorities
+            .offset(TPriority.data_size() * i)
+            .peek()
+            .destroy()
+        me.elements
+            .offset(TElement.data_size() * i)
+            .peek()
+            .destroy()
         i = i + 1u64
     me.priorities.invalidate()
     me.elements.invalidate()

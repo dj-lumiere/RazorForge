@@ -22,7 +22,7 @@ record ProcessResult
 ### Whether the command finished cleanly: exited normally (no signal) with exit code 0.
 ### :returns: true if not signalled and `exit_code == 0`.
 routine ProcessResult.succeeded() -> Bool
-    return (not me.signal.is_present()) and me.exit_code == 0
+    return not me.signal.is_present() and me.exit_code == 0
 
 ### Maps the runtime's term-signal convention (0 = not signalled) to a `Maybe`: absent when 0,
 ### otherwise the signal number. `try`-recovering it yields the `S32?` that ProcessResult carries.
@@ -62,8 +62,12 @@ routine run_process(command: Text) -> ProcessResult
 ### :param env: Environment overrides, MERGED into the parent environment (so PATH etc. stay intact);
 ###   the default empty `{:}` inherits the parent environment unchanged.
 ### :returns: A `ProcessResult` with exit code, optional signal, and captured streams.
-routine run_program(file: Text, args: Accessing[List[Text]], cwd: Text = "",
-                    env: Dict[Text, Text] = {:}) -> ProcessResult
+routine run_program(
+    file: Text,
+    args: Accessing[List[Text]],
+    cwd: Text = "",
+    env: Dict[Text, Text] = {:},
+) -> ProcessResult
     var fcstr = CStr(from: file)
     var builder = rf_proc_begin(file: fcstr, file_len: fcstr.count().S32())
     each arg in args
@@ -74,6 +78,11 @@ routine run_program(file: Text, args: Accessing[List[Text]], cwd: Text = "",
     each entry in env
         var kcstr = CStr(from: entry.key)
         var vcstr = CStr(from: entry.value)
-        rf_proc_add_env(builder: builder, key: kcstr, key_len: kcstr.count().S32(),
-                        val: vcstr, val_len: vcstr.count().S32())
+        rf_proc_add_env(
+            builder: builder,
+            key: kcstr,
+            key_len: kcstr.count().S32(),
+            val: vcstr,
+            val_len: vcstr.count().S32(),
+        )
     return proc_result_of(code: rf_proc_run_built(builder: builder))

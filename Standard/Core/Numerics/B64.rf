@@ -1,21 +1,6 @@
 module Core
 
 import Collections
-# Core B64 type definition - maps to LLVM double
-
-### A 64-bit IEEE 754 binary floating-point value (double precision).
-### `B64` is the default floating-point type for general scientific, financial,
-### and system-level numeric code in RazorForge. With 53 bits of significand, it
-### provides about 15–16 significant decimal digits of precision and can represent
-### values up to approximately ±1.8 × 10³⁰⁸.
-###
-### Arithmetic operations throw {NumericOverflowError} when the result is
-### non-finite (infinity or NaN). Use `truediv_unchecked` for raw IEEE 754
-### semantics without the overflow guard.
-@llvm("double")
-record B64 obeys Numeric, Ordered, Assignable, Copyable, Splittable
-    pass
-
 # IEEE 754 double precision constants
 preset B64_EPSILON: B64 = 2.220446049250313e-16_b64
 preset B64_MIN: B64 = -1.7976931348623157e+308_b64
@@ -30,6 +15,22 @@ preset B64_E: B64 = 2.718281828459045_b64
 preset B64_SQRT_2: B64 = 1.4142135623730951_b64
 preset B64_LN_2: B64 = 0.6931471805599453_b64
 preset B64_LN_10: B64 = 2.302585092994046_b64
+
+# Core B64 type definition - maps to LLVM double
+
+### A 64-bit IEEE 754 binary floating-point value (double precision).
+### `B64` is the default floating-point type for general scientific, financial,
+### and system-level numeric code in RazorForge. With 53 bits of significand, it
+### provides about 15–16 significant decimal digits of precision and can represent
+### values up to approximately ±1.8 × 10³⁰⁸.
+###
+### Arithmetic operations throw {NumericOverflowError} when the result is
+### non-finite (infinity or NaN). Use `truediv_unchecked` for raw IEEE 754
+### semantics without the overflow guard.
+@llvm("double")
+record B64
+obeys Numeric, Ordered, Assignable, Copyable, Splittable
+    pass
 
 # ============================================================================
 # Creators
@@ -146,7 +147,19 @@ routine B64(from: B64) -> B64
 ### :returns: The closest representable `B64` value.
 routine B64(from: D64) -> B64
     var d = from.decode()
-    return B64.from_bits(bits: LLVM::int_truncate[U128, U64](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 53_s64, emin: -1022_s64, emax: 1023_s64)))
+    return B64.from_bits(
+        bits: LLVM::int_truncate[U128, U64](
+            decimal_to_binary_bits(
+                sign: d.sign,
+                special: d.special,
+                coeff: d.coeff,
+                exp: d.exp,
+                p: 53_s64,
+                emin: -1022_s64,
+                emax: 1023_s64,
+            ),
+        ),
+    )
 
 ### Converts a decimal128 value to double-precision binary floating point, correctly rounded in one step (see
 ### B128(from: D128)).
@@ -610,13 +623,41 @@ routine B64.to_bytes_le() -> Array[Byte, 8]
     var raw = LLVM::reinterpret_bits[B64, U64](me)
     var result = Array[Byte, 8]()
     result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](raw))
-    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 8_u64)))
-    result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 16_u64)))
-    result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 24_u64)))
-    result = LLVM::set_byte_at(array: result, index: 4_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 32_u64)))
-    result = LLVM::set_byte_at(array: result, index: 5_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 40u64)))
-    result = LLVM::set_byte_at(array: result, index: 6_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 48_u64)))
-    result = LLVM::set_byte_at(array: result, index: 7_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 56_u64)))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 8_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 2_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 16_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 3_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 24_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 4_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 32_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 5_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 40u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 6_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 48_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 7_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 56_u64)),
+    )
     return result
 
 ### Returns the raw bytes of this value in big-endian order.
@@ -625,13 +666,41 @@ routine B64.to_bytes_be() -> Array[Byte, 8]
     var raw = LLVM::byte_swap(LLVM::reinterpret_bits[B64, U64](me))
     var result = Array[Byte, 8]()
     result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](raw))
-    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 8_u64)))
-    result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 16_u64)))
-    result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 24_u64)))
-    result = LLVM::set_byte_at(array: result, index: 4_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 32_u64)))
-    result = LLVM::set_byte_at(array: result, index: 5_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 40u64)))
-    result = LLVM::set_byte_at(array: result, index: 6_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 48_u64)))
-    result = LLVM::set_byte_at(array: result, index: 7_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 56_u64)))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 8_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 2_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 16_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 3_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 24_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 4_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 32_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 5_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 40u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 6_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 48_u64)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 7_u64,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 56_u64)),
+    )
     return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -739,7 +808,6 @@ routine B64.fma!(b: B64, c: B64) -> B64
 routine B64.fma_unchecked(b: B64, c: B64) -> B64
     return LLVM::fma[B64](a: me, b: b, c: c)
 
-
 ### Arc sine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `asin_unchecked` for raw
 ### IEEE.
 routine B64.asin!() -> B64
@@ -815,12 +883,16 @@ routine B64.tgamma!() -> B64
 # ============================================================================
 ### C libm extern (rf_b64_ passthrough): next representable value after x toward y.
 routine C::rf_b64_nextafter(x: B64, y: B64) -> B64
+
 ### C libm extern (rf_b64_ passthrough): x * 2^n (C scalbn).
 routine C::rf_b64_scalbn(value: B64, n: S64) -> B64
+
 ### C libm extern (rf_b64_ passthrough): unbiased radix-2 exponent as an integer (C ilogb).
 routine C::rf_b64_ilogb(value: B64) -> S64
+
 ### C libm extern (rf_b64_ passthrough): positive difference max(x - y, 0) (C fdim).
 routine C::rf_b64_fdim(x: B64, y: B64) -> B64
+
 ### C libm extern (rf_b64_ passthrough): IEEE remainder, ties to even (C remainder).
 routine C::rf_b64_remainder(x: B64, y: B64) -> B64
 
@@ -940,7 +1012,10 @@ routine B64.total_order(you: B64) -> Bool
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine B64.total_order_mag(you: B64) -> Bool
-    return LLVM::bit_and(a: me.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64) <= LLVM::bit_and(a: you.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64)
+    return LLVM::bit_and(a: me.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64) <= LLVM::bit_and(
+        a: you.to_bits(),
+        b: 0x7FFFFFFFFFFFFFFF_u64,
+    )
 
 # ============================================================================
 # IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding
@@ -1038,4 +1113,3 @@ routine B64.round_ties_away() -> B64
     var t = a.trunc()
     var rounded = if a - t >= 0.5_b64 then t + 1.0_b64 else t
     return rounded.copysign(sign: me)
-

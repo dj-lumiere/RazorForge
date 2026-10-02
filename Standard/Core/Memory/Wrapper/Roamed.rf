@@ -1,7 +1,6 @@
 module Core
 
 import BuilderQuery
-
 ### Biased-reference-counted handle — the auto-promoting hybrid of {Retained[T]} and {Guarded[T, P]}.
 ### Thin pointer to {RoamController[T]}. Backs Suflae's `entity` (the monitor-flavored actor): behaves
 ### like {Retained[T]} (non-atomic, unlocked, fast) while it stays on one thread, and — the moment it
@@ -31,7 +30,8 @@ import BuilderQuery
 ### (no auto-scheduling yet), so cycles are reclaimed only where the collector is actually run.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
-record Roamed[EntityType T] obeys Controlling[T]
+record Roamed[EntityType T]
+obeys Controlling[T]
     pass
 
 # ============================================================================
@@ -87,7 +87,6 @@ routine Roamed[T].share() -> Roamed[T]
 routine Roamed[T].duplicate() -> Roamed[T]
     return me.share()
 
-
 # ============================================================================
 # Escape + access lock. In Stage 2 the builder inserts these automatically (promote at the
 # concurrency-boundary site; lock_enter/lock_exit around member-routine entry/return). Manual here.
@@ -117,7 +116,6 @@ dangerous routine Roamed[T].lock_exit()
     var ctrl = Hijacked[RoamController[T]](me).as_entity()
     ctrl.guard_exit()
     return
-
 
 # ============================================================================
 # Inspection / Stage-1 test access
@@ -192,7 +190,8 @@ dangerous routine Roamed[T].raw_inner() -> T
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
 ### :returns: The inner entity as `T`.
-@[readonly, inline]
+@readonly
+@inline
 routine Roamed[T].access() -> T
     danger
         var ctrl = Hijacked[RoamController[T]](me).as_entity()

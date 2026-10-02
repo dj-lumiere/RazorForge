@@ -14,7 +14,11 @@ module Core
 # argument, the correctly rounded result and a tiny correction that fixes the rounding direction (as IEEE 754
 # bit patterns).
 secret preset B64_SINPI_DB_IQ: Array[U64, 4] = [76_u64, 108_u64, 490_u64, 903_u64]
-secret preset B64_SINPI_DB: Array[U64, 12] = [0xBFD276B3FEF46600_u64, 0x3FBDB8A79A80C3A0_u64, 0x3910000000000000_u64, 0xBFD33CAEA0F24C00_u64, 0x3FC5146C0BC45BCE_u64, 0x3920000000000000_u64, 0xBFE8A1E8A3E82C00_u64, 0x3FE5D6561936B699_u64, 0xBC80000000000000_u64, 0xBFDBDD02D1AD6000_u64, 0x3FEF72C906962631_u64, 0x3C80000000000000_u64]
+secret preset B64_SINPI_DB: Array[U64, 12] = [
+    0xBFD276B3FEF46600_u64, 0x3FBDB8A79A80C3A0_u64, 0x3910000000000000_u64, 0xBFD33CAEA0F24C00_u64,
+    0x3FC5146C0BC45BCE_u64, 0x3920000000000000_u64, 0xBFE8A1E8A3E82C00_u64, 0x3FE5D6561936B699_u64,
+    0xBC80000000000000_u64, 0xBFDBDD02D1AD6000_u64, 0x3FEF72C906962631_u64, 0x3C80000000000000_u64,
+]
 
 ### Returns sin(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
 ### identical on every platform. It is exact at integers (±0, with the sign of the input) and
@@ -27,7 +31,7 @@ routine B64.sinpi() -> B64
     if ax == 0_u64
         return x
     var e = LLVM::reinterpret_bits[U64, S64](ax >>> 52)
-    var m0 = (ixu & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
+    var m0 = ixu & 0x000FFFFFFFFFFFFF_u64 | 0x0010000000000000_u64
     var m = LLVM::reinterpret_bits[U64, S64](m0)
     if (ixu >>> 63) == 1_u64
         m = -m
@@ -49,8 +53,8 @@ routine B64.sinpi() -> B64
         return big.item0 +! big.item1
     if ax <= 0x3FA2000000000000_u64
         # |x| <= 0x1.2p-5
-        var ph = 0x1.921fb54442d18p+1
-        var pl = 0x1.1a62633145c07p-53
+        var ph = 0x1.921FB54442D18p+1
+        var pl = 0x1.1A62633145C07p-53
         if x.abs() < 0x1p-54
             if x.abs() < 0x1p-970
                 var t = x *! 0x1p106
@@ -59,7 +63,7 @@ routine B64.sinpi() -> B64
                 var r = th +! tl
                 var rs = r *! 0x1p-106
                 var rt = rs *! 0x1p106
-                return LLVM::fma[B64](a: (th -! rt) +! tl, b: 0x1p-106, c: rs)
+                return LLVM::fma[B64](a: th -! rt +! tl, b: 0x1p-106, c: rs)
             var sh = ph *! x
             var sl = LLVM::fma[B64](a: ph, b: x, c: -sh) +! pl *! x
             return sh +! sl
@@ -69,11 +73,11 @@ routine B64.sinpi() -> B64
         var x3 = x2 *! x
         var x4 = x2 *! x2
         var eps = x *! (x2 *! 0x1p-47 +! 0x1p-102)
-        var c01 = -0x1.4abbce625be51p+2 +! x2 *! 0x1.466bc67754b46p+1
-        var c23 = -0x1.32d2cc12a51f4p-1 +! x2 *! 0x1.5060540058476p-4
+        var c01 = -0x1.4ABBCE625BE51p+2 +! x2 *! 0x1.466BC67754B46p+1
+        var c23 = -0x1.32D2CC12A51F4p-1 +! x2 *! 0x1.5060540058476p-4
         zl = zl +! x3 *! (c01 +! x4 *! c23)
-        var lb0 = (zl -! eps) +! zh
-        var ub0 = (zl +! eps) +! zh
+        var lb0 = zl -! eps +! zh
+        var ub0 = zl +! eps +! zh
         if lb0 == ub0
             return lb0
         return b64_sinpi_zero(x: x)
@@ -85,22 +89,22 @@ routine B64.sinpi() -> B64
             if (m0 << LLVM::int_truncate[S64, U32](si)) == 0_u64
                 return zero.copysign(sign: x)
             # t = 0 when |x| = 1/2 mod 2, t = 1 when |x| = 3/2 mod 2
-            var t = (m0 << LLVM::int_truncate[S64, U32](si - 1)) >>> 63
+            var t = m0 << LLVM::int_truncate[S64, U32](si - 1) >>> 63
             if t == 0_u64
                 return one.copysign(sign: x)
             return -one.copysign(sign: x)
     var iq = LLVM::reinterpret_bits[S64, U64](m >> LLVM::int_truncate[S64, U32](s)) & 8191_u64
-    iq = (iq + 1_u64) >>> 1
+    iq = iq + 1_u64 >>> 1
     var k = LLVM::reinterpret_bits[U64, S64](LLVM::reinterpret_bits[S64, U64](m) << LLVM::int_truncate[S64, U32](e - 1000))
     var z = LLVM::signed_to_float[S64, B64](k)
     var z2 = z *! z
-    var fs = 0x1.921fb54442d18p-74 +! z2 *! (-0x1.4abbce625be51p-223 +! z2 *! 0x1.466bc6044ba16p-374)
-    var fc = -0x1.3bd3cc9be45dbp-148 +! z2 *! 0x1.03c1f00186416p-298
+    var fs = 0x1.921FB54442D18p-74 +! z2 *! (-0x1.4ABBCE625BE51p-223 +! z2 *! 0x1.466BC6044BA16p-374)
+    var fc = -0x1.3BD3CC9BE45DBp-148 +! z2 *! 0x1.03C1F00186416p-298
     var b = b64_trigpi_sincosn(s: iq)
     var er = z.abs() *! 0x1p-123 +! 0x1p-78
-    var r = (b.item1 +! b.item0 *! (z2 *! fc)) +! b.item2 *! (z *! fs)
-    var lb = (r -! er) +! b.item0
-    var ub = (r +! er) +! b.item0
+    var r = b.item1 +! b.item0 *! (z2 *! fc) +! b.item2 *! (z *! fs)
+    var lb = r -! er +! b.item0
+    var ub = r +! er +! b.item0
     if lb == ub
         return lb
     return b64_sinpi_refine(iq: iq, z: z)
@@ -114,19 +118,40 @@ secret routine b64_sinpi_zero(x: B64) -> B64
     var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
     var x3 = x2 *! x
     var dx3 = LLVM::fma[B64](a: x2, b: x, c: -x3) +! dx2 *! x
-    var fl = x2 *! (-0x1.e3074fde861fp-8 +! x2 *! (0x1.e8f4344534da6p-12 +! x2 *! -0x1.6f9cd7b8cb9dbp-16))
-    var f = b64_trigpi_poly_start(c0: 0x1.50783487ee781p-4, c1: 0x1.832989f39a743p-58, l: fl)
-    f = b64_trigpi_poly_step(xh: x2, xl: dx2, h: f.item0, l: f.item1, c0: -0x1.32d2cce62bd86p-1, c1: 0x1.066bd54973829p-55)
-    f = b64_trigpi_poly_step(xh: x2, xl: dx2, h: f.item0, l: f.item1, c0: 0x1.466bc6775aae2p+1, c1: -0x1.6dc0cbefae1dap-54)
-    f = b64_trigpi_poly_step(xh: x2, xl: dx2, h: f.item0, l: f.item1, c0: -0x1.4abbce625be53p+2, c1: 0x1.05511c68477bep-52)
+    var fl = x2 *! (-0x1.E3074FDE861Fp-8 +! x2 *! (0x1.E8F4344534DA6p-12 +! x2 *! -0x1.6F9CD7B8CB9DBp-16))
+    var f = b64_trigpi_poly_start(c0: 0x1.50783487EE781p-4, c1: 0x1.832989F39A743p-58, l: fl)
+    f = b64_trigpi_poly_step(
+        xh: x2,
+        xl: dx2,
+        h: f.item0,
+        l: f.item1,
+        c0: -0x1.32D2CCE62BD86p-1,
+        c1: 0x1.066BD54973829p-55,
+    )
+    f = b64_trigpi_poly_step(
+        xh: x2,
+        xl: dx2,
+        h: f.item0,
+        l: f.item1,
+        c0: 0x1.466BC6775AAE2p+1,
+        c1: -0x1.6DC0CBEFAE1DAp-54,
+    )
+    f = b64_trigpi_poly_step(
+        xh: x2,
+        xl: dx2,
+        h: f.item0,
+        l: f.item1,
+        c0: -0x1.4ABBCE625BE53p+2,
+        c1: 0x1.05511C68477BEp-52,
+    )
     f = b64_trigpi_muldd_acc(xh: f.item0, xl: f.item1, ch: x3, cl: dx3)
     var pi0 = 0x1.92p+1
-    var pi1 = 0x1.fb54442d1846ap-11
-    var pi2 = -0x1.d9cceba3f91f2p-65
+    var pi1 = 0x1.FB54442D1846Ap-11
+    var pi2 = -0x1.D9CCEBA3F91F2p-65
     var y0 = pi0 *! x
     var bu = (y0.to_bits() & 0x000FFFFFFFFFFFFF_u64) +% (85_u64 << 51)
     var bf = B64.from_bits(bits: bu)
-    y0 = (y0 +! bf) -! bf
+    y0 = y0 +! bf -! bf
     var y0l = LLVM::fma[B64](a: pi0, b: x, c: -y0)
     var y1 = pi1 *! x
     var y2 = LLVM::fma[B64](a: pi1, b: x, c: -y1) +! pi2 *! x

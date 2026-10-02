@@ -1,7 +1,6 @@
 module Collections
 
 import BuilderExpansion
-
 ### A growable struct-of-arrays (SoA) sequence of records: each field of the element type `T` is stored
 ### in its OWN contiguous column buffer, rather than interleaving whole `T` values. Indexing copies a
 ### whole `T` out (gathering one value from each column), matching `List[T]`'s value-out `getitem`, so the
@@ -16,7 +15,8 @@ import BuilderExpansion
 ###
 ### :typeparam T: The record element type (must be `Splittable`).
 ### :see: {List[T]} for the array-of-structs counterpart.
-entity SplitList[AnyType T] obeys Iterable[T], MutableIndexable[T], Sized, Container, ListLiteral[T]
+entity SplitList[AnyType T]
+obeys Iterable[T], MutableIndexable[T], Sized, Container, ListLiteral[T]
 needs T obeys Splittable
 relates SplitListEmittable[T] as Iter
     expand m in allmemvarof(T)
@@ -26,6 +26,19 @@ relates SplitListEmittable[T] as Iter
     secret count: U64
     ### The number of elements each column can hold without reallocating.
     secret capacity: U64
+
+### A forward iterator over a `SplitList[T]`: holds a borrowed alias of each column buffer plus the
+### captured count and current position. Emits whole `T` values gathered one field at a time.
+entity SplitListEmittable[AnyType T]
+obeys Emittable[T]
+needs T obeys Splittable
+    expand m in allmemvarof(T)
+        ### Borrowed alias of the source list's column for this field.
+        secret $nameof(m): Hijacked[$typeof(m)]
+    ### Element count captured when the iterator was created.
+    secret count: U64
+    ### Current iteration position.
+    secret index: U64
 
 # Creators
 
@@ -105,7 +118,10 @@ routine SplitList[T].add_last(value: T)
         me.reserve(new_capacity: new_capacity)
     expand m in allmemvarof(T)
         danger
-            me.$nameof(m).poke_at_offset(at: $typeof(m).data_size() * me.count, value: value.$nameof(m))
+            me.$nameof(m).poke_at_offset(
+                at: $typeof(m).data_size() * me.count,
+                value: value.$nameof(m),
+            )
     me.count = me.count +% 1u64
     return
 
@@ -132,7 +148,10 @@ routine SplitList[T].setitem!(index: U64, value: T)
         throw IndexOutOfBoundsError(index: index, count: me.count)
     expand m in allmemvarof(T)
         danger
-            me.$nameof(m).poke_at_offset(at: $typeof(m).data_size() * index, value: value.$nameof(m))
+            me.$nameof(m).poke_at_offset(
+                at: $typeof(m).data_size() * index,
+                value: value.$nameof(m),
+            )
     return
 
 ### Frees every column buffer, then the entity itself. Elements are `Splittable` (trivially
@@ -181,18 +200,6 @@ routine SplitList[T].iter() -> SplitListEmittable[T]
         it.count = me.count
         it.index = 0u64
         return it
-
-### A forward iterator over a `SplitList[T]`: holds a borrowed alias of each column buffer plus the
-### captured count and current position. Emits whole `T` values gathered one field at a time.
-entity SplitListEmittable[AnyType T] obeys Emittable[T]
-needs T obeys Splittable
-    expand m in allmemvarof(T)
-        ### Borrowed alias of the source list's column for this field.
-        secret $nameof(m): Hijacked[$typeof(m)]
-    ### Element count captured when the iterator was created.
-    secret count: U64
-    ### Current iteration position.
-    secret index: U64
 
 ### Produces the next element and advances, or `absent`s when the sequence is exhausted.
 ### :returns: The element at the current position.

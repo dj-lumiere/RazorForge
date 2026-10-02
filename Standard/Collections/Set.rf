@@ -2,7 +2,6 @@ module Core
 
 import BuilderQuery
 import Core.SecureHashKey
-
 secret preset SET_INITIAL_CAPACITY: U64 = 16u64
 secret preset SET_INITIAL_ENTRIES: U64 = 16u64
 secret preset CTRL_EMPTY: U8 = 128_u8
@@ -32,7 +31,8 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ###
 ### :typeparam T: The element type. Must obey {Hashable} and {Equatable}.
 ### :see: {Dict[K, V]} for the dictionary counterpart.
-entity Set[AnyType T] obeys Iterable[T], Container, SetLiteral[T]
+entity Set[AnyType T]
+obeys Iterable[T], Container, SetLiteral[T]
 needs T obeys Hashable, Equatable
 relates SetEmittable[T] as Iter
     secret ctrl: Hijacked[U8]
@@ -49,6 +49,14 @@ relates SetEmittable[T] as Iter
     ### How many `each` loops and in-place element accesses are using the element positions right now.
     ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
     secret shape_users: U64
+
+### Emittable that walks the dense entries array of a {Set[T]} in insertion order.
+entity SetEmittable[AnyType T]
+obeys Emittable[T]
+    secret slots: Hijacked[T]
+    secret entry_live: Hijacked[U8]
+    secret entries_used: U64
+    secret pos: U64
 
 # ============================================================================
 # Creators
@@ -86,11 +94,15 @@ routine Set[T](key: SecureHashKey) -> Set[T]
         entries_cap: ecap,
         k0: key.k0,
         k1: key.k1,
-        shape_users: 0u64
+        shape_users: 0u64,
     )
     danger
         set.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
-        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](set.ctrl),
+            value: CTRL_EMPTY,
+            size: cap,
+        )
         set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
         set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
         set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
@@ -115,11 +127,15 @@ routine Set[T](key: SecureHashKey, capacity: U64) -> Set[T]
         entries_cap: ecap,
         k0: key.k0,
         k1: key.k1,
-        shape_users: 0u64
+        shape_users: 0u64,
     )
     danger
         set.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
-        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](set.ctrl),
+            value: CTRL_EMPTY,
+            size: cap,
+        )
         set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
         set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
         set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
@@ -157,7 +173,7 @@ routine Set[T].find_slot(value: T) -> U64
                 var ei = me.indices.offset(U64.data_size() * i).peek()
                 if me.slots.offset(T.data_size() * ei).peek() == value
                     return i
-            i = (i +% 1u64) & mask
+            i = i +% 1u64 & mask
     return me.capacity
 
 routine Set[T].insert_index_raw(h: U64, entry_index: U64)
@@ -176,7 +192,7 @@ routine Set[T].insert_index_raw(h: U64, entry_index: U64)
                 me.indices.offset(U64.data_size() * i).poke(entry_index)
                 me.deleted = me.deleted -% 1u64
                 return
-            i = (i +% 1u64) & mask
+            i = i +% 1u64 & mask
     return
 
 @readonly
@@ -208,7 +224,11 @@ routine Set[T].rehash()
 
     danger
         me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
-        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](me.ctrl),
+            value: CTRL_EMPTY,
+            size: new_cap,
+        )
         me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
         me.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * new_ecap))
         me.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_ecap))
@@ -257,7 +277,11 @@ routine Set[T].is_empty() -> Bool
 
 routine Set[T].clear()
     danger
-        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](me.ctrl),
+            value: CTRL_EMPTY,
+            size: me.capacity,
+        )
     me.count = 0u64
     me.deleted = 0u64
     me.entries_used = 0u64
@@ -304,15 +328,8 @@ routine Set[T].iter() -> SetEmittable[T]
             slots: me.slots,
             entry_live: me.entry_live,
             entries_used: me.entries_used,
-            pos: 0u64
+            pos: 0u64,
         )
-
-### Emittable that walks the dense entries array of a {Set[T]} in insertion order.
-entity SetEmittable[AnyType T] obeys Emittable[T]
-    secret slots: Hijacked[T]
-    secret entry_live: Hijacked[U8]
-    secret entries_used: U64
-    secret pos: U64
 
 routine SetEmittable[T].emit!() -> T
     danger
@@ -400,7 +417,8 @@ routine List[T](from: Set[T]) -> List[T]
 # Display
 # ============================================================================
 
-@[readonly, override]
+@readonly
+@override
 routine Set[T].represent() -> Text
     if me.is_empty()
         return "{}"
@@ -414,7 +432,8 @@ routine Set[T].represent() -> Text
     result = result + "}"
     return steal result
 
-@[readonly, override]
+@readonly
+@override
 routine Set[T].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
     var first = true
@@ -447,7 +466,10 @@ dangerous routine Set[T].destroy()
     var p = 0u64
     while p < me.entries_used
         if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
-            me.slots.offset(T.data_size() * p).peek().destroy()
+            me.slots
+                .offset(T.data_size() * p)
+                .peek()
+                .destroy()
         p = p + 1u64
     me.ctrl.invalidate()
     me.indices.invalidate()
@@ -478,7 +500,8 @@ dangerous routine Set[T].roam_free()
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, override]
+@readonly
+@override
 routine Set[T].serialize() -> SerialValue
     var __sv = List[SerialValue]()
     each __x in me

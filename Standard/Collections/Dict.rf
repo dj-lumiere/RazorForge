@@ -2,7 +2,6 @@ module Core
 
 import BuilderQuery
 import Core.SecureHashKey
-
 secret preset DICT_INITIAL_CAPACITY: U64 = 16u64
 secret preset DICT_INITIAL_ENTRIES: U64 = 16u64
 secret preset CTRL_EMPTY: U8 = 128_u8
@@ -33,7 +32,8 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### :typeparam K: The key type. Must obey {Hashable} and {Equatable}.
 ### :typeparam V: The value type associated with each key.
 ### :see: {Set[T]} for the set counterpart.
-entity Dict[AnyType K, AnyType V] obeys Iterable[DictEntry[K, V]], KeyFindable, Container, Copyable onlyif (K obeys Copyable, V obeys Copyable), DictLiteral[K, V]
+entity Dict[AnyType K, AnyType V]
+obeys Iterable[DictEntry[K, V]], KeyFindable, Container, Copyable onlyif (K obeys Copyable, V obeys Copyable), DictLiteral[K, V]
 needs K obeys Hashable, Equatable
 relates DictEmittable[K, V] as Iter
 relates K as Key
@@ -53,6 +53,15 @@ relates V as Value
     ### How many `each` loops and in-place element accesses are using the element positions right now.
     ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
     secret shape_users: U64
+
+### Emittable that walks the dense entries array of a {Dict[K, V]} in insertion order.
+entity DictEmittable[AnyType K, AnyType V]
+obeys Emittable[DictEntry[K, V]]
+    secret keys: Hijacked[K]
+    secret vals: Hijacked[V]
+    secret entry_live: Hijacked[U8]
+    secret entries_used: U64
+    secret pos: U64
 
 # ============================================================================
 # Creators
@@ -91,11 +100,15 @@ routine Dict[K, V](key: SecureHashKey) -> Dict[K, V]
         entries_cap: ecap,
         k0: key.k0,
         k1: key.k1,
-        shape_users: 0u64
+        shape_users: 0u64,
     )
     danger
         dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
-        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](dict.ctrl),
+            value: CTRL_EMPTY,
+            size: cap,
+        )
         dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
         dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
         dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
@@ -122,11 +135,15 @@ routine Dict[K, V](key: SecureHashKey, capacity: U64) -> Dict[K, V]
         entries_cap: ecap,
         k0: key.k0,
         k1: key.k1,
-        shape_users: 0u64
+        shape_users: 0u64,
     )
     danger
         dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
-        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](dict.ctrl),
+            value: CTRL_EMPTY,
+            size: cap,
+        )
         dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
         dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
         dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
@@ -142,8 +159,14 @@ dangerous routine Dict[K, V].destroy()
     var p = 0u64
     while p < me.entries_used
         if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
-            me.keys.offset(K.data_size() * p).peek().destroy()
-            me.vals.offset(V.data_size() * p).peek().destroy()
+            me.keys
+                .offset(K.data_size() * p)
+                .peek()
+                .destroy()
+            me.vals
+                .offset(V.data_size() * p)
+                .peek()
+                .destroy()
         p = p + 1u64
     me.ctrl.invalidate()
     me.indices.invalidate()
@@ -222,7 +245,7 @@ routine Dict[K, V].find_slot(key: K) -> U64
                 var ei = me.indices.offset(U64.data_size() * i).peek()
                 if me.keys.offset(K.data_size() * ei).peek() == key
                     return i
-            i = (i +% 1u64) & mask
+            i = i +% 1u64 & mask
     return me.capacity
 
 routine Dict[K, V].insert_index_raw(h: U64, entry_index: U64)
@@ -241,7 +264,7 @@ routine Dict[K, V].insert_index_raw(h: U64, entry_index: U64)
                 me.indices.offset(U64.data_size() * i).poke(entry_index)
                 me.deleted = me.deleted -% 1u64
                 return
-            i = (i +% 1u64) & mask
+            i = i +% 1u64 & mask
     return
 
 @readonly
@@ -274,7 +297,11 @@ routine Dict[K, V].rehash()
 
     danger
         me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
-        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](me.ctrl),
+            value: CTRL_EMPTY,
+            size: new_cap,
+        )
         me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
         me.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * new_ecap))
         me.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * new_ecap))
@@ -328,7 +355,11 @@ routine Dict[K, V].is_empty() -> Bool
 
 routine Dict[K, V].clear()
     danger
-        C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](me.ctrl),
+            value: CTRL_EMPTY,
+            size: me.capacity,
+        )
     me.count = 0u64
     me.deleted = 0u64
     me.entries_used = 0u64
@@ -434,7 +465,9 @@ needs EntityType V
     if slot >= me.capacity
         absent
     danger
-        return Modifying[V](me.vals.offset(V.data_size() * me.read_index(slot)).peek_as[Hijacked[V]]())
+        return Modifying[V](
+            me.vals.offset(V.data_size() * me.read_index(slot)).peek_as[Hijacked[V]](),
+        )
 
 ### Returns a read token on the entity stored at `key`, so one call through it reads the value without
 ### copying it: `groups["a"].count()` lowers to `groups.view_at(key: "a").count()`. A plain `getitem` hands
@@ -447,7 +480,9 @@ needs EntityType V
     if slot >= me.capacity
         absent
     danger
-        return Viewing[V](me.vals.offset(V.data_size() * me.read_index(slot)).peek_as[Hijacked[V]]())
+        return Viewing[V](
+            me.vals.offset(V.data_size() * me.read_index(slot)).peek_as[Hijacked[V]](),
+        )
 
 # ============================================================================
 # Keys / Values / Entries
@@ -506,16 +541,8 @@ routine Dict[K, V].iter() -> DictEmittable[K, V]
             vals: me.vals,
             entry_live: me.entry_live,
             entries_used: me.entries_used,
-            pos: 0u64
+            pos: 0u64,
         )
-
-### Emittable that walks the dense entries array of a {Dict[K, V]} in insertion order.
-entity DictEmittable[AnyType K, AnyType V] obeys Emittable[DictEntry[K, V]]
-    secret keys: Hijacked[K]
-    secret vals: Hijacked[V]
-    secret entry_live: Hijacked[U8]
-    secret entries_used: U64
-    secret pos: U64
 
 routine DictEmittable[K, V].emit!() -> DictEntry[K, V]
     danger
@@ -549,7 +576,8 @@ needs V obeys Copyable
 # Display
 # ============================================================================
 
-@[readonly, override]
+@readonly
+@override
 routine Dict[K, V].represent() -> Text
     if me.is_empty()
         return "{:}"
@@ -563,7 +591,8 @@ routine Dict[K, V].represent() -> Text
     result = result + "}"
     return steal result
 
-@[readonly, override]
+@readonly
+@override
 routine Dict[K, V].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
     var first = true
@@ -602,7 +631,8 @@ needs V obeys Equatable
 
 ### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.
 ### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
-@[readonly, override]
+@readonly
+@override
 routine Dict[K, V].serialize() -> SerialValue
     var __sv = Dict[Text, SerialValue]()
     each __e in me

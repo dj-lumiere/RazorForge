@@ -12,7 +12,6 @@ module Tests/Stdlib/SignalCasterTimeoutApi
 # on start()'s frame, shared by value across the two coroutines and written under the monitor lock.
 
 import IO/Console
-
 # A: waits 20ms with nobody to cast -> times out -> false -> 0.
 suspended routine wait_alone(sig: SignalCaster) -> S64
     sig.lock()
@@ -27,19 +26,19 @@ suspended routine wait_for_cast(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     var woken = true
     sig.lock()
     danger
-        while cell.peek() == 0_s64        # predicate, tested under the lock
+        while cell.peek() == 0_s64  # predicate, tested under the lock
             woken = sig.wait_within(deadline: Duration.from_seconds(s: 10))
             if not woken
-                break                          # deadline elapsed (does not happen here) -> report a timeout
+                break  # deadline elapsed (does not happen here) -> report a timeout
     sig.unlock()
     return if woken then 1 else 0
 
 suspended routine caster(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     sig.lock()
     danger
-        cell.poke(value: 1_s64)           # make the predicate true under the lock...
+        cell.poke(value: 1_s64)  # make the predicate true under the lock...
     sig.unlock()
-    sig.cast_one()                       # ...then wake the waiter
+    sig.cast_one()  # ...then wake the waiter
     return 0
 
 routine start()
@@ -52,8 +51,11 @@ routine start()
     var slot = 0_s64
     var sig_b = SignalCaster()
     danger
-        var cell = slot.hijack()           # raw pointer to `slot`, copyable -> both coroutines share it
-        var results = [wait_for_cast(sig: steal sig_b.duplicate(), cell: cell), caster(sig: steal sig_b, cell: cell)].gather()
+        var cell = slot.hijack()  # raw pointer to `slot`, copyable -> both coroutines share it
+        var results = [
+            wait_for_cast(sig: steal sig_b.duplicate(), cell: cell),
+            caster(sig: steal sig_b, cell: cell),
+        ].gather()
         var woken = results[0]
         show(f"timed_out={timed_out} woken={woken}")
     return

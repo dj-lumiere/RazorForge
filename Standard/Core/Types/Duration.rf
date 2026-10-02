@@ -22,7 +22,6 @@ module Core
 preset NS_PER_MICROSECOND: S64 = 1_000_s64
 preset NS_PER_MILLISECOND: S64 = 1_000_000_s64
 preset NS_PER_SECOND: S64 = 1_000_000_000_s64
-
 preset SECONDS_PER_MINUTE: S64 = 60_s64
 preset SECONDS_PER_HOUR: S64 = 3_600_s64
 preset SECONDS_PER_DAY: S64 = 86_400_s64
@@ -36,9 +35,10 @@ preset SECONDS_PER_WEEK: S64 = 604_800_s64
 ### `Duration` is the standard temporal offset type used for time arithmetic, scheduling, and rate control.
 ### Internally it stores whole seconds plus a normalized sub-second nanosecond component.
 ### :see: {Moment}, {LocalMoment}, {Temporal-Types}
-record Duration obeys Ordered, Addable, Subtractable, FloorDivisible, Negatable, Scalable, ScalarFloorDivisible
+record Duration
+obeys Ordered, Addable, Subtractable, FloorDivisible, Negatable, Scalable, ScalarFloorDivisible
     ### Stores the whole-second component.
-    secret seconds: S64      # Whole seconds (negative for negative durations)
+    secret seconds: S64  # Whole seconds (negative for negative durations)
     ### Stores the normalized sub-second nanosecond component.
     secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
@@ -219,7 +219,10 @@ routine Duration.get_milliseconds() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_microseconds() -> S64
-    return LLVM::signed_div(LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
+    return LLVM::signed_div(
+        LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MILLISECOND),
+        NS_PER_MICROSECOND,
+    )
 
 ### Returns the nanoseconds component.
 ### :returns: The resulting `S64` value.
@@ -266,14 +269,20 @@ routine Duration.int_abs() -> Duration
 ### :returns: The combined `Duration`.
 @readonly
 routine Duration.add(you: Duration) -> Duration
-    return normalize_duration(seconds: me.seconds +% you.seconds, nanoseconds: S64(me.nanoseconds) +% S64(you.nanoseconds))
+    return normalize_duration(
+        seconds: me.seconds +% you.seconds,
+        nanoseconds: S64(me.nanoseconds) +% S64(you.nanoseconds),
+    )
 
 ### Returns `me - you`, subtracting `you` from this duration and normalizing.
 ### :param you: The duration to subtract.
 ### :returns: The resulting `Duration`.
 @readonly
 routine Duration.sub(you: Duration) -> Duration
-    return normalize_duration(seconds: me.seconds -% you.seconds, nanoseconds: S64(me.nanoseconds) -% S64(you.nanoseconds))
+    return normalize_duration(
+        seconds: me.seconds -% you.seconds,
+        nanoseconds: S64(me.nanoseconds) -% S64(you.nanoseconds),
+    )
 
 ### Returns the negated value.
 ### :returns: The resulting `Duration` value.
@@ -282,7 +291,10 @@ routine Duration.neg() -> Duration
     if me.nanoseconds == 0_u32
         return Duration(seconds: 0_s64 -% me.seconds, nanoseconds: 0_u32)
     # -(s, ns) = (-s - 1, 1_000_000_000 - ns)
-    return Duration(seconds: 0_s64 -% me.seconds -% 1_s64, nanoseconds: 1_000_000_000_u32 -% me.nanoseconds)
+    return Duration(
+        seconds: 0_s64 -% me.seconds -% 1_s64,
+        nanoseconds: 1_000_000_000_u32 -% me.nanoseconds,
+    )
 
 ### Returns this value scaled by `factor`.
 ### :param factor: The scale factor to apply.

@@ -1,7 +1,6 @@
 module Core
 
 import BuilderQuery
-
 ### A fixed-size, inline array of `N` elements with value semantics.
 ###
 ### `Array[T, N]` stores exactly `N` elements packed directly into its own
@@ -33,10 +32,26 @@ import BuilderQuery
 ### :see: {List[T]} for a heap-backed growable sequence.
 ### :see: {BitArray[N]} for a compact fixed-size bit sequence.
 @llvm("[{N} x {T}]")
-record Array[AnyType T, U64 N] obeys Comparable, Iterable[T], MutableIndexable[T], Sized, Container
+record Array[AnyType T, U64 N]
+obeys Comparable, Iterable[T], MutableIndexable[T], Sized, Container
 relates ArrayEmittable[T, N] as Iter
     # N elements of T stored inline by builder - no explicit member variables needed
     pass
+
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+### Walks the elements of a fixed-size `Array[T, N]` from index 0 to N - 1.
+### Because `Array` is a record type, the iterator holds its own copy of the array data.
+### :typeparam T: The element type yielded by the iterator.
+### :typeparam N: The buildtime element count.
+entity ArrayEmittable[AnyType T, U64 N]
+obeys Emittable[T]
+    ### Stores the array being iterated.
+    list: Array[T, N]
+    ### Stores the next logical index to read.
+    index: U64
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -206,20 +221,6 @@ needs T obeys Equatable
             return i
     absent
 
-# ============================================================================
-# Iteration Support
-# ============================================================================
-
-### Walks the elements of a fixed-size `Array[T, N]` from index 0 to N - 1.
-### Because `Array` is a record type, the iterator holds its own copy of the array data.
-### :typeparam T: The element type yielded by the iterator.
-### :typeparam N: The buildtime element count.
-entity ArrayEmittable[AnyType T, U64 N] obeys Emittable[T]
-    ### Stores the array being iterated.
-    list: Array[T, N]
-    ### Stores the next logical index to read.
-    index: U64
-
 @readonly
 routine Array[T, N].iter() -> ArrayEmittable[T, N]
     return ArrayEmittable[T, N](list: me, index: 0u64)
@@ -238,7 +239,8 @@ routine ArrayEmittable[T, N].emit!() -> T
 # Display
 # ============================================================================
 
-@[readonly, override]
+@readonly
+@override
 routine Array[T, N].represent() -> Text
     var result = "Array(["
     each i in 0u64 til N
@@ -248,7 +250,8 @@ routine Array[T, N].represent() -> Text
     result = result + "])"
     return result
 
-@[readonly, override]
+@readonly
+@override
 routine Array[T, N].diagnose() -> Text
     var result = me.full_type_name() + "(["
     each i in 0u64 til N

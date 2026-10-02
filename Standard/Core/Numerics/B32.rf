@@ -1,16 +1,6 @@
 module Core
 
 import Collections
-# Core B32 type definition - maps to LLVM float
-
-### Represents a 32-bit IEEE 754 binary floating-point value.
-### `B32` is the standard single-precision float: compact, fast, and suitable
-### for graphics, simulation, and general-purpose numeric code where 24 bits of
-### significand precision are acceptable.
-@llvm("float")
-record B32 obeys Numeric, Ordered, Assignable, Copyable, Splittable
-    pass
-
 # IEEE 754 single precision constants
 preset B32_EPSILON: B32 = 1.1920929e-7_b32
 preset B32_MIN: B32 = -3.4028235e+38_b32
@@ -20,13 +10,23 @@ preset B32_ZERO: B32 = 0.0_b32
 preset B32_ONE: B32 = 1.0_b32
 preset B32_INFINITY: B32 = inf_b32
 preset B32_NAN: B32 = nan_b32
-
 # Mathematical constants
 preset B32_PI: B32 = 3.1415927_b32
 preset B32_E: B32 = 2.7182817_b32
 preset B32_SQRT_2: B32 = 1.4142135_b32
 preset B32_LN_2: B32 = 0.6931472_b32
 preset B32_LN_10: B32 = 2.3025851_b32
+
+# Core B32 type definition - maps to LLVM float
+
+### Represents a 32-bit IEEE 754 binary floating-point value.
+### `B32` is the standard single-precision float: compact, fast, and suitable
+### for graphics, simulation, and general-purpose numeric code where 24 bits of
+### significand precision are acceptable.
+@llvm("float")
+record B32
+obeys Numeric, Ordered, Assignable, Copyable, Splittable
+    pass
 
 ### Converts an `S8` into single-precision floating-point form.
 ### :param from: The signed 8-bit integer to convert.
@@ -149,14 +149,38 @@ routine B32(from: B64) -> B32
 ### :returns: The closest representable `B32` value.
 routine B32(from: D32) -> B32
     var d = from.decode()
-    return B32.from_bits(bits: LLVM::int_truncate[U128, U32](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 24_s64, emin: -126_s64, emax: 127_s64)))
+    return B32.from_bits(
+        bits: LLVM::int_truncate[U128, U32](
+            decimal_to_binary_bits(
+                sign: d.sign,
+                special: d.special,
+                coeff: d.coeff,
+                exp: d.exp,
+                p: 24_s64,
+                emin: -126_s64,
+                emax: 127_s64,
+            ),
+        ),
+    )
 
 ### Converts a decimal64 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B32` value.
 routine B32(from: D64) -> B32
     var d = from.decode()
-    return B32.from_bits(bits: LLVM::int_truncate[U128, U32](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 24_s64, emin: -126_s64, emax: 127_s64)))
+    return B32.from_bits(
+        bits: LLVM::int_truncate[U128, U32](
+            decimal_to_binary_bits(
+                sign: d.sign,
+                special: d.special,
+                coeff: d.coeff,
+                exp: d.exp,
+                p: 24_s64,
+                emin: -126_s64,
+                emax: 127_s64,
+            ),
+        ),
+    )
 
 ### Converts a decimal128 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
@@ -555,7 +579,11 @@ routine B32.fixed(places: U64) -> Text
 routine B32.diagnose() -> Text
     if me.is_signaling()
         return "B32(snan)"
-    return format_binary_shortest_wrapped(raw: LLVM::zero_extend[U32, U64](me.to_bits()), fmt: 1_s32, wrap: "B32")
+    return format_binary_shortest_wrapped(
+        raw: LLVM::zero_extend[U32, U64](me.to_bits()),
+        fmt: 1_s32,
+        wrap: "B32",
+    )
 
 ### Implements the wired routine behavior for this value.
 ### :param from_text: The `from_text` value.
@@ -587,9 +615,21 @@ routine B32.to_bytes_le() -> Array[Byte, 4]
     var raw = LLVM::reinterpret_bits[B32, U32](me)
     var result = Array[Byte, 4]()
     result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U32, U8](raw))
-    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)))
-    result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)))
-    result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1_u64,
+        value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 2_u64,
+        value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 3_u64,
+        value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)),
+    )
     return result
 
 ### Returns the raw bytes of this value in big-endian order.
@@ -598,9 +638,21 @@ routine B32.to_bytes_be() -> Array[Byte, 4]
     var raw = LLVM::byte_swap(LLVM::reinterpret_bits[B32, U32](me))
     var result = Array[Byte, 4]()
     result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U32, U8](raw))
-    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)))
-    result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)))
-    result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1_u64,
+        value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 2_u64,
+        value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 3_u64,
+        value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)),
+    )
     return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -608,7 +660,11 @@ routine B32.to_bytes_be() -> Array[Byte, 4]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine B32.hash(k0: U64, k1: U64) -> U64
-    return __secure_hash_u64(v: LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[B32, U32](me)), k0: k0, k1: k1)
+    return __secure_hash_u64(
+        v: LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[B32, U32](me)),
+        k0: k0,
+        k1: k1,
+    )
 
 # ============================================================================
 # Runtime externs (rf_b32_* in native/runtime/math_functions.c) for the exact
@@ -617,12 +673,16 @@ routine B32.hash(k0: U64, k1: U64) -> U64
 # ============================================================================
 ### C libm extern: IEEE remainder (C remainder).
 routine C::rf_b32_remainder(x: B32, y: B32) -> B32
+
 ### C libm extern: positive difference max(x - y, 0) (C fdim).
 routine C::rf_b32_fdim(x: B32, y: B32) -> B32
+
 ### C libm extern: next representable value after x toward y.
 routine C::rf_b32_nextafter(x: B32, y: B32) -> B32
+
 ### C libm extern: x * 2^n (C scalbn).
 routine C::rf_b32_scalbn(value: B32, n: S64) -> B32
+
 ### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
 routine C::rf_b32_ilogb(value: B32) -> S64
 
@@ -910,7 +970,10 @@ routine B32.total_order(you: B32) -> Bool
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine B32.total_order_mag(you: B32) -> Bool
-    return LLVM::bit_and(a: me.to_bits(), b: 0x7FFFFFFF_u32) <= LLVM::bit_and(a: you.to_bits(), b: 0x7FFFFFFF_u32)
+    return LLVM::bit_and(a: me.to_bits(), b: 0x7FFFFFFF_u32) <= LLVM::bit_and(
+        a: you.to_bits(),
+        b: 0x7FFFFFFF_u32,
+    )
 
 # ============================================================================
 # IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding

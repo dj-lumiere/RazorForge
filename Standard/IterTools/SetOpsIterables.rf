@@ -5,7 +5,8 @@ module IterTools
 ### :typeparam T: The element type of both source sequences.
 ### :typeparam S: The concrete primary source iterable type (borrowed).
 ### :typeparam SO: The concrete membership-test iterable type (borrowed).
-entity IntersectIterable[AnyType T, AnyType S, AnyType SO] obeys Iterable[T]
+entity IntersectIterable[AnyType T, AnyType S, AnyType SO]
+obeys Iterable[T]
 needs S obeys Iterable[T]
 needs SO obeys Iterable[T]
 relates IntersectEmittable[T, S/Iter] as Iter
@@ -14,6 +15,43 @@ relates IntersectEmittable[T, S/Iter] as Iter
     ### Stores the membership-test iterable to materialize at iteration start (borrowed).
     secret you: Hijacked[SO]
 
+### Iterates over a source sequence and keeps only elements that appear in the membership set.
+### :typeparam T: The element type of the filtered sequence.
+### :typeparam SE: The concrete source iterator type (owned).
+entity IntersectEmittable[AnyType T, AnyType SE]
+obeys Emittable[T]
+needs SE obeys Emittable[T]
+    ### Stores the underlying source iterator (owned; destroyed with the adapter).
+    secret source: SE
+    ### Stores the pre-materialized membership set.
+    secret you: Set[T]
+
+### Represents a lazy adapter that suppresses elements present in another iterable.
+### The exclusion iterable is fully materialized into a set when iteration begins.
+### :typeparam T: The element type of both source sequences.
+### :typeparam S: The concrete primary source iterable type (borrowed).
+### :typeparam SO: The concrete exclusion iterable type (borrowed).
+entity ExcludeIterable[AnyType T, AnyType S, AnyType SO]
+obeys Iterable[T]
+needs S obeys Iterable[T]
+needs SO obeys Iterable[T]
+relates ExcludeEmittable[T, S/Iter] as Iter
+    ### Stores the primary source iterable (borrowed, not owned).
+    secret source: Hijacked[S]
+    ### Stores the exclusion iterable to materialize at iteration start (borrowed).
+    secret you: Hijacked[SO]
+
+### Iterates over a source sequence and suppresses elements found in the exclusion set.
+### :typeparam T: The element type of the filtered sequence.
+### :typeparam SE: The concrete source iterator type (owned).
+entity ExcludeEmittable[AnyType T, AnyType SE]
+obeys Emittable[T]
+needs SE obeys Emittable[T]
+    ### Stores the underlying source iterator (owned; destroyed with the adapter).
+    secret source: SE
+    ### Stores the pre-materialized exclusion set.
+    secret you: Set[T]
+
 ### Materializes `other` into a set and returns an iterator that filters `source` against it.
 ### :returns: The resulting `IntersectEmittable[T, S/Iter]` value.
 @readonly
@@ -21,17 +59,10 @@ routine IntersectIterable[T, S, SO].iter() -> IntersectEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
     danger
         var other_set = me.you.as_entity().Set()
-        return IntersectEmittable[T, S/Iter](source: me.source.as_entity().iter(), you: steal other_set)
-
-### Iterates over a source sequence and keeps only elements that appear in the membership set.
-### :typeparam T: The element type of the filtered sequence.
-### :typeparam SE: The concrete source iterator type (owned).
-entity IntersectEmittable[AnyType T, AnyType SE] obeys Emittable[T]
-needs SE obeys Emittable[T]
-    ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: SE
-    ### Stores the pre-materialized membership set.
-    secret you: Set[T]
+        return IntersectEmittable[T, S/Iter](
+            source: me.source.as_entity().iter(),
+            you: steal other_set,
+        )
 
 ### Returns the next source element that is also present in the membership set.
 ### Source elements not found in the set are consumed and discarded.
@@ -54,20 +85,6 @@ needs T obeys Hashable, Comparable
     danger
         return IntersectIterable[T, Me, SO](source: me.hijack(), you: you.hijack())
 
-### Represents a lazy adapter that suppresses elements present in another iterable.
-### The exclusion iterable is fully materialized into a set when iteration begins.
-### :typeparam T: The element type of both source sequences.
-### :typeparam S: The concrete primary source iterable type (borrowed).
-### :typeparam SO: The concrete exclusion iterable type (borrowed).
-entity ExcludeIterable[AnyType T, AnyType S, AnyType SO] obeys Iterable[T]
-needs S obeys Iterable[T]
-needs SO obeys Iterable[T]
-relates ExcludeEmittable[T, S/Iter] as Iter
-    ### Stores the primary source iterable (borrowed, not owned).
-    secret source: Hijacked[S]
-    ### Stores the exclusion iterable to materialize at iteration start (borrowed).
-    secret you: Hijacked[SO]
-
 ### Materializes `other` into a set and returns an iterator that removes matching elements.
 ### :returns: The resulting `ExcludeEmittable[T, S/Iter]` value.
 @readonly
@@ -75,17 +92,10 @@ routine ExcludeIterable[T, S, SO].iter() -> ExcludeEmittable[T, S/Iter]
 needs T obeys Hashable, Comparable
     danger
         var other_set = me.you.as_entity().Set()
-        return ExcludeEmittable[T, S/Iter](source: me.source.as_entity().iter(), you: steal other_set)
-
-### Iterates over a source sequence and suppresses elements found in the exclusion set.
-### :typeparam T: The element type of the filtered sequence.
-### :typeparam SE: The concrete source iterator type (owned).
-entity ExcludeEmittable[AnyType T, AnyType SE] obeys Emittable[T]
-needs SE obeys Emittable[T]
-    ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: SE
-    ### Stores the pre-materialized exclusion set.
-    secret you: Set[T]
+        return ExcludeEmittable[T, S/Iter](
+            source: me.source.as_entity().iter(),
+            you: steal other_set,
+        )
 
 ### Returns the next source element that is not present in the exclusion set.
 ### Source elements found in the set are consumed and discarded.

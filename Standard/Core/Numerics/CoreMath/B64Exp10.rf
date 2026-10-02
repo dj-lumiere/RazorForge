@@ -1,5 +1,29 @@
 module Core
 
+# Double-double coefficients (high, low) of the degree-5 polynomial of the accurate path, as bit patterns.
+secret preset B64_EXP10_ACC_C: Array[U64, 12] = [
+    0x40026BB1BBB55516_u64, 0xBCAF48AD494EA102_u64, 0x40053524C73CEA69_u64, 0xBCAE2BFAB318D399_u64,
+    0x4000470591DE2CA4_u64, 0x3CA81F50779E162B_u64, 0x3FF2BD7609FD98C4_u64, 0x3C931A5CC5D3D313_u64,
+    0x3FE1429FFD336AA3_u64, 0x3C8910DE8C68A0C2_u64, 0x3FCA7ED7086882B4_u64, 0xBC605E703D496537_u64,
+]
+# The arguments (bit patterns, sorted) whose power of ten is too close to a rounding boundary for the
+# accurate path.
+secret preset B64_EXP10_DB: Array[U64, 49] = [
+    0x3F4821E0F2AFB970_u64, 0x3F57C3DDD23AC8CA_u64, 0x3F5A2D7C1699E82D_u64, 0x3F7EC65645EDC394_u64,
+    0x3F890D7373B3A546_u64, 0x3F97E3C84F2CB9B5_u64, 0x3FA25765968ECD68_u64, 0x3FA9AA6FD4D21A47_u64,
+    0x3FAE7B525705EDEF_u64, 0x3FD12E02AA997AF2_u64, 0x3FDC414AA8BD83B1_u64, 0x3FDD7D271AB4EEB4_u64,
+    0x3FE1FE5F30572361_u64, 0x3FE522C9F19CC202_u64, 0x3FF1DAF94CF0BD01_u64, 0x3FF75F49C6AD3BAD_u64,
+    0x3FFA3C782D4F54FC_u64, 0x3FFCC30B915EC8C4_u64, 0x400EE9674267E65F_u64, 0x4012D5494EB1DD13_u64,
+    0x40389063309F3004_u64, 0x4052A59B82B6FC5E_u64, 0x406CDE37694F4D10_u64, 0xBF045DDB10382E3F_u64,
+    0xBF0485426A688467_u64, 0xBF06506061AAE6F7_u64, 0xBF0898A8C3990624_u64, 0xBF117362E953393B_u64,
+    0xBF1E40231E216CAD_u64, 0xBF27A7F33CC3FD0B_u64, 0xBF363DF14C04AB23_u64, 0xBF3A1B18D3A28957_u64,
+    0xBF3E12494018E44C_u64, 0xBF44C7A2BE09B10E_u64, 0xBF4DE686910F4F52_u64, 0xBF5EBB11D32C9493_u64,
+    0xBF7F6F96F005FD47_u64, 0xBF8B44E17164CE91_u64, 0xBF93B95082297EA7_u64, 0xBF95B25114A07A72_u64,
+    0xBFBA9CF11E5ADBC5_u64, 0xBFCC360CDDE773F7_u64, 0xBFD56FF305822F26_u64, 0xBFDC03419F51B93E_u64,
+    0xBFE1416C72A588A6_u64, 0xBFED18176754AAC7_u64, 0xC01AA5575135E2D3_u64, 0xC034CD4AF2FCA2B4_u64,
+    0xC05DA5B10D8689FD_u64,
+]
+
 # ============================================================================
 # Correctly rounded base-10 exponential 10^x of B64
 # ============================================================================
@@ -25,11 +49,11 @@ routine B64.exp10_unchecked() -> B64
             return x +! x
         # ±infinity
         if aix == 0x7FF0000000000000_u64
-            if ux >>> 63 == 1
+            if (ux >>> 63) == 1
                 return 0.0
             return x
         # overflow
-        if ux >>> 63 == 0
+        if (ux >>> 63) == 0
             return 0x1p1023 *! 2.0
         # x < -0x1.439b746e36b52p+8: underflow to 0
         if aix > 0x407439B746E36B52_u64
@@ -50,15 +74,15 @@ routine B64.exp10_unchecked() -> B64
     # exp10(x) rounds to 1 for |x| <= 0x1.bcb7b1526e50ep-56
     if aix <= 0x3C7BCB7B1526E50E_u64
         return 1.0 +! x
-    var t = LLVM::rint[B64](value: 0x1.a934f0979a371p+13 *! x)
+    var t = LLVM::rint[B64](value: 0x1.A934F0979A371p+13 *! x)
     var jt = LLVM::float_to_signed[B64, S64](t)
     var ie = jt >> 12
     var tt = b64_exp_table_2pow(j: LLVM::reinterpret_bits[S64, U64](jt))
     var th = tt.item0
     var tl = tt.item1
-    var dx = (x -! 0x1.34413508p-14 *! t) -! 0x1.f79fef311f12bp-46 *! t
+    var dx = x -! 0x1.34413508p-14 *! t -! 0x1.F79FEF311F12Bp-46 *! t
     var dx2 = dx *! dx
-    var p = (0x1.26bb1bbb55516p+1 +! dx *! 0x1.53524c73cea69p+1) +! dx2 *! (0x1.0470591fd74e1p+1 +! dx *! 0x1.2bd760a1f32a5p+0)
+    var p = 0x1.26BB1BBB55516p+1 +! dx *! 0x1.53524C73CEA69p+1 +! dx2 *! (0x1.0470591FD74E1p+1 +! dx *! 0x1.2BD760A1F32A5p+0)
     var fh = th
     var fx = th *! dx
     var fl = tl +! fx *! p
@@ -86,7 +110,7 @@ routine B64.exp10_unchecked() -> B64
 ### :returns: The correctly rounded power of ten.
 secret routine b64_exp10_accurate(x: B64) -> B64
     var ux = x.to_bits()
-    var t = LLVM::rint[B64](value: 0x1.a934f0979a371p+13 *! x)
+    var t = LLVM::rint[B64](value: 0x1.A934F0979A371p+13 *! x)
     var jt = LLVM::float_to_signed[B64, S64](t)
     var ujt = LLVM::reinterpret_bits[S64, U64](jt)
     var ie = jt >> 12
@@ -94,12 +118,12 @@ secret routine b64_exp10_accurate(x: B64) -> B64
     var th = tt.item0
     var tl = tt.item1
     # Cody-Waite argument reduction with a triple-double log10(2)/2^12
-    var l1 = -0x1.f79fef311f12bp-46
+    var l1 = -0x1.F79FEF311F12Bp-46
     var dx = x -! 0x1.34413508p-14 *! t
     var dxl = l1 *! t
-    var dxll = -0x1.ac0b7c917826bp-101 *! t +! LLVM::fma[B64](a: l1, b: t, c: -dxl)
+    var dxll = -0x1.AC0B7C917826Bp-101 *! t +! LLVM::fma[B64](a: l1, b: t, c: -dxl)
     var dxh = dx +! dxl
-    dxl = ((dx -! dxh) +! dxl) +! dxll
+    dxl = dx -! dxh +! dxl +! dxll
     # Horner evaluation of the degree-5 double-double polynomial
     var i = 5_u64
     var ch = B64.from_bits(bits: B64_EXP10_ACC_C[2_u64 * i])
@@ -109,7 +133,7 @@ secret routine b64_exp10_accurate(x: B64) -> B64
         var r = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
         var ci = B64.from_bits(bits: B64_EXP10_ACC_C[2_u64 * i])
         var sh = r.item0 +! ci
-        var sl = (ci -! sh) +! r.item0
+        var sl = ci -! sh +! r.item0
         ch = sh
         cl = r.item1 +! (sl +! B64.from_bits(bits: B64_EXP10_ACC_C[2_u64 * i + 1_u64]))
     var f = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
@@ -134,7 +158,8 @@ secret routine b64_exp10_accurate(x: B64) -> B64
             var s4 = b64_exp_fasttwosum(x: f.item0, y: f.item1)
             fh = s4.item0
             var ul = s4.item1.to_bits()
-            if ((ul +% 4_u64) & 0x000FFFFFFFFFFFFF_u64) <= 4_u64 or ((ul >>> 52) & 0x7FF_u64) < 918_u64
+            if (ul +% 4_u64 & 0x000FFFFFFFFFFFFF_u64) <= 4_u64
+                or ((ul >>> 52) & 0x7FF_u64) < 918_u64
                 fh = b64_exp10_database(x: x, f: fh)
         return b64_exp_ldexp(x: fh, e: ie)
     # subnormal result
@@ -155,7 +180,7 @@ secret routine b64_exp10_database(x: B64, f: B64) -> B64
     var ux = x.to_bits()
     var a = 0_s64
     var b = 48_s64
-    var m = (a + b) >> 1
+    var m = a + b >> 1
     while a <= b
         var um = LLVM::reinterpret_bits[S64, U64](m)
         var cm = B64_EXP10_DB[um]
@@ -170,12 +195,5 @@ secret routine b64_exp10_database(x: B64, f: B64) -> B64
             return b64_exp_pick(f: f, t: t, dr: dr)
         else
             b = m - 1
-        m = (a + b) >> 1
+        m = a + b >> 1
     return f
-
-# Double-double coefficients (high, low) of the degree-5 polynomial of the accurate path, as bit patterns.
-secret preset B64_EXP10_ACC_C: Array[U64, 12] = [0x40026BB1BBB55516_u64, 0xBCAF48AD494EA102_u64, 0x40053524C73CEA69_u64, 0xBCAE2BFAB318D399_u64, 0x4000470591DE2CA4_u64, 0x3CA81F50779E162B_u64, 0x3FF2BD7609FD98C4_u64, 0x3C931A5CC5D3D313_u64, 0x3FE1429FFD336AA3_u64, 0x3C8910DE8C68A0C2_u64, 0x3FCA7ED7086882B4_u64, 0xBC605E703D496537_u64]
-
-# The arguments (bit patterns, sorted) whose power of ten is too close to a rounding boundary for the
-# accurate path.
-secret preset B64_EXP10_DB: Array[U64, 49] = [0x3F4821E0F2AFB970_u64, 0x3F57C3DDD23AC8CA_u64, 0x3F5A2D7C1699E82D_u64, 0x3F7EC65645EDC394_u64, 0x3F890D7373B3A546_u64, 0x3F97E3C84F2CB9B5_u64, 0x3FA25765968ECD68_u64, 0x3FA9AA6FD4D21A47_u64, 0x3FAE7B525705EDEF_u64, 0x3FD12E02AA997AF2_u64, 0x3FDC414AA8BD83B1_u64, 0x3FDD7D271AB4EEB4_u64, 0x3FE1FE5F30572361_u64, 0x3FE522C9F19CC202_u64, 0x3FF1DAF94CF0BD01_u64, 0x3FF75F49C6AD3BAD_u64, 0x3FFA3C782D4F54FC_u64, 0x3FFCC30B915EC8C4_u64, 0x400EE9674267E65F_u64, 0x4012D5494EB1DD13_u64, 0x40389063309F3004_u64, 0x4052A59B82B6FC5E_u64, 0x406CDE37694F4D10_u64, 0xBF045DDB10382E3F_u64, 0xBF0485426A688467_u64, 0xBF06506061AAE6F7_u64, 0xBF0898A8C3990624_u64, 0xBF117362E953393B_u64, 0xBF1E40231E216CAD_u64, 0xBF27A7F33CC3FD0B_u64, 0xBF363DF14C04AB23_u64, 0xBF3A1B18D3A28957_u64, 0xBF3E12494018E44C_u64, 0xBF44C7A2BE09B10E_u64, 0xBF4DE686910F4F52_u64, 0xBF5EBB11D32C9493_u64, 0xBF7F6F96F005FD47_u64, 0xBF8B44E17164CE91_u64, 0xBF93B95082297EA7_u64, 0xBF95B25114A07A72_u64, 0xBFBA9CF11E5ADBC5_u64, 0xBFCC360CDDE773F7_u64, 0xBFD56FF305822F26_u64, 0xBFDC03419F51B93E_u64, 0xBFE1416C72A588A6_u64, 0xBFED18176754AAC7_u64, 0xC01AA5575135E2D3_u64, 0xC034CD4AF2FCA2B4_u64, 0xC05DA5B10D8689FD_u64]

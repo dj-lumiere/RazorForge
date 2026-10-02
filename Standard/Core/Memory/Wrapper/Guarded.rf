@@ -1,7 +1,6 @@
 module Core
 
 import BuilderQuery
-
 ### Multi-threaded strong reference to shared data under an access discipline `P`. Thin pointer to
 ### {GuardController[T, P]}. The atomic-refcount twin of {Retained[T]} — equivalent to `Arc[T]` in Rust.
 ### Cloning bumps the strong count atomically (`.share()`); dropping decrements it. Safe across threads.
@@ -16,7 +15,8 @@ import BuilderQuery
 ### :typeparam P: The access-discipline lock policy.
 @llvm("ptr")
 record Guarded[AnyType T, AnyType P]
-needs EntityType T, P obeys LockPolicy
+needs EntityType T
+needs P obeys LockPolicy
     pass
 
 # ============================================================================
@@ -25,7 +25,8 @@ needs EntityType T, P obeys LockPolicy
 
 ### `Guarded[T, P](from: n)`: ownership of the entity moves into the RC system.
 routine Guarded[T, P](from: T) -> Guarded[T, P]
-needs EntityType T, P obeys LockPolicy
+needs EntityType T
+needs P obeys LockPolicy
     danger
         var ctrl = GuardController[T, P](data: from.hijack()).hijack()
         return Guarded[T, P](ctrl)
@@ -119,14 +120,16 @@ routine Guarded[T, P].weak_count() -> U64
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Guarded[T, P].represent() -> Text
     danger
         return me.type_name()
 
 ### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
-@[readonly, override]
+@readonly
+@override
 routine Guarded[T, P].diagnose() -> Text
     danger
         var ctrl = Hijacked[GuardController[T, P]](me).as_entity()

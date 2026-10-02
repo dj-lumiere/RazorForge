@@ -26,24 +26,34 @@ routine B128.exp10_unchecked() -> B128
     if b1 >= 0x400B34413509F79F_u64
         # infinity: 10^+inf = +inf, 10^-inf = +0
         if b1 == 0x7FFF000000000000_u64 and lo == 0
-            if hi >>> 63 == 0
+            if (hi >>> 63) == 0
                 return me
             return B128.from_bits(bits: 0_u128)
         # NaN: quiet it, keeping sign and payload
         if b1 >= 0x7FFF000000000000_u64
             return B128.from_bits(bits: u | (1_u128 << 111))
         # x >= 0x1.34413509f79fef311f12b35816fap+12: overflow
-        if hi >>> 63 == 0 and u >= 0x400B34413509F79FEF311F12B35816FA_u128
+        if (hi >>> 63) == 0 and u >= 0x400B34413509F79FEF311F12B35816FA_u128
             return B128.from_bits(bits: 0x7FFF0000000000000000000000000000_u128)
         # x <= -0x1.3657d621f4e96893f84497c723c1p+12: underflow to +0
         if u >= 0xC00B3657D621F4E96893F84497C723C1_u128
             return B128.from_bits(bits: 0_u128)
     # x*log2(10) in fixed point: 3 words, the integer part above the 20 low bits of the top word
     var sm = b128_expfam_sar(v: hi, n: 63_u64)
-    var mh = (hi & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
-    var fs = b128_expfam_mh3x2(a0: B128_EXPFAM_ILN102[4], a1: B128_EXPFAM_ILN102[5], a2: B128_EXPFAM_ILN102[6], b: b128_expfam_w(hi: mh, lo: lo))
+    var mh = hi & 0x0000FFFFFFFFFFFF_u64 | 0x0001000000000000_u64
+    var fs = b128_expfam_mh3x2(
+        a0: B128_EXPFAM_ILN102[4],
+        a1: B128_EXPFAM_ILN102[5],
+        a2: B128_EXPFAM_ILN102[6],
+        b: b128_expfam_w(hi: mh, lo: lo),
+    )
     var e = (hi >>> 48) & 0x7FFF_u64
-    var r = b128_expfam_ars3(w0: fs.item0 ^ sm, w1: fs.item1 ^ sm, w2: fs.item2 ^ sm, n: 0x4019_u64 -% e)
+    var r = b128_expfam_ars3(
+        w0: fs.item0 ^ sm,
+        w1: fs.item1 ^ sm,
+        w2: fs.item2 ^ sm,
+        n: 0x4019_u64 -% e,
+    )
     # x = 1, 2, ..., 48: the result is exact
     if sm == 0 and lo == 0 and e >= 16383 and b128_expfam_shl(v: hi, n: e - 16367) == 0
         var k = b128_expfam_shr(v: mh, n: 16431_u64 - e)
@@ -60,4 +70,4 @@ secret routine b128_exp10_exact(k: U64) -> B128
         i = i + 1
     var nz = LLVM::int_truncate[U128, U64](p.leading_zeros())
     p = p << LLVM::int_truncate[U64, U32](nz - 15)
-    return B128.from_bits(bits: p +% b128_expfam_w(hi: (16509_u64 - nz + k) << 48, lo: 0_u64))
+    return B128.from_bits(bits: p +% b128_expfam_w(hi: 16509_u64 - nz + k << 48, lo: 0_u64))

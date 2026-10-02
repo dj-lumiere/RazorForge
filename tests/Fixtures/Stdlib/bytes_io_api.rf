@@ -1,6 +1,14 @@
 module Tests/Stdlib/BytesIoApi
-import IO/Console
+
 import IO/BytesIO
+import IO/Console
+# Helpers so we can call the failable `to_digit_bytes!` from a non-failable
+# routine via the auto-generated `try_*` variant.
+routine to_digit_bytes_s64!(v: S64) -> Bytes
+    return v.to_digit_bytes()
+
+routine to_digit_bytes_u64!(v: U64) -> Bytes
+    return v.to_digit_bytes()
 
 # Bytes-direct integer parsing + formatting (BytesIO). Bypasses Text and the
 # UTF-8↔UTF-32 roundtrip. Critical for CP-style stdin/stdout.
@@ -9,19 +17,19 @@ import IO/BytesIO
 
 routine start()
     # --- S64 parse: happy paths ---
-    show(f"parse '42': {(try S64.from_digit_bytes(bytes: b"42"))!!}")
-    show(f"parse '-42': {(try S64.from_digit_bytes(bytes: b"-42"))!!}")
-    show(f"parse '+42': {(try S64.from_digit_bytes(bytes: b"+42"))!!}")
-    show(f"parse '0': {(try S64.from_digit_bytes(bytes: b"0"))!!}")
-    show(f"parse '1234567890': {(try S64.from_digit_bytes(bytes: b"1234567890"))!!}")
+    show(f"parse '42': {try S64.from_digit_bytes(bytes: b"42")!!}")
+    show(f"parse '-42': {try S64.from_digit_bytes(bytes: b"-42")!!}")
+    show(f"parse '+42': {try S64.from_digit_bytes(bytes: b"+42")!!}")
+    show(f"parse '0': {try S64.from_digit_bytes(bytes: b"0")!!}")
+    show(f"parse '1234567890': {try S64.from_digit_bytes(bytes: b"1234567890")!!}")
 
     # Leading whitespace
-    show(f"parse '   42': {(try S64.from_digit_bytes(bytes: b"   42"))!!}")
-    show(f"parse '\\t-7': {(try S64.from_digit_bytes(bytes: b"\t-7"))!!}")
+    show(f"parse '   42': {try S64.from_digit_bytes(bytes: b"   42")!!}")
+    show(f"parse '\\t-7': {try S64.from_digit_bytes(bytes: b"\t-7")!!}")
 
     # Lenient: stops at first non-digit, doesn't fail
-    show(f"parse '42abc' (stops at 'a'): {(try S64.from_digit_bytes(bytes: b"42abc"))!!}")
-    show(f"parse '42 99' (stops at ' '): {(try S64.from_digit_bytes(bytes: b"42 99"))!!}")
+    show(f"parse '42abc' (stops at 'a'): {try S64.from_digit_bytes(bytes: b"42abc")!!}")
+    show(f"parse '42 99' (stops at ' '): {try S64.from_digit_bytes(bytes: b"42 99")!!}")
 
     # --- S64 parse failures ---
     show(f"try empty: {try S64.from_digit_bytes(bytes: b"")}")
@@ -43,19 +51,19 @@ routine start()
     show(f"streaming sum: {sum}")
 
     # --- to_digit_bytes (formatting) ---
-    show(f"format 0: {(try to_digit_bytes_s64(v: S64(0)))!!}")
-    show(f"format 42: {(try to_digit_bytes_s64(v: S64(42)))!!}")
-    show(f"format -42: {(try to_digit_bytes_s64(v: S64(-42)))!!}")
-    show(f"format S64_MIN: {(try to_digit_bytes_s64(v: S64_MIN))!!}")
-    show(f"format S64_MAX: {(try to_digit_bytes_s64(v: S64_MAX))!!}")
+    show(f"format 0: {try to_digit_bytes_s64(v: S64(0))!!}")
+    show(f"format 42: {try to_digit_bytes_s64(v: S64(42))!!}")
+    show(f"format -42: {try to_digit_bytes_s64(v: S64(-42))!!}")
+    show(f"format S64_MIN: {try to_digit_bytes_s64(v: S64_MIN)!!}")
+    show(f"format S64_MAX: {try to_digit_bytes_s64(v: S64_MAX)!!}")
 
     # --- U64 ---
-    show(f"U64 parse '42': {(try U64.from_digit_bytes(bytes: b"42"))!!}")
-    show(f"U64 parse '+42': {(try U64.from_digit_bytes(bytes: b"+42"))!!}")
+    show(f"U64 parse '42': {try U64.from_digit_bytes(bytes: b"42")!!}")
+    show(f"U64 parse '+42': {try U64.from_digit_bytes(bytes: b"+42")!!}")
     show(f"U64 try '-42' (must fail): {try U64.from_digit_bytes(bytes: b"-42")}")
 
-    show(f"U64 format 0: {(try to_digit_bytes_u64(v: U64(0)))!!}")
-    show(f"U64 format U64_MAX: {(try to_digit_bytes_u64(v: U64_MAX))!!}")
+    show(f"U64 format 0: {try to_digit_bytes_u64(v: U64(0))!!}")
+    show(f"U64 format U64_MAX: {try to_digit_bytes_u64(v: U64_MAX)!!}")
 
     # --- Round-trip property: parse(format(x)) == x for many values ---
     var ok = true
@@ -81,20 +89,12 @@ routine start()
     var comp = grab S64.from_digit_bytes(bytes: to_digit_bytes_s64(v: 42))
     when comp
         is S64 n => show(f"grab compose: {n}")
-        else e   => show("grab compose: err")
+        else e => show("grab compose: err")
     var compl = lookup S64.from_digit_bytes(bytes: to_digit_bytes_s64(v: 7))
     when compl
         is S64 n => show(f"lookup compose: {n}")
-        is None  => show("lookup compose: none")
-        else e   => show("lookup compose: err")
+        is None => show("lookup compose: none")
+        else e => show("lookup compose: err")
 
     show("DONE")
     return
-
-# Helpers so we can call the failable `to_digit_bytes!` from a non-failable
-# routine via the auto-generated `try_*` variant.
-routine to_digit_bytes_s64!(v: S64) -> Bytes
-    return v.to_digit_bytes()
-
-routine to_digit_bytes_u64!(v: U64) -> Bytes
-    return v.to_digit_bytes()

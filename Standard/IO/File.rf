@@ -1,8 +1,8 @@
 module IO/File
-import IO/Errors
-import IO/Stream
-import IO/FileSystem
 
+import IO/Errors
+import IO/FileSystem
+import IO/Stream
 # ============================================================================
 # File — named, persistent, format-blind byte content
 # ============================================================================
@@ -20,6 +20,105 @@ import IO/FileSystem
 ### never be exposed or wielded.
 record File
     ### The path naming this file's content.
+    at: Text
+
+# To PRODUCE output through a mapping (mmap cannot grow a file), size the file first, then wield it:
+#   var f = File(at: out)
+#   f.set_size(bytes: count *% T.data_size().byte_size())
+#   using f.wield[T]() as w
+#     ...
+# For output larger than the address space, size the file, then wield one window at a time with
+# `wield_range[T](start:, count:)` — the write-side dual of `expose_range`.
+# (A `wield[T](count:)` convenience overload is intentionally omitted: two same-name method-generic
+# overloads currently defeat GenericCallLoweringPass, and keeping `set_size!` explicit is truer to the
+# fact that a writable mapping cannot resize its own file.)
+
+# ============================================================================
+# Exposed[T] — spatial, read-only, random-access view of a file's bytes
+# ============================================================================
+
+### A read-only, element-addressable view of a file's bytes reinterpreted as a sequence of `T` —
+### RazorForge-only. Zero-copy: the bytes are NOT read into a heap buffer but faulted in on access
+### (demand paging), so `File.expose` is near-instant with no large allocation. `using`-required (obeys
+### {Enterable}) so the view's lifetime is lexically bound and released at scope exit. Read elements
+### with `peek(i)` (bounds-checked) or, for hot bounds-check-free scanning, the `dangerous`
+### `raw_buffer()`. Unlike a {Source}, an `Exposed[T]` has NO cursor — it is a live window onto the
+### bytes, indexed directly. Suflae never sees this: `File.expose`/`raw_buffer` are `dangerous`, and
+### Suflae has no `danger` block.
+entity Exposed[T]
+obeys Enterable
+    ### The exposed read-only buffer, typed as `T`, at the caller-facing element 0 (non-owning; the OS
+    ### releases it on `exit`).
+    secret buf: Hijacked[T]
+    ### The exposed size in bytes; the element count is `byte_len // T.data_size()`.
+    secret byte_len: U64
+    ### Bytes from the real mapping base to `buf` — nonzero only for a `expose_range` window whose start
+    ### was rounded down to the mapping granularity. `exit` strides back by this to unmap the true base.
+    secret map_delta: U64
+
+# ============================================================================
+# Wielded[T] — spatial, read/write, random-access view of a file's bytes
+# ============================================================================
+
+### A read/write, element-addressable view of a file's bytes as a sequence of `T` — RazorForge-only.
+### Like {Exposed} but writable: `poke(i, v)` overwrites element `i` in place, and the write lands in
+### the file (SHARED — flushed lazily, on `flush()`, or on scope exit). The view CANNOT grow the file:
+### `poke!` is bounds-checked to `count()`, so it overwrites but never appends. `using`-required (obeys
+### {Enterable}); `exit` flushes dirty pages back to the file and releases the view. Unlike a {Sink}, a
+### `Wielded[T]` has NO cursor — it is a live, shared, mutable window, indexed directly. Suflae never
+### sees this: `File.wield`/`raw_buffer` are `dangerous`, and Suflae has no `danger` block.
+entity Wielded[T]
+obeys Enterable
+    ### The wielded read/write buffer, typed as `T`, at the caller-facing element 0 (non-owning; the OS
+    ### releases it on `exit`).
+    secret buf: Hijacked[T]
+    ### The wielded size in bytes; the element count is `byte_len // T.data_size()`.
+    secret byte_len: U64
+    ### Bytes from the real mapping base to `buf` — nonzero only for a `wield_range` window whose start
+    ### was rounded down to the mapping granularity. `exit` strides back by this to flush and unmap the
+    ### true base.
+    secret map_delta: U64
+
+# ============================================================================
+# FileSource — a File-backed sequential read stream (obeys Source)
+# ============================================================================
+
+### A sequential read session over a {File}'s content. Owns a unique OS descriptor with a `close`
+### teardown, so it is an `entity` (single owner, no implicit copy — preventing double-close). Consume
+### it forward with `load`; there is no length, index, or seek — the file's spatial extent lives on
+### {Exposed}, not here.
+entity FileSource
+obeys Source, Enterable
+    ### The native file descriptor.
+    secret fd: S32
+    ### Whether the descriptor has been closed. Guards `close()` so it is idempotent.
+    secret is_closed: Bool
+
+# ============================================================================
+# FileSink — a File-backed sequential write stream (obeys Sink)
+# ============================================================================
+
+### A sequential write session over a {File}'s content (truncating via `open_write`, or appending via
+### `open_append`). Owns a unique OS descriptor with a `close` teardown, so it is an `entity`. Emit into
+### it forward with `store`; there is no length, index, or seek.
+entity FileSink
+obeys Sink, Enterable
+    ### The native file descriptor.
+    secret fd: S32
+    ### Whether the descriptor has been closed. Guards `close()` so it is idempotent.
+    secret is_closed: Bool
+
+# ============================================================================
+# Directory — a named location in the filesystem that contains entries
+# ============================================================================
+
+### A `Directory` names a directory in the filesystem — a container of entries, NOT byte content (that
+### is what {File} is). Like `File` it is a cheap value (just the path); constructing one creates
+### nothing. From a `Directory` you inspect and mutate the directory itself (`create!`/`delete_all!`),
+### enumerate its entries (`list!`/`entries!`/`walk!`), and build the paths of the things inside it
+### (`file(name:)` → a {File}, `subdir(name:)` → a nested `Directory`).
+record Directory
+    ### The path naming this directory.
     at: Text
 
 # ============================================================================
@@ -65,7 +164,8 @@ routine File.metadata!() -> FileMetadata
         modified: Moment.from_timestamp(seconds: rf_fs_meta_modified()),
         created: Moment.from_timestamp(seconds: rf_fs_meta_created()),
         is_directory: rf_fs_meta_is_directory(),
-        readonly: rf_fs_meta_readonly())
+        readonly: rf_fs_meta_readonly(),
+    )
 
 ### This file's extension, without the leading dot (empty when absent).
 ### :returns: The extension `Text`.
@@ -226,7 +326,12 @@ routine File.move_to!(destination: File)
 routine File.move_to_if_absent!(destination: File) -> Bool
     var src_cstr = CStr(from: me.at)
     var dst_cstr = CStr(from: destination.at)
-    var result = rf_fs_move_no_replace(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
+    var result = rf_fs_move_no_replace(
+        src_cstr,
+        src_cstr.count().S32(),
+        dst_cstr,
+        dst_cstr.count().S32(),
+    )
     if result == -1
         throw IOError(description: f"Cannot move '{me.at}' to '{destination.at}'")
     return result == 0
@@ -362,39 +467,6 @@ dangerous routine File.wield_range[T](start: U64, count: U64) -> Wielded[T]
     var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
     return Wielded[T](buf: user, byte_len: user_len, map_delta: delta)
 
-# To PRODUCE output through a mapping (mmap cannot grow a file), size the file first, then wield it:
-#   var f = File(at: out)
-#   f.set_size(bytes: count *% T.data_size().byte_size())
-#   using f.wield[T]() as w
-#     ...
-# For output larger than the address space, size the file, then wield one window at a time with
-# `wield_range[T](start:, count:)` — the write-side dual of `expose_range`.
-# (A `wield[T](count:)` convenience overload is intentionally omitted: two same-name method-generic
-# overloads currently defeat GenericCallLoweringPass, and keeping `set_size!` explicit is truer to the
-# fact that a writable mapping cannot resize its own file.)
-
-# ============================================================================
-# Exposed[T] — spatial, read-only, random-access view of a file's bytes
-# ============================================================================
-
-### A read-only, element-addressable view of a file's bytes reinterpreted as a sequence of `T` —
-### RazorForge-only. Zero-copy: the bytes are NOT read into a heap buffer but faulted in on access
-### (demand paging), so `File.expose` is near-instant with no large allocation. `using`-required (obeys
-### {Enterable}) so the view's lifetime is lexically bound and released at scope exit. Read elements
-### with `peek(i)` (bounds-checked) or, for hot bounds-check-free scanning, the `dangerous`
-### `raw_buffer()`. Unlike a {Source}, an `Exposed[T]` has NO cursor — it is a live window onto the
-### bytes, indexed directly. Suflae never sees this: `File.expose`/`raw_buffer` are `dangerous`, and
-### Suflae has no `danger` block.
-entity Exposed[T] obeys Enterable
-    ### The exposed read-only buffer, typed as `T`, at the caller-facing element 0 (non-owning; the OS
-    ### releases it on `exit`).
-    secret buf: Hijacked[T]
-    ### The exposed size in bytes; the element count is `byte_len // T.data_size()`.
-    secret byte_len: U64
-    ### Bytes from the real mapping base to `buf` — nonzero only for a `expose_range` window whose start
-    ### was rounded down to the mapping granularity. `exit` strides back by this to unmap the true base.
-    secret map_delta: U64
-
 ### Pass-through entry: the view was already acquired by `File.expose`.
 ### :returns: This `Exposed[T]`.
 routine Exposed[T].enter!() -> Exposed[T]
@@ -434,28 +506,6 @@ routine Exposed[T].peek!(index: U64) -> T
 @readonly
 dangerous routine Exposed[T].raw_buffer() -> Hijacked[T]
     return me.buf
-
-# ============================================================================
-# Wielded[T] — spatial, read/write, random-access view of a file's bytes
-# ============================================================================
-
-### A read/write, element-addressable view of a file's bytes as a sequence of `T` — RazorForge-only.
-### Like {Exposed} but writable: `poke(i, v)` overwrites element `i` in place, and the write lands in
-### the file (SHARED — flushed lazily, on `flush()`, or on scope exit). The view CANNOT grow the file:
-### `poke!` is bounds-checked to `count()`, so it overwrites but never appends. `using`-required (obeys
-### {Enterable}); `exit` flushes dirty pages back to the file and releases the view. Unlike a {Sink}, a
-### `Wielded[T]` has NO cursor — it is a live, shared, mutable window, indexed directly. Suflae never
-### sees this: `File.wield`/`raw_buffer` are `dangerous`, and Suflae has no `danger` block.
-entity Wielded[T] obeys Enterable
-    ### The wielded read/write buffer, typed as `T`, at the caller-facing element 0 (non-owning; the OS
-    ### releases it on `exit`).
-    secret buf: Hijacked[T]
-    ### The wielded size in bytes; the element count is `byte_len // T.data_size()`.
-    secret byte_len: U64
-    ### Bytes from the real mapping base to `buf` — nonzero only for a `wield_range` window whose start
-    ### was rounded down to the mapping granularity. `exit` strides back by this to flush and unmap the
-    ### true base.
-    secret map_delta: U64
 
 ### Pass-through entry: the view was already acquired by `File.wield`.
 ### :returns: This `Wielded[T]`.
@@ -520,20 +570,6 @@ routine Wielded[T].flush()
 dangerous routine Wielded[T].raw_buffer() -> Hijacked[T]
     return me.buf
 
-# ============================================================================
-# FileSource — a File-backed sequential read stream (obeys Source)
-# ============================================================================
-
-### A sequential read session over a {File}'s content. Owns a unique OS descriptor with a `close`
-### teardown, so it is an `entity` (single owner, no implicit copy — preventing double-close). Consume
-### it forward with `load`; there is no length, index, or seek — the file's spatial extent lives on
-### {Exposed}, not here.
-entity FileSource obeys Source, Enterable
-    ### The native file descriptor.
-    secret fd: S32
-    ### Whether the descriptor has been closed. Guards `close()` so it is idempotent.
-    secret is_closed: Bool
-
 ### Loads up to `max` bytes from the current position. Returns fewer when end-of-file is reached first;
 ### an empty `Bytes` signals EOF.
 ### :param max: The maximum byte count to load.
@@ -568,19 +604,6 @@ routine FileSource.exit()
 dangerous routine FileSource.destroy()
     me.close()
     return
-
-# ============================================================================
-# FileSink — a File-backed sequential write stream (obeys Sink)
-# ============================================================================
-
-### A sequential write session over a {File}'s content (truncating via `open_write`, or appending via
-### `open_append`). Owns a unique OS descriptor with a `close` teardown, so it is an `entity`. Emit into
-### it forward with `store`; there is no length, index, or seek.
-entity FileSink obeys Sink, Enterable
-    ### The native file descriptor.
-    secret fd: S32
-    ### Whether the descriptor has been closed. Guards `close()` so it is idempotent.
-    secret is_closed: Bool
 
 ### Stores `data` at the current position, returning the number of bytes accepted.
 ### :param data: The bytes to store.
@@ -649,20 +672,12 @@ routine read_text(path: Text) -> Text
 routine write_text(path: Text, content: Text) -> S64
     var cstr = CStr(from: path)
     var data = CStr(from: content)
-    return rf_io_write_file_all(path: cstr, path_len: cstr.count().S32(), data: data.ptr(), data_len: data.count().S64())
-
-# ============================================================================
-# Directory — a named location in the filesystem that contains entries
-# ============================================================================
-
-### A `Directory` names a directory in the filesystem — a container of entries, NOT byte content (that
-### is what {File} is). Like `File` it is a cheap value (just the path); constructing one creates
-### nothing. From a `Directory` you inspect and mutate the directory itself (`create!`/`delete_all!`),
-### enumerate its entries (`list!`/`entries!`/`walk!`), and build the paths of the things inside it
-### (`file(name:)` → a {File}, `subdir(name:)` → a nested `Directory`).
-record Directory
-    ### The path naming this directory.
-    at: Text
+    return rf_io_write_file_all(
+        path: cstr,
+        path_len: cstr.count().S32(),
+        data: data.ptr(),
+        data_len: data.count().S64(),
+    )
 
 # ============================================================================
 # Directory identity & metadata
@@ -696,7 +711,8 @@ routine Directory.metadata!() -> FileMetadata
         modified: Moment.from_timestamp(seconds: rf_fs_meta_modified()),
         created: Moment.from_timestamp(seconds: rf_fs_meta_created()),
         is_directory: rf_fs_meta_is_directory(),
-        readonly: rf_fs_meta_readonly())
+        readonly: rf_fs_meta_readonly(),
+    )
 
 ### This directory's final path component.
 ### :returns: The name `Text`.
@@ -844,7 +860,12 @@ routine Directory.move_to!(destination: Directory)
 routine Directory.move_to_if_absent!(destination: Directory) -> Bool
     var src_cstr = CStr(from: me.at)
     var dst_cstr = CStr(from: destination.at)
-    var result = rf_fs_move_no_replace(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
+    var result = rf_fs_move_no_replace(
+        src_cstr,
+        src_cstr.count().S32(),
+        dst_cstr,
+        dst_cstr.count().S32(),
+    )
     if result == -1
         throw IOError(description: f"Cannot move '{me.at}' to '{destination.at}'")
     return result == 0
@@ -913,11 +934,14 @@ routine Directory.entries!() -> List[DirEntry]
         var mtime: S64 = 0
         each k in 1u64 til space
             mtime = mtime * 10_s64 + S64(line[k].digit_value())
-        var name = line[(space + 1u64) til ^0]
-        result.add_last(value: DirEntry(
-            name: name,
-            is_directory: is_dir,
-            modified: Moment.from_timestamp(seconds: mtime)))
+        var name = line[space + 1u64 til ^0]
+        result.add_last(
+            value: DirEntry(
+                name: name,
+                is_directory: is_dir,
+                modified: Moment.from_timestamp(seconds: mtime),
+            ),
+        )
     return result
 
 ### Every descendant path under this directory, recursively. Each returned path is a full path built by

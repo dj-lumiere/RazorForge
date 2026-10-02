@@ -20,7 +20,13 @@ dangerous routine C::rf_reciprocal_word(d: U64) -> U64
 ### `(hi:lo) / d` with a PRECOMPUTED reciprocal `v` (from `rf_reciprocal_word`). PRECONDITION: hi < d
 ### (and `d` normalized on the M-G path). x86-64 hardware `divq` / MSVC `_udiv128` (both ignore `v`) /
 ### arm64+wasm multiply-only Möller-Granlund. Writes the remainder through `rem`, returns the quotient.
-dangerous routine C::rf_udivrem_128_64_pre(hi: U64, lo: U64, d: U64, v: U64, rem: Hijacked[U64]) -> U64
+dangerous routine C::rf_udivrem_128_64_pre(
+    hi: U64,
+    lo: U64,
+    d: U64,
+    v: U64,
+    rem: Hijacked[U64],
+) -> U64
 
 ### Allocates zero-initialized dynamic memory.
 ### The C boundary returns `CPtr` (a real `void*`) rather than an `Address` (i64) so the pointer
@@ -29,35 +35,42 @@ dangerous routine C::rf_udivrem_128_64_pre(hi: U64, lo: U64, d: U64, v: U64, rem
 ### :param size: The number of bytes to allocate.
 ### :returns: The resulting `CPtr` value.
 dangerous routine C::rf_allocate_dynamic(size: U64) -> CPtr
+
 ### Allocates zero-initialized dynamic memory.
 ### :param size: The number of bytes to allocate.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_allocate_dynamic(size: ByteSize) -> Address
     return C::rf_allocate_dynamic(size: size.byte_size()).get_address()
+
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
 ### :returns: The resulting `CPtr` value.
 dangerous routine C::rf_allocate_dynamic_uninit(size: U64) -> CPtr
+
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_allocate_dynamic_uninit(size: ByteSize) -> Address
     return C::rf_allocate_dynamic_uninit(size: size.byte_size()).get_address()
+
 ### Reallocates a dynamic memory block to a new size.
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size in bytes.
 ### :returns: The resulting `CPtr` value.
 dangerous routine C::rf_reallocate_dynamic(ptr: CPtr, size: U64) -> CPtr
+
 ### Reallocates a dynamic memory block to a new size.
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_reallocate_dynamic(ptr: Address, size: ByteSize) -> Address
     return C::rf_reallocate_dynamic(ptr: CPtr(from: ptr), size: size.byte_size()).get_address()
+
 ### Frees a dynamic memory block previously returned by the runtime allocator.
 ### The C boundary takes `CPtr` (a real `void*`) so `free` matches its C signature under LTO.
 ### :param ptr: The allocation to release.
 dangerous routine C::rf_invalidate(ptr: CPtr)
+
 ### Frees a dynamic memory block, given its raw `Address`. Thin `Address`→`CPtr` adapter over
 ### `C::rf_invalidate` so the many address-holding call sites (collection rehash, Agent payload
 ### teardown, ...) need no per-site conversion.
@@ -71,11 +84,13 @@ dangerous routine rf_invalidate(ptr: Address)
 ### stack order, and a computation must not suspend between its mark and its release.
 ### :returns: The region mark.
 dangerous routine C::rf_region_mark() -> U64
+
 ### Allocates zero-initialized scratch memory in this thread's region. It is freed in bulk by the
 ### enclosing `C::rf_region_release`, never individually.
 ### :param bytes: The number of bytes to allocate.
 ### :returns: The resulting `CPtr` value.
 dangerous routine C::rf_region_alloc(bytes: U64) -> CPtr
+
 ### Frees every scratch block allocated since `mark` was taken.
 ### :param mark: A mark returned by `C::rf_region_mark`.
 dangerous routine C::rf_region_release(mark: U64)
@@ -87,97 +102,132 @@ dangerous routine C::rf_region_release(mark: U64)
 ### Creates a task control block. `kind` is 1 for an OS thread (RF_TASK_THREADED).
 ### :returns: The `rf_task*` handle as an `Address` (null on allocation failure).
 dangerous routine C::rf_task_create(kind: U32) -> Address
+
 ### Spawns an OS thread running `entry(task, userdata)`. Idempotent: a task that was already spawned is
 ### left running and reported as spawned again.
 ### :returns: 1 on success, 0 on failure.
 dangerous routine C::rf_task_spawn_threaded(task: Address, entry: CPtr, userdata: Address) -> S32
+
 ### Completes a task with its boxed result (`result` is the result cell, or 0 for no value). A
 ### detached task frees itself and the box here.
 dangerous routine C::rf_task_complete_value(task: Address, result: Address)
+
 ### Whether a task is fire-and-forget (`execute`): its result has no reader.
 ### :returns: 1 when detached, 0 otherwise.
 dangerous routine C::rf_task_is_detached(task: Address) -> U8
+
 ### Blocks until the task completes. :returns: the completion kind (1 = value).
 dangerous routine C::rf_task_wait(task: Address) -> S32
+
 ### Blocks until the task completes or the deadline elapses.
 ### :returns: the completion kind (1 = value, 4 = timeout).
 dangerous routine C::rf_task_wait_within(task: Address, secs: S64, ns: U32) -> S32
+
 ### :returns: the boxed result payload pointer set by the task's entry thunk.
 dangerous routine C::rf_task_result_payload(task: Address) -> Address
+
 ### Reads a task's status (0 new, 1 ready, 2 running, 3 parked, 4 completed). Used by Agent[T].destroy
 ### to decide between freeing a completed worker and joining one still in flight.
 dangerous routine C::rf_task_status_get(task: Address) -> U32
+
 ### Releases a task control block.
 dangerous routine C::rf_task_destroy(task: Address)
+
 ### Marks a result task as fire-and-forget (`execute()`): its completion self-frees the task + result
 ### box, no consumer. Set before the coroutine/thread runs.
 dangerous routine C::rf_task_set_detached(task: Address)
+
 ### Consumer side of the threaded-task self-reap rendezvous: called once by the driving `retrieve!`
 ### (after reading the value, or on a deadline give-up). Frees the task iff the worker already exited;
 ### else the worker frees it. An Agent handle copy's `destroy` never calls this — so no double-free.
 dangerous routine C::rf_task_release(task: Address)
+
 ### Opaque, stable identifier for the calling OS thread (lock re-entrancy detection). Safe: takes
 ### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
 ### the same thread.
 routine C::rf_current_thread_id() -> U64
+
 ### Identity of the current logical execution context — the coroutine if inside one (stable across
 ### worker migration), else the OS thread. The key for {Roamed}'s reentrant, migration-safe lock.
 ### Safe: takes no pointers. :returns: a per-context id, equal across calls in the same coroutine/thread.
 routine C::rf_current_task_id() -> U64
+
 ### §4 nested-monitor deadlock detector (opt-in via RF_DEADLOCK_DETECT=1). Called on a CONTENDED
 ### escaped-lock spin: registers that `self` is blocked waiting for the task `holder`, then walks the
 ### wait graph and LOUD-aborts if the wait forms a cycle (opposite-order lock acquisition). No-op
 ### unless the env flag is set. Safe: takes no pointers, only task ids.
 routine C::rf_deadlock_wait_begin(self: U64, holder: U64)
+
 ### Clears `self`'s registered wait once the lock is acquired (the §4 detector counterpart).
 routine C::rf_deadlock_wait_end(self: U64)
+
 ### Cycle collector (Bacon-Rajan) — the SOLE entry point. A {Roamed} strong-decrement that leaves the
 ### count > 0 reports the controller here as a possible cycle root (RF dedups via `buffered` first).
 ### See internal-wiki/v0.4.x-cycle-collector.md.
 dangerous routine C::rf_cyclic_add_candidate(obj: Address)
+
 ### Number of candidate controllers currently in the roots buffer.
 dangerous routine C::rf_cyclic_roots_count() -> U64
+
 ### The i-th candidate controller in the roots buffer (`Address(0)` if out of range).
 dangerous routine C::rf_cyclic_roots_at(i: U64) -> Address
+
 ### Empties the roots buffer (after a CollectCycles pass consumes it).
 dangerous routine C::rf_cyclic_roots_clear()
+
 ### Drops the first `n` (processed) candidates, keeping any appended after the pass snapshotted `n`
 ### (e.g. a candidate reported by a finalizer during reap). Prevents dropping late arrivals.
 dangerous routine C::rf_cyclic_roots_remove_front(n: U64)
+
 ### Drops one candidate about to be freed — a buffered controller reaching count 0 is freed eagerly, so
 ### its roots entry must go first or the collector would dereference freed memory.
 dangerous routine C::rf_cyclic_roots_remove(ptr: Address)
+
 ### Resets the scratch buffer before tracing one controller's children.
 dangerous routine C::rf_cyclic_scratch_reset()
+
 ### Number of children collected into the scratch buffer by the last trace.
 dangerous routine C::rf_cyclic_scratch_count() -> U64
+
 ### The i-th child controller in the scratch buffer (`Address(0)` if out of range).
 dangerous routine C::rf_cyclic_scratch_at(i: U64) -> Address
+
 ### Called by a builder-generated per-type trace, once per {Roamed} field, with its controller.
 dangerous routine C::rf_cyclic_visit_child(child_ctrl: Address)
+
 ### Pushes a collected white controller onto the deferred-free (reap) buffer.
 dangerous routine C::rf_cyclic_reap_push(ctrl: Address)
+
 ### Number of controllers awaiting deferred free in the reap buffer.
 dangerous routine C::rf_cyclic_reap_count() -> U64
+
 ### The i-th controller in the reap buffer (`Address(0)` if out of range).
 dangerous routine C::rf_cyclic_reap_at(i: U64) -> Address
+
 ### Empties the reap buffer.
 dangerous routine C::rf_cyclic_reap_clear()
+
 ### The sole trace indirect-call site: runs the per-type trace hook over a controller, filling scratch
 ### with its child controllers.
 dangerous routine C::rf_cyclic_trace_into_scratch(trace_hook: Address, controller: Address)
+
 ### The free indirect-call site: runs the per-type free hook over a white (garbage) controller —
 ### type-correct entity `destroy` then controller free.
 dangerous routine C::rf_cyclic_invoke_free(free_hook: Address, controller: Address)
+
 ### Whether a collection pass should run now (candidate set reached the threshold, none in progress).
 dangerous routine C::rf_cyclic_should_collect() -> Bool
+
 ### Marks a collection pass in progress (guards against re-entrant auto-triggering).
 dangerous routine C::rf_cyclic_enter_collect()
+
 ### Marks the collection pass finished.
 dangerous routine C::rf_cyclic_exit_collect()
+
 ### Takes the collector's SHARED stop-the-world lock around a mutator refcount op (a no-op on the
 ### collector's own thread, which already holds it EXCLUSIVE). RoamController.hold/unhold bracket with these.
 dangerous routine C::rf_cyclic_lock_shared()
+
 ### Releases the SHARED stop-the-world lock — the `rf_cyclic_lock_shared` counterpart.
 dangerous routine C::rf_cyclic_unlock_shared()
 
@@ -196,22 +246,29 @@ routine C::rf_monotonic_now_ns() -> U64
 ### non-capturing routine coerces to `CPtr`. `stack_size` of 0 picks a default.
 ### :returns: an opaque coroutine handle as a `CPtr` (null on failure). Does not start it.
 dangerous routine C::rf_coro_create(entry: CPtr, userdata: CPtr, stack_size: U64) -> CPtr
+
 ### Switches into the coroutine, blocking the caller until it parks or finishes.
 ### :returns: the resulting status (2 = parked, 3 = completed).
 dangerous routine C::rf_coro_resume(coro: CPtr) -> U32
+
 ### Parks the coroutine currently running on this OS thread, switching back to its resumer.
 ### Safe: takes no pointers; a no-op outside a coroutine. THIS is the suspend point.
 routine C::rf_coro_yield()
+
 ### Reads a coroutine's status (0 new, 1 running, 2 parked, 3 completed, 4 cancelled).
 dangerous routine C::rf_coro_status_get(coro: CPtr) -> U32
+
 ### Marks a coroutine as fire-and-forget (`execute()`): the completing worker frees it, no consumer.
 ### Call before rf_sched_spawn_default so it is published before any worker runs it.
 dangerous routine C::rf_coro_set_detached(coro: CPtr)
+
 ### Abandons a parked (or never-started) coroutine: walks its cancellation shadow stack
 ### innermost-first, runs each teardown thunk once, then frees the coroutine and its stack.
 dangerous routine C::rf_coro_abandon(coro: CPtr)
+
 ### Frees a completed (or never-started) coroutine and its stack. Use rf_coro_abandon for a parked one.
 dangerous routine C::rf_coro_delete(coro: CPtr)
+
 ### Blocks the calling thread for the given duration. The synchronous-sleep backing for the
 ### `waitfor` routine; a `suspended` waitfor will instead park on a timer (v0.3.0 scheduler).
 dangerous routine C::rf_waitfor_duration(secs: S64, ns: U32)
@@ -227,9 +284,11 @@ dangerous routine C::rf_waitfor_duration(secs: S64, ns: U32)
 ### observes it at its next suspend point (waitfor returns early) or via a poll, and returns on
 ### its own. Never frees.
 dangerous routine C::rf_coro_request_cancel(coro: CPtr)
+
 ### Requests cooperative cancellation of a thread-backed agent. Sets a flag the worker polls. Never
 ### frees — destroy still joins the worker at teardown.
 dangerous routine C::rf_task_request_cancel(task: Address)
+
 ### Whether cancellation has been requested for the agent (coroutine OR worker thread) running on
 ### THIS thread. The backing for the `cancellation_requested()` free routine. Reads only
 ### thread-local state. :returns: 1 if requested, else 0.
@@ -242,46 +301,60 @@ routine C::rf_cancel_requested() -> U32
 
 ### Creates a scheduler. :returns: an opaque `rf_sched*` handle as a `CPtr`.
 dangerous routine C::rf_sched_create() -> CPtr
+
 ### Frees a scheduler.
 dangerous routine C::rf_sched_destroy(sched: CPtr)
+
 ### Queues a NEW coroutine to run on the scheduler (starts on its first resume by the run loop).
 dangerous routine C::rf_sched_spawn(sched: CPtr, coro: CPtr)
+
 ### Parks the coroutine currently running under the loop for `delay_ns`, then resumes it. Called
 ### from inside a coroutine (e.g. by waitfor). A no-op outside a running scheduler/coroutine.
 routine C::rf_sched_park_timer(delay_ns: U64)
+
 ### Parks the current coroutine with no scheduler-side wake: only rf_sched_wake re-queues it.
 ### How a coroutine awaits work on another OS thread without blocking the scheduler thread.
 routine C::rf_sched_park_external()
+
 ### Makes a parked coroutine runnable again. Safe to call from ANY thread — the bridge a worker
 ### thread uses to hand a result back to a coroutine awaiting it on the scheduler thread.
 dangerous routine C::rf_sched_wake(sched: CPtr, coro: CPtr)
+
 ### Drives all spawned coroutines to completion on this thread (returns when none remain).
 dangerous routine C::rf_sched_run(sched: CPtr)
+
 ### Spawns a NEW coroutine onto THIS thread's implicit scheduler (created lazily). Emitted at a
 ### `suspended routine` call site so the coroutine is ready before any retrieve! drives the loop.
 dangerous routine C::rf_sched_spawn_default(coro: CPtr)
+
 ### Drives this thread's implicit scheduler until `coro` finishes, leaving siblings parked. The
 ### engine behind Agent[T].retrieve() (run-until-this-handle: siblings progress concurrently).
 dangerous routine C::rf_sched_run_until_default(coro: CPtr)
+
 ### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
 ### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
 dangerous routine C::rf_sched_unschedule_default(coro: CPtr) -> U32
+
 ### Race-free owner-side disposal for an Agent handle's destroy. Detaches `coro` from the pool and,
 ### under the scheduler lock, decides whether the OWNER may free it now (returns 1) or the free was
 ### DEFERRED (returns 0) because a worker still holds it (RUNNING / mid-pop) and will free it on
 ### completion. Prevents the owner from freeing a coroutine a worker is about to resume (the M:N UAF).
 dangerous routine C::rf_sched_dispose_default(coro: CPtr) -> U32
+
 ### Number of worker threads driving the process pool (fixed host-core-count, min 1). Creates the pool
 ### on first call. Coroutine migration across workers can only occur when this is > 1.
 routine C::rf_sched_worker_count() -> U64
+
 ### Registers the current scheduler-driven coroutine as `task`'s awaiter. Returns 1 if the task is
 ### already complete (read the result, don't park), 0 if registered (park via rf_sched_park_external;
 ### the worker wakes you on completion). Outside a scheduler-driven coroutine returns 1 (block-wait).
 dangerous routine C::rf_task_await_coro(task: Address) -> U32
+
 ### Timed variant: parks (deadline timer + externally wakeable) until the task completes or
 ### `timeout_ns` elapses. Returns 1 if completed (read the result), 0 if it timed out, 2 if not on a
 ### scheduler-driven coroutine (the caller should block-wait with the deadline instead).
 dangerous routine C::rf_task_await_coro_deadline(task: Address, timeout_ns: U64) -> U32
+
 ### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
 ### Safe: reads only thread-local scheduler state. Lets `waitfor` be uncolored.
 routine C::rf_in_coroutine() -> U32
@@ -297,27 +370,37 @@ routine C::rf_in_coroutine() -> U32
 ### one consumer ref. Throws OutOfMemoryError on a capacity*slot overflow or allocation failure.
 ### :returns: an opaque `rf_channel*` handle as a `CPtr`.
 dangerous routine C::rf_channel_create(capacity: U64) -> CPtr
+
 ### Adds a producer (Sender) reference.
 dangerous routine C::rf_channel_add_feeder(chan: CPtr)
+
 ### Drops a producer reference. The last Sender dropping auto-closes the channel.
 dangerous routine C::rf_channel_drop_feeder(chan: CPtr)
+
 ### Adds a consumer (Receiver / SharedReceiver) reference.
 dangerous routine C::rf_channel_add_consumer(chan: CPtr)
+
 ### Drops a consumer reference. The struct frees once both producer and consumer refs reach 0.
 dangerous routine C::rf_channel_drop_consumer(chan: CPtr)
+
 ### Sends one payload pointer. Returns 1 on success, 0 if the channel is closed or has no consumers.
 ### Blocks/parks while the buffer is full (backpressure); for a rendezvous channel additionally waits
 ### until a consumer takes the item.
 dangerous routine C::rf_channel_feed(chan: CPtr, payload: Address) -> U32
+
 ### Receives one payload pointer, or null (Address 0) when the channel is closed AND drained. Parks
 ### while the buffer is empty.
 dangerous routine C::rf_channel_next(chan: CPtr) -> Address
+
 ### Explicit early close (drop auto-closes too). Not dangerous semantically; double-close is a no-op.
 dangerous routine C::rf_channel_close(chan: CPtr)
+
 ### Buffered item count — diagnostic snapshot only, not a synchronization primitive.
 dangerous routine C::rf_channel_count(chan: CPtr) -> U64
+
 ### 1 if the channel is closed (may still hold buffered items to drain). Introspection snapshot.
 dangerous routine C::rf_channel_is_closed(chan: CPtr) -> U32
+
 ### The buffered capacity the channel was created with (0 = rendezvous). Introspection.
 dangerous routine C::rf_channel_capacity(chan: CPtr) -> U64
 
@@ -330,22 +413,30 @@ dangerous routine C::rf_channel_capacity(chan: CPtr) -> U64
 
 ### Creates a monitor (refcount 1). :returns: an opaque `rf_signal*` handle as a `CPtr`.
 dangerous routine C::rf_signal_create() -> CPtr
+
 ### Adds a handle reference (for clone).
 dangerous routine C::rf_signal_add_ref(sig: CPtr)
+
 ### Drops a handle reference; the monitor frees at 0.
 dangerous routine C::rf_signal_drop(sig: CPtr)
+
 ### Acquires the monitor lock that guards the caller's shared predicate.
 dangerous routine C::rf_signal_lock(sig: CPtr)
+
 ### Releases the monitor lock.
 dangerous routine C::rf_signal_unlock(sig: CPtr)
+
 ### Waits for a cast — MUST hold the monitor lock. Drops the lock, parks (coroutine) or blocks
 ### (thread), and re-acquires the lock before returning. Re-check the predicate in a loop.
 dangerous routine C::rf_signal_wait(sig: CPtr)
+
 ### Timed wait. Returns 1 if woken before the deadline (re-check the predicate), 0 if it timed out.
 ### MUST hold the lock; releases/re-acquires it around the suspend.
 dangerous routine C::rf_signal_wait_deadline(sig: CPtr, timeout_ns: U64) -> U32
+
 ### Wakes one waiter. Call after updating the predicate (not while holding the lock).
 dangerous routine C::rf_signal_cast_one(sig: CPtr)
+
 ### Wakes all waiters. Call after updating the predicate (not while holding the lock).
 dangerous routine C::rf_signal_cast_all(sig: CPtr)
 
@@ -357,20 +448,26 @@ dangerous routine C::rf_signal_cast_all(sig: CPtr)
 
 ### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as a `CPtr`.
 dangerous routine C::rf_race_begin() -> CPtr
+
 ### Appends a coroutine competitor (Agent of kind CORO), preserving add (List) order.
 dangerous routine C::rf_race_add_coro(race: CPtr, coro: CPtr)
+
 ### Appends a thread competitor (Agent of kind THREAD), preserving add (List) order.
 dangerous routine C::rf_race_add_task(race: CPtr, task: Address)
+
 ### Drives the scheduler until one competitor completes; :returns: its index in add (List) order, or
 ### -1 if the set is empty. Thread competitors' completions wake the loop; no wake can be lost.
 dangerous routine C::rf_race_wait(race: CPtr) -> S64
+
 ### Frees the competitor set. Does NOT touch the Agents themselves (the caller still owns them).
 dangerous routine C::rf_race_end(race: CPtr)
+
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
 ### :param size: The number of bytes to copy.
 dangerous routine C::rf_copy_bytes_at(dest: Address, src: Address, size: U64)
+
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
@@ -378,11 +475,13 @@ dangerous routine C::rf_copy_bytes_at(dest: Address, src: Address, size: U64)
 dangerous routine rf_copy_bytes_at(dest: Address, src: Address, size: ByteSize)
     C::rf_copy_bytes_at(dest: dest, src: src, size: size.byte_size())
     return
+
 ### Fills `size` bytes at `dest` with `value`.
 ### :param dest: The destination location.
 ### :param value: The byte value to write.
 ### :param size: The number of bytes to set.
 dangerous routine C::rf_set_bytes_at(dest: Address, value: U8, size: U64)
+
 ### Fills `size` bytes at `dest` with `value`.
 ### :param dest: The destination location.
 ### :param value: The byte value to write.
@@ -390,7 +489,6 @@ dangerous routine C::rf_set_bytes_at(dest: Address, value: U8, size: U64)
 dangerous routine rf_set_bytes_at(dest: Address, value: U8, size: ByteSize)
     C::rf_set_bytes_at(dest: dest, value: value, size: size.byte_size())
     return
-
 
 # ============================================================================
 # Moment - System Clock
@@ -422,11 +520,13 @@ routine C::ingrid_splitmix64(x: U64) -> U64
 ### :param ptr: The C string pointer to measure.
 ### :returns: The number of `char` code units before the terminator.
 routine C::rf_cstr_count(ptr: CStr) -> U64
+
 ### Compares two null-terminated C strings lexicographically.
 ### :param a: The left-hand string.
 ### :param b: The right-hand string.
 ### :returns: A negative, zero, or positive comparison result.
 routine C::rf_cstr_compare(a: CStr, b: CStr) -> S32
+
 ### Copies a null-terminated C string into destination storage.
 ### :param dest: The destination buffer.
 ### :param src: The source string.
@@ -441,8 +541,10 @@ routine C::rf_cstr_copy(dest: CStr, src: CStr) -> CStr
 ### :param ptr: Pointer to the bytes to write.
 ### :param len: Number of bytes to write.
 routine C::rf_console_error(ptr: Hijacked[Byte], len: U64)
+
 ### Flushes buffered standard output, so a program's output appears before a crash report.
 routine C::rf_flush_output()
+
 ### Ends the program with the crash status (82) after a crash report has been written.
 routine C::rf_crash_exit()
 
@@ -454,6 +556,7 @@ routine C::rf_crash_exit()
 ### :param ptr: Pointer to the bytes to write.
 ### :param len: Number of bytes to write.
 routine C::rf_console_show(ptr: Hijacked[Byte], len: U64)
+
 ### Writes a UTF-8 byte buffer to the console's alert or error stream.
 ### :param ptr: Pointer to the bytes to write.
 ### :param len: Number of bytes to write.
@@ -462,12 +565,15 @@ routine C::rf_console_alert(ptr: Hijacked[Byte], len: U64)
 ### Reads one line of console input and returns its bytes.
 ### :returns: A runtime-managed byte buffer containing the captured line.
 routine C::rf_console_ask_line() -> Hijacked[Byte]
+
 ### Reads one whitespace-delimited token from console input.
 ### :returns: A runtime-managed byte buffer containing the captured token.
 routine C::rf_console_ask_word() -> Hijacked[Byte]
+
 ### Reads the remaining console input as text bytes.
 ### :returns: A runtime-managed byte buffer containing the captured input.
 routine C::rf_console_ask_all() -> Hijacked[Byte]
+
 ### Reads exactly `count` bytes from console input when available.
 ### :param count: The requested number of bytes to read.
 ### :returns: A runtime-managed byte buffer containing the captured bytes.
@@ -481,23 +587,28 @@ routine C::rf_console_ask_bytes(count: U64) -> Hijacked[Byte]
 ### This is used by higher-level wrappers after calls that return raw byte pointers.
 ### :returns: The length of the current result buffer in bytes.
 routine C::rf_get_result_len() -> U64
+
 ### Opens a file and returns the runtime file descriptor.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
 ### :param mode: The runtime file-open mode code.
 ### :returns: A runtime file descriptor, or a failure code defined by the runtime.
 routine C::rf_file_open(path: CStr, path_len: S32, mode: S32) -> S32
+
 ### Closes an open runtime file descriptor.
 ### :param fd: The file descriptor to close.
 routine C::rf_file_close(fd: S32)
+
 ### Reads the remaining contents of a file into a runtime-managed byte buffer.
 ### :param fd: The file descriptor to read from.
 ### :returns: A pointer to the captured byte buffer.
 routine C::rf_file_read_all(fd: S32) -> Hijacked[Byte]
+
 ### Reads one line from a file into a runtime-managed byte buffer.
 ### :param fd: The file descriptor to read from.
 ### :returns: A pointer to the captured byte buffer.
 routine C::rf_file_read_line(fd: S32) -> Hijacked[Byte]
+
 ### RF-only: memory-maps a file read-only and returns the mapped base pointer
 ### (`rf_get_result_len()` yields the mapped size); none on failure (missing / non-regular /
 ### zero-length file). The view stays valid until `rf_file_unmap`.
@@ -505,10 +616,12 @@ routine C::rf_file_read_line(fd: S32) -> Hijacked[Byte]
 ### :param path_len: The path length in bytes.
 ### :returns: A pointer to the mapped read-only byte view.
 dangerous routine C::rf_file_map_path(path: CStr, path_len: S32) -> Hijacked[Byte]
+
 ### RF-only: releases a mapping created by `rf_file_map_path`.
 ### :param ptr: The mapped base pointer.
 ### :param len: The mapped size in bytes.
 dangerous routine C::rf_file_unmap(ptr: Hijacked[Byte], len: U64)
+
 ### RF-only: memory-maps a file read/write, SHARED (writes are flushed back to the file) and returns
 ### the mapped base pointer (`rf_get_result_len()` yields the mapped size); none on failure (missing /
 ### non-regular / zero-length file). The view stays valid until `rf_file_unmap`, which flushes dirty
@@ -517,11 +630,13 @@ dangerous routine C::rf_file_unmap(ptr: Hijacked[Byte], len: U64)
 ### :param path_len: The path length in bytes.
 ### :returns: A pointer to the mapped read/write byte view.
 dangerous routine C::rf_file_map_path_rw(path: CStr, path_len: S32) -> Hijacked[Byte]
+
 ### RF-only: forces dirty pages of a read/write mapping to be written back to the file (msync /
 ### FlushViewOfFile). A null pointer is a no-op.
 ### :param ptr: The mapped base pointer.
 ### :param len: The mapped size in bytes.
 dangerous routine C::rf_file_map_flush(ptr: Hijacked[Byte], len: U64)
+
 ### RF-only: memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file read-only, clamped
 ### to the file end. Returns the mapping BASE (rounded down to the platform mapping granularity); add
 ### `rf_file_map_delta()` to reach the requested offset, and `rf_get_result_len()` gives the clamped
@@ -532,7 +647,13 @@ dangerous routine C::rf_file_map_flush(ptr: Hijacked[Byte], len: U64)
 ### :param offset: The starting byte offset within the file.
 ### :param length: The requested window length in bytes (clamped to the file end).
 ### :returns: A pointer to the mapped window base.
-dangerous routine C::rf_file_map_path_range(path: CStr, path_len: S32, offset: U64, length: U64) -> Hijacked[Byte]
+dangerous routine C::rf_file_map_path_range(
+    path: CStr,
+    path_len: S32,
+    offset: U64,
+    length: U64,
+) -> Hijacked[Byte]
+
 ### RF-only: memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file READ/WRITE, SHARED
 ### (writes land in the file), clamped to the file end — the read/write dual of `rf_file_map_path_range`.
 ### Size the file first (`rf_file_set_size`); the mapping cannot grow it. Returns the mapping BASE
@@ -544,20 +665,29 @@ dangerous routine C::rf_file_map_path_range(path: CStr, path_len: S32, offset: U
 ### :param offset: The starting byte offset within the file.
 ### :param length: The requested window length in bytes (clamped to the file end).
 ### :returns: A pointer to the mapped window base.
-dangerous routine C::rf_file_map_path_range_rw(path: CStr, path_len: S32, offset: U64, length: U64) -> Hijacked[Byte]
+dangerous routine C::rf_file_map_path_range_rw(
+    path: CStr,
+    path_len: S32,
+    offset: U64,
+    length: U64,
+) -> Hijacked[Byte]
+
 ### RF-only: the byte offset from a range mapping's base to the caller-requested offset (see
 ### `rf_file_map_path_range`). Zero for a whole-file mapping.
 ### :returns: The delta in bytes.
 routine C::rf_file_map_delta() -> U64
+
 ### Reads a whole file asynchronously off the libuv threadpool. Inside a suspended routine the calling
 ### coroutine parks while the read runs (siblings keep progressing); outside one it reads inline.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
 ### :returns: A pointer to the captured byte buffer (length via `rf_io_get_result_len`).
 routine C::rf_io_read_file_all(path: CStr, path_len: S32) -> Hijacked[Byte]
+
 ### Returns the byte length of the most recent async I/O buffer result.
 ### :returns: The length of the current async result buffer in bytes.
 routine C::rf_io_get_result_len() -> U64
+
 ### Writes a whole file asynchronously off the libuv threadpool, truncating any existing contents.
 ### Inside a suspended routine the calling coroutine parks while the write runs (siblings keep
 ### progressing); outside one it writes inline. The payload is copied, so the caller's buffer need not
@@ -567,7 +697,13 @@ routine C::rf_io_get_result_len() -> U64
 ### :param data: Pointer to the bytes to write.
 ### :param data_len: The number of bytes to write.
 ### :returns: The number of bytes written, or a negative value on error.
-routine C::rf_io_write_file_all(path: CStr, path_len: S32, data: Hijacked[Byte], data_len: S64) -> S64
+routine C::rf_io_write_file_all(
+    path: CStr,
+    path_len: S32,
+    data: Hijacked[Byte],
+    data_len: S64,
+) -> S64
+
 ### Runs a shell command, capturing stdout/stderr, while the calling coroutine parks (siblings keep
 ### progressing); blocks on a plain thread. Returns the child's exit code (-1 if it could not be
 ### spawned). The captured streams + signal are read via the accessors below.
@@ -575,27 +711,37 @@ routine C::rf_io_write_file_all(path: CStr, path_len: S32, data: Hijacked[Byte],
 ### :param command_len: The command length in bytes.
 ### :returns: The child's exit code, or -1 on spawn failure.
 routine C::rf_proc_run(command: CStr, command_len: S32) -> S64
+
 ### Returns the signal that killed the most recent `rf_proc_run` child, or 0 if it exited normally.
 routine C::rf_proc_term_signal() -> S32
+
 ### Returns the captured stdout buffer of the most recent `rf_proc_run` (length via `rf_proc_output_len`).
 routine C::rf_proc_output() -> Hijacked[Byte]
+
 ### Returns the byte length of the most recent `rf_proc_run` stdout capture.
 routine C::rf_proc_output_len() -> U64
+
 ### Returns the captured stderr buffer of the most recent `rf_proc_run` (length via `rf_proc_errors_len`).
 routine C::rf_proc_errors() -> Hijacked[Byte]
+
 ### Returns the byte length of the most recent `rf_proc_run` stderr capture.
 routine C::rf_proc_errors_len() -> U64
+
 ### Begins an argv subprocess builder (no shell), setting argv[0] to `file`. Returns an opaque handle.
 ### :param file: The executable to run.
 ### :param file_len: The file length in bytes.
 ### :returns: An opaque builder handle for `rf_proc_add_arg`/`rf_proc_set_cwd`/`rf_proc_run_built`.
 routine C::rf_proc_begin(file: CStr, file_len: S32) -> CPtr
+
 ### Appends an argument to a subprocess builder.
 routine C::rf_proc_add_arg(builder: CPtr, arg: CStr, arg_len: S32)
+
 ### Sets the working directory for a subprocess builder (empty = inherit the parent's).
 routine C::rf_proc_set_cwd(builder: CPtr, cwd: CStr, cwd_len: S32)
+
 ### Adds an environment override (KEY=VALUE), merged into the parent environment at launch.
 routine C::rf_proc_add_env(builder: CPtr, key: CStr, key_len: S32, val: CStr, val_len: S32)
+
 ### Launches a built subprocess (no shell), capturing stdout/stderr like `rf_proc_run`, and consumes
 ### the builder. Parks the calling coroutine while it runs. Returns the exit code, or -1 on failure.
 routine C::rf_proc_run_built(builder: CPtr) -> S64
@@ -622,15 +768,18 @@ dangerous routine C::rf_signal_register_ctx(which: S32, handler: Address, contex
 ### :param count: The maximum number of bytes to read.
 ### :returns: A pointer to the captured byte buffer.
 routine C::rf_file_read_bytes(fd: S32, count: U64) -> Hijacked[Byte]
+
 ### Writes `len` bytes from `ptr` to an open file descriptor.
 ### :param fd: The file descriptor to write to.
 ### :param ptr: Pointer to the bytes to write.
 ### :param len: Number of bytes to write.
 ### :returns: The number of bytes written.
 routine C::rf_file_write(fd: S32, ptr: Hijacked[Byte], len: U64) -> U64
+
 ### Flushes buffered output associated with a file descriptor.
 ### :param fd: The file descriptor to flush.
 routine C::rf_file_flush(fd: S32)
+
 ### Returns whether a file descriptor has reached end-of-file.
 ### :param fd: The file descriptor to inspect.
 ### :returns: `true` when no more data can be read.
@@ -645,36 +794,43 @@ routine C::rf_file_is_eof(fd: S32) -> Bool
 ### :param len: The path length in bytes.
 ### :returns: `true` when the path exists.
 routine C::rf_fs_exists(path: CStr, len: S32) -> Bool
+
 ### Returns whether a filesystem path refers to a regular file.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when the path exists and is a regular file.
 routine C::rf_fs_is_file(path: CStr, len: S32) -> Bool
+
 ### Returns whether a filesystem path refers to a directory.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when the path exists and is a directory.
 routine C::rf_fs_is_directory(path: CStr, len: S32) -> Bool
+
 ### Creates one directory at `path`.
 ### :param path: The null-terminated directory path.
 ### :param len: The path length in bytes.
 ### :returns: A runtime status code.
 routine C::rf_fs_create_dir(path: CStr, len: S32) -> S32
+
 ### Creates a directory path recursively, including missing parents.
 ### :param path: The null-terminated directory path.
 ### :param len: The path length in bytes.
 ### :returns: A runtime status code.
 routine C::rf_fs_create_dir_all(path: CStr, len: S32) -> S32
+
 ### Removes a file or empty directory at `path`.
 ### :param path: The null-terminated path to remove.
 ### :param len: The path length in bytes.
 ### :returns: A runtime status code.
 routine C::rf_fs_remove(path: CStr, len: S32) -> S32
+
 ### Removes a directory tree or path recursively.
 ### :param path: The null-terminated path to remove.
 ### :param len: The path length in bytes.
 ### :returns: A runtime status code.
 routine C::rf_fs_remove_all(path: CStr, len: S32) -> S32
+
 ### Copies a filesystem object from `src` to `dst`.
 ### :param src: The null-terminated source path.
 ### :param src_len: The source path length in bytes.
@@ -682,6 +838,7 @@ routine C::rf_fs_remove_all(path: CStr, len: S32) -> S32
 ### :param dst_len: The destination path length in bytes.
 ### :returns: A runtime status code.
 routine C::rf_fs_copy(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
+
 ### Moves or renames a filesystem object from `src` to `dst`.
 ### :param src: The null-terminated source path.
 ### :param src_len: The source path length in bytes.
@@ -689,6 +846,7 @@ routine C::rf_fs_copy(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
 ### :param dst_len: The destination path length in bytes.
 ### :returns: A runtime status code.
 routine C::rf_fs_move(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
+
 ### Moves an entry without overwriting an existing destination.
 ### :param src: The null-terminated source path.
 ### :param src_len: The source path length in bytes.
@@ -696,11 +854,13 @@ routine C::rf_fs_move(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
 ### :param dst_len: The destination path length in bytes.
 ### :returns: `0` when moved, `1` when the destination already exists, `-1` on error.
 routine C::rf_fs_move_no_replace(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
+
 ### Returns the file size for a regular file path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: The file size in bytes.
 routine C::rf_fs_file_size(path: CStr, len: S32) -> S64
+
 ### Joins two path fragments using the platform path separator rules.
 ### :param a: The left-hand path fragment.
 ### :param a_len: The length of `a` in bytes.
@@ -708,84 +868,102 @@ routine C::rf_fs_file_size(path: CStr, len: S32) -> S64
 ### :param b_len: The length of `b` in bytes.
 ### :returns: A runtime-managed byte buffer containing the joined path.
 routine C::rf_fs_join_path(a: CStr, a_len: S32, b: CStr, b_len: S32) -> Hijacked[Byte]
+
 ### Returns the parent directory portion of a path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the parent path.
 routine C::rf_fs_parent_path(path: CStr, len: S32) -> Hijacked[Byte]
+
 ### Returns the final path component of a path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the file name.
 routine C::rf_fs_file_name(path: CStr, len: S32) -> Hijacked[Byte]
+
 ### Returns the file name without its final extension.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the stem text.
 routine C::rf_fs_file_stem(path: CStr, len: S32) -> Hijacked[Byte]
+
 ### Returns the final extension component of a path, WITHOUT the leading dot.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the extension text.
 routine C::rf_fs_extension(path: CStr, len: S32) -> Hijacked[Byte]
+
 ### Returns an absolute version of a path without necessarily resolving symlinks.
 ### :param path: The null-terminated path to normalize.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the absolute path.
 routine C::rf_fs_absolute_path(path: CStr, len: S32) -> Hijacked[Byte]
+
 ### Returns the canonicalized path with platform-specific resolution applied.
 ### :param path: The null-terminated path to canonicalize.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the canonical path.
 routine C::rf_fs_canonical_path(path: CStr, len: S32) -> Hijacked[Byte]
+
 ### Returns whether the current process can read the path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when read access is available.
 routine C::rf_fs_can_read(path: CStr, len: S32) -> Bool
+
 ### Returns whether the current process can write to the path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when write access is available.
 routine C::rf_fs_can_write(path: CStr, len: S32) -> Bool
+
 ### Returns whether the current process can execute the path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `true` when execute access is available.
 routine C::rf_fs_can_execute(path: CStr, len: S32) -> Bool
+
 ### Sets or clears the readonly attribute for a filesystem path.
 ### :param path: The null-terminated path to update.
 ### :param len: The path length in bytes.
 ### :param readonly_flag: `true` to mark readonly, `false` to clear it.
 ### :returns: A runtime status code.
 routine C::rf_fs_set_readonly(path: CStr, len: S32, readonly_flag: Bool) -> S32
+
 ### Reads filesystem metadata for a path in a single stat, caching the result.
 ### Field accessors below read the cached values from the most recent successful call.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: `0` on success, or `-1` on error.
 routine C::rf_fs_metadata(path: CStr, len: S32) -> S32
+
 ### Returns the cached size in bytes from the last `rf_fs_metadata` call.
 ### :returns: The file size in bytes.
 routine C::rf_fs_meta_size() -> S64
+
 ### Returns the cached last-modification time as whole Unix epoch seconds.
 ### :returns: Unix epoch seconds.
 routine C::rf_fs_meta_modified() -> S64
+
 ### Returns the cached creation time as whole Unix epoch seconds.
 ### :returns: Unix epoch seconds.
 routine C::rf_fs_meta_created() -> S64
+
 ### Returns whether the cached metadata describes a directory.
 ### :returns: `true` when the path is a directory.
 routine C::rf_fs_meta_is_directory() -> Bool
+
 ### Returns whether the cached metadata marks the path readonly.
 ### :returns: `true` when the path is readonly.
 routine C::rf_fs_meta_readonly() -> Bool
+
 ### Lists the direct entries of a directory as newline-separated names.
 ### The returned buffer excludes `.` and `..`; an empty directory yields an empty buffer.
 ### :param path: The null-terminated directory path to list.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer of newline-separated entry names.
 routine C::rf_fs_list_dir(path: CStr, len: S32) -> Hijacked[Byte]
+
 ### Lists directory entries WITH kind, so the caller avoids a per-entry stat.
 ### Each newline-separated line is `<kind><name>` where `<kind>` is 'd' (directory)
 ### or 'f' (other); `.` and `..` are excluded.
@@ -793,25 +971,31 @@ routine C::rf_fs_list_dir(path: CStr, len: S32) -> Hijacked[Byte]
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer of newline-separated typed entries.
 routine C::rf_fs_list_dir_typed(path: CStr, len: S32) -> Hijacked[Byte]
+
 ### Returns the current working directory of the process.
 ### :returns: A runtime-managed byte buffer containing the working directory path.
 routine C::rf_fs_current_dir() -> Hijacked[Byte]
+
 ### Sets the current working directory of the process.
 ### :param path: The null-terminated directory path to switch to.
 ### :param len: The path length in bytes.
 ### :returns: `0` on success, or `-1` on error.
 routine C::rf_fs_set_current_dir(path: CStr, len: S32) -> S32
+
 ### Returns the platform temporary directory (TMPDIR/TEMP, falling back to a default).
 ### :returns: A runtime-managed byte buffer containing the temp directory path.
 routine C::rf_fs_temp_dir() -> Hijacked[Byte]
+
 ### Returns the current user's home directory (HOME/USERPROFILE).
 ### :returns: A runtime-managed byte buffer containing the home directory path, or none when unset.
 routine C::rf_fs_home_dir() -> Hijacked[Byte]
+
 ### Creates an empty file, or updates the modification time when it already exists.
 ### :param path: The null-terminated file path to touch.
 ### :param len: The path length in bytes.
 ### :returns: `0` on success, or `-1` on error.
 routine C::rf_fs_touch(path: CStr, len: S32) -> S32
+
 ### Sets a file's size to exactly `size` bytes, creating it if missing (extending with zero bytes or
 ### truncating as needed). Enables writable mappings that produce output — mmap cannot grow a file.
 ### :param path: The null-terminated file path.

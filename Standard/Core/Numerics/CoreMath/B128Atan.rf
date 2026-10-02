@@ -1,5 +1,34 @@
 module Core
 
+# first guess of the table index for |x| < 1, indexed by the top mantissa bits
+secret preset B128_ATAN_INDL: Array[U64, 128] = [
+    0_u64, 0_u64, 1_u64, 1_u64, 2_u64, 3_u64, 3_u64, 4_u64, 5_u64, 5_u64, 6_u64, 6_u64, 7_u64,
+    8_u64, 8_u64, 9_u64, 10_u64, 10_u64, 11_u64, 12_u64, 12_u64, 13_u64, 13_u64, 14_u64, 15_u64,
+    15_u64, 16_u64, 16_u64, 17_u64, 18_u64, 18_u64, 19_u64, 19_u64, 20_u64, 21_u64, 21_u64, 22_u64,
+    22_u64, 23_u64, 24_u64, 24_u64, 25_u64, 25_u64, 26_u64, 26_u64, 27_u64, 28_u64, 28_u64, 29_u64,
+    29_u64, 30_u64, 30_u64, 31_u64, 31_u64, 32_u64, 33_u64, 33_u64, 34_u64, 34_u64, 35_u64, 35_u64,
+    36_u64, 36_u64, 37_u64, 37_u64, 38_u64, 38_u64, 39_u64, 39_u64, 40_u64, 40_u64, 41_u64, 41_u64,
+    42_u64, 42_u64, 43_u64, 43_u64, 44_u64, 44_u64, 45_u64, 45_u64, 45_u64, 46_u64, 46_u64, 47_u64,
+    47_u64, 48_u64, 48_u64, 49_u64, 49_u64, 49_u64, 50_u64, 50_u64, 51_u64, 51_u64, 52_u64, 52_u64,
+    52_u64, 53_u64, 53_u64, 54_u64, 54_u64, 54_u64, 55_u64, 55_u64, 55_u64, 56_u64, 56_u64, 57_u64,
+    57_u64, 57_u64, 58_u64, 58_u64, 58_u64, 59_u64, 59_u64, 59_u64, 60_u64, 60_u64, 61_u64, 61_u64,
+    61_u64, 62_u64, 62_u64, 62_u64, 63_u64, 63_u64, 63_u64,
+]
+# first guess of the table index for |x| >= 1, indexed by the complemented top mantissa bits
+secret preset B128_ATAN_INDH: Array[U64, 128] = [
+    0_u64, 0_u64, 1_u64, 1_u64, 2_u64, 2_u64, 3_u64, 4_u64, 5_u64, 5_u64, 5_u64, 6_u64, 6_u64,
+    7_u64, 8_u64, 9_u64, 10_u64, 10_u64, 10_u64, 11_u64, 11_u64, 11_u64, 12_u64, 12_u64, 13_u64,
+    14_u64, 14_u64, 15_u64, 16_u64, 16_u64, 17_u64, 18_u64, 19_u64, 20_u64, 20_u64, 20_u64, 21_u64,
+    21_u64, 21_u64, 22_u64, 22_u64, 23_u64, 23_u64, 23_u64, 24_u64, 24_u64, 25_u64, 25_u64, 26_u64,
+    26_u64, 27_u64, 27_u64, 28_u64, 29_u64, 29_u64, 30_u64, 31_u64, 31_u64, 32_u64, 33_u64, 34_u64,
+    34_u64, 35_u64, 36_u64, 37_u64, 38_u64, 38_u64, 38_u64, 38_u64, 39_u64, 39_u64, 39_u64, 39_u64,
+    40_u64, 40_u64, 40_u64, 41_u64, 41_u64, 41_u64, 41_u64, 42_u64, 42_u64, 42_u64, 43_u64, 43_u64,
+    43_u64, 44_u64, 44_u64, 44_u64, 45_u64, 45_u64, 46_u64, 46_u64, 46_u64, 47_u64, 47_u64, 47_u64,
+    48_u64, 48_u64, 49_u64, 49_u64, 49_u64, 50_u64, 50_u64, 51_u64, 51_u64, 52_u64, 52_u64, 53_u64,
+    53_u64, 54_u64, 54_u64, 54_u64, 55_u64, 55_u64, 56_u64, 57_u64, 57_u64, 58_u64, 58_u64, 59_u64,
+    59_u64, 60_u64, 60_u64, 61_u64, 62_u64, 62_u64, 63_u64,
+]
+
 # ============================================================================
 # Correctly rounded arc tangent of B128
 # ============================================================================
@@ -29,11 +58,15 @@ routine B128.atan() -> B128
         var cls = b128_atanfam_class(xh: xh, xl: xl)
         if cls == 2
             # signaling NaN: the default NaN of an invalid operation
-            return LLVM::reinterpret_bits[U128, B128](b128_atanfam_mk(hi: 0xFFFF800000000000_u64, lo: 0_u64))
+            return LLVM::reinterpret_bits[U128, B128](
+                b128_atanfam_mk(hi: 0xFFFF800000000000_u64, lo: 0_u64),
+            )
         if cls == 3
             return me
-        return LLVM::reinterpret_bits[U128, B128](b128_atanfam_mk(hi: 0x3FFF921FB54442D1_u64 | xsgn, lo: 0x8469898CC51701B8_u64))
-    xh = (xh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+        return LLVM::reinterpret_bits[U128, B128](
+            b128_atanfam_mk(hi: 0x3FFF921FB54442D1_u64 | xsgn, lo: 0x8469898CC51701B8_u64),
+        )
+    xh = xh & 0x0000FFFFFFFFFFFF_u64 | 0x0001000000000000_u64
     var kn = 0_u128
     var kd = 0_u128
     var dn = 0_s64
@@ -52,11 +85,14 @@ routine B128.atan() -> B128
             var tt = B128_ATANFAM_TN[isct] << b128_atanfam_sa(n: 33 +% e)
             var nr = b128_atan_norm(knh: xh -% tt, knl: xl)
             kn = nr.item0
-            var xa = b128_atanfam_mk(hi: xh, lo: xl) *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
+            var xa = b128_atanfam_mk(
+                hi: xh,
+                lo: xl,
+            ) *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
             var x0 = b128_atanfam_lo(v: xa)
             var x1 = b128_atanfam_hi(v: xa)
             var se = b128_atanfam_sa(n: e)
-            var sne = b128_atanfam_sa(n: (0 -% e) & 63)
+            var sne = b128_atanfam_sa(n: 0 -% e & 63)
             x0 = (x0 >>> se) | (x1 << sne)
             x1 = (x1 >>> se) | 0x8000000000000000_u64
             kd = b128_atanfam_mk(hi: x1, lo: x0)
@@ -70,7 +106,7 @@ routine B128.atan() -> B128
         else
             var xa = b128_atanfam_mk(hi: xh, lo: xl)
             isct = B128_ATAN_INDH[(xh ^ 0x0000FFFFFFFFFFFF_u64) >>> b128_atanfam_sa(n: e +% 42)]
-            if (B128_ATANFAM_TN[isct +% 1] *% xh) < (1_u64 << b128_atanfam_sa(n: 63 -% e))
+            if B128_ATANFAM_TN[isct +% 1] *% xh < (1_u64 << b128_atanfam_sa(n: 63 -% e))
                 isct = isct +% 1
             var t = xa *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
             if (b128_atanfam_hi(v: t) & (1_u64 << b128_atanfam_sa(n: 63 -% e))) != 0
@@ -82,7 +118,7 @@ routine B128.atan() -> B128
             xh = xh +% tt
             var nzd = b128_atanfam_clz(v: xh)
             var snzd = b128_atanfam_sa(n: nzd)
-            var x1 = (xh << snzd) | (xl >>> b128_atanfam_sa(n: (0 -% nzd) & 63))
+            var x1 = (xh << snzd) | (xl >>> b128_atanfam_sa(n: 0 -% nzd & 63))
             var x0 = xl << snzd
             kd = b128_atanfam_mk(hi: x1, lo: x0)
             dn = e +% nr.item1 -% nzd +% 15
@@ -109,7 +145,14 @@ routine B128.atan() -> B128
             f0 = fa[0]
             f1 = fa[1]
             f2 = fa[2]
-        var s = b128_atanfam_add3(a0: B128_ATANFAM_PHI0[6 *% isct +% 3], a1: B128_ATANFAM_PHI0[6 *% isct +% 4], a2: B128_ATANFAM_PHI0[6 *% isct +% 5], b0: f0, b1: f1, b2: f2)
+        var s = b128_atanfam_add3(
+            a0: B128_ATANFAM_PHI0[6 *% isct +% 3],
+            a1: B128_ATANFAM_PHI0[6 *% isct +% 4],
+            a2: B128_ATANFAM_PHI0[6 *% isct +% 5],
+            b0: f0,
+            b1: f1,
+            b2: f2,
+        )
         f0 = s.item0
         f1 = s.item1
         f2 = s.item2
@@ -129,7 +172,7 @@ routine B128.atan() -> B128
         var t = b128_atanfam_mk(hi: f1, lo: f0) +% 0x0CA2339C0EBEDFA4_u128
         var th = b128_atanfam_hi(v: t)
         var tl = b128_atanfam_lo(v: t)
-        th = th & ((1_u64 << b128_atanfam_sa(n: 15 -% k)) -% 1)
+        th = th & (1_u64 << b128_atanfam_sa(n: 15 -% k)) -% 1
         th = th ^ (1_u64 << b128_atanfam_sa(n: 14 -% k))
         if th == 0 and tl < 0x194467381D7DBF48_u64
             return b128_atan_accurate(x: me)
@@ -141,7 +184,7 @@ routine B128.atan() -> B128
         var w1 = b128_atanfam_hi(v: f)
         var k = b128_atanfam_clz(v: w1)
         xn = 0x3FFE -% dn -% k
-        var tl = (w0 +% 6) & (0xFFFFFFFFFFFFFFFF_u64 >>> b128_atanfam_sa(n: 49 +% k))
+        var tl = w0 +% 6 & (0xFFFFFFFFFFFFFFFF_u64 >>> b128_atanfam_sa(n: 49 +% k))
         tl = tl ^ (1_u64 << b128_atanfam_sa(n: 14 -% k))
         if tl <= 15
             return b128_atan_accurate(x: me)
@@ -164,7 +207,7 @@ secret routine b128_atan_fx(x: B128) -> (Bool, B128Fx)
     var xn = LLVM::reinterpret_bits[U64, S64](xh >>> 48)
     if xn < 0x3FFF -% 57 or xn > 0x3FFF +% 114
         return (false, b128fx_one())
-    xh = (xh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+    xh = xh & 0x0000FFFFFFFFFFFF_u64 | 0x0001000000000000_u64
     var kn = 0_u128
     var kd = 0_u128
     var dn = 0_s64
@@ -183,11 +226,14 @@ secret routine b128_atan_fx(x: B128) -> (Bool, B128Fx)
             var tt = B128_ATANFAM_TN[isct] << b128_atanfam_sa(n: 33 +% e)
             var nr = b128_atan_norm(knh: xh -% tt, knl: xl)
             kn = nr.item0
-            var xa = b128_atanfam_mk(hi: xh, lo: xl) *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
+            var xa = b128_atanfam_mk(
+                hi: xh,
+                lo: xl,
+            ) *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
             var x0 = b128_atanfam_lo(v: xa)
             var x1 = b128_atanfam_hi(v: xa)
             var se = b128_atanfam_sa(n: e)
-            var sne = b128_atanfam_sa(n: (0 -% e) & 63)
+            var sne = b128_atanfam_sa(n: 0 -% e & 63)
             x0 = (x0 >>> se) | (x1 << sne)
             x1 = (x1 >>> se) | 0x8000000000000000_u64
             kd = b128_atanfam_mk(hi: x1, lo: x0)
@@ -201,7 +247,7 @@ secret routine b128_atan_fx(x: B128) -> (Bool, B128Fx)
         else
             var xa = b128_atanfam_mk(hi: xh, lo: xl)
             isct = B128_ATAN_INDH[(xh ^ 0x0000FFFFFFFFFFFF_u64) >>> b128_atanfam_sa(n: e +% 42)]
-            if (B128_ATANFAM_TN[isct +% 1] *% xh) < (1_u64 << b128_atanfam_sa(n: 63 -% e))
+            if B128_ATANFAM_TN[isct +% 1] *% xh < (1_u64 << b128_atanfam_sa(n: 63 -% e))
                 isct = isct +% 1
             var t = xa *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
             if (b128_atanfam_hi(v: t) & (1_u64 << b128_atanfam_sa(n: 63 -% e))) != 0
@@ -213,7 +259,7 @@ secret routine b128_atan_fx(x: B128) -> (Bool, B128Fx)
             xh = xh +% tt
             var nzd = b128_atanfam_clz(v: xh)
             var snzd = b128_atanfam_sa(n: nzd)
-            var x1 = (xh << snzd) | (xl >>> b128_atanfam_sa(n: (0 -% nzd) & 63))
+            var x1 = (xh << snzd) | (xl >>> b128_atanfam_sa(n: 0 -% nzd & 63))
             var x0 = xl << snzd
             kd = b128_atanfam_mk(hi: x1, lo: x0)
             dn = e +% nr.item1 -% nzd +% 15
@@ -238,7 +284,14 @@ secret routine b128_atan_fx(x: B128) -> (Bool, B128Fx)
         f0 = fa[0]
         f1 = fa[1]
         f2 = fa[2]
-    var s = b128_atanfam_add3(a0: B128_ATANFAM_PHI0[6 *% isct +% 3], a1: B128_ATANFAM_PHI0[6 *% isct +% 4], a2: B128_ATANFAM_PHI0[6 *% isct +% 5], b0: f0, b1: f1, b2: f2)
+    var s = b128_atanfam_add3(
+        a0: B128_ATANFAM_PHI0[6 *% isct +% 3],
+        a1: B128_ATANFAM_PHI0[6 *% isct +% 4],
+        a2: B128_ATANFAM_PHI0[6 *% isct +% 5],
+        b0: f0,
+        b1: f1,
+        b2: f2,
+    )
     f0 = s.item0
     f1 = s.item1
     f2 = s.item2
@@ -261,7 +314,15 @@ secret routine b128_atan_fx(x: B128) -> (Bool, B128Fx)
         mid = (f1 << b128_atanfam_sa(n: k)) | (f0 >>> b128_atanfam_sa(n: 64 -% k))
     # 4 times the rounding test's allowance and one unit of the dropped word, over f >= 2^(191 - k)
     var err = (4.0 *! B64(from: 0x0CA2339C0EBEDFA4_u64) +! 0x1p64) *! b128fx_p2(k: k -% 191_s64) *! 2.0
-    return (true, B128Fx(neg: neg, m: b128_atanfam_mk(hi: hi, lo: mid), e: -126_s64 -% k, rel: err +! 0x1p-127))
+    return (
+        true,
+        B128Fx(
+            neg: neg,
+            m: b128_atanfam_mk(hi: hi, lo: mid),
+            e: -126_s64 -% k,
+            rel: err +! 0x1p-127,
+        ),
+    )
 
 # normalizes the 128-bit knh:knl so its top bit is set; returns it and the shift applied
 @inline
@@ -269,7 +330,7 @@ secret routine b128_atan_norm(knh: U64, knl: U64) -> (U128, S64)
     if knh != 0
         var nzn = b128_atanfam_clz(v: knh)
         var s = b128_atanfam_sa(n: nzn)
-        var h = (knh << s) | (knl >>> b128_atanfam_sa(n: (0 -% nzn) & 63))
+        var h = (knh << s) | (knl >>> b128_atanfam_sa(n: 0 -% nzn & 63))
         return (b128_atanfam_mk(hi: h, lo: knl << s), nzn)
     if knl == 0
         return (0_u128, 128)
@@ -284,10 +345,13 @@ secret routine b128_atan_negnorm(t: U128, e: S64) -> (U128, S64)
     var se = b128_atanfam_sa(n: e)
     t1 = t1 << se
     if e != 0
-        t1 = t1 | (t0 >>> b128_atanfam_sa(n: (0 -% e) & 63))
+        t1 = t1 | (t0 >>> b128_atanfam_sa(n: 0 -% e & 63))
     t0 = t0 << se
     var kn = 0_u128 -% b128_atanfam_mk(hi: t1, lo: t0)
-    return b128_atan_norm(knh: b128_atanfam_hi(v: kn) ^ 0x8000000000000000_u64, knl: b128_atanfam_lo(v: kn))
+    return b128_atan_norm(
+        knh: b128_atanfam_hi(v: kn) ^ 0x8000000000000000_u64,
+        knl: b128_atanfam_lo(v: kn),
+    )
 
 # the accurate path, taken when the fast result is too close to a rounding boundary
 secret routine b128_atan_accurate(x: B128) -> B128
@@ -297,7 +361,7 @@ secret routine b128_atan_accurate(x: B128) -> B128
     var xsgn = xh & 0x8000000000000000_u64
     xh = xh & 0x7FFFFFFFFFFFFFFF_u64
     var xn = LLVM::reinterpret_bits[U64, S64](xh >>> 48)
-    xh = (xh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+    xh = xh & 0x0000FFFFFFFFFFFF_u64 | 0x0001000000000000_u64
     var kn = 0_u128
     var kd0 = 0_u64
     var kd1 = 0_u64
@@ -318,13 +382,16 @@ secret routine b128_atan_accurate(x: B128) -> B128
             var tt = B128_ATANFAM_TN[isct] << b128_atanfam_sa(n: 33 +% e)
             var nr = b128_atan_norm(knh: xh -% tt, knl: xl)
             kn = nr.item0
-            var xa = b128_atanfam_mk(hi: xh, lo: xl) *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
+            var xa = b128_atanfam_mk(
+                hi: xh,
+                lo: xl,
+            ) *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
             kd2 = b128_atanfam_hi(v: xa)
             kd1 = b128_atanfam_lo(v: xa)
             kd0 = 0_u64
             if e != 0
                 var se = b128_atanfam_sa(n: e)
-                var sne = b128_atanfam_sa(n: (0 -% e) & 63)
+                var sne = b128_atanfam_sa(n: 0 -% e & 63)
                 kd0 = kd1 << sne
                 kd1 = (kd1 >>> se) | (kd2 << sne)
                 kd2 = kd2 >>> se
@@ -341,7 +408,7 @@ secret routine b128_atan_accurate(x: B128) -> B128
         else
             var xa = b128_atanfam_mk(hi: xh, lo: xl)
             isct = B128_ATAN_INDH[(xh ^ 0x0000FFFFFFFFFFFF_u64) >>> b128_atanfam_sa(n: e +% 42)]
-            if (B128_ATANFAM_TN[isct +% 1] *% xh) < (1_u64 << b128_atanfam_sa(n: 63 -% e))
+            if B128_ATANFAM_TN[isct +% 1] *% xh < (1_u64 << b128_atanfam_sa(n: 63 -% e))
                 isct = isct +% 1
             var t = xa *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
             if (b128_atanfam_hi(v: t) & (1_u64 << b128_atanfam_sa(n: 63 -% e))) != 0
@@ -353,7 +420,7 @@ secret routine b128_atan_accurate(x: B128) -> B128
             xh = xh +% tt
             var nzd = b128_atanfam_clz(v: xh)
             var snzd = b128_atanfam_sa(n: nzd)
-            kd2 = (xh << snzd) | (xl >>> b128_atanfam_sa(n: (0 -% nzd) & 63))
+            kd2 = (xh << snzd) | (xl >>> b128_atanfam_sa(n: 0 -% nzd & 63))
             kd1 = xl << snzd
             dn = e +% nr.item1 -% nzd +% 15
     var f = b128_atanfam_accurate_core(kn: kn, kd0: kd0, kd1: kd1, kd2: kd2, dn: dn)
@@ -371,27 +438,3 @@ secret routine b128_atan_accurate(x: B128) -> B128
     v = v >>> 15
     v = v +% b128_atanfam_mk(hi: LLVM::reinterpret_bits[S64, U64](xn) << 48, lo: rnd)
     return LLVM::reinterpret_bits[U128, B128](v | b128_atanfam_mk(hi: xsgn, lo: 0_u64))
-
-# first guess of the table index for |x| < 1, indexed by the top mantissa bits
-secret preset B128_ATAN_INDL: Array[U64, 128] = [
-    0_u64, 0_u64, 1_u64, 1_u64, 2_u64, 3_u64, 3_u64, 4_u64, 5_u64, 5_u64, 6_u64, 6_u64, 7_u64, 8_u64, 8_u64, 9_u64,
-    10_u64, 10_u64, 11_u64, 12_u64, 12_u64, 13_u64, 13_u64, 14_u64, 15_u64, 15_u64, 16_u64, 16_u64, 17_u64, 18_u64, 18_u64, 19_u64,
-    19_u64, 20_u64, 21_u64, 21_u64, 22_u64, 22_u64, 23_u64, 24_u64, 24_u64, 25_u64, 25_u64, 26_u64, 26_u64, 27_u64, 28_u64, 28_u64,
-    29_u64, 29_u64, 30_u64, 30_u64, 31_u64, 31_u64, 32_u64, 33_u64, 33_u64, 34_u64, 34_u64, 35_u64, 35_u64, 36_u64, 36_u64, 37_u64,
-    37_u64, 38_u64, 38_u64, 39_u64, 39_u64, 40_u64, 40_u64, 41_u64, 41_u64, 42_u64, 42_u64, 43_u64, 43_u64, 44_u64, 44_u64, 45_u64,
-    45_u64, 45_u64, 46_u64, 46_u64, 47_u64, 47_u64, 48_u64, 48_u64, 49_u64, 49_u64, 49_u64, 50_u64, 50_u64, 51_u64, 51_u64, 52_u64,
-    52_u64, 52_u64, 53_u64, 53_u64, 54_u64, 54_u64, 54_u64, 55_u64, 55_u64, 55_u64, 56_u64, 56_u64, 57_u64, 57_u64, 57_u64, 58_u64,
-    58_u64, 58_u64, 59_u64, 59_u64, 59_u64, 60_u64, 60_u64, 61_u64, 61_u64, 61_u64, 62_u64, 62_u64, 62_u64, 63_u64, 63_u64, 63_u64
-]
-
-# first guess of the table index for |x| >= 1, indexed by the complemented top mantissa bits
-secret preset B128_ATAN_INDH: Array[U64, 128] = [
-    0_u64, 0_u64, 1_u64, 1_u64, 2_u64, 2_u64, 3_u64, 4_u64, 5_u64, 5_u64, 5_u64, 6_u64, 6_u64, 7_u64, 8_u64, 9_u64,
-    10_u64, 10_u64, 10_u64, 11_u64, 11_u64, 11_u64, 12_u64, 12_u64, 13_u64, 14_u64, 14_u64, 15_u64, 16_u64, 16_u64, 17_u64, 18_u64,
-    19_u64, 20_u64, 20_u64, 20_u64, 21_u64, 21_u64, 21_u64, 22_u64, 22_u64, 23_u64, 23_u64, 23_u64, 24_u64, 24_u64, 25_u64, 25_u64,
-    26_u64, 26_u64, 27_u64, 27_u64, 28_u64, 29_u64, 29_u64, 30_u64, 31_u64, 31_u64, 32_u64, 33_u64, 34_u64, 34_u64, 35_u64, 36_u64,
-    37_u64, 38_u64, 38_u64, 38_u64, 38_u64, 39_u64, 39_u64, 39_u64, 39_u64, 40_u64, 40_u64, 40_u64, 41_u64, 41_u64, 41_u64, 41_u64,
-    42_u64, 42_u64, 42_u64, 43_u64, 43_u64, 43_u64, 44_u64, 44_u64, 44_u64, 45_u64, 45_u64, 46_u64, 46_u64, 46_u64, 47_u64, 47_u64,
-    47_u64, 48_u64, 48_u64, 49_u64, 49_u64, 49_u64, 50_u64, 50_u64, 51_u64, 51_u64, 52_u64, 52_u64, 53_u64, 53_u64, 54_u64, 54_u64,
-    54_u64, 55_u64, 55_u64, 56_u64, 57_u64, 57_u64, 58_u64, 58_u64, 59_u64, 59_u64, 60_u64, 60_u64, 61_u64, 62_u64, 62_u64, 63_u64
-]

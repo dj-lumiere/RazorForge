@@ -1,19 +1,20 @@
 module Core
 
+# Constants for U32 limits
+preset U32_MIN: U32 = 0_u32
+preset U32_MAX: U32 = 4294967295_u32
+preset U32_ZERO: U32 = 0_u32
+preset U32_ONE: U32 = 1_u32
+
 ### A 32-bit unsigned integer in the range 0 to 4,294,967,295.
 ###
 ### `U32` is the natural unsigned integer type for 32-bit quantities such as
 ### Unicode code points, IPv4 addresses, pixel colours, and shift amounts
 ### (the shift operators expect `U32` for their count argument).
 @llvm("i32")
-record U32 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable, Splittable
+record U32
+obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable, Splittable
     pass
-
-# Constants for U32 limits
-preset U32_MIN: U32 = 0_u32
-preset U32_MAX: U32 = 4294967295_u32
-preset U32_ZERO: U32 = 0_u32
-preset U32_ONE: U32 = 1_u32
 
 # ============================================================================
 # Checked Creators (crash on overflow)
@@ -707,7 +708,7 @@ routine U32.swap_bytes() -> U32
 ### Returns `true` if this value is an exact power of two.
 ### :returns: `true` if `me` is 1, 2, 4, ..., 2147483648; `false` otherwise (including zero).
 routine U32.is_power_of_two() -> Bool
-    return me != 0_u32 and (me & (me -% 1_u32)) == 0_u32
+    return me != 0_u32 and (me & me -% 1_u32) == 0_u32
 
 ### Returns this value rotated left by `bits` positions.
 routine U32.rotate_left(bits: U32) -> U32
@@ -742,7 +743,10 @@ common routine U32.from_bytes_le(bytes: Array[Byte, 4]) -> U32
     var result = 0_u32
     var i = 0_u64
     while i < 4_u64
-        var part = LLVM::shift_left(LLVM::zero_extend[U8, U32](LLVM::byte_at(array: bytes, index: i)), U32(i * 8_u64))
+        var part = LLVM::shift_left(
+            LLVM::zero_extend[U8, U32](LLVM::byte_at(array: bytes, index: i)),
+            U32(i * 8_u64),
+        )
         result = LLVM::bit_or(a: result, b: part)
         i = i + 1_u64
     return result
@@ -828,4 +832,3 @@ routine U32!(from_text: Text) -> U32
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine U32.hash(k0: U64, k1: U64) -> U64
     return __secure_hash_u64(v: LLVM::zero_extend[U32, U64](me), k0: k0, k1: k1)
-
