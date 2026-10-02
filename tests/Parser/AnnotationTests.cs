@@ -171,13 +171,12 @@ public class AttributeTests
     #region Type Annotation Tests
 
     /// <summary>
-    /// Verifies that the parser accepts attribute on protocol.
+    /// Verifies that the parser accepts an annotation on a protocol's routine.
     /// </summary>
     [Fact]
-    public void Parse_AttributeOnProtocol()
+    public void Parse_AttributeOnProtocolRoutine()
     {
         string source = """
-                        @prelude
                         protocol Displayable
                             @readonly
                             routine Me.display() -> Text
@@ -186,15 +185,30 @@ public class AttributeTests
         AssertParses(source: source);
     }
 
+    /// <summary>
+    /// Verifies that an annotation on a protocol itself is rejected: it has no effect there (RF-G213).
+    /// </summary>
+    [Fact]
+    public void Parse_AttributeOnProtocol_HasNoEffect()
+    {
+        string source = """
+                        @prelude
+                        protocol Displayable
+                            routine Me.display() -> Text
+                        """;
+
+        AssertParseError(source: source);
+    }
+
     #endregion
 
     #region Member Variable Annotation Tests
 
     /// <summary>
-    /// Verifies that the parser accepts attribute on field.
+    /// Verifies that an annotation on a record's member variable is rejected: it has no effect there (RF-G213).
     /// </summary>
     [Fact]
-    public void Parse_AttributeOnField()
+    public void Parse_AttributeOnField_HasNoEffect()
     {
         string source = """
                         record Config
@@ -205,13 +219,13 @@ public class AttributeTests
                             value: S32
                         """;
 
-        AssertParses(source: source);
+        AssertParseError(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts attribute on entity member variable.
+    /// Verifies that an annotation on an entity's member variable is rejected: it has no effect there (RF-G213).
     /// </summary>
     [Fact]
-    public void Parse_AttributeOnEntityMemberVariable()
+    public void Parse_AttributeOnEntityMemberVariable_HasNoEffect()
     {
         string source = """
                         entity User
@@ -222,7 +236,7 @@ public class AttributeTests
                             email: Text
                         """;
 
-        AssertParses(source: source);
+        AssertParseError(source: source);
     }
 
     #endregion
