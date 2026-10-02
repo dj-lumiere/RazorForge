@@ -1,70 +1,51 @@
-# RazorForge / Suflae — Rider (JetBrains) plugin
+# RazorForge for Rider
 
-Brings `.rf` / `.sf` language support into Rider by driving the builder's built-in language
-servers (`dotnet RazorForge.dll lsp` for `.rf`, `dotnet Suflae.dll lsp` for `.sf`) through the IntelliJ Platform **LSP client API**. This is
-the Rider counterpart to `../vscode-extension` — the LSP server is the same process; only the
-client that launches it differs.
+A Rider plugin for RazorForge (`.rf`, `.razorforge`):
 
-> The LSP client API (`com.intellij.platform.lsp`) is a **paid-IDE feature**. Rider qualifies;
-> the free Community IDEs do not.
+- Syntax highlighting from `../RazorForge.tmbundle`, plus `#` comment toggling and bracket pairing (`bundle/`).
+- The RazorForge file icon.
+- The RazorForge language server (`RazorForge lsp`), through Rider's LSP client: diagnostics, completion, hover,
+  go to definition, references, rename, signature help, inlay hints, code actions, symbols and formatting.
 
-## What it does
+Suflae and Tessera have plugins of their own, in `../../Suflae/rider-plugin` and `../../Tessera/rider-plugin`.
 
-- Registers the `RazorForge` (`.rf`, `.razorforge`) and `Suflae` (`.sf`) file types.
-- On opening such a file, launches that language's server (`dotnet <RazorForge.dll> lsp` or `dotnet <Suflae.dll> lsp`) and connects as an LSP client,
-  surfacing the server's diagnostics, hover, go-to-definition, references and completion.
+## Which server runs
 
-## Prerequisites
+Settings | Languages & Frameworks | RazorForge sets the server: `RazorForge.dll` (run with `dotnet`) or a RazorForge
+executable. Left empty, the plugin uses the dev build, `<project>/RazorForge/bin/Debug/net10.0/RazorForge.dll`
+(the LumiFoundry workspace) or `<project>/bin/Debug/net10.0/RazorForge.dll`.
 
-1. Build the builder so the DLL + its sibling `Standard/` stdlib exist:
-   ```
-   dotnet build       # from the repo root — produces RazorForge/bin/Debug/net10.0/RazorForge.dll
-   ```
-2. `dotnet` on PATH.
-3. A local Gradle (or generate the wrapper — see below).
+The server runs from a copy of its folder in Rider's system directory (`razorforge-lsp/`), never from `bin/`, so it
+never holds the files the next `dotnet build` overwrites. When the build folder changes and then stays the same for
+a few seconds, the plugin restarts the server from a fresh copy, so a rebuilt builder takes over by itself.
 
-## Build & run
+## Build
 
-The wrapper jar is gitignored; generate it once, then use `./gradlew`:
+Needs Rider 2026.2 (build 262) or later. The build compiles against an installed Rider and uses Rider's own JDK, set
+once for every plugin in `%USERPROFILE%\.gradle\gradle.properties`:
 
 ```
-cd rider-plugin
-gradle wrapper --gradle-version 8.10.2   # one-time; creates gradle/wrapper/gradle-wrapper.jar
-./gradlew runIde                         # launches a sandbox Rider with the plugin loaded
+riderLocalPath=C:/Users/<you>/AppData/Local/Programs/Rider
+org.gradle.java.installations.paths=C:/Users/<you>/AppData/Local/Programs/Rider/jbr
 ```
 
-`runIde` downloads the Rider build named by `platformVersion` in `gradle.properties` — set that
-to match your installed Rider (e.g. `2025.1`) and bump `sinceBuild` in `build.gradle.kts` to the
-matching branch (`2025.1` -> `251`) if you tighten compatibility.
-
-To package an installable ZIP:
+Without `riderLocalPath`, the build downloads the Rider named by `platformVersion` in `gradle.properties`.
 
 ```
-./gradlew buildPlugin        # -> build/distributions/razorforge-rider-lsp-0.1.0.zip
+gradlew buildPlugin    # -> build/distributions/razorforge-rider-<version>.zip
+gradlew runIde         # a sandbox Rider with the plugin loaded
 ```
 
-Install it in your real Rider via **Settings → Plugins → ⚙ → Install Plugin from Disk…**.
-
-## Locating RazorForge.dll
-
-`RazorForgeLspServerDescriptor.resolveServerDll()` looks, in order:
-
-1. `RAZORFORGE_LSP_DLL` — an absolute path to the DLL (set this for a Release build, or when a
-   game project references RazorForge from another location).
-2. `<project>/RazorForge/bin/Debug/net10.0/RazorForge.dll` — the repo dev build (default).
-
-The server is launched with its working directory set to the DLL's folder so the sibling
-`Standard/` stdlib is found; `FORGE_STDLIB` still overrides the stdlib path if you need it.
+Install the zip with Settings | Plugins | ⚙ | Install Plugin from Disk.
 
 ## Layout
 
 ```
-rider-plugin/
-  build.gradle.kts                     IntelliJ Platform Gradle plugin 2.x, targets Rider
-  gradle.properties                    platformVersion (which Rider to build against)
-  settings.gradle.kts
-  src/main/resources/META-INF/plugin.xml   file types + lsp serverSupportProvider registration
-  src/main/kotlin/com/razorforge/lsp/
-    Languages.kt                       RazorForge/Suflae Language + LanguageFileType
-    RazorForgeLspServerSupportProvider.kt  launches each language's server (`<Name>.dll lsp`)
+build.gradle.kts             IntelliJ Platform Gradle plugin, copies the grammar into the plugin's bundle/
+bundle/                      package.json and language-configuration.json of the TextMate bundle
+src/main/kotlin/com/razorforge/rider/
+  RazorForgeFiles.kt         TextMate bundle and file icon
+  RazorForgeLanguageServer.kt  starts the server, runs it from a copy, restarts it after a rebuild
+  RazorForgeSettings.kt      the server setting and its settings page
+src/main/resources/META-INF/plugin.xml
 ```

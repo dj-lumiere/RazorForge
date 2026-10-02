@@ -1,1 +1,1 @@
-rootProject.name = "razorforge-rider-lsp"
+rootProject.name = "razorforge-rider"
