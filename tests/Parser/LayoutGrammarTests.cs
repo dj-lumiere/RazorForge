@@ -130,6 +130,123 @@ public class LayoutGrammarTests
         Assert.Equal(expected: char.ConvertFromUtf32(utf32: 0x1F600), actual: text.Text);
     }
 
+    /// <summary>Verifies that annotation arguments take durations, memory sizes, negative numbers and tuples.</summary>
+    [Fact]
+    public void Parse_AnnotationValuesWithSuffixesAndTuples()
+    {
+        Program program = AssertParses(source: """
+                                               @case(input: (1, -2), output: -1)
+                                               @time_limit(5s)
+                                               @memory_limit(1mib)
+                                               routine add(a: S32, b: S32) -> S32
+                                                   return a + b
+                                               """);
+        List<string> annotations = GetDeclaration<RoutineDeclaration>(program: program).Annotations;
+        Assert.Equal(expected: ["case(input=(1, -2), output=-1)", "time_limit(5s)", "memory_limit(1mib)"],
+            actual: annotations);
+    }
+
+    /// <summary>
+    /// Verifies that a type header takes its clauses in any order (`relates` before `obeys`) and that a clause
+    /// continues on a deeper line after a trailing comma.
+    /// </summary>
+    [Fact]
+    public void Parse_HeaderClausesInAnyOrderWithContinuation()
+    {
+        Program program = AssertParses(source: """
+                                               entity Pair[A, B]
+                                               relates PairEmitter[A] as Iter
+                                               obeys Equatable, Hashable,
+                                                   Comparable
+                                               needs EntityType A, U64 B
+                                               needs A obeys Hashable,
+                                                   Equatable
+                                                   first: A
+                                               """);
+        var entity = GetDeclaration<EntityDeclaration>(program: program);
+        Assert.Equal(expected: 3, actual: entity.Protocols.Count);
+        Assert.Single(collection: entity.AssociatedTypes!);
+        Assert.Equal(expected: 3, actual: entity.GenericConstraints!.Count);
+        Assert.Equal(expected: 2, actual: entity.GenericConstraints[index: 2].ConstraintTypes!.Count);
+        Assert.Single(collection: entity.Members);
+    }
+
+    /// <summary>Verifies that a script's top level takes a destructuring declaration.</summary>
+    [Fact]
+    public void Parse_ScriptDestructuring()
+    {
+        Program program = AssertParses(source: """
+                                               var pair = (1, 2)
+                                               var (a, b) = pair
+                                               show(a)
+                                               """);
+        var start = GetDeclaration<RoutineDeclaration>(program: program);
+        Assert.True(condition: start.IsScriptEntry);
+        Assert.IsType<DestructuringStatement>(@object: ((BlockStatement)start.Body).Statements[index: 1]);
+    }
+
+    /// <summary>Verifies that a parenthesized `when` arm is a tuple pattern, not a lambda or a tuple value.</summary>
+    [Fact]
+    public void Parse_TuplePatternArm()
+    {
+        Program program = AssertParses(source: """
+                                               routine describe(point: (S64, S64)) -> Text
+                                                   when point
+                                                       (0, 0) => return "origin"
+                                                       (x, y) => return "other"
+                                                   return "none"
+                                               """);
+        var when = (WhenStatement)((BlockStatement)GetDeclaration<RoutineDeclaration>(program: program).Body)
+           .Statements[index: 0];
+        var origin = Assert.IsType<DestructuringPattern>(@object: when.Clauses[index: 0].Pattern);
+        Assert.IsType<LiteralPattern>(@object: origin.Bindings[index: 0].NestedPattern);
+        var other = Assert.IsType<DestructuringPattern>(@object: when.Clauses[index: 1].Pattern);
+        Assert.Equal(expected: "y", actual: other.Bindings[index: 1].BindingName);
+    }
+
+    /// <summary>Verifies that `unless` takes an `else`.</summary>
+    [Fact]
+    public void Parse_UnlessElse()
+    {
+        Program program = AssertParses(source: """
+                                               routine start()
+                                                   unless ready
+                                                       wait()
+                                                   else
+                                                       go()
+                                                   return
+                                               """);
+        var unless = (IfStatement)((BlockStatement)GetDeclaration<RoutineDeclaration>(program: program).Body)
+           .Statements[index: 0];
+        Assert.NotNull(@object: unless.ElseStatement);
+    }
+
+    /// <summary>Verifies that an `if` expression with an indented block is a grammar error.</summary>
+    [Fact]
+    public void Parse_BlockIfExpressionIsError()
+    {
+        AssertParseError(source: """
+                                 routine start()
+                                     var status = if ready
+                                         "go"
+                                     return
+                                 """);
+    }
+
+    /// <summary>Verifies that a bare lowercase name with a guard in a `when` arm is a grammar error.</summary>
+    [Fact]
+    public void Parse_UntypedBindingArmIsError()
+    {
+        AssertParseError(source: """
+                                 routine start()
+                                     var value: S32 = 2
+                                     when value
+                                         n and 0 <= n <= 3 => pass
+                                         else => pass
+                                     return
+                                 """);
+    }
+
     private static Expression Initializer(Statement statement)
     {
         return ((VariableDeclaration)((DeclarationStatement)statement).Declaration).Initializer!;

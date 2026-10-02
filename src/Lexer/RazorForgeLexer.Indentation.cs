@@ -70,6 +70,17 @@ public partial class RazorForgeLexer
             return;
         }
 
+        // A deeper line after a line that ended with a comma continues that line's list (a broken `obeys` or
+        // `needs` clause): no INDENT, no block.
+        if (_continuesAfterComma)
+        {
+            _continuesAfterComma = false;
+            if (spaces > _indentStack.Peek())
+            {
+                return;
+            }
+        }
+
         // Leading-operator line continuation: when the first token on this line is a
         // continuation operator (`and`, `or`, `but`, or a member-access `.`), the line continues the previous logical line instead of
         // starting a new statement. Drop the newline that terminated the previous line
@@ -279,6 +290,10 @@ public partial class RazorForgeLexer
         if (isSignificant)
         {
             AddToken(type: TokenType.Newline, text: "\\n");
+        }
+        else if (_hasTokenOnLine && _tokens.Count > 0 && _tokens[^1].Type == TokenType.Comma)
+        {
+            _continuesAfterComma = true;
         }
 
         _hasTokenOnLine = false;

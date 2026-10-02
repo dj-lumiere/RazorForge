@@ -30,6 +30,9 @@ public partial class RazorForgeLexer
     public List<CommentTrivia> Comments { get; } = [];
     private readonly Stack<int> _indentStack = new(collection: [0]);
     private bool _hasTokenOnLine;
+
+    /// <summary>The last line ended with a comma outside brackets, so a deeper next line continues it.</summary>
+    private bool _continuesAfterComma;
     private int _bracketDepth;
     private bool _hasDefinitions;
 
