@@ -516,7 +516,10 @@ that differ from other languages:
   `get_by_rank!(...)`.
 - Iterator adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`,
   `chain`, `distinct`, `select_many`, `min_by`, … — lazily evaluated, chainable,
-  lambdas like `x => x % 2 == 0`.
+  lambdas like `x => x % 2 == 0`. An adapter points at the collection it was made
+  from, so it is used in the statement that makes it (`each`, a terminal call such
+  as `.List()`, or an argument). Keeping one in a variable or field, or returning
+  it, is RF-S644. A range (`var r = 0 til 10`) points at nothing and can be kept.
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive; direction
   is inferred from the endpoints (`10 to 1` counts down — there is no `step -1`).
   `by N` sets a positive step magnitude (`1 to 10 by 2`); direction stays driven

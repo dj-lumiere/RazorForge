@@ -927,6 +927,14 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         Expr(expr: v.Initializer);
                     }
 
+                    if (_reporting && IsSourceIterable(type: v.Initializer?.ResolvedType) &&
+                        !v.Name.StartsWith(value: "_lf_", comparisonType: StringComparison.Ordinal))
+                    {
+                        owner.ReportSourceIterableKept(type: v.Initializer!.ResolvedType!,
+                            where: $"in '{v.Name}'",
+                            location: v.Location);
+                    }
+
                     // `each item in v` over a read token starts with `var _lf_iter_N = v.iter()`.
                     if (v.Initializer is CallExpression
                         {
@@ -956,6 +964,12 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     if (ret.Value != null)
                     {
                         Expr(expr: ret.Value);
+                        if (_reporting && IsSourceIterable(type: ret.Value.ResolvedType))
+                        {
+                            owner.ReportSourceIterableKept(type: ret.Value.ResolvedType!,
+                                where: "by returning it",
+                                location: ret.Location);
+                        }
                     }
 
                     _state = null;
@@ -1182,6 +1196,18 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
         private void Assign(Expression target, Expression value, int index, SourceLocation at)
         {
+            if (_reporting && IsSourceIterable(type: value.ResolvedType))
+            {
+                owner.ReportSourceIterableKept(type: value.ResolvedType!,
+                    where: target switch
+                    {
+                        IdentifierExpression kept => $"in '{kept.Name}'",
+                        MemberExpression m => $"in the field '{m.MemberName}'",
+                        _ => "in a slot"
+                    },
+                    location: at);
+            }
+
             if (_reporting && target is MemberExpression && RootIdentifier(expr: target) is { } root &&
                 _readElements.Contains(item: root))
             {
@@ -1383,6 +1409,53 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 End(written: path, why: why, at: call.Location);
             }
         }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="type"/> is a lazy iterable that points at the collection it was made from: an adapter
+    /// such as <c>WhereIterable[T, S]</c>, which keeps its source as a <c>Hijacked[S]</c> field, <c>S</c> being one of
+    /// its own type parameters with <c>needs S obeys Iterable[…]</c>. A range or a generator keeps its own state and
+    /// points at nothing, so it is not one.
+    /// </summary>
+    internal static bool IsSourceIterable(TypeSymbol? type)
+    {
+        TypeSymbol? def = type switch
+        {
+            EntityTypeSymbol { GenericDefinition: { } entityDef } => entityDef,
+            RecordTypeSymbol { GenericDefinition: { } recordDef } => recordDef,
+            _ => null
+        };
+        List<MemberVariableInfo>? fields = def switch
+        {
+            EntityTypeSymbol e => e.MemberVariables,
+            RecordTypeSymbol r => r.MemberVariables,
+            _ => null
+        };
+        if (def?.GenericConstraints is not { } constraints || fields == null)
+        {
+            return false;
+        }
+
+        HashSet<string> iterableParams = constraints
+                                         .Where(predicate: c => c.ConstraintType == ConstraintKind.Obeys &&
+                                                                (c.ConstraintTypes ?? []).Any(predicate: t =>
+                                                                    t.Name == "Iterable"))
+                                         .Select(selector: c => c.ParameterName)
+                                         .ToHashSet(comparer: StringComparer.Ordinal);
+        return fields.Any(predicate: f => f.Type.BareName == RuntimeContract.Hijacked &&
+                                          f.Type.TypeArguments is [GenericParameterTypeSymbol held] &&
+                                          iterableParams.Contains(item: held.Name));
+    }
+
+    private void ReportSourceIterableKept(TypeSymbol type, string where, SourceLocation location)
+    {
+        report(code: SemanticDiagnosticCode.SourceIterableKept,
+            message:
+            $"You are keeping a lazy '{type.BareName}' {where}. It points at the collection it was made from, so it is " +
+            "used in the statement that makes it: loop over it with 'each', finish it with a terminal call " +
+            "('.List()', '.first()', '.get_count()', …), or pass it straight to a routine. To use the result more than " +
+            "once, keep '.List()' of it.",
+            location: location);
     }
 
     /// <summary>Whether a token only lets its holder read: <c>Viewing[T]</c>, or the lock-held <c>Consulting[T]</c>.</summary>
