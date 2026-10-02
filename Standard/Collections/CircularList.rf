@@ -383,12 +383,26 @@ routine CircularList[T].reserve(new_capacity: U64)
 ### :returns: The element at that logical position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
+@overridable
 routine CircularList[T].getitem!(index: U64) -> T
+needs AnyType T
 needs T obeys Assignable
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
     var physical_idx = me.physical_index(index)
     return me.read_at(physical_idx).assign()
+
+### `getitem!` for a single-owner entity: the container keeps its element, so
+### the caller gets an independent duplicate, which needs the entity to declare it can be copied.
+@readonly
+@override
+routine CircularList[T].getitem!(index: U64) -> T
+needs EntityType T
+needs T obeys Copyable
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var physical_idx = me.physical_index(index)
+    return me.read_at(physical_idx).duplicate()
 
 ### Replaces the element at the given zero-based logical position.
 ### :param index: The zero-based logical position to update.

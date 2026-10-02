@@ -442,12 +442,26 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # ============================================================================
 
 @readonly
+@overridable
 routine Dict[K, V].getitem!(key: Accessing[K]) -> V
+needs AnyType V
 needs V obeys Assignable
     var slot = me.find_slot(key)
     if slot >= me.capacity
         absent
     return me.read_val_at(me.read_index(slot)).assign()
+
+### `getitem!` for a single-owner entity: the container keeps its value, so
+### the caller gets an independent duplicate, which needs the entity to declare it can be copied.
+@readonly
+@override
+routine Dict[K, V].getitem!(key: Accessing[K]) -> V
+needs EntityType V
+needs V obeys Copyable
+    var slot = me.find_slot(key)
+    if slot >= me.capacity
+        absent
+    return me.read_val_at(me.read_index(slot)).duplicate()
 
 routine Dict[K, V].setitem!(key: Accessing[K], value: V)
     if me lack key

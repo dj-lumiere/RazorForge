@@ -565,13 +565,28 @@ routine SortedDict[K, V].search_node(node: Accessing[BTreeDictNode[K, V]], key: 
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
+@overridable
 routine SortedDict[K, V].getitem!(key: Accessing[K]) -> V
+needs AnyType V
 needs V obeys Assignable
     if me.root is None
         throw KeyNotFoundError(key: key.represent())
     danger
         var root_ref = me.root!!.as_entity()
         return me.get_from_node(node: root_ref, key: key).assign()
+
+### `getitem!` for a single-owner entity: the container keeps its value, so
+### the caller gets an independent duplicate, which needs the entity to declare it can be copied.
+@readonly
+@override
+routine SortedDict[K, V].getitem!(key: Accessing[K]) -> V
+needs EntityType V
+needs V obeys Copyable
+    if me.root is None
+        throw KeyNotFoundError(key: key.represent())
+    danger
+        var root_ref = me.root!!.as_entity()
+        return me.get_from_node(node: root_ref, key: key).duplicate()
 
 ### Descends `node` to retrieve the value for `key`, throwing if not found.
 ### :param node: The subtree root to search.

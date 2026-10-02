@@ -65,7 +65,9 @@ needs U64 N
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @readonly
 @inline
+@overridable
 routine Array[T, N].getitem!(index: U64) -> T
+needs AnyType T
 needs T obeys Assignable
     if index >= N
         throw IndexOutOfBoundsError(index: index, count: me.count())
@@ -73,6 +75,24 @@ needs T obeys Assignable
     danger
         var element: T = LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
         return element.assign()
+
+### `getitem` for a single-owner entity element: the array keeps its element, so the caller gets an independent
+### duplicate, which needs the entity to declare it can be copied. (A call or field access on `cells[0]` works on
+### the element in place through `modify_at`/`view_at`, and `var c = cells[0]` holds a read token on it.)
+### :param index: The zero-based position to read.
+### :returns: A duplicate of the element stored at that position.
+### :throws: {IndexOutOfBoundsError} if `index >= N`.
+@readonly
+@inline
+@override
+routine Array[T, N].getitem!(index: U64) -> T
+needs EntityType T
+needs T obeys Copyable
+    if index >= N
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        var element: T = LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
+        return element.duplicate()
 
 ### Returns the element at `index` as the array holds it, without bounds checking and without a holder of
 ### its own. Only call this when the index is already proven to be in range.
