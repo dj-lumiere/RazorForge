@@ -6,10 +6,10 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for RF-S639: while an access token is in use (its `using` block, or the one call it is passed
-/// to inline), the object it was taken from must stay put. Reassigning or stealing the token's source
-/// there would leave the token pointing at freed memory, so it is rejected. Other bindings, and the
-/// source itself once the token is done, stay free.
+/// Tests for token sources. A token remembers the object it was taken from. Reassigning or stealing that
+/// object ends the token, and using the token afterwards is RF-S643 at the use. Inside one call, handing over
+/// a token while the same call moves its source out is RF-S639 at the call. Other bindings, and the source
+/// itself once the token is no longer used, stay free.
 /// </summary>
 public class TokenSourceFreezeTests
 {
@@ -42,9 +42,9 @@ public class TokenSourceFreezeTests
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "You are trying to reassign 'a'");
+            expectedErrorSubstring: "You are using the token 'm'");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.TokenSourceReplaced);
+            filter: e => e.Code == SemanticDiagnosticCode.TokenUsedAfterSourceChanged);
     }
 
     [Fact]
@@ -60,9 +60,9 @@ public class TokenSourceFreezeTests
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "You are trying to steal 'a'");
+            expectedErrorSubstring: "You are using the token 'v'");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.TokenSourceReplaced);
+            filter: e => e.Code == SemanticDiagnosticCode.TokenUsedAfterSourceChanged);
     }
 
     [Fact]

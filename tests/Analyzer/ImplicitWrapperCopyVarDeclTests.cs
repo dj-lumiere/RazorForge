@@ -121,9 +121,9 @@ public class ImplicitWrapperCopyVarDeclTests
                 e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>`var v = a.view()` is rejected: Viewing[T] is a scoped token that can't escape.</summary>
+    /// <summary>`var v = a.view()` names the token for the rest of its block.</summary>
     [Fact]
-    public void Analyze_VarDecl_ViewedFromCall_IsError()
+    public void Analyze_VarDecl_ViewedFromCall_IsAllowed()
     {
         string source = """
                         entity Node
@@ -136,16 +136,12 @@ public class ImplicitWrapperCopyVarDeclTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e =>
-                e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
-                e.Message.Contains(value: "Viewing",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(collection: result.Errors);
     }
 
-    /// <summary>`var g = a.modify()` is rejected: Modifying[T] is a scoped token that can't escape.</summary>
+    /// <summary>`var g = a.modify()` names the token for the rest of its block.</summary>
     [Fact]
-    public void Analyze_VarDecl_GraspedFromCall_IsError()
+    public void Analyze_VarDecl_GraspedFromCall_IsAllowed()
     {
         string source = """
                         entity Node
@@ -158,11 +154,72 @@ public class ImplicitWrapperCopyVarDeclTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>A token used after its source was replaced is RF-S643, reported at the use.</summary>
+    [Fact]
+    public void Analyze_VarDecl_TokenUsedAfterSourceReplaced_IsError()
+    {
+        string source = """
+                        import IO/Console
+
+                        entity Node
+                            value: S64
+
+                        routine start()
+                            var a = Node(value: 1)
+                            var v = a.view()
+                            a = Node(value: 2)
+                            show(f"{v.value}")
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e =>
-                e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
-                e.Message.Contains(value: "Modifying",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
+            filter: e => e.Code == Builder.Diagnostics.SemanticDiagnosticCode.TokenUsedAfterSourceChanged);
+    }
+
+    /// <summary>Replacing the source after the token's last use is fine: the token simply ends there.</summary>
+    [Fact]
+    public void Analyze_VarDecl_SourceReplacedAfterLastUse_IsAllowed()
+    {
+        string source = """
+                        import IO/Console
+
+                        entity Node
+                            value: S64
+
+                        routine start()
+                            var a = Node(value: 1)
+                            var v = a.view()
+                            show(f"{v.value}")
+                            a = Node(value: 2)
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>A token variable can be pointed at another object of the same type.</summary>
+    [Fact]
+    public void Analyze_VarDecl_TokenVariableRebound_IsAllowed()
+    {
+        string source = """
+                        entity Node
+                            value: S64
+
+                        routine start()
+                            var a = Node(value: 1)
+                            var b = Node(value: 2)
+                            var v = a.view()
+                            v = b.view()
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
     }
 
     /// <summary>Inline chained access `a.view().value` is accepted — desugars as a scoped `using`.</summary>

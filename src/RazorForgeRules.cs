@@ -1,6 +1,8 @@
 using System.Reflection;
 using Builder.Frontends;
 using Builder.Tokenizer;
+using Builder.Verification;
+using RazorForge.Checks;
 using RazorForge.Lexer;
 using TypeModel.Enums;
 
@@ -64,6 +66,13 @@ public sealed class RazorForgeRules : LanguageRules
     public override string ScriptVariableAdvice(string name)
     {
         return "Pass it in as an argument. RazorForge has no module-level mutable state.";
+    }
+
+    /// <summary>Access tokens are RazorForge's: their lifetimes are checked here (see
+    /// <see cref="TokenLifetimeChecker"/>).</summary>
+    internal override IUserBodyCheck CreateUserBodyCheck(DiagnosticReporter report)
+    {
+        return new TokenLifetimeChecker(report: report);
     }
 
     /// <summary>The informational version of <paramref name="assembly"/> (its csproj <c>&lt;Version&gt;</c>)

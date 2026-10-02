@@ -40,17 +40,18 @@ public class KeptEntityReadTests
         return e.Code == SemanticDiagnosticCode.BareEntityAssignment;
     }
 
+    /// <summary>A new variable bound to an entity element holds a read token on it (`boxes.view_at(index: 0)`),
+    /// so it makes no second owner.</summary>
     [Fact]
-    public void Analyze_BindingAnEntityElement_Errors()
+    public void Analyze_BindingAnEntityElement_IsReadToken()
     {
-        Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
-                                    routine start()
-                                        var boxes = List[Box]()
-                                        boxes.add_last(value: Box(n: 1))
-                                        var b = boxes[0]
-                                        return
-                                    """,
-            expected: "You are keeping in 'b' a 'Box' that its container still owns"));
+        Assert.Empty(collection: AnalyzeSa(source: Prelude + """
+                                                       routine start()
+                                                           var boxes = List[Box]()
+                                                           boxes.add_last(value: Box(n: 1))
+                                                           var b = boxes[0]
+                                                           return
+                                                       """).Errors);
     }
 
     [Fact]
@@ -168,10 +169,10 @@ public class KeptEntityReadTests
     public void Analyze_CopyableElementMessageOffersDuplicate()
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
+                                    routine first_row(grid: Viewing[List[List[S64]]]) -> List[S64]
+                                        return grid[0]
+
                                     routine start()
-                                        var grid = List[List[S64]]()
-                                        grid.add_last(value: List[S64]())
-                                        var row = grid[0]
                                         return
                                     """,
             expected: "make an explicit copy with '.duplicate()'"));

@@ -326,12 +326,35 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
   owns it, torn down at scope exit). A routine handing back an entity it does NOT
   own (e.g. a container's element) must return an access token, never a bare
   entity — else the caller becomes a second owner and double-frees.
-- **Access tokens** (RF's answer to "borrow" — never call them borrows). They are
-  scope-bound: they cannot be returned, stored, or bound with `var x = a.view()`.
-  Use them inline for a single call, or `using ... as` when a name is needed.
-  While a token is in use (its `using` block, or the one call it is passed to),
-  the entity it was taken from cannot be reassigned or `steal`-moved (RF-S639):
-  that would leave the token pointing at freed memory.
+- **Access tokens** (RF's answer to "borrow" — never call them borrows). A token
+  remembers the object it was taken from (its SOURCE), and every rule below is
+  checked at build time:
+  - Use one inline, keep it in a variable (`var v = a.view()`,
+    `var m = a.modify()`, re-pointable to another object of the same type), or
+    open it with `using ... as`. Tokens are never stored in fields or variants.
+  - The source is free to change. Replacing it (`a = …`, `h.inner = …`), moving
+    it out (`steal a`), leaving its scope, or calling a routine that replaces it
+    (`h.reset()` whose body assigns `me.inner`, followed through its calls) ENDS
+    the token. Using an ended token is RF-S643, reported at the use. A change that
+    cannot reach the source (`h.count = 1`, `h.bump()` touching only `count`)
+    does not end it.
+  - A call that can replace the source of a token handed to that same call is
+    RF-S639 (`h.replace_with(t: h.inner.view())`).
+  - A token parameter takes the entity itself: `total(items: xs)` passes
+    `xs.view()` for `Viewing[T]` (a temporary works too), `grow(items: xs)` passes
+    `xs.modify()` for `Modifying[T]`, and `Accessing[T]`/`Controlling[T]` take
+    `.view()`/`.modify()` the same way.
+  - A routine may return a token taken from `me` or from a parameter the caller
+    keeps owning (a token parameter, or an `Accessing`/`Controlling` one):
+    `return me.inner.view()`, or `peek(h: Viewing[Holder])` returning
+    `h.inner.view()`. Every return takes it from the same parameter, never from a
+    local, a temporary, or an entity parameter the routine owns (RF-S600). The
+    caller's token has that argument as source.
+  - An entity element read into a variable is a read token on the element:
+    `var b = boxes[0]` holds `boxes.view_at(index: 0)`. Anything that can add to
+    or remove from `boxes` ends it. Write through `boxes[0].n = 5` or take
+    `boxes.modify_at(index: 0)`.
+  - The lock tokens (`Consulting`/`Amending`) are always opened with `using`.
   - **`Viewing[T]` / `Modifying[T]`** — read / write intent on a directly-owned
     entity. Produced by `a.view()` / `a.modify()`.
   - **`Consulting[T]` / `Amending[T]`** — read / write intent on the inner value of
@@ -487,9 +510,8 @@ that differ from other languages:
   `xs.skip(a).take(n)` instead — copy-vs-view is spelled by which you call.
 - `List[T]`, `Dict[K, V]`, `Set[T]`, `CircularList[T]`, and sorted collections are
   entities. Do not pass a container as a bare parameter when read-only access is
-  enough; use `Viewing[List[T]]` and pass `items.view()` inline for one call.
-  Use `using items.view() as v` only when the token needs a name or spans
-  multiple statements. Do not write `var v = items.view()`.
+  enough; declare the parameter `Viewing[List[T]]` and pass the container
+  (`largest(items: xs)`). Bind `var v = items.view()` when the token needs a name.
 - `SortedList`/`SortedSet` have **no positional indexing** — rank access is
   `get_by_rank!(...)`.
 - Iterator adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`,
@@ -529,13 +551,14 @@ the builder writes through a copy and stores it back.
 
 **An entity element or field cannot be taken by a plain read.** `boxes[0]` and
 `p.a` read an entity their container still owns, so putting one anywhere that
-owns what it holds (`var x = boxes[0]`, `x = boxes[0]`, `p.b = boxes[0]`,
+owns what it holds (`x = boxes[0]`, `p.b = boxes[0]`,
 `take(b: boxes[0])`, `holder.add_last(value: boxes[0])`, `return boxes[0]`,
 `(boxes[0], 1)`) is RF-S413: it would make two owners of one entity (a tuple
 owns its items, so a variable goes in with `steal` too: `(steal z, 1)`). Take an
 element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
 explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
-where it sits.
+where it sits. A new variable (`var x = boxes[0]`) is the exception: it holds a
+read token on the element (see access tokens).
 
 ## 10b. Filesystem and paths (`IO/File`, `IO/FileSystem`)
 
