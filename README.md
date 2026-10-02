@@ -115,10 +115,7 @@ git clone https://github.com/dj-lumiere/Anvila.git
 git clone https://github.com/dj-lumiere/Ingrid.git
 git clone https://github.com/dj-lumiere/RazorForge.git
 git clone https://github.com/dj-lumiere/Suflae.git
-
-# The native runtime builds against libuv and libco, which are not vendored.
-git clone --depth 1 https://github.com/libuv/libuv.git Ingrid/native/libuv
-git clone --depth 1 https://github.com/higan-emu/libco.git Ingrid/native/libco
+git clone https://github.com/dj-lumiere/Tessera.git   # the Tessera builder compiles part of the native runtime
 
 dotnet build RazorForge/RazorForge.csproj      # also builds the native runtime
 dotnet test RazorForge/tests/RazorForge.Tests.csproj   # optional
