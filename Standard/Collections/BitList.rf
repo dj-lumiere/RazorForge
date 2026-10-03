@@ -39,9 +39,6 @@ obeys Iterable[Bool], MutableIndexable[Bool], Sized, ListLiteral[Bool]
     ### Stores the number of bits that can be appended before growth is required.
     ### Capacity is tracked in bits rather than words.
     secret capacity: U64  # Total bit capacity (in bits, not words)
-    ### How many `each` loops and in-place element accesses are using the element positions right now.
-    ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
-    secret shape_users: U64
 
 ### Represents an iterator over the logical bits stored in a `BitList`.
 ### The iterator walks the packed word buffer in ascending logical index order.
@@ -63,7 +60,7 @@ obeys Emittable[Bool]
 ### :returns: An empty `BitList`.
 routine BitList() -> BitList
     # Create empty bit list with default capacity
-    return BitList(data: hijacked_none[U64](), count: 0u64, capacity: 0u64, shape_users: 0u64)
+    return BitList(data: hijacked_none[U64](), count: 0u64, capacity: 0u64)
 
 ### Creates a bit list containing exactly the given `elements`, in order. Variadic constructor behind the
 ### `[a, b, c]` list-literal syntax (the `ListLiteral` opt-in).
@@ -89,7 +86,7 @@ routine BitList(capacity: U64) -> BitList
         var data_ptr = Hijacked[U64](C::rf_allocate_dynamic_uninit(word_size *% 8u64))
         # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
         # and mid-word appends only read bits we've already written ourselves.
-        return BitList(data: data_ptr, count: 0u64, capacity: capacity, shape_users: 0u64)
+        return BitList(data: data_ptr, count: 0u64, capacity: capacity)
 
 # ============================================================================
 # Internal Helpers
@@ -667,28 +664,4 @@ dangerous routine BitList.destroy()
 dangerous routine BitList.roam_free()
     me.data.invalidate()
     me.hijack().invalidate()
-    return
-
-# ============================================================================
-# Shape use (keeps the element positions still for `each` loops and in-place element access)
-# ============================================================================
-
-### Crashes when an `each` loop over this bit list, or a call on one of its elements, is still running. The
-### builder calls this at the start of every `@reshaping` routine (one that can add, remove, or move
-### elements), because such a change would leave that loop or call unsure where the elements are.
-@readonly
-routine BitList.require_shape_free!()
-    if me.shape_users != 0u64
-        throw ReshapingWhileInUseError(container: "bit list")
-    return
-
-### Marks one more `each` loop or element call as using this bit list's element positions. Only the builder
-### calls this, paired with `end_shape_use` when that use ends.
-dangerous routine BitList.begin_shape_use()
-    me.shape_users = me.shape_users +% 1u64
-    return
-
-### Ends one use started by `begin_shape_use`.
-dangerous routine BitList.end_shape_use()
-    me.shape_users = me.shape_users -% 1u64
     return

@@ -49,9 +49,6 @@ obeys Iterable[T], MutableIndexable[T], Sized, Container, Equatable,
     secret count: U64
     ### Stores the total number of elements that fit without reallocating.
     secret capacity: U64
-    ### How many `each` loops and in-place element accesses are using the element positions right now.
-    ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
-    secret shape_users: U64
 
 # ============================================================================
 # Iterable protocol support
@@ -73,7 +70,7 @@ obeys Emittable[T]
 # Creators
 
 routine List[T]() -> List[T]
-    return List[T](data: hijacked_none[T](), count: 0u64, capacity: 0u64, shape_users: 0u64)
+    return List[T](data: hijacked_none[T](), count: 0u64, capacity: 0u64)
 
 ### Creates an empty list with storage reserved for at least `capacity` elements.
 ### No elements are initialized, but the backing allocation is made immediately to
@@ -87,7 +84,6 @@ routine List[T](capacity: U64) -> List[T]
             data: hijacked_from[T](ptr),
             count: 0u64,
             capacity: capacity,
-            shape_users: 0u64,
         )
 
 ### Creates a list of `count` copies of `fill_value`. The backing buffer is sized
@@ -110,7 +106,7 @@ needs T obeys Assignable
         while i < count
             data.offset(t_size *% i).poke(fill_value)
             i = i +% 1u64
-        return List[T](data: data, count: count, capacity: count, shape_users: 0u64)
+        return List[T](data: data, count: count, capacity: count)
 
 ### Builds a list containing exactly the given `elements`, in order. This static routine is the mechanism
 ### behind the `[a, b, c]` list-literal syntax (the `ListLiteral` opt-in): the builder lowers a list
@@ -937,28 +933,4 @@ dangerous routine List[T].roam_trace()
 dangerous routine List[T].roam_free()
     me.data.invalidate()
     me.hijack().invalidate()
-    return
-
-# ============================================================================
-# Shape use (keeps the element positions still for `each` loops and in-place element access)
-# ============================================================================
-
-### Crashes when an `each` loop over this list, or a call on one of its elements, is still running. The
-### builder calls this at the start of every `@reshaping` routine (one that can add, remove, or move
-### elements), because such a change would leave that loop or call unsure where the elements are.
-@readonly
-routine List[T].require_shape_free!()
-    if me.shape_users != 0u64
-        throw ReshapingWhileInUseError(container: "list")
-    return
-
-### Marks one more `each` loop or element call as using this list's element positions. Only the builder
-### calls this, paired with `end_shape_use` when that use ends.
-dangerous routine List[T].begin_shape_use()
-    me.shape_users = me.shape_users +% 1u64
-    return
-
-### Ends one use started by `begin_shape_use`.
-dangerous routine List[T].end_shape_use()
-    me.shape_users = me.shape_users -% 1u64
     return

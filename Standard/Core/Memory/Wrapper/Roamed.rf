@@ -109,6 +109,31 @@ routine Roamed[T].is_escaped() -> Bool
         var ctrl = Hijacked[RoamController[T]](me).as_entity()
         return ctrl.is_escaped()
 
+### Crashes when an `each` loop over this entity, or a call on one of its elements, is still running. Suflae's
+### builder calls this before every call through the handle that can add, remove or move elements (a
+### `@reshaping` routine), since the loop or the call could no longer trust where the elements are. A change
+### hidden behind other calls is caught too: it reaches the entity through a handle as well.
+@readonly
+routine Roamed[T].require_shape_free!()
+    danger
+        var ctrl = Hijacked[RoamController[T]](me).as_entity()
+        if ctrl.shape_users != 0_u64
+            throw ReshapingWhileInUseError(container: T.type_name())
+    return
+
+### Marks one more `each` loop or element call as using this entity's element positions. Only the builder
+### calls this, paired with `end_shape_use` when that use ends.
+dangerous routine Roamed[T].begin_shape_use()
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    ctrl.shape_users = ctrl.shape_users +% 1_u64
+    return
+
+### Ends one use started by `begin_shape_use`.
+dangerous routine Roamed[T].end_shape_use()
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    ctrl.shape_users = ctrl.shape_users -% 1_u64
+    return
+
 ### Enters the access lock: a no-op in LOCAL mode, a reentrant task-keyed acquire in ESCAPED mode.
 dangerous routine Roamed[T].lock_enter()
     var ctrl = Hijacked[RoamController[T]](me).as_entity()
