@@ -38,6 +38,7 @@ private val LOG = logger<RazorForgeLanguageServer>()
  */
 class RazorForgeLanguageServer : LspIntegrationProvider {
     override fun fileOpened(project: Project, file: VirtualFile, clientStarter: LspIntegrationProvider.LspClientStarter) {
+        RazorForgeLanguage.ensureRegistered()
         if (file.isRazorForge()) {
             clientStarter.ensureClientStarted(RazorForgeClientDescriptor(project))
         }
@@ -57,6 +58,7 @@ class RazorForgeLanguageServer : LspIntegrationProvider {
  */
 internal class RazorForgeFileOpenListener(private val project: Project) : FileEditorManagerListener {
     override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+        RazorForgeLanguage.ensureRegistered()
         if (file.isRazorForge()) {
             LspClientManager.getInstance(project)
                 .ensureClientStarted(RazorForgeLanguageServer::class.java, RazorForgeClientDescriptor(project))
@@ -90,8 +92,10 @@ private class RazorForgeClientDescriptor(project: Project) :
         } else {
             GeneralCommandLine(staged.toString(), "lsp")
         }
-        // The server finds its standard library next to itself, under Standard/.
+        // The server finds its standard library next to itself, under Standard/. It names a stdlib location by the
+        // source the build copied it from, which it finds from the build folder this copy was made of.
         return command.withWorkDirectory(staged.parent.toFile()).withCharset(StandardCharsets.UTF_8)
+            .withEnvironment("ANVILA_BUILD_DIR", server.parent.toString())
     }
 }
 

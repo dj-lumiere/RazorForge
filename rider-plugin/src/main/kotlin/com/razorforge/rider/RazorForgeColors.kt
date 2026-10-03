@@ -25,6 +25,8 @@ object RazorForgeColors {
     val MODULE = key("RAZORFORGE_MODULE", TextAttributesKey.find("ReSharper.NAMESPACE_IDENTIFIER"))
     val PRESET = key("RAZORFORGE_PRESET", DefaultLanguageHighlighterColors.CONSTANT)
     val OPERATOR = key("RAZORFORGE_OPERATOR", DefaultLanguageHighlighterColors.OPERATION_SIGN)
+    val DOC_TAG = key("RAZORFORGE_DOC_TAG", DefaultLanguageHighlighterColors.DOC_COMMENT_TAG)
+    val DOC_VALUE = key("RAZORFORGE_DOC_VALUE", DefaultLanguageHighlighterColors.DOC_COMMENT_TAG_VALUE)
     val ANNOTATION = key("RAZORFORGE_ANNOTATION", DefaultLanguageHighlighterColors.METADATA)
 
     private fun key(name: String, csharp: TextAttributesKey) = TextAttributesKey.createTextAttributesKey(name, csharp)
@@ -41,6 +43,8 @@ internal object RazorForgeSemanticTokens : LspSemanticTokensSupport() {
         "namespace" to RazorForgeColors.MODULE,
         "constant" to RazorForgeColors.PRESET,
         "operator" to RazorForgeColors.OPERATOR,
+        "docTag" to RazorForgeColors.DOC_TAG,
+        "docValue" to RazorForgeColors.DOC_VALUE,
         "decorator" to RazorForgeColors.ANNOTATION,
     )
 
@@ -61,6 +65,8 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
         AttributesDescriptor("Module", RazorForgeColors.MODULE),
         AttributesDescriptor("Preset", RazorForgeColors.PRESET),
         AttributesDescriptor("Operator", RazorForgeColors.OPERATOR),
+        AttributesDescriptor("Doc comment//Field (:param, :returns)", RazorForgeColors.DOC_TAG),
+        AttributesDescriptor("Doc comment//Field name, reference", RazorForgeColors.DOC_VALUE),
         AttributesDescriptor("Annotation", RazorForgeColors.ANNOTATION),
     )
 
