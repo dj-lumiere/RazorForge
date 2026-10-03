@@ -1,0 +1,25 @@
+module Tests/Stdlib/CstrDecodeApi
+
+import IO/Console
+# Text(from: CStr) decodes UTF-8, and a malformed sequence becomes one U+FFFD per offending lead byte.
+routine codepoints(text: Text) -> Text
+    var out = ""
+    each c in text
+        out = f"{out} {c.codepoint()}"
+    return out
+
+routine decode(label: Text, bytes: List[Byte])
+    var text = Text(from: CStr(from: Bytes(from_list: bytes.duplicate())))
+    show(f"{label}: count {text.count()}, code points{codepoints(text: text)}")
+    return
+
+routine start()
+    decode(label: "ascii", bytes: [Byte(0x41u8), Byte(0x42u8)])
+    decode(label: "korean", bytes: [Byte(0xEDu8), Byte(0x95u8), Byte(0x9Cu8)])
+    decode(label: "four-byte", bytes: [Byte(0xF0u8), Byte(0x9Fu8), Byte(0x98u8), Byte(0x80u8)])
+    decode(label: "stray continuation", bytes: [Byte(0x41u8), Byte(0x80u8), Byte(0x42u8)])
+    decode(label: "overlong", bytes: [Byte(0xC0u8), Byte(0x80u8)])
+    decode(label: "surrogate", bytes: [Byte(0xEDu8), Byte(0xA0u8), Byte(0x80u8)])
+    decode(label: "past U+10FFFF", bytes: [Byte(0xF4u8), Byte(0x90u8), Byte(0x80u8), Byte(0x80u8)])
+    decode(label: "truncated", bytes: [Byte(0x41u8), Byte(0xE2u8), Byte(0x82u8)])
+    return
