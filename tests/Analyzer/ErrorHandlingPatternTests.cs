@@ -89,7 +89,7 @@ public class ErrorHandlingPatternTests
                         routine test(value: Lookup[S32])
                             when value
                                 is None => pass
-                                is Crashable err => pass
+                                is Crashables err => pass
                                 else v => pass
                             return
                         """;
@@ -110,7 +110,7 @@ public class ErrorHandlingPatternTests
         string source = """
                         routine test(value: Check[None])
                             when value
-                                is Crashable err => pass
+                                is Crashables err => pass
                                 is None => pass
                             return
                         """;

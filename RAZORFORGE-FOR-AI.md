@@ -41,8 +41,8 @@ When unsure, consult ground truth in the repo/package:
    crashes LOUDLY on failure. To RECOVER, prefix the whole expression with a
    keyword and match the carrier with `when`:
    `try EXPR` → `Maybe[T]` (present | absent, no error kept);
-   `grab EXPR` → `Check[T]` (T | the caught `Crashable`);
-   `lookup EXPR` → `Lookup[T]` (T | absent | `Crashable`).
+   `grab EXPR` → `Check[T]` (T | the caught `Crashables`);
+   `lookup EXPR` → `Lookup[T]` (T | absent | `Crashables`).
    The keyword composes EVERY failable call inside the expression — AND every
    checked-arithmetic operator (`try a + b` recovers the overflow, `grab a // b` the
    divide-by-zero) — short-circuiting to the carrier on the first failure. It takes
@@ -192,7 +192,7 @@ binding RazorForge has.
   `var x = none`, `var x: S64 = none`, `foo(none)` into a non-carrier slot are all
   errors — `none` has no free-standing type.
 - Absent is matched by `is None` on `Maybe[T]` / `Lookup[T]` / a variant's zero
-  tag. `Check[T]` has no absent state (only `Crashable | T`).
+  tag. `Check[T]` has no absent state (only `Crashables | T`).
 
 ## 4. Variables and operators
 
@@ -261,7 +261,7 @@ when n
     else => return "many"
 
 when v
-    is Crashable e => show("failed")
+    is Crashables e => show("failed")
     is S64 x       => show(f"ok: {x}")     # type pattern with binding
 ```
 
@@ -286,8 +286,8 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
 
 - Call with named args: `add(a: 1, b: 2)`. Recover a failable call with a keyword:
   `try get_text(n: 0)` → `Maybe[Text]`/`Text?`; `grab get_text(n: 0)` → `Check[Text]`
-  (keeps the `Crashable`); `lookup get_text(n: 0)` → `Lookup[Text]` (T | absent |
-  `Crashable`). A bare `get_text(n: 0)` crashes loudly on failure.
+  (keeps the `Crashables`); `lookup get_text(n: 0)` → `Lookup[Text]` (T | absent |
+  `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
   the constructor `T(...)`, `destroy`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`

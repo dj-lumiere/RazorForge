@@ -358,11 +358,11 @@ public class PatternMatchingTests
     public void Parse_WhenTypeWithComplexGuard()
     {
         string source = """
-                        routine handle(error: Crashable)
+                        routine handle(error: Crashables)
                             when error
                                 is NetworkError e and e.code == 404 => show("Not found")
                                 is NetworkError e and e.code >= 500 => show("Server error")
-                                is Crashable e => show(f"Error: {e.message()}")
+                                is Crashables e => show(f"Error: {e.message()}")
                             return
                         """;
 
@@ -398,7 +398,7 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Check[User])
                             when result
-                                is Crashable err => show(f"Error: {err.message()}")
+                                is Crashables err => show(f"Error: {err.message()}")
                                 else user => show(f"Found: {user.name}")
                             return
                         """;
@@ -416,7 +416,7 @@ public class PatternMatchingTests
                             when result
                                 is FileNotFoundError e => show(f"Not found: {e.path}")
                                 is PermissionError e => show(f"Access denied: {e.path}")
-                                is Crashable e => show(f"Unknown error: {e.message()}")
+                                is Crashables e => show(f"Unknown error: {e.message()}")
                                 else file => file.read()
                             return
                         """;
@@ -432,7 +432,7 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Lookup[User])
                             when result
-                                is Crashable e => show(f"Error: {e.message()}")
+                                is Crashables e => show(f"Error: {e.message()}")
                                 is None => show("User not found")
                                 else user => show(f"Found: {user.name}")
                             return
@@ -451,7 +451,7 @@ public class PatternMatchingTests
                             when result
                                 is ValidationError e => stop(f"Invalid config name: {e.message}")
                                 is IOError e => show(f"IO error: {e.message}")
-                                is Crashable e => breach()
+                                is Crashables e => breach()
                                 is None => use_default_config()
                                 else config => apply(config)
                             return
@@ -530,7 +530,7 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Check[S32])
                             when result
-                                is Crashable => absent
+                                is Crashables => absent
                                 else value => value
                             return
                         """;
@@ -656,7 +656,7 @@ public class PatternMatchingTests
         string source = """
                         routine process(result: Lookup[Shape])
                             when result
-                                is Crashable e =>
+                                is Crashables e =>
                                     log_error(e)
                                     return
                                 is None =>
