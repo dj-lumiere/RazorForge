@@ -25,7 +25,7 @@ public class StabilizationPlanTests
                             @readonly
                             routine Me.sum(other: Me) -> Me
 
-                        record Total[T] obeys Summable
+                        bundle Total[T] obeys Summable
                             value: T
 
                         @readonly
@@ -51,7 +51,7 @@ public class StabilizationPlanTests
     {
         // Owner-level T and memberRoutine-level U should both resolve
         string source = """
-                        record Store[T]
+                        bundle Store[T]
                             item: T
 
                         routine Store[T].transform[U](func_val: U) -> U
@@ -75,7 +75,7 @@ public class StabilizationPlanTests
     {
         // Return type T should resolve to the owner's type argument
         string source = """
-                        record Slot[T]
+                        bundle Slot[T]
                             data: T
 
                         routine Slot[T].peek() -> T
@@ -102,7 +102,7 @@ public class StabilizationPlanTests
                             @readonly
                             routine Me.duplicate() -> Me
 
-                        record Box[T] obeys Clonable
+                        bundle Box[T] obeys Clonable
                             value: T
 
                         @readonly
@@ -136,7 +136,7 @@ public class StabilizationPlanTests
                             @readonly
                             routine Me.label() -> Text
 
-                        record Pair[T] obeys Showable
+                        bundle Pair[T] obeys Showable
                             first: T
                             second: T
 
@@ -203,7 +203,7 @@ public class StabilizationPlanTests
     {
         // using on a generic Enterable type (self pass-through binds the resource itself)
         string source = """
-                        record Guard[T] obeys Enterable
+                        bundle Guard[T] obeys Enterable
                             resource: T
 
                         routine Guard[T].enter() -> Guard[T]
@@ -231,10 +231,10 @@ public class StabilizationPlanTests
     public void P3_UsingWithNestedGenericReturn_BindsResolvedType()
     {
         string source = """
-                        record Box[T]
+                        bundle Box[T]
                             value: T
 
-                        record Guard[T] obeys Enterable
+                        bundle Guard[T] obeys Enterable
                             resource: T
 
                         routine Guard[T].enter() -> Guard[T]
@@ -327,7 +327,7 @@ public class StabilizationPlanTests
     {
         // Body matching on generic owner should use resolved type names
         string source = """
-                        record Stack[T]
+                        bundle Stack[T]
                             top: T
 
                         routine Stack[T].push(item: T) -> Stack[T]
@@ -355,7 +355,7 @@ public class StabilizationPlanTests
     public void P4_GenericOwnerOverloads_SameArityDifferentTypes_MatchCorrectBody()
     {
         string source = """
-                        record Buffer[T]
+                        bundle Buffer[T]
                             value: T
                             ready: Bool
 
@@ -384,7 +384,7 @@ public class StabilizationPlanTests
     public void P4_CreateOverload_WithOwnerTypedParameter_MatchesCorrectBody()
     {
         string source = """
-                        record Wrapper[T]
+                        bundle Wrapper[T]
                             value: T
 
                         routine Wrapper[T].$create(from: T) -> Wrapper[T]
@@ -417,7 +417,7 @@ public class StabilizationPlanTests
         // Const generic value N should not be rewritten in AST
         // Codegen resolves via _typeSubstitutions
         string source = """
-                        record Wrapper[T]
+                        bundle Wrapper[T]
                             value: T
 
                         routine Wrapper[T].get() -> T
@@ -446,7 +446,7 @@ public class StabilizationPlanTests
         // Nested generics like Wrapper[Wrapper[S32]] should resolve
         // through GenericDefinition, not Name.Contains('[') heuristics
         string source = """
-                        record Wrapper[T]
+                        bundle Wrapper[T]
                             inner: T
 
                         routine Wrapper[T].unwrap() -> T
@@ -471,14 +471,14 @@ public class StabilizationPlanTests
     public void P6_NestedGenericMemberType_ReturnsResolvedInnerType()
     {
         string source = """
-                        record Node[T]
+                        bundle Node[T]
                             item: T
 
                         @readonly
                         routine Node[T].hash() -> U64
                             return 0u64
 
-                        record Holder[T]
+                        bundle Holder[T]
                             node: Node[T]
 
                         @readonly
@@ -514,7 +514,7 @@ public class StabilizationPlanTests
                         protocol Clearable
                             routine Me.clear() -> Me
 
-                        record Buffer[T] obeys Clearable
+                        bundle Buffer[T] obeys Clearable
                             item: T
                             size: S32
 

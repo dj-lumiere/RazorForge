@@ -119,7 +119,7 @@ public class TypeResolutionTests
     public void Analyze_GenericRecord_RegistersWithTypeParameters()
     {
         string source = """
-                        record Container[T]
+                        bundle Container[T]
                             value: T
                         """;
 
@@ -318,7 +318,7 @@ public class TypeResolutionTests
                             @readonly
                             routine Me.$cmp(other: Me) -> S32
 
-                        record Wrapper[T]
+                        bundle Wrapper[T]
                         needs T obeys Comparable
                             value: T
                         """;
@@ -334,7 +334,7 @@ public class TypeResolutionTests
     public void Analyze_UnknownTypeParameter_ReportsError()
     {
         string source = """
-                        record Container[T]
+                        bundle Container[T]
                         needs X obeys Comparable
                             value: T
                         """;
@@ -890,7 +890,7 @@ public class TypeResolutionTests
     {
         // S191: Void memberRoutine call on generic resolution should not produce error type
         string source = """
-                        record Container[T]
+                        bundle Container[T]
                             value: T
 
                         routine Container.reset()
@@ -914,7 +914,7 @@ public class TypeResolutionTests
     {
         // memberRoutine on generic type should be found through the generic definition
         string source = """
-                        record Box[T]
+                        bundle Box[T]
                             value: T
 
                         @readonly

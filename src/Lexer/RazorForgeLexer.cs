@@ -146,6 +146,7 @@ public partial class RazorForgeLexer
             [key: "routine"] = TokenType.Routine,
             [key: "entity"] = TokenType.Entity,
             [key: "record"] = TokenType.Record,
+            [key: "bundle"] = TokenType.Bundle,
             [key: "choice"] = TokenType.Choice,
             [key: "flags"] = TokenType.Flags,
             [key: "crashable"] = TokenType.Crashable,

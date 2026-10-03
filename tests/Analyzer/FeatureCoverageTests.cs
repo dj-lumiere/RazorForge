@@ -283,7 +283,7 @@ public class FeatureCoverageTests
                               module Test/Feat/GenericRec
                               import IO/Console
 
-                              record Pair[A, B]
+                              bundle Pair[A, B]
                                   first: A
                                   second: B
 

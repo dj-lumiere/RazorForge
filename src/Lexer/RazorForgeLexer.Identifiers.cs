@@ -159,7 +159,7 @@ public partial class RazorForgeLexer
         AddToken(type: type, text: text);
 
         // Track definition keywords for script mode detection
-        if (type is TokenType.Routine or TokenType.Entity or TokenType.Record or TokenType.Choice
+        if (type is TokenType.Routine or TokenType.Entity or TokenType.Record or TokenType.Bundle or TokenType.Choice
             or TokenType.Variant or TokenType.Flags or TokenType.Protocol)
         {
             _hasDefinitions = true;

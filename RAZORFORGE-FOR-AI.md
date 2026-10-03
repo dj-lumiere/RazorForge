@@ -422,18 +422,26 @@ show(a === make_other())    # false — different objects
 
 > **Decided direction (2026-09-22, NOT yet built — do not assume the builder does this today).**
 > Full rationale in `internal-wiki/record-entity-finite-representation.md`.
+> (The `bundle` part below the note is BUILT.)
 > - **A recursive record is a build error; recursion belongs to entity.** Surface rule: *a record is a
 >   copied value, an infinitely-sized value cannot be copied, so a record cannot contain itself.*
 >   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
 >   nullable pointer; unique ownership makes the structure a tree = acyclic = deterministic teardown).
-> - **`bundle`** = a third declaration keyword for a generic aggregate whose kind is INDUCED per
->   instantiation (all-value fields → record; any entity field or self-reference → entity). `record`/`entity`
->   stay the explicit poles.
 > - Generic param kinds: bare `[T, U]` = `AnyType`; annotate `T: record` / `T: entity` only to constrain.
 >   No `Assignable`/`Copyable` bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the ownership
 >   wrappers below name only *departures* from the bare-entity default (unique ownership is unnamed).
 > - Entity allocation is stack/inline by default; heap is induced by a wrapper (`Retained`/…) or recursion,
 >   not a marked concern.
+
+**`record` vs `bundle` (built, RazorForge only).** A `record` is a copied value, so it may hold neither an
+entity nor a type parameter that could be one (**RF-S409**): a copy would make two of the one entity. Fix it
+by declaring the type `entity`, holding a handle that copies (`Retained[E]`), keeping the parameter to values
+(`needs RecordType T`), or declaring it `bundle`. A `bundle` is the generic aggregate whose kind each
+instantiation decides: `bundle Pair[T]` with `T = S64` is a copyable value, with an entity `T` it is
+single-owner (moved with `steal`, RF-S413 on a copy). Stdlib bundles: `Maybe`, `Array`, `SplitArray`,
+`DictEntry`, `PQEntry` (tuples and variants behave the same way). `Range[T]` and `Atomic[T]` are
+`needs RecordType T`. Suflae has no `bundle` (an SF entity is shared, so a record holding one copies the
+handle).
 
 ## 8. Generics and protocols
 
@@ -851,7 +859,7 @@ both realms. There is NO `for`, `external`, `async`, `spawn`, `let`, `const`, `f
 `class`, `struct`, `enum`, `match`, `trait`, or `impl` keyword — if you reach for one,
 you are writing another language.
 
-- **Declarations**: `routine` `entity` `record` `choice` `flags` `crashable`
+- **Declarations**: `routine` `entity` `record` `bundle`† `choice` `flags` `crashable`
   `variant` `protocol`
 - **Bindings**: `var` `preset` `lateinit`
 - **Visibility / receiver**: `secret` `posted` `common`

@@ -54,7 +54,7 @@ public class RoutineBodyMatchingTests
         // routine Box[T].unwrap() defined outside the type body
         // should match the registered declaration
         string source = """
-                        record Box[T]
+                        bundle Box[T]
                             value: T
 
                         routine Box[T].unwrap() -> T
@@ -78,7 +78,7 @@ public class RoutineBodyMatchingTests
     {
         // memberRoutine-level generic params (Box[T].convert[U]) should match correctly
         string source = """
-                        record Box[T]
+                        bundle Box[T]
                             value: T
 
                         routine Box[T].convert[U](new_val: U) -> Box[U]

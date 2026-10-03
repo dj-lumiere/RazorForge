@@ -93,7 +93,7 @@ public class GenericParamCollisionTests
     public void memberRoutineGenericParam_CoexistsWith_UserRecordOfSameName()
     {
         AssertAnalyzes(source: """
-                               record Holder[A]
+                               bundle Holder[A]
                                    value: A
 
                                routine Holder[A].mapped[U](u: U) -> U
@@ -121,7 +121,7 @@ public class GenericParamCollisionTests
                                record T
                                    a: S32
 
-                               record Box[T]
+                               bundle Box[T]
                                    item: T
 
                                routine start()
