@@ -105,6 +105,52 @@ public sealed class ToolCommandTests : IDisposable
         Assert.True(condition: tidyExit == 0, userMessage: tidyOut);
     }
 
+    /// <summary>
+    /// A foreign routine marked <c>@blocking</c> runs on an I/O thread while its coroutine parks: with one worker,
+    /// four coroutines each blocked for 300 ms finish together, not one after another. Outside a coroutine it is an
+    /// ordinary call that returns its value.
+    /// </summary>
+    [Fact]
+    public void BlockingForeignCall_ParksItsCoroutineInsteadOfItsWorker()
+    {
+        string sleep = OperatingSystem.IsWindows()
+            ? "@link(\"kernel32\")\n@blocking\nroutine C::Sleep(ms: U32)\n\nroutine pause()\n    C::Sleep(ms: 300_u32)\n    return\n"
+            : "@blocking\nroutine C::usleep(us: U32) -> S32\n\nroutine pause()\n    discard C::usleep(us: 300000_u32)\n    return\n";
+        string program = Write(name: "blocking.rf", source: "module ToolBlocking\nimport IO/Console\n\n" + sleep + """
+
+            @blocking
+            routine C::labs(n: S64) -> S64
+
+            suspended routine nap(id: S64) -> S64
+                pause()
+                return id
+
+            routine start()
+                show(f"labs {C::labs(n: -42)}")
+                var t0 = 0_u64
+                danger
+                    t0 = C::rf_monotonic_now_ns()
+                var agents = List[Agent[S64]]()
+                var i = 0
+                while i < 4
+                    agents.add_last(value: nap(id: i))
+                    i += 1
+                show(f"results {agents.gather()}")
+                var t1 = 0_u64
+                danger
+                    t1 = C::rf_monotonic_now_ns()
+                show(f"together {(t1 - t0) // 1000000 < 900}")
+                return
+            """);
+
+        (int exit, string stdout, string stderr) = ToolWith(environment: [("RF_WORKERS", "1")], "run", program);
+
+        Assert.True(condition: exit == 0, userMessage: stdout + stderr);
+        Assert.Contains(expectedSubstring: "labs 42", actualString: stdout);
+        Assert.Contains(expectedSubstring: "results [0, 1, 2, 3]", actualString: stdout);
+        Assert.Contains(expectedSubstring: "together true", actualString: stdout);
+    }
+
     private string Write(string name, string source)
     {
         string path = Path.Combine(path1: _dir, path2: name);
@@ -113,6 +159,12 @@ public sealed class ToolCommandTests : IDisposable
     }
 
     private (int Exit, string Stdout, string Stderr) Tool(params string[] args)
+    {
+        return ToolWith(environment: [], args);
+    }
+
+    private (int Exit, string Stdout, string Stderr) ToolWith((string Name, string Value)[] environment,
+        params string[] args)
     {
         var psi = new ProcessStartInfo
         {
@@ -125,6 +177,11 @@ public sealed class ToolCommandTests : IDisposable
             WorkingDirectory = _dir,
             Environment = { [key: "RF_NO_DAEMON"] = "1" }
         };
+        foreach ((string name, string value) in environment)
+        {
+            psi.Environment[key: name] = value;
+        }
+
         psi.ArgumentList.Add(item: TestHelpers.ToolchainDll(sourcePath: Path.Combine(path1: _dir, path2: "x.rf")));
         foreach (string arg in args)
         {

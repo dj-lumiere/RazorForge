@@ -839,6 +839,11 @@ routine start()
   intrinsic as `routine LLVM::name(...)`. `dangerous routine C::name(...)` works
   (the `dangerous` prefix precedes). Call sites use the same qualifier:
   `C::labs(n: x)`. External calls are positional.
+- **`@blocking`** on a `C::` routine marks a call that may block its thread for long (a read from a pipe, a
+  sleep, a network wait). Inside a `suspended` coroutine such a call runs on one of the runtime's I/O threads
+  while the coroutine parks, so its worker goes on with other coroutines; anywhere else it is an ordinary call.
+  A variadic or failable foreign routine cannot be marked. (`threaded` remains RazorForge's way to put your own
+  long work on an OS thread.)
 - **`@link("SDL2")`** on a `C::` extern names the C library that resolves its
   symbols (Rust `#[link]` style); merged with `[target] c_libraries` in the
   manifest into clang `-l` flags. Library search paths (`-L`) live in the
