@@ -50,6 +50,21 @@ When unsure, consult ground truth in the repo/package:
    a trailing `!!` applies to the recovery result. There is no `try_foo` name form —
    recovery is a keyword at the call site, not a mangled variant name. There are no
    exceptions in the Java/C# sense.
+   **The errors.** `crashable NopeError` declares an error type: a RECORD. It must
+   write `routine NopeError.crash_message() -> Text` (RF-S704); `crash_title()` is
+   given (the name in sentence case, `AbsentValueError` → "Absent value error") unless
+   it writes its own. There is no `Crashable` protocol. `Crashables` (plural) is the
+   stdlib record for "any caught error": `crash_title()`, `crash_message()`,
+   `represent()`, `diagnose()` and `crash_type_id()` on it reach the actual
+   crashable's own routines.
+   **Matching a carrier.** `Check[T]` is the variant `T | Crashables`, `Lookup[T]` is
+   `None | T | Crashables`. A `when` on one MUST have the `T` arm (build error
+   otherwise). `is Crashables e` takes any error; `is NopeError e` takes only that
+   crashable and binds it as a `NopeError` (fields readable); `x is NopeError` works
+   as an expression too. A `when` with NO error arm passes the error on: in a
+   failable routine as if `is Crashables e => throw e` were written (it propagates),
+   anywhere else it crashes loudly. `throw e` of a caught `Crashables` rethrows it.
+   `is None` is a `Lookup`/`Maybe` arm only (a `Check` has no absent state).
    **A crash exits the process with status 82** (`0x52`, `'R'` for Runtime error —
    `RF_EXIT_CRASH`), for every runtime crash (unrecovered `throw`/`absent`, checked-
    arithmetic failure, out of memory, stack overflow). If a run ended with 82, it
