@@ -1,0 +1,88 @@
+module Tests/Stdlib/CarrierVariantApi
+
+import IO/Console
+# Check[T] = T | Crashables and Lookup[T] = None | T | Crashables: a specific crashable arm, the any-error arm,
+# an unhandled error passing on out of a failable routine, a rethrow moving the error, and `is` as an expression.
+crashable NopeError
+    what: Text
+
+routine NopeError.crash_message() -> Text
+    return f"nope: {me.what}"
+
+crashable OtherError
+    code: S64
+
+routine OtherError.crash_message() -> Text
+    return f"other {me.code}"
+
+routine inner!(n: S64) -> S64
+    if n == 3
+        throw NopeError(what: f"three {n}")
+    if n == 4
+        throw OtherError(code: n)
+    return n * 10
+
+# No error arm: the error passes on to the caller.
+routine passes!(n: S64) -> S64
+    when grab inner(n: n)
+        is S64 v =>
+            return v + 1
+
+# Rethrows the caught error: it moves to this routine's carrier.
+routine rethrows!(n: S64) -> S64
+    when grab inner(n: n)
+        is S64 v =>
+            return v + 2
+        is Crashables e =>
+            throw e
+
+routine start()
+    var i = 2
+    while i < 5
+        when grab inner(n: i)
+            is S64 v =>
+                show(f"ok {v}")
+            is NopeError e =>
+                show(f"nope arm: {e.what}")
+            is Crashables e =>
+                show(f"other arm: {e.crash_title()} / {e}")
+        when grab passes(n: i)
+            is S64 v =>
+                show(f"passes ok {v}")
+            is Crashables e =>
+                show(f"passes caught {e.crash_message()}")
+        when grab rethrows(n: i)
+            is S64 v =>
+                show(f"rethrows ok {v}")
+            is Crashables e =>
+                show(f"rethrows caught {e.crash_message()}")
+        var c = grab inner(n: i)
+        if c is NopeError
+            show("is NopeError")
+        when c
+            is S64 v =>
+                show(f"c ok {v}")
+            is Crashables e =>
+                show(f"c err {e}")
+        when lookup inner(n: i)
+            is None =>
+                show("absent")
+            is S64 v =>
+                show(f"lookup ok {v}")
+            is Crashables e =>
+                show(f"lookup err {e}")
+        i += 1
+
+    # Many rethrows: each error object moves once and is freed once.
+    var total = 0
+    var k = 0
+    while k < 20000
+        when grab rethrows(n: 3 + k % 2)
+            is S64 v =>
+                total += v
+            is Crashables e =>
+                total += 1
+        k += 1
+    show(f"total {total}")
+    show("DONE")
+    return
