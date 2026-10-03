@@ -116,10 +116,10 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
-    public void BareFile_DefaultsToParse_ReturnsZero()
+    public void BareFile_IsNotACommand_ReturnsOne()
     {
         (int code, _) = RunMain(_rf);
-        Assert.Equal(expected: 0, actual: code);
+        Assert.Equal(expected: 1, actual: code);
     }
 
     [Fact]

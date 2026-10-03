@@ -90,38 +90,46 @@ ignored `Bool` result takes an explicit `discard`, and blocks are indentation, f
 
 ## Quick start
 
-### From a release package
+### 1. Install
 
-Prebuilt packages for win-x64, linux-x64, and osx-arm64 are on the
-[releases page](https://github.com/dj-lumiere/RazorForge/releases). Each one bundles the LLVM
-toolchain it needs, so unpack it, put it on your `PATH`, and run:
+Download the package for your platform from the
+[releases page](https://github.com/dj-lumiere/RazorForge/releases):
 
-```bash
-razorforge buildandrun hello.rf
+| Platform              | File                                 |
+|-----------------------|--------------------------------------|
+| Windows x64           | `razorforge-v<version>-win-x64.zip`    |
+| Linux x64             | `razorforge-v<version>-linux-x64.tar.gz` |
+| macOS (Apple Silicon) | `razorforge-v<version>-osx-arm64.tar.gz` |
+
+The package is self-contained: the builder, the standard library, the runtime, and the LLVM
+toolchain are all inside it. Unpack it anywhere and run the installer from that folder:
+
+```bat
+:: Windows: adds the folder to your user PATH
+install.cmd
 ```
 
-### From source
-
-RazorForge is built from four repositories checked out side by side: the builder core
-([Anvila](https://github.com/dj-lumiere/Anvila)), the shared library
-([Ingrid](https://github.com/dj-lumiere/Ingrid)), and the two language front ends (this repository
-and [Suflae](https://github.com/dj-lumiere/Suflae)).
-
-You need the .NET 10 SDK, LLVM 22 (`clang` and `opt` on `PATH`), CMake 3.20+, and Ninja on Windows.
-
 ```bash
-mkdir LumiFoundry && cd LumiFoundry
-git clone https://github.com/dj-lumiere/Anvila.git
-git clone https://github.com/dj-lumiere/Ingrid.git
-git clone https://github.com/dj-lumiere/RazorForge.git
-git clone https://github.com/dj-lumiere/Suflae.git
-git clone https://github.com/dj-lumiere/Tessera.git   # the Tessera builder compiles part of the native runtime
-
-dotnet build RazorForge/RazorForge.csproj      # also builds the native runtime
-dotnet test RazorForge/tests/RazorForge.Tests.csproj   # optional
+# Linux / macOS: links the commands into ~/.local/bin
+./install.sh
 ```
 
-### Hello, world
+Open a new terminal and check that it works:
+
+```bash
+razorforge version
+```
+
+The same package installs Suflae too (`suflae`). Short aliases `rf` and `sf` work as well.
+
+> **Linux:** linking needs the C library's development files. Most machines have them; otherwise
+> install `libc6-dev` (Debian/Ubuntu) or `glibc-devel` (Fedora) once.
+>
+> **macOS:** linking uses Apple's Command Line Tools; run `xcode-select --install` once if you have
+> never built anything on this Mac. This alpha is not notarized, and `install.sh` clears the
+> Gatekeeper quarantine on the unpacked folder for you.
+
+### 2. Hello, world
 
 ```razorforge
 # hello.rf
@@ -133,9 +141,11 @@ routine start()
 ```
 
 ```bash
-./RazorForge/bin/Debug/net10.0/RazorForge buildandrun hello.rf
-# Windows: .\RazorForge\bin\Debug\net10.0\RazorForge.exe buildandrun hello.rf
+razorforge run hello.rf
 ```
+
+`run` builds a native executable and runs it. `razorforge build hello.rf` stops after
+building and leaves `hello.exe` next to the source.
 
 Every routine ends with an explicit `return`; scope teardown is anchored there. A single-file
 program may also skip `routine start()` and put its statements at the top level (script mode), and
@@ -296,10 +306,35 @@ The builder itself (parser, analysis, lowering, LLVM emission) is
 - A WASM backend
 - A self-hosting builder
 
+## Building from source
+
+You only need this to work on the builder or the standard library. RazorForge is built from five
+repositories checked out side by side: the builder core
+([Anvila](https://github.com/dj-lumiere/Anvila)), the shared library
+([Ingrid](https://github.com/dj-lumiere/Ingrid)), the two language front ends (this repository and
+[Suflae](https://github.com/dj-lumiere/Suflae)), and [Tessera](https://github.com/dj-lumiere/Tessera),
+whose builder compiles part of the native runtime.
+
+You need the .NET 10 SDK, LLVM 22 (`clang` and `opt` on `PATH`), CMake 3.20+, and Ninja on Windows.
+
+```bash
+mkdir LumiFoundry && cd LumiFoundry
+git clone https://github.com/dj-lumiere/Anvila.git
+git clone https://github.com/dj-lumiere/Ingrid.git
+git clone https://github.com/dj-lumiere/RazorForge.git
+git clone https://github.com/dj-lumiere/Suflae.git
+git clone https://github.com/dj-lumiere/Tessera.git
+
+dotnet build RazorForge/RazorForge.csproj               # also builds the native runtime
+dotnet test RazorForge/tests/RazorForge.Tests.csproj    # optional
+```
+
+The built command is `RazorForge/bin/Debug/net10.0/RazorForge` (`RazorForge.exe` on Windows).
+
 ## Contributing
 
 Bug reports, feature suggestions, documentation fixes, and code are all welcome. A good start is to
-build from source, run the tests, and read a few programs in `tests/Fixtures/Stdlib/`. Report bugs
+[build from source](#building-from-source), run the tests, and read a few programs in `tests/Fixtures/Stdlib/`. Report bugs
 at [github.com/dj-lumiere/RazorForge/issues](https://github.com/dj-lumiere/RazorForge/issues).
 
 ## License

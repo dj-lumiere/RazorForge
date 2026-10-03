@@ -629,13 +629,19 @@ Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
 ## 11. CLI and project manifest
 
 ```
-razorforge buildandrun hello.rf     # build + link + execute one file
+razorforge check [entry]            # check the program without building it
 razorforge build [entry]            # build a native executable, don't run
-razorforge codegen [entry] [out.ll] # stop at LLVM IR
-razorforge check [entry]            # type-check only
-razorforge parse|tokenize <file>    # front-end inspection
-razorforge version
+razorforge run [entry]              # build and run
+razorforge test <dir-or-file>...    # run programs against <name>.expected / .exit / .error / .input
+razorforge fmt [--check] <paths>... # format in the canonical layout
+razorforge lint <paths>...          # report code not in the canonical layout (style errors)
+razorforge lsp                      # language server, for an editor
+razorforge help | version
 ```
+
+These are the same commands `suflae` and `tessera` have. A bare file is not a command
+(`razorforge hello.rf` is an error that points to `razorforge run hello.rf`). The builder's own
+inspection commands (`codegen [entry] [out.ll]`, `parse`, `tokenize`) still work but are not listed.
 
 **There are no build flags.** All configuration lives in `config.toml`:
 
@@ -653,7 +659,7 @@ show-build-stages = false   # optional: print build/check stage banners
 ```
 
 With no entry file argument, the CLI walks up from the cwd to find
-`config.toml` — `cd` into a project and `razorforge buildandrun` works.
+`config.toml` — `cd` into a project and `razorforge run` works.
 
 ## 12. Reading build errors
 
