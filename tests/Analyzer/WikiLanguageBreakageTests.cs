@@ -128,6 +128,8 @@ public class WikiLanguageBreakageTests
         string source = """
                         crashable SampleError
                             message: Text
+                        routine SampleError.crash_message() -> Text
+                            return "SampleError"
 
                         routine test()
                             throw SampleError(message: "boom")

@@ -23,6 +23,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable BadError
                             message: Text
+                        routine BadError.crash_message() -> Text
+                            return "BadError"
                         routine test!() -> S32
                             throw BadError(message: "oops")
                         """;
@@ -40,6 +42,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable MyError
                             message: Text
+                        routine MyError.crash_message() -> Text
+                            return "MyError"
                         routine test!() -> S32
                             throw MyError(message: "oops")
                         """;
@@ -77,6 +81,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable MyError
                             message: Text
+                        routine MyError.crash_message() -> Text
+                            return "MyError"
                         routine useful!() -> S32
                             throw MyError(message: "bad")
                         """;
@@ -131,6 +137,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable MyError
                             message: Text
+                        routine MyError.crash_message() -> Text
+                            return "MyError"
                         @crash_only
                         routine crash_routine!() -> S32
                             throw MyError(message: "fatal")
@@ -149,6 +157,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable MyError
                             message: Text
+                        routine MyError.crash_message() -> Text
+                            return "MyError"
                         @crash_only
                         routine crash_routine!() -> S32
                             throw MyError(message: "fatal")
@@ -170,6 +180,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable MyError
                             message: Text
+                        routine MyError.crash_message() -> Text
+                            return "MyError"
                         routine normal_routine!() -> S32
                             throw MyError(message: "error")
 
@@ -198,6 +210,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable ParseError
                             message: Text
+                        routine ParseError.crash_message() -> Text
+                            return "ParseError"
                         routine parse!(data: S32) -> S32
                             throw ParseError(message: "bad")
                         routine caller() -> S32
@@ -218,6 +232,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable ParseError
                             message: Text
+                        routine ParseError.crash_message() -> Text
+                            return "ParseError"
                         routine parse!(data: S32) -> S32
                             throw ParseError(message: "bad")
                         routine caller!() -> S32
@@ -239,6 +255,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable DbError
                             message: Text
+                        routine DbError.crash_message() -> Text
+                            return "DbError"
 
                         @readonly
                         routine DbError.crash_message() -> Text
@@ -270,6 +288,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable ParseError
                             message: Text
+                        routine ParseError.crash_message() -> Text
+                            return "ParseError"
 
                         @readonly
                         routine ParseError.crash_message() -> Text
@@ -320,8 +340,12 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable ErrA
                             message: Text
+                        routine ErrA.crash_message() -> Text
+                            return "ErrA"
                         crashable ErrB
                             code: S32
+                        routine ErrB.crash_message() -> Text
+                            return "ErrB"
                         routine test!(flag: Bool) -> S32
                             if flag
                                 throw ErrA(message: "a")
@@ -344,6 +368,8 @@ public class ErrorHandlingValidationTests
         string source = """
                         crashable MyErr
                             message: Text
+                        routine MyErr.crash_message() -> Text
+                            return "MyErr"
                         routine inner!(value: S32) -> S32
                             if value < 0
                                 throw MyErr(message: "bad")
