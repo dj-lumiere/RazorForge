@@ -49,12 +49,12 @@ needs U64 N
 ### :typeparam N: The buildtime element count.
 entity ArrayEmittable[T, N]
 obeys Emittable[T]
-needs RecordType T
 needs U64 N
-    ### Stores the array being iterated.
-    list: Array[T, N]
+    ### Points at the array being iterated, where it lives: each element is read in place, so iterating an array of
+    ### entities neither copies the array nor gives an element a second owner (the loop's binding only reads it).
+    secret data: Hijacked[Array[T, N]]
     ### Stores the next logical index to read.
-    index: U64
+    secret index: U64
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -274,20 +274,24 @@ needs T obeys Equatable
             return i
     absent
 
+### Returns an iterator over the elements in ascending index order. It reads each element where the array holds it,
+### so the array must stay where it is while the loop runs (the builder keeps it from being reshaped, RF-S625).
 @readonly
 routine Array[T, N].iter() -> ArrayEmittable[T, N]
-needs RecordType T
-    return ArrayEmittable[T, N](list: me, index: 0u64)
+    danger
+        return ArrayEmittable[T, N](data: me.hijack(), index: 0u64)
 
-### Returns the next element from the iterator in ascending index order.
+### Returns the next element from the iterator in ascending index order, read in place: for an entity element it is
+### the array's own element, which the loop only reads (as `List`'s iterator does).
 ### :returns: The element at the current index.
 ### :absent: All `N` elements have been yielded.
 routine ArrayEmittable[T, N].emit!() -> T
     if me.index >= U64(N)
         absent
-    var value = me.list[me.index]
-    me.index = me.index + 1u64
-    return value
+    danger
+        var value: T = LLVM::load_element_ref[Array[T, N], T](me.data, me.index)
+        me.index = me.index + 1u64
+        return value
 
 # ============================================================================
 # Display
