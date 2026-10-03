@@ -13,8 +13,8 @@ import javax.swing.Icon
 /**
  * RazorForge's own colors. Each starts as the C# color of its counterpart (record as struct, entity as class,
  * routine as method, module as namespace, preset as constant), so RazorForge reads like C# in any scheme until
- * Settings | Editor | Color Scheme | RazorForge says otherwise. A protocol is the exception: it
- * starts light blue and italic (colorSchemes/).
+ * Settings | Editor | Color Scheme | RazorForge says otherwise. A protocol and an annotation are the
+ * exceptions: a protocol starts light blue and italic, an annotation yellow (colorSchemes/).
  */
 object RazorForgeColors {
     val RECORD = key("RAZORFORGE_RECORD", TextAttributesKey.find("ReSharper.STRUCT_IDENTIFIER"))
@@ -25,6 +25,7 @@ object RazorForgeColors {
     val MODULE = key("RAZORFORGE_MODULE", TextAttributesKey.find("ReSharper.NAMESPACE_IDENTIFIER"))
     val PRESET = key("RAZORFORGE_PRESET", DefaultLanguageHighlighterColors.CONSTANT)
     val OPERATOR = key("RAZORFORGE_OPERATOR", DefaultLanguageHighlighterColors.OPERATION_SIGN)
+    val ANNOTATION = key("RAZORFORGE_ANNOTATION", DefaultLanguageHighlighterColors.METADATA)
 
     private fun key(name: String, csharp: TextAttributesKey) = TextAttributesKey.createTextAttributesKey(name, csharp)
 }
@@ -40,6 +41,7 @@ internal object RazorForgeSemanticTokens : LspSemanticTokensSupport() {
         "namespace" to RazorForgeColors.MODULE,
         "constant" to RazorForgeColors.PRESET,
         "operator" to RazorForgeColors.OPERATOR,
+        "decorator" to RazorForgeColors.ANNOTATION,
     )
 
     override val tokenTypes: List<String> = (super.tokenTypes + keys.keys).distinct()
@@ -59,6 +61,7 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
         AttributesDescriptor("Module", RazorForgeColors.MODULE),
         AttributesDescriptor("Preset", RazorForgeColors.PRESET),
         AttributesDescriptor("Operator", RazorForgeColors.OPERATOR),
+        AttributesDescriptor("Annotation", RazorForgeColors.ANNOTATION),
     )
 
     private val tags = mapOf(
@@ -70,6 +73,7 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
         "module" to RazorForgeColors.MODULE,
         "preset" to RazorForgeColors.PRESET,
         "op" to RazorForgeColors.OPERATOR,
+        "annotation" to RazorForgeColors.ANNOTATION,
     )
 
     override fun getDisplayName(): String = "RazorForge"
@@ -101,6 +105,7 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
             owner: <record>Text</record>
             history: <entity>List</entity>[<record>Point</record>]
 
+        <annotation>@positional</annotation>
         routine <routine>largest</routine>[<generic>T</generic>](items: <entity>List</entity>[<generic>T</generic>]) -> <generic>T</generic>
             var best = items.<routine>first</routine>()
             return best
