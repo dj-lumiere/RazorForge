@@ -151,6 +151,34 @@ public sealed class ToolCommandTests : IDisposable
         Assert.Contains(expectedSubstring: "together true", actualString: stdout);
     }
 
+    /// <summary>A stack overflow is a crash like any other (exit status 82), saying how deep the calls went and
+    /// how big the stack was. Reported on Windows; elsewhere the system's signal still ends the process.</summary>
+    [Fact]
+    public void StackOverflow_IsReportedAsACrash()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string program = Write(name: "deep.rf", source: """
+            module ToolDeep
+            import IO/Console
+
+            routine dive(n: S64) -> S64
+                return dive(n: n + 1) + 1
+
+            routine start()
+                show(f"{dive(n: 0)}")
+                return
+            """);
+
+        (int exit, string stdout, string stderr) = Tool("run", program);
+
+        Assert.Equal(expected: 82, actual: exit);
+        Assert.Contains(expectedSubstring: "StackOverflowError: the routine calls went", actualString: stdout + stderr);
+    }
+
     private string Write(string name, string source)
     {
         string path = Path.Combine(path1: _dir, path2: name);
