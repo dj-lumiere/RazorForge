@@ -30,6 +30,11 @@ echo "=== RazorForge ${VERSION} -> ${NAME} ==="
 rm -rf "$OUT" "dist/${NAME}.tar.gz"
 mkdir -p dist
 
+echo "=== build the Tessera builder ==="
+# Ingrid's runtime has code written in Tessera (Ingrid/runtime-tessera): its native build finds the Tessera
+# builder at Tessera/bin/Release/net10.0/tessera.dll.
+dotnet build Tessera/Tessera.csproj -c Release --verbosity minimal
+
 echo "=== build Ingrid's native runtime ==="
 (cd Ingrid/native && bash build.sh)
 

@@ -25,6 +25,12 @@ if (Test-Path $Out) { Remove-Item -Recurse -Force $Out }
 if (Test-Path "dist\$Name.zip") { Remove-Item -Force "dist\$Name.zip" }
 New-Item -ItemType Directory -Force -Path dist | Out-Null
 
+Write-Host '=== build the Tessera builder ==='
+# Ingrid's runtime has code written in Tessera (Ingrid\runtime-tessera): its native build finds the Tessera
+# builder at Tessera\bin\Release\net10.0\tessera.dll.
+dotnet build Tessera\Tessera.csproj -c Release --verbosity minimal
+if ($LASTEXITCODE -ne 0) { throw "Tessera build failed ($LASTEXITCODE)" }
+
 Write-Host "=== build Ingrid's native runtime ==="
 Push-Location Ingrid\native
 cmd /c build.bat
