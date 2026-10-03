@@ -1,25 +1,18 @@
 module Core
 
 import BuilderQuery
-### Represents the success-or-crash-or-absent carrier produced by the `lookup` recovery keyword.
-### `Lookup[T]` extends the `Check[T]` carrier shape with an explicit absent
-### state for APIs where "not found" is not itself an error. The full layout
-### is codegen-controlled:
-###   { U64 type_id, [max(sizeof(T), 8) x U8] payload }
-### `type_id == 0` is the absent state with don't-care payload bytes.
-### :typeparam T: The successful return value type.
-record Lookup[T]
-    ### Identifies the stored payload type, or `0` for the absent state.
-    secret type_id: U64
-    ### Inline payload buffer, sized to the success `T` but at least 8 bytes so an error entity pointer
-    ### always fits. The `$max(…)` splice folds to a literal element count at monomorphization. The success
-    ### `T` is stored inline at its FULL width (no truncation); an error is stored as its entity pointer
-    ### in the first 8 bytes. type_id disambiguates (0 = absent).
-    secret payload: Array[U8, $max(T.data_size().byte_size(), 8)]
 
-### Returns the display form of this lookup result.
-### Absent renders as `"none"`; present/crashable arms delegate to the payload's
-### own `represent`.
+### Represents the success-or-crash-or-absent carrier produced by the `lookup` recovery keyword: absent, the
+### successful `T`, or the caught error, as a `Crashables`. It is `Check[T]` with an absent arm, for APIs where
+### "not found" is not itself an error.
+### :typeparam T: The successful return value type.
+variant Lookup[T]
+    None
+    T
+    Crashables
+
+### Returns the display form of this lookup result. Absent renders as `"none"`; the success value and the caught
+### error use their own `represent`.
 ### :returns: The resulting `Text` value.
 @override
 routine Lookup[T].represent() -> Text
@@ -30,12 +23,9 @@ routine Lookup[T].represent() -> Text
             return v.represent()
         is T v =>
             return v.represent()
-        else =>
-            return me.type_name()
 
-### Returns the diagnostic form of this lookup result.
-### Format: `f"{full_type_name}(type_id: {type_id}, {payload.diagnose()})"`,
-### or `f"{full_type_name}(type_id: 0, none)"` for the absent state.
+### Returns the diagnostic form of this lookup result: the type, the type id of what it holds (the caught error's
+### own type, not `Crashables`; 0 when absent), then that value's own `diagnose`, or `none`.
 ### :returns: The resulting `Text` value.
 @override
 routine Lookup[T].diagnose() -> Text
@@ -43,15 +33,12 @@ routine Lookup[T].diagnose() -> Text
         is None =>
             return f"{me.full_type_name()}(type_id: 0, none)"
         is Crashables v =>
-            return f"{me.full_type_name()}(type_id: {me.type_id}, {v.diagnose()})"
+            return f"{me.full_type_name()}(type_id: {v.crash_type_id()}, {v.diagnose()})"
         is T v =>
-            return f"{me.full_type_name()}(type_id: {me.type_id}, {v.diagnose()})"
-        else =>
-            return f"{me.full_type_name()}(type_id: {me.type_id})"
+            return f"{me.full_type_name()}(type_id: {v.type_id()}, {v.diagnose()})"
 
-### Frees the active payload. The absent arm is a no-op, the success arm frees `T`, and the crashable arm frees
-### the caught error and the object it lives in. Defined explicitly (not auto-derived) so the per-instantiation
-### body is monomorphized and emitted like `represent`/`diagnose`.
+### Frees the live arm. The absent arm has nothing, the success arm frees `T`, and the crashable arm frees the
+### caught error and the object it lives in.
 @override
 dangerous routine Lookup[T].destroy()
     when me
