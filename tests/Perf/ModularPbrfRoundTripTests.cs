@@ -94,7 +94,7 @@ public sealed partial class ModularPbrfRoundTripTests
             _out.WriteLine(message: $"modules={labels.Count}  artifacts total={total / 1024}KB");
 
             SemanticVerifier.CompiledStdlibState restored =
-                ModularStdlibCache.Deserialize(dir: dir);
+                ModularStdlibCache.Deserialize(dir: dir, language: Language.RazorForge);
 
             var warmSa = new SemanticVerifier(language: Language.RazorForge, warm: restored);
             AnalysisResult warmResult = warmSa.Analyze(program: ParseTrivial());
