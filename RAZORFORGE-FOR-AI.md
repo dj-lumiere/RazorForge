@@ -437,11 +437,20 @@ show(a === make_other())    # false — different objects
 entity nor a type parameter that could be one (**RF-S409**): a copy would make two of the one entity. Fix it
 by declaring the type `entity`, holding a handle that copies (`Retained[E]`), keeping the parameter to values
 (`needs RecordType T`), or declaring it `bundle`. A `bundle` is the generic aggregate whose kind each
-instantiation decides: `bundle Pair[T]` with `T = S64` is a copyable value, with an entity `T` it is
-single-owner (moved with `steal`, RF-S413 on a copy). Stdlib bundles: `Maybe`, `Array`, `SplitArray`,
-`DictEntry`, `PQEntry` (tuples and variants behave the same way). `Range[T]` and `Atomic[T]` are
-`needs RecordType T`. Suflae has no `bundle` (an SF entity is shared, so a record holding one copies the
-handle).
+instantiation decides: `bundle Pair[T]` with `T = S64` is a copyable value; with an entity `T` it is
+single-owner (moved with `steal`, RF-S413 on a copy), has no identity (`===` is an error), is laid out in
+place, has no `assign`, and has `duplicate()` only when every member is Copyable (RF-S150 naming the member
+otherwise). A bundle needs type parameters (**RF-S445**) and cannot contain itself (**RF-S446**; a recursive
+structure is an entity, as for records, RF-S960).
+In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
+it (`var y = x`, `return me.value`, a tuple of it) is RF-S413 on the template's own line: `steal` it, keep the
+parameter to values (`needs RecordType T`, or `needs T obeys Assignable`), or work on it in place.
+`needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
+kinds on one line repeat the kind: `needs RecordType K, RecordType V`. Stdlib bundles: `Maybe`, `Array`,
+`SplitArray`, `DictEntry`, `PQEntry` (tuples and variants follow their elements the same way). `Range[T]`,
+`Atomic[T]`, `PriorityQueue`'s priority, and the element iterators of `Array`/`SplitArray` are
+`needs RecordType` (so an `Array` of entities is indexed in place, not iterated by value). Suflae has no
+`bundle` (an SF entity is shared, so a record holding one copies the handle).
 
 ## 8. Generics and protocols
 

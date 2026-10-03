@@ -24,6 +24,7 @@ public class GenericResolutionTests
         // S191: Calling a void memberRoutine on a generic resolution should return None, not <error>
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].clear()
@@ -53,6 +54,7 @@ public class GenericResolutionTests
         // convert[U](new_val: U) -> Box[U] should resolve Box[U] with the call-site type arg
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].convert[U](new_val: U) -> Box[U]
@@ -76,6 +78,7 @@ public class GenericResolutionTests
         // S192: Without explicit type annotation, var c should infer as Box[Bool]
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].convert[U](new_val: U) -> Box[U]
@@ -100,6 +103,7 @@ public class GenericResolutionTests
         // S192: memberRoutine returning U directly (not wrapped in owner type)
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].extract[U](val: U) -> U
@@ -129,6 +133,7 @@ public class GenericResolutionTests
         // LookupMemberRoutine falls back from Wrapper[S32] → Wrapper to find user-defined memberRoutines
         string source = """
                         bundle Wrapper[T]
+                        needs RecordType T
                             value: T
 
                         routine Wrapper[T].unwrap() -> T
@@ -158,6 +163,7 @@ public class GenericResolutionTests
         // After fix, no manual SubstituteTypeParameters needed at call site
         string source = """
                         bundle Pair[T]
+                        needs RecordType T
                             first: T
                             second: T
 
@@ -182,6 +188,7 @@ public class GenericResolutionTests
         // LookupMemberRoutine on generic owner should substitute T in return type
         string source = """
                         bundle Container[T]
+                        needs RecordType T
                             item: T
 
                         routine Container[T].get() -> T
@@ -205,6 +212,7 @@ public class GenericResolutionTests
         // Dict[Text, List[S32]].$getitem should return List[S32], not T
         string source = """
                         bundle Mapping[K, V]
+                        needs RecordType K, RecordType V
                             key: K
                             val: V
 
@@ -235,6 +243,7 @@ public class GenericResolutionTests
         // P1: Member call on a generic resolution should store ResolvedRoutine with substituted types
         string source = """
                         bundle Pair[T]
+                        needs RecordType T
                             first: T
                             second: T
 
@@ -278,6 +287,7 @@ public class GenericResolutionTests
         // P1: Void memberRoutine on generic resolution should still store ResolvedRoutine
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].clear()
@@ -315,6 +325,7 @@ public class GenericResolutionTests
         // P1: Generic memberRoutine call (obj.MemberRoutine[U](args)) stores ResolvedRoutine
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].convert[U](new_val: U) -> Box[U]
@@ -362,6 +373,7 @@ public class GenericResolutionTests
         // so that memberRoutine lookup on the resolved type can substitute T → S32
         string source = """
                         bundle Cell[T]
+                        needs RecordType T
                             data: T
 
                         routine Cell[T].extract() -> T
@@ -385,6 +397,7 @@ public class GenericResolutionTests
         // P2: Same test for entity types — GenericDefinition must survive update
         string source = """
                         entity Node[T]
+                        needs RecordType T
                             value: T
 
                         routine Node[T].get_value() -> T
@@ -505,6 +518,7 @@ public class GenericResolutionTests
         // must each match their own body via resolved RegistryKey
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine process(item: Box[S32]) -> S32
@@ -534,6 +548,7 @@ public class GenericResolutionTests
         // P4: Extension-syntax routine with generic owner resolves its body
         string source = """
                         bundle Wrapper[T]
+                        needs RecordType T
                             inner: T
 
                         routine Wrapper[T].get_inner() -> T
@@ -558,6 +573,7 @@ public class GenericResolutionTests
         // P4: Overloads where one takes a plain type and another takes a generic resolution
         string source = """
                         bundle Pair[T]
+                        needs RecordType T
                             first: T
                             second: T
 

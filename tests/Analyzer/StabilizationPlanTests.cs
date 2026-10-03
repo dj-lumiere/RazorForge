@@ -26,6 +26,7 @@ public class StabilizationPlanTests
                             routine Me.sum(other: Me) -> Me
 
                         bundle Total[T] obeys Summable
+                        needs RecordType T
                             value: T
 
                         @readonly
@@ -52,6 +53,7 @@ public class StabilizationPlanTests
         // Owner-level T and memberRoutine-level U should both resolve
         string source = """
                         bundle Store[T]
+                        needs RecordType T
                             item: T
 
                         routine Store[T].transform[U](func_val: U) -> U
@@ -76,6 +78,7 @@ public class StabilizationPlanTests
         // Return type T should resolve to the owner's type argument
         string source = """
                         bundle Slot[T]
+                        needs RecordType T
                             data: T
 
                         routine Slot[T].peek() -> T
@@ -103,6 +106,7 @@ public class StabilizationPlanTests
                             routine Me.duplicate() -> Me
 
                         bundle Box[T] obeys Clonable
+                        needs RecordType T
                             value: T
 
                         @readonly
@@ -137,6 +141,7 @@ public class StabilizationPlanTests
                             routine Me.label() -> Text
 
                         bundle Pair[T] obeys Showable
+                        needs RecordType T
                             first: T
                             second: T
 
@@ -171,6 +176,7 @@ public class StabilizationPlanTests
                             routine Me.describe() -> Text
 
                         entity Container[T] obeys Describable
+                        needs RecordType T
                             item: T
 
                         @readonly
@@ -204,6 +210,7 @@ public class StabilizationPlanTests
         // using on a generic Enterable type (self pass-through binds the resource itself)
         string source = """
                         bundle Guard[T] obeys Enterable
+                        needs RecordType T
                             resource: T
 
                         routine Guard[T].enter() -> Guard[T]
@@ -232,9 +239,11 @@ public class StabilizationPlanTests
     {
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         bundle Guard[T] obeys Enterable
+                        needs RecordType T
                             resource: T
 
                         routine Guard[T].enter() -> Guard[T]
@@ -328,6 +337,7 @@ public class StabilizationPlanTests
         // Body matching on generic owner should use resolved type names
         string source = """
                         bundle Stack[T]
+                        needs RecordType T
                             top: T
 
                         routine Stack[T].push(item: T) -> Stack[T]
@@ -356,6 +366,7 @@ public class StabilizationPlanTests
     {
         string source = """
                         bundle Buffer[T]
+                        needs RecordType T
                             value: T
                             ready: Bool
 
@@ -385,6 +396,7 @@ public class StabilizationPlanTests
     {
         string source = """
                         bundle Wrapper[T]
+                        needs RecordType T
                             value: T
 
                         routine Wrapper[T].$create(from: T) -> Wrapper[T]
@@ -418,6 +430,7 @@ public class StabilizationPlanTests
         // Codegen resolves via _typeSubstitutions
         string source = """
                         bundle Wrapper[T]
+                        needs RecordType T
                             value: T
 
                         routine Wrapper[T].get() -> T
@@ -447,6 +460,7 @@ public class StabilizationPlanTests
         // through GenericDefinition, not Name.Contains('[') heuristics
         string source = """
                         bundle Wrapper[T]
+                        needs RecordType T
                             inner: T
 
                         routine Wrapper[T].unwrap() -> T
@@ -472,6 +486,7 @@ public class StabilizationPlanTests
     {
         string source = """
                         bundle Node[T]
+                        needs RecordType T
                             item: T
 
                         @readonly
@@ -479,6 +494,7 @@ public class StabilizationPlanTests
                             return 0u64
 
                         bundle Holder[T]
+                        needs RecordType T
                             node: Node[T]
 
                         @readonly
@@ -515,6 +531,7 @@ public class StabilizationPlanTests
                             routine Me.clear() -> Me
 
                         bundle Buffer[T] obeys Clearable
+                        needs RecordType T
                             item: T
                             size: S32
 

@@ -93,6 +93,108 @@ public class BundleRecordTests
             filter: e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
 
+    [Fact]
+    public void Bundle_WithoutTypeParameters_IsAnError()
+    {
+        AnalysisResult result = AnalyzeSa(source: Entity + """
+                                                           bundle Doc
+                                                               r: Res
+                                                           """);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BundleWithoutParameters);
+    }
+
+    [Fact]
+    public void Bundle_ContainingItself_IsAnError()
+    {
+        AnalysisResult result = AnalyzeSa(source: """
+                                                  bundle Tree[T]
+                                                      value: T
+                                                      child: Maybe[Tree[T]]
+                                                  """);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecursiveBundle);
+    }
+
+    [Fact]
+    public void GenericBody_CopyingAnUnconstrainedParameter_IsAnError()
+    {
+        AnalysisResult result = AnalyzeSa(source: """
+                                                  bundle Box[T]
+                                                      value: T
+
+                                                  routine Box[T].get() -> T
+                                                      return me.value
+
+                                                  routine keep[T](x: T) -> T
+                                                      var y = x
+                                                      return steal y
+                                                  """);
+        Assert.Equal(expected: 2,
+            actual: result.Errors.Count(predicate: e => e.Code == SemanticDiagnosticCode.BareEntityAssignment));
+    }
+
+    [Fact]
+    public void GenericBody_ParameterKeptToValues_MayBeCopied()
+    {
+        AnalysisResult result = AnalyzeSa(source: """
+                                                  bundle Box[T]
+                                                      value: T
+
+                                                  routine Box[T].get() -> T
+                                                  needs RecordType T
+                                                      return me.value
+
+                                                  routine keep[T](x: T) -> T
+                                                  needs T obeys Assignable
+                                                      var y = x
+                                                      return y
+                                                  """);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
+    }
+
+    [Fact]
+    public void RecordTypeConstraint_RejectsABundleHoldingAnEntity()
+    {
+        AnalysisResult result = AnalyzeSa(source: Entity + """
+                                                           bundle Pair[T]
+                                                               a: T
+
+                                                           record Cell[T]
+                                                           needs RecordType T
+                                                               v: T
+
+                                                           routine start()
+                                                               var ok = Cell[Pair[S64]](v: Pair[S64](a: 1))
+                                                               var bad = Cell[Pair[Res]](v: Pair[Res](a: Res(n: 1)))
+                                                               return
+                                                           """);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ValueTypeConstraintViolation);
+    }
+
+    [Fact]
+    public void BundleHoldingAnEntity_DuplicatesOnlyWhenEveryMemberIsCopyable()
+    {
+        AnalysisResult result = AnalyzeSa(source: Entity + """
+                                                           entity Cop obeys Copyable
+                                                               n: S64
+
+                                                           bundle Pair[T]
+                                                               a: T
+
+                                                           routine start()
+                                                               var c = Pair[Cop](a: Cop(n: 1))
+                                                               var c2 = c.duplicate()
+                                                               var r = Pair[Res](a: Res(n: 1))
+                                                               var r2 = r.duplicate()
+                                                               return
+                                                           """);
+        Assert.Single(collection: result.Errors,
+            predicate: e => e.Code == SemanticDiagnosticCode.ProtocolConstraintViolation);
+    }
+
     /// <summary>Every RazorForge stdlib record keeps to the rule: the ones that may hold an entity are bundles.</summary>
     [Fact]
     public void StdlibRecords_HoldNoEntity()

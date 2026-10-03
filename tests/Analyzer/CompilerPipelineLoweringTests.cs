@@ -172,6 +172,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].fetch() -> T
@@ -208,6 +209,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].none_ptr() -> Box[T]
@@ -245,6 +247,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].peek() -> T
@@ -960,6 +963,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         bundle Box[T]
+                        needs RecordType T
                             value: T
 
                         routine Box[T].peek() -> T
@@ -1362,6 +1366,7 @@ public class CompilerPipelineLoweringTests
                         preset WIDTH: Address = 16addr
 
                         entity Buffer[T, N]
+                        needs RecordType T
                         needs Address N
                             data: T
 
