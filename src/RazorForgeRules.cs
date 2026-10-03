@@ -26,7 +26,7 @@ public sealed class RazorForgeRules : LanguageRules
     public override string ToolName => "razorforge";
     public override string Version => VersionOf(assembly: typeof(RazorForgeRules).Assembly);
     public override string FileExtension => ".rf";
-    public override string ShortName => "RF";
+    public override string ShortName => TypeModel.Realms.Shared;
 
     public override List<Token> Tokenize(string source, string fileName)
     {
