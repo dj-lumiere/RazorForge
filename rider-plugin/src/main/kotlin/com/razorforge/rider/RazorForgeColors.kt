@@ -13,12 +13,14 @@ import javax.swing.Icon
 /**
  * RazorForge's own colors. Each starts as the C# color of its counterpart (record as struct, entity as class,
  * routine as method, module as namespace, preset as constant), so RazorForge reads like C# in any scheme until
- * Settings | Editor | Color Scheme | RazorForge says otherwise. A protocol and an annotation are the
- * exceptions: a protocol starts light blue and italic, an annotation yellow (colorSchemes/).
+ * Settings | Editor | Color Scheme | RazorForge says otherwise. A bundle takes the color of what each use makes it. A protocol, an annotation and an
+ * undecided bundle are the exceptions: a protocol starts light blue and italic, an annotation yellow, a bundle whose
+ * kind no instantiation has decided yet pink (colorSchemes/). A decided bundle takes the record or the entity color.
  */
 object RazorForgeColors {
     val RECORD = key("RAZORFORGE_RECORD", TextAttributesKey.find("ReSharper.STRUCT_IDENTIFIER"))
     val ENTITY = key("RAZORFORGE_ENTITY", DefaultLanguageHighlighterColors.CLASS_NAME)
+    val BUNDLE = key("RAZORFORGE_BUNDLE", TextAttributesKey.find("ReSharper.STRUCT_IDENTIFIER"))
     val PROTOCOL = key("RAZORFORGE_PROTOCOL", DefaultLanguageHighlighterColors.INTERFACE_NAME)
     val GENERIC_PARAMETER = key("RAZORFORGE_GENERIC_PARAMETER", TextAttributesKey.find("ReSharper.TYPE_PARAMETER_IDENTIFIER"))
     val ROUTINE = key("RAZORFORGE_ROUTINE", DefaultLanguageHighlighterColors.INSTANCE_METHOD)
@@ -37,6 +39,7 @@ internal object RazorForgeSemanticTokens : LspSemanticTokensSupport() {
     private val keys = mapOf(
         "recordType" to RazorForgeColors.RECORD,
         "entityType" to RazorForgeColors.ENTITY,
+        "bundleType" to RazorForgeColors.BUNDLE,
         "interface" to RazorForgeColors.PROTOCOL,
         "typeParameter" to RazorForgeColors.GENERIC_PARAMETER,
         "function" to RazorForgeColors.ROUTINE,
@@ -57,8 +60,9 @@ internal object RazorForgeSemanticTokens : LspSemanticTokensSupport() {
 /** Settings | Editor | Color Scheme | RazorForge. */
 class RazorForgeColorSettingsPage : ColorSettingsPage {
     private val descriptors = arrayOf(
-        AttributesDescriptor("Types//Record, choice, flags, crashable", RazorForgeColors.RECORD),
-        AttributesDescriptor("Types//Entity", RazorForgeColors.ENTITY),
+        AttributesDescriptor("Types//Record, choice, flags, crashable, bundle of values", RazorForgeColors.RECORD),
+        AttributesDescriptor("Types//Entity, bundle holding an entity", RazorForgeColors.ENTITY),
+        AttributesDescriptor("Types//Bundle, kind not decided yet", RazorForgeColors.BUNDLE),
         AttributesDescriptor("Types//Protocol", RazorForgeColors.PROTOCOL),
         AttributesDescriptor("Types//Generic parameter", RazorForgeColors.GENERIC_PARAMETER),
         AttributesDescriptor("Routine", RazorForgeColors.ROUTINE),
@@ -73,6 +77,7 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
     private val tags = mapOf(
         "record" to RazorForgeColors.RECORD,
         "entity" to RazorForgeColors.ENTITY,
+        "bundle" to RazorForgeColors.BUNDLE,
         "protocol" to RazorForgeColors.PROTOCOL,
         "generic" to RazorForgeColors.GENERIC_PARAMETER,
         "routine" to RazorForgeColors.ROUTINE,
@@ -106,6 +111,10 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
         record <record>Point</record>
             x: <record>S64</record>
             y: <record>S64</record>
+
+        bundle <bundle>Pair</bundle>[<generic>A</generic>, <generic>B</generic>]
+            first: <generic>A</generic>
+            second: <generic>B</generic>
 
         entity <entity>Account</entity> obeys <protocol>Displayable</protocol>
             owner: <record>Text</record>
