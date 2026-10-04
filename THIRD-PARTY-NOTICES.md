@@ -132,15 +132,14 @@ For more information, please refer to <https://unlicense.org/>
 
 ## CORE-MATH — correctly rounded mathematical functions
 
-Used by the RazorForge `B16`, `B32`, and `B64` math routines under
-`Standard/RazorForge/Core/Numerics/CoreMath/` (acos, acosh, asin, asinh, atan, atan2, atanh, cbrt, cos,
-cosh, cospi, erf, erfc, exp, exp10, exp2, expm1, hypot, lgamma, log, log10, log1p, log2, pow, sin, sinh,
-sinpi, tan, tanh, tanpi, tgamma), and by the `B128` routines acos, asin, atan, atan2, cbrt, cos, exp,
-exp10, exp2, expm1, hypot, log, sin and sqrt (the binary128 functions CORE-MATH provides). Each routine
-is a port of the CORE-MATH C implementation for that format (round-to-nearest path only) and returns the
-correctly rounded result. Every port file names its upstream source file, repeats that file's copyright
-line and points to this notice for the license. The B128 and D128 fast paths in `B128Fast`, `B128Erf`,
-`B128Gamma` and `D128Fast` build on the unrounded intermediate values of these ports.
+The `B16`, `B32`, `B64`, and `B128` math routines call Ingrid, whose Tessera standard library holds the
+CORE-MATH ports. What stays under `Standard/RazorForge/Core/Numerics/CoreMath/` are the parts of those ports
+that the decimal transcendentals build on: the fast phases of the binary128 asin, atan, exp, log, sin and cos
+(the D128 fast paths in `B128Fast`, `B128Erf`, `B128Gamma` and `D128Fast` build on their unrounded
+intermediate values), and the double-double kernels of the binary64 erf, erfc, lgamma and tgamma (used by
+`D64Trans`). Each is a port of the CORE-MATH C implementation for that format (round-to-nearest path only).
+Every port file names its upstream source file, repeats that file's copyright line and points to this notice
+for the license.
 
 - Project: **CORE-MATH** — https://core-math.gitlabpages.inria.fr/
 - Copyright © 2021-2026 Alexei Sibidanov, Paul Zimmermann, Tom Hubrecht, Maxence Ponsardin,

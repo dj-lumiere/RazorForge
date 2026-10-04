@@ -1,8 +1,10 @@
 module Core
 
 # ============================================================================
-# Shared core of the correctly rounded B128 exp, exp2 and exp10
+# Shared core of CORE-MATH's B128 exp, exp2 and exp10
 # ============================================================================
+# B128.exp_unchecked, exp2_unchecked and exp10_unchecked are Tessera's, through Ingrid. What stays is
+# the 2^x evaluation the B128 fast paths of the D128 transcendentals (D128Fast.rf) build on.
 # Ported from CORE-MATH, src/binary128/exp/expq.c, src/binary128/exp2/exp2q.c and
 # src/binary128/exp10/exp10q.c (https://core-math.gitlabpages.inria.fr/), which carry identical copies of
 # these tables, of the 2^x evaluation and of its two fallback paths. The three functions differ only in how
@@ -19,92 +21,6 @@ module Core
 secret preset B128_EXPFAM_ILN2: Array[U64, 7] = [
     0xEA90B9E60C4A90A0_u64, 0x24D92F75C16BE0B3_u64, 0xDE1C43F755176CD6_u64, 0x8B25166CD1A13247_u64,
     0xEB577AA8DD695A58_u64, 0xBE87FED0691D3E88_u64, 0xB8AA3B295C17F0BB_u64,
-]
-# Superaccurate path: 2^(j/16), j = 0..15, 6 words each, least significant first.
-secret preset B128_EXPFAM_TBL6: Array[U64, 96] = [
-    0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64,
-    0x0000000000000000_u64, 0x8000000000000000_u64, 0x82DC9BF3421840D1_u64, 0x7835AF9AB4E6355C_u64,
-    0x5D42B362AF1EE859_u64, 0x148A0459E7585151_u64, 0xC5C95B8C2154C1B2_u64, 0x85AAC367CC487B14_u64,
-    0x9994FAC7F4EA654B_u64, 0xB4F28C879A524BD4_u64, 0x91E135EE84A3F733_u64, 0x1AA84FFBEBAC349F_u64,
-    0xFBE4628758A53C90_u64, 0x8B95C1E3EA8BD6E6_u64, 0x23B504FB5DADBB25_u64, 0x4E0D990C27C43643_u64,
-    0xF1203CAF65BFB9B9_u64, 0x1942B34816FB4F26_u64, 0x0FD6D8E0AE5AC9D8_u64, 0x91C3D373AB11C336_u64,
-    0x4E9F94EE0C90DBBD_u64, 0xBE47C34D380250A8_u64, 0xD78B65CBEFA7BB6F_u64, 0x5E139A1B14FA8178_u64,
-    0x46AD23182E42F6F6_u64, 0x9837F0518DB8A96F_u64, 0xA264696B6F6E2B1C_u64, 0xCD12E5ADA91EEF7B_u64,
-    0x21F977FE7C7FA117_u64, 0x65C15C122133E2A2_u64, 0xA0911F09EBB9FDD1_u64, 0x9EF5326091A111AD_u64,
-    0xAD35E8E58C5CE4F4_u64, 0x5343B4A0330A8052_u64, 0x2589C98A8290D3F0_u64, 0x1DD170ACE2BCFC17_u64,
-    0x1CBD7F621710701B_u64, 0xA5FED6A9B15138EA_u64, 0x739A3D061FEA7592_u64, 0x458FD5F44E26A7A7_u64,
-    0xB165F141833A67DA_u64, 0x6BE409407034FDED_u64, 0x4980A8C8F59A2EC4_u64, 0xAD583EEA42A14AC6_u64,
-    0xA8B1FE6FDC83DB39_u64, 0x4AFC83043AB8A2C3_u64, 0xED17AC8583339915_u64, 0x1D6F60BA893BA84C_u64,
-    0x597D89B3754ABE9F_u64, 0xB504F333F9DE6484_u64, 0x283C66DB56DF97F8_u64, 0x9B985F3A0EAE1C1D_u64,
-    0x0D9A4BE023ECE031_u64, 0x15B34BBCB0298F41_u64, 0xA8811FB66D0FAF7A_u64, 0xBD08A39F580C36BE_u64,
-    0xEFBA190ED1A58A51_u64, 0xBB2068BE237512DF_u64, 0xC7686006E4E6C092_u64, 0x6B0F939998251A36_u64,
-    0x3E2AD0C964DD9F37_u64, 0xC5672A115506DADD_u64, 0xCD8CAEBC5D894C26_u64, 0x1B8343088BBDADD4_u64,
-    0x2BBD398AF35C079F_u64, 0x6F28610B8C36485A_u64, 0xE235838F95F2C6ED_u64, 0xCE248C151F8480E3_u64,
-    0x81247458FB61E576_u64, 0xEFB01FDA334BCA9A_u64, 0xB5C13ADA0E778299_u64, 0x1D733AF522058B16_u64,
-    0x39A68BB9902D3FDE_u64, 0xD744FCCAD69D6AF4_u64, 0xF44E17262DA49B5D_u64, 0x188081FE7062F61E_u64,
-    0x1CB99D3F1FF298A2_u64, 0x224B251B33092002_u64, 0x065895048DD333CA_u64, 0xE0CCDEEC2A94E111_u64,
-    0x091482854D819E44_u64, 0xB338FCD2AC2FFBC8_u64, 0x17D8D1E8CA31880A_u64, 0xC4FAACE043B7F91C_u64,
-    0xD02D75B3706E54FA_u64, 0xEAC0C6E7DD24392E_u64, 0x29F075F23730E918_u64, 0xD22DD036F1906094_u64,
-    0xBDD80329364AA29F_u64, 0x6F510308677709F5_u64, 0x7B9D0C7AED980FC3_u64, 0xF5257D152486CC2C_u64,
-]
-# Superaccurate path: 37 polynomial coefficients for 2^x on [0, 1/16), 6 words each.
-secret preset B128_EXPFAM_C6: Array[U64, 222] = [
-    0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64,
-    0x0000000000000000_u64, 0x8000000000000000_u64, 0x2ACAA97DA57CADBE_u64, 0xF3DC3B1036F5D64C_u64,
-    0xC5068BADC5D57D15_u64, 0xA079A193394C5B16_u64, 0xE4F1D9CC01F97B57_u64, 0x58B90BFBE8E7BCD5_u64,
-    0xD344071B5EC47714_u64, 0x524EB0376B9686E0_u64, 0xC2BE93BBB1396E6E_u64, 0xA3A2751C30CE69D4_u64,
-    0x6F16B06EC9735FCA_u64, 0x1EBFBDFF82C58EA8_u64, 0x80960837D68B3044_u64, 0x44545F2E4DD67D06_u64,
-    0x4753198ADE236146_u64, 0xA7AE23A226D00887_u64, 0xCCE9D8AECCAF4B7B_u64, 0x071AC235C1282FE2_u64,
-    0xEEE877628D8F6274_u64, 0x8F7E8887E73829D7_u64, 0x699B709699E1815F_u64, 0x72478EA53E63911D_u64,
-    0x9CCBBE0B53EEAC50_u64, 0x013B2AB6FBA4E772_u64, 0x318A9F63B2F3EC5C_u64, 0x2F040F926E2C93BE_u64,
-    0xC8CDC36AA406093F_u64, 0x60AED94D2DCE32E1_u64, 0x20E2FED34A297D86_u64, 0x002BB0FFCF14CE62_u64,
-    0x2D3C7B9299D0D3E1_u64, 0x91EC7AEC4E3F0A35_u64, 0x549592FF6D6AB786_u64, 0xCFB314FFCCC47BB0_u64,
-    0xDBD2C2A261AC8D07_u64, 0x00050C244BE1B1E1_u64, 0xCD46DC2CD5899528_u64, 0x95CE94549C9A636A_u64,
-    0x5D3119327FAC831D_u64, 0x4ACE1152E8810FEE_u64, 0x1A1AC547321F639A_u64, 0x00007FF2FF1622C3_u64,
-    0x8531A13788143560_u64, 0x5C5F54178A891B6B_u64, 0x7D5B21CD05968068_u64, 0x2586E1A0F7107AB9_u64,
-    0x11FEC7FF3036D3BE_u64, 0x00000B160111D2E4_u64, 0xE590C3FDFB446BE7_u64, 0x2D5087B376C0214D_u64,
-    0x738AFD2A4917377A_u64, 0x84518CB8CAA9BA26_u64, 0x3E1ED253872D27FC_u64, 0x000000DA929E9CAF_u64,
-    0xCC782DE6FF640FD0_u64, 0x68569686F1264EA6_u64, 0x98468B24ACD303BE_u64, 0xB4CE2A0608A16570_u64,
-    0xC764FB7ED0ECA973_u64, 0x0000000F267A8AC5_u64, 0xEE22A537A6D9A8B8_u64, 0x08110963D1D9380F_u64,
-    0x43B147AA9F2C11B5_u64, 0x90A4EDC7B3F29C1C_u64, 0x8DD92607ABCCAF23_u64, 0x00000000F465639A_u64,
-    0x38202F8BF18F1943_u64, 0xBC2FB66E0BF68E76_u64, 0x511F7698B91CBA26_u64, 0xD17730E76AAEDF16_u64,
-    0x7E14C2F15AB43F0B_u64, 0x000000000E1DEB28_u64, 0xEA93B5CEDF528C2F_u64, 0x6EE667B44F788F66_u64,
-    0x714AA5175CD8C9AB_u64, 0x7B8D8CE6FE81F087_u64, 0x8B3687CB140D6180_u64, 0x0000000000C0B0C9_u64,
-    0x88AD1FE5BCEC581B_u64, 0xA772E0B581376DF7_u64, 0x1D1EDB9F5248282A_u64, 0x2AE5761242913279_u64,
-    0x26AC3C54B9F8A1B1_u64, 0x0000000000098A4B_u64, 0x9D19FAF9F3A16E65_u64, 0xC2FDE1C74321A361_u64,
-    0x3787E55BAD70A464_u64, 0xFC6A729280D47C69_u64, 0xA10EC1008799EC55_u64, 0x00000000000070DB_u64,
-    0xF708EE5BF7061DEE_u64, 0x921CFCDBBCCF2EB0_u64, 0x7CD64E11A79215FE_u64, 0x93B26377E3B574BD_u64,
-    0xA26B9E7E2CE48E3F_u64, 0x00000000000004E3_u64, 0x9BB4D4CCB609D71E_u64, 0x6EF9409A4CD3AC24_u64,
-    0xC560A32B4349D4DD_u64, 0xB1001EFF03E83F71_u64, 0x088968384B4FAAC3_u64, 0x0000000000000033_u64,
-    0xB5C5F81B7E235F48_u64, 0x9C1837383FEF6AA4_u64, 0xCF80A6C83EA7DC89_u64, 0x2ED389743C9AA15C_u64,
-    0xF7176BDB43695D73_u64, 0x0000000000000001_u64, 0x4E3F1412BE77B88A_u64, 0x75F070DF1338E5DB_u64,
-    0xD970F6D684DCCA91_u64, 0xE056AB257AA7F274_u64, 0x125A7ECB835C64DA_u64, 0x0000000000000000_u64,
-    0x6C8A502410B3A92B_u64, 0x5AE22FF5B3B87C53_u64, 0x5510CEF268F5A4F6_u64, 0x27126F802BC39D75_u64,
-    0x00A2D6625A8289AC_u64, 0x0000000000000000_u64, 0xA851C04A8293FECE_u64, 0x95E77DEC82B8EB58_u64,
-    0xEF60EB192FE67EDA_u64, 0xE0AADF36DDF86F4F_u64, 0x00055FF15E0F8271_u64, 0x0000000000000000_u64,
-    0x7E2F1903476D3F72_u64, 0x991510E40164F6EC_u64, 0xB93A9CF471520656_u64, 0x81D8F91AED9D0512_u64,
-    0x00002B59F5A6E03B_u64, 0x0000000000000000_u64, 0xE661B8B0F04BD98D_u64, 0xC0C7162D7C443B27_u64,
-    0x48EB10AA6D041426_u64, 0xFB5CB2465D33A354_u64, 0x0000014E7515DC98_u64, 0x0000000000000000_u64,
-    0xA2DE610B24AFFA88_u64, 0x36D51A1C2CF018AE_u64, 0xE823660BEE34DF2B_u64, 0xD5E52102FA4F3D47_u64,
-    0x00000009A8D57B65_u64, 0x0000000000000000_u64, 0x8297D75925CF8A0E_u64, 0xB19C48D3A13188F6_u64,
-    0x08EC765F339C0710_u64, 0x6A09E41E7A3814F9_u64, 0x00000000448FBF65_u64, 0x0000000000000000_u64,
-    0x11744278158DD70D_u64, 0xD10B922FB4D1B574_u64, 0xDD8263D932A8A20C_u64, 0x99F1CC682AF884C5_u64,
-    0x0000000001D3EBC2_u64, 0x0000000000000000_u64, 0x20127EE09BB9F25C_u64, 0x5ED98D7CDE9ECACE_u64,
-    0x46DA42907892BB39_u64, 0x9AF8DBD36A3B0863_u64, 0x00000000000C0334_u64, 0x0000000000000000_u64,
-    0xAFD75D37C82B15CA_u64, 0xF0ACD37674CF3129_u64, 0xAE8A3FB59540AB8D_u64, 0xA3DFEB50D4131639_u64,
-    0x0000000000004C20_u64, 0x0000000000000000_u64, 0xDAAF1913E1CB12F0_u64, 0xE352EA644FB69C62_u64,
-    0xF3FAC0750B414CC5_u64, 0xCF69A29F13DE20E8_u64, 0x00000000000001D1_u64, 0x0000000000000000_u64,
-    0x0587A7D1A7EC6C45_u64, 0x05EACA3704DCD2F6_u64, 0x12DCBE8116EADA8F_u64, 0xC333445E3155F79B_u64,
-    0x000000000000000A_u64, 0x0000000000000000_u64, 0x183F54470927DBCD_u64, 0x76BC8F5B8E8B7093_u64,
-    0x8F099FB908474B26_u64, 0x3D9AEA5B4D0EBFAE_u64, 0x0000000000000000_u64, 0x0000000000000000_u64,
-    0x261C179F4BDFFA1D_u64, 0x0909A0681E2103A8_u64, 0x4DBDD766D2D9A092_u64, 0x01559C86508B1539_u64,
-    0x0000000000000000_u64, 0x0000000000000000_u64, 0x3816A7CA0CA85578_u64, 0x6B7FD2696989CDEE_u64,
-    0xD34DACABB2D48A6C_u64, 0x00072CE49E65A3AC_u64, 0x0000000000000000_u64, 0x0000000000000000_u64,
-    0xD4E29D35FE14E115_u64, 0xC30D08011BDAFD19_u64, 0xA9A6BF19955B2132_u64, 0x00002572BE492F62_u64,
-    0x0000000000000000_u64, 0x0000000000000000_u64, 0xE4DF41884BE86BB5_u64, 0x0C5772EE960FD5BF_u64,
-    0x9DBEE3B9355D1FB0_u64, 0x000000BDD01D5D84_u64, 0x0000000000000000_u64, 0x0000000000000000_u64,
-    0x80446608D32C4ED3_u64, 0xB4D5892FE7709C19_u64, 0xD3840403FCEFE8A9_u64, 0x00000003BC4FB6D4_u64,
-    0x0000000000000000_u64, 0x0000000000000000_u64,
 ]
 # Accurate path: 2^(j/16), j = 0..15, 3 words each.
 secret preset B128_EXPFAM_TBL0: Array[U64, 48] = [
@@ -390,48 +306,6 @@ secret routine b128_expfam_eval(fs0: U64, fs1: U64, fs2: U64) -> (S64, U128)
     res = b128_expfam_mhuu128(a: res, b: m)
     return (el, res)
 
-### Finishes exp, exp2 or exp10 from the reduced argument (fs0, fs1, fs2): a 2's complement fixed-point
-### value of x*log2(base) whose integer part sits above the 20 low bits of fs2. x0 is the input's bit
-### pattern (for the fallback paths). Returns the correctly rounded result.
-@inline
-secret routine b128_expfam_finish(fs0: U64, fs1: U64, fs2: U64, x0: U128, kind: U64) -> B128
-    var (el, res) = b128_expfam_eval(fs0: fs0, fs1: fs1, fs2: fs2)
-    var rnd = 0_u64
-    if el >= -16382
-        # rounding test: fall back when the 11 dropped bits are too close to a rounding boundary
-        if (b128_expfam_lo(u: res) +% 1030_u64 & 0x7FF_u64) <= 6
-            var acc = b128_expfam_accurate(x0: x0, kind: kind)
-            el = acc.item0
-            res = acc.item1
-        rnd = (b128_expfam_lo(u: res) >>> 10) & 1
-        res = res >>> 11
-        el = el +% 16382
-    else
-        # subnormal result
-        if el > -16499
-            var sh = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](-16372 -% el))
-            var s = 1_u128 << sh
-            var msk = (2_u128 << sh) -% 1_u128
-            if (res +% s +% 6_u128 & msk) <= 6_u128
-                var acc2 = b128_expfam_accurate(x0: x0, kind: kind)
-                el = acc2.item0
-                res = acc2.item1
-            # the accurate path may land one binade lower than the fast one, so sh2 can reach 127; shifting
-            # by sh2 and then by 1 keeps every shift below 128 (res >>> (sh2 + 1) was poison at 127)
-            var sh2 = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](-16372 -% el))
-            if sh2 > 127_u32
-                rnd = 0_u64
-                res = 0_u128
-            else
-                rnd = b128_expfam_lo(u: res >>> sh2) & 1
-                res = res >>> sh2 >>> 1
-        else
-            rnd = 0_u64
-            res = 0_u128
-        el = 0
-    res = res +% b128_expfam_w(hi: LLVM::reinterpret_bits[S64, U64](el) << 48, lo: rnd)
-    return B128.from_bits(bits: res)
-
 ### The words at positions p .. p+nout-1 of the product of the na-word a and the nb-word b, keeping every
 ### partial-product word at a position >= p (lower words and their carries are dropped).
 secret routine b128_expfam_tmul(
@@ -526,18 +400,6 @@ secret routine b128_expfam_row3(which: U64, idx: U64) -> Array[U64, 8]
         k = k + 1
     return o
 
-### Row `idx` of a flattened 6-word table: 0 = 2^(j/16), 1 = the superaccurate coefficients.
-secret routine b128_expfam_row6(which: U64, idx: U64) -> Array[U64, 8]
-    var o = Array[U64, 8]()
-    var k = 0_u64
-    while k < 6
-        if which == 0
-            o[k] = B128_EXPFAM_TBL6[6 * idx + k]
-        else
-            o[k] = B128_EXPFAM_C6[6 * idx + k]
-        k = k + 1
-    return o
-
 ### The fixed-point significand of x0 (with its implicit bit) times log2(base) in `len` words (4 or 7), the
 ### sign applied as a 1's complement after the product (exp, exp10) or a 2's complement (exp2), before the
 ### exponent shift.
@@ -616,112 +478,3 @@ secret routine b128_expfam_accurate_words(x0: U128, kind: U64) -> (S64, U64, U64
     f1[2] = B128_EXPFAM_C3[2]
     f = b128_expfam_tmul(a: ft, na: 3_u64, b: f1, nb: 3_u64, p: 3_u64, nout: 3_u64)
     return (el, f[0], f[1], f[2])
-
-### The accurate path: returns the unbiased exponent and the 2^x significand for the finishing step, or
-### defers to the superaccurate path when this result is still too close to a rounding boundary.
-secret routine b128_expfam_accurate(x0: U128, kind: U64) -> (S64, U128)
-    var (el, f0, f1w, f2) = b128_expfam_accurate_words(x0: x0, kind: kind)
-    var f = Array[U64, 8]()
-    f[0] = f0
-    f[1] = f1w
-    f[2] = f2
-    var m = b128_expfam_w(hi: f[2] >>> 1, lo: (f[1] >>> 1) | (f[2] << 63))
-    var rndfail = false
-    if el >= -16382
-        var g = b128_expfam_w(hi: f[1], lo: f[0])
-        var d = g +% 8_u128 & 0x000000000000000007FFFFFFFFFFFFFF_u128
-        rndfail = d <= 16_u128
-    else
-        var s = LLVM::reinterpret_bits[S64, U64](-16371 - el)
-        var w = b128_expfam_w(hi: f[1], lo: f[0]) +% 8_u128
-        var ff0 = b128_expfam_lo(u: w)
-        var ff1 = b128_expfam_hi(u: w)
-        var ff2 = f[2]
-        if w < 8_u128
-            ff2 = ff2 +% 1
-        if s < 64
-            ff1 = ff1 & b128_expfam_shl(v: 1_u64, n: s) -% 1
-            ff2 = 0_u64
-        elseif s < 128
-            ff2 = ff2 & b128_expfam_shl(v: 1_u64, n: s - 64) -% 1
-        rndfail = ff0 <= 16 and (ff1 | ff2) == 0
-    if rndfail
-        return b128_expfam_superaccurate(x0: x0, kind: kind)
-    return (el, m)
-
-### The superaccurate path, used when the accurate result is too close to a rounding boundary: returns the
-### unbiased exponent and the 2^x significand like the accurate path.
-secret routine b128_expfam_superaccurate(x0: U128, kind: U64) -> (S64, U128)
-    var x = b128_expfam_reduce_wide(x0: x0, kind: kind, len: 7_u64)
-    x = b128_expfam_ars(o: x, len: 7_u64, n: b128_expfam_wide_shift(x0: x0, kind: kind))
-    var el = LLVM::reinterpret_bits[U64, S64](x[6])
-    var jt = x[5] >>> 60
-    x[5] = x[5] & 0x0FFFFFFFFFFFFFFF_u64
-    # degree-36 polynomial in the top fraction word
-    var f = b128_expfam_row6(which: 1_u64, idx: 36_u64)
-    var i = 36_u64
-    while i > 0
-        i = i - 1
-        f = b128_expfam_mahu(a: x[5], b: f, c: b128_expfam_row6(which: 1_u64, idx: i), n: 6_u64)
-    # the same series truncated per degree, in the next fraction word
-    var a = Array[U64, 8]()
-    var r = 5_u64
-    while r >= 1
-        var bb = Array[U64, 8]()
-        var kk = 0_u64
-        while r + kk < 6
-            bb[kk] = B128_EXPFAM_C6[6 * r + r + kk]
-            kk = kk + 1
-        a = b128_expfam_mahu(a: x[4], b: a, c: bb, n: 6_u64)
-        r = r - 1
-    var f1 = b128_expfam_mahu(
-        a: x[4],
-        b: a,
-        c: b128_expfam_row6(which: 1_u64, idx: 0_u64),
-        n: 6_u64,
-    )
-    # the four low fraction words, by a second-order correction
-    var xs = Array[U64, 8]()
-    xs[2] = x[0]
-    xs[3] = x[1]
-    xs[4] = x[2]
-    xs[5] = x[3]
-    var p2 = b128_expfam_tmul(
-        a: xs,
-        na: 6_u64,
-        b: b128_expfam_row6(which: 1_u64, idx: 2_u64),
-        nb: 6_u64,
-        p: 6_u64,
-        nout: 6_u64,
-    )
-    var g = Array[U64, 8]()
-    g[0] = p2[2]
-    g[1] = p2[3]
-    g[2] = p2[4]
-    g[3] = p2[5]
-    var carry = 0_u128
-    var q = 0_u64
-    while q < 6
-        var v = LLVM::zero_extend[U64, U128](g[q]) +% LLVM::zero_extend[U64, U128](B128_EXPFAM_C6[6 + q]) +% carry
-        g[q] = b128_expfam_lo(u: v)
-        carry = v >>> 64
-        q = q + 1
-    p2 = b128_expfam_tmul(a: xs, na: 6_u64, b: g, nb: 6_u64, p: 6_u64, nout: 6_u64)
-    var h = Array[U64, 8]()
-    h[0] = p2[2]
-    h[1] = p2[3]
-    h[2] = p2[4]
-    h[3] = p2[5]
-    h[4] = B128_EXPFAM_C6[4]
-    h[5] = B128_EXPFAM_C6[5]
-    var ft = b128_expfam_tmul(a: f, na: 6_u64, b: f1, nb: 6_u64, p: 6_u64, nout: 6_u64)
-    ft = b128_expfam_tmul(a: ft, na: 6_u64, b: h, nb: 6_u64, p: 6_u64, nout: 6_u64)
-    ft = b128_expfam_tmul(
-        a: ft,
-        na: 6_u64,
-        b: b128_expfam_row6(which: 0_u64, idx: jt),
-        nb: 6_u64,
-        p: 6_u64,
-        nout: 6_u64,
-    )
-    return (el, b128_expfam_w(hi: ft[5] >>> 1, lo: (ft[4] >>> 1) | (ft[5] << 63)))

@@ -522,8 +522,10 @@ secret preset B128_TRIG_COS_COEF: Array[U64, 108] = [
 ]
 
 # ============================================================================
-# Correctly rounded sine and cosine of B128: the shared pipeline
+# CORE-MATH's sine and cosine of B128: the shared pipeline
 # ============================================================================
+# B128.sin, cos and sincos are Tessera's, through Ingrid. What stays is the pipeline
+# the D128 transcendentals (D128Fast.rf) build on.
 # Ported from CORE-MATH, src/binary128/sin/sinq.c and src/binary128/cos/cosq.c
 # (https://core-math.gitlabpages.inria.fr/), themselves a C port of the binary128 sine/cosine of metallic-rs.
 # Copyright (c) 2026 Chen-Pang He <jdh863@gmail.com>
@@ -545,128 +547,6 @@ secret preset B128_TRIG_COS_COEF: Array[U64, 108] = [
 #
 # Wide values are tuples of 128-bit limbs, least significant first: (l0, l1) for 256 bits and (l0, l1, l2)
 # for 384 bits.
-
-### The shared sine/cosine entry.
-### :param bits: The argument's bits.
-### :param cosine: True for the cosine, false for the sine.
-### :returns: The bits of the correctly rounded result.
-secret routine b128_trig(bits: U128, cosine: Bool) -> U128
-    var signmask = 1_u128 << 127
-    var expmask = 0x7FFF_u128 << 112
-    var implicit = 1_u128 << 112
-    var ax = bits & signmask -% 1
-    if ax >= expmask
-        if ax == expmask
-            # +-infinity: the positive default quiet NaN
-            return expmask | (1_u128 << 111)
-        # NaN: quiet it, keep sign and payload
-        return bits | (1_u128 << 111)
-    if ax < (LLVM::zero_extend[U64, U128](16383_u64 -% 57_u64) << 112)
-        # |x| < 2^-57: sin(x) rounds to x, cos(x) to 1
-        if cosine
-            return 0x3FFF_u128 << 112
-        return bits
-    var m = ax & implicit -% 1 | implicit
-    var sign = 0_u128
-    if not cosine
-        sign = bits & signmask
-    var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
-    return b128_trig_finish(
-        fr: b128_trig_fast(m: m, e: e, cosine: cosine),
-        m: m,
-        e: e,
-        cosine: cosine,
-        sign: sign,
-    )
-
-### Rounds a fast-path result, or runs the accurate path when the fast one cannot vouch for it.
-### :param fr: The fast path's (vouched, frac, e2, sign) result.
-### :param m: The argument's significand.
-### :param e: The argument's exponent.
-### :param cosine: True for the cosine, false for the sine.
-### :param sign: The argument's sign bit for the sine, 0 for the cosine.
-### :returns: The bits of the correctly rounded result.
-secret routine b128_trig_finish(
-    fr: (Bool, U128, S64, U128),
-    m: U128,
-    e: S64,
-    cosine: Bool,
-    sign: U128,
-) -> U128
-    var implicit = 1_u128 << 112
-    if fr.item0
-        # round on the fixed 15-bit guard unless it sits within 16 units of the midpoint
-        var frac = fr.item1
-        var rest = LLVM::int_truncate[U128, U64](frac) & 0x7FFF_u64
-        if (rest +% 16_u64 -% 0x4000_u64 & 0x7FFF_u64) > 32_u64
-            var up = 0_u128
-            if rest > 0x4000_u64
-                up = 1
-            var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](fr.item2 +% 16382)) << 112
-            return sign ^ fr.item3 | ex +% (frac >>> 15) -% implicit +% up
-    return b128_trig_accurate(m: m, e: e, cosine: cosine, sign: sign)
-
-### Both correctly rounded results for the argument bits, the sine's then the cosine's, sharing the argument
-### reduction (the expensive part) between them.
-### :param bits: The argument's bits.
-### :returns: The bits of sin and of cos.
-secret routine b128_trig_both(bits: U128) -> (U128, U128)
-    var signmask = 1_u128 << 127
-    var expmask = 0x7FFF_u128 << 112
-    var implicit = 1_u128 << 112
-    var ax = bits & signmask -% 1
-    if ax >= expmask or ax < (LLVM::zero_extend[U64, U128](16383_u64 -% 57_u64) << 112)
-        return (b128_trig(bits: bits, cosine: false), b128_trig(bits: bits, cosine: true))
-    var m = ax & implicit -% 1 | implicit
-    var sign = bits & signmask
-    var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
-    if e < -8
-        return (
-            b128_trig_finish(
-                fr: b128_trig_fast(m: m, e: e, cosine: false),
-                m: m,
-                e: e,
-                cosine: false,
-                sign: sign,
-            ),
-            b128_trig_finish(
-                fr: b128_trig_fast(m: m, e: e, cosine: true),
-                m: m,
-                e: e,
-                cosine: true,
-                sign: 0_u128,
-            ),
-        )
-    var r = b128_trig_reduce(m: m, e: e)
-    if not r.item0
-        return (
-            b128_trig_accurate(m: m, e: e, cosine: false, sign: sign),
-            b128_trig_accurate(m: m, e: e, cosine: true, sign: 0_u128),
-        )
-    var sq = b128_trig_squares(t1: r.item3, et: r.item4)
-    var s1 = b128_trig_sin_frac(t1: r.item3, u: sq.item0, v: sq.item1)
-    var fs = b128_trig_fast_tail(
-        n: r.item1,
-        negative: r.item2,
-        rt1: r.item3,
-        ret: r.item4,
-        sq: sq,
-        s1b: s1,
-        cosine: false,
-    )
-    var fc = b128_trig_fast_tail(
-        n: r.item1,
-        negative: r.item2,
-        rt1: r.item3,
-        ret: r.item4,
-        sq: sq,
-        s1b: s1,
-        cosine: true,
-    )
-    return (
-        b128_trig_finish(fr: fs, m: m, e: e, cosine: false, sign: sign),
-        b128_trig_finish(fr: fc, m: m, e: e, cosine: true, sign: 0_u128),
-    )
 
 ### A shift amount as the U32 the shift operators take.
 @inline
@@ -1258,40 +1138,6 @@ secret routine b128_trig_alternating(u: (U128, U128, U128), cosine: Bool) -> (U1
         q = b128_trig_sub384(a: c3, b: b128_trig_mul384(a: u, b: q))
         k = k -% 1
     return q
-
-### Rounds a normalized 384-bit fraction frac*2^(e2-384) to binary128, to nearest with ties to even. The
-### result is never subnormal here: |x| >= 2^-57 keeps it above 2^-124.
-secret routine b128_trig_round384(frac: (U128, U128, U128), e2: S64, sign: U128) -> U128
-    var mantissa = frac.item2 >>> 15
-    var round_bit = (frac.item2 >>> 14) & 1
-    var sticky = (frac.item2 & 0x3FFF_u128 | frac.item1 | frac.item0) != 0
-    var up = 0_u128
-    if round_bit != 0 and (sticky or (mantissa & 1) != 0)
-        up = 1
-    var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](e2 +% 16382)) << 112
-    return sign | ex +% (mantissa -% (1_u128 << 112)) +% up
-
-### The 384-bit path: everything the fast path would not decide.
-secret routine b128_trig_accurate(m: U128, e: S64, cosine: Bool, sign: U128) -> U128
-    var n = 0_s64
-    var negative = false
-    var t = (0_u128, 0_u128, m << 15)
-    var et = e +% 1
-    if e >= -8
-        var rw = b128_trig_reduce_wide(m: m, e: e)
-        n = rw.item0
-        negative = rw.item1
-        t = rw.item2
-        et = rw.item3
-    var (sg, frac, e2) = b128_trig_accurate_eval(
-        n: n,
-        negative: negative,
-        t: t,
-        et: et,
-        cosine: cosine,
-        sign: sign,
-    )
-    return b128_trig_round384(frac: frac, e2: e2, sign: sg)
 
 ### sin (cosine false) or cos of n pi/256 + theta, theta = (-1)^negative t 2^(et - 384) with t a normalized
 ### 384-bit fraction, to about 2^-370: the sign bit to apply (sign, the argument's for the sine, flipped by the

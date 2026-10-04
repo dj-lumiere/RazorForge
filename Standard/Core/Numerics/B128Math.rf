@@ -1,176 +1,10 @@
 module Core
 
 # ============================================================================
-# B128 transcendentals. The functions CORE-MATH provides for binary128 (acos, asin, atan, atan2, cbrt, cos,
-# exp, exp10, exp2, expm1, hypot, log, sin, sqrt) are correctly rounded integer ports in CoreMath/B128*.rf.
-# The rest (tan, sinh/cosh/tanh, asinh/acosh/atanh, log2/log10/log1p, pow, sinpi/cospi/tanpi, erf/erfc,
-# tgamma/lgamma) first try a fast path built from the CORE-MATH fast phases with proven error bounds
-# (CoreMath/B128Log.rf, B128Fast.rf, B128Erf.rf, B128Gamma.rf), kept only when its band rounds to one B128.
-# The few inputs whose band reaches a rounding midpoint go to the 384-bit tier (B128Wx.rf), which rounds
-# from a band of about 2^-360.
-# ============================================================================
-
-### Whether a finite B128 is an integer (every B128 from 2^112 on is).
-secret routine b128_is_int(a: B128) -> Bool
-    var bits = a.to_bits()
-    var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
-    if be == 0x7FFF_s64
-        return false
-    var f = bits & (1_u128 << 112_u32) -% 1_u128
-    if be == 0_s64
-        return f == 0_u128
-    var e = be -% 16383_s64
-    if e >= 112_s64
-        return true
-    if e < 0_s64
-        return false
-    return (f & (1_u128 << b128_trig_sh(n: 112_s64 -% e)) -% 1_u128) == 0_u128
-
-### Whether a finite B128 integer is odd (every B128 from 2^113 on is even).
-secret routine b128_integer_is_odd(a: B128) -> Bool
-    var bits = a.to_bits()
-    var e = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128) -% 16383_s64
-    if e < 0_s64 or e > 112_s64
-        return false
-    var m = bits & (1_u128 << 112_u32) -% 1_u128 | (1_u128 << 112_u32)
-    return ((m >>> b128_trig_sh(n: 112_s64 -% e)) & 1_u128) == 1_u128
-
-### f(x) on the 384-bit tier for a B128 whose fast path left the rounding open: 0 tan, 1 sinh, 2 cosh,
-### 3 tanh, 4 asinh, 5 acosh, 6 atanh, 7 log2, 8 log10, 9 log1p, 10 erf, 11 erfc, 12 lgamma, 13 tgamma.
-### Special values, and arguments whose result the range alone settles, are handled first.
-secret routine b128_wide(x: B128, which: U64) -> B128
-    if x.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: x.to_bits()))
-    var nan = B128.from_bits(bits: b128_qnan())
-    var posinf = B128.from_bits(bits: b128_inf(sign: 0_u64))
-    var neginf = B128.from_bits(bits: b128_inf(sign: 1_u64))
-    var one = wx_one()
-    var w = wx_of_b128(x: x)
-    var ax = x.abs()
-    var neg = x.is_negative()
-    var signed_one = B128.from_bits(bits: 0x3FFF_u128 << 112_u32)
-    if neg
-        signed_one = signed_one.neg()
-    if which == 0_u64
-        if x.is_infinite()
-            return nan
-        if x.is_zero()
-            return x
-        var (s, c) = wx_sincos_b128(x: x)
-        return wx_b128(w: wx_div(a: s, b: c))
-    if which == 1_u64
-        if x.is_infinite() or x.is_zero()
-            return x
-        if ax > 11400.0_b128
-            if neg
-                return neginf
-            return posinf
-        return wx_b128(w: wx_sinh(x: w))
-    if which == 2_u64
-        if x.is_infinite() or ax > 11400.0_b128
-            return posinf
-        return wx_b128(w: wx_cosh(x: w))
-    if which == 3_u64
-        if x.is_zero()
-            return x
-        if x.is_infinite() or ax > 100.0_b128
-            return signed_one
-        return wx_b128(w: wx_tanh(x: w))
-    if which == 4_u64
-        if x.is_infinite() or x.is_zero()
-            return x
-        return wx_b128(w: wx_asinh(x: w))
-    if which == 5_u64
-        if x < 1.0_b128
-            return nan
-        if x.is_infinite()
-            return x
-        return wx_b128(w: wx_acosh(t: wx_sub(a: w, b: one)))
-    if which == 6_u64
-        if ax > 1.0_b128
-            return nan
-        if ax == 1.0_b128
-            if neg
-                return neginf
-            return posinf
-        if x.is_zero()
-            return x
-        return wx_b128(w: wx_atanh(x: w, omx: wx_sub(a: one, b: wx_abs(w: w))))
-    if which == 7_u64 or which == 8_u64
-        if neg and not x.is_zero()
-            return nan
-        if x.is_zero()
-            return neginf
-        if x.is_infinite()
-            return x
-        var scale = wx_table(i: 3_u64)
-        if which == 8_u64
-            scale = wx_table(i: 4_u64)
-        return wx_b128(w: wx_mul(a: wx_log(x: w), b: scale))
-    if which == 9_u64
-        if x < -1.0_b128
-            return nan
-        if x == -1.0_b128
-            return neginf
-        if x.is_infinite() or x.is_zero()
-            return x
-        return wx_b128(w: wx_log1p(t: w))
-    if which == 10_u64
-        if x.is_zero()
-            return x
-        if x.is_infinite() or ax > 20.0_b128
-            return signed_one
-        return wx_b128(w: wx_erf(x: w, complement: false))
-    if which == 11_u64
-        if neg and (x.is_infinite() or ax > 20.0_b128)
-            return 2.0_b128
-        if x.is_infinite() or x > 110.0_b128
-            return B128.from_bits(bits: 0_u128)
-        return wx_b128(w: wx_erf(x: w, complement: true))
-    # lgamma (12) and tgamma (13)
-    if x.is_infinite()
-        if which == 13_u64 and neg
-            return nan
-        return posinf
-    if x.is_zero()
-        if which == 13_u64 and neg
-            return neginf
-        return posinf
-    if neg and b128_is_int(a: x)
-        if which == 13_u64
-            return nan
-        return posinf
-    var k = x.round()
-    var r = x - k
-    var k_odd = b128_integer_is_odd(a: k)
-    if which == 13_u64
-        if x > 1755.5_b128
-            return posinf
-        if x < -1800.0_b128
-            # |Gamma| underflows; its sign is that of sin(pi x) = (-1)^k sin(pi r)
-            var zb = 0_u128
-            if r.is_negative() != k_odd
-                zb = 1_u128 << 127_u32
-            return B128.from_bits(bits: zb)
-        return wx_b128(w: wx_tgamma(x: w, k_odd: k_odd, r: wx_of_b128(x: r)))
-    return wx_b128(w: wx_lgamma(x: w, k_odd: k_odd, r: wx_of_b128(x: r)).item0)
-
-### sinpi (which 0), cospi (1) or tanpi (2) of a finite non-integer B128 on the 384-bit tier: y = k + r with
-### k the nearest integer and |r| <= 1/2 (both exact), and sin / cos(pi y) = (-1)^k sin / cos(pi r).
-secret routine b128_wide_pi(y: B128, which: U64) -> B128
-    var k = y.round()
-    var (s, c) = wx_sincospi(r: wx_of_b128(x: y - k))
-    if which == 2_u64
-        return wx_b128(w: wx_div(a: s, b: c))
-    var v = s
-    if which == 1_u64
-        v = c
-    if b128_integer_is_odd(a: k)
-        v = wx_neg(w: v)
-    return wx_b128(w: v)
-
-# ============================================================================
-# B128 method wrappers
+# B128 library functions. Each is one call to Ingrid's export (Ingrid/tessera/binfloat.tess), which is Tessera's
+# correctly rounded F128 routine: the CORE-MATH port where CORE-MATH has the binary128 function, Tessera's own
+# correctly rounded one elsewhere. The checked forms (`!`) crash here, in RazorForge, on a result that is not
+# finite. Only the three-leg hypot is computed here (exact integer arithmetic, one rounding): Tessera has none.
 # ============================================================================
 
 ### Returns `e^me`.
@@ -211,20 +45,7 @@ routine B128.log1p!() -> B128
 
 ### `ln(1+me)` with raw IEEE (NaN -> qNaN, me=-1 -> -inf, me<-1 -> qNaN, +inf -> +inf). No crash.
 routine B128.log1p_unchecked() -> B128
-    if me.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-    if me.is_zero()
-        return me
-    if me == -1.0_b128
-        return B128.from_bits(bits: b128_inf(sign: 1_u64))
-    if me < -1.0_b128
-        return B128.from_bits(bits: b128_qnan())
-    if me.is_infinite()
-        return me
-    var (fast, v) = b128_log1p_cr(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 9_u64)
+    return b128_of_words(w: C::ingrid_b128_log1p(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `log2(me)`.
 routine B128.log2!() -> B128
@@ -237,21 +58,7 @@ routine B128.log2!() -> B128
 
 ### `log2(me)` with raw IEEE. No crash.
 routine B128.log2_unchecked() -> B128
-    var (near, nv) = b128_log_near1(x: me, ten: false)
-    if near
-        return nv
-    var (ok, hi, lo) = b128_log_scaled_ok(x: me)
-    if ok
-        var (fast, v) = b128_log_scaled(
-            hi: hi,
-            lo: lo,
-            c1: 0xB8AA3B295C17F0BB_u64,
-            c0: 0xBE87FED0691D3E89_u64,
-            p: 127_u32,
-        )
-        if fast
-            return v
-    return b128_wide(x: me, which: 7_u64)
+    return b128_of_words(w: C::ingrid_b128_log2(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `log10(me)`.
 routine B128.log10!() -> B128
@@ -264,21 +71,7 @@ routine B128.log10!() -> B128
 
 ### `log10(me)` with raw IEEE. No crash.
 routine B128.log10_unchecked() -> B128
-    var (near, nv) = b128_log_near1(x: me, ten: true)
-    if near
-        return nv
-    var (ok, hi, lo) = b128_log_scaled_ok(x: me)
-    if ok
-        var (fast, v) = b128_log_scaled(
-            hi: hi,
-            lo: lo,
-            c1: 0xDE5BD8A937287195_u64,
-            c0: 0x355BAAAFAD33DC32_u64,
-            p: 129_u32,
-        )
-        if fast
-            return v
-    return b128_wide(x: me, which: 8_u64)
+    return b128_of_words(w: C::ingrid_b128_log10(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `2^me`.
 routine B128.exp2!() -> B128
@@ -311,84 +104,13 @@ routine B128.pow!(you: B128) -> B128
 ### exp(you * ln|me|) on the 384-bit tier when the fast path leaves the rounding open, the sign of an
 ### odd-integer exponent reapplied.
 routine B128.pow_unchecked(you: B128) -> B128
-    var (fast, v) = b128_pow_fast(x: me, y: you)
-    if fast
-        return v
-    var (exact, w) = b128_pow_exact(x: me, y: you)
-    if exact
-        return w
-    var one = 1.0_b128
-    var negone = -1.0_b128
-    # integer / odd-integer exponent classification drives the sign rules and domain checks below
-    var yisint = you.is_finite() and b128_is_int(a: you)
-    var yisoddint = yisint and b128_integer_is_odd(a: you)
-    var poszero = B128.from_bits(bits: 0_u128)
-    var negzero = B128.from_bits(bits: 1_u128 << 127_u32)
-    var posinf = B128.from_bits(bits: b128_inf(sign: 0_u64))
-    var neginf = B128.from_bits(bits: b128_inf(sign: 1_u64))
-    var xs = 0_u64
-    if me.is_negative()
-        xs = 1_u64
-    # a negative base raised to a non-integer power has no real result
-    if me.is_negative() and me.is_finite() and not me.is_zero() and you.is_finite() and not yisint
-        return B128.from_bits(bits: b128_qnan())
-    if me == one or you.is_zero()
-        return one
-    if me.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-    if you.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
-    if not you.is_negative() and not you.is_zero() and me.is_zero() and yisoddint
-        return me
-    if me.is_zero() and not you.is_negative() and not you.is_zero() and not yisoddint
-        return poszero
-    if you.is_infinite() and me == negone
-        return one
-    var absxlt1 = negone < me and me < one
-    var absxgt1 = me < negone or one < me
-    if you.is_infinite() and you.is_negative() and absxlt1
-        return posinf
-    if you.is_infinite() and you.is_negative() and absxgt1
-        return poszero
-    if you.is_infinite() and not you.is_negative() and absxlt1
-        return poszero
-    if you.is_infinite() and not you.is_negative() and absxgt1
-        return posinf
-    if me.is_infinite() and me.is_negative() and you.is_negative() and yisoddint
-        return negzero
-    if me.is_infinite()
-        and me.is_negative()
-        and you.is_negative()
-        and not you.is_zero()
-        and not yisoddint
-        return poszero
-    if me.is_infinite() and me.is_negative() and not you.is_negative() and yisoddint
-        return neginf
-    if me.is_infinite()
-        and me.is_negative()
-        and not you.is_negative()
-        and not you.is_zero()
-        and not yisoddint
-        return posinf
-    if me.is_infinite() and not me.is_negative() and you.is_negative() and not you.is_zero()
-        return poszero
-    if me.is_infinite() and not me.is_negative() and not you.is_negative() and not you.is_zero()
-        return posinf
-    if me.is_zero() and yisoddint and you.is_negative()
-        return B128.from_bits(bits: b128_inf(sign: xs))
-    if me.is_zero() and you.is_negative() and not you.is_zero() and not yisoddint
-        return posinf
-    # |me|^you = e^z with z = you ln|me|; far past the range the result is infinite or zero
-    var z = wx_mul(a: wx_of_b128(x: you), b: wx_log(x: wx_abs(w: wx_of_b128(x: me))))
-    var zb = wx_b64(w: z)
-    var r = poszero
-    if zb > 12000.0
-        r = posinf
-    elseif zb > -12000.0
-        r = wx_b128(w: wx_exp(x: z))
-    if me.is_negative() and yisoddint
-        return r.neg()
-    return r
+    var w = C::ingrid_b128_pow(
+        low: me.low_bits(),
+        high: me.high_bits(),
+        y_low: you.low_bits(),
+        y_high: you.high_bits(),
+    )
+    return b128_of_words(w: w)
 
 ### Returns `asin(me)`.
 routine B128.asin!() -> B128
@@ -419,10 +141,7 @@ routine B128.sinh!() -> B128
 
 ### `sinh(me)` with raw IEEE (large |me| -> signed inf). No crash.
 routine B128.sinh_unchecked() -> B128
-    var (fast, v) = b128_sinh_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 1_u64)
+    return b128_of_words(w: C::ingrid_b128_sinh(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `cosh(me)`.
 routine B128.cosh!() -> B128
@@ -435,17 +154,11 @@ routine B128.cosh!() -> B128
 
 ### `cosh(me)` with raw IEEE (large |me| -> +inf). No crash.
 routine B128.cosh_unchecked() -> B128
-    var (fast, v) = b128_cosh_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 2_u64)
+    return b128_of_words(w: C::ingrid_b128_cosh(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `tanh(me)`.
 routine B128.tanh() -> B128
-    var (fast, v) = b128_tanh_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 3_u64)
+    return b128_of_words(w: C::ingrid_b128_tanh(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `atanh(me)`.
 routine B128.atanh!() -> B128
@@ -458,21 +171,11 @@ routine B128.atanh!() -> B128
 
 ### `atanh(me)` with raw IEEE (|me|=1 -> signed inf, |me|>1 -> qNaN). No crash.
 routine B128.atanh_unchecked() -> B128
-    var (fast, v) = b128_atanh_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 6_u64)
+    return b128_of_words(w: C::ingrid_b128_atanh(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `asinh(me)`.
 routine B128.asinh() -> B128
-    if me.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-    if me.is_zero()
-        return me
-    var (fast, v) = b128_asinh_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 4_u64)
+    return b128_of_words(w: C::ingrid_b128_asinh(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `acosh(me)`.
 routine B128.acosh!() -> B128
@@ -485,28 +188,14 @@ routine B128.acosh!() -> B128
 
 ### `acosh(me)` with raw IEEE (me<1 -> qNaN). No crash.
 routine B128.acosh_unchecked() -> B128
-    if me.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-    var (fast, v) = b128_acosh_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 5_u64)
+    return b128_of_words(w: C::ingrid_b128_acosh(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `tan(me)`.
 routine B128.tan() -> B128
-    if me.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-    if me.is_infinite()
-        return B128.from_bits(bits: b128_qnan())
-    if me.is_zero()
-        return me
-    var (fast, v) = b128_tan_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 0_u64)
+    return b128_of_words(w: C::ingrid_b128_tan(low: me.low_bits(), high: me.high_bits()))
 
 # ============================================================================
-# fma and the three-leg hypot: exact integer arithmetic, one rounding
+# fma, and the three-leg hypot: exact integer arithmetic, one rounding
 # ============================================================================
 
 ### A finite nonzero B128 as its integer significand (113 bits, fewer when subnormal) and the exponent of
@@ -582,149 +271,17 @@ routine B128.fma!(b: B128, c: B128) -> B128
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### `me*b + c` with a single rounding and raw IEEE propagation. No crash. The product is exact (226 bits) and
-### the sum exact up to a sticky bit (b128_exact_sum), so its one rounding is the correct one.
-### The bits of a * b + c, correctly rounded, for finite nonzero a, b, c (bit patterns) whose result is a
-### normal B128, or false (then the general path decides): the 226-bit product and c, each normalized to the
-### top of a 256-bit window, the smaller aligned below the larger with the bits it drops folded into a sticky
-### bit. Bits drop only when the smaller sits more than 30 bits (the product) or 143 bits (c) below the larger,
-### and then the sum keeps its top within one bit of the larger one's, so the sticky bit at bit 0 is far below
-### the rounding place (bit 143); a subtraction that drops bits takes one unit off first, the true value lying
-### strictly between that and the next unit up.
-secret routine b128_fma_fast(a: U128, b: U128, c: U128) -> (Bool, U128)
-    var signmask = 1_u128 << 127_u32
-    var expmask = 0x7FFF_u128 << 112_u32
-    var fracmask = (1_u128 << 112_u32) -% 1_u128
-    var aa = a & signmask -% 1_u128
-    var ba = b & signmask -% 1_u128
-    var ca = c & signmask -% 1_u128
-    if aa == 0_u128
-        or ba == 0_u128
-        or ca == 0_u128
-        or aa >= expmask
-        or ba >= expmask
-        or ca >= expmask
-        return (false, 0_u128)
-    if aa < (1_u128 << 112_u32) or ba < (1_u128 << 112_u32) or ca < (1_u128 << 112_u32)
-        return (false, 0_u128)
-    # value = m 2^e with m the 113-bit significand and e the exponent of its last bit
-    var ma = aa & fracmask | (1_u128 << 112_u32)
-    var mb = ba & fracmask | (1_u128 << 112_u32)
-    var mc = ca & fracmask | (1_u128 << 112_u32)
-    var ea = LLVM::int_truncate[U128, S64](aa >>> 112_u32) -% 16495_s64
-    var eb = LLVM::int_truncate[U128, S64](ba >>> 112_u32) -% 16495_s64
-    var ec = LLVM::int_truncate[U128, S64](ca >>> 112_u32) -% 16495_s64
-    var pneg = ((a ^ b) & signmask) != 0_u128
-    var cneg = (c & signmask) != 0_u128
-    # the product (225 or 226 bits) and c with their top bits at 255, and the exponents of their bit 0
-    var pr = b128_trig_wmul(x: ma, y: mb)
-    var pw = (LLVM::zero_extend[U128, U256](pr.item0) << 128_u32) | LLVM::zero_extend[U128, U256](pr.item1)
-    var plz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(pw))
-    pw = pw << b128_trig_sh(n: plz)
-    var pe = ea +% eb -% plz
-    var cw = LLVM::zero_extend[U128, U256](mc) << 143_u32
-    var ce = ec -% 143_s64
-    var x = pw
-    var xe = pe
-    var xneg = pneg
-    var y = cw
-    var ye = ce
-    var yneg = cneg
-    if ce > pe or (ce == pe and cw > pw)
-        x = cw
-        xe = ce
-        xneg = cneg
-        y = pw
-        ye = pe
-        yneg = pneg
-    var d = xe -% ye
-    var ys = 0_u256
-    var sticky = true
-    if d < 256_s64
-        ys = y >>> b128_trig_sh(n: d)
-        sticky = (ys << b128_trig_sh(n: d)) != y
-    var sum = 0_u256
-    var e = xe
-    if xneg == yneg
-        sum = x +% ys
-        if sum < x
-            # the carry: one bit up, the dropped low bit into the sticky bit
-            if (sum & 1_u256) != 0_u256
-                sticky = true
-            sum = (sum >>> 1_u32) | (1_u256 << 255_u32)
-            e = e +% 1_s64
-    else
-        sum = x -% ys
-        if sticky
-            sum = sum -% 1_u256
-        if sum == 0_u256
-            # exact cancellation: +0
-            return (true, 0_u128)
-    var lz = LLVM::int_truncate[U256, S64](LLVM::leading_zeros(sum))
-    sum = sum << b128_trig_sh(n: lz)
-    e = e -% lz
-    if sticky
-        sum = sum | 1_u256
-    var lead = e +% 255_s64
-    if lead < -16382_s64 or lead > 16383_s64
-        return (false, 0_u128)
-    # the top 113 bits, rounded to nearest even on the 143 below
-    var q = LLVM::int_truncate[U256, U128](sum >>> 143_u32)
-    var rem = sum & (1_u256 << 143_u32) -% 1_u256
-    var half = 1_u256 << 142_u32
-    var bits = (LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](lead +% 16383_s64)) << 112_u32) +% (q -% (1_u128 << 112_u32))
-    if rem > half or (rem == half and (q & 1_u128) == 1_u128)
-        bits = bits +% 1_u128
-    if xneg
-        bits = bits | signmask
-    return (true, bits)
-
+### Returns the fused multiply-add `me*b + c` with a single rounding, with raw IEEE 754 propagation.
 routine B128.fma_unchecked(b: B128, c: B128) -> B128
-    var (fast, fb) = b128_fma_fast(a: me.to_bits(), b: b.to_bits(), c: c.to_bits())
-    if fast
-        return B128.from_bits(bits: fb)
-    var nan = B128.from_bits(bits: b128_qnan())
-    if me.is_nan() or b.is_nan() or c.is_nan()
-        return nan
-    var pneg = me.is_negative() != b.is_negative()
-    var pzero = me.is_zero() or b.is_zero()
-    if me.is_infinite() or b.is_infinite()
-        if pzero
-            return nan
-        if c.is_infinite() and c.is_negative() != pneg
-            return nan
-        var ps = 0_u64
-        if pneg
-            ps = 1_u64
-        return B128.from_bits(bits: b128_inf(sign: ps))
-    if c.is_infinite()
-        return c
-    if pzero
-        if c.is_zero()
-            # (+0) + (+0) and (-0) + (-0) keep their sign, mixed signs give +0
-            if pneg and c.is_negative()
-                return c
-            return B128.from_bits(bits: 0_u128)
-        return c
-    var (ma, ea) = b128_int_parts(x: me)
-    var (mb, eb) = b128_int_parts(x: b)
-    var p = b128_trig_wmul(x: ma, y: mb)
-    var pt = (0_u128, p.item1, p.item0)
-    var pe = ea +% eb -% 128_s64
-    if c.is_zero()
-        return wx_b128(w: wx_make(neg: pneg, t: pt, e: pe, rel: 0.0))
-    var (mc, ec) = b128_int_parts(x: c)
-    var sum = b128_exact_sum(
-        neg_a: pneg,
-        a: pt,
-        ea: pe,
-        neg_b: c.is_negative(),
-        b: (0_u128, 0_u128, mc),
-        eb: ec -% 256_s64,
+    var w = C::ingrid_b128_fma(
+        low: me.low_bits(),
+        high: me.high_bits(),
+        y_low: b.low_bits(),
+        y_high: b.high_bits(),
+        z_low: c.low_bits(),
+        z_high: c.high_bits(),
     )
-    if wx_is_zero(w: sum)
-        return B128.from_bits(bits: 0_u128)
-    return wx_b128(w: sum)
+    return b128_of_words(w: w)
 
 ### Returns `sqrt(x^2 + y^2)` without spurious overflow.
 ### :param x: One leg.
@@ -806,70 +363,24 @@ routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
 
 ### Returns `sin(pi*me)`: sin(pi*n) is ±0 with the sign of me.
 routine B128.sinpi() -> B128
-    if me.is_nan() or me.is_zero()
-        return me
-    if me.is_infinite()
-        return B128.from_bits(bits: b128_qnan())
-    if b128_is_int(a: me)
-        return B128.from_bits(bits: me.to_bits() & (1_u128 << 127_u32))
-    var (fast, v) = b128_trigpi_fast(y: me, which: 0_u64)
-    if fast
-        return v
-    return b128_wide_pi(y: me, which: 0_u64)
+    return b128_of_words(w: C::ingrid_b128_sinpi(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `cos(pi*me)`: cos(pi*(n + 1/2)) is +0.
 routine B128.cospi() -> B128
-    if me.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-    if me.is_infinite()
-        return B128.from_bits(bits: b128_qnan())
-    if b128_is_int(a: me *! 2.0_b128) and not b128_is_int(a: me)
-        return B128.from_bits(bits: 0_u128)
-    var (fast, v) = b128_trigpi_fast(y: me, which: 1_u64)
-    if fast
-        return v
-    return b128_wide_pi(y: me, which: 1_u64)
+    return b128_of_words(w: C::ingrid_b128_cospi(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns `tan(pi*me)`. At an integer n it is +0 for a positive even n and -0 for a positive odd one (IEEE
 ### 754 tanPi), with the opposite signs for negative n since tanpi is odd.
 routine B128.tanpi() -> B128
-    if me.is_nan() or me.is_zero()
-        return me
-    if me.is_infinite()
-        return B128.from_bits(bits: b128_qnan())
-    if b128_is_int(a: me)
-        var zb = 0_u128
-        if me.is_negative() != b128_integer_is_odd(a: me)
-            zb = 1_u128 << 127_u32
-        return B128.from_bits(bits: zb)
-    if b128_is_int(a: me *! 2.0_b128)
-        # n + 1/2: +inf for an even n, -inf for an odd one
-        var sg = 0_u64
-        if b128_integer_is_odd(a: me.floor())
-            sg = 1_u64
-        return B128.from_bits(bits: b128_inf(sign: sg))
-    var (fast, v) = b128_trigpi_fast(y: me, which: 2_u64)
-    if fast
-        return v
-    return b128_wide_pi(y: me, which: 2_u64)
+    return b128_of_words(w: C::ingrid_b128_tanpi(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns the error function `erf(me)`.
 routine B128.erf() -> B128
-    if me.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-    var (fast, v) = b128_erf_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 10_u64)
+    return b128_of_words(w: C::ingrid_b128_erf(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns the complementary error function `erfc(me)`.
 routine B128.erfc() -> B128
-    if me.is_nan()
-        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-    var (fast, v) = b128_erfc_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 11_u64)
+    return b128_of_words(w: C::ingrid_b128_erfc(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns the gamma function `tgamma(me)`.
 routine B128.tgamma!() -> B128
@@ -882,14 +393,140 @@ routine B128.tgamma!() -> B128
 
 ### `tgamma(me)` with raw IEEE (poles at 0/negative integers -> inf/qNaN). No crash.
 routine B128.tgamma_unchecked() -> B128
-    var (fast, v) = b128_tgamma_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 13_u64)
+    return b128_of_words(w: C::ingrid_b128_tgamma(low: me.low_bits(), high: me.high_bits()))
 
 ### Returns the log-gamma function `lgamma(me)` (= ln|gamma(me)|).
 routine B128.lgamma() -> B128
-    var (fast, v) = b128_lgamma_fast(x: me)
-    if fast
-        return v
-    return b128_wide(x: me, which: 12_u64)
+    return b128_of_words(w: C::ingrid_b128_lgamma(low: me.low_bits(), high: me.high_bits()))
+
+# ============================================================================
+# The CORE-MATH functions
+# ============================================================================
+
+### `acos(me)`, correctly rounded: the exact arc cosine rounded to the nearest `B128` (ties to even),
+### identical on every platform. The result lies in [0, pi]. |me| > 1, ±infinity and a signaling NaN give
+### NaN, and a quiet NaN is returned unchanged. No crash.
+### :returns: The correctly rounded arc cosine in radians.
+routine B128.acos_unchecked() -> B128
+    return b128_of_words(w: C::ingrid_b128_acos(low: me.low_bits(), high: me.high_bits()))
+
+### `asin(me)`, correctly rounded: the exact arc sine rounded to the nearest `B128` (ties to even),
+### identical on every platform. The result lies in [-pi/2, pi/2] and `asin(-x) == -asin(x)`. ±0 map to
+### themselves; |me| > 1, ±infinity and a signaling NaN give NaN, and a quiet NaN is returned unchanged.
+### No crash.
+### :returns: The correctly rounded arc sine in radians.
+routine B128.asin_unchecked() -> B128
+    return b128_of_words(w: C::ingrid_b128_asin(low: me.low_bits(), high: me.high_bits()))
+
+### Returns the arc tangent of this value, correctly rounded: the exact angle in [-pi/2, pi/2] rounded to
+### the nearest `B128` (ties to even), identical on every platform. `atan(-x) == -atan(x)`, ±0 map to
+### themselves, ±infinity give ±pi/2 and NaN gives NaN.
+### :returns: The correctly rounded arc tangent in radians.
+routine B128.atan() -> B128
+    return b128_of_words(w: C::ingrid_b128_atan(low: me.low_bits(), high: me.high_bits()))
+
+### Two-argument arc tangent atan2(y, x), correctly rounded: the exact angle of the point (x, y) rounded to
+### the nearest `B128` (ties to even), identical on every platform. The result lies in [-pi, pi]; the signs
+### of zero and infinite coordinates select the quadrant as in IEEE 754, and a NaN coordinate gives NaN.
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+### :returns: The correctly rounded angle in radians.
+routine atan2(y: B128, x: B128) -> B128
+    var w = C::ingrid_b128_atan2(
+        y_low: y.low_bits(),
+        y_high: y.high_bits(),
+        x_low: x.low_bits(),
+        x_high: x.high_bits(),
+    )
+    return b128_of_words(w: w)
+
+### Returns the cube root of this value, correctly rounded: the exact cube root rounded to the nearest
+### `B128` (ties to even), identical on every platform. `cbrt(-x) == -cbrt(x)`, and ±0, ±infinity and NaN
+### map to themselves (a signaling NaN is quieted).
+### :returns: The correctly rounded cube root.
+routine B128.cbrt() -> B128
+    return b128_of_words(w: C::ingrid_b128_cbrt(low: me.low_bits(), high: me.high_bits()))
+
+### Returns the cosine, correctly rounded: the exact cosine of this value (in radians) rounded to the nearest
+### `B128` (ties to even), identical on every platform. `cos(-x) == cos(x)`, and ±infinity and NaN give
+### NaN.
+### :returns: The correctly rounded cosine.
+routine B128.cos() -> B128
+    return b128_of_words(w: C::ingrid_b128_cos(low: me.low_bits(), high: me.high_bits()))
+
+### Returns `e` raised to this value, correctly rounded: the exact exponential rounded to the nearest
+### `B128` (ties to even), identical on every platform, with raw IEEE 754 propagation (overflow ->
+### +infinity, `exp(-infinity) == 0`, NaN -> quiet NaN). No crash.
+### :returns: The correctly rounded exponential, possibly +infinity.
+routine B128.exp_unchecked() -> B128
+    return b128_of_words(w: C::ingrid_b128_exp(low: me.low_bits(), high: me.high_bits()))
+
+### Returns 10 raised to this value, correctly rounded: the exact power rounded to the nearest `B128`
+### (ties to even), identical on every platform, exact for x = 1, 2, ..., 48, with raw IEEE 754
+### propagation (overflow -> +infinity, `exp10(-infinity) == 0`, NaN -> quiet NaN). No crash.
+### :returns: The correctly rounded power of ten, possibly +infinity.
+routine B128.exp10_unchecked() -> B128
+    return b128_of_words(w: C::ingrid_b128_exp10(low: me.low_bits(), high: me.high_bits()))
+
+### Returns 2 raised to this value, correctly rounded: the exact power rounded to the nearest `B128`
+### (ties to even), identical on every platform, exact for integer arguments, with raw IEEE 754
+### propagation (overflow -> +infinity, `exp2(-infinity) == 0`, NaN -> quiet NaN). No crash.
+### :returns: The correctly rounded power of two, possibly +infinity.
+routine B128.exp2_unchecked() -> B128
+    return b128_of_words(w: C::ingrid_b128_exp2(low: me.low_bits(), high: me.high_bits()))
+
+### `e^me - 1`, correctly rounded: the exact value rounded to the nearest `B128` (ties to even), identical on
+### every platform, and accurate near 0. Raw IEEE 754 propagation, no crash: NaN -> quiet NaN,
+### -infinity -> -1, +infinity -> +infinity, overflow -> +infinity.
+### :returns: The correctly rounded `e^me - 1`.
+routine B128.expm1_unchecked() -> B128
+    return b128_of_words(w: C::ingrid_b128_expm1(low: me.low_bits(), high: me.high_bits()))
+
+### `sqrt(x^2 + y^2)`, correctly rounded: the exact Euclidean distance rounded to the nearest `B128` (ties
+### to even), identical on every platform, without spurious overflow or underflow. Raw IEEE 754
+### propagation: an infinite leg gives +infinity (even with a quiet NaN in the other leg), otherwise a NaN
+### leg gives NaN.
+### :param x: One leg.
+### :param y: The other leg.
+### :returns: The correctly rounded hypotenuse.
+routine hypot_unchecked(x: B128, y: B128) -> B128
+    var w = C::ingrid_b128_hypot(
+        low: x.low_bits(),
+        high: x.high_bits(),
+        y_low: y.low_bits(),
+        y_high: y.high_bits(),
+    )
+    return b128_of_words(w: w)
+
+### `ln(me)`, correctly rounded: the exact natural logarithm rounded to the nearest `B128` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation, no crash: ±0 -> -infinity, x < 0 -> NaN,
+### +infinity -> +infinity, NaN -> quiet NaN.
+### :returns: The correctly rounded natural logarithm.
+routine B128.log_unchecked() -> B128
+    return b128_of_words(w: C::ingrid_b128_log(low: me.low_bits(), high: me.high_bits()))
+
+### Returns the sine, correctly rounded: the exact sine of this value (in radians) rounded to the nearest
+### `B128` (ties to even), identical on every platform. `sin(-x) == -sin(x)`, ±0 maps to itself, and
+### ±infinity and NaN give NaN.
+### :returns: The correctly rounded sine.
+routine B128.sin() -> B128
+    return b128_of_words(w: C::ingrid_b128_sin(low: me.low_bits(), high: me.high_bits()))
+
+### Returns the sine and the cosine together, each correctly rounded exactly as `sin()` and `cos()` return
+### them. They share the argument reduction, so the pair costs little more than one of them.
+### :returns: `(sin(me), cos(me))`.
+routine B128.sincos() -> (B128, B128)
+    var w = C::ingrid_b128_sincos(low: me.low_bits(), high: me.high_bits())
+    var cos_bits = (U128(from: w.w3) << 64) | U128(from: w.w2)
+    return (b128_of_words(w: w), B128.from_bits(bits: cos_bits))
+
+### Returns the square root, correctly rounded: the exact square root rounded to the nearest `B128` (ties to
+### even), identical on every platform, with raw IEEE 754 propagation (C `sqrt`): NaN for negatives and
+### NaN inputs, +infinity for +infinity, ±0 for ±0.
+### :returns: The correctly rounded square root.
+routine B128.sqrt_unchecked() -> B128
+    return b128_of_words(w: C::ingrid_b128_sqrt(low: me.low_bits(), high: me.high_bits()))
+
+### Reads the B128 an Ingrid routine hands back: its low 64 bits in `w0`, its high 64 bits in `w1`.
+secret routine b128_of_words(w: IngridWords) -> B128
+    return B128.from_bits(bits: (U128(from: w.w1) << 64) | U128(from: w.w0))

@@ -431,20 +431,13 @@ routine B64.to_degrees() -> B64
 routine B64.to_radians() -> B64
     return me.mul_unchecked(B64_PI).truediv_unchecked(180.0_b64)
 
-### Returns `me` raised to the integer power `n` via exponentiation by squaring.
-### A negative `n` inverts the result. Exact for small exponents, unlike `pow` with a float exponent.
+### Returns `me` raised to the integer power `n`, correctly rounded: the exact `me^n` rounded to the nearest
+### `B64` (ties to even), identical on every platform, with raw IEEE 754 propagation. `powi(0)` is 1 for every
+### `me`, NaN included.
 ### :param n: The integer exponent.
 ### :returns: `me ** n`.
 routine B64.powi(n: S32) -> B64
-    var base = if n < 0_s32 then B64_ONE.truediv_unchecked(me) else me
-    var count = n.unsigned_abs()
-    var result = B64_ONE
-    while count > 0_u32
-        if count.bitand(1_u32) == 1_u32
-            result = result.mul_unchecked(base)
-        base = base.mul_unchecked(base)
-        count = count.lshr(1_u32)
-    return result
+    return C::ingrid_b64_powi(x: me, n: n)
 
 ### Returns `(me + you) / 2`, computed without intermediate overflow.
 ### :param you: The other value.
@@ -1113,3 +1106,235 @@ routine B64.round_ties_away() -> B64
     var t = a.trunc()
     var rounded = if a - t >= 0.5_b64 then t + 1.0_b64 else t
     return rounded.copysign(sign: me)
+
+# ============================================================================
+# Library functions: one call each to Ingrid's export (Ingrid/tessera/binfloat.tess), Tessera's correctly
+# rounded routine (the CORE-MATH ports)
+# ============================================================================
+
+### Arc cosine (radians) with raw IEEE 754 propagation, correctly rounded: the exact arc cosine rounded to
+### the nearest `B64` (ties to even), identical on every platform. The result lies in [0, pi], and
+### `|me| > 1`, ±infinity and NaN give NaN.
+### :returns: The correctly rounded arc cosine.
+routine B64.acos_unchecked() -> B64
+    return C::ingrid_b64_acos(x: me)
+
+### Inverse hyperbolic cosine with raw IEEE 754 propagation (`me < 1` -> NaN), correctly rounded: the
+### exact `acosh(me)` rounded to the nearest `B64` (ties to even), identical on every platform.
+### `acosh(1) == 0`, +infinity maps to +infinity, and NaN, -infinity and every `me < 1` give NaN.
+### :returns: The correctly rounded inverse hyperbolic cosine.
+routine B64.acosh_unchecked() -> B64
+    return C::ingrid_b64_acosh(x: me)
+
+### Arc sine (radians) with raw IEEE 754 propagation, correctly rounded: the exact arc sine rounded to the
+### nearest `B64` (ties to even), identical on every platform. The result lies in [-pi/2, pi/2],
+### `asin(-x) == -asin(x)`, ±0 maps to itself, and `|me| > 1`, ±infinity and NaN give NaN.
+### :returns: The correctly rounded arc sine.
+routine B64.asin_unchecked() -> B64
+    return C::ingrid_b64_asin(x: me)
+
+### Inverse hyperbolic sine, correctly rounded: the exact `asinh(me)` rounded to the nearest `B64` (ties
+### to even), identical on every platform. `asinh(-x) == -asinh(x)`, and ±0, ±infinity and NaN map to
+### themselves.
+### :returns: The correctly rounded inverse hyperbolic sine.
+routine B64.asinh() -> B64
+    return C::ingrid_b64_asinh(x: me)
+
+### Arc tangent (radians), correctly rounded: the exact arc tangent rounded to the nearest `B64` (ties to
+### even), identical on every platform. The result lies in [-pi/2, pi/2], `atan(-x) == -atan(x)`, ±0 maps
+### to itself, ±infinity to ±pi/2 (rounded), and NaN to NaN.
+### :returns: The correctly rounded arc tangent.
+routine B64.atan() -> B64
+    return C::ingrid_b64_atan(x: me)
+
+### Two-argument arc tangent atan2(y, x), correctly rounded: the exact angle of the point (x, y) rounded to
+### the nearest `B64` (ties to even), identical on every platform. The result lies in [-pi, pi]; the signs
+### of zero and infinite coordinates select the quadrant as in IEEE 754, and a NaN coordinate gives NaN.
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+### :returns: The correctly rounded angle in radians.
+routine atan2(y: B64, x: B64) -> B64
+    return C::ingrid_b64_atan2(y: y, x: x)
+
+### Inverse hyperbolic tangent with raw IEEE 754 propagation (`±1` -> ±inf, `|me| > 1` -> NaN), correctly
+### rounded: the exact `atanh(me)` rounded to the nearest `B64` (ties to even), identical on every
+### platform. `atanh(-x) == -atanh(x)`, and ±0 and NaN map to themselves.
+### :returns: The correctly rounded inverse hyperbolic tangent.
+routine B64.atanh_unchecked() -> B64
+    return C::ingrid_b64_atanh(x: me)
+
+### Returns the cube root of this value, correctly rounded: the exact cube root rounded to the nearest
+### `B64` (ties to even), identical on every platform. `cbrt(-x) == -cbrt(x)`, and ±0, ±infinity and NaN
+### map to themselves.
+### :returns: The correctly rounded cube root.
+routine B64.cbrt() -> B64
+    return C::ingrid_b64_cbrt(x: me)
+
+### Returns the cosine of this value, interpreting it as radians, correctly rounded: the exact cosine
+### rounded to the nearest `B64` (ties to even), identical on every platform. `cos(-x) == cos(x)`, and
+### ±infinity and NaN give NaN.
+### :returns: The correctly rounded cosine.
+routine B64.cos() -> B64
+    return C::ingrid_b64_cos(x: me)
+
+### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +infinity), correctly rounded: the exact
+### `cosh(me)` rounded to the nearest `B64` (ties to even), identical on every platform. ±infinity maps to
+### +infinity and NaN to NaN.
+### :returns: The correctly rounded hyperbolic cosine.
+routine B64.cosh_unchecked() -> B64
+    return C::ingrid_b64_cosh(x: me)
+
+### Returns cos(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
+### identical on every platform. It is exact at integers (±1) and half-integers (+0),
+### `cospi(-x) == cospi(x)`, and ±infinity and NaN give NaN.
+### :returns: The correctly rounded cosine of pi times this value.
+routine B64.cospi() -> B64
+    return C::ingrid_b64_cospi(x: me)
+
+### Returns the error function `erf(x) = 2/sqrt(pi) * integral from 0 to x of exp(-t^2) dt` of this
+### value, correctly rounded: the exact result rounded to the nearest `B64` (ties to even), identical on
+### every platform. `erf(-x) == -erf(x)`, `erf(±0) == ±0`, `erf(±infinity) == ±1`, and NaN maps to NaN.
+### :returns: The correctly rounded error function.
+routine B64.erf() -> B64
+    return C::ingrid_b64_erf(x: me)
+
+### Returns the complementary error function `erfc(x) = 1 - erf(x)` of this value, correctly rounded: the
+### exact result rounded to the nearest `B64` (ties to even), identical on every platform. It keeps full
+### relative accuracy where `1 - erf(x)` would cancel (large positive `x`). `erfc(-infinity) == 2`,
+### `erfc(+infinity) == +0`, and NaN maps to NaN.
+### :returns: The correctly rounded complementary error function.
+routine B64.erfc() -> B64
+    return C::ingrid_b64_erfc(x: me)
+
+### Returns `e` raised to this value, correctly rounded: the exact exponential rounded to the nearest
+### `B64` (ties to even), identical on every platform, with raw IEEE 754 propagation (overflow ->
+### +infinity, `exp(-infinity) == 0`, NaN -> NaN).
+### :returns: The correctly rounded exponential, possibly +infinity.
+routine B64.exp_unchecked() -> B64
+    return C::ingrid_b64_exp(x: me)
+
+### Returns 10 raised to this value, correctly rounded: the exact power rounded to the nearest `B64`
+### (ties to even), identical on every platform, with raw IEEE 754 propagation (overflow -> +infinity,
+### `exp10(-infinity) == 0`, NaN -> NaN). Exact powers of ten (10^0 through 10^22) are returned exactly.
+### :returns: The correctly rounded power of ten, possibly +infinity.
+routine B64.exp10_unchecked() -> B64
+    return C::ingrid_b64_exp10(x: me)
+
+### Returns 2 raised to this value, correctly rounded: the exact power rounded to the nearest `B64`
+### (ties to even), identical on every platform, with raw IEEE 754 propagation (overflow -> +infinity,
+### `exp2(-infinity) == 0`, NaN -> NaN). Integer arguments give exact powers of two.
+### :returns: The correctly rounded power of two, possibly +infinity.
+routine B64.exp2_unchecked() -> B64
+    return C::ingrid_b64_exp2(x: me)
+
+### Returns `e` raised to this value, minus 1, correctly rounded: the exact `e^x - 1` rounded to the
+### nearest `B64` (ties to even), identical on every platform and accurate near 0, with raw IEEE 754
+### propagation (overflow -> +infinity, `expm1(-infinity) == -1`, NaN -> NaN).
+### :returns: The correctly rounded `e^x - 1`, possibly +infinity.
+routine B64.expm1_unchecked() -> B64
+    return C::ingrid_b64_expm1(x: me)
+
+### Euclidean distance sqrt(x^2 + y^2), correctly rounded: the exact distance rounded to the nearest `B64`
+### (ties to even), identical on every platform, with no intermediate overflow or underflow (overflow of
+### the result itself -> +infinity). An infinite leg gives +infinity even when the other leg is a quiet
+### NaN, otherwise a NaN leg gives NaN.
+### :param x: One leg.
+### :param y: The other leg.
+### :returns: The correctly rounded distance.
+routine hypot_unchecked(x: B64, y: B64) -> B64
+    return C::ingrid_b64_hypot(x: x, y: y)
+
+### Returns the natural logarithm of the absolute value of the gamma function of this value, correctly
+### rounded: the exact ln|gamma(x)| rounded to the nearest `B64` (ties to even), identical on every
+### platform. Poles (zero and the negative integers) and ±infinity give +infinity, and NaN stays NaN.
+### :returns: The correctly rounded ln|gamma(x)|, possibly +infinity or NaN.
+routine B64.lgamma() -> B64
+    return C::ingrid_b64_lgamma(x: me)
+
+### Returns the natural logarithm with raw IEEE 754 propagation, correctly rounded: the exact natural
+### logarithm rounded to the nearest `B64` (ties to even), identical on every platform. `log(±0)` is
+### -infinity, `log(+infinity)` is +infinity, and a negative argument or NaN gives NaN.
+### :returns: The correctly rounded natural logarithm.
+routine B64.log_unchecked() -> B64
+    return C::ingrid_b64_log(x: me)
+
+### Returns the base-10 logarithm with raw IEEE 754 propagation, correctly rounded: the exact base-10
+### logarithm rounded to the nearest `B64` (ties to even), identical on every platform. `log10(±0)` is
+### -infinity, `log10(+infinity)` is +infinity, a negative argument or NaN gives NaN, and `log10(10^n)`
+### is exactly `n`.
+### :returns: The correctly rounded base-10 logarithm.
+routine B64.log10_unchecked() -> B64
+    return C::ingrid_b64_log10(x: me)
+
+### log(1 + me) with raw IEEE 754 propagation, correctly rounded: the exact value of log(1 + x) rounded to
+### the nearest `B64` (ties to even), identical on every platform, and accurate near 0 where
+### `log(1.0 + x)` loses digits. `log1p(±0)` is ±0, `log1p(-1)` is -infinity, `log1p(+infinity)` is
+### +infinity, and an argument below -1 or NaN gives NaN.
+### :returns: The correctly rounded log(1 + x).
+routine B64.log1p_unchecked() -> B64
+    return C::ingrid_b64_log1p(x: me)
+
+### Base-2 logarithm with raw IEEE 754 propagation, correctly rounded: the exact base-2 logarithm rounded
+### to the nearest `B64` (ties to even), identical on every platform. `log2(±0)` is -infinity,
+### `log2(+infinity)` is +infinity, and a negative argument or NaN gives NaN.
+### :returns: The correctly rounded base-2 logarithm.
+routine B64.log2_unchecked() -> B64
+    return C::ingrid_b64_log2(x: me)
+
+### Raises this value to the power `exp`, correctly rounded: the exact `me^exp` rounded to the nearest `B64`
+### (ties to even), identical on every platform. Raw IEEE 754 propagation: overflow gives ±infinity, a
+### domain error such as `(-1)^0.5` gives NaN, and `x^±0 == 1` and `1^y == 1` for every `x` and `y`
+### (even NaN), following the IEEE 754 `pow` definition.
+### :param exp: The exponent applied to `me`.
+### :returns: `me` raised to `exp`, correctly rounded, possibly ±infinity or NaN.
+routine B64.pow_unchecked(exp: B64) -> B64
+    return C::ingrid_b64_pow(x: me, y: exp)
+
+### Returns the sine of this value, interpreting it as radians, correctly rounded: the exact sine rounded
+### to the nearest `B64` (ties to even), identical on every platform. `sin(-x) == -sin(x)`, ±0 map to
+### themselves, and ±infinity and NaN give NaN.
+### :returns: The correctly rounded sine.
+routine B64.sin() -> B64
+    return C::ingrid_b64_sin(x: me)
+
+### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±infinity), correctly rounded: the exact
+### `sinh(me)` rounded to the nearest `B64` (ties to even), identical on every platform. ±0, ±infinity
+### and NaN map to themselves.
+### :returns: The correctly rounded hyperbolic sine.
+routine B64.sinh_unchecked() -> B64
+    return C::ingrid_b64_sinh(x: me)
+
+### Returns sin(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
+### identical on every platform. It is exact at integers (±0, with the sign of the input) and
+### half-integers (±1), `sinpi(-x) == -sinpi(x)`, and ±infinity and NaN give NaN.
+### :returns: The correctly rounded sine of pi times this value.
+routine B64.sinpi() -> B64
+    return C::ingrid_b64_sinpi(x: me)
+
+### Returns the tangent of this value, interpreting it as radians, correctly rounded: the exact tangent
+### rounded to the nearest `B64` (ties to even), identical on every platform. `tan(-x) == -tan(x)`, ±0
+### map to themselves, and ±infinity and NaN give NaN.
+### :returns: The correctly rounded tangent.
+routine B64.tan() -> B64
+    return C::ingrid_b64_tan(x: me)
+
+### Hyperbolic tangent, correctly rounded: the exact `tanh(me)` rounded to the nearest `B64` (ties to
+### even), identical on every platform. ±0 map to themselves, ±infinity to ±1 and NaN to NaN.
+### :returns: The correctly rounded hyperbolic tangent.
+routine B64.tanh() -> B64
+    return C::ingrid_b64_tanh(x: me)
+
+### Returns tan(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
+### identical on every platform. It is exact at multiples of 1/4: ±0 at integers, ±1 at odd quarters and
+### ±infinity at half-integers; `tanpi(-x) == -tanpi(x)`, and ±infinity and NaN give NaN.
+### :returns: The correctly rounded tangent of pi times this value.
+routine B64.tanpi() -> B64
+    return C::ingrid_b64_tanpi(x: me)
+
+### Returns the gamma function of this value, correctly rounded: the exact gamma(x) rounded to the
+### nearest `B64` (ties to even), identical on every platform, with raw IEEE 754 propagation: overflow
+### gives +infinity, a pole (±0) gives ±infinity, a negative integer or -infinity gives NaN, and NaN
+### stays NaN.
+### :returns: The correctly rounded gamma function, possibly ±infinity or NaN.
+routine B64.tgamma_unchecked() -> B64
+    return C::ingrid_b64_tgamma(x: me)

@@ -1,10 +1,10 @@
 module Core
 
 # ============================================================================
-# erf and erfc of B128 from 128-bit fast phases
+# The 128-bit fast phases of erf and erfc of B128, for the D128 transcendentals (D128Fast.rf). B128.erf and
+# erfc themselves are Tessera's, through Ingrid.
 # ============================================================================
-# Three regions, each with a proven error bound carried in B128Fx, the result kept only when its band
-# rounds to one B128 (otherwise the 384-bit tier of B128Wx.rf decides):
+# Three regions, each with a proven error bound carried in B128Fx:
 # - |x| < 1/2: the Taylor series of erf in x^2, alternating but with every nested value positive.
 # - 1/2 <= |x| < 10: the table value erfc(c) at the nearest c = i/32 corrected by the integral of
 #   e^(-t^2) from c to x, a Taylor series of e^(-2ct - t^2) whose terms follow the recurrence of the
@@ -2904,8 +2904,6 @@ secret preset B128_INV_SQRTPI: U128 = 0x906EBA8214DB688D71D48A7F6BFEC344_u128
 secret preset B128_ERF_HALF: U128 = 0x3FFE0000000000000000000000000000_u128
 secret preset B128_ERF_TEN: U128 = 0x40024000000000000000000000000000_u128
 secret preset B128_ERF_MAX: U128 = 0x4005AA00000000000000000000000000_u128
-# 107, from which erfc rounds to +0
-secret preset B128_ERF_ZERO: U128 = 0x4005AC00000000000000000000000000_u128
 
 ### floor((a * b) / 2^126), for signed fixed-point values below 2 in magnitude (units of 2^-126): the unsigned
 ### product of the two's-complement words, its high word corrected by subtracting b when a is negative and a when
@@ -3103,13 +3101,6 @@ secret routine b128_erf_fx(x: B128) -> (Bool, B128Fx)
         r = e
     return (true, B128Fx(neg: neg, m: r.m, e: r.e, rel: r.rel))
 
-### erf(x) as a B128, or false when the band does not settle it.
-secret routine b128_erf_fast(x: B128) -> (Bool, B128)
-    var (ok, r) = b128_erf_fx(x: x)
-    if not ok
-        return (false, x)
-    return b128fx_round(v: r)
-
 ### erfc(x) for a finite nonzero x as a B128Fx, or false: 1 - erf below 1/2, the table up to
 ### 10, the asymptotic series up to 106.5 (beyond it the result leaves the normal range), and for negative
 ### x, 2 - erfc(|x|) (exactly 2 from -10 down, as 2 - erfc(10) rounds to 2). acc takes e^(-x^2) of the series
@@ -3150,19 +3141,3 @@ secret routine b128_erfc_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
     if not okb
         return (false, b128fx_one())
     return (true, cb)
-
-### erfc(x) as a B128, or false when the band does not settle it.
-secret routine b128_erfc_fast(x: B128) -> (Bool, B128)
-    if x.to_bits() >= B128_ERF_ZERO and x.to_bits() < (1_u128 << 127_u32) and not x.is_nan()
-        # from 107 on e^(-x^2) / (x sqrt(pi)) is below half the smallest subnormal (+inf included)
-        return (true, B128.from_bits(bits: 0_u128))
-    var (ok, r) = b128_erfc_fx(x: x, acc: false)
-    if not ok
-        return (false, x)
-    var (okr, v) = b128fx_round(v: r)
-    if okr or x < 10.0_b128
-        return (okr, v)
-    var (oka, ra) = b128_erfc_fx(x: x, acc: true)
-    if not oka
-        return (false, x)
-    return b128fx_round(v: ra)

@@ -1,14 +1,15 @@
 module Core
 
 # ============================================================================
-# lgamma and tgamma of B128 from 128-bit fast phases
+# The 128-bit fast phases of lgamma and tgamma of B128, for the D128 transcendentals (D128Fast.rf). B128.lgamma
+# and tgamma_unchecked themselves are Tessera's, through Ingrid.
 # ============================================================================
 # Below 24, x = 2 + z + n with |z| <= 1/2: lgamma(2 + z) = z Q(z) from its series in zeta values, and the
 # factors x - 1 .. x - n (or the divisions x, x (1 + x) below 3/2) are exact, so lgamma adds ln of their
 # product and tgamma multiplies e^(z Q) by it. From 24 on, Stirling's series with the sum in u = 24/x;
 # for tgamma the exponent (x - 1/2) ln x - x + ln(2 pi)/2 + sum reaches 11356, so it is formed in fixed
 # point from the whole 192-bit CORE-MATH logarithm, as in pow. Each result keeps a proven error bound
-# (B128Fx) and is kept only when its band rounds to one B128, else the 384-bit tier (B128Wx.rf) decides.
+# (B128Fx).
 
 # lgamma(2 + z) / z around the centres c = i/32 (i = -16 .. 16): Q(c + t) = sum_k q_k t^k for |t| <= 1/64,
 # 19 coefficients per centre (the rest below 0.05 units), in units of 2^-126. They come from the Taylor
@@ -645,18 +646,6 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
             r = e
     return (true, r)
 
-### lgamma(x) as a B128, or false when the band does not settle it: +0 at 1 and 2, the rest from
-### b128_lgamma_fx.
-secret routine b128_lgamma_fast(x: B128) -> (Bool, B128)
-    var u = x.to_bits()
-    # lgamma(1) = lgamma(2) = +0 exactly
-    if u == (0x3FFF_u128 << 112_u32) or u == (0x4000_u128 << 112_u32)
-        return (true, B128.from_bits(bits: 0_u128))
-    var (ok, r) = b128_lgamma_fx(x: x)
-    if not ok
-        return (false, x)
-    return b128fx_round(v: r)
-
 ### tgamma(x) for a positive finite x as a B128Fx, or false (also for x <= 0 or at overflow, which the
 ### caller settles), its exponentials from the fast phase or with acc the accurate one.
 secret routine b128_tgamma_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
@@ -742,23 +731,6 @@ secret routine b128_gamma_int(x: B128) -> (Bool, U256)
         f = f *% LLVM::zero_extend[U128, U256](j)
         j = j +% 1_u128
     return (true, f)
-
-### tgamma(x) as a B128, or false when the band does not settle it: an integer up to 57 exactly (38! sits
-### exactly on a rounding midpoint), the rest from b128_tgamma_fx.
-secret routine b128_tgamma_fast(x: B128) -> (Bool, B128)
-    var (isn, f) = b128_gamma_int(x: x)
-    if isn
-        return b128_round_exact(neg: false, mag: f, scale: 0_s64)
-    var (ok, r) = b128_tgamma_fx(x: x, acc: false)
-    if not ok
-        return (false, x)
-    var (okr, v) = b128fx_round(v: r)
-    if okr
-        return (true, v)
-    var (oka, ra) = b128_tgamma_fx(x: x, acc: true)
-    if not oka
-        return (false, x)
-    return b128fx_round(v: ra)
 
 ### Gamma(x) for a negative non-integer B128 x as a B128Fx, or false. Above -1/2 by the small-x formula
 ### (Gamma(2 + x) / (x (1 + x)), the series taking a negative z too), from -1 to -1/2 as Gamma(2 + z) /

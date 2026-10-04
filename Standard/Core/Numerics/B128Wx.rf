@@ -326,7 +326,7 @@ secret preset WX_INV_FACT_E: Array[S64, 111] = [
 ]
 
 # ============================================================================
-# B128Wx — the 384-bit tier behind the B128, D128, D64 and D32 transcendentals.
+# B128Wx — the 384-bit tier behind the D128, D64 and D32 transcendentals.
 # A value is (-1)^neg * m * 2^e with m a 384-bit integer (limbs m2 m1 m0, m2 the most significant, its top
 # bit set; the value is zero when m2 is 0) and a bound rel on its relative error that every operation
 # carries, as B128Fx does at 128 bits. exp and expm1 are Taylor series after a reduction, sine and cosine
@@ -1173,23 +1173,6 @@ secret routine wx_sincos(a: B128Wx) -> (B128Wx, B128Wx)
     if n != 0_s64
         theta = wx_sub(a: a, b: wx_mul(a: wx_table(i: 2_u64), b: wx_of_s64(v: n)))
     return wx_sincos_red(n: n, theta: theta)
-
-### sin and cos of a finite B128 x: below 2^-8 no reduction, else the CORE-MATH 448-bit reduction to
-### n pi/256 + theta (the residual good to about 2^-440 absolute).
-secret routine wx_sincos_b128(x: B128) -> (B128Wx, B128Wx)
-    var bits = x.to_bits()
-    var ax = bits & (1_u128 << 127_u32) -% 1_u128
-    var e = LLVM::int_truncate[U128, S64](ax >>> 112_u32) -% 16383_s64
-    if e < -8_s64
-        return wx_sincos_red(n: 0_s64, theta: wx_of_b128(x: x))
-    var m = ax & (1_u128 << 112_u32) -% 1_u128 | (1_u128 << 112_u32)
-    var rw = b128_trig_reduce_wide(m: m, e: e)
-    var theta = wx_make(neg: rw.item1, t: rw.item2, e: rw.item3 -% 384_s64, rel: 0x1p-378)
-    theta = wx_widen(w: theta, r: 1.0.scaleb_unchecked(n: -440_s64 -% wx_ilog2(w: theta)))
-    var (s, c) = wx_sincos_red(n: rw.item0, theta: theta)
-    if (bits >>> 127_u32) != 0_u128
-        return (wx_neg(w: s), c)
-    return (s, c)
 
 ### sin(pi r) and cos(pi r) for |r| <= 1/2 (r exact or close): j = round(256 r) comes off exactly, and
 ### pi (r - j/256) is the residual angle.

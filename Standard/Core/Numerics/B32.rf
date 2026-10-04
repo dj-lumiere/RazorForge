@@ -422,20 +422,13 @@ routine B32.to_degrees() -> B32
 routine B32.to_radians() -> B32
     return me.mul_unchecked(B32_PI).truediv_unchecked(180.0_b32)
 
-### Returns `me` raised to the integer power `n` via exponentiation by squaring.
-### A negative `n` inverts the result. Exact for small exponents, unlike `pow` with a float exponent.
+### Returns `me` raised to the integer power `n`, correctly rounded: the exact `me^n` rounded to the nearest
+### `B32` (ties to even), identical on every platform, with raw IEEE 754 propagation. `powi(0)` is 1 for every
+### `me`, NaN included.
 ### :param n: The integer exponent.
 ### :returns: `me ** n`.
 routine B32.powi(n: S32) -> B32
-    var base = if n < 0_s32 then B32_ONE.truediv_unchecked(me) else me
-    var count = n.unsigned_abs()
-    var result = B32_ONE
-    while count > 0_u32
-        if count.bitand(1_u32) == 1_u32
-            result = result.mul_unchecked(base)
-        base = base.mul_unchecked(base)
-        count = count.lshr(1_u32)
-    return result
+    return C::ingrid_b32_powi(x: me, n: n)
 
 ### Returns `(me + you) / 2`, computed without intermediate overflow.
 ### :param you: The other value.
@@ -1067,3 +1060,221 @@ routine B32.round_ties_away() -> B32
     var t = a.trunc()
     var rounded = if a - t >= 0.5_b32 then t + 1.0_b32 else t
     return rounded.copysign(sign: me)
+
+# ============================================================================
+# Library functions: one call each to Ingrid's export (Ingrid/tessera/binfloat.tess), Tessera's correctly
+# rounded routine (the CORE-MATH ports)
+# ============================================================================
+
+### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN), correctly rounded: the exact arc cosine
+### rounded to the nearest `B32` (ties to even), identical on every platform.
+### :returns: The correctly rounded arc cosine, in [0, pi].
+routine B32.acos_unchecked() -> B32
+    return C::ingrid_b32_acos(x: me)
+
+### Inverse hyperbolic cosine, correctly rounded: the exact acosh rounded to the nearest `B32` (ties to
+### even), identical on every platform. Raw IEEE 754 propagation: `acosh(1) == 0`, `+infinity` maps to
+### itself, and any `me < 1` (or NaN) gives NaN.
+### :returns: The correctly rounded inverse hyperbolic cosine.
+routine B32.acosh_unchecked() -> B32
+    return C::ingrid_b32_acosh(x: me)
+
+### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN), correctly rounded: the exact arc sine
+### rounded to the nearest `B32` (ties to even), identical on every platform. ±0 maps to itself.
+### :returns: The correctly rounded arc sine, in [-pi/2, pi/2].
+routine B32.asin_unchecked() -> B32
+    return C::ingrid_b32_asin(x: me)
+
+### Inverse hyperbolic sine, correctly rounded: the exact asinh rounded to the nearest `B32` (ties to even),
+### identical on every platform. `asinh(-x) == -asinh(x)`; ±0, ±infinity and NaN map to themselves.
+### :returns: The correctly rounded inverse hyperbolic sine.
+routine B32.asinh() -> B32
+    return C::ingrid_b32_asinh(x: me)
+
+### Returns the arc tangent of this value, correctly rounded: the exact arc tangent rounded to the nearest
+### `B32` (ties to even), identical on every platform. ±infinity gives ±pi/2 (rounded), ±0 maps to itself
+### and NaN maps to NaN.
+### :returns: The correctly rounded arc tangent, in [-pi/2, pi/2].
+routine B32.atan() -> B32
+    return C::ingrid_b32_atan(x: me)
+
+### Two-argument arc tangent atan2(y, x), correctly rounded: the exact angle of the point (x, y) rounded
+### to the nearest `B32` (ties to even), identical on every platform. Follows the C99 special cases for
+### zeros and infinities, and a NaN input gives NaN.
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+### :returns: The correctly rounded angle, in [-pi, pi].
+routine atan2(y: B32, x: B32) -> B32
+    return C::ingrid_b32_atan2(y: y, x: x)
+
+### Inverse hyperbolic tangent, correctly rounded: the exact atanh rounded to the nearest `B32` (ties to
+### even), identical on every platform. Raw IEEE 754 propagation: `±1` gives ±infinity, `|me| > 1` (or
+### NaN) gives NaN, and ±0 maps to itself.
+### :returns: The correctly rounded inverse hyperbolic tangent.
+routine B32.atanh_unchecked() -> B32
+    return C::ingrid_b32_atanh(x: me)
+
+### Cube root, correctly rounded: the exact cube root rounded to the nearest `B32` (ties to even),
+### identical on every platform. `cbrt(-x) == -cbrt(x)`, and ±0, ±infinity and NaN map to themselves.
+### :returns: The correctly rounded cube root.
+routine B32.cbrt() -> B32
+    return C::ingrid_b32_cbrt(x: me)
+
+### Returns the cosine of this value, interpreting it as radians, correctly rounded: the exact cosine
+### rounded to the nearest `B32` (ties to even), identical on every platform. ±infinity gives NaN and NaN
+### maps to NaN.
+### :returns: The correctly rounded cosine.
+routine B32.cos() -> B32
+    return C::ingrid_b32_cos(x: me)
+
+### Hyperbolic cosine, correctly rounded: the exact cosh rounded to the nearest `B32` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation: overflow gives +infinity, NaN stays NaN.
+### :returns: The correctly rounded hyperbolic cosine.
+routine B32.cosh_unchecked() -> B32
+    return C::ingrid_b32_cosh(x: me)
+
+### Returns `cos(pi * me)`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Half-integers give +0, ±infinity gives NaN and NaN maps to NaN.
+### :returns: The correctly rounded `cos(pi * me)`.
+routine B32.cospi() -> B32
+    return C::ingrid_b32_cospi(x: me)
+
+### Error function, correctly rounded: the exact erf rounded to the nearest `B32` (ties to even), identical
+### on every platform. `erf(-x) == -erf(x)`, ±infinity maps to ±1, and NaN stays NaN.
+### :returns: The correctly rounded error function.
+routine B32.erf() -> B32
+    return C::ingrid_b32_erf(x: me)
+
+### Complementary error function `1 - erf(x)`, correctly rounded: the exact erfc rounded to the nearest
+### `B32` (ties to even), identical on every platform. `-infinity` maps to 2, `+infinity` to 0, and NaN
+### stays NaN.
+### :returns: The correctly rounded complementary error function.
+routine B32.erfc() -> B32
+    return C::ingrid_b32_erfc(x: me)
+
+### Natural exponential `e^me`, correctly rounded: the exact value rounded to the nearest `B32` (ties to
+### even), identical on every platform. Raw IEEE 754 propagation: overflow gives +infinity, underflow
+### rounds to a subnormal or zero, `exp(-infinity) == 0` and NaN maps to NaN.
+### :returns: The correctly rounded natural exponential.
+routine B32.exp_unchecked() -> B32
+    return C::ingrid_b32_exp(x: me)
+
+### Base-10 exponential `10^me`, correctly rounded: the exact value rounded to the nearest `B32` (ties to
+### even), identical on every platform. Raw IEEE 754 propagation: overflow gives +infinity, underflow
+### rounds to a subnormal or zero, `exp10(-infinity) == 0` and NaN maps to NaN.
+### :returns: The correctly rounded base-10 exponential.
+routine B32.exp10_unchecked() -> B32
+    return C::ingrid_b32_exp10(x: me)
+
+### Base-2 exponential `2^me`, correctly rounded: the exact value rounded to the nearest `B32` (ties to
+### even), identical on every platform. Raw IEEE 754 propagation: overflow gives +infinity, underflow
+### rounds to a subnormal or zero, `exp2(-infinity) == 0` and NaN maps to NaN. Integer inputs give exact
+### powers of two.
+### :returns: The correctly rounded base-2 exponential.
+routine B32.exp2_unchecked() -> B32
+    return C::ingrid_b32_exp2(x: me)
+
+### `e^me - 1`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even), identical
+### on every platform, and accurate near zero. Raw IEEE 754 propagation: overflow gives +infinity,
+### `expm1(-infinity) == -1`, ±0 map to themselves and NaN maps to NaN.
+### :returns: The correctly rounded `exp(me) - 1`.
+routine B32.expm1_unchecked() -> B32
+    return C::ingrid_b32_expm1(x: me)
+
+### Hypotenuse sqrt(x^2 + y^2), correctly rounded, with raw IEEE 754 propagation (overflow -> +inf, an
+### infinite leg -> +inf even when the other leg is NaN).
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot_unchecked(x: B32, y: B32) -> B32
+    return C::ingrid_b32_hypot(x: x, y: y)
+
+### Natural logarithm of the absolute value of the gamma function, correctly rounded: the exact
+### `log|gamma(x)|` rounded to the nearest `B32` (ties to even), identical on every platform. Poles
+### (0 and the negative integers) give +infinity, ±infinity gives +infinity, and NaN stays NaN.
+### :returns: The correctly rounded `log|gamma(me)|`.
+routine B32.lgamma() -> B32
+    return C::ingrid_b32_lgamma(x: me)
+
+### Natural logarithm, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation: `log(±0) == -infinity`, `log(+infinity) ==
+### +infinity`, a negative input gives NaN and NaN maps to NaN.
+### :returns: The correctly rounded natural logarithm.
+routine B32.log_unchecked() -> B32
+    return C::ingrid_b32_log(x: me)
+
+### Base-10 logarithm, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Exact powers of ten give exact integers. Raw IEEE 754 propagation:
+### `log10(±0) == -infinity`, `log10(+infinity) == +infinity`, a negative input gives NaN and NaN maps
+### to NaN.
+### :returns: The correctly rounded base-10 logarithm.
+routine B32.log10_unchecked() -> B32
+    return C::ingrid_b32_log10(x: me)
+
+### `log(1 + me)`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform, and accurate near zero. Raw IEEE 754 propagation: `log1p(-1) ==
+### -infinity`, an input below -1 gives NaN, ±0 and +infinity map to themselves and NaN maps to NaN.
+### :returns: The correctly rounded `log(1 + me)`.
+routine B32.log1p_unchecked() -> B32
+    return C::ingrid_b32_log1p(x: me)
+
+### Base-2 logarithm, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Exact powers of two give exact integers. Raw IEEE 754 propagation:
+### `log2(±0) == -infinity`, `log2(+infinity) == +infinity`, a negative input gives NaN and NaN maps to NaN.
+### :returns: The correctly rounded base-2 logarithm.
+routine B32.log2_unchecked() -> B32
+    return C::ingrid_b32_log2(x: me)
+
+### `me` raised to `exp`, correctly rounded: the exact power rounded to the nearest `B32` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation with the C `pow` special cases: overflow gives
+### ±infinity, a negative base with a non-integer exponent gives NaN, `x^0 == 1` and `1^y == 1`.
+### :param exp: The exponent applied to `me`.
+### :returns: The correctly rounded `me ** exp`.
+routine B32.pow_unchecked(exp: B32) -> B32
+    return C::ingrid_b32_pow(x: me, y: exp)
+
+### Returns the sine of this value, interpreting it as radians, correctly rounded: the exact sine rounded
+### to the nearest `B32` (ties to even), identical on every platform. ±infinity gives NaN, NaN maps to NaN
+### and ±0 maps to itself.
+### :returns: The correctly rounded sine.
+routine B32.sin() -> B32
+    return C::ingrid_b32_sin(x: me)
+
+### Hyperbolic sine, correctly rounded: the exact sinh rounded to the nearest `B32` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation: overflow gives ±infinity, NaN stays NaN.
+### :returns: The correctly rounded hyperbolic sine.
+routine B32.sinh_unchecked() -> B32
+    return C::ingrid_b32_sinh(x: me)
+
+### Returns `sin(pi * me)`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Integers give a zero of the argument's sign, ±infinity gives NaN and NaN
+### maps to NaN.
+### :returns: The correctly rounded `sin(pi * me)`.
+routine B32.sinpi() -> B32
+    return C::ingrid_b32_sinpi(x: me)
+
+### Returns the tangent of this value, interpreting it as radians, correctly rounded: the exact tangent
+### rounded to the nearest `B32` (ties to even), identical on every platform. ±infinity gives NaN, NaN maps
+### to NaN and ±0 maps to itself.
+### :returns: The correctly rounded tangent.
+routine B32.tan() -> B32
+    return C::ingrid_b32_tan(x: me)
+
+### Hyperbolic tangent, correctly rounded: the exact tanh rounded to the nearest `B32` (ties to even),
+### identical on every platform. ±infinity maps to ±1, ±0 to itself, NaN stays NaN.
+### :returns: The correctly rounded hyperbolic tangent.
+routine B32.tanh() -> B32
+    return C::ingrid_b32_tanh(x: me)
+
+### Returns `tan(pi * me)`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Integers give a signed zero, `x = 1/2 mod 2` gives +infinity and
+### `x = -1/2 mod 2` gives -infinity, ±infinity gives NaN and NaN maps to NaN.
+### :returns: The correctly rounded `tan(pi * me)`.
+routine B32.tanpi() -> B32
+    return C::ingrid_b32_tanpi(x: me)
+
+### Gamma function, correctly rounded: the exact gamma rounded to the nearest `B32` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation: overflow gives +infinity, ±0 gives ±infinity,
+### and the negative integers, `-infinity` and NaN give NaN.
+### :returns: The correctly rounded gamma function.
+routine B32.tgamma_unchecked() -> B32
+    return C::ingrid_b32_tgamma(x: me)
