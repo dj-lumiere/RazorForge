@@ -17,51 +17,16 @@ import Collections
 ###   - `List`            -> a JSON array
 ###   - `Dict[Text, _]`   -> a JSON object (keys are the Text keys, escaped)
 
-### Maps a 4-bit nibble (0..15) to its lowercase hex digit as a one-character `Text`.
-### :param nibble: The value to render; only the low 4 bits are meaningful.
-### :returns: `"0".."9"` or `"a".."f"`.
-secret routine json_hex_digit(nibble: U32) -> Text
-    if nibble < 10u32
-        return Character(0x30u32 + nibble).represent()
-    return Character(0x61u32 + (nibble - 10u32)).represent()
-
-### Renders the low byte of `cp` as two lowercase hex digits (for the u00XX control escape form).
-### :param cp: The code point whose low 8 bits are rendered.
-### :returns: A two-character hex `Text`.
-secret routine json_hex2(cp: U32) -> Text
-    var hi = (cp >>> 4u32) & 0xFu32
-    var lo = cp & 0xFu32
-    return json_hex_digit(nibble: hi) + json_hex_digit(nibble: lo)
-
 ### Renders `t` as a quoted, escaped JSON string.
 ### Escapes the quote, the backslash, the named controls (b, t, n, f, r), and any other control
-### code as the u00XX form.
+### code as the u00XX form (lowercase hex). The escaping is Tessera's `Standard::Json`, called
+### through Ingrid: one pass sizes the result, the second fills it.
 ### :param t: The text to encode.
 ### :returns: The JSON string literal, including the surrounding quotes.
 secret routine json_string(t: Text) -> Text
-    var result: Text = "\""
-    each ch in t
-        var cp = ch.codepoint()
-        when cp
-            == 0x22u32 =>
-                result = result + "\\\""
-            == 0x5Cu32 =>
-                result = result + "\\\\"
-            == 0x08u32 =>
-                result = result + "\\b"
-            == 0x09u32 =>
-                result = result + "\\t"
-            == 0x0Au32 =>
-                result = result + "\\n"
-            == 0x0Cu32 =>
-                result = result + "\\f"
-            == 0x0Du32 =>
-                result = result + "\\r"
-            < 0x20u32 =>
-                result = result + "\\u00" + json_hex2(cp: cp)
-            else =>
-                result = result + ch.represent()
-    result = result + "\""
+    var count = C::ingrid_json_quoted_count_utf32(chars: t.data, count: t.count)
+    var result = text_alloc(count: count)
+    discard C::ingrid_json_quote_utf32(chars: t.data, count: t.count, out: result.data, out_count: count)
     return result
 
 ### Encodes this `SerialValue` tree as JSON `Text`. Total — never fails.
