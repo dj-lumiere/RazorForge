@@ -322,6 +322,18 @@ loop                      # infinite loop, exit with break
         break
 ```
 
+A `while` or `each` may end with an `else`, which runs only when the body ran
+zero times: the condition was false at the very first check, or the source was
+empty. Once the body has run, the `else` never runs, however the loop ended
+(condition false, source exhausted, or `break`).
+
+```razorforge
+each item in items
+    show(item)
+else
+    show("no items")
+```
+
 `when` is the pattern match:
 
 ```razorforge
