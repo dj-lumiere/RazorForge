@@ -1,22 +1,25 @@
 module Core
 
 import BuilderQuery
-### A fixed-size, inline array of `N` elements with value semantics.
+### A fixed-size, inline array of `COUNT` elements with value semantics.
 ###
-### `Array[T, N]` stores exactly `N` elements packed directly into its own
-### memory footprint — it never heap-allocates. Because it is a record type,
-### copying an `Array` copies all `N` elements, and the size can never change
+### `Array[T, COUNT]` stores exactly `COUNT` elements packed directly into its own
+### footprint: it makes no separate allocation for its slots, and it lives wherever
+### what holds it lives (a local, a member variable of an entity, another array). An
+### element can still own memory of its own (a `Text`'s characters, an entity's
+### object). Because it is a record type, copying an `Array` copies all `COUNT`
+### elements, each the way its own type copies, and the size can never change
 ### after construction.
 ###
 ### Use this type when the number of elements is known at build time and you
-### want stack-allocated, cache-friendly storage without pointer indirection.
+### want the elements laid out inline, without the indirection of a separate buffer.
 ###
 ### **When to use**
 ### - The element count is a buildtime constant.
 ### - You want value semantics (copy = full duplication of contents).
 ### - You need a small fixed-size buffer (e.g., a 4×4 matrix, an RGBA colour, a SIMD lane).
 ### - Use {List[T]} when the count is only known at runtime or elements are added dynamically.
-### - Use {BitArray[N]} for a compact fixed-size sequence of boolean flags.
+### - Use {BitArray[COUNT]} for a compact fixed-size sequence of boolean flags.
 ###
 ### **Complexity**
 ### | Operation | Time |
@@ -28,14 +31,14 @@ import BuilderQuery
 ### | Iteration | O(N) |
 ###
 ### :typeparam T: The element type stored in the array.
-### :typeparam N: The buildtime element count, supplied as a `U64` literal.
+### :typeparam COUNT: The buildtime element count, supplied as a `U64` literal.
 ### :see: {List[T]} for a heap-backed growable sequence.
-### :see: {BitArray[N]} for a compact fixed-size bit sequence.
-@llvm("[{N} x {T}]")
-bundle Array[T, N]
-relates ArrayEmittable[T, N] as Iter
+### :see: {BitArray[COUNT]} for a compact fixed-size bit sequence.
+@llvm("[{COUNT} x {T}]")
+bundle Array[T, COUNT]
+relates ArrayEmittable[T, COUNT] as Iter
 obeys Comparable, Iterable[T], MutableIndexable[T], Sized, Container
-needs U64 N
+needs U64 COUNT
     # N elements of T stored inline by builder - no explicit member variables needed
     pass
 
@@ -43,16 +46,16 @@ needs U64 N
 # Iteration Support
 # ============================================================================
 
-### Walks the elements of a fixed-size `Array[T, N]` from index 0 to N - 1.
+### Walks the elements of a fixed-size `Array[T, COUNT]` from index 0 to N - 1.
 ### Because `Array` is a record type, the iterator holds its own copy of the array data.
 ### :typeparam T: The element type yielded by the iterator.
-### :typeparam N: The buildtime element count.
-entity ArrayEmittable[T, N]
+### :typeparam COUNT: The buildtime element count.
+entity ArrayEmittable[T, COUNT]
 obeys Emittable[T]
-needs U64 N
+needs U64 COUNT
     ### Points at the array being iterated, where it lives: each element is read in place, so iterating an array of
     ### entities neither copies the array nor gives an element a second owner (the loop's binding only reads it).
-    secret data: Hijacked[Array[T, N]]
+    secret data: Hijacked[Array[T, COUNT]]
     ### Stores the next logical index to read.
     secret index: U64
 
@@ -63,18 +66,18 @@ needs U64 N
 ### Returns the element at `index`, as a holder of its own (a share for a counted value).
 ### :param index: The zero-based position to read.
 ### :returns: The element stored at that position.
-### :throws: {IndexOutOfBoundsError} if `index >= N`.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
 @readonly
 @inline
 @overridable
-routine Array[T, N].getitem!(index: U64) -> T
+routine Array[T, COUNT].getitem!(index: U64) -> T
 needs AnyType T
 needs T obeys Assignable
-    if index >= N
+    if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     # Read in place through the storage pointer — no whole-array copy.
     danger
-        var element: T = LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
+        var element: T = LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
         return element.assign()
 
 ### `getitem` for a single-owner entity element: the array keeps its element, so the caller gets an independent
@@ -82,90 +85,90 @@ needs T obeys Assignable
 ### the element in place through `modify_at`/`view_at`, and `var c = cells[0]` holds a read token on it.)
 ### :param index: The zero-based position to read.
 ### :returns: A duplicate of the element stored at that position.
-### :throws: {IndexOutOfBoundsError} if `index >= N`.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
 @readonly
 @inline
 @override
-routine Array[T, N].getitem!(index: U64) -> T
+routine Array[T, COUNT].getitem!(index: U64) -> T
 needs EntityType T
 needs T obeys Copyable
-    if index >= N
+    if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
-        var element: T = LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
+        var element: T = LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
         return element.duplicate()
 
 ### Returns the element at `index` as the array holds it, without bounds checking and without a holder of
 ### its own. Only call this when the index is already proven to be in range.
 @readonly
 @inline
-routine Array[T, N].get_raw(index: U64) -> T
+routine Array[T, COUNT].get_raw(index: U64) -> T
     danger
-        return LLVM::load_element_ref[Array[T, N], T](me.hijack(), index)
+        return LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
 
 ### Returns a write token on the entity stored at `index`, so one call or field write through it changes the
 ### element in place: `cells[0].v = 5` lowers to `cells.modify_at(index: 0).v = 5`. Entity elements only (a
 ### plain `getitem` hands back a holder of its own, which a single-owner entity cannot have).
-routine Array[T, N].modify_at!(index: U64) -> Modifying[T]
+routine Array[T, COUNT].modify_at!(index: U64) -> Modifying[T]
 needs EntityType T
-    if index >= N
+    if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
-        return Modifying[T](LLVM::load_element_ref[Array[T, N], T](me.hijack(), index).hijack())
+        return Modifying[T](LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index).hijack())
 
 ### Returns a read token on the entity stored at `index`, so one call or field read through it reads the
 ### element without copying it: `cells[0].v` lowers to `cells.view_at(index: 0).v`. Entity elements only.
 @readonly
-routine Array[T, N].view_at!(index: U64) -> Viewing[T]
+routine Array[T, COUNT].view_at!(index: U64) -> Viewing[T]
 needs EntityType T
-    if index >= N
+    if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
-        return Viewing[T](LLVM::load_element_ref[Array[T, N], T](me.hijack(), index).hijack())
+        return Viewing[T](LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index).hijack())
 
 ### Replaces the element at `index` with `value`, mutating this `Array` in place.
 ### `me` is received by reference (struct-record `setitem!`), so the single-element write through
 ### `me.hijack()` reaches the caller's storage directly — no whole-array copy.
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
-### :throws: {IndexOutOfBoundsError} if `index >= N`.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
 @inline
-routine Array[T, N].setitem!(index: U64, value: T)
-    if index >= N
+routine Array[T, COUNT].setitem!(index: U64, value: T)
+    if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
-        LLVM::store_element_ref[Array[T, N], T](me.hijack(), index, value)
+        LLVM::store_element_ref[Array[T, COUNT], T](me.hijack(), index, value)
     return
 
 ### Returns a `List[T]` holding independent copies of the elements in `range` — the slice form of
 ### indexing (`array[a til b]`). Unlike scalar indexing this returns a `List`, NOT an `Array[T, M]`: the
 ### slice length is a runtime value, whereas an `Array`'s size is a buildtime parameter, so it cannot
 ### type as a fixed-size array. A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields
-### `[a, b]`; a descending range reverses. Positions at or past `N` are skipped. Each element is copied
+### `[a, b]`; a descending range reverses. Positions at or past `COUNT` are skipped. Each element is copied
 ### through `copy`.
 ### :param range: The index range to extract.
 ### :returns: A `List[T]` owning copies of the selected elements.
 @readonly
-routine Array[T, N].getitem(range: Range[U64]) -> List[T]
+routine Array[T, COUNT].getitem(range: Range[U64]) -> List[T]
 needs T obeys Assignable
     var result = List[T]()
     each i in range
-        if i < N
+        if i < COUNT
             result.add_last(value: me[i])
     return steal result
 
 ### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
 ### entity elements. Invoked through an owning entity's generated `destroy` field-recursion when
-### the array is an entity field — all `N` inline slots are live, so the full range is visited.
+### the array is an entity field — all `COUNT` inline slots are live, so the full range is visited.
 ### (`Array` is a value record, so it has no separate allocation of its own to free.)
 @override
-dangerous routine Array[T, N].destroy()
+dangerous routine Array[T, COUNT].destroy()
     var i = 0u64
-    while i < N
+    while i < COUNT
         # Read element i in place through the storage pointer (element_at's by-VALUE form copies the whole
         # array — which also draws a spurious retaining `me.assign()` at the copy-lowering pass; the pointer
         # form is what getitem/setitem use). The routine is already `dangerous`, so no nested `danger` block.
-        LLVM::load_element_ref[Array[T, N], T](me.hijack(), i).destroy()
+        LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), i).destroy()
         i = i + 1u64
     return
 
@@ -173,10 +176,10 @@ dangerous routine Array[T, N].destroy()
 ### controller; a value element is a no-op). Overrides the universal member-walk — `Array` is `@llvm`
 ### storage with no named members, so the generic walk sees nothing.
 @override
-dangerous routine Array[T, N].roam_trace()
+dangerous routine Array[T, COUNT].roam_trace()
     var i = 0u64
-    while i < N
-        LLVM::load_element_ref[Array[T, N], T](me.hijack(), i).cyclic_visit()
+    while i < COUNT
+        LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), i).cyclic_visit()
         i = i + 1u64
     return
 
@@ -184,31 +187,31 @@ dangerous routine Array[T, N].roam_trace()
 ### elements are freed by the collector as part of the white cycle — the default `roam_free` forwards to
 ### `destroy`, which WOULD tear down every element (a double-free here), so it must be overridden.
 @override
-dangerous routine Array[T, N].roam_free()
+dangerous routine Array[T, COUNT].roam_free()
     return
 
 ### Returns a copy with each element STORED (refcount-bumped for managed element types like `Text`; a
 ### plain bitwise duplicate for trivially-copyable elements). Element-wise so the per-element `destroy`
 ### at scope teardown stays balanced — a whole-array bitwise copy would alias element handles at
-### refcount 1 and double-free. Storability CASCADES: `Array[T, N]` is Assignable iff `T` is.
+### refcount 1 and double-free. Storability CASCADES: `Array[T, COUNT]` is Assignable iff `T` is.
 @readonly
-routine Array[T, N].assign() -> Array[T, N]
+routine Array[T, COUNT].assign() -> Array[T, COUNT]
 needs T obeys Assignable
-    var result = Array[T, N]()
+    var result = Array[T, COUNT]()
     var i = 0u64
-    while i < N
+    while i < COUNT
         result[i] = me[i].assign()
         i = i + 1u64
     return result
 
 ### Returns a deep, independent copy — each element deep-copied via its own `copy`. Copyability
-### cascades: `Array[T, N]` is copyable iff `T` is.
+### cascades: `Array[T, COUNT]` is copyable iff `T` is.
 @readonly
-routine Array[T, N].duplicate() -> Array[T, N]
+routine Array[T, COUNT].duplicate() -> Array[T, COUNT]
 needs T obeys Assignable
-    var result = Array[T, N]()
+    var result = Array[T, COUNT]()
     var i = 0u64
-    while i < N
+    while i < COUNT
         result[i] = me[i]
         i = i + 1u64
     return result
@@ -218,46 +221,46 @@ needs T obeys Assignable
 # ============================================================================
 
 ### Returns the fixed number of elements in this array.
-### This is always equal to the buildtime parameter `N`.
-### :returns: The element count `N`.
+### This is always equal to the buildtime parameter `COUNT`.
+### :returns: The element count `COUNT`.
 @readonly
-routine Array[T, N].count() -> U64
-    return N
+routine Array[T, COUNT].count() -> U64
+    return COUNT
 
 ### Returns true when the buildtime size is zero.
-### :returns: `true` if `N == 0`.
+### :returns: `true` if `COUNT == 0`.
 @readonly
-routine Array[T, N].is_empty() -> Bool
-    return N == 0u64
+routine Array[T, COUNT].is_empty() -> Bool
+    return COUNT == 0u64
 
 ### Returns the first element of the array.
 ### :returns: The element at index `0`.
-### :absent: The array has zero elements (`N == 0`).
+### :absent: The array has zero elements (`COUNT == 0`).
 @readonly
-routine Array[T, N].first!() -> T
-    if N == 0u64
+routine Array[T, COUNT].first!() -> T
+    if COUNT == 0u64
         absent
     danger
-        return LLVM::load_element_ref[Array[T, N], T](me.hijack(), 0u64)
+        return LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), 0u64)
 
 ### Returns the last element of the array.
-### :returns: The element at index `N - 1`.
-### :absent: The array has zero elements (`N == 0`).
+### :returns: The element at index `COUNT - 1`.
+### :absent: The array has zero elements (`COUNT == 0`).
 @readonly
-routine Array[T, N].last!() -> T
-    if N == 0u64
+routine Array[T, COUNT].last!() -> T
+    if COUNT == 0u64
         absent
     danger
-        return LLVM::load_element_ref[Array[T, N], T](me.hijack(), N - 1u64)
+        return LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), COUNT - 1u64)
 
 ### Returns true if any element equals `value`.
 ### Scans from index 0 to N - 1 using the element type's equality operator.
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` otherwise.
 @readonly
-routine Array[T, N].contains(value: T) -> Bool
+routine Array[T, COUNT].contains(value: T) -> Bool
 needs T obeys Equatable
-    each i in 0u64 til N
+    each i in 0u64 til COUNT
         if me[i] == value
             return true
     return false
@@ -267,9 +270,9 @@ needs T obeys Equatable
 ### :returns: The zero-based index of the first match.
 ### :absent: No element equals `value`.
 @readonly
-routine Array[T, N].index_of!(value: T) -> U64
+routine Array[T, COUNT].index_of!(value: T) -> U64
 needs T obeys Equatable
-    each i in 0u64 til N
+    each i in 0u64 til COUNT
         if me[i] == value
             return i
     absent
@@ -277,19 +280,19 @@ needs T obeys Equatable
 ### Returns an iterator over the elements in ascending index order. It reads each element where the array holds it,
 ### so the array must stay where it is while the loop runs (the builder keeps it from being reshaped, RF-S625).
 @readonly
-routine Array[T, N].iter() -> ArrayEmittable[T, N]
+routine Array[T, COUNT].iter() -> ArrayEmittable[T, COUNT]
     danger
-        return ArrayEmittable[T, N](data: me.hijack(), index: 0u64)
+        return ArrayEmittable[T, COUNT](data: me.hijack(), index: 0u64)
 
 ### Returns the next element from the iterator in ascending index order, read in place: for an entity element it is
 ### the array's own element, which the loop only reads (as `List`'s iterator does).
 ### :returns: The element at the current index.
-### :absent: All `N` elements have been yielded.
-routine ArrayEmittable[T, N].emit!() -> T
-    if me.index >= U64(N)
+### :absent: All `COUNT` elements have been yielded.
+routine ArrayEmittable[T, COUNT].emit!() -> T
+    if me.index >= U64(COUNT)
         absent
     danger
-        var value: T = LLVM::load_element_ref[Array[T, N], T](me.data, me.index)
+        var value: T = LLVM::load_element_ref[Array[T, COUNT], T](me.data, me.index)
         me.index = me.index + 1u64
         return value
 
@@ -299,9 +302,9 @@ routine ArrayEmittable[T, N].emit!() -> T
 
 @readonly
 @override
-routine Array[T, N].represent() -> Text
+routine Array[T, COUNT].represent() -> Text
     var result = "Array(["
-    each i in 0u64 til N
+    each i in 0u64 til COUNT
         if i > 0u64
             result = result + ", "
         result = result + nested_repr(me[i])
@@ -310,9 +313,9 @@ routine Array[T, N].represent() -> Text
 
 @readonly
 @override
-routine Array[T, N].diagnose() -> Text
+routine Array[T, COUNT].diagnose() -> Text
     var result = me.full_type_name() + "(["
-    each i in 0u64 til N
+    each i in 0u64 til COUNT
         if i > 0u64
             result = result + ", "
         result = result + nested_repr(me[i])
@@ -326,9 +329,9 @@ routine Array[T, N].diagnose() -> Text
 ###        (e.g. a `U` that is not equatable) do not get an `eq`
 ###        operator — `==` on such arrays is a build error.
 @readonly
-routine Array[T, N].eq(you: Array[T, N]) -> Bool
+routine Array[T, COUNT].eq(you: Array[T, COUNT]) -> Bool
 needs T obeys Equatable
-    each i in 0u64 til N
+    each i in 0u64 til COUNT
         if me[i] != you[i]
             return false
     return true
@@ -340,9 +343,9 @@ needs T obeys Equatable
 ### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
 ### :note: Requires `T` to obey `Comparable`.
 @readonly
-routine Array[T, N].cmp(you: Array[T, N]) -> ComparisonSign
+routine Array[T, COUNT].cmp(you: Array[T, COUNT]) -> ComparisonSign
 needs T obeys Comparable
-    each i in 0u64 til N
+    each i in 0u64 til COUNT
         var sign = me[i].cmp(you[i])
         if sign != SAME
             return sign

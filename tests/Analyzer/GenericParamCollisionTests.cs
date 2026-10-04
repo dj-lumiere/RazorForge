@@ -130,4 +130,31 @@ public class GenericParamCollisionTests
                                    return
                                """);
     }
+
+    /// <summary>
+    /// A receiver pattern's own parameter shadows the owner's parameter of the same name: in
+    /// `routine List[Box[T]].items() -> List[T]` the `T` is the pattern's, so on a `List[Box[S64]]` the result
+    /// is `List[S64]`, not `List[Box[S64]]` (the list's own slot is bound to `Box[S64]`).
+    /// </summary>
+    [Fact]
+    public void ReceiverPatternParam_ShadowsOwnerParamOfSameName()
+    {
+        AssertAnalyzes(source: """
+                               bundle Box[T]
+                                   item: T
+
+                               routine List[Box[T]].items() -> List[T]
+                                   var out = List[T]()
+                                   each b in me
+                                       out.add_last(value: b.item)
+                                   return steal out
+
+                               routine start()
+                                   var xs = List[Box[S64]]()
+                                   xs.add_last(value: Box[S64](item: 4_s64))
+                                   var got = xs.items()
+                                   var sum: S64 = got[0] + got[0]
+                                   return
+                               """);
+    }
 }

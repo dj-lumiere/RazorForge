@@ -276,30 +276,6 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for when expression becomes is lowered before codegen.
-    /// </summary>
-    [Fact]
-    public void Analyze_WhenExpressionBecomes_IsLoweredBeforeCodegen()
-    {
-        string source = """
-                        routine test(value: S32) -> S32
-                            var result = when value
-                                == 1 =>
-                                    var doubled = value * 2_s32
-                                    becomes doubled
-                                else => 0_s32
-                            return result
-                        """;
-
-        Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
-        AnalysisResult result = analyzer.Analyze(program: program);
-
-        Assert.Empty(collection: result.Errors);
-        Assert.False(condition: ContainsBecomes(program: program));
-    }
-
-    /// <summary>
     /// Verifies semantic analysis behavior for lambda expression is lifted before codegen.
     /// </summary>
     [Fact]
@@ -1636,36 +1612,11 @@ public class CompilerPipelineLoweringTests
         };
     }
 
-    private static bool ContainsBecomes(Program program)
-    {
-        return program.Declarations
-                      .OfType<RoutineDeclaration>()
-                      .Any(predicate: routine => ContainsBecomes(statement: routine.Body));
-    }
-
     private static bool ContainsLambda(Program program)
     {
         return program.Declarations
                       .OfType<RoutineDeclaration>()
                       .Any(predicate: routine => ContainsLambda(statement: routine.Body));
-    }
-
-    private static bool ContainsBecomes(Statement statement)
-    {
-        return statement switch
-        {
-            BecomesStatement => true,
-            BlockStatement block => block.Statements.Any(predicate: ContainsBecomes),
-            IfStatement ifs => ContainsBecomes(statement: ifs.ThenStatement) ||
-                               ifs.ElseStatement != null &&
-                               ContainsBecomes(statement: ifs.ElseStatement),
-            LoopStatement loop => ContainsBecomes(statement: loop.Body),
-            WhenStatement whenStmt => whenStmt.Clauses.Any(predicate: clause =>
-                ContainsBecomes(statement: clause.Body)),
-            DangerStatement danger => ContainsBecomes(statement: danger.Body),
-            UsingStatement usingStmt => ContainsBecomes(statement: usingStmt.Body),
-            _ => false
-        };
     }
 
     private static bool ContainsLambda(Statement statement)
@@ -1700,7 +1651,6 @@ public class CompilerPipelineLoweringTests
                                         ContainsLambda(statement: usingStmt.Body),
             DiscardStatement discard => ContainsLambda(expression: discard.Expression),
             ThrowStatement throwStmt => ContainsLambda(expression: throwStmt.Error),
-            BecomesStatement becomes => ContainsLambda(expression: becomes.Value),
             _ => false
         };
     }

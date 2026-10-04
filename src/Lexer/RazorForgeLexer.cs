@@ -194,8 +194,6 @@ public partial class RazorForgeLexer
             [key: "try"] = TokenType.Try,
             [key: "grab"] = TokenType.Grab,
             [key: "lookup"] = TokenType.Lookup,
-            [key: "becomes"] = TokenType.Becomes,
-
             // Module system
             [key: "import"] = TokenType.Import,
             [key: "module"] = TokenType.Module,

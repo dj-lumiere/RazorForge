@@ -65,8 +65,8 @@ dangerous routine recipe_new(slots: U64) -> Address
 
 ### Moves `value` into its own heap cell and stores the cell in recipe slot `slot` (like
 ### `List.add_last` storing an element). Builder plumbing for `suspended`/`threaded` calls.
-dangerous routine recipe_put[V](recipe: Address, slot: U64, value: V)
-    var cell = Hijacked[V](rf_allocate_dynamic(size: V.data_size()))
+dangerous routine recipe_put[T](recipe: Address, slot: U64, value: T)
+    var cell = Hijacked[T](rf_allocate_dynamic(size: T.data_size()))
     cell.poke(value)
     Hijacked[Address](recipe).poke_at_offset(at: recipe_slot_size() * slot, value: cell.address())
     return
@@ -74,9 +74,9 @@ dangerous routine recipe_put[V](recipe: Address, slot: U64, value: V)
 ### Moves the value out of recipe slot `slot` and frees its cell (like `List.remove_last`). Builder
 ### plumbing for the routine that runs a recipe.
 ### :returns: the argument value.
-dangerous routine recipe_take[V](recipe: Address, slot: U64) -> V
+dangerous routine recipe_take[T](recipe: Address, slot: U64) -> T
     var cell = Hijacked[Address](recipe).peek_at_offset(offset: recipe_slot_size() * slot)
-    var value = Hijacked[V](cell).peek()
+    var value = Hijacked[T](cell).peek()
     rf_invalidate(ptr: cell)
     return value
 
@@ -95,11 +95,11 @@ dangerous routine recipe_task(recipe: Address) -> Address
 ### Builds the coroutine-backed Agent for a `suspended` call: creates the result task (stored in recipe
 ### slot 0) and the INERT coroutine that will run `entry(recipe)`. Nothing runs until a verb.
 ### :returns: the Agent recipe.
-dangerous routine agent_suspended[R](entry: CPtr, recipe: Address) -> Agent[R]
+dangerous routine agent_suspended[T](entry: CPtr, recipe: Address) -> Agent[T]
     var task = C::rf_task_create(kind: 0_u32)
     Hijacked[Address](recipe).poke(value: task)
     var coro = C::rf_coro_create(entry: entry, userdata: CPtr(from: recipe), stack_size: 0)
-    return Agent[R](
+    return Agent[T](
         kind: AgentKind.CORO,
         coro: coro,
         agent: task,
@@ -112,10 +112,10 @@ dangerous routine agent_suspended[R](entry: CPtr, recipe: Address) -> Agent[R]
 ### Builds the thread-backed Agent for a `threaded` call: creates the result task (stored in recipe slot 0)
 ### and remembers `entry`. The thread is started by the first verb that runs the Agent.
 ### :returns: the Agent recipe.
-dangerous routine agent_threaded[R](entry: CPtr, recipe: Address) -> Agent[R]
+dangerous routine agent_threaded[T](entry: CPtr, recipe: Address) -> Agent[T]
     var task = C::rf_task_create(kind: 1_u32)
     Hijacked[Address](recipe).poke(value: task)
-    return Agent[R](
+    return Agent[T](
         kind: AgentKind.THREAD,
         coro: cptr_none(),
         agent: task,
@@ -128,13 +128,13 @@ dangerous routine agent_threaded[R](entry: CPtr, recipe: Address) -> Agent[R]
 ### Completes a recipe's task with the value its routine returned and frees the recipe. A detached
 ### (`execute`) task has no reader, so the value is not boxed: it is torn down like any argument the
 ### routine does not keep. Builder plumbing for the routine that runs a recipe.
-dangerous routine agent_finish[R](recipe: Address, value: R)
+dangerous routine agent_finish[T](recipe: Address, value: T)
     var task = recipe_task(recipe: recipe)
     rf_invalidate(ptr: recipe)
     if C::rf_task_is_detached(task: task) != 0_u8
         C::rf_task_complete_value(task: task, result: Address(0))
         return
-    var cell = Hijacked[R](rf_allocate_dynamic(size: R.data_size()))
+    var cell = Hijacked[T](rf_allocate_dynamic(size: T.data_size()))
     cell.poke(value)
     C::rf_task_complete_value(task: task, result: cell.address())
     return
@@ -394,7 +394,7 @@ dangerous routine Agent[T].destroy()
 ### Mixed coroutine/thread sets are supported.
 ### :throws: {TaskSpawnError} if the set is empty (there is nothing to race).
 ### :returns: The value produced by the first Agent to finish.
-routine List[Agent[V]].race!() -> V
+routine List[Agent[T]].race!() -> T
     danger
         var n = me.count()
         if n == 0_u64
@@ -418,7 +418,7 @@ routine List[Agent[V]].race!() -> V
         C::rf_race_end(race: race)
         var w = U64(winner)
         var payload = C::rf_task_result_payload(task: me[w].task_handle())
-        var value = Hijacked[V](from: payload).peek()
+        var value = Hijacked[T](from: payload).peek()
         rf_invalidate(ptr: payload)
         # race! is the sole consumer of this set: the winner's value is read, the losers are never
         # retrieved. Reap EVERY agent exactly once here (winner + losers) — a still-running loser's worker
@@ -438,7 +438,7 @@ routine List[Agent[V]].race!() -> V
 ### that throw propagates out and the remaining children are abandoned when the list tears down at
 ### scope exit. An empty set yields an empty list.
 ### :returns: The values produced by every Agent, in the order they appear in the list.
-routine List[Agent[V]].gather!() -> List[V]
+routine List[Agent[T]].gather!() -> List[T]
     danger
         var n = me.count()
         # Launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
@@ -449,7 +449,7 @@ routine List[Agent[V]].gather!() -> List[V]
             if not me[i].launch()
                 throw TaskSpawnError()
             i = i + 1
-        var results = List[V]()
+        var results = List[T]()
         i = 0_u64
         while i < n
             var value = me[i].retrieve()
@@ -466,7 +466,7 @@ routine List[Agent[V]].gather!() -> List[V]
 ### next `waitfor` returning early. `!` because the wind-down join can surface a child's throw. To
 ### cancel WITHOUT waiting, simply let the list tear down at scope exit (abandon-all).
 ### :returns: Each Agent's final value, in input order.
-routine List[Agent[V]].cancel_all!() -> List[V]
+routine List[Agent[T]].cancel_all!() -> List[T]
     danger
         var n = me.count()
         var i = 0u64
@@ -480,7 +480,7 @@ routine List[Agent[V]].cancel_all!() -> List[V]
             if not me[i].launch()
                 throw TaskSpawnError()
             i = i + 1
-        var results = List[V]()
+        var results = List[T]()
         i = 0u64
         while i < n
             var value = me[i].retrieve()

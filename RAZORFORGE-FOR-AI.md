@@ -103,6 +103,18 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   receiver INSTANCE.** Do not conflate them.
 - The generic-constraint keyword is **`needs`** (e.g. `needs T obeys P`), **not
   `where`** — `where` is not RF syntax.
+- **Generic parameter names.** A type parameter is `T` alone only when it is the
+  only one and its role is obvious (`List[T]`, `Maybe[T]`, `Array[T, COUNT]`).
+  Otherwise every type parameter is `T` + a PascalCase role (`Dict[TKey, TValue]`,
+  `select[TResult]`, `Guarded[T, TPolicy]`, `LLVM::sign_extend[TFrom, TTo]`), never
+  another single letter (`K`, `V`, `U`, `E`, ...). A const generic is
+  SCREAMING_CASE with a meaning (`needs U64 COUNT`, `BITS`, `LANES`, `ARITY`),
+  never `N`. Why: the `T` prefix shows at a use site (`var k: TKey`, a hover
+  `get(key: TKey) -> TValue?`) that a name is a type parameter and not a real
+  type, and SCREAMING marks a buildtime constant (like `preset`s and `U64_MAX`),
+  so case alone tells type / type parameter / buildtime constant / runtime value
+  apart. A receiver pattern's own parameter shadows the owner's parameter of the
+  same name (`routine List[Agent[T]].gather() -> List[T]`: that `T` is the pattern's).
 - Say **"buildtime dispatch" / "runtime dispatch"**, not "static / dynamic".
   Everything monomorphizes; RF's default is buildtime dispatch, no runtime dispatch.
 - varargs parameter notation is **`name...: Type`** (the `...` follows the param
@@ -189,9 +201,10 @@ binding RazorForge has.
   defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
 - `Bool`, `Text` (UTF-32 string), `Character`, `Byte`, `Bytes`
 - `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals
-- Collections: `List[T]`, `Dict[K,V]`, `Set[T]`, `CircularList[T]`, `BitList`, `PriorityQueue[TPriority, TElement]`,
-  `SortedDict[K, V]`, `SortedList[T]`, `SortedSet[T]`, fixed-size `Array[T, N]`, `BitArray[N]`
-- Tuples: `(T, U)` / `Tuple[T, U]`, with fields `item0`, `item1`, ...
+- Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `CircularList[T]`, `BitList`,
+  `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
+  fixed-size `Array[T, COUNT]`, `BitArray[BITS]`
+- Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
 - Carriers: `Maybe[T]`, `Check[T]`, `Lookup[T]` (builder-synthesized only —
   user routines cannot declare them as return types; you obtain one by wrapping a
   failable call with the `try`/`grab`/`lookup` keyword).
@@ -373,16 +386,16 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
   - **`Viewing[T]` / `Modifying[T]`** — read / write intent on a directly-owned
     entity. Produced by `a.view()` / `a.modify()`.
   - **`Consulting[T]` / `Amending[T]`** — read / write intent on the inner value of
-    a `Guarded[T,P]`, lock-guarded by the policy `P`. Produced by `s.consult()` /
+    a `Guarded[T, TPolicy]`, lock-guarded by the policy `TPolicy`. Produced by `s.consult()` /
     `s.amend()`, always via a `using` block; `s.try_amend()` is the NON-BLOCKING
     acquire (a hand-written method returning the token, used with `using … fallback`
     — NOT a recovery variant, so no `try` keyword).
 - **RC wrappers** (opt-in shared ownership, reference-counted):
   - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, copy verb `.share()`);
     forwards direct access to the retained entity.
-  - **`Guarded[T,P]`** — multi-thread strong handle (atomic, copy verb `.share()`);
+  - **`Guarded[T, TPolicy]`** — multi-thread strong handle (atomic, copy verb `.share()`);
     reaching its inner value goes through a `Consulting`/`Amending` token.
-  - **`Tracked[T]`** (single-thread) / **`Witnessed[T]`** (multi-thread) — weak handles.
+  - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
 - **`Hijacked[T]`** — a non-owning raw handle (no-op destroy); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
 - Records never use tokens or `as_entity` — those are entity concepts.
@@ -427,7 +440,7 @@ show(a === make_other())    # false — different objects
 >   copied value, an infinitely-sized value cannot be copied, so a record cannot contain itself.*
 >   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
 >   nullable pointer; unique ownership makes the structure a tree = acyclic = deterministic teardown).
-> - Generic param kinds: bare `[T, U]` = `AnyType`; annotate `T: record` / `T: entity` only to constrain.
+> - Generic param kinds: bare `[TKey, TValue]` = `AnyType`; annotate `T: record` / `T: entity` only to constrain.
 >   No `Assignable`/`Copyable` bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the ownership
 >   wrappers below name only *departures* from the bare-entity default (unique ownership is unnamed).
 > - Entity allocation is stack/inline by default; heap is induced by a wrapper (`Retained`/…) or recursion,
@@ -446,7 +459,7 @@ In a generic body, a value of an unconstrained type parameter may be an entity, 
 it (`var y = x`, `return me.value`, a tuple of it) is RF-S413 on the template's own line: `steal` it, keep the
 parameter to values (`needs RecordType T`, or `needs T obeys Assignable`), or work on it in place.
 `needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
-kinds on one line repeat the kind: `needs RecordType K, RecordType V`. Stdlib bundles: `Maybe`, `Array`,
+kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
 `SplitArray`, `DictEntry`, `PQEntry` (tuples and variants follow their elements the same way). `Range[T]`,
 `Atomic[T]`, `PriorityQueue`'s priority, and `SplitArray`'s element iterator are `needs RecordType`. An
 `Array`'s iterator reads each element in place, so `each r in arr` works on an array of entities (the binding
@@ -459,9 +472,9 @@ only reads; the array keeps owning each element). Suflae has no
 routine largest[T obeys Comparable](items: Viewing[List[T]]) -> T
     ...
 
-record Pair[A, B]
-    first: A
-    second: B
+record Pair[TFirst, TSecond]
+    first: TFirst
+    second: TSecond
 
 protocol Iterable[T]
 relates Iter obeys Iterator[T]        # associated type slot
@@ -472,7 +485,7 @@ relates ListEmitter[T] as Iter        # associated type binding
 ```
 
 - Constraint syntax: `T obeys SomeProtocol`. `Me` is the self type.
-- Const generics: `Array[T, N]`.
+- Const generics: `Array[T, COUNT]`.
 - **Type arguments use `[...]`, never `<...>` — by design; do not propose `<>`.**
   `f < T > (x)` is already a valid chained comparison in RF, so angle brackets
   would force a parse-time guess (C#'s disambiguation rules, Rust's turbofish) plus
@@ -531,17 +544,17 @@ that differ from other languages:
   returns `Maybe`.
 - `set.add(value: v)` returns Bool — `discard` it if unused.
 - `dict.add(key: k, value: v)` returns Bool; indexing is failable under the
-  hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Maybe[V]`.
+  hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Maybe[TValue]`.
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
   is `coll[^1]` (last element).
 - **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a
-  `List`/`CircularList` yields a new `List`/`CircularList`, on `Array[T, N]` a `List[T]`
+  `List`/`CircularList` yields a new `List`/`CircularList`, on `Array[T, COUNT]` a `List[T]`
   (slice length is a runtime value, so it cannot be a fixed `Array`). Mutating
   the slice never touches the original. Open-ended `xs[a til ^0]` slices to the
   end. Element type must be `Copyable` (slicing a `List[Entity]` is a compile
   error). For a lazy, no-copy window use the iterator combinator
   `xs.skip(a).take(n)` instead — copy-vs-view is spelled by which you call.
-- `List[T]`, `Dict[K, V]`, `Set[T]`, `CircularList[T]`, and sorted collections are
+- `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `CircularList[T]`, and sorted collections are
   entities. Do not pass a container as a bare parameter when read-only access is
   enough; declare the parameter `Viewing[List[T]]` and pass the container
   (`largest(items: xs)`). Bind `var v = items.view()` when the token needs a name.
@@ -828,7 +841,7 @@ routine start()
   (`()` is the empty parameter tuple; `None` is the void return. The parameter list is
   always tuple-notation: `()`, `(T,)`, `(A, B)`.)
 - **Carrying state — the context overload.** Because the handler runs on another thread,
-  shared state it touches must be a thread-safe, storable handle: a `Guarded[T, P]`
+  shared state it touches must be a thread-safe, storable handle: a `Guarded[T, TPolicy]`
   (RazorForge multi-thread RC) or a `Roamed[T]`. Pass it with the copy verb and the
   handler receives it back on every fire — no capture, no global:
 
@@ -881,7 +894,7 @@ you are writing another language.
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `disobeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `unless` `when` `is` `isnot` `loop`
-  `while` `each` `break` `continue` `return` `throw` `pierce` `absent` `becomes`
+  `while` `each` `break` `continue` `return` `throw` `pierce` `absent`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `discard`

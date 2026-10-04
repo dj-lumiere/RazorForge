@@ -2,39 +2,39 @@ module IterTools
 
 ### Represents a lazy adapter that discards the first `count` elements from a sequence.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity SkipIterable[T, S]
-relates SkipEmittable[T, S/Iter] as Iter
+### :typeparam TSource: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity SkipIterable[T, TSource]
+relates SkipEmittable[T, TSource/Iter] as Iter
 obeys Iterable[T]
-needs S obeys Iterable[T]
+needs TSource obeys Iterable[T]
     ### Stores the source iterable (borrowed, not owned).
-    secret source: Hijacked[S]
+    secret source: Hijacked[TSource]
     ### Stores how many leading values should be skipped.
     secret count: U64
 
 ### Iterates over a source sequence after discarding an initial prefix.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam SE: The concrete source iterator type (owned).
-entity SkipEmittable[T, SE]
+### :typeparam TSourceIter: The concrete source iterator type (owned).
+entity SkipEmittable[T, TSourceIter]
 obeys Emittable[T]
-needs SE obeys Emittable[T]
+needs TSourceIter obeys Emittable[T]
     ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: SE
+    secret source: TSourceIter
     ### Stores how many items still need to be discarded.
     secret remaining: U64
 
 ### Returns the stateful iterator that discards the configured prefix lazily.
 ### The returned emitter defers the actual skipping until iteration begins.
-### :returns: The resulting `SkipEmittable[T, S/Iter]` value.
+### :returns: The resulting `SkipEmittable[T, TSource/Iter]` value.
 @readonly
-routine SkipIterable[T, S].iter() -> SkipEmittable[T, S/Iter]
+routine SkipIterable[T, TSource].iter() -> SkipEmittable[T, TSource/Iter]
     danger
-        return SkipEmittable[T, S/Iter](source: me.source.as_entity().iter(), remaining: me.count)
+        return SkipEmittable[T, TSource/Iter](source: me.source.as_entity().iter(), remaining: me.count)
 
 ### Returns the next value after any remaining skipped prefix has been consumed.
 ### Values are discarded only until `remaining` reaches zero.
 ### :returns: The resulting `T` value.
-routine SkipEmittable[T, SE].emit!() -> T
+routine SkipEmittable[T, TSourceIter].emit!() -> T
     danger
         while me.remaining > 0u64
             me.source.emit()

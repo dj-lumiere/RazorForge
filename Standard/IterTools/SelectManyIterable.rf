@@ -3,47 +3,47 @@ module IterTools
 ### Represents a lazy flat-map adapter that applies a transform to each source element and
 ### yields all values produced by each resulting inner iterable in sequence.
 ### :typeparam T: The source element type.
-### :typeparam U: The output element type produced by each inner iterable.
-### :typeparam Sub: The CONCRETE inner-iterable type the transform returns (captured so the
+### :typeparam TResult: The output element type produced by each inner iterable.
+### :typeparam TInner: The CONCRETE inner-iterable type the transform returns (captured so the
 ###   emitter dispatches `.List()` against a real type — RazorForge has no runtime dispatch, so a
-###   bare `Iterable[U]` transform return would leave `Iterable[U].List` unresolvable).
-### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity SelectManyIterable[T, U, Sub, S]
-relates SelectManyEmittable[T, U, Sub, S/Iter] as Iter
-obeys Iterable[U]
-needs S obeys Iterable[T]
-needs Sub obeys Iterable[U]
+###   bare `Iterable[TResult]` transform return would leave `Iterable[TResult].List` unresolvable).
+### :typeparam TSource: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity SelectManyIterable[T, TResult, TInner, TSource]
+relates SelectManyEmittable[T, TResult, TInner, TSource/Iter] as Iter
+obeys Iterable[TResult]
+needs TSource obeys Iterable[T]
+needs TInner obeys Iterable[TResult]
     ### Stores the source iterable (borrowed, not owned).
-    secret source: Hijacked[S]
+    secret source: Hijacked[TSource]
     ### Stores the transform routine applied to each source element.
-    secret transform: Routine[(T,), Sub]
+    secret transform: Routine[(T,), TInner]
 
 ### Iterates over source elements, expanding each through a transform to yield a flat sequence.
 ### An internal buffer holds the current inner sequence; once drained the next outer element is fetched.
 ### :typeparam T: The source element type.
-### :typeparam U: The element type yielded by each inner iterable.
-### :typeparam Sub: The concrete inner-iterable type returned by the transform.
-### :typeparam SE: The concrete source iterator type (owned).
-entity SelectManyEmittable[T, U, Sub, SE]
-obeys Emittable[U]
-needs SE obeys Emittable[T]
-needs Sub obeys Iterable[U]
+### :typeparam TResult: The element type yielded by each inner iterable.
+### :typeparam TInner: The concrete inner-iterable type returned by the transform.
+### :typeparam TSourceIter: The concrete source iterator type (owned).
+entity SelectManyEmittable[T, TResult, TInner, TSourceIter]
+obeys Emittable[TResult]
+needs TSourceIter obeys Emittable[T]
+needs TInner obeys Iterable[TResult]
     ### Stores the outer source iterator (owned; destroyed with the adapter).
-    secret source: SE
+    secret source: TSourceIter
     ### Stores the transform routine used to expand each source element.
-    secret transform: Routine[(T,), Sub]
+    secret transform: Routine[(T,), TInner]
     ### Stores the current inner buffer of materialized inner-sequence values.
-    secret buffer: List[U]
+    secret buffer: List[TResult]
     ### Stores the read position within the current inner buffer.
     secret buffer_index: U64
 
 ### Returns the stateful iterator that drives the flat-map expansion.
-### :returns: The resulting `SelectManyEmittable[T, U, Sub, S/Iter]` value.
+### :returns: The resulting `SelectManyEmittable[T, TResult, TInner, TSource/Iter]` value.
 @readonly
-routine SelectManyIterable[T, U, Sub, S].iter() -> SelectManyEmittable[T, U, Sub, S/Iter]
-    var buffer = List[U]()
+routine SelectManyIterable[T, TResult, TInner, TSource].iter() -> SelectManyEmittable[T, TResult, TInner, TSource/Iter]
+    var buffer = List[TResult]()
     danger
-        return SelectManyEmittable[T, U, Sub, S/Iter](
+        return SelectManyEmittable[T, TResult, TInner, TSource/Iter](
             source: me.source.as_entity().iter(),
             transform: me.transform,
             buffer: steal buffer,
@@ -52,9 +52,9 @@ routine SelectManyIterable[T, U, Sub, S].iter() -> SelectManyEmittable[T, U, Sub
 
 ### Returns the next value from the current inner buffer, refilling it as needed.
 ### The emitter calls `emit!` on the outer source whenever the buffer is exhausted.
-### :returns: The resulting `U` value.
+### :returns: The resulting `TResult` value.
 @reshaping
-routine SelectManyEmittable[T, U, Sub, SE].emit!() -> U
+routine SelectManyEmittable[T, TResult, TInner, TSourceIter].emit!() -> TResult
     danger
         loop
             if me.buffer_index < me.buffer.count()
@@ -67,13 +67,13 @@ routine SelectManyEmittable[T, U, Sub, SE].emit!() -> U
             me.buffer_index = 0u64
 
 ### Returns a lazy adapter that applies `transform` to each element and yields values from all
-### resulting inner iterables in sequence. The inner-iterable type `Sub` is an explicit type
+### resulting inner iterables in sequence. The inner-iterable type `TInner` is an explicit type
 ### argument (e.g. `select_many[S64, List[S64]]`) because RazorForge resolves the dispatch on it
 ### at build time.
 ### :param transform: The routine that maps each source element to an inner iterable.
-### :returns: The resulting `SelectManyIterable[T, U, Sub, Me]` value.
+### :returns: The resulting `SelectManyIterable[T, TResult, TInner, Me]` value.
 @readonly
-routine Iterable[T].select_many[U, Sub](transform: Routine[(T,), Sub]) -> SelectManyIterable[T, U, Sub, Me]
-needs Sub obeys Iterable[U]
+routine Iterable[T].select_many[TResult, TInner](transform: Routine[(T,), TInner]) -> SelectManyIterable[T, TResult, TInner, Me]
+needs TInner obeys Iterable[TResult]
     danger
-        return SelectManyIterable[T, U, Sub, Me](source: me.hijack(), transform: transform)
+        return SelectManyIterable[T, TResult, TInner, Me](source: me.hijack(), transform: transform)

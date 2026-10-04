@@ -1,16 +1,16 @@
 module Core
 
 import BuilderQuery
-### Multi-threaded weak reference. Thin pointer to the same {GuardController[T, P]} as {Guarded[T, P]}.
+### Multi-threaded weak reference. Thin pointer to the same {GuardController[T, TPolicy]} as {Guarded[T, TPolicy]}.
 ### The atomic-refcount twin of {Tracked[T]} — equivalent to `Weak[T]` in Rust. Does not keep the
-### entity alive. Use {recover()} to attempt an upgrade to a strong {Guarded[T, P]}.
+### entity alive. Use {recover()} to attempt an upgrade to a strong {Guarded[T, TPolicy]}.
 ### :typeparam T: The exclusively owned entity type.
-### :typeparam P: The access-discipline lock policy (carried so the upgraded `Guarded` keeps it).
+### :typeparam TPolicy: The access-discipline lock policy (carried so the upgraded `Guarded` keeps it).
 @llvm("ptr")
-record Witnessed[T, P]
+record Witnessed[T, TPolicy]
 obeys Assignable
 needs EntityType T
-needs P obeys LockPolicy
+needs TPolicy obeys LockPolicy
     pass
 
 # ============================================================================
@@ -19,27 +19,27 @@ needs P obeys LockPolicy
 
 ### Returns a new weak reference to the same controller, atomically incrementing the weak count.
 ### :returns: A new weak handle to the same entity's controller.
-routine Witnessed[T, P].share() -> Witnessed[T, P]
+routine Witnessed[T, TPolicy].share() -> Witnessed[T, TPolicy]
     danger
-        var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
+        var ctrl = hijacked_from[GuardController[T, TPolicy]](me.get_address()).as_entity()
         ctrl.observe()
     return me
 
 ### A copy of this handle is one more holder of the same entity: assigning it shares it.
 ### :returns: A new handle to the same entity.
-routine Witnessed[T, P].assign() -> Witnessed[T, P]
+routine Witnessed[T, TPolicy].assign() -> Witnessed[T, TPolicy]
     return me.share()
 
 ### Attempts to upgrade to a strong reference.
 ### :returns: A new strong handle to the entity if it is still alive.
 ### :absent: Returns absent when the entity has already been destroyed.
-routine Witnessed[T, P].hold!() -> Guarded[T, P]
+routine Witnessed[T, TPolicy].hold!() -> Guarded[T, TPolicy]
     danger
-        var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
+        var ctrl = hijacked_from[GuardController[T, TPolicy]](me.get_address()).as_entity()
         if ctrl.strong_count() == 0_u64
             absent
         ctrl.hold()
-        return LLVM::reinterpret_bits[Witnessed[T, P], Guarded[T, P]](me)
+        return LLVM::reinterpret_bits[Witnessed[T, TPolicy], Guarded[T, TPolicy]](me)
 
 # ============================================================================
 # Inspection
@@ -47,23 +47,23 @@ routine Witnessed[T, P].hold!() -> Guarded[T, P]
 
 ### Returns true if the entity is still alive (strong count > 0).
 ### :returns: `true` if at least one strong handle still exists.
-routine Witnessed[T, P].is_alive() -> Bool
+routine Witnessed[T, TPolicy].is_alive() -> Bool
     danger
-        var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
+        var ctrl = hijacked_from[GuardController[T, TPolicy]](me.get_address()).as_entity()
         return ctrl.strong_count() > 0_u64
 
 ### Returns the current strong reference count.
 ### :returns: The number of live strong handles to the entity this tracker points at.
-routine Witnessed[T, P].strong_count() -> U64
+routine Witnessed[T, TPolicy].strong_count() -> U64
     danger
-        var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
+        var ctrl = hijacked_from[GuardController[T, TPolicy]](me.get_address()).as_entity()
         return ctrl.strong_count()
 
 ### Returns the current weak reference count.
 ### :returns: The number of live weak handles sharing this controller.
-routine Witnessed[T, P].weak_count() -> U64
+routine Witnessed[T, TPolicy].weak_count() -> U64
     danger
-        var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
+        var ctrl = hijacked_from[GuardController[T, TPolicy]](me.get_address()).as_entity()
         return ctrl.weak_count()
 
 # ============================================================================
@@ -74,16 +74,16 @@ routine Witnessed[T, P].weak_count() -> U64
 ### :returns: The resulting `Text` value.
 @readonly
 @override
-routine Witnessed[T, P].represent() -> Text
+routine Witnessed[T, TPolicy].represent() -> Text
     return me.type_name()
 
 ### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 @override
-routine Witnessed[T, P].diagnose() -> Text
+routine Witnessed[T, TPolicy].diagnose() -> Text
     danger
-        var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
+        var ctrl = hijacked_from[GuardController[T, TPolicy]](me.get_address()).as_entity()
         var rc = ctrl.strong_count()
         var weak = ctrl.weak_count()
         return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", alive: " + (rc > 0_u64).represent() + ")"
@@ -91,9 +91,9 @@ routine Witnessed[T, P].diagnose() -> Text
 ### Decrements the weak count, tearing down the controller when both counts reach zero. This IS the
 ### decrement — no separate `release` verb; `destroy` is the teardown.
 @override
-dangerous routine Witnessed[T, P].destroy()
+dangerous routine Witnessed[T, TPolicy].destroy()
     if me.get_address() == 0_addr
         return
-    var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
+    var ctrl = hijacked_from[GuardController[T, TPolicy]](me.get_address()).as_entity()
     ctrl.unobserve()
     return

@@ -1,21 +1,21 @@
 module Core
 
 import BuilderQuery
-### Represents temporary thread-safe exclusive (read/write) access to data guarded by a {Guarded[T, P]}.
+### Represents temporary thread-safe exclusive (read/write) access to data guarded by a {Guarded[T, TPolicy]}.
 ### `Amending[T]` is the non-Assignable token produced by `Guarded.amend()` for exclusive access. It holds
-### the shared {GuardController[T, P]} pointer; entering its `using` scope (`enter`) acquires the
+### the shared {GuardController[T, TPolicy]} pointer; entering its `using` scope (`enter`) acquires the
 ### exclusive amender hold on the controller's access-discipline lock and exiting (`exit`) releases it,
 ### so the lock spans exactly the `using` block. At most one amender may exist, with no concurrent
 ### {Consulting[T]}; the readers-XOR-writer access discipline enforces this. Must be opened with `using` —
 ### a bare/inline `amend()` would never acquire the lock.
 ### :typeparam T: The entity type being amended.
-### :typeparam P: The access-discipline lock policy of the originating `Guarded`.
-### :see: {Consulting[T]}, {Modifying[T]}, {Guarded[T, P]}, {Access-Types}
+### :typeparam TPolicy: The access-discipline lock policy of the originating `Guarded`.
+### :see: {Consulting[T]}, {Modifying[T]}, {Guarded[T, TPolicy]}, {Access-Types}
 @llvm("ptr")
-record Amending[T, P]
+record Amending[T, TPolicy]
 obeys Controlling[T], Enterable
 needs EntityType T
-needs P obeys LockPolicy
+needs TPolicy obeys LockPolicy
     pass
 
 # NOTE: No creators, no manual methods — the token is produced only by `Guarded.amend()`, which
@@ -28,10 +28,10 @@ needs P obeys LockPolicy
 ### Called on entry to the `using` block: acquires the exclusive amender hold on the controller's
 ### access-discipline lock, then passes the token through as the bound value. Pairs with `exit`,
 ### so the lock spans exactly the `using` scope.
-### :returns: This token as `Amending[T, P]`.
-routine Amending[T, P].enter() -> Amending[T, P]
+### :returns: This token as `Amending[T, TPolicy]`.
+routine Amending[T, TPolicy].enter() -> Amending[T, TPolicy]
     danger
-        var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
         ctrl.add_claimer()
     return me
 
@@ -39,15 +39,15 @@ routine Amending[T, P].enter() -> Amending[T, P]
 ### once, without blocking. Returns `true` if the hold was acquired (the `using` body runs and `exit`
 ### will release it) or `false` on contention (the `fallback` branch runs; nothing is held).
 ### :returns: `true` if the exclusive hold was acquired, `false` otherwise.
-routine Amending[T, P].try_enter() -> Bool
+routine Amending[T, TPolicy].try_enter() -> Bool
     danger
-        var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
         return ctrl.try_add_claimer()
 
 ### Called on exit from the `using` block (and on every escape): releases the amender hold.
-routine Amending[T, P].exit()
+routine Amending[T, TPolicy].exit()
     danger
-        var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
         ctrl.remove_claimer()
     return
 
@@ -60,18 +60,18 @@ routine Amending[T, P].exit()
 ### :returns: The guarded entity as `T`.
 @readonly
 @inline
-routine Amending[T, P].access() -> T
+routine Amending[T, TPolicy].access() -> T
     danger
-        var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
         return ctrl.raw_data().as_entity()
 
 ### Yields the guarded entity as an in-flight `T` reference for read/write access.
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
 ### :returns: The guarded entity as `T`.
 @inline
-routine Amending[T, P].control() -> T
+routine Amending[T, TPolicy].control() -> T
     danger
-        var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
         return ctrl.raw_data().as_entity()
 
 # ============================================================================
@@ -82,9 +82,9 @@ routine Amending[T, P].control() -> T
 ### :returns: The resulting `Text` value.
 @readonly
 @override
-routine Amending[T, P].represent() -> Text
+routine Amending[T, TPolicy].represent() -> Text
     danger
-        var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
         return ctrl
             .raw_data()
             .as_entity()
@@ -94,9 +94,9 @@ routine Amending[T, P].represent() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 @override
-routine Amending[T, P].diagnose() -> Text
+routine Amending[T, TPolicy].diagnose() -> Text
     danger
-        var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
         return me.type_name() + "(" + ctrl
             .raw_data()
             .as_entity()
@@ -105,5 +105,5 @@ routine Amending[T, P].diagnose() -> Text
 ### No-op: the token owns no heap (it only aliases the controller), and the amender hold is
 ### released by `exit`. Releasing here too would double-release the lock.
 @override
-dangerous routine Amending[T, P].destroy()
+dangerous routine Amending[T, TPolicy].destroy()
     return

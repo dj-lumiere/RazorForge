@@ -3,33 +3,33 @@ module Core
 ### Represents a lazy adapter that pairs each produced element with an index.
 ### The emitted index starts at `0` by default or at the caller-supplied offset.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity EnumerateIterable[T, S]
-relates EnumerateEmittable[T, S/Iter] as Iter
+### :typeparam TSource: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity EnumerateIterable[T, TSource]
+relates EnumerateEmittable[T, TSource/Iter] as Iter
 obeys Iterable[Tuple[U64, T]]
-needs S obeys Iterable[T]
+needs TSource obeys Iterable[T]
     ### Stores the source iterable (borrowed, not owned).
-    secret source: Hijacked[S]
+    secret source: Hijacked[TSource]
     ### Stores the first index value to assign.
     secret start_index: U64
 
 ### Iterates over a source sequence, pairing each element with an incrementing index.
 ### :typeparam T: The element type of the source sequence.
-### :typeparam SE: The concrete source iterator type (owned).
-entity EnumerateEmittable[T, SE]
+### :typeparam TSourceIter: The concrete source iterator type (owned).
+entity EnumerateEmittable[T, TSourceIter]
 obeys Emittable[Tuple[U64, T]]
-needs SE obeys Emittable[T]
+needs TSourceIter obeys Emittable[T]
     ### Stores the iterator over the source sequence (owned; destroyed with the adapter).
-    secret source: SE
+    secret source: TSourceIter
     ### Stores the next index value to assign.
     secret index: U64
 
 ### Returns the stateful iterator that produces indexed tuples lazily.
-### :returns: The resulting `EnumerateEmittable[T, S/Iter]` value.
+### :returns: The resulting `EnumerateEmittable[T, TSource/Iter]` value.
 @readonly
-routine EnumerateIterable[T, S].iter() -> EnumerateEmittable[T, S/Iter]
+routine EnumerateIterable[T, TSource].iter() -> EnumerateEmittable[T, TSource/Iter]
     danger
-        return EnumerateEmittable[T, S/Iter](
+        return EnumerateEmittable[T, TSource/Iter](
             source: me.source.as_entity().iter(),
             index: me.start_index,
         )
@@ -37,7 +37,7 @@ routine EnumerateIterable[T, S].iter() -> EnumerateEmittable[T, S/Iter]
 ### Returns the next value from this iterator.
 ### The returned tuple contains the current index followed by the source item.
 ### :returns: The resulting `Tuple[U64, T]` value.
-routine EnumerateEmittable[T, SE].emit!() -> Tuple[U64, T]
+routine EnumerateEmittable[T, TSourceIter].emit!() -> Tuple[U64, T]
     danger
         var item = me.source.emit()
         var _result = (me.index, steal item)

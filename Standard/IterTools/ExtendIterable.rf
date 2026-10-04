@@ -3,40 +3,40 @@ module IterTools
 ### Represents a lazy adapter that yields one iterable after another.
 ### The second sequence is not touched until the first one is exhausted.
 ### :typeparam T: The element type produced by both source sequences.
-### :typeparam S1: The concrete first source iterable type (borrowed).
-### :typeparam S2: The concrete second source iterable type (borrowed).
-entity ExtendIterable[T, S1, S2]
-relates ExtendEmittable[T, S1/Iter, S2/Iter] as Iter
+### :typeparam TFirstSource: The concrete first source iterable type (borrowed).
+### :typeparam TSecondSource: The concrete second source iterable type (borrowed).
+entity ExtendIterable[T, TFirstSource, TSecondSource]
+relates ExtendEmittable[T, TFirstSource/Iter, TSecondSource/Iter] as Iter
 obeys Iterable[T]
-needs S1 obeys Iterable[T]
-needs S2 obeys Iterable[T]
+needs TFirstSource obeys Iterable[T]
+needs TSecondSource obeys Iterable[T]
     ### Stores the first source iterable (borrowed, not owned).
-    secret first: Hijacked[S1]
+    secret first: Hijacked[TFirstSource]
     ### Stores the second source iterable (borrowed, not owned).
-    secret second: Hijacked[S2]
+    secret second: Hijacked[TSecondSource]
 
 ### Iterates over an `ExtendIterable` by exhausting the first source before moving to the second.
 ### :typeparam T: The element type produced by the concatenated sequence.
-### :typeparam SE1: The concrete first source iterator type (owned).
-### :typeparam SE2: The concrete second source iterator type (owned).
-entity ExtendEmittable[T, SE1, SE2]
+### :typeparam TFirstIter: The concrete first source iterator type (owned).
+### :typeparam TSecondIter: The concrete second source iterator type (owned).
+entity ExtendEmittable[T, TFirstIter, TSecondIter]
 obeys Emittable[T]
-needs SE1 obeys Emittable[T]
-needs SE2 obeys Emittable[T]
+needs TFirstIter obeys Emittable[T]
+needs TSecondIter obeys Emittable[T]
     ### Stores the iterator for the first source (owned; destroyed with the adapter).
-    secret first: SE1
+    secret first: TFirstIter
     ### Stores the iterator for the second source (owned; destroyed with the adapter).
-    secret second: SE2
+    secret second: TSecondIter
     ### Stores whether iteration has already advanced into the second source.
     secret in_second: Bool
 
 ### Returns the stateful iterator that concatenates the two source sequences.
 ### The returned emitter walks `first` to completion before switching to `second`.
-### :returns: The resulting `ExtendEmittable[T, S1/Iter, S2/Iter]` value.
+### :returns: The resulting `ExtendEmittable[T, TFirstSource/Iter, TSecondSource/Iter]` value.
 @readonly
-routine ExtendIterable[T, S1, S2].iter() -> ExtendEmittable[T, S1/Iter, S2/Iter]
+routine ExtendIterable[T, TFirstSource, TSecondSource].iter() -> ExtendEmittable[T, TFirstSource/Iter, TSecondSource/Iter]
     danger
-        return ExtendEmittable[T, S1/Iter, S2/Iter](
+        return ExtendEmittable[T, TFirstSource/Iter, TSecondSource/Iter](
             first: me.first.as_entity().iter(),
             second: me.second.as_entity().iter(),
             in_second: false,
@@ -45,7 +45,7 @@ routine ExtendIterable[T, S1, S2].iter() -> ExtendEmittable[T, S1/Iter, S2/Iter]
 ### Returns the next value from the concatenated sequence.
 ### Once the first iterator is exhausted, all remaining values come from the second iterator.
 ### :returns: The resulting `T` value.
-routine ExtendEmittable[T, SE1, SE2].emit!() -> T
+routine ExtendEmittable[T, TFirstIter, TSecondIter].emit!() -> T
     danger
         if not me.in_second
             var result = try me.first.emit()
@@ -57,9 +57,9 @@ routine ExtendEmittable[T, SE1, SE2].emit!() -> T
 
 ### Returns a lazy concatenation of this iterable and `other`.
 ### :param other: The iterable to consume after `me`.
-### :returns: The resulting `ExtendIterable[T, Me, S2]` value.
+### :returns: The resulting `ExtendIterable[T, Me, TOther]` value.
 @readonly
-routine Iterable[T].extend[S2](other: Accessing[S2]) -> ExtendIterable[T, Me, S2]
-needs S2 obeys Iterable[T]
+routine Iterable[T].extend[TOther](other: Accessing[TOther]) -> ExtendIterable[T, Me, TOther]
+needs TOther obeys Iterable[T]
     danger
-        return ExtendIterable[T, Me, S2](first: me.hijack(), second: other.hijack())
+        return ExtendIterable[T, Me, TOther](first: me.hijack(), second: other.hijack())

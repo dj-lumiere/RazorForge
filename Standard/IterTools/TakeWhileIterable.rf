@@ -3,24 +3,24 @@ module IterTools
 ### Represents a lazy adapter that yields values while a predicate remains true.
 ### Iteration stops permanently after the first predicate failure.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity TakeWhileIterable[T, S]
-relates TakeWhileEmittable[T, S/Iter] as Iter
+### :typeparam TSource: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity TakeWhileIterable[T, TSource]
+relates TakeWhileEmittable[T, TSource/Iter] as Iter
 obeys Iterable[T]
-needs S obeys Iterable[T]
+needs TSource obeys Iterable[T]
     ### Stores the source iterable (borrowed, not owned).
-    secret source: Hijacked[S]
+    secret source: Hijacked[TSource]
     ### Stores the predicate that determines whether iteration should continue.
     secret predicate: Routine[(T,), Bool]
 
 ### Iterates over a source sequence until the continuation predicate fails.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam SE: The concrete source iterator type (owned).
-entity TakeWhileEmittable[T, SE]
+### :typeparam TSourceIter: The concrete source iterator type (owned).
+entity TakeWhileEmittable[T, TSourceIter]
 obeys Emittable[T]
-needs SE obeys Emittable[T]
+needs TSourceIter obeys Emittable[T]
     ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: SE
+    secret source: TSourceIter
     ### Stores the continuation predicate.
     secret predicate: Routine[(T,), Bool]
     ### Stores whether iteration has already terminated.
@@ -29,11 +29,11 @@ needs SE obeys Emittable[T]
 ### Returns the stateful iterator that enforces the continuation predicate.
 ### The emitted iterator remembers when the predicate has already failed so it
 ### never resumes after termination.
-### :returns: The resulting `TakeWhileEmittable[T, S/Iter]` value.
+### :returns: The resulting `TakeWhileEmittable[T, TSource/Iter]` value.
 @readonly
-routine TakeWhileIterable[T, S].iter() -> TakeWhileEmittable[T, S/Iter]
+routine TakeWhileIterable[T, TSource].iter() -> TakeWhileEmittable[T, TSource/Iter]
     danger
-        return TakeWhileEmittable[T, S/Iter](
+        return TakeWhileEmittable[T, TSource/Iter](
             source: me.source.as_entity().iter(),
             predicate: me.predicate,
             done: false,
@@ -44,7 +44,7 @@ routine TakeWhileIterable[T, S].iter() -> TakeWhileEmittable[T, S/Iter]
 ### calls.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the predicate has failed or the source ends first.
-routine TakeWhileEmittable[T, SE].emit!() -> T
+routine TakeWhileEmittable[T, TSourceIter].emit!() -> T
     danger
         if me.done
             absent

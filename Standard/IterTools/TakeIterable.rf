@@ -2,42 +2,42 @@ module IterTools
 
 ### Represents a lazy adapter that yields at most `limit` elements from a source sequence.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity TakeIterable[T, S]
-relates TakeEmittable[T, S/Iter] as Iter
+### :typeparam TSource: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity TakeIterable[T, TSource]
+relates TakeEmittable[T, TSource/Iter] as Iter
 obeys Iterable[T]
-needs S obeys Iterable[T]
+needs TSource obeys Iterable[T]
     ### Stores the source iterable (borrowed, not owned).
-    secret source: Hijacked[S]
+    secret source: Hijacked[TSource]
     ### Stores the maximum number of values to yield.
     secret limit: U64
 
 ### Iterates over at most the configured number of values from the source sequence.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam SE: The concrete source iterator type (owned).
-entity TakeEmittable[T, SE]
+### :typeparam TSourceIter: The concrete source iterator type (owned).
+entity TakeEmittable[T, TSourceIter]
 obeys Emittable[T]
-needs SE obeys Emittable[T]
+needs TSourceIter obeys Emittable[T]
     ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: SE
+    secret source: TSourceIter
     ### Stores how many values may still be yielded.
     secret remaining: U64
 
 ### Returns the stateful iterator that enforces the configured take limit.
 ### The emitted iterator decrements its remaining budget on each successful
 ### yield.
-### :returns: The resulting `TakeEmittable[T, S/Iter]` value.
+### :returns: The resulting `TakeEmittable[T, TSource/Iter]` value.
 @readonly
-routine TakeIterable[T, S].iter() -> TakeEmittable[T, S/Iter]
+routine TakeIterable[T, TSource].iter() -> TakeEmittable[T, TSource/Iter]
     danger
-        return TakeEmittable[T, S/Iter](source: me.source.as_entity().iter(), remaining: me.limit)
+        return TakeEmittable[T, TSource/Iter](source: me.source.as_entity().iter(), remaining: me.limit)
 
 ### Returns the next value while the remaining take budget is still positive.
 ### Iteration stops once the configured limit has been reached, even if the
 ### source still has more values available.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the take limit has been exhausted or the source ends first.
-routine TakeEmittable[T, SE].emit!() -> T
+routine TakeEmittable[T, TSourceIter].emit!() -> T
     danger
         if me.remaining == 0u64
             absent

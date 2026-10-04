@@ -532,73 +532,30 @@ public class ControlFlowAnalysisTests
 
     #endregion
 
-    #region Becomes Statement Validation
+    #region When Expression Arms
 
     /// <summary>
-    /// Verifies semantic analysis behavior for when expression block with becomes without unexpected diagnostics.
+    /// An arm of a `when` that gives a value is one expression after `=>`: a block there is an error that
+    /// points the writer at a `when` statement instead.
     /// </summary>
     [Fact]
-    public void Analyze_WhenExpressionBlockWithBecomes_NoError()
+    public void Analyze_WhenExpressionBlockArm_ReportsError()
     {
-        // Multi-statement block with becomes is valid
         string source = """
                         routine test(value: S32) -> S32
                             var result = when value
                                 == 1 =>
                                     var x = value * 2
-                                    becomes x
-                                else => 0
-                            return result
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "becomes",
-                comparisonType: StringComparison.OrdinalIgnoreCase));
-    }
-    /// <summary>
-    /// Verifies semantic analysis behavior for when expression block missing becomes and reports the expected error.
-    /// </summary>
-    [Fact]
-    public void Analyze_WhenExpressionBlockMissingBecomes_ReportsError()
-    {
-        // Multi-statement block in when expression without becomes should error
-        string source = """
-                        routine test(value: S32) -> S32
-                            var result = when value
-                                == 1 =>
-                                    var x = value * 2
-                                    x
+                                    show(x)
                                 else => 0
                             return result
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "requires 'becomes'",
-                comparisonType: StringComparison.OrdinalIgnoreCase));
+            filter: e => e.Code == SemanticDiagnosticCode.WhenExpressionArmIsBlock);
     }
-    /// <summary>
-    /// Verifies semantic analysis behavior for when expression single becomes block and reports the expected error.
-    /// </summary>
-    [Fact]
-    public void Analyze_WhenExpressionSingleBecomesBlock_ReportsError()
-    {
-        // Block containing only 'becomes' should use => syntax instead
-        string source = """
-                        routine test(value: S32) -> S32
-                            var result = when value
-                                == 1 =>
-                                    becomes 42
-                                else => 0
-                            return result
-                        """;
 
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "'=>' syntax",
-                comparisonType: StringComparison.OrdinalIgnoreCase));
-    }
     /// <summary>
     /// Verifies semantic analysis behavior for when expression arrow syntax without unexpected diagnostics.
     /// </summary>
@@ -616,16 +573,14 @@ public class ControlFlowAnalysisTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "becomes",
-                comparisonType: StringComparison.OrdinalIgnoreCase));
+            filter: e => e.Code == SemanticDiagnosticCode.WhenExpressionArmIsBlock);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for when statement block without becomes without unexpected diagnostics.
+    /// A block arm is fine in a `when` statement: only a `when` that gives a value takes one expression per arm.
     /// </summary>
     [Fact]
-    public void Analyze_WhenStatementBlockWithoutBecomes_NoError()
+    public void Analyze_WhenStatementBlockArm_NoError()
     {
-        // When statement (not expression) doesn't need becomes
         string source = """
                         routine test(value: S32)
                             when value
@@ -639,8 +594,7 @@ public class ControlFlowAnalysisTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "becomes",
-                comparisonType: StringComparison.OrdinalIgnoreCase));
+            filter: e => e.Code == SemanticDiagnosticCode.WhenExpressionArmIsBlock);
     }
 
     #endregion

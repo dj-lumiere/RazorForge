@@ -6,6 +6,7 @@ module Tests/Stdlib/WeirdExprsApi
 # output is stable, the expression grammar's dark corners are holding.
 
 import IO/Console
+import Numerics
 # punch_card: parenthesization torture — depth and redundancy
 routine punch_card() -> S64
     return 1 + 2 + 3 + 4 + 5
@@ -68,6 +69,103 @@ routine loop_the_loop() -> S64
             break
     return spins
 
+# Combinations: each feature below works on its own; these stack them the way a
+# real program does, which is where the lowering passes have collided before.
+
+# fallback_everywhere: `??` takes the fallback for every arm that is not the
+# value: a Maybe's None, a Check's caught error, and both arms of a Lookup
+routine look!(n: S64) -> S64
+    if n < 0
+        throw InvalidValueError(input: "negative", target: "S64")
+    if n == 0
+        absent
+    return n
+
+routine fallback_everywhere() -> Text
+    var a = grab Integer(text: "x") ?? Integer(from: 7)
+    var b = try Integer(text: "8") ?? Integer(from: 0)
+    var c = lookup look(n: -1) ?? 1
+    var d = lookup look(n: 0) ?? 2
+    var e = lookup look(n: 5) ?? 3
+    return f"{a} {b} {c} {d} {e}"
+
+# generic_ctor_recovered: a failable creator with explicit type arguments,
+# recovered with `try`, both when the value fits and when it does not
+routine generic_ctor_recovered() -> Text
+    var bad = try List[S64](from: "x".serialize())
+    var good = try List[S64](from: [4_s64, 5_s64].serialize())
+    when good
+        is None => return f"{bad is None} none"
+        else list => return f"{bad is None} {list.count()}"
+
+# each_over_call: a loop over a list nothing names, built by a call
+routine three() -> List[S64]
+    var xs = List[S64]()
+    xs.add_last(1)
+    xs.add_last(2)
+    xs.add_last(3)
+    return steal xs
+
+routine each_over_call() -> S64
+    var total = 0_s64
+    each x in three()
+        total = total + x
+    return total
+
+# box_of_box: a type argument that mentions the parameter's own name is
+# substituted once (`T = Box[S64]` gives `Box[Box[S64]]`)
+record Box[T]
+needs RecordType T
+    item: T
+
+routine wrap[T](x: T) -> Box[T]
+needs RecordType T
+    return Box[T](item: x)
+
+routine box_of_box() -> S64
+    var inner = wrap[S64](x: 7)
+    var outer = wrap[Box[S64]](x: inner)
+    return outer.item.item
+
+# pattern_items: a member routine on a receiver pattern whose own `T` has the
+# list's name, walked with `each` and a member call per element
+routine Box[T].get() -> T
+    return me.item
+
+routine List[Box[T]].items() -> List[T]
+    var out = List[T]()
+    each b in me
+        out.add_last(value: b.get())
+    return steal out
+
+routine pattern_items() -> S64
+    var boxes = List[Box[S64]]()
+    boxes.add_last(value: wrap[S64](x: 4))
+    boxes.add_last(value: wrap[S64](x: 5))
+    var got = boxes.items()
+    return got[0] + got[^1]
+
+# slices_from_the_back: end-relative bounds inside a slice, then a count
+routine slices_from_the_back() -> Text
+    var xs = three()
+    return f"{xs[1 til ^0].count()} {xs[^2 til ^0][0]} {xs[0 til ^1][^1]}"
+
+# when_in_each: a `when` inside an `each` that leaves the loop from one arm
+routine when_in_each() -> S64
+    var seen = 0_s64
+    each x in three()
+        when x
+            == 3 => break
+            else => seen = seen + x
+    return seen
+
+# arm_fstring: an f-string hole inside a `when` arm reads `is` as the test it is,
+# not as the start of the next arm's pattern
+routine arm_fstring(m: S64?, other: S64?) -> Text
+    when m
+        is None => return f"none {other is None}"
+        else v => return f"{v} {other is None} {(v + 1) * 2}"
+
 routine start()
     show(f"punch_card: {punch_card()}")
     show(f"clamp_chain: {clamp_chain(n: 42)}")
@@ -85,4 +183,13 @@ routine start()
         is None => show("zombie: absent")
         else v => show(f"zombie: {v}")
     show(f"loop_the_loop: {loop_the_loop()}")
+    show(f"fallback_everywhere: {fallback_everywhere()}")
+    show(f"generic_ctor_recovered: {generic_ctor_recovered()}")
+    show(f"each_over_call: {each_over_call()}")
+    show(f"box_of_box: {box_of_box()}")
+    show(f"pattern_items: {pattern_items()}")
+    show(f"slices_from_the_back: {slices_from_the_back()}")
+    show(f"when_in_each: {when_in_each()}")
+    show(f"in_fstring: {three().count()} {box_of_box() + each_over_call()}")
+    show(f"arm_fstring: {arm_fstring(m: 4, other: none)} / {arm_fstring(m: none, other: 1)}")
     return
