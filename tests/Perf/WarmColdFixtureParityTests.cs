@@ -111,6 +111,39 @@ public sealed partial class WarmColdFixtureParityTests
             $"warm-only=[{string.Join(separator: ", ", value: warmOnly)}]");
     }
 
+    /// <summary>The daemon's second build of a program reuses the stdlib files the first one analyzed
+    /// (<see cref="SemanticVerifier.CompiledStdlibState.AnalyzedFileCache"/>). That cache-hit build must still
+    /// clone protocol defaults from analyzed bodies: `Iterable[T].List` reached through `SelectManyIterable` came
+    /// out of the lowered cached program, its `each` already a `when` nobody had typed, and the LLVM emitter
+    /// rejected the leftover `when`.</summary>
+    [Theory]
+    [InlineData("itertools_more_api")]
+    [InlineData("itertools_api")]
+    public void CacheHitBuild_MatchesCold(string name)
+    {
+        string path = Path.Combine(path1: FixtureDir, path2: name + ".rf");
+        string src = File.ReadAllText(path: path);
+        SemanticVerifier.CompiledStdlibState warm =
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+        HashSet<string> coldDefs = DefineSet(ll: Codegen(
+            r: new SemanticVerifier(language: Language.RazorForge).Analyze(
+                program: Parse(src: src, path: path))));
+        for (int build = 1; build <= 2; build++)
+        {
+            HashSet<string> warmDefs = DefineSet(ll: Codegen(
+                r: new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+                    program: Parse(src: src, path: path))));
+            string[] coldOnly = coldDefs.Except(second: warmDefs).OrderBy(keySelector: s => s).ToArray();
+            string[] warmOnly = warmDefs.Except(second: coldDefs).OrderBy(keySelector: s => s).ToArray();
+            Assert.True(condition: coldOnly.Length == 0 && warmOnly.Length == 0,
+                userMessage:
+                $"{name} warm build {build}: define-set diverged from cold, cold-only=[{string.Join(separator: ", ", values: coldOnly.Take(count: 6))}] " +
+                $"warm-only=[{string.Join(separator: ", ", values: warmOnly.Take(count: 6))}]");
+        }
+
+        Assert.NotEmpty(collection: warm.AnalyzedFileCache);
+    }
+
     [Fact(Skip =
         "Slow full sweep (one cold full-SA per fixture, ~192×). Un-skip to audit ALL fixtures.")]
     public void AllFixtures_Parity()
