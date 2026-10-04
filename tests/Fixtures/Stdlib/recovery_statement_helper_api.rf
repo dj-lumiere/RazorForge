@@ -1,0 +1,98 @@
+module Tests/Stdlib/RecoveryStatementHelperApi
+
+import IO/Console
+# A throw inside a failable helper that a failable routine calls as a statement (its result unused,
+# or a helper that returns nothing) reaches the caller's recovery the same way under `try`, `grab`
+# and `lookup`. Only the carrier differs.
+
+crashable NopeError
+    what: Text
+
+routine NopeError.crash_message() -> Text
+    return f"nope: {me.what}"
+
+# Returns nothing, throws for a zero n.
+routine check_nonzero!(n: S64)
+    if n == 0
+        throw NopeError(what: "zero")
+    return
+
+# Throws for a zero n, else n doubled.
+routine double!(n: S64) -> S64
+    if n == 0
+        throw NopeError(what: "zero")
+    return n * 2
+
+# absent for a negative n, throws for a zero n, else n.
+routine positive!(n: S64) -> S64
+    if n < 0
+        absent
+    if n == 0
+        throw NopeError(what: "zero")
+    return n
+
+# a helper that returns nothing, called as a statement
+routine via_void!(n: S64) -> S64
+    check_nonzero(n: n)
+    return n + 100
+
+# a value-returning helper whose result is dropped
+routine via_discard!(n: S64) -> S64
+    discard double(n: n)
+    return n + 200
+
+# a value-returning helper whose result is bound
+routine via_value!(n: S64) -> S64
+    var d = double(n: n)
+    return d + 300
+
+# a routine that returns nothing itself, calling a helper that returns nothing
+routine void_via_void!(n: S64)
+    check_nonzero(n: n)
+    show(f"  void_via_void ran with {n}")
+    return
+
+# a helper that can be absent or throw, called as a statement
+routine via_positive!(n: S64) -> S64
+    check_nonzero(n: n + 10)
+    discard positive(n: n)
+    return n + 400
+
+routine start()
+    show(f"void try: {try via_void(n: 0)} {try via_void(n: 1)}")
+    show(f"void grab: {grab via_void(n: 0)} {grab via_void(n: 1)}")
+    show(f"void lookup: {lookup via_void(n: 0)} {lookup via_void(n: 1)}")
+
+    show(f"discard try: {try via_discard(n: 0)} {try via_discard(n: 1)}")
+    show(f"discard grab: {grab via_discard(n: 0)} {grab via_discard(n: 1)}")
+    show(f"discard lookup: {lookup via_discard(n: 0)} {lookup via_discard(n: 1)}")
+
+    show(f"value try: {try via_value(n: 0)} {try via_value(n: 1)}")
+    show(f"value grab: {grab via_value(n: 0)} {grab via_value(n: 1)}")
+    show(f"value lookup: {lookup via_value(n: 0)} {lookup via_value(n: 1)}")
+
+    if try void_via_void(n: 0)
+        show("void_via_void try 0: ran")
+    else
+        show("void_via_void try 0: failed")
+    if try void_via_void(n: 1)
+        show("void_via_void try 1: ran")
+    else
+        show("void_via_void try 1: failed")
+    when grab void_via_void(n: 0)
+        is NopeError e => show(f"void_via_void grab 0: {e.what}")
+        else => show("void_via_void grab 0: ran")
+
+    show(f"positive try: {try via_positive(n: -1)} {try via_positive(n: 0)} {try via_positive(n: 2)}")
+    show(f"positive grab: {grab via_positive(n: 0)} {grab via_positive(n: 2)}")
+    show(f"positive lookup: {lookup via_positive(n: -1)} {lookup via_positive(n: 0)} {lookup via_positive(n: 2)}")
+
+    when grab via_void(n: 0)
+        is S64 v => show(f"matched value {v}")
+        is NopeError e => show(f"matched error: {e.what}")
+    when lookup via_positive(n: -1)
+        is S64 v => show(f"matched value {v}")
+        is None => show("matched none")
+        is Crashables e => show(f"matched error: {e.crash_title()}")
+    show("DONE")
+    return
