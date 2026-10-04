@@ -139,22 +139,7 @@ common routine Matrix4R4C.rotation_z(angle: B32) -> Matrix4R4C
 ### :param q: The rotation quaternion (assumed normalized).
 ### :returns: The equivalent rotation matrix.
 common routine Matrix4R4C.from_quaternion(q: Q128) -> Matrix4R4C
-    var xx = q.x * q.x
-    var yy = q.y * q.y
-    var zz = q.z * q.z
-    var xy = q.x * q.y
-    var xz = q.x * q.z
-    var yz = q.y * q.z
-    var wx = q.w * q.x
-    var wy = q.w * q.y
-    var wz = q.w * q.z
-    var two = 2.0_b32
-    return Matrix4R4C(
-        c0: vec4(1.0_b32 - two * (yy + zz), two * (xy + wz), two * (xz - wy), 0.0_b32),
-        c1: vec4(two * (xy - wz), 1.0_b32 - two * (xx + zz), two * (yz + wx), 0.0_b32),
-        c2: vec4(two * (xz + wy), two * (yz - wx), 1.0_b32 - two * (xx + yy), 0.0_b32),
-        c3: vec4(0.0_b32, 0.0_b32, 0.0_b32, 1.0_b32),
-    )
+    return C::ingrid_m4_from_quaternion(w: q.w, x: q.x, y: q.y, z: q.z)
 
 # ============================================================================
 # Element access
@@ -287,104 +272,47 @@ routine Matrix4R4C.transpose() -> Matrix4R4C
 ### :returns: `det(me)`.
 @readonly
 routine Matrix4R4C.determinant() -> B32
-    # m{row}{col}
-    var m00 = me.get(row: 0u64, col: 0u64)
-    var m01 = me.get(row: 0u64, col: 1u64)
-    var m02 = me.get(row: 0u64, col: 2u64)
-    var m03 = me.get(row: 0u64, col: 3u64)
-    var m10 = me.get(row: 1u64, col: 0u64)
-    var m11 = me.get(row: 1u64, col: 1u64)
-    var m12 = me.get(row: 1u64, col: 2u64)
-    var m13 = me.get(row: 1u64, col: 3u64)
-    var m20 = me.get(row: 2u64, col: 0u64)
-    var m21 = me.get(row: 2u64, col: 1u64)
-    var m22 = me.get(row: 2u64, col: 2u64)
-    var m23 = me.get(row: 2u64, col: 3u64)
-    var m30 = me.get(row: 3u64, col: 0u64)
-    var m31 = me.get(row: 3u64, col: 1u64)
-    var m32 = me.get(row: 3u64, col: 2u64)
-    var m33 = me.get(row: 3u64, col: 3u64)
-
-    # 2x2 sub-determinants of the bottom two rows (columns i,j)
-    var s0 = m20 * m31 - m21 * m30
-    var s1 = m20 * m32 - m22 * m30
-    var s2 = m20 * m33 - m23 * m30
-    var s3 = m21 * m32 - m22 * m31
-    var s4 = m21 * m33 - m23 * m31
-    var s5 = m22 * m33 - m23 * m32
-
-    # Cofactor expansion along the top two rows.
-    var d0 = m00 * (m11 * s5 - m12 * s4 + m13 * s3)
-    var d1 = m01 * (m10 * s5 - m12 * s2 + m13 * s1)
-    var d2 = m02 * (m10 * s4 - m11 * s2 + m13 * s0)
-    var d3 = m03 * (m10 * s3 - m11 * s1 + m12 * s0)
-    return d0 - d1 + d2 - d3
+    return C::ingrid_m4_determinant(
+        m00: me.get(row: 0u64, col: 0u64),
+        m01: me.get(row: 0u64, col: 1u64),
+        m02: me.get(row: 0u64, col: 2u64),
+        m03: me.get(row: 0u64, col: 3u64),
+        m10: me.get(row: 1u64, col: 0u64),
+        m11: me.get(row: 1u64, col: 1u64),
+        m12: me.get(row: 1u64, col: 2u64),
+        m13: me.get(row: 1u64, col: 3u64),
+        m20: me.get(row: 2u64, col: 0u64),
+        m21: me.get(row: 2u64, col: 1u64),
+        m22: me.get(row: 2u64, col: 2u64),
+        m23: me.get(row: 2u64, col: 3u64),
+        m30: me.get(row: 3u64, col: 0u64),
+        m31: me.get(row: 3u64, col: 1u64),
+        m32: me.get(row: 3u64, col: 2u64),
+        m33: me.get(row: 3u64, col: 3u64),
+    )
 
 ### The inverse of this matrix. A singular matrix (determinant 0) yields the zero
 ### matrix.
 ### :returns: `me⁻¹`, or the zero matrix if `me` is singular.
 @readonly
 routine Matrix4R4C.inverse() -> Matrix4R4C
-    var m00 = me.get(row: 0u64, col: 0u64)
-    var m01 = me.get(row: 0u64, col: 1u64)
-    var m02 = me.get(row: 0u64, col: 2u64)
-    var m03 = me.get(row: 0u64, col: 3u64)
-    var m10 = me.get(row: 1u64, col: 0u64)
-    var m11 = me.get(row: 1u64, col: 1u64)
-    var m12 = me.get(row: 1u64, col: 2u64)
-    var m13 = me.get(row: 1u64, col: 3u64)
-    var m20 = me.get(row: 2u64, col: 0u64)
-    var m21 = me.get(row: 2u64, col: 1u64)
-    var m22 = me.get(row: 2u64, col: 2u64)
-    var m23 = me.get(row: 2u64, col: 3u64)
-    var m30 = me.get(row: 3u64, col: 0u64)
-    var m31 = me.get(row: 3u64, col: 1u64)
-    var m32 = me.get(row: 3u64, col: 2u64)
-    var m33 = me.get(row: 3u64, col: 3u64)
-
-    # Pairwise 2x2 determinants (rows 0-1 and rows 2-3).
-    var a0 = m00 * m11 - m01 * m10
-    var a1 = m00 * m12 - m02 * m10
-    var a2 = m00 * m13 - m03 * m10
-    var a3 = m01 * m12 - m02 * m11
-    var a4 = m01 * m13 - m03 * m11
-    var a5 = m02 * m13 - m03 * m12
-    var b0 = m20 * m31 - m21 * m30
-    var b1 = m20 * m32 - m22 * m30
-    var b2 = m20 * m33 - m23 * m30
-    var b3 = m21 * m32 - m22 * m31
-    var b4 = m21 * m33 - m23 * m31
-    var b5 = m22 * m33 - m23 * m32
-
-    var det = a0 * b5 - a1 * b4 + a2 * b3 + a3 * b2 - a4 * b1 + a5 * b0
-    if det == 0.0_b32
-        return Matrix4R4C.zero()
-    var inv = 1.0_b32 / det
-
-    # Adjugate (transpose of the cofactor matrix), scaled by 1/det. Columns of the result:
-    var r00 = (m11 * b5 - m12 * b4 + m13 * b3) * inv
-    var r01 = (-m01 * b5 + m02 * b4 - m03 * b3) * inv
-    var r02 = (m31 * a5 - m32 * a4 + m33 * a3) * inv
-    var r03 = (-m21 * a5 + m22 * a4 - m23 * a3) * inv
-    var r10 = (-m10 * b5 + m12 * b2 - m13 * b1) * inv
-    var r11 = (m00 * b5 - m02 * b2 + m03 * b1) * inv
-    var r12 = (-m30 * a5 + m32 * a2 - m33 * a1) * inv
-    var r13 = (m20 * a5 - m22 * a2 + m23 * a1) * inv
-    var r20 = (m10 * b4 - m11 * b2 + m13 * b0) * inv
-    var r21 = (-m00 * b4 + m01 * b2 - m03 * b0) * inv
-    var r22 = (m30 * a4 - m31 * a2 + m33 * a0) * inv
-    var r23 = (-m20 * a4 + m21 * a2 - m23 * a0) * inv
-    var r30 = (-m10 * b3 + m11 * b1 - m12 * b0) * inv
-    var r31 = (m00 * b3 - m01 * b1 + m02 * b0) * inv
-    var r32 = (-m30 * a3 + m31 * a1 - m32 * a0) * inv
-    var r33 = (m20 * a3 - m21 * a1 + m22 * a0) * inv
-
-    # r{row}{col} -> stored column-major (column c = (r0c, r1c, r2c, r3c)).
-    return Matrix4R4C(
-        c0: vec4(r00, r10, r20, r30),
-        c1: vec4(r01, r11, r21, r31),
-        c2: vec4(r02, r12, r22, r32),
-        c3: vec4(r03, r13, r23, r33),
+    return C::ingrid_m4_inverse(
+        m00: me.get(row: 0u64, col: 0u64),
+        m01: me.get(row: 0u64, col: 1u64),
+        m02: me.get(row: 0u64, col: 2u64),
+        m03: me.get(row: 0u64, col: 3u64),
+        m10: me.get(row: 1u64, col: 0u64),
+        m11: me.get(row: 1u64, col: 1u64),
+        m12: me.get(row: 1u64, col: 2u64),
+        m13: me.get(row: 1u64, col: 3u64),
+        m20: me.get(row: 2u64, col: 0u64),
+        m21: me.get(row: 2u64, col: 1u64),
+        m22: me.get(row: 2u64, col: 2u64),
+        m23: me.get(row: 2u64, col: 3u64),
+        m30: me.get(row: 3u64, col: 0u64),
+        m31: me.get(row: 3u64, col: 1u64),
+        m32: me.get(row: 3u64, col: 2u64),
+        m33: me.get(row: 3u64, col: 3u64),
     )
 
 # ============================================================================
@@ -423,3 +351,49 @@ routine Matrix4R4C.represent() -> Text
 @override
 routine Matrix4R4C.diagnose() -> Text
     return "Math3D.Matrix4R4C(" + me.represent() + ")"
+
+# ============================================================================
+# Ingrid (Ingrid/tessera/matrix.tess)
+# ============================================================================
+# The determinant, the inverse and the rotation from a quaternion: the elements go in as `m{row}{col}`, and a
+# matrix comes back as itself (64 bytes, returned through a hidden pointer on every target).
+
+routine C::ingrid_m4_determinant(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m03: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m13: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+    m23: B32,
+    m30: B32,
+    m31: B32,
+    m32: B32,
+    m33: B32,
+) -> B32
+
+routine C::ingrid_m4_inverse(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m03: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m13: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+    m23: B32,
+    m30: B32,
+    m31: B32,
+    m32: B32,
+    m33: B32,
+) -> Matrix4R4C
+
+routine C::ingrid_m4_from_quaternion(w: B32, x: B32, y: B32, z: B32) -> Matrix4R4C

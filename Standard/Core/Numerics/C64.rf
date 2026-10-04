@@ -11,8 +11,10 @@ obeys Numeric, Equatable, Hashable
     ### The imaginary part.
     imag: B32
 
-# Math routines use the component B32's `_unchecked` ops (raw IEEE, no overflow
-# checks); NaN/±inf therefore propagate through the complex result per IEEE 754.
+# The math lives in Ingrid's Tessera library (`Ingrid/tessera/complex.tess`), which RazorForge and Suflae share:
+# each routine below that computes hands the parts to a `C::ingrid_c64_*` routine (declared in
+# Core/NativeDeclarations.rf). Its `+ - * /` are checked like B32's own, so a part that overflows or has no real
+# value crashes as it does here, and the elementary functions are the same correctly rounded ones.
 
 # Complex constants. `common routine` factories (not `preset`s): a `C64` value is a two-`B32` record, not
 # a buildtime scalar constant, so inlining it at every use (what a `preset` does) leaves the
@@ -28,6 +30,12 @@ common routine C64.one() -> C64
 ### The imaginary unit (0 + 1i). :returns: The resulting `C64` value.
 common routine C64.i() -> C64
     return C64(real: 0.0_b32, imag: 1.0_b32)
+
+### Reads the C64 an Ingrid routine hands back in one `U64`: the real part's bits low, the imaginary part's high.
+secret routine c64_from_bits(bits: U64) -> C64
+    var low = LLVM::int_truncate[U64, U32](bits)
+    var high = LLVM::int_truncate[U64, U32](bits >>> 32)
+    return C64(real: B32.from_bits(bits: low), imag: B32.from_bits(bits: high))
 
 # ============================================================================
 # Creators
@@ -146,8 +154,7 @@ routine C64(from: B128) -> C64
 ### :param theta: The argument (angle in radians).
 ### :returns: The complex value at that polar position.
 routine C64.from_polar(r: B32, theta: B32) -> C64
-    # Polar -> rectangular: z = r·e^(iθ) = r·cos θ + i·r·sin θ.
-    return C64(real: r * theta.cos(), imag: r * theta.sin())
+    return c64_from_bits(bits: C::ingrid_c64_from_polar(r: r, theta: theta))
 
 # ============================================================================
 # Arithmetic Operations
@@ -194,24 +201,16 @@ routine C64.truediv(you: B32) -> C64
 ### :param you: The right operand.
 ### :returns: The Gaussian product.
 routine C64.mul(you: C64) -> C64
-    # (a+bi)(c+di) = (ac − bd) + (ad + bc)i.
-    return C64(
-        real: me.real * you.real - me.imag * you.imag,
-        imag: me.real * you.imag + me.imag * you.real,
-    )
+    var bits = C::ingrid_c64_mul(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
+    return c64_from_bits(bits: bits)
 
 ### Returns the complex quotient `me / you`.
 ### Divides by the squared modulus of `you`.
 ### :param you: The divisor.
 ### :returns: The complex quotient.
 routine C64.truediv(you: C64) -> C64
-    # (a+bi)/(c+di) = (a+bi)(c−di)/|c+di|², with d = |denom|² = c²+d².
-    var d = you.real * you.real + you.imag * you.imag
-    # Real = (ac+bd)/d, imag = (bc−ad)/d.
-    return C64(
-        real: (me.real * you.real + me.imag * you.imag) / d,
-        imag: (me.imag * you.real - me.real * you.imag) / d,
-    )
+    var bits = C::ingrid_c64_div(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
+    return c64_from_bits(bits: bits)
 
 ### Returns the arithmetic negation of this value.
 ### :returns: A `C64` with both components negated.
@@ -235,14 +234,12 @@ routine C64.eq(you: C64) -> Bool
 ### Returns the modulus (absolute value) of this complex number.
 ### :returns: `√(real² + imag²)`.
 routine C64.abs() -> B32
-    # |z| = √(re² + im²); uses raw IEEE sqrt_unchecked on the B32 sum.
-    return (me.real * me.real + me.imag * me.imag).sqrt_unchecked()
+    return C::ingrid_c64_abs(real: me.real, imag: me.imag)
 
 ### Returns the phase angle of this complex value in radians.
 ### :returns: `atan2(imag, real)`, in the range (−π, π].
 routine C64.arg() -> B32
-    # arg(z) = atan2(im, re); two-arg atan2 picks the correct quadrant.
-    return atan2(y: me.imag, x: me.real)
+    return C::ingrid_c64_arg(real: me.real, imag: me.imag)
 
 ### Returns the complex conjugate (negates the imaginary part).
 ### :returns: `real - imag·i`.
@@ -252,8 +249,7 @@ routine C64.conjugate() -> C64
 ### Returns the squared modulus (avoids the square root of `abs`).
 ### :returns: `real² + imag²`.
 routine C64.norm() -> B32
-    # norm = re² + im² = |z|²; skips the sqrt that abs() performs.
-    return me.real * me.real + me.imag * me.imag
+    return C::ingrid_c64_norm(real: me.real, imag: me.imag)
 
 # ============================================================================
 # Trigonometric (sinh/cosh computed from exp since B32 lacks native versions)
@@ -262,67 +258,32 @@ routine C64.norm() -> B32
 ### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
 ### :returns: The complex sine of this value.
 routine C64.sin() -> C64
-    # cosh(b)=(eᵇ+e⁻ᵇ)/2, sinh(b)=(eᵇ−e⁻ᵇ)/2 from raw exp (B32 has no native hyperbolics).
-    var ep = me.imag.exp_unchecked()
-    var em = (-me.imag).exp_unchecked()
-    var ch = (ep + em) / 2.0_b32
-    var sh = (ep - em) / 2.0_b32
-    # sin(a+bi) = sin a·cosh b + i·cos a·sinh b.
-    return C64(real: me.real.sin() * ch, imag: me.real.cos() * sh)
+    return c64_from_bits(bits: C::ingrid_c64_sin(real: me.real, imag: me.imag))
 
 ### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
 ### :returns: The complex cosine of this value.
 routine C64.cos() -> C64
-    # cosh(b)=(eᵇ+e⁻ᵇ)/2, sinh(b)=(eᵇ−e⁻ᵇ)/2 from raw exp (B32 has no native hyperbolics).
-    var ep = me.imag.exp_unchecked()
-    var em = (-me.imag).exp_unchecked()
-    var ch = (ep + em) / 2.0_b32
-    var sh = (ep - em) / 2.0_b32
-    # cos(a+bi) = cos a·cosh b − i·sin a·sinh b.
-    return C64(real: me.real.cos() * ch, imag: -(me.real.sin() * sh))
+    return c64_from_bits(bits: C::ingrid_c64_cos(real: me.real, imag: me.imag))
 
 ### Returns the complex tangent of this value.
 ### :returns: The complex tangent.
 routine C64.tan() -> C64
-    # Double-angle form: a2 = 2a, b2 = 2b.
-    var a2 = me.real + me.real
-    var b2 = me.imag + me.imag
-    var ep = b2.exp_unchecked()
-    var em = (-b2).exp_unchecked()
-    # d = cos(2a) + cosh(2b) is the shared denominator.
-    var d = a2.cos() + (ep + em) / 2.0_b32
-    # tan(a+bi) = sin(2a)/d + i·sinh(2b)/d.
-    return C64(real: a2.sin() / d, imag: (ep - em) / 2.0_b32 / d)
+    return c64_from_bits(bits: C::ingrid_c64_tan(real: me.real, imag: me.imag))
 
 ### Returns the complex arcsine of this value.
 ### :returns: The principal value of `arcsin(me)`.
 routine C64.asin() -> C64
-    # asin(z) = −i·log(iz + √(1 − z²)); iz = (−im, re).
-    var iz = C64(real: -me.imag, imag: me.real)
-    var w = iz + (C64.one() - me * me).sqrt_unchecked()
-    var v = w.log_unchecked()
-    # Multiply log(w) by −i: (re, im) -> (im, −re).
-    return C64(real: v.imag, imag: -v.real)
+    return c64_from_bits(bits: C::ingrid_c64_asin(real: me.real, imag: me.imag))
 
 ### Returns the complex arccosine of this value.
 ### :returns: The principal value of `arccos(me)`.
 routine C64.acos() -> C64
-    # acos(z) = −i·log(z + i·√(1 − z²)); i·s = (−s.im, s.re).
-    var s = (C64.one() - me * me).sqrt_unchecked()
-    var w = me + C64(real: -s.imag, imag: s.real)
-    var v = w.log_unchecked()
-    # Multiply log(w) by −i: (re, im) -> (im, −re).
-    return C64(real: v.imag, imag: -v.real)
+    return c64_from_bits(bits: C::ingrid_c64_acos(real: me.real, imag: me.imag))
 
 ### Returns the complex arctangent of this value.
 ### :returns: The principal value of `arctan(me)`.
 routine C64.atan() -> C64
-    # atan(z) = (i/2)·log((i+z)/(i−z)); num = z+i, den = i−z.
-    var num = C64(real: me.real, imag: me.imag + 1.0_b32)
-    var den = C64(real: -me.real, imag: 1.0_b32 - me.imag)
-    var v = (num / den).log_unchecked()
-    # Multiply log by i/2: (re, im) -> (−im/2, re/2).
-    return C64(real: -v.imag / 2.0_b32, imag: v.real / 2.0_b32)
+    return c64_from_bits(bits: C::ingrid_c64_atan(real: me.real, imag: me.imag))
 
 # ============================================================================
 # Hyperbolic (sinh/cosh computed from exp since B32 lacks native versions)
@@ -331,56 +292,32 @@ routine C64.atan() -> C64
 ### Returns the complex hyperbolic sine of this value.
 ### :returns: The complex hyperbolic sine.
 routine C64.sinh_unchecked() -> C64
-    # sinh(a)=(eᵃ−e⁻ᵃ)/2, cosh(a)=(eᵃ+e⁻ᵃ)/2 from raw exp on the real part.
-    var ep = me.real.exp_unchecked()
-    var em = (-me.real).exp_unchecked()
-    var sh = (ep - em) / 2.0_b32
-    var ch = (ep + em) / 2.0_b32
-    # sinh(a+bi) = sinh a·cos b + i·cosh a·sin b.
-    return C64(real: sh * me.imag.cos(), imag: ch * me.imag.sin())
+    return c64_from_bits(bits: C::ingrid_c64_sinh(real: me.real, imag: me.imag))
 
 ### Returns the complex hyperbolic cosine of this value.
 ### :returns: The complex hyperbolic cosine.
 routine C64.cosh_unchecked() -> C64
-    # sinh(a)=(eᵃ−e⁻ᵃ)/2, cosh(a)=(eᵃ+e⁻ᵃ)/2 from raw exp on the real part.
-    var ep = me.real.exp_unchecked()
-    var em = (-me.real).exp_unchecked()
-    var sh = (ep - em) / 2.0_b32
-    var ch = (ep + em) / 2.0_b32
-    # cosh(a+bi) = cosh a·cos b + i·sinh a·sin b.
-    return C64(real: ch * me.imag.cos(), imag: sh * me.imag.sin())
+    return c64_from_bits(bits: C::ingrid_c64_cosh(real: me.real, imag: me.imag))
 
 ### Returns the complex hyperbolic tangent of this value.
 ### :returns: The complex hyperbolic tangent.
 routine C64.tanh() -> C64
-    # Double-angle form: a2 = 2a, b2 = 2b.
-    var a2 = me.real + me.real
-    var b2 = me.imag + me.imag
-    var ep = a2.exp_unchecked()
-    var em = (-a2).exp_unchecked()
-    # d = cosh(2a) + cos(2b) is the shared denominator.
-    var d = (ep + em) / 2.0_b32 + b2.cos()
-    # tanh(a+bi) = sinh(2a)/d + i·sin(2b)/d.
-    return C64(real: (ep - em) / 2.0_b32 / d, imag: b2.sin() / d)
+    return c64_from_bits(bits: C::ingrid_c64_tanh(real: me.real, imag: me.imag))
 
 ### Returns the complex inverse hyperbolic sine of this value.
 ### :returns: The principal value of `arcsinh(me)`.
 routine C64.asinh() -> C64
-    # asinh(z) = log(z + √(z² + 1)).
-    return (me + (me * me + C64.one()).sqrt_unchecked()).log_unchecked()
+    return c64_from_bits(bits: C::ingrid_c64_asinh(real: me.real, imag: me.imag))
 
 ### Returns the complex inverse hyperbolic cosine of this value.
 ### :returns: The principal value of `arccosh(me)`.
 routine C64.acosh() -> C64
-    # acosh(z) = log(z + √(z² − 1)).
-    return (me + (me * me - C64.one()).sqrt_unchecked()).log_unchecked()
+    return c64_from_bits(bits: C::ingrid_c64_acosh(real: me.real, imag: me.imag))
 
 ### Returns the complex inverse hyperbolic tangent of this value.
 ### :returns: The principal value of `arctanh(me)`.
 routine C64.atanh() -> C64
-    # atanh(z) = ½·log((1 + z)/(1 − z)).
-    var v = ((C64.one() + me) / (C64.one() - me)).log_unchecked()
-    return C64(real: v.real / 2.0_b32, imag: v.imag / 2.0_b32)
+    return c64_from_bits(bits: C::ingrid_c64_atanh(real: me.real, imag: me.imag))
 
 # ============================================================================
 # Exponential, Logarithmic, and Square Root
@@ -389,34 +326,27 @@ routine C64.atanh() -> C64
 ### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
 ### :returns: The complex exponential.
 routine C64.exp_unchecked() -> C64
-    # exp(a+bi) = eᵃ·(cos b + i·sin b); ea = eᵃ scales the unit phasor.
-    var ea = me.real.exp_unchecked()
-    return C64(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+    return c64_from_bits(bits: C::ingrid_c64_exp(real: me.real, imag: me.imag))
 
 ### Returns the principal natural logarithm of this complex value.
 ### :returns: `log(|me|) + i·arg(me)`.
 routine C64.log_unchecked() -> C64
-    # log(z) = ln|z| + i·arg(z); principal branch from atan2.
-    return C64(real: me.abs().log_unchecked(), imag: me.arg())
+    return c64_from_bits(bits: C::ingrid_c64_ln(real: me.real, imag: me.imag))
 
 ### Returns the base-10 logarithm of this complex value.
 ### :returns: `log(me) / ln(10)`.
 routine C64.log10() -> C64
-    # log10(z) = ln(z)/ln(10); divide both components by the constant ln 10.
-    var v = me.log_unchecked()
-    return C64(real: v.real / B32_LN_10, imag: v.imag / B32_LN_10)
+    return c64_from_bits(bits: C::ingrid_c64_log10(real: me.real, imag: me.imag))
 
 ### Returns the base-2 logarithm of this complex value.
 ### :returns: `log(me) / ln(2)`.
 routine C64.log2() -> C64
-    var v = me.log_unchecked()
-    return C64(real: v.real / B32_LN_2, imag: v.imag / B32_LN_2)
+    return c64_from_bits(bits: C::ingrid_c64_log2(real: me.real, imag: me.imag))
 
 ### Returns the multiplicative inverse `1/me` (conjugate over the squared modulus).
 ### :returns: `conj(me) / |me|²`.
 routine C64.reciprocal() -> C64
-    var d = me.real * me.real + me.imag * me.imag
-    return C64(real: me.real / d, imag: -me.imag / d)
+    return c64_from_bits(bits: C::ingrid_c64_reciprocal(real: me.real, imag: me.imag))
 
 ### Returns the polar form `(magnitude, angle-in-radians)` — the inverse of `from_polar`.
 ### :returns: A tuple `(abs, arg)`.
@@ -426,23 +356,14 @@ routine C64.to_polar() -> (B32, B32)
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
 routine C64.sqrt_unchecked() -> C64
-    # Half-magnitude formula: with r = |z|, re' = √((r+re)/2), im' = √((r−re)/2).
-    var r = me.abs()
-    if r == 0.0_b32
-        return C64.zero()
-    var rp = ((r + me.real) / 2.0_b32).sqrt_unchecked()
-    var ip = ((r - me.real) / 2.0_b32).sqrt_unchecked()
-    # Imag part takes the sign of the input's imag (principal root, re' ≥ 0).
-    if me.imag < 0.0_b32
-        ip = -ip
-    return C64(real: rp, imag: ip)
+    return c64_from_bits(bits: C::ingrid_c64_sqrt(real: me.real, imag: me.imag))
 
 ### Returns this complex value raised to the complex power `you`.
 ### :param you: The complex exponent.
 ### :returns: `me ** you`, computed as `exp(you · log(me))`.
 routine C64.pow(you: C64) -> C64
-    # z^w = exp(w·log z); principal branch via log_unchecked.
-    return (you * me.log_unchecked()).exp_unchecked()
+    var bits = C::ingrid_c64_pow(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
+    return c64_from_bits(bits: bits)
 
 ### Crashes unless both parts of `r` are finite: a NaN part is a domain error, an infinite part an
 ### overflow. The check behind the `!` forms of `exp`/`log`/`sqrt`/`sinh`/`cosh`.
@@ -486,17 +407,7 @@ routine C64.cosh!() -> C64
 ### :param exp: The integer exponent.
 ### :returns: `me ** exp`.
 routine C64.pow(exp: S64) -> C64
-    var base = if exp < 0_s64 then me.reciprocal() else me
-    var k = LLVM::reinterpret_bits[S64, U64](exp)
-    if exp < 0_s64
-        k = 0u64 -% k
-    var result = C64.one()
-    while k != 0u64
-        if k % 2u64 == 1u64
-            result = result * base
-        base = base * base
-        k = k // 2u64
-    return result
+    return c64_from_bits(bits: C::ingrid_c64_powi(real: me.real, imag: me.imag, n: exp))
 
 # ============================================================================
 # Query Routines

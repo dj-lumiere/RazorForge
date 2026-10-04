@@ -10,8 +10,10 @@ obeys Numeric, Equatable, Hashable
     ### The imaginary part.
     imag: B64
 
-# Math routines use the component B64's `_unchecked` ops (raw IEEE, no overflow
-# checks); NaN/±inf therefore propagate through the complex result per IEEE 754.
+# The math lives in Ingrid's Tessera library (`Ingrid/tessera/complex.tess`), which RazorForge and Suflae share:
+# each routine below that computes hands the parts to a `C::ingrid_c128_*` routine (declared in
+# Core/NativeDeclarations.rf). Its `+ - * /` are checked like B64's own, so a part that overflows or has no real
+# value crashes as it does here, and the elementary functions are the same correctly rounded ones.
 
 # Complex constants. `common routine` factories (not `preset`s): a `C128` value is a two-`B64` record, not
 # a buildtime scalar constant, so inlining it at every use (what a `preset` does) leaves the
@@ -27,6 +29,10 @@ common routine C128.one() -> C128
 ### The imaginary unit (0 + 1i). :returns: The resulting `C128` value.
 common routine C128.i() -> C128
     return C128(real: 0.0_b64, imag: 1.0_b64)
+
+### Reads the C128 an Ingrid routine hands back: the real part's bits in `w0`, the imaginary part's in `w1`.
+secret routine c128_from_words(w: IngridWords) -> C128
+    return C128(real: B64.from_bits(bits: w.w0), imag: B64.from_bits(bits: w.w1))
 
 # ============================================================================
 # Creators
@@ -145,8 +151,7 @@ routine C128(from: B128) -> C128
 ### :param theta: The argument (angle in radians).
 ### :returns: The complex value at that polar position.
 routine C128.from_polar(r: B64, theta: B64) -> C128
-    # Polar -> rectangular: z = r·e^(iθ) = r·cos θ + i·r·sin θ.
-    return C128(real: r * theta.cos(), imag: r * theta.sin())
+    return c128_from_words(w: C::ingrid_c128_from_polar(r: r, theta: theta))
 
 # ============================================================================
 # Arithmetic Operations
@@ -193,24 +198,16 @@ routine C128.truediv(you: B64) -> C128
 ### :param you: The right operand.
 ### :returns: The Gaussian product.
 routine C128.mul(you: C128) -> C128
-    # (a+bi)(c+di) = (ac − bd) + (ad + bc)i.
-    return C128(
-        real: me.real * you.real - me.imag * you.imag,
-        imag: me.real * you.imag + me.imag * you.real,
-    )
+    var w = C::ingrid_c128_mul(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
+    return c128_from_words(w: w)
 
 ### Returns the complex quotient `me / you`.
 ### Divides by the squared modulus of `you`.
 ### :param you: The divisor.
 ### :returns: The complex quotient.
 routine C128.truediv(you: C128) -> C128
-    # (a+bi)/(c+di) = (a+bi)(c−di)/|c+di|², with d = |denom|² = c²+d².
-    var d = you.real * you.real + you.imag * you.imag
-    # Real = (ac+bd)/d, imag = (bc−ad)/d.
-    return C128(
-        real: (me.real * you.real + me.imag * you.imag) / d,
-        imag: (me.imag * you.real - me.real * you.imag) / d,
-    )
+    var w = C::ingrid_c128_div(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
+    return c128_from_words(w: w)
 
 ### Returns the arithmetic negation of this value.
 ### :returns: A `C128` with both components negated.
@@ -234,14 +231,12 @@ routine C128.eq(you: C128) -> Bool
 ### Returns the modulus (absolute value) of this complex number.
 ### :returns: `√(real² + imag²)`.
 routine C128.abs() -> B64
-    # |z| = √(re² + im²); uses raw IEEE sqrt_unchecked on the B64 sum.
-    return (me.real * me.real + me.imag * me.imag).sqrt_unchecked()
+    return C::ingrid_c128_abs(real: me.real, imag: me.imag)
 
 ### Returns the phase angle of this complex value in radians.
 ### :returns: `atan2(imag, real)`, in the range (−π, π].
 routine C128.arg() -> B64
-    # arg(z) = atan2(im, re); two-arg atan2 picks the correct quadrant.
-    return atan2(y: me.imag, x: me.real)
+    return C::ingrid_c128_arg(real: me.real, imag: me.imag)
 
 ### Returns the complex conjugate (negates the imaginary part).
 ### :returns: `real - imag·i`.
@@ -251,8 +246,7 @@ routine C128.conjugate() -> C128
 ### Returns the squared modulus (avoids the square root of `abs`).
 ### :returns: `real² + imag²`.
 routine C128.norm() -> B64
-    # norm = re² + im² = |z|²; skips the sqrt that abs() performs.
-    return me.real * me.real + me.imag * me.imag
+    return C::ingrid_c128_norm(real: me.real, imag: me.imag)
 
 # ============================================================================
 # Trigonometric (sinh/cosh computed from exp since B64 lacks native versions)
@@ -261,67 +255,32 @@ routine C128.norm() -> B64
 ### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
 ### :returns: The complex sine of this value.
 routine C128.sin() -> C128
-    # cosh(b)=(eᵇ+e⁻ᵇ)/2, sinh(b)=(eᵇ−e⁻ᵇ)/2 from raw exp (B64 has no native hyperbolics).
-    var ep = me.imag.exp_unchecked()
-    var em = (-me.imag).exp_unchecked()
-    var ch = (ep + em) / 2.0_b64
-    var sh = (ep - em) / 2.0_b64
-    # sin(a+bi) = sin a·cosh b + i·cos a·sinh b.
-    return C128(real: me.real.sin() * ch, imag: me.real.cos() * sh)
+    return c128_from_words(w: C::ingrid_c128_sin(real: me.real, imag: me.imag))
 
 ### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
 ### :returns: The complex cosine of this value.
 routine C128.cos() -> C128
-    # cosh(b)=(eᵇ+e⁻ᵇ)/2, sinh(b)=(eᵇ−e⁻ᵇ)/2 from raw exp (B64 has no native hyperbolics).
-    var ep = me.imag.exp_unchecked()
-    var em = (-me.imag).exp_unchecked()
-    var ch = (ep + em) / 2.0_b64
-    var sh = (ep - em) / 2.0_b64
-    # cos(a+bi) = cos a·cosh b − i·sin a·sinh b.
-    return C128(real: me.real.cos() * ch, imag: -(me.real.sin() * sh))
+    return c128_from_words(w: C::ingrid_c128_cos(real: me.real, imag: me.imag))
 
 ### Returns the complex tangent of this value.
 ### :returns: The complex tangent.
 routine C128.tan() -> C128
-    # Double-angle form: a2 = 2a, b2 = 2b.
-    var a2 = me.real + me.real
-    var b2 = me.imag + me.imag
-    var ep = b2.exp_unchecked()
-    var em = (-b2).exp_unchecked()
-    # d = cos(2a) + cosh(2b) is the shared denominator.
-    var d = a2.cos() + (ep + em) / 2.0_b64
-    # tan(a+bi) = sin(2a)/d + i·sinh(2b)/d.
-    return C128(real: a2.sin() / d, imag: (ep - em) / 2.0_b64 / d)
+    return c128_from_words(w: C::ingrid_c128_tan(real: me.real, imag: me.imag))
 
 ### Returns the complex arcsine of this value.
 ### :returns: The principal value of `arcsin(me)`.
 routine C128.asin() -> C128
-    # asin(z) = −i·log(iz + √(1 − z²)); iz = (−im, re).
-    var iz = C128(real: -me.imag, imag: me.real)
-    var w = iz + (C128.one() - me * me).sqrt_unchecked()
-    var v = w.log_unchecked()
-    # Multiply log(w) by −i: (re, im) -> (im, −re).
-    return C128(real: v.imag, imag: -v.real)
+    return c128_from_words(w: C::ingrid_c128_asin(real: me.real, imag: me.imag))
 
 ### Returns the complex arccosine of this value.
 ### :returns: The principal value of `arccos(me)`.
 routine C128.acos() -> C128
-    # acos(z) = −i·log(z + i·√(1 − z²)); i·s = (−s.im, s.re).
-    var s = (C128.one() - me * me).sqrt_unchecked()
-    var w = me + C128(real: -s.imag, imag: s.real)
-    var v = w.log_unchecked()
-    # Multiply log(w) by −i: (re, im) -> (im, −re).
-    return C128(real: v.imag, imag: -v.real)
+    return c128_from_words(w: C::ingrid_c128_acos(real: me.real, imag: me.imag))
 
 ### Returns the complex arctangent of this value.
 ### :returns: The principal value of `arctan(me)`.
 routine C128.atan() -> C128
-    # atan(z) = (i/2)·log((i+z)/(i−z)); num = z+i, den = i−z.
-    var num = C128(real: me.real, imag: me.imag + 1.0_b64)
-    var den = C128(real: -me.real, imag: 1.0_b64 - me.imag)
-    var v = (num / den).log_unchecked()
-    # Multiply log by i/2: (re, im) -> (−im/2, re/2).
-    return C128(real: -v.imag / 2.0_b64, imag: v.real / 2.0_b64)
+    return c128_from_words(w: C::ingrid_c128_atan(real: me.real, imag: me.imag))
 
 # ============================================================================
 # Hyperbolic (sinh/cosh computed from exp since B64 lacks native versions)
@@ -330,56 +289,32 @@ routine C128.atan() -> C128
 ### Returns the complex hyperbolic sine of this value.
 ### :returns: The complex hyperbolic sine.
 routine C128.sinh_unchecked() -> C128
-    # sinh(a)=(eᵃ−e⁻ᵃ)/2, cosh(a)=(eᵃ+e⁻ᵃ)/2 from raw exp on the real part.
-    var ep = me.real.exp_unchecked()
-    var em = (-me.real).exp_unchecked()
-    var sh = (ep - em) / 2.0_b64
-    var ch = (ep + em) / 2.0_b64
-    # sinh(a+bi) = sinh a·cos b + i·cosh a·sin b.
-    return C128(real: sh * me.imag.cos(), imag: ch * me.imag.sin())
+    return c128_from_words(w: C::ingrid_c128_sinh(real: me.real, imag: me.imag))
 
 ### Returns the complex hyperbolic cosine of this value.
 ### :returns: The complex hyperbolic cosine.
 routine C128.cosh_unchecked() -> C128
-    # sinh(a)=(eᵃ−e⁻ᵃ)/2, cosh(a)=(eᵃ+e⁻ᵃ)/2 from raw exp on the real part.
-    var ep = me.real.exp_unchecked()
-    var em = (-me.real).exp_unchecked()
-    var sh = (ep - em) / 2.0_b64
-    var ch = (ep + em) / 2.0_b64
-    # cosh(a+bi) = cosh a·cos b + i·sinh a·sin b.
-    return C128(real: ch * me.imag.cos(), imag: sh * me.imag.sin())
+    return c128_from_words(w: C::ingrid_c128_cosh(real: me.real, imag: me.imag))
 
 ### Returns the complex hyperbolic tangent of this value.
 ### :returns: The complex hyperbolic tangent.
 routine C128.tanh() -> C128
-    # Double-angle form: a2 = 2a, b2 = 2b.
-    var a2 = me.real + me.real
-    var b2 = me.imag + me.imag
-    var ep = a2.exp_unchecked()
-    var em = (-a2).exp_unchecked()
-    # d = cosh(2a) + cos(2b) is the shared denominator.
-    var d = (ep + em) / 2.0_b64 + b2.cos()
-    # tanh(a+bi) = sinh(2a)/d + i·sin(2b)/d.
-    return C128(real: (ep - em) / 2.0_b64 / d, imag: b2.sin() / d)
+    return c128_from_words(w: C::ingrid_c128_tanh(real: me.real, imag: me.imag))
 
 ### Returns the complex inverse hyperbolic sine of this value.
 ### :returns: The principal value of `arcsinh(me)`.
 routine C128.asinh() -> C128
-    # asinh(z) = log(z + √(z² + 1)).
-    return (me + (me * me + C128.one()).sqrt_unchecked()).log_unchecked()
+    return c128_from_words(w: C::ingrid_c128_asinh(real: me.real, imag: me.imag))
 
 ### Returns the complex inverse hyperbolic cosine of this value.
 ### :returns: The principal value of `arccosh(me)`.
 routine C128.acosh() -> C128
-    # acosh(z) = log(z + √(z² − 1)).
-    return (me + (me * me - C128.one()).sqrt_unchecked()).log_unchecked()
+    return c128_from_words(w: C::ingrid_c128_acosh(real: me.real, imag: me.imag))
 
 ### Returns the complex inverse hyperbolic tangent of this value.
 ### :returns: The principal value of `arctanh(me)`.
 routine C128.atanh() -> C128
-    # atanh(z) = ½·log((1 + z)/(1 − z)).
-    var v = ((C128.one() + me) / (C128.one() - me)).log_unchecked()
-    return C128(real: v.real / 2.0_b64, imag: v.imag / 2.0_b64)
+    return c128_from_words(w: C::ingrid_c128_atanh(real: me.real, imag: me.imag))
 
 # ============================================================================
 # Exponential, Logarithmic, and Square Root
@@ -388,34 +323,27 @@ routine C128.atanh() -> C128
 ### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
 ### :returns: The complex exponential.
 routine C128.exp_unchecked() -> C128
-    # exp(a+bi) = eᵃ·(cos b + i·sin b); ea = eᵃ scales the unit phasor.
-    var ea = me.real.exp_unchecked()
-    return C128(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+    return c128_from_words(w: C::ingrid_c128_exp(real: me.real, imag: me.imag))
 
 ### Returns the principal natural logarithm of this complex value.
 ### :returns: `log(|me|) + i·arg(me)`.
 routine C128.log_unchecked() -> C128
-    # log(z) = ln|z| + i·arg(z); principal branch from atan2.
-    return C128(real: me.abs().log_unchecked(), imag: me.arg())
+    return c128_from_words(w: C::ingrid_c128_ln(real: me.real, imag: me.imag))
 
 ### Returns the base-10 logarithm of this complex value.
 ### :returns: `log(me) / ln(10)`.
 routine C128.log10() -> C128
-    # log10(z) = ln(z)/ln(10); the literal 2.302585… is ln 10.
-    var v = me.log_unchecked()
-    return C128(real: v.real / 2.302585092994046_b64, imag: v.imag / 2.302585092994046_b64)
+    return c128_from_words(w: C::ingrid_c128_log10(real: me.real, imag: me.imag))
 
 ### Returns the base-2 logarithm of this complex value.
 ### :returns: `log(me) / ln(2)`.
 routine C128.log2() -> C128
-    var v = me.log_unchecked()
-    return C128(real: v.real / B64_LN_2, imag: v.imag / B64_LN_2)
+    return c128_from_words(w: C::ingrid_c128_log2(real: me.real, imag: me.imag))
 
 ### Returns the multiplicative inverse `1/me` (conjugate over the squared modulus).
 ### :returns: `conj(me) / |me|²`.
 routine C128.reciprocal() -> C128
-    var d = me.real * me.real + me.imag * me.imag
-    return C128(real: me.real / d, imag: -me.imag / d)
+    return c128_from_words(w: C::ingrid_c128_reciprocal(real: me.real, imag: me.imag))
 
 ### Returns the polar form `(magnitude, angle-in-radians)` — the inverse of `from_polar`.
 ### :returns: A tuple `(abs, arg)`.
@@ -425,23 +353,14 @@ routine C128.to_polar() -> (B64, B64)
 ### Returns the complex square root, choosing the root with non-negative real part.
 ### :returns: The principal square root of this value.
 routine C128.sqrt_unchecked() -> C128
-    # Half-magnitude formula: with r = |z|, re' = √((r+re)/2), im' = √((r−re)/2).
-    var r = me.abs()
-    if r == 0.0_b64
-        return C128.zero()
-    var rp = ((r + me.real) / 2.0_b64).sqrt_unchecked()
-    var ip = ((r - me.real) / 2.0_b64).sqrt_unchecked()
-    # Imag part takes the sign of the input's imag (principal root, re' ≥ 0).
-    if me.imag < 0.0_b64
-        ip = -ip
-    return C128(real: rp, imag: ip)
+    return c128_from_words(w: C::ingrid_c128_sqrt(real: me.real, imag: me.imag))
 
 ### Returns this complex value raised to the complex power `you`.
 ### :param you: The complex exponent.
 ### :returns: `me ** you`, computed as `exp(you · log(me))`.
 routine C128.pow(you: C128) -> C128
-    # z^w = exp(w·log z); principal branch via log_unchecked.
-    return (you * me.log_unchecked()).exp_unchecked()
+    var w = C::ingrid_c128_pow(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
+    return c128_from_words(w: w)
 
 ### Crashes unless both parts of `r` are finite: a NaN part is a domain error, an infinite part an
 ### overflow. The check behind the `!` forms of `exp`/`log`/`sqrt`/`sinh`/`cosh`.
@@ -485,17 +404,7 @@ routine C128.cosh!() -> C128
 ### :param exp: The integer exponent.
 ### :returns: `me ** exp`.
 routine C128.pow(exp: S64) -> C128
-    var base = if exp < 0_s64 then me.reciprocal() else me
-    var k = LLVM::reinterpret_bits[S64, U64](exp)
-    if exp < 0_s64
-        k = 0u64 -% k
-    var result = C128.one()
-    while k != 0u64
-        if k % 2u64 == 1u64
-            result = result * base
-        base = base * base
-        k = k // 2u64
-    return result
+    return c128_from_words(w: C::ingrid_c128_powi(real: me.real, imag: me.imag, n: exp))
 
 # ============================================================================
 # Query Routines

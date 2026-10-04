@@ -1,7 +1,9 @@
 module Math3D
 
-# Math routines use the component B32's `_unchecked` ops (raw IEEE, no overflow
-# checks); NaN/±inf therefore propagate through the quaternion result per IEEE 754.
+# The math lives in Ingrid's Tessera library (`Ingrid/tessera/quaternion.tess`), which RazorForge and
+# Suflae share: each routine below that computes hands the components to a `C::ingrid_q128_*`
+# routine (declared at the end of this file). Its `+ - * /` are checked like B32's own, so a
+# component that overflows or has no real value crashes as it does here.
 
 # Quaternion constants
 preset Q128_ZERO: Q128 = Q128(w: 0.0_b32, x: 0.0_b32, y: 0.0_b32, z: 0.0_b32)
@@ -26,6 +28,14 @@ obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Equatable, Has
     ### The k (z) component.
     z: B32
 
+### Reads the B32 in the low half of a word an Ingrid routine hands back.
+secret routine q128_word(v: U64) -> B32
+    return B32.from_bits(bits: LLVM::int_truncate[U64, U32](v))
+
+### Reads the Q128 an Ingrid routine hands back: w, x, y and z in the low halves of `w0` to `w3`.
+secret routine q128_from_words(w: IngridWords) -> Q128
+    return Q128(w: q128_word(v: w.w0), x: q128_word(v: w.w1), y: q128_word(v: w.w2), z: q128_word(v: w.w3))
+
 # ============================================================================
 # Creators
 # ============================================================================
@@ -48,12 +58,8 @@ routine Q128(from: Q256) -> Q128
 ### :param angle: The rotation angle in radians.
 ### :returns: The unit quaternion representing that rotation.
 routine Q128.from_axis_angle(axis: Vector3D, angle: B32) -> Q128
-    var len = axis.length()
-    if len == 0.0_b32
-        return Q128_IDENTITY
-    var half = angle * 0.5_b32
-    var s = half.sin() / len
-    return Q128(w: half.cos(), x: axis.x * s, y: axis.y * s, z: axis.z * s)
+    var w = C::ingrid_q128_from_axis_angle(ax: axis.x, ay: axis.y, az: axis.z, angle: angle)
+    return q128_from_words(w: w)
 
 # ============================================================================
 # Arithmetic Operations
@@ -76,19 +82,33 @@ routine Q128.sub(you: Q128) -> Q128
 ### :param you: The right operand.
 ### :returns: The Hamilton product.
 routine Q128.mul(you: Q128) -> Q128
-    # Hamilton product of (w1,x1,y1,z1)·(w2,x2,y2,z2).
-    return Q128(
-        w: me.w * you.w - me.x * you.x - me.y * you.y - me.z * you.z,
-        x: me.w * you.x + me.x * you.w + me.y * you.z - me.z * you.y,
-        y: me.w * you.y - me.x * you.z + me.y * you.w + me.z * you.x,
-        z: me.w * you.z + me.x * you.y - me.y * you.x + me.z * you.w,
+    var w = C::ingrid_q128_mul(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
     )
+    return q128_from_words(w: w)
 
 ### Returns the quotient `me / you = me · you⁻¹`.
 ### :param you: The divisor.
 ### :returns: The quaternion quotient.
 routine Q128.truediv(you: Q128) -> Q128
-    return me * you.reciprocal()
+    var w = C::ingrid_q128_div(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+    )
+    return q128_from_words(w: w)
 
 ### Returns this quaternion scaled by a real scalar `factor`.
 ### :param factor: The scalar multiplier.
@@ -135,33 +155,40 @@ routine Q128.conjugate() -> Q128
 ### Returns the squared norm (avoids the square root of `abs`).
 ### :returns: `w² + x² + y² + z²`.
 routine Q128.norm() -> B32
-    return me.w * me.w + me.x * me.x + me.y * me.y + me.z * me.z
+    return C::ingrid_q128_norm(w: me.w, x: me.x, y: me.y, z: me.z)
 
 ### Returns the norm (magnitude) of this quaternion.
 ### :returns: `√(w² + x² + y² + z²)`.
 routine Q128.abs() -> B32
-    return me.norm().sqrt_unchecked()
+    return C::ingrid_q128_abs(w: me.w, x: me.x, y: me.y, z: me.z)
 
 ### Returns the unit quaternion in the same direction. A zero quaternion is
 ### returned unchanged (its norm is zero).
 ### :returns: `me / |me|`, or `me` when `|me| == 0`.
 routine Q128.normalize() -> Q128
-    var n = me.abs()
-    if n == 0.0_b32
-        return me
-    return me.scale(factor: 1.0_b32 / n)
+    var w = C::ingrid_q128_normalize(w: me.w, x: me.x, y: me.y, z: me.z)
+    return q128_from_words(w: w)
 
 ### Returns the multiplicative inverse `me⁻¹ = conj(me) / |me|²`.
 ### :returns: The quaternion inverse.
 routine Q128.reciprocal() -> Q128
-    var n = me.norm()
-    return me.conjugate().scale(factor: 1.0_b32 / n)
+    var w = C::ingrid_q128_reciprocal(w: me.w, x: me.x, y: me.y, z: me.z)
+    return q128_from_words(w: w)
 
 ### Returns the dot product of the two quaternions viewed as 4-vectors.
 ### :param you: The right operand.
 ### :returns: `w₁w₂ + x₁x₂ + y₁y₂ + z₁z₂`.
 routine Q128.dot(you: Q128) -> B32
-    return me.w * you.w + me.x * you.x + me.y * you.y + me.z * you.z
+    return C::ingrid_q128_dot(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+    )
 
 # ============================================================================
 # Rotation
@@ -172,9 +199,8 @@ routine Q128.dot(you: Q128) -> B32
 ### :param v: The vector to rotate.
 ### :returns: The rotated vector.
 routine Q128.rotate(v: Vector3D) -> Vector3D
-    var p = Q128(w: 0.0_b32, x: v.x, y: v.y, z: v.z)
-    var r = me * p * me.conjugate()
-    return Vector3D(x: r.x, y: r.y, z: r.z)
+    var w = C::ingrid_q128_rotate(w: me.w, x: me.x, y: me.y, z: me.z, vx: v.x, vy: v.y, vz: v.z)
+    return Vector3D(x: q128_word(v: w.w0), y: q128_word(v: w.w1), z: q128_word(v: w.w2))
 
 ### Returns the spherical linear interpolation between `me` (at `t = 0`) and
 ### `you` (at `t = 1`). Both operands are assumed to be unit quaternions; the
@@ -184,46 +210,31 @@ routine Q128.rotate(v: Vector3D) -> Vector3D
 ### :param t: The interpolation parameter.
 ### :returns: The interpolated unit quaternion.
 routine Q128.slerp(you: Q128, t: B32) -> Q128
-    var d = me.dot(you: you)
-    # Choose the shorter arc: if the dot is negative, negate one endpoint.
-    var target = you
-    if d < 0.0_b32
-        target = you.neg()
-        d = -d
-    # Near-parallel: fall back to normalized linear interpolation to avoid a
-    # division by sin(θ) ≈ 0.
-    if d > 0.9995_b32
-        return (me + (target - me).scale(factor: t)).normalize()
-    var theta = d.acos_unchecked()
-    var sin_theta = theta.sin()
-    var wa = ((1.0_b32 - t) * theta).sin() / sin_theta
-    var wb = (t * theta).sin() / sin_theta
-    return me.scale(factor: wa) + target.scale(factor: wb)
+    var w = C::ingrid_q128_slerp(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+        t: t,
+    )
+    return q128_from_words(w: w)
 
 ### Returns the rotation angle encoded by this unit quaternion, in radians.
 ### :returns: `2·acos(w)`, in the range [0, 2π).
 routine Q128.angle() -> B32
-    return 2.0_b32 * q128_clamp_unit(v: me.w).acos_unchecked()
-
-### Clamps `v` into [-1, 1], so a unit quaternion whose `w` drifted just past 1 by rounding still has
-### a real `acos` (instead of NaN).
-routine q128_clamp_unit(v: B32) -> B32
-    if v > 1.0_b32
-        return 1.0_b32
-    if v < -1.0_b32
-        return -1.0_b32
-    return v
+    return C::ingrid_q128_angle(w: me.w, x: me.x, y: me.y, z: me.z)
 
 ### Returns the rotation axis (unit length) and angle (radians) of this unit quaternion, the inverse of
 ### `from_axis_angle`. A rotation by 0 has no axis; it reports the x axis with angle 0.
 ### :returns: A tuple `(axis, angle)`.
 routine Q128.to_axis_angle() -> (Vector3D, B32)
-    var w = q128_clamp_unit(v: me.w)
-    var angle = 2.0_b32 * w.acos_unchecked()
-    var s = (1.0_b32 - w * w).sqrt_unchecked()
-    if s < 0.000001_b32
-        return (Vector3D(x: 1.0_b32, y: 0.0_b32, z: 0.0_b32), angle)
-    return (Vector3D(x: me.x / s, y: me.y / s, z: me.z / s), angle)
+    var w = C::ingrid_q128_to_axis_angle(w: me.w, x: me.x, y: me.y, z: me.z)
+    var axis = Vector3D(x: q128_word(v: w.w0), y: q128_word(v: w.w1), z: q128_word(v: w.w2))
+    return (axis, q128_word(v: w.w3))
 
 ### Returns the shortest rotation that turns direction `from` onto direction `target` (neither needs to be
 ### unit length). Opposite directions turn vy half a turn about an axis perpendicular to `from`.
@@ -231,43 +242,15 @@ routine Q128.to_axis_angle() -> (Vector3D, B32)
 ### :param target: The target direction.
 ### :returns: The unit rotation quaternion.
 common routine Q128.from_to(from: Vector3D, target: Vector3D) -> Q128
-    var ux = from.x
-    var uy = from.y
-    var uz = from.z
-    var vx = target.x
-    var vy = target.y
-    var vz = target.z
-    var la = (ux * ux + uy * uy + uz * uz).sqrt_unchecked()
-    var lb = (vx * vx + vy * vy + vz * vz).sqrt_unchecked()
-    if la == 0.0_b32 or lb == 0.0_b32
-        return Q128_IDENTITY
-    ux = ux / la
-    uy = uy / la
-    uz = uz / la
-    vx = vx / lb
-    vy = vy / lb
-    vz = vz / lb
-    var d = ux * vx + uy * vy + uz * vz
-    if d >= 1.0_b32 - 0.000001_b32
-        return Q128_IDENTITY
-    if d <= -1.0_b32 + 0.000001_b32
-        # Half a turn about an axis perpendicular to `from`: x-axis cross `from`, else y-axis cross `from`.
-        var px = 0.0_b32
-        var py = -uz
-        var pz = uy
-        if py * py + pz * pz < 0.000001_b32
-            px = uz
-            py = 0.0_b32
-            pz = -ux
-        var pl = (px * px + py * py + pz * pz).sqrt_unchecked()
-        return Q128(w: 0.0_b32, x: px / pl, y: py / pl, z: pz / pl)
-    # (1 + a.b, a cross b), normalized, is the rotation from a to b.
-    return Q128(
-        w: 1.0_b32 + d,
-        x: uy * vz - uz * vy,
-        y: uz * vx - ux * vz,
-        z: ux * vy - uy * vx,
-    ).normalize()
+    var w = C::ingrid_q128_from_to(
+        ux: from.x,
+        uy: from.y,
+        uz: from.z,
+        vx: target.x,
+        vy: target.y,
+        vz: target.z,
+    )
+    return q128_from_words(w: w)
 
 ### Returns the normalized linear interpolation between `me` (at `t = 0`) and `you` (at `t = 1`) along
 ### the shorter arc: cheaper than `slerp`, with a non-constant angular speed.
@@ -275,43 +258,40 @@ common routine Q128.from_to(from: Vector3D, target: Vector3D) -> Q128
 ### :param t: The interpolation parameter.
 ### :returns: The interpolated unit quaternion.
 routine Q128.nlerp(you: Q128, t: B32) -> Q128
-    var target = you
-    if me.dot(you: you) < 0.0_b32
-        target = you.neg()
-    return (me + (target - me).scale(factor: t)).normalize()
+    var w = C::ingrid_q128_nlerp(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+        t: t,
+    )
+    return q128_from_words(w: w)
 
 ### Returns `true` if this quaternion has unit length within rounding (`|norm - 1| <= 0.00001`).
 routine Q128.is_unit() -> Bool
-    var d = me.norm() - 1.0_b32
-    return d <= 0.00001_b32 and d >= -0.00001_b32
+    return C::ingrid_q128_is_unit(w: me.w, x: me.x, y: me.y, z: me.z)
 
 ### Returns the rotation of the upper-left 3x3 part of `m` (assumed a pure rotation), the inverse of
 ### `Matrix4R4C.from_quaternion`.
 ### :param m: The rotation matrix.
 ### :returns: The unit rotation quaternion.
 common routine Q128.from_matrix(m: Matrix4R4C) -> Q128
-    var m00 = m.get(row: 0u64, col: 0u64)
-    var m01 = m.get(row: 0u64, col: 1u64)
-    var m02 = m.get(row: 0u64, col: 2u64)
-    var m10 = m.get(row: 1u64, col: 0u64)
-    var m11 = m.get(row: 1u64, col: 1u64)
-    var m12 = m.get(row: 1u64, col: 2u64)
-    var m20 = m.get(row: 2u64, col: 0u64)
-    var m21 = m.get(row: 2u64, col: 1u64)
-    var m22 = m.get(row: 2u64, col: 2u64)
-    var trace = m00 + m11 + m22
-    # Shepperd: divide by the largest of 4w, 4x, 4y, 4z to stay well conditioned.
-    if trace > 0.0_b32
-        var sw = (trace + 1.0_b32).sqrt_unchecked() * 2.0_b32
-        return Q128(w: 0.25_b32 * sw, x: (m21 - m12) / sw, y: (m02 - m20) / sw, z: (m10 - m01) / sw)
-    if m00 > m11 and m00 > m22
-        var sx = (1.0_b32 + m00 - m11 - m22).sqrt_unchecked() * 2.0_b32
-        return Q128(w: (m21 - m12) / sx, x: 0.25_b32 * sx, y: (m01 + m10) / sx, z: (m02 + m20) / sx)
-    if m11 > m22
-        var sy = (1.0_b32 + m11 - m00 - m22).sqrt_unchecked() * 2.0_b32
-        return Q128(w: (m02 - m20) / sy, x: (m01 + m10) / sy, y: 0.25_b32 * sy, z: (m12 + m21) / sy)
-    var sz = (1.0_b32 + m22 - m00 - m11).sqrt_unchecked() * 2.0_b32
-    return Q128(w: (m10 - m01) / sz, x: (m02 + m20) / sz, y: (m12 + m21) / sz, z: 0.25_b32 * sz)
+    var w = C::ingrid_q128_from_matrix(
+        m00: m.get(row: 0u64, col: 0u64),
+        m01: m.get(row: 0u64, col: 1u64),
+        m02: m.get(row: 0u64, col: 2u64),
+        m10: m.get(row: 1u64, col: 0u64),
+        m11: m.get(row: 1u64, col: 1u64),
+        m12: m.get(row: 1u64, col: 2u64),
+        m20: m.get(row: 2u64, col: 0u64),
+        m21: m.get(row: 2u64, col: 1u64),
+        m22: m.get(row: 2u64, col: 2u64),
+    )
+    return q128_from_words(w: w)
 
 ### Builds a rotation from Euler angles in radians, applied as yaw about z, then pitch about y, then
 ### roll about x (the aerospace Z-Y-X order; the rotation is `yaw * pitch * roll`).
@@ -320,33 +300,15 @@ common routine Q128.from_matrix(m: Matrix4R4C) -> Q128
 ### :param yaw: The rotation about the z axis.
 ### :returns: The unit rotation quaternion.
 common routine Q128.from_euler(roll: B32, pitch: B32, yaw: B32) -> Q128
-    var cr = (roll * 0.5_b32).cos()
-    var sr = (roll * 0.5_b32).sin()
-    var cp = (pitch * 0.5_b32).cos()
-    var sp = (pitch * 0.5_b32).sin()
-    var cy = (yaw * 0.5_b32).cos()
-    var sy = (yaw * 0.5_b32).sin()
-    return Q128(
-        w: cr * cp * cy + sr * sp * sy,
-        x: sr * cp * cy - cr * sp * sy,
-        y: cr * sp * cy + sr * cp * sy,
-        z: cr * cp * sy - sr * sp * cy,
-    )
+    var w = C::ingrid_q128_from_euler(roll: roll, pitch: pitch, yaw: yaw)
+    return q128_from_words(w: w)
 
 ### Returns the Z-Y-X Euler angles `(roll, pitch, yaw)` of this unit quaternion, the inverse of
 ### `from_euler`. At pitch +-90 degrees (gimbal lock) roll and yaw are not unique; pitch is clamped there.
 ### :returns: A tuple `(roll, pitch, yaw)` in radians.
 routine Q128.to_euler() -> (B32, B32, B32)
-    var roll = atan2(
-        y: 2.0_b32 * (me.w * me.x + me.y * me.z),
-        x: 1.0_b32 - 2.0_b32 * (me.x * me.x + me.y * me.y),
-    )
-    var pitch = q128_clamp_unit(v: 2.0_b32 * (me.w * me.y - me.z * me.x)).asin_unchecked()
-    var yaw = atan2(
-        y: 2.0_b32 * (me.w * me.z + me.x * me.y),
-        x: 1.0_b32 - 2.0_b32 * (me.y * me.y + me.z * me.z),
-    )
-    return (roll, pitch, yaw)
+    var w = C::ingrid_q128_to_euler(w: me.w, x: me.x, y: me.y, z: me.z)
+    return (q128_word(v: w.w0), q128_word(v: w.w1), q128_word(v: w.w2))
 
 # ============================================================================
 # Text Representation
@@ -412,3 +374,85 @@ routine Q128.hash(k0: U64, k1: U64) -> U64
     acc = __hash_round(acc: acc, h: me.y.hash(k0: k0, k1: k1))
     acc = __hash_round(acc: acc, h: me.z.hash(k0: k0, k1: k1))
     return __hash_finalize(h: acc)
+
+# ============================================================================
+# Ingrid (Ingrid/tessera/quaternion.tess)
+# ============================================================================
+# The bodies of Q128's math: each component of a quaternion is its own B32, a Vector3D's or a Matrix4R4C's
+# its own B32. A quaternion comes back in `IngridWords` (w, x, y, z in `w0` to `w3`), a vector in `w0` to `w2`
+# as B32s, `to_axis_angle` as the axis's B32s then the angle, and `to_euler` as roll, pitch, yaw.
+routine C::ingrid_q128_mul(
+    w: B32,
+    x: B32,
+    y: B32,
+    z: B32,
+    other_w: B32,
+    other_x: B32,
+    other_y: B32,
+    other_z: B32,
+) -> IngridWords
+routine C::ingrid_q128_div(
+    w: B32,
+    x: B32,
+    y: B32,
+    z: B32,
+    other_w: B32,
+    other_x: B32,
+    other_y: B32,
+    other_z: B32,
+) -> IngridWords
+routine C::ingrid_q128_dot(
+    w: B32,
+    x: B32,
+    y: B32,
+    z: B32,
+    other_w: B32,
+    other_x: B32,
+    other_y: B32,
+    other_z: B32,
+) -> B32
+routine C::ingrid_q128_norm(w: B32, x: B32, y: B32, z: B32) -> B32
+routine C::ingrid_q128_abs(w: B32, x: B32, y: B32, z: B32) -> B32
+routine C::ingrid_q128_angle(w: B32, x: B32, y: B32, z: B32) -> B32
+routine C::ingrid_q128_normalize(w: B32, x: B32, y: B32, z: B32) -> IngridWords
+routine C::ingrid_q128_reciprocal(w: B32, x: B32, y: B32, z: B32) -> IngridWords
+routine C::ingrid_q128_to_axis_angle(w: B32, x: B32, y: B32, z: B32) -> IngridWords
+routine C::ingrid_q128_to_euler(w: B32, x: B32, y: B32, z: B32) -> IngridWords
+routine C::ingrid_q128_is_unit(w: B32, x: B32, y: B32, z: B32) -> Bool
+routine C::ingrid_q128_rotate(w: B32, x: B32, y: B32, z: B32, vx: B32, vy: B32, vz: B32) -> IngridWords
+routine C::ingrid_q128_slerp(
+    w: B32,
+    x: B32,
+    y: B32,
+    z: B32,
+    other_w: B32,
+    other_x: B32,
+    other_y: B32,
+    other_z: B32,
+    t: B32,
+) -> IngridWords
+routine C::ingrid_q128_nlerp(
+    w: B32,
+    x: B32,
+    y: B32,
+    z: B32,
+    other_w: B32,
+    other_x: B32,
+    other_y: B32,
+    other_z: B32,
+    t: B32,
+) -> IngridWords
+routine C::ingrid_q128_from_axis_angle(ax: B32, ay: B32, az: B32, angle: B32) -> IngridWords
+routine C::ingrid_q128_from_to(ux: B32, uy: B32, uz: B32, vx: B32, vy: B32, vz: B32) -> IngridWords
+routine C::ingrid_q128_from_matrix(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+) -> IngridWords
+routine C::ingrid_q128_from_euler(roll: B32, pitch: B32, yaw: B32) -> IngridWords
