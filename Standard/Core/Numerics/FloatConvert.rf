@@ -386,7 +386,7 @@ record FloatParsed
 
 ### Returns 10^k as an Integer. `k` must be non-negative.
 routine pow10_int(k: S64) -> Integer
-    return Integer(value: 10u64).pow(exp: LLVM::int_truncate[S64, U32](k))
+    return Integer(from: 10u64).pow(exp: LLVM::int_truncate[S64, U32](k))
 
 ### Returns round-half-to-even of n/d for non-negative n and positive d.
 routine div_round_half_even(n: Integer, d: Integer) -> Integer
@@ -417,7 +417,7 @@ routine ratio_ge_pow2(num: Integer, den: Integer, k: S64) -> Bool
 ### value m·2^e2. Returns (digits, E) where the value equals d0.d1d2… × 10^E and
 ### `digits` is exactly `sig` characters long.
 routine binary_float_digits(m: U64, e2: S64, sig: U64) -> FloatDigits
-    var num = Integer(value: m)
+    var num = Integer(from: m)
     var den = Integer.one()
     if e2 >= 0_s64
         num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
@@ -454,7 +454,7 @@ routine binary_float_digits(m: U64, e2: S64, sig: U64) -> FloatDigits
             done = true
     # Safety: if the guard tripped with a rounded-up extra digit, drop it.
     if dd.cmp(you: hi) != ME_SMALL
-        dd = dd.floordiv(other: Integer(value: 10u64))
+        dd = dd.floordiv(other: Integer(from: 10u64))
         ee = ee + 1_s64
     return FloatDigits(digits: dd.represent(), point_exp: ee)
 
@@ -562,7 +562,7 @@ routine format_binary(value: B64, sig: U64) -> Text
 ### :returns: The digit string and the exponent of its leading digit.
 routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatDigits
     var inclusive = m.is_even()
-    var ten = Integer(value: 10u64)
+    var ten = Integer(from: 10u64)
     var r = Integer.zero()
     var s = Integer.one()
     var m_plus = Integer.one()
@@ -572,18 +572,18 @@ routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatD
         var ulp = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](e2))
         if lower_closer
             r = m.mul(other: ulp).shl(bits: 2_s32)
-            s = Integer(value: 4u64)
+            s = Integer(from: 4u64)
             m_plus = ulp.shl(bits: 1_s32)
             m_minus = ulp
         else
             r = m.mul(other: ulp).shl(bits: 1_s32)
-            s = Integer(value: 2u64)
+            s = Integer(from: 2u64)
             m_plus = ulp
             m_minus = ulp
     elseif lower_closer
         r = m.shl(bits: 2_s32)
         s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](2_s64 - e2))
-        m_plus = Integer(value: 2u64)
+        m_plus = Integer(from: 2u64)
     else
         r = m.shl(bits: 1_s32)
         s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](1_s64 - e2))
@@ -1025,7 +1025,7 @@ routine format_binary_fixed(value: B64, places: U64) -> Text
         )
         if fast
             return txt
-    return fixed_from_binary(neg: value.signbit(), m: Integer(value: m), e2: e2, places: places)
+    return fixed_from_binary(neg: value.signbit(), m: Integer(from: m), e2: e2, places: places)
 
 ### Renders the raw bits of a B128 with exactly `places` digits after the point.
 routine format_b128_fixed(value: B128, places: U64) -> Text
@@ -1188,7 +1188,7 @@ routine round_and_pack(neg: Bool, num_in: Integer, den_in: Integer, fmt: S32) ->
         n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - lsb))
     var q = div_round_half_even(n: n2, d: d2)
     # A round-up can carry to 2^p; renormalize one bit.
-    var pbits = Integer(value: 1u64).shl(bits: LLVM::int_truncate[S64, S32](p))
+    var pbits = Integer(from: 1u64).shl(bits: LLVM::int_truncate[S64, S32](p))
     if q.cmp(you: pbits) != ME_SMALL
         q = q.shr(bits: 1_s32)
         lsb = lsb + 1_s64
@@ -1260,7 +1260,7 @@ routine parse_float_components(from_text: Text, target: Text) -> FloatParsed
                 and c7 == Character(0x0079u32)
                 return FloatParsed(kind: 2_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
     var m = Integer.zero()
-    var ten = Integer(value: 10u64)
+    var ten = Integer(from: 10u64)
     var frac_digits = 0_s64
     var seen_dot = false
     var has_digit = false
@@ -1466,7 +1466,7 @@ routine b128_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B128
         n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - lsb))
     var q = div_round_half_even(n: n2, d: d2)
     # A round-up can carry to 2^113; renormalize one bit.
-    if q.cmp(you: Integer(value: 1u64).shl(bits: 113_s32)) != ME_SMALL
+    if q.cmp(you: Integer(from: 1u64).shl(bits: 113_s32)) != ME_SMALL
         q = q.shr(bits: 1_s32)
         lsb = lsb + 1_s64
     if q.is_zero()

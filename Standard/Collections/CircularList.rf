@@ -461,7 +461,7 @@ needs T obeys Assignable
 
 ### Shifts the logical front toward the back by `n` positions.
 ### Elements that fall off the front reappear at the back. Only the front index
-### changes; no elements are copied.
+### changes when the buffer is full; otherwise `n` elements move.
 ### :param n: The number of positions to rotate left.
 routine CircularList[T].rotate_left(n: U64)
     # Rotate elements left by n positions
@@ -469,12 +469,22 @@ routine CircularList[T].rotate_left(n: U64)
     if me.count == 0u64
         return
     var shift = LLVM::unsigned_rem(n, me.count)
-    me.start = me.wrap_index(me.start +% shift)
+    if me.count == me.capacity
+        me.start = me.wrap_index(me.start +% shift)
+        return
+    # With free slots after the back, moving the front index alone would bring them into the list: each
+    # front element moves into the free slot after the back instead.
+    var i = 0u64
+    while i < shift
+        var value = me.read_at(physical_idx: me.start)
+        me.start = me.wrap_index(me.start +% 1u64)
+        me.write_at(physical_idx: me.physical_index(me.count -% 1u64), value: value)
+        i = i +% 1u64
     return
 
 ### Shifts the logical back toward the front by `n` positions.
 ### Elements that fall off the back reappear at the front. Only the front index
-### changes; no elements are copied.
+### changes when the buffer is full; otherwise `n` elements move.
 ### :param n: The number of positions to rotate right.
 routine CircularList[T].rotate_right(n: U64)
     # Rotate elements right by n positions
@@ -482,6 +492,15 @@ routine CircularList[T].rotate_right(n: U64)
     if me.count == 0u64
         return
     var shift = LLVM::unsigned_rem(n, me.count)
+    if me.count != me.capacity
+        # With free slots before the front, each back element moves into the free slot before the front.
+        var i = 0u64
+        while i < shift
+            var value = me.read_at(physical_idx: me.physical_index(me.count -% 1u64))
+            me.start = me.wrap_index(me.start +% me.capacity -% 1u64)
+            me.write_at(physical_idx: me.start, value: value)
+            i = i +% 1u64
+        return
     if shift > me.start
         me.start = me.capacity -% (shift -% me.start)
     else
