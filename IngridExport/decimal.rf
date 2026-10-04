@@ -1,0 +1,102 @@
+# The decimal floats' arithmetic Ingrid exports (IEEE 754 decimal32, decimal64 and decimal128, BID):
+# `RazorForge export-ingrid` writes these routines, with the Core engines they call (Core/Numerics/D32.rf, D64.rf,
+# D128.rf and the helpers they share), to Ingrid/tessera/generated/decimal.tess. Core's D32, D64 and D128 methods
+# call them through the C:: declarations in Core/NativeDeclarations.rf (Decimal reaches them through D128).
+#
+# A D32 crosses the C ABI as its 32 BID bits in a U32 and a D64 as its 64 bits in a U64. A D128 goes in as its low
+# and high 64 bits (a 128-bit value crosses Win64 by pointer from Tessera but by value from RazorForge, so neither
+# side passes one) and comes back in IngridWords (`w0` low, `w1` high), which every target returns through a hidden
+# pointer. Each routine is the raw IEEE operation (an infinity or a NaN passes through), so the checked operators
+# keep their crash in RazorForge, where it gets RazorForge's crash trace. An order is -1, 0 or 1 as a is below,
+# equal to or above b (+0 and -0 equal, cohorts equal), and 2 when either is a NaN.
+module IngridExport/Decimal
+
+### The exports: each common routine below is the C symbol `ingrid_<its name>`.
+record Ingrid
+    pass
+
+# ---- D32 ----
+
+### `a + b`, rounded half to even to 7 digits.
+common routine Ingrid.d32_add(a: U32, b: U32) -> U32
+    return d32_add(a: D32.from_bits(bits: a), b: D32.from_bits(bits: b)).to_bits()
+
+### `a - b`, rounded half to even to 7 digits.
+common routine Ingrid.d32_sub(a: U32, b: U32) -> U32
+    return d32_sub(a: D32.from_bits(bits: a), b: D32.from_bits(bits: b)).to_bits()
+
+### `a * b`, rounded half to even to 7 digits.
+common routine Ingrid.d32_mul(a: U32, b: U32) -> U32
+    return d32_mul(a: D32.from_bits(bits: a), b: D32.from_bits(bits: b)).to_bits()
+
+### `a / b`, rounded half to even to 7 digits: a nonzero value over zero is an infinity, zero over zero a NaN.
+common routine Ingrid.d32_div(a: U32, b: U32) -> U32
+    return d32_div(a: D32.from_bits(bits: a), b: D32.from_bits(bits: b)).to_bits()
+
+### The order of a and b.
+common routine Ingrid.d32_order(a: U32, b: U32) -> S64
+    return d32_order(a: D32.from_bits(bits: a), b: D32.from_bits(bits: b))
+
+# ---- D64 ----
+
+### `a + b`, rounded half to even to 16 digits.
+common routine Ingrid.d64_add(a: U64, b: U64) -> U64
+    return d64_add(a: D64.from_bits(bits: a), b: D64.from_bits(bits: b)).to_bits()
+
+### `a - b`, rounded half to even to 16 digits.
+common routine Ingrid.d64_sub(a: U64, b: U64) -> U64
+    return d64_sub(a: D64.from_bits(bits: a), b: D64.from_bits(bits: b)).to_bits()
+
+### `a * b`, rounded half to even to 16 digits.
+common routine Ingrid.d64_mul(a: U64, b: U64) -> U64
+    return d64_mul(a: D64.from_bits(bits: a), b: D64.from_bits(bits: b)).to_bits()
+
+### `a / b`, rounded half to even to 16 digits: a nonzero value over zero is an infinity, zero over zero a NaN.
+common routine Ingrid.d64_div(a: U64, b: U64) -> U64
+    return d64_div(a: D64.from_bits(bits: a), b: D64.from_bits(bits: b)).to_bits()
+
+### The order of a and b.
+common routine Ingrid.d64_order(a: U64, b: U64) -> S64
+    return d64_order(a: D64.from_bits(bits: a), b: D64.from_bits(bits: b))
+
+# ---- D128 ----
+
+### A D128 as IngridWords: its low 64 bits in `w0`, its high 64 bits in `w1`.
+routine d128_words(v: D128) -> IngridWords
+    var bits = v.to_bits()
+    return IngridWords(
+        w0: LLVM::int_truncate[U128, U64](bits),
+        w1: LLVM::int_truncate[U128, U64](bits >>> 64),
+        w2: 0_u64,
+        w3: 0_u64,
+    )
+
+### `a + b`, rounded half to even to 34 digits.
+common routine Ingrid.d128_add(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+    var a = D128.from_words(low: a_low, high: a_high)
+    var b = D128.from_words(low: b_low, high: b_high)
+    return d128_words(v: d128_add(a: a, b: b))
+
+### `a - b`, rounded half to even to 34 digits.
+common routine Ingrid.d128_sub(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+    var a = D128.from_words(low: a_low, high: a_high)
+    var b = D128.from_words(low: b_low, high: b_high)
+    return d128_words(v: d128_sub(a: a, b: b))
+
+### `a * b`, rounded half to even to 34 digits.
+common routine Ingrid.d128_mul(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+    var a = D128.from_words(low: a_low, high: a_high)
+    var b = D128.from_words(low: b_low, high: b_high)
+    return d128_words(v: d128_mul(a: a, b: b))
+
+### `a / b`, rounded half to even to 34 digits: a nonzero value over zero is an infinity, zero over zero a NaN.
+common routine Ingrid.d128_div(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+    var a = D128.from_words(low: a_low, high: a_high)
+    var b = D128.from_words(low: b_low, high: b_high)
+    return d128_words(v: d128_div(a: a, b: b))
+
+### The order of a and b.
+common routine Ingrid.d128_order(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S64
+    var a = D128.from_words(low: a_low, high: a_high)
+    var b = D128.from_words(low: b_low, high: b_high)
+    return d128_order(a: a, b: b)

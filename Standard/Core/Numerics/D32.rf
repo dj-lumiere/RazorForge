@@ -608,6 +608,10 @@ routine d32_div(a: D32, b: D32) -> D32
     return d32_of_parts(p: decfin32(sign: sign, coeff: q, exp: exp, pref: pref))
 
 # ---- wired operators + represent ----
+# The engine above is the source of Ingrid's D32 arithmetic: `RazorForge export-ingrid` writes d32_add, d32_sub,
+# d32_mul, d32_div and d32_order, with what they call, to Ingrid/tessera/generated/decimal.tess
+# (RazorForge/IngridExport/decimal.rf), and the operators below call those exports, so RazorForge and Suflae share
+# one implementation. Change the engine here, then export again.
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors B64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
@@ -615,7 +619,7 @@ routine d32_div(a: D32, b: D32) -> D32
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
 routine D32.add!(you: D32) -> D32
-    var r = d32_add(a: me, b: you)
+    var r = D32.from_bits(bits: C::ingrid_d32_add(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
         return r
     if r.is_nan()
@@ -625,7 +629,7 @@ routine D32.add!(you: D32) -> D32
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
 routine D32.sub!(you: D32) -> D32
-    var r = d32_sub(a: me, b: you)
+    var r = D32.from_bits(bits: C::ingrid_d32_sub(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
         return r
     if r.is_nan()
@@ -635,7 +639,7 @@ routine D32.sub!(you: D32) -> D32
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
 routine D32.mul!(you: D32) -> D32
-    var r = d32_mul(a: me, b: you)
+    var r = D32.from_bits(bits: C::ingrid_d32_mul(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
         return r
     if r.is_nan()
@@ -646,7 +650,7 @@ routine D32.mul!(you: D32) -> D32
 ### overflow.
 ### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 routine D32.truediv!(you: D32) -> D32
-    var r = d32_div(a: me, b: you)
+    var r = D32.from_bits(bits: C::ingrid_d32_div(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
         return r
     if you.is_zero() and not me.is_zero()
@@ -657,19 +661,19 @@ routine D32.truediv!(you: D32) -> D32
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D32.add_unchecked(you: D32) -> D32
-    return d32_add(a: me, b: you)
+    return D32.from_bits(bits: C::ingrid_d32_add(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D32.sub_unchecked(you: D32) -> D32
-    return d32_sub(a: me, b: you)
+    return D32.from_bits(bits: C::ingrid_d32_sub(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine D32.mul_unchecked(you: D32) -> D32
-    return d32_mul(a: me, b: you)
+    return D32.from_bits(bits: C::ingrid_d32_mul(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
 routine D32.truediv_unchecked(you: D32) -> D32
-    return d32_div(a: me, b: you)
+    return D32.from_bits(bits: C::ingrid_d32_div(a: me.to_bits(), b: you.to_bits()))
 
 ### -1, 0 or 1 as |a| = ca 10^ea is below, equal to or above |b| = cb 10^eb (both coefficients nonzero): the same
 ### exponent compares the coefficients, a different adjusted exponent (digits + exponent) decides alone, and
@@ -722,12 +726,12 @@ routine d32_order(a: D32, b: D32) -> S64
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;
 ### finite values compare by value, so different cohorts of the same number are equal).
 routine D32.eq(you: D32) -> Bool
-    return d32_order(a: me, b: you) == 0_s64
+    return C::ingrid_d32_order(a: me.to_bits(), b: you.to_bits()) == 0_s64
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
 routine D32.cmp(you: D32) -> ComparisonSign
-    var o = d32_order(a: me, b: you)
+    var o = C::ingrid_d32_order(a: me.to_bits(), b: you.to_bits())
     if o == -1_s64
         return ME_SMALL
     if o == 1_s64
