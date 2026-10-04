@@ -1,377 +1,15 @@
 module Core
 
 # ============================================================================
-# B64 and B128 fast paths. A D32 operand becomes a B64 with one rounding (d32_to_b64: the 7-digit
-# coefficient is exact in B64 and so is 10^e for |e| <= 22), the correctly rounded B64 CORE-MATH routine
-# evaluates it, and the result is within (1 + cond) * 2^-53 relative of the true value, cond being an
-# upper bound on the function's condition number |x f'(x) / f(x)| (the input's rounding scaled by it,
-# plus the routine's own half ulp). When every value in that band rounds to one D32 (d32_from_b64_band),
-# that D32 is the correctly rounded result. Otherwise a function with a fast CORE-MATH B128 port runs the
-# same test on B128 (2^-113 per rounding, d32_round_within), and failing that the D64 route decides.
+# D32Trans — the decimal32 transcendentals and libm surface. Every value is computed by Ingrid's decimal engine
+# (Ingrid/tessera/decimal/, written in Tessera), one engine for D32, D64 and D128: each transcendental is
+# correctly rounded (Ziv's strategy over a multiprecision evaluation with a tracked error bound), and sqrt, cbrt,
+# hypot, fma, quantize, fmod and remainder are exact computations rounded once. A bare `op()` that can leave the
+# finite range is CHECKED (it crashes on a non-finite result), `op_unchecked()` gives the raw IEEE value.
 # ============================================================================
 
-### 10^q for q in [-120, 120] (index q + 120), each correctly rounded; exact for 0 <= q <= 22.
-secret preset D32_B64_P10W: Array[B64, 241] = [
-    0x1.4A8729FC3DDB7p-399_b64, 0x1.9D28F47B4D525p-396_b64, 0x1.023998CD10537p-392_b64,
-    0x1.42C7FF0054685p-389_b64, 0x1.9379FEC069826p-386_b64, 0x1.F8587E7083E30p-383_b64,
-    0x1.3B374F06526DEp-379_b64, 0x1.8A0522C7E7095p-376_b64, 0x1.EC866B79E0CBAp-373_b64,
-    0x1.33D4032C2C7F5p-369_b64, 0x1.80C903F7379F2p-366_b64, 0x1.E0FB44F50586Ep-363_b64,
-    0x1.2C9D0B1923745p-359_b64, 0x1.77C44DDF6C516p-356_b64, 0x1.D5B561574765Bp-353_b64,
-    0x1.25915CD68C9F9p-349_b64, 0x1.6EF5B40C2FC77p-346_b64, 0x1.CAB3210F3BB95p-343_b64,
-    0x1.1EAFF4A98553Dp-339_b64, 0x1.665BF1D3E6A8Dp-336_b64, 0x1.BFF2EE48E0530p-333_b64,
-    0x1.17F7D4ED8C33Ep-329_b64, 0x1.5DF5CA28EF40Dp-326_b64, 0x1.B5733CB32B111p-323_b64,
-    0x1.116805EFFAEAAp-319_b64, 0x1.55C2076BF9A55p-316_b64, 0x1.AB328946F80EAp-313_b64,
-    0x1.0AFF95CC5B092p-309_b64, 0x1.4DBF7B3F71CB7p-306_b64, 0x1.A12F5A0F4E3E5p-303_b64,
-    0x1.04BD984990E6Fp-299_b64, 0x1.45ECFE5BF520Bp-296_b64, 0x1.97683DF2F268Dp-293_b64,
-    0x1.FD424D6FAF031p-290_b64, 0x1.3E497065CD61Fp-286_b64, 0x1.8DDBCC7F40BA6p-283_b64,
-    0x1.F152BF9F10E90p-280_b64, 0x1.36D3B7C36A91Ap-276_b64, 0x1.8488A5B445360p-273_b64,
-    0x1.E5AACF2156838p-270_b64, 0x1.2F8AC174D6123p-266_b64, 0x1.7B6D71D20B96Cp-263_b64,
-    0x1.DA48CE468E7C7p-260_b64, 0x1.286D80EC190DCp-256_b64, 0x1.7288E1271F513p-253_b64,
-    0x1.CF2B1970E7258p-250_b64, 0x1.217AEFE690777p-246_b64, 0x1.69D9ABE034955p-243_b64,
-    0x1.C45016D841BAAp-240_b64, 0x1.1AB20E472914Ap-236_b64, 0x1.615E91D8F359Dp-233_b64,
-    0x1.B9B6364F30304p-230_b64, 0x1.1411E1F17E1E3p-226_b64, 0x1.59165A6DDDA5Bp-223_b64,
-    0x1.AF5BF109550F2p-220_b64, 0x1.0D9976A5D5297p-216_b64, 0x1.50FFD44F4A73Dp-213_b64,
-    0x1.A53FC9631D10Dp-210_b64, 0x1.0747DDDDF22A8p-206_b64, 0x1.4919D5556EB52p-203_b64,
-    0x1.9B604AAACA626p-200_b64, 0x1.011C2EAABE7D8p-196_b64, 0x1.41633A556E1CEp-193_b64,
-    0x1.91BC08EAC9A41p-190_b64, 0x1.F62B0B257C0D2p-187_b64, 0x1.39DAE6F76D883p-183_b64,
-    0x1.8851A0B548EA4p-180_b64, 0x1.EA6608E29B24Dp-177_b64, 0x1.327FC58DA0F70p-173_b64,
-    0x1.7F1FB6F10934Cp-170_b64, 0x1.DEE7A4AD4B81Fp-167_b64, 0x1.2B50C6EC4F313p-163_b64,
-    0x1.7624F8A762FD8p-160_b64, 0x1.D3AE36D13BBCEp-157_b64, 0x1.244CE242C5561p-153_b64,
-    0x1.6D601AD376AB9p-150_b64, 0x1.C8B8218854567p-147_b64, 0x1.1D7314F534B61p-143_b64,
-    0x1.64CFDA3281E39p-140_b64, 0x1.BE03D0BF225C7p-137_b64, 0x1.16C262777579Cp-133_b64,
-    0x1.5C72FB1552D83p-130_b64, 0x1.B38FB9DAA78E4p-127_b64, 0x1.1039D428A8B8Fp-123_b64,
-    0x1.54484932D2E72p-120_b64, 0x1.A95A5B7F87A0Fp-117_b64, 0x1.09D8792FB4C49p-113_b64,
-    0x1.4C4E977BA1F5Cp-110_b64, 0x1.9F623D5A8A733p-107_b64, 0x1.039D665896880p-103_b64,
-    0x1.4484BFEEBC2A0p-100_b64, 0x1.95A5EFEA6B347p-97_b64, 0x1.FB0F6BE506019p-94_b64,
-    0x1.3CE9A36F23C10p-90_b64, 0x1.8C240C4AECB14p-87_b64, 0x1.EF2D0F5DA7DD9p-84_b64,
-    0x1.357C299A88EA7p-80_b64, 0x1.82DB34012B251p-77_b64, 0x1.E392010175EE6p-74_b64,
-    0x1.2E3B40A0E9B4Fp-70_b64, 0x1.79CA10C924223p-67_b64, 0x1.D83C94FB6D2ACp-64_b64,
-    0x1.2725DD1D243ACp-60_b64, 0x1.70EF54646D497p-57_b64, 0x1.CD2B297D889BCp-54_b64,
-    0x1.203AF9EE75616p-50_b64, 0x1.6849B86A12B9Bp-47_b64, 0x1.C25C268497682p-44_b64,
-    0x1.19799812DEA11p-40_b64, 0x1.5FD7FE1796495p-37_b64, 0x1.B7CDFD9D7BDBBp-34_b64,
-    0x1.12E0BE826D695p-30_b64, 0x1.5798EE2308C3Ap-27_b64, 0x1.AD7F29ABCAF48p-24_b64,
-    0x1.0C6F7A0B5ED8Dp-20_b64, 0x1.4F8B588E368F1p-17_b64, 0x1.A36E2EB1C432Dp-14_b64,
-    0x1.0624DD2F1A9FCp-10_b64, 0x1.47AE147AE147Bp-7_b64, 0x1.999999999999Ap-4_b64,
-    0x1.0000000000000p+0_b64, 0x1.4000000000000p+3_b64, 0x1.9000000000000p+6_b64,
-    0x1.F400000000000p+9_b64, 0x1.3880000000000p+13_b64, 0x1.86A0000000000p+16_b64,
-    0x1.E848000000000p+19_b64, 0x1.312D000000000p+23_b64, 0x1.7D78400000000p+26_b64,
-    0x1.DCD6500000000p+29_b64, 0x1.2A05F20000000p+33_b64, 0x1.74876E8000000p+36_b64,
-    0x1.D1A94A2000000p+39_b64, 0x1.2309CE5400000p+43_b64, 0x1.6BCC41E900000p+46_b64,
-    0x1.C6BF526340000p+49_b64, 0x1.1C37937E08000p+53_b64, 0x1.6345785D8A000p+56_b64,
-    0x1.BC16D674EC800p+59_b64, 0x1.158E460913D00p+63_b64, 0x1.5AF1D78B58C40p+66_b64,
-    0x1.B1AE4D6E2EF50p+69_b64, 0x1.0F0CF064DD592p+73_b64, 0x1.52D02C7E14AF6p+76_b64,
-    0x1.A784379D99DB4p+79_b64, 0x1.08B2A2C280291p+83_b64, 0x1.4ADF4B7320335p+86_b64,
-    0x1.9D971E4FE8402p+89_b64, 0x1.027E72F1F1281p+93_b64, 0x1.431E0FAE6D721p+96_b64,
-    0x1.93E5939A08CEAp+99_b64, 0x1.F8DEF8808B024p+102_b64, 0x1.3B8B5B5056E17p+106_b64,
-    0x1.8A6E32246C99Cp+109_b64, 0x1.ED09BEAD87C03p+112_b64, 0x1.3426172C74D82p+116_b64,
-    0x1.812F9CF7920E3p+119_b64, 0x1.E17B84357691Bp+122_b64, 0x1.2CED32A16A1B1p+126_b64,
-    0x1.78287F49C4A1Dp+129_b64, 0x1.D6329F1C35CA5p+132_b64, 0x1.25DFA371A19E7p+136_b64,
-    0x1.6F578C4E0A061p+139_b64, 0x1.CB2D6F618C879p+142_b64, 0x1.1EFC659CF7D4Cp+146_b64,
-    0x1.66BB7F0435C9Ep+149_b64, 0x1.C06A5EC5433C6p+152_b64, 0x1.18427B3B4A05Cp+156_b64,
-    0x1.5E531A0A1C873p+159_b64, 0x1.B5E7E08CA3A8Fp+162_b64, 0x1.11B0EC57E649Ap+166_b64,
-    0x1.561D276DDFDC0p+169_b64, 0x1.ABA4714957D30p+172_b64, 0x1.0B46C6CDD6E3Ep+176_b64,
-    0x1.4E1878814C9CEp+179_b64, 0x1.A19E96A19FC41p+182_b64, 0x1.05031E2503DA9p+186_b64,
-    0x1.4643E5AE44D13p+189_b64, 0x1.97D4DF19D6057p+192_b64, 0x1.FDCA16E04B86Dp+195_b64,
-    0x1.3E9E4E4C2F344p+199_b64, 0x1.8E45E1DF3B015p+202_b64, 0x1.F1D75A5709C1Bp+205_b64,
-    0x1.3726987666191p+209_b64, 0x1.84F03E93FF9F5p+212_b64, 0x1.E62C4E38FF872p+215_b64,
-    0x1.2FDBB0E39FB47p+219_b64, 0x1.7BD29D1C87A19p+222_b64, 0x1.DAC74463A989Fp+225_b64,
-    0x1.28BC8ABE49F64p+229_b64, 0x1.72EBAD6DDC73Dp+232_b64, 0x1.CFA698C95390Cp+235_b64,
-    0x1.21C81F7DD43A7p+239_b64, 0x1.6A3A275D49491p+242_b64, 0x1.C4C8B1349B9B5p+245_b64,
-    0x1.1AFD6EC0E1411p+249_b64, 0x1.61BCCA7119916p+252_b64, 0x1.BA2BFD0D5FF5Bp+255_b64,
-    0x1.145B7E285BF99p+259_b64, 0x1.59725DB272F7Fp+262_b64, 0x1.AFCEF51F0FB5Fp+265_b64,
-    0x1.0DE1593369D1Bp+269_b64, 0x1.5159AF8044462p+272_b64, 0x1.A5B01B605557Bp+275_b64,
-    0x1.078E111C3556Dp+279_b64, 0x1.4971956342AC8p+282_b64, 0x1.9BCDFABC1357Ap+285_b64,
-    0x1.0160BCB58C16Cp+289_b64, 0x1.41B8EBE2EF1C7p+292_b64, 0x1.922726DBAAE39p+295_b64,
-    0x1.F6B0F092959C7p+298_b64, 0x1.3A2E965B9D81Dp+302_b64, 0x1.88BA3BF284E24p+305_b64,
-    0x1.EAE8CAEF261ADp+308_b64, 0x1.32D17ED577D0Cp+312_b64, 0x1.7F85DE8AD5C4Fp+315_b64,
-    0x1.DF67562D8B363p+318_b64, 0x1.2BA095DC7701Ep+322_b64, 0x1.7688BB5394C25p+325_b64,
-    0x1.D42AEA2879F2Ep+328_b64, 0x1.249AD2594C37Dp+332_b64, 0x1.6DC186EF9F45Cp+335_b64,
-    0x1.C931E8AB87173p+338_b64, 0x1.1DBF316B346E8p+342_b64, 0x1.652EFDC6018A2p+345_b64,
-    0x1.BE7ABD3781ECAp+348_b64, 0x1.170CB642B133Fp+352_b64, 0x1.5CCFE3D35D80Ep+355_b64,
-    0x1.B403DCC834E12p+358_b64, 0x1.108269FD210CBp+362_b64, 0x1.54A3047C694FEp+365_b64,
-    0x1.A9CBC59B83A3Dp+368_b64, 0x1.0A1F5B8132466p+372_b64, 0x1.4CA732617ED80p+375_b64,
-    0x1.9FD0FEF9DE8E0p+378_b64, 0x1.03E29F5C2B18Cp+382_b64, 0x1.44DB473335DEFp+385_b64,
-    0x1.961219000356Bp+388_b64, 0x1.FB969F40042C5p+391_b64, 0x1.3D3E2388029BBp+395_b64,
-    0x1.8C8DAC6A0342Ap+398_b64,
-]
-### 10^q for q in [0, 22], every one exact in B64.
-secret preset D32_B64_P10: Array[B64, 23] = [
-    1.0_b64, 10.0_b64, 100.0_b64, 1000.0_b64, 10000.0_b64, 100000.0_b64, 1000000.0_b64,
-    10000000.0_b64, 100000000.0_b64, 1000000000.0_b64, 10000000000.0_b64, 100000000000.0_b64,
-    1000000000000.0_b64, 10000000000000.0_b64, 100000000000000.0_b64, 1000000000000000.0_b64,
-    10000000000000000.0_b64, 100000000000000000.0_b64, 1000000000000000000.0_b64,
-    10000000000000000000.0_b64, 100000000000000000000.0_b64, 1000000000000000000000.0_b64,
-    10000000000000000000000.0_b64,
-]
-
-# ============================================================================
-# D32Trans — decimal32 (Pmax=7) transcendentals and the rest of the math surface. Each function tries, in order:
-# 1. B64: the operands rounded once to B64 and the correctly rounded B64 CORE-MATH routine; the result is
-#    kept when its error band ((1 + condition number) * 2^-53) rounds to one D32.
-# 2. B128, for the functions with a fast CORE-MATH B128 port: the same test at 2^-113 per rounding.
-# 3. D64: the operands widened exactly, the correctly rounded D64 routine, one rounding to 7 digits. That is
-#    the correct D32 unless the D64 result sits exactly on a D32 midpoint; then the operation is repeated in
-#    D128, which decides the direction or confirms an exact midpoint (rounded half-even).
-#
-# The dec<->bin conversions (B16/B32/B64/B128 <-> D32) are the integer bridge in D64Trans.rf
-# (decimal_to_binary_bits / b128_to_d32), correctly rounded in one step.
-# ============================================================================
-
-### dec -> bin: D32 value as a B64, correctly rounded (see decimal_to_binary_bits).
-routine B64(from: D32) -> B64
-    var d = from.decode()
-    return B64.from_bits(
-        bits: LLVM::int_truncate[U128, U64](
-            decimal_to_binary_bits(
-                sign: d.sign,
-                special: d.special,
-                coeff: d.coeff,
-                exp: d.exp,
-                p: 53_s64,
-                emin: -1022_s64,
-                emax: 1023_s64,
-            ),
-        ),
-    )
-
-### bin -> dec: B64 value as a D32, correctly rounded (exact widening to B128, then b128_to_d32).
-routine D32(from: B64) -> D32
-    return b128_to_d32(x: B128(from: from))
-
-### D32 -> D64, exact: every decimal32 value (cohort, NaN payload and all) is a decimal64 value.
-secret routine d32_to_d64_exact(x: D32) -> D64
-    var p = x.decode()
-    return d64_of_parts(p: D64Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
-
-### True when `r` lies exactly on a D32 rounding midpoint: the digits D32 has to drop (the excess over 7,
-### or those below the minimum exponent) are exactly half of the dropped quantum. A correctly rounded
-### D64 result that is NOT on a midpoint rounds to the same D32 as the exact value, since rounding to
-### nearest never crosses a representable number and every D32 midpoint is representable in D64.
-secret routine d64_is_d32_tie(r: D64) -> Bool
-    var p = r.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u64)
-        return false
-    var nd = digits10_u64(c: p.coeff)
-    var drop = LLVM::sub(a: nd, b: 7_s64)
-    var under = LLVM::sub(a: -101_s64, b: p.exp)
-    if LLVM::signed_gt(a: under, b: drop)
-        drop = under
-    if LLVM::signed_le(a: drop, b: 0_s64) or LLVM::signed_gt(a: drop, b: nd)
-        return false
-    var half = LLVM::mul(a: p10_u64(k: LLVM::sub(a: drop, b: 1_s64)), b: 5_u64)
-    if LLVM::int_eq(a: drop, b: nd)
-        return LLVM::int_eq(a: p.coeff, b: half)
-    var kept = div_pow10_u64(x: p.coeff, k: drop)
-    var tail = LLVM::sub(a: p.coeff, b: LLVM::mul(a: kept, b: p10_u64(k: drop)))
-    return LLVM::int_eq(a: tail, b: half)
-
-### True when a D128 result lies exactly on a D32 rounding midpoint (see d64_is_d32_tie).
-secret routine d128_is_d32_tie(r: D128) -> Bool
-    var p = r.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u128)
-        return false
-    var nd = digits10_u128(c: p.coeff)
-    var drop = LLVM::sub(a: nd, b: 7_s64)
-    var under = LLVM::sub(a: -101_s64, b: p.exp)
-    if LLVM::signed_gt(a: under, b: drop)
-        drop = under
-    if LLVM::signed_le(a: drop, b: 0_s64) or LLVM::signed_gt(a: drop, b: nd)
-        return false
-    var half = LLVM::mul(a: p10_u128(k: LLVM::sub(a: drop, b: 1_s64)), b: 5_u128)
-    if LLVM::int_eq(a: drop, b: nd)
-        return LLVM::int_eq(a: p.coeff, b: half)
-    var kept = div_pow10_u128(x: p.coeff, k: drop)
-    var tail = LLVM::sub(a: p.coeff, b: LLVM::mul(a: kept, b: p10_u128(k: drop)))
-    return LLVM::int_eq(a: tail, b: half)
-
-### True for a finite nonzero D32 with |x| < 10^-20 (below that, tgamma's D32 rounding step is at least
-### 10^13, so a D32 midpoint within gamma's -0.58 offset of 1/x = 10^-e / c must be 1/x itself).
-secret routine d32_tiny_for_gamma(x: D32) -> Bool
-    var p = x.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u64)
-        return false
-    return LLVM::signed_le(a: LLVM::add(a: p.exp, b: digits10_u64(c: p.coeff)), b: -20_s64)
-
-### The D32 just below the D32 midpoint `r` (rounded toward -infinity). tgamma(x) for |x| < 10^-20 is
-### 1/x - 0.5772... + O(x), so when the midpoint is 1/x itself (the only midpoint D128 cannot separate
-### from it there, e.g. x = +-2.048E-40 with 1/x = +-4.8828125E+39) the true value lies just below it.
-secret routine d64_to_d32_round_down(r: D64) -> D32
-    var p = r.decode()
-    var nd = digits10_u64(c: p.coeff)
-    var drop = LLVM::sub(a: nd, b: 7_s64)
-    var under = LLVM::sub(a: -101_s64, b: p.exp)
-    if LLVM::signed_gt(a: under, b: drop)
-        drop = under
-    var kept = div_pow10_u64(x: p.coeff, k: drop)
-    if p.sign
-        kept = LLVM::add(a: kept, b: 1_u64)
-    return d32_of_parts(
-        p: decfin32(sign: p.sign, coeff: kept, exp: LLVM::add(a: p.exp, b: drop), pref: 90_s64),
-    )
-
-### The D32 result when the D64 result `r` sits exactly on a D32 midpoint, given the same operation
-### evaluated in D128 as `wide`. Off the midpoint in D128, `wide` decides the direction; still on it, the
-### true value is taken to be the midpoint and `r` rounds half-even. For the algebraic functions (sqrt,
-### cbrt, hypot, fma, pow with an integer exponent) that follows from the operand sizes. For the one-argument
-### functions it was checked over every D32 input (2026-09-27, 3 458 000 000 per function): the midpoint
-### D128 cannot separate occurs only for exp2(-11) = 2^-11, exactly a midpoint, and for tgamma of |x| below
-### 10^-20, which D32.tgamma_unchecked settles before calling this. The two-argument functions cannot be
-### enumerated (about 10^19 operand pairs). hypot, fma and pow with an integer exponent are algebraic, so
-### the assumption follows from the operand sizes. atan2 and pow with a non-integer exponent rest on a
-### counting argument instead: atan2 of nonzero rationals is transcendental, so it is never exactly a
-### midpoint, and pow has exact midpoints (pow(1225, 2.5) = 35^5 = 52521875) where the assumption is right;
-### an inexact result would have to agree with a midpoint to all 34 D128 digits, about 2 * 10^-27 of the
-### D32 spacing, which over 10^19 pairs is expected about 2 * 10^-8 times.
-secret routine d32_settle_tie(r: D64, wide: D128) -> D32
-    if d128_is_d32_tie(r: wide)
-        return d64_to_d32_round(r: r)
-    var n = D32(from: wide)
-    var p = n.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u64)
-        return n
-    return d32_of_parts(p: decfin32(sign: p.sign, coeff: p.coeff, exp: p.exp, pref: 90_s64))
-
-### D64 -> D32 with one half-even rounding (decfin32), the cohort normalized (trailing
-### zeros stripped, a zero result has exponent 0).
-secret routine d64_to_d32_round(r: D64) -> D32
-    var p = r.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64)
-        return D32(from: r)
-    if LLVM::int_eq(a: p.coeff, b: 0_u64)
-        return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64))
-    return d32_of_parts(p: decfin32(sign: p.sign, coeff: p.coeff, exp: p.exp, pref: 90_s64))
-
-### x as a B64 rounded once (correctly rounded): the coefficient times or divided by an exact power of ten
-### while |exponent| <= 22, the general conversion otherwise (and for infinities and NaN).
-secret routine d32_to_b64(x: D32) -> B64
-    var p = x.decode()
-    if p.special != 0_u64 or p.exp > 22_s64 or p.exp < -22_s64
-        return B64(from: x)
-    var v = d32_b64_scale(a: p.coeff.B64(), q: p.exp)
-    return if p.sign then v.neg() else v
-
-### a * 10^q for q in [-22, 22], one rounding (10^|q| is exact).
-@inline
-secret routine d32_b64_scale(a: B64, q: S64) -> B64
-    if q >= 0_s64
-        return a *! D32_B64_P10[LLVM::reinterpret_bits[S64, U64](q)]
-    return a /! D32_B64_P10[LLVM::reinterpret_bits[S64, U64](0_s64 -% q)]
-
-### 2^-m as a B64 for m in [0, 1022].
-@inline
-secret routine d32_b64_pow2_neg(m: S64) -> B64
-    return B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1023_s64 -% m) << 52)
-
-### a * 10^q for q in [-120, 120]: one rounding while |q| <= 22 (10^|q| is exact), two otherwise (the
-### correctly rounded constant and the product).
-@inline
-secret routine d32_b64_scale_w(a: B64, q: S64) -> B64
-    if q >= 0_s64 and q <= 22_s64
-        return a *! D32_B64_P10[LLVM::reinterpret_bits[S64, U64](q)]
-    if q < 0_s64 and q >= -22_s64
-        return a /! D32_B64_P10[LLVM::reinterpret_bits[S64, U64](0_s64 -% q)]
-    return a *! D32_B64_P10W[LLVM::reinterpret_bits[S64, U64](q +% 120_s64)]
-
-### The D32 that every value within y * (1 +- 2^-k) rounds to, and whether there is one.
-### - NaN is NaN: the B64 routine returns it exactly where the function is undefined, and every domain
-###   boundary (0, +-1, the poles) is exactly representable, so a D32 operand lands on the same side.
-### - Exact zero is +-0: a zero of the function at an exactly representable point, or an underflow.
-### - With the band below 2^-10, anything at or beyond 2e97 (including infinity) rounds to +-infinity and
-###   anything at or below 4e-102 to +-0, both far outside the band from the D32 overflow threshold
-###   (9.9999995e96) and half the smallest subnormal (5e-102).
-### - Otherwise |y| is scaled to t = |y| * 10^q in [10^6, 10^7) (one rounding while |q| <= 22, two
-###   beyond), the band around t is widened to 2^(1-k), or 2^(2-k) for two roundings (k capped at 50), to
-###   cover those roundings and the roundings of its own ends, and when both ends round half up to the same
-###   integer n and the lower end is not exactly on n - 1/2, no D32 rounding boundary lies inside it:
-###   n * 10^-q is the correctly rounded D32 (decfin32 saturates a carry past the largest to infinity).
-###   Subnormal results (exponent below -101) are left to the slower paths.
-secret routine d32_from_b64_band(y: B64, k: S64) -> (Bool, D32)
-    var neg = y.signbit()
-    if y.is_nan()
-        return (true, D32.quiet_nan())
-    if y.is_zero()
-        return (
-            true, d32_of_parts(p: D32Parts(sign: neg, special: 0_u64, exp: 0_s64, coeff: 0_u64)),
-        )
-    if k < 10_s64
-        return (false, D32.quiet_nan())
-    var a = y.abs()
-    if a >= 2e97_b64
-        return (true, D32.infinity(sign: neg))
-    if a <= 4e-102_b64
-        return (
-            true, d32_of_parts(p: D32Parts(sign: neg, special: 0_u64, exp: 0_s64, coeff: 0_u64)),
-        )
-    if k < 27_s64
-        return (false, D32.quiet_nan())
-    var e10 = b64_exponent(x: a) *% 315653_s64 >> 20
-    var q = 6_s64 -% e10
-    var t = d32_b64_scale_w(a: a, q: q)
-    if t >= 10000000.0_b64
-        q = q -% 1_s64
-        t = d32_b64_scale_w(a: a, q: q)
-    elseif t < 1000000.0_b64
-        q = q +% 1_s64
-        t = d32_b64_scale_w(a: a, q: q)
-    var e = 0_s64 -% q
-    if e < -101_s64
-        return (false, D32.quiet_nan())
-    var kk = k
-    if kk > 50_s64
-        kk = 50_s64
-    var widen = kk -% 1_s64
-    if q > 22_s64 or q < -22_s64
-        widen = kk -% 2_s64
-    var d = t *! d32_b64_pow2_neg(m: widen)
-    var lo_arg = t -! d +! 0.5_b64
-    var lo = lo_arg.floor()
-    if lo != (t +! d +! 0.5_b64).floor() or lo == lo_arg
-        return (false, D32.quiet_nan())
-    var n = LLVM::float_to_unsigned[B64, U64](value: lo)
-    if n == 10000000_u64
-        n = 1000000_u64
-        e = e +% 1_s64
-    return (true, d32_of_parts(p: decfin32(sign: neg, coeff: n, exp: e, pref: 90_s64)))
-
-### k with (1 + cond) * 2^-53 <= 2^-k for a condition-number bound, 0 when the bound is not finite.
-secret routine d32_b64_k(cond: B64) -> S64
-    if not cond.is_finite()
-        return 0_s64
-    var c = cond.abs()
-    if c < 1.0_b64
-        return 51_s64
-    return 50_s64 -% b64_exponent(x: c)
-
-### k with (1 + cond) * 2^-112 <= 2^-k (a B128 input rounding plus the B128 routine's half ulp).
-secret routine d32_b128_k(cond: B64) -> S64
-    if not cond.is_finite()
-        return 0_s64
-    var c = cond.abs()
-    if c < 1.0_b64
-        return 110_s64
-    return 109_s64 -% b64_exponent(x: c)
-
-### A bound on |x digamma(x)|, the condition number of tgamma (and, over |lgamma(x)|, of lgamma). For
-### x > 0, digamma(x) lies in [log x - 1/x, log x]; for x < 0 the reflection formula bounds it through
-### cot(pi x), which grows near the poles. Infinite (no fast path) at 0 and for NaN.
-secret routine d32_gamma_cond(x: B64) -> B64
-    if x > 0.0_b64
-        return x *! (x.log_unchecked().abs() +! 1.0_b64) +! 2.0_b64
-    if not (x < 0.0_b64)
-        return B64.from_bits(bits: 0x7FF0000000000000_u64)
-    # reflection: digamma(x) = digamma(1 - x) - pi cot(pi x), with |digamma(1 - x)| <= log(1 - x) + 1
-    return x.abs() *! ((1.0_b64 -! x).log_unchecked() +! 1.0_b64 +! 3.2_b64 /! x
-        .tanpi()
-        .abs()) +! 2.0_b64
-
-# ============================================================================
-# Transcendentals — B64, then B128, then D64 (see the top of this file). Out-of-domain operands come out
-# as NaN from every tier, so no domain checks are needed here.
-# ============================================================================
-
-### e^me. Crashes on a non-finite result.
-### :returns: The exponential of `me`.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
+### e^me. Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.exp!() -> D32
     var r = me.exp_unchecked()
     if r.is_finite()
@@ -380,27 +18,12 @@ routine D32.exp!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### e^me, raw IEEE: may return ±inf or NaN. Never crashes.
-### :returns: The exponential of `me`, possibly non-finite.
+### e^me, raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.exp_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.exp_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs()))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: xb.abs())
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).exp_unchecked(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).exp_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).exp_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_exp(x: me.to_bits()))
 
-### e^me - 1 (accurate near 0). Crashes on a non-finite result.
-### :returns: `exp(me) - 1`.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
+### e^me - 1 (accurate near 0). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.expm1!() -> D32
     var r = me.expm1_unchecked()
     if r.is_finite()
@@ -409,27 +32,12 @@ routine D32.expm1!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### `exp(me) - 1`, raw IEEE: may return ±inf or NaN. Never crashes.
-### :returns: `exp(me) - 1`, possibly non-finite.
+### e^me - 1 (accurate near 0), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.expm1_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.expm1_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs() +! 1.0_b64))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: xb.abs() +! 1.0_b64)
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).expm1_unchecked(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).expm1_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).expm1_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_expm1(x: me.to_bits()))
 
-### 2^me. Crashes on a non-finite result.
-### :returns: Two raised to the power `me`.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
+### 2^me. Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.exp2!() -> D32
     var r = me.exp2_unchecked()
     if r.is_finite()
@@ -438,27 +46,12 @@ routine D32.exp2!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### 2^me, raw IEEE: may return ±inf or NaN. Never crashes.
-### :returns: Two raised to the power `me`, possibly non-finite.
+### 2^me, raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.exp2_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.exp2_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs()))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: xb.abs())
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).exp2_unchecked(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).exp2_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).exp2_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_exp2(x: me.to_bits()))
 
-### 10^me. Crashes on a non-finite result.
-### :returns: Ten raised to the power `me`.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
+### 10^me. Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.exp10!() -> D32
     var r = me.exp10_unchecked()
     if r.is_finite()
@@ -467,27 +60,12 @@ routine D32.exp10!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### 10^me, raw IEEE: may return ±inf or NaN. Never crashes.
-### :returns: Ten raised to the power `me`, possibly non-finite.
+### 10^me, raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.exp10_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.exp10_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs() *! 3.0_b64))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: xb.abs() *! 3.0_b64)
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).exp10_unchecked(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).exp10_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).exp10_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_exp10(x: me.to_bits()))
 
-### Natural log ln(me). Crashes on a non-finite result (me<=0).
-### :returns: The natural logarithm of `me`.
-### :throws: {NumericDomainError} on NaN (me<0); {NumericOverflowError} on ±inf (me=0).
+### ln(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.log!() -> D32
     var r = me.log_unchecked()
     if r.is_finite()
@@ -496,27 +74,12 @@ routine D32.log!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### ln(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
-### :returns: The natural logarithm of `me`, possibly non-finite.
+### ln(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.log_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.log_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 1.0_b64 /! yb.abs()))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: 1.0_b64 /! yb.abs())
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).log_unchecked(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).log_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).log_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_log(x: me.to_bits()))
 
-### ln(1+me) (accurate near 0). Crashes on a non-finite result (me<=-1).
-### :returns: `ln(1 + me)`.
-### :throws: {NumericDomainError} on NaN (me<-1); {NumericOverflowError} on ±inf (me=-1).
+### ln(1 + me) (accurate near 0). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.log1p!() -> D32
     var r = me.log1p_unchecked()
     if r.is_finite()
@@ -525,29 +88,12 @@ routine D32.log1p!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### `ln(1 + me)`, raw IEEE: NaN for me<-1, -inf for me=-1. Never crashes.
-### :returns: `ln(1 + me)`, possibly non-finite.
+### ln(1 + me) (accurate near 0), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.log1p_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.log1p_unchecked()
-    var cond = xb.abs() /! ((1.0_b64 +! xb) *! yb.abs())
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: cond))
-    if fast
-        return v
-    var (lr, lk) = b128_log1p_fast(t: B128(from: me))
-    var k128 = d32_b128_k(cond: cond)
-    if lk > 0_s64 and k128 >= 62_s64
-        var (wide_ok, w) = d32_round_within(r: lr, k: k128 -% 2_s64)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).log1p_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).log1p_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_log1p(x: me.to_bits()))
 
-### Base-2 log log2(me). Crashes on a non-finite result (me<=0).
-### :returns: The base-2 logarithm of `me`.
-### :throws: {NumericDomainError} on NaN (me<0); {NumericOverflowError} on ±inf (me=0).
+### log2(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.log2!() -> D32
     var r = me.log2_unchecked()
     if r.is_finite()
@@ -556,22 +102,12 @@ routine D32.log2!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### log2(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
-### :returns: The base-2 logarithm of `me`, possibly non-finite.
+### log2(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.log2_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.log2_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 2.0_b64 /! yb.abs()))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).log2_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).log2_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_log2(x: me.to_bits()))
 
-### Base-10 log log10(me). Crashes on a non-finite result (me<=0).
-### :returns: The base-10 logarithm of `me`.
-### :throws: {NumericDomainError} on NaN (me<0); {NumericOverflowError} on ±inf (me=0).
+### log10(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.log10!() -> D32
     var r = me.log10_unchecked()
     if r.is_finite()
@@ -580,22 +116,12 @@ routine D32.log10!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### log10(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
-### :returns: The base-10 logarithm of `me`, possibly non-finite.
+### log10(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.log10_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.log10_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 1.0_b64 /! yb.abs()))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).log10_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).log10_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_log10(x: me.to_bits()))
 
-### Square root sqrt(me). Crashes on a non-finite result (me<0).
-### :returns: The square root of `me`.
-### :throws: {NumericDomainError} on NaN (me<0); {NumericOverflowError} on ±inf.
+### sqrt(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.sqrt!() -> D32
     var r = me.sqrt_unchecked()
     if r.is_finite()
@@ -604,175 +130,16 @@ routine D32.sqrt!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### sqrt(me), raw IEEE: NaN for me<0, -0 for -0. Never crashes.
-### :returns: The square root of `me`, possibly NaN.
+### sqrt(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.sqrt_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.sqrt_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 0.5_b64))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: 0.5_b64)
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).sqrt_unchecked(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).sqrt_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).sqrt_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_sqrt(x: me.to_bits()))
 
-### Cube root cbrt(me) (defined for all reals). Never crashes.
-### :returns: The cube root of `me`.
+### The real cube root of me, correctly rounded.
 routine D32.cbrt() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.cbrt()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 0.5_b64))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: 0.5_b64)
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).cbrt(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).cbrt()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).cbrt())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_cbrt(x: me.to_bits()))
 
-### me^you (general power), raw IEEE: may return ±inf or NaN. Never crashes.
-### :param you: The exponent.
-### :returns: `me` raised to the power `you`, possibly non-finite.
-routine D32.pow_unchecked(you: D32) -> D32
-    var xb = d32_to_b64(x: me)
-    var eb = d32_to_b64(x: you)
-    var cond = eb.abs() *! (xb
-        .abs()
-        .log_unchecked()
-        .abs() +! 1.0_b64)
-    var (fast, v) = d32_from_b64_band(y: xb.pow_unchecked(exp: eb), k: d32_b64_k(cond: cond))
-    if fast
-        return v
-    var wide = d32_to_d64_exact(x: me).pow_unchecked(you: d32_to_d64_exact(x: you))
-    if not d64_is_d32_tie(r: wide)
-        return d64_to_d32_round(r: wide)
-    return d32_settle_tie(r: wide, wide: D128(from: me).pow_unchecked(you: D128(from: you)))
-
-### sqrt(x^2 + y^2) (without spurious overflow). Crashes if non-finite.
-### :param x: The first leg.
-### :param y: The second leg.
-### :returns: The Euclidean length `hypot(x, y)`.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
-routine hypot!(x: D32, y: D32) -> D32
-    var r = hypot_unchecked(x: x, y: y)
-    if r.is_finite()
-        return r
-    if r.is_nan()
-        throw NumericDomainError(description: "domain error: no real result")
-    throw NumericOverflowError(description: "overflow: out of range")
-
-### `hypot(x, y)`, raw IEEE: may return +inf. Never crashes.
-### :param x: The first leg.
-### :param y: The second leg.
-### :returns: The Euclidean length, possibly +inf.
-routine hypot_unchecked(x: D32, y: D32) -> D32
-    var (fast, v) = d32_from_b64_band(
-        y: hypot_unchecked(x: d32_to_b64(x: x), y: d32_to_b64(x: y)),
-        k: 51_s64,
-    )
-    if fast
-        return v
-    var (wide_ok, w) = d32_round_within(
-        r: hypot_unchecked(x: B128(from: x), y: B128(from: y)),
-        k: 110_s64,
-    )
-    if wide_ok
-        return w
-    var r = hypot_unchecked(x: d32_to_d64_exact(x: x), y: d32_to_d64_exact(x: y))
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: hypot_unchecked(x: D128(from: x), y: D128(from: y)))
-    return d64_to_d32_round(r: r)
-
-### sqrt(x^2 + y^2 + z^2) (without spurious overflow). Crashes if non-finite.
-### :param x: The first leg.
-### :param y: The second leg.
-### :param z: The third leg.
-### :returns: The 3D Euclidean length.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
-routine hypot!(x: D32, y: D32, z: D32) -> D32
-    var r = hypot_unchecked(x: x, y: y, z: z)
-    if r.is_finite()
-        return r
-    if r.is_nan()
-        throw NumericDomainError(description: "domain error: no real result")
-    throw NumericOverflowError(description: "overflow: out of range")
-
-### `hypot(x, y, z)`, raw IEEE: may return +inf. Never crashes.
-### :param x: The first leg.
-### :param y: The second leg.
-### :param z: The third leg.
-### :returns: The 3D Euclidean length, possibly +inf.
-routine hypot_unchecked(x: D32, y: D32, z: D32) -> D32
-    var (fast, v) = d32_from_b64_band(
-        y: hypot_unchecked(x: d32_to_b64(x: x), y: d32_to_b64(x: y), z: d32_to_b64(x: z)),
-        k: 51_s64,
-    )
-    if fast
-        return v
-    var r = hypot_unchecked(
-        x: d32_to_d64_exact(x: x),
-        y: d32_to_d64_exact(x: y),
-        z: d32_to_d64_exact(x: z),
-    )
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(
-            r: r,
-            wide: hypot_unchecked(x: D128(from: x), y: D128(from: y), z: D128(from: z)),
-        )
-    return d64_to_d32_round(r: r)
-
-### Fused multiply-add me*b + c, single rounding,. Crashes if non-finite.
-### :param b: The multiplier.
-### :param c: The addend.
-### :returns: `me * b + c` rounded once.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
-routine D32.fma!(b: D32, c: D32) -> D32
-    var r = me.fma_unchecked(b: b, c: c)
-    if r.is_finite()
-        return r
-    if r.is_nan()
-        throw NumericDomainError(description: "domain error: no real result")
-    throw NumericOverflowError(description: "overflow: out of range")
-
-### `me * b + c` (single rounding), raw IEEE: may return ±inf or NaN. Never crashes.
-### :param b: The multiplier.
-### :param c: The addend.
-### :returns: `me * b + c`, possibly non-finite.
-routine D32.fma_unchecked(b: D32, c: D32) -> D32
-    var xb = d32_to_b64(x: me)
-    var bb = d32_to_b64(x: b)
-    var cb = d32_to_b64(x: c)
-    var yb = xb.fma_unchecked(b: bb, c: cb)
-    var (fast, v) = d32_from_b64_band(
-        y: yb,
-        k: d32_b64_k(cond: ((xb *! bb).abs() +! cb.abs()) /! yb.abs()),
-    )
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).fma_unchecked(
-        b: d32_to_d64_exact(x: b),
-        c: d32_to_d64_exact(x: c),
-    )
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(
-            r: r,
-            wide: D128(from: me).fma_unchecked(b: D128(from: b), c: D128(from: c)),
-        )
-    return d64_to_d32_round(r: r)
-
-### Arcsine asin(me). Crashes if non-finite (|me|>1).
-### :returns: The arcsine of `me` in radians.
-### :throws: {NumericDomainError} on NaN (|me|>1); {NumericOverflowError} on ±inf.
+### asin(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.asin!() -> D32
     var r = me.asin_unchecked()
     if r.is_finite()
@@ -781,30 +148,12 @@ routine D32.asin!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### asin(me), raw IEEE: NaN for |me|>1. Never crashes.
-### :returns: The arcsine of `me`, possibly NaN.
+### asin(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.asin_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.asin_unchecked()
-    var (fast, v) = d32_from_b64_band(
-        y: yb,
-        k: d32_b64_k(cond: 1.0_b64 /! ((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked()),
-    )
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: 1.0_b64 /! ((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked())
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).asin_unchecked(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).asin_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).asin_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_asin(x: me.to_bits()))
 
-### Arccosine acos(me). Crashes if non-finite (|me|>1).
-### :returns: The arccosine of `me` in radians.
-### :throws: {NumericDomainError} on NaN (|me|>1); {NumericOverflowError} on ±inf.
+### acos(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.acos!() -> D32
     var r = me.acos_unchecked()
     if r.is_finite()
@@ -813,70 +162,28 @@ routine D32.acos!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### acos(me), raw IEEE: NaN for |me|>1. Never crashes.
-### :returns: The arccosine of `me`, possibly NaN.
+### acos(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.acos_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.acos_unchecked()
-    var (fast, v) = d32_from_b64_band(
-        y: yb,
-        k: d32_b64_k(cond: xb.abs() /! (((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked() *! yb.abs())),
-    )
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: xb.abs() /! (((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs())).sqrt_unchecked() *! yb.abs()))
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).acos_unchecked(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).acos_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).acos_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_acos(x: me.to_bits()))
 
-### Arctangent atan(me) (defined for all reals). Never crashes.
-### :returns: The arctangent of `me` in radians.
+### atan(me) (atan(±inf) = ±pi/2), correctly rounded.
 routine D32.atan() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.atan()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 1.0_b64))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: 1.0_b64)
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: B128(from: me).atan(), k: k128)
-        if wide_ok
-            return w
-    var r = d32_to_d64_exact(x: me).atan()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).atan())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_atan(x: me.to_bits()))
 
-### Two-argument arctangent atan2(y, x), quadrant-aware,. Never crashes.
-### :param y: The y-coordinate.
-### :param x: The x-coordinate.
-### :returns: The angle of (x, y) in radians, in (-pi, pi].
-routine atan2(y: D32, x: D32) -> D32
-    var yb = d32_to_b64(x: y)
-    var xb = d32_to_b64(x: x)
-    var tb = atan2(y: yb, x: xb)
-    var cond = (xb *! yb).abs() *! 2.0_b64 /! ((xb *! xb +! yb *! yb) *! tb.abs()) +! 1.0_b64
-    var (fast, v) = d32_from_b64_band(y: tb, k: d32_b64_k(cond: cond))
-    if fast
-        return v
-    var k128 = d32_b128_k(cond: cond)
-    if k128 >= 60_s64
-        var (wide_ok, w) = d32_round_within(r: atan2(y: B128(from: y), x: B128(from: x)), k: k128)
-        if wide_ok
-            return w
-    var r = atan2(y: d32_to_d64_exact(x: y), x: d32_to_d64_exact(x: x))
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: atan2(y: D128(from: y), x: D128(from: x)))
-    return d64_to_d32_round(r: r)
+### sin(me), me in radians, correctly rounded.
+routine D32.sin() -> D32
+    return D32.from_bits(bits: C::ingrid_d32_sin(x: me.to_bits()))
 
-### Hyperbolic sine sinh(me). Crashes if non-finite (overflow for large |me|).
-### :returns: The hyperbolic sine of `me`.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
+### cos(me), me in radians, correctly rounded.
+routine D32.cos() -> D32
+    return D32.from_bits(bits: C::ingrid_d32_cos(x: me.to_bits()))
+
+### tan(me), me in radians, correctly rounded.
+routine D32.tan() -> D32
+    return D32.from_bits(bits: C::ingrid_d32_tan(x: me.to_bits()))
+
+### sinh(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.sinh!() -> D32
     var r = me.sinh_unchecked()
     if r.is_finite()
@@ -885,22 +192,12 @@ routine D32.sinh!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### sinh(me), raw IEEE: ±inf on overflow. Never crashes.
-### :returns: The hyperbolic sine of `me`, possibly ±inf.
+### sinh(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.sinh_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.sinh_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs() +! 1.0_b64))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).sinh_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).sinh_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_sinh(x: me.to_bits()))
 
-### Hyperbolic cosine cosh(me). Crashes if non-finite (overflow for large |me|).
-### :returns: The hyperbolic cosine of `me`.
-### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
+### cosh(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.cosh!() -> D32
     var r = me.cosh_unchecked()
     if r.is_finite()
@@ -909,48 +206,20 @@ routine D32.cosh!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### cosh(me), raw IEEE: +inf on overflow. Never crashes.
-### :returns: The hyperbolic cosine of `me`, possibly +inf.
+### cosh(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.cosh_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.cosh_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb.abs() +! 1.0_b64))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).cosh_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).cosh_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_cosh(x: me.to_bits()))
 
-### Hyperbolic tangent tanh(me) (defined for all reals). Never crashes.
-### :returns: The hyperbolic tangent of `me`.
+### tanh(me), correctly rounded.
 routine D32.tanh() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.tanh()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 1.0_b64))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).tanh()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).tanh())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_tanh(x: me.to_bits()))
 
-### Inverse hyperbolic sine asinh(me) (defined for all reals). Never crashes.
-### :returns: The inverse hyperbolic sine of `me`.
+### asinh(me), correctly rounded.
 routine D32.asinh() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.asinh()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 1.0_b64))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).asinh()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).asinh())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_asinh(x: me.to_bits()))
 
-### Inverse hyperbolic cosine acosh(me). Crashes if non-finite (me<1).
-### :returns: The inverse hyperbolic cosine of `me`.
-### :throws: {NumericDomainError} on NaN (me<1); {NumericOverflowError} on ±inf.
+### acosh(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.acosh!() -> D32
     var r = me.acosh_unchecked()
     if r.is_finite()
@@ -959,25 +228,12 @@ routine D32.acosh!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### acosh(me), raw IEEE: NaN for me<1. Never crashes.
-### :returns: The inverse hyperbolic cosine of `me`, possibly NaN.
+### acosh(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.acosh_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.acosh_unchecked()
-    var (fast, v) = d32_from_b64_band(
-        y: yb,
-        k: d32_b64_k(cond: xb.abs() /! (((xb -! 1.0_b64) *! (xb +! 1.0_b64)).sqrt_unchecked() *! yb.abs())),
-    )
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).acosh_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).acosh_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_acosh(x: me.to_bits()))
 
-### Inverse hyperbolic tangent atanh(me). Crashes if non-finite (|me|>=1).
-### :returns: The inverse hyperbolic tangent of `me`.
-### :throws: {NumericDomainError} on NaN (|me|>1); {NumericOverflowError} on ±inf (|me|=1).
+### atanh(me). Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.atanh!() -> D32
     var r = me.atanh_unchecked()
     if r.is_finite()
@@ -986,51 +242,20 @@ routine D32.atanh!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### atanh(me), raw IEEE: NaN for |me|>1, ±inf for |me|=1. Never crashes.
-### :returns: The inverse hyperbolic tangent of `me`, possibly non-finite.
+### atanh(me), raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.atanh_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.atanh_unchecked()
-    var (fast, v) = d32_from_b64_band(
-        y: yb,
-        k: d32_b64_k(cond: xb.abs() /! ((1.0_b64 -! xb.abs()) *! (1.0_b64 +! xb.abs()) *! yb.abs())),
-    )
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).atanh_unchecked()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).atanh_unchecked())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_atanh(x: me.to_bits()))
 
-### Error function erf(me). Never crashes (saturates to ±1).
-### :returns: The error function of `me`.
+### erf(me) (erf(±inf) = ±1), correctly rounded.
 routine D32.erf() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.erf()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: 1.0_b64))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).erf()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).erf())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_erf(x: me.to_bits()))
 
-### Complementary error function erfc(me) = 1 - erf(me). Never crashes.
-### :returns: The complementary error function of `me`.
+### erfc(me) = 1 - erf(me) (erfc(-inf) = 2, erfc(+inf) = 0), correctly rounded.
 routine D32.erfc() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.erfc()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: xb *! xb *! 2.0_b64 +! 2.0_b64))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).erfc()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).erfc())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_erfc(x: me.to_bits()))
 
-### Gamma function tgamma(me). Crashes if non-finite (poles at 0 and neg ints).
-### :returns: The gamma function of `me`.
-### :throws: {NumericDomainError} on NaN (neg int poles); {NumericOverflowError} on ±inf.
+### The gamma function of me. Crashes on a non-finite result (NumericDomainError for a NaN, NumericOverflowError for an
+### infinity).
 routine D32.tgamma!() -> D32
     var r = me.tgamma_unchecked()
     if r.is_finite()
@@ -1039,117 +264,128 @@ routine D32.tgamma!() -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### tgamma(me), raw IEEE: ±inf at poles, NaN for neg-int poles, overflow. Never crashes.
-### :returns: The gamma function of `me`, possibly non-finite.
+### The gamma function of me, raw IEEE (an infinity or a NaN where the result has no finite value).
 routine D32.tgamma_unchecked() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.tgamma_unchecked()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: d32_gamma_cond(x: xb)))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).tgamma_unchecked()
-    if d64_is_d32_tie(r: r)
-        var wide = D128(from: me).tgamma_unchecked()
-        if d128_is_d32_tie(r: wide) and d32_tiny_for_gamma(x: me)
-            return d64_to_d32_round_down(r: r)
-        return d32_settle_tie(r: r, wide: wide)
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_tgamma(x: me.to_bits()))
 
-### Log-gamma lgamma(me) = ln(|gamma(me)|). Never crashes (+inf at poles).
-### :returns: The natural log of the absolute gamma of `me`.
+### ln|tgamma(me)| (+inf at the poles and at ±inf), correctly rounded.
 routine D32.lgamma() -> D32
-    var xb = d32_to_b64(x: me)
-    var yb = xb.lgamma()
-    var (fast, v) = d32_from_b64_band(y: yb, k: d32_b64_k(cond: d32_gamma_cond(x: xb) /! yb.abs()))
-    if fast
-        return v
-    var r = d32_to_d64_exact(x: me).lgamma()
-    if d64_is_d32_tie(r: r)
-        return d32_settle_tie(r: r, wide: D128(from: me).lgamma())
-    return d64_to_d32_round(r: r)
+    return D32.from_bits(bits: C::ingrid_d32_lgamma(x: me.to_bits()))
+
+### `me^you` with raw IEEE (the C99 pow special cases), correctly rounded.
+routine D32.pow_unchecked(you: D32) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_pow(x: me.to_bits(), y: you.to_bits()))
+
+### atan2(y, x), the angle of (x, y) in (-pi, pi], with the C99 special cases for zeros and infinities.
+routine atan2(y: D32, x: D32) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_atan2(y: y.to_bits(), x: x.to_bits()))
+
+### hypot(x, y) = sqrt(x^2 + y^2), no spurious overflow. Crashes on a non-finite result.
+routine hypot!(x: D32, y: D32) -> D32
+    var r = hypot_unchecked(x: x, y: y)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### sqrt(x^2 + y^2), rounded once, raw IEEE (an infinity wins over a NaN).
+routine hypot_unchecked(x: D32, y: D32) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_hypot(x: x.to_bits(), y: y.to_bits()))
+
+### hypot(x, y, z) = sqrt(x^2 + y^2 + z^2), no spurious overflow. Crashes on a non-finite result.
+routine hypot!(x: D32, y: D32, z: D32) -> D32
+    var r = hypot_unchecked(x: x, y: y, z: z)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### sqrt(x^2 + y^2 + z^2), rounded once, raw IEEE.
+routine hypot_unchecked(x: D32, y: D32, z: D32) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_hypot3(x: x.to_bits(), y: y.to_bits(), z: z.to_bits()))
+
+### Fused multiply-add me*b + c with a single rounding. Crashes on a non-finite result.
+routine D32.fma!(b: D32, c: D32) -> D32
+    var r = me.fma_unchecked(b: b, c: c)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### me*b + c with a single rounding, raw IEEE.
+routine D32.fma_unchecked(b: D32, c: D32) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_fma(a: me.to_bits(), b: b.to_bits(), c: c.to_bits()))
 
 # ============================================================================
-# libm manipulation / classification — decimal-native on D32Parts (coeff U64).
+# libm manipulation and classification (value = (-1)^sign * coeff * 10^exp)
 # ============================================================================
 
-### IEEE 754 signBit: true when the sign bit is set (includes -0 and -NaN). Never crashes.
-### :returns: Whether `me`'s sign bit is set.
+### IEEE 754 signbit: the raw sign bit (true for negatives, -0, and -NaN). Never crashes.
 routine D32.signbit() -> Bool
     return me.decode().sign
 
-### True if me is negative (sign bit set; includes -0 and -NaN).
+### True if me is negative (sign bit set, which includes -0 and -NaN).
 routine D32.is_negative() -> Bool
     return me.decode().sign
 
 ### True if me is strictly positive (not signed, not zero).
 routine D32.is_positive() -> Bool
     var p = me.decode()
-    return not p.sign
-        and LLVM::int_eq(a: p.special, b: 0_u64)
-        and LLVM::int_ne(a: p.coeff, b: 0_u64)
+    return not p.sign and p.special == 0_u64 and p.coeff != 0_u64
 
-### True if me is a finite, nonzero subnormal: quantum exponent at the minimum (-101)
-### with a coefficient below 10^6 (fewer than the full 7 significant digits).
+### True if me is a finite, nonzero value at the minimum exponent (-101) with fewer than 7 digits.
 routine D32.is_subnormal() -> Bool
     var p = me.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u64)
+    if p.special != 0_u64 or p.coeff == 0_u64
         return false
-    return LLVM::int_eq(a: p.exp, b: -101_s64) and LLVM::unsigned_lt(a: p.coeff, b: 1000000_u64)
+    return p.exp == -101_s64 and p.coeff < 1000000_u64
 
-### Splits into integer and fractional parts (C modf); both carry me's sign.
+### Splits into integer and fractional parts (C modf), both carrying me's sign.
 routine D32.modf() -> (D32, D32)
     if me.is_nan()
         return (me, me)
-    var p = me.decode()
-    if LLVM::int_eq(a: p.special, b: 1_u64)
-        return (
-            me, d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64)),
-        )
+    if me.is_infinite()
+        return (me, D32.from_components(sign: me.decode().sign, coeff: 0_u64, exp: 0_s64))
     var ip = me.trunc()
     return (ip, me - ip)
 
-### True if me is finite and nonzero (a normal or subnormal number, not zero/inf/NaN).
-### :returns: Whether `me` is a finite nonzero value.
+### True if me is finite and nonzero (this includes the subnormals).
 routine D32.is_normal() -> Bool
     var p = me.decode()
-    return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_ne(a: p.coeff, b: 0_u64)
+    return p.special == 0_u64 and p.coeff != 0_u64
 
-### True if me is ±0 (finite with a zero coefficient).
-### :returns: Whether `me` is zero.
-routine D32.is_zero() -> Bool
-    var p = me.decode()
-    return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_eq(a: p.coeff, b: 0_u64)
-
-### IEEE 754 fpClassify: bucket me into signaling/quiet NaN, infinite, zero, subnormal, normal.
-### :returns: The floating-point class of `me`.
+### C99 fpclassify: SIGNALING_NAN, NAN, INFINITE, ZERO, SUBNORMAL, or NORMAL.
 routine D32.fpclassify() -> FpClass
     var p = me.decode()
-    if LLVM::int_eq(a: p.special, b: 3_u64)
+    if p.special == 3_u64
         return SIGNALING_NAN
-    if LLVM::unsigned_ge(a: p.special, b: 2_u64)
+    if p.special == 2_u64
         return NAN
-    if LLVM::int_eq(a: p.special, b: 1_u64)
+    if p.special == 1_u64
         return INFINITE
-    if LLVM::int_eq(a: p.coeff, b: 0_u64)
+    if p.coeff == 0_u64
         return ZERO
     if me.is_subnormal()
         return SUBNORMAL
     return NORMAL
 
-### Absolute value |me| (clears the sign bit, cohort preserved). Never crashes.
-### :returns: The magnitude of `me`.
+### Absolute value |me| (clears the sign bit, keeps specials and the cohort). Never crashes.
 routine D32.abs() -> D32
     var p = me.decode()
     return d32_of_parts(p: D32Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
 
-### IEEE 754 totalOrder for decimals (see `D128.total_order`). Orders signed zeros, cohorts,
-### and NaNs into one total ranking; never crashes.
+### IEEE 754 totalOrder for decimals: a total order over all values including signed zeros, cohorts
+### (equal value with differing exponents), and NaNs. For finite operands of equal value the smaller-exponent
+### member precedes when positive (the reverse when negative).
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
 routine D32.total_order(you: D32) -> Bool
     var pa = me.decode()
     var pb = you.decode()
-    if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
+    if pa.special >= 2_u64 or pb.special >= 2_u64
         return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(
             sign: pb.sign,
             special: pb.special,
@@ -1160,39 +396,33 @@ routine D32.total_order(you: D32) -> Bool
     if pa.sign != pb.sign
         return pa.sign
     if pa.sign
-        return LLVM::signed_ge(a: pa.exp, b: pb.exp)
-    return LLVM::signed_le(a: pa.exp, b: pb.exp)
+        return pa.exp >= pb.exp
+    return pa.exp <= pb.exp
 
-### IEEE 754 totalOrderMag for decimals: `total_order` on the magnitudes.
+### IEEE 754 totalOrderMag for decimals: `total_order` applied to the magnitudes.
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine D32.total_order_mag(you: D32) -> Bool
     return me.abs().total_order(you: you.abs())
 
-### Unary negation -me (flips the sign bit, cohort preserved). Never crashes.
-### :returns: `me` with its sign flipped.
+### Negation -me (flips the sign bit, keeps specials and the cohort). Never crashes.
 routine D32.neg() -> D32
     var p = me.decode()
-    return d32_of_parts(
-        p: D32Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff),
-    )
+    return d32_of_parts(p: D32Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
-### IEEE 754 copySign: me's magnitude with you's sign bit. Never crashes.
+### C99 copysign: me's magnitude with you's sign bit. Never crashes.
 ### :param you: The value supplying the sign.
-### :returns: `|me|` carrying `you`'s sign.
 routine D32.copysign(you: D32) -> D32
     var p = me.decode()
-    return d32_of_parts(
-        p: D32Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff),
-    )
+    return d32_of_parts(p: D32Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
 
-### Returns -1, 0, or +1 indicating the sign of `me`; NaN propagates; ±0 -> +0.
+### Returns -1, 0, or +1 for the sign of `me`. A NaN propagates, ±0 gives +0.
 routine D32.signum() -> D32
     if me.is_nan()
         return D32.quiet_nan()
     if me.is_zero()
-        return d32_of_parts(p: D32Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u64))
-    return if me.decode().sign then D32(from: -1_s64) else D32(from: 1_s64)
+        return D32.from_components(sign: false, coeff: 0_u64, exp: 0_s64)
+    return D32.from_components(sign: me.decode().sign, coeff: 1_u64, exp: 0_s64)
 
 ### Throws when `me` is non-finite (inf or NaN).
 @crash_only
@@ -1203,22 +433,12 @@ routine D32.finite!() -> D32
         throw NumericOverflowError(description: "overflow: out of range")
     return me
 
-### C99 fmod: me - trunc(me/you)*you (truncated-division remainder), exact (d64_mod_core / d128_mod_core).
+### C99 fmod: me - trunc(me/you)*you, exact, with me's sign (NaN for an infinite me or a zero you).
 routine D32.fmod(you: D32) -> D32
-    if me.is_nan() or you.is_nan()
-        return D32.quiet_nan()
-    if me.is_infinite() or you.is_zero()
-        return D32.quiet_nan()
-    if you.is_infinite()
-        return me
-    var px = me.decode()
-    var py = you.decode()
-    var (flip, r, e) = d64_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: false)
-    return d32_of_parts(p: D32Parts(sign: px.sign, special: 0_u64, exp: e, coeff: r))
+    return D32.from_bits(bits: C::ingrid_d32_fmod(a: me.to_bits(), b: you.to_bits()))
 
-### C99 fmax: the larger of me and you, treating NaN as missing. Never crashes.
+### C99 fmax: the larger of me and you, treating NaN as missing (returns the non-NaN operand).
 ### :param you: The value to compare against.
-### :returns: The larger operand, or the non-NaN one.
 routine D32.fmax(you: D32) -> D32
     if me.is_nan()
         return you
@@ -1228,9 +448,8 @@ routine D32.fmax(you: D32) -> D32
         return you
     return me
 
-### C99 fmin: the smaller of me and you, treating NaN as missing. Never crashes.
+### C99 fmin: the smaller of me and you, treating NaN as missing (returns the non-NaN operand).
 ### :param you: The value to compare against.
-### :returns: The smaller operand, or the non-NaN one.
 routine D32.fmin(you: D32) -> D32
     if me.is_nan()
         return you
@@ -1240,15 +459,14 @@ routine D32.fmin(you: D32) -> D32
         return me
     return you
 
-### C99 fdim: the positive difference max(me - you, 0). NaN propagates. Never crashes.
+### C99 fdim: the positive difference max(me - you, 0), NaN if either operand is NaN.
 ### :param you: The value to subtract.
-### :returns: `me - you` if positive, else +0.
 routine D32.fdim(you: D32) -> D32
     if me.is_nan() or you.is_nan()
         return D32.quiet_nan()
     var d = me - you
     if d.decode().sign
-        return d32_of_parts(p: D32Parts(sign: false, special: 0_u64, exp: 0_s64, coeff: 0_u64))
+        return D32.from_components(sign: false, coeff: 0_u64, exp: 0_s64)
     return d
 
 ### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
@@ -1262,37 +480,17 @@ routine D32.scaleb!(n: S64) -> D32
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### `me * 10^n` with raw propagation (overflow -> ±infinity, underflow -> 0).
+### `me * 10^n` with raw propagation (overflow -> ±infinity, below the range -> 0).
 ### :param n: The power-of-ten exponent to apply.
 ### :returns: `me` scaled by `10^n`.
 routine D32.scaleb_unchecked(n: S64) -> D32
-    var p = me.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64) or LLVM::int_eq(a: p.coeff, b: 0_u64)
-        return me
-    var ne = LLVM::add(a: p.exp, b: n)
-    if LLVM::signed_gt(a: ne, b: 90_s64)
-        return D32.infinity(sign: p.sign)
-    if LLVM::signed_lt(a: ne, b: -101_s64)
-        return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64))
-    return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: ne, coeff: p.coeff))
+    return D32.from_bits(bits: C::ingrid_d32_scaleb(x: me.to_bits(), n: n))
 
-# ============================================================================
-# IEEE 754 Tier 2 — exponent extraction, selection, rounding
-# (decimal next_up/next_down deferred — cohort/ULP stepping not yet implemented)
-# ============================================================================
-
-### IEEE 754 logb: the base-10 exponent of `me` as a decimal integer (logb(0)=-inf,
-### logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
+### IEEE 754 logb: the exponent `e` with `10^e <= |me| < 10^(e+1)`, as a decimal integer (logb(0) = -inf,
+### logb(±inf) = +inf, logb(NaN) = NaN). Never crashes.
 ### :returns: The radix-10 exponent of `me`.
 routine D32.logb() -> D32
-    var p = me.decode()
-    if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-        return D32.quiet_nan()
-    if LLVM::int_eq(a: p.special, b: 1_u64)
-        return D32.infinity(sign: false)
-    if LLVM::int_eq(a: p.coeff, b: 0_u64)
-        return D32.infinity(sign: true)
-    return D32(from: LLVM::add(a: p.exp, b: LLVM::sub(a: digits10_u64(c: p.coeff), b: 1_s64)))
+    return D32.from_bits(bits: C::ingrid_d32_logb(x: me.to_bits()))
 
 ### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
@@ -1340,186 +538,74 @@ routine D32.maximum(you: D32) -> D32
         return if me.signbit() then you else me
     return me
 
-### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero
-### (alias of `round`). Never crashes.
+### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero (alias of
+### `round`). Never crashes.
 ### :returns: `me` rounded to an integral value with ties away from zero.
 routine D32.round_ties_away() -> D32
     return me.round()
 
-# ============================================================================
-# IEEE 754 Tier 3 — decimal-specific (quantize, same_quantum, remainder)
-# ============================================================================
-
-### IEEE 754 sameQuantum: `true` when `me` and `you` share an exponent, or are both infinite,
-### or both NaN. Never crashes.
+### IEEE 754 sameQuantum: `true` when `me` and `you` have the same exponent (quantum), or are both
+### infinities, or both NaNs. Never crashes.
 ### :param you: The value whose quantum to compare against.
 ### :returns: Whether the two share a quantum.
 routine D32.same_quantum(you: D32) -> Bool
     var pa = me.decode()
     var pb = you.decode()
-    if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-        return LLVM::unsigned_ge(a: pa.special, b: 2_u64)
-            and LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-    if LLVM::int_eq(a: pa.special, b: 1_u64) or LLVM::int_eq(a: pb.special, b: 1_u64)
-        return LLVM::int_eq(a: pa.special, b: 1_u64) and LLVM::int_eq(a: pb.special, b: 1_u64)
-    return LLVM::int_eq(a: pa.exp, b: pb.exp)
+    if pa.special >= 2_u64 or pb.special >= 2_u64
+        return pa.special >= 2_u64 and pb.special >= 2_u64
+    if pa.special == 1_u64 or pb.special == 1_u64
+        return pa.special == 1_u64 and pb.special == 1_u64
+    return pa.exp == pb.exp
 
-### IEEE 754 quantize: `me`'s value re-expressed with `you`'s exponent (half-even when dropping
-### digits). NaN if the result needs more than 7 significand digits, or for incompatible specials.
+### IEEE 754 quantize: `me`'s value with the exponent of `you`, rounded half to even when digits are dropped.
+### NaN when the result needs more than 7 digits, or for incompatible specials.
 ### :param you: The value supplying the target exponent.
 ### :returns: `me` quantized to `you`'s exponent, or NaN if not representable.
 routine D32.quantize(you: D32) -> D32
-    var pa = me.decode()
-    var pb = you.decode()
-    if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
-        return D32.quiet_nan()
-    var ainf = LLVM::int_eq(a: pa.special, b: 1_u64)
-    var binf = LLVM::int_eq(a: pb.special, b: 1_u64)
-    if ainf or binf
-        if ainf and binf
-            return me
-        return D32.quiet_nan()
-    var target = pb.exp
-    if LLVM::int_eq(a: pa.exp, b: target)
-        return me
-    if LLVM::signed_gt(a: pa.exp, b: target)
-        var shift = LLVM::sub(a: pa.exp, b: target)
-        if LLVM::int_ne(a: pa.coeff, b: 0_u64)
-            and LLVM::signed_gt(a: LLVM::add(a: digits10_u64(c: pa.coeff), b: shift), b: 7_s64)
-            return D32.quiet_nan()
-        var scaled = LLVM::mul(a: LLVM::zero_extend[U64, U256](pa.coeff), b: pow10b(k: shift))
-        return d32_of_parts(
-            p: D32Parts(
-                sign: pa.sign,
-                special: 0_u64,
-                exp: target,
-                coeff: LLVM::int_truncate[U256, U64](scaled),
-            ),
-        )
-    var drop = LLVM::sub(a: target, b: pa.exp)
-    if LLVM::signed_gt(a: drop, b: 7_s64)
-        return d32_of_parts(p: D32Parts(sign: pa.sign, special: 0_u64, exp: target, coeff: 0_u64))
-    var cw = LLVM::zero_extend[U64, U256](pa.coeff)
-    var divp = pow10b(k: drop)
-    var q = div_pow10b(x: cw, k: drop)
-    var r = LLVM::sub(a: cw, b: LLVM::mul(a: q, b: divp))
-    var twice = LLVM::mul(a: r, b: LLVM::zero_extend[U64, U256](2_u64))
-    if LLVM::unsigned_gt(a: twice, b: divp)
-        q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
-    elseif LLVM::int_eq(a: twice, b: divp)
-        and LLVM::int_ne(
-            a: LLVM::bit_and(a: q, b: LLVM::zero_extend[U64, U256](1_u64)),
-            b: LLVM::zero_extend[U64, U256](0_u64),
-        )
-        q = LLVM::add(a: q, b: LLVM::zero_extend[U64, U256](1_u64))
-    return d32_of_parts(
-        p: D32Parts(
-            sign: pa.sign,
-            special: 0_u64,
-            exp: target,
-            coeff: LLVM::int_truncate[U256, U64](q),
-        ),
-    )
+    return D32.from_bits(bits: C::ingrid_d32_quantize(a: me.to_bits(), b: you.to_bits()))
 
-### IEEE 754 remainder: `me - you * n` with `n` the nearest integer to `me / you` (ties even).
-### NaN if `me` infinite or `you` zero; `me` if `you` infinite. Never crashes.
+### IEEE 754 remainder: `me - you * n`, n the integer nearest `me / you` (ties to even), exact. NaN if `me`
+### is infinite or `you` is zero, `me` if `you` is infinite. Never crashes.
 ### :param you: The divisor.
 ### :returns: The IEEE remainder of `me / you`.
 routine D32.remainder(you: D32) -> D32
-    if me.is_nan() or you.is_nan()
-        return D32.quiet_nan()
-    if me.is_infinite() or you.is_zero()
-        return D32.quiet_nan()
-    if you.is_infinite()
-        return me
-    var px = me.decode()
-    var py = you.decode()
-    var (flip, r, e) = d64_mod_core(cx: px.coeff, ex: px.exp, cy: py.coeff, ey: py.exp, near: true)
-    return d32_of_parts(p: D32Parts(sign: px.sign != flip, special: 0_u64, exp: e, coeff: r))
+    return D32.from_bits(bits: C::ingrid_d32_remainder(a: me.to_bits(), b: you.to_bits()))
 
-### IEEE 754 normalize (the `reduce` operation): trailing zeros stripped to the simplest cohort
-### member (`3.00` -> `3`, `1.50` -> `1.5`, `100` -> `1E+2`, `0.00` -> `0`). Specials pass through.
-### Never crashes. Arithmetic stays cohort-preserving (IEEE); this is the opt-in to shortest form.
+### IEEE 754 normalize (the `reduce` operation): the value with trailing zeros stripped to the simplest member of
+### its cohort (`3.00` -> `3`, `100` -> `1E+2`, `0.00` -> `0`). Specials pass through. Never crashes.
 ### :returns: `me` normalized to its simplest cohort member.
 routine D32.normalize() -> D32
-    var p = me.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64)
-        return me
-    if LLVM::int_eq(a: p.coeff, b: 0_u64)
-        return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64))
-    return d32_of_parts(p: decfin32(sign: p.sign, coeff: p.coeff, exp: p.exp, pref: 90_s64))
+    return D32.from_bits(bits: C::ingrid_d32_normalize(x: me.to_bits()))
 
 ### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 round (half away), 4 rint (half even).
 routine d32_round_int(x: D32, mode: S64) -> D32
-    var p = x.decode()
-    if LLVM::int_ne(a: p.special, b: 0_u64)
-        return x
-    if LLVM::int_eq(a: p.coeff, b: 0_u64)
-        return x
-    if LLVM::signed_ge(a: p.exp, b: 0_s64)
-        return x
-    var ndrop = LLVM::sub(a: 0_s64, b: p.exp)
-    var cw = p.coeff
-    var q = 0_u64
-    var rnz = true
-    var half = false
-    var gthalf = false
-    if LLVM::signed_le(a: ndrop, b: 7_s64)
-        var divp = p10_u64(k: ndrop)
-        q = div_pow10_u64(x: cw, k: ndrop)
-        var r = LLVM::sub(a: cw, b: LLVM::mul(a: q, b: divp))
-        rnz = r != 0_u64
-        var twice = r *% 2_u64
-        half = LLVM::int_eq(a: twice, b: divp)
-        gthalf = LLVM::unsigned_gt(a: twice, b: divp)
-    var inc = false
-    if LLVM::int_eq(a: mode, b: 1_s64)
-        inc = p.sign and rnz
-    elseif LLVM::int_eq(a: mode, b: 2_s64)
-        inc = not p.sign and rnz
-    elseif LLVM::int_eq(a: mode, b: 3_s64)
-        inc = gthalf or half
-    elseif LLVM::int_eq(a: mode, b: 4_s64)
-        if gthalf
-            inc = true
-        elseif half
-            inc = (q & 1_u64) != 0_u64
-    var qq = q
-    if inc
-        qq = q +% 1_u64
-    return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: qq))
+    var m = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](mode))
+    return D32.from_bits(bits: C::ingrid_d32_round_int(x: x.to_bits(), mode: m))
 
-### Truncates toward zero to an integral value. Never crashes.
-### :returns: `me` with its fractional part discarded.
+### Truncates toward zero to an integral value. Specials pass through. Never crashes.
 routine D32.trunc() -> D32
     return d32_round_int(x: me, mode: 0_s64)
 
-### Rounds down (toward -inf) to an integral value. Never crashes.
-### :returns: The largest integer <= `me`.
+### Rounds down toward -inf to an integral value. Specials pass through. Never crashes.
 routine D32.floor() -> D32
     return d32_round_int(x: me, mode: 1_s64)
 
-### Rounds up (toward +inf) to an integral value. Never crashes.
-### :returns: The smallest integer >= `me`.
+### Rounds up toward +inf to an integral value. Specials pass through. Never crashes.
 routine D32.ceil() -> D32
     return d32_round_int(x: me, mode: 2_s64)
 
-### Rounds to nearest integer, ties away from zero. Never crashes.
-### :returns: `me` rounded with ties away.
+### Rounds to the nearest integral value, ties away from zero. Specials pass through. Never crashes.
 routine D32.round() -> D32
     return d32_round_int(x: me, mode: 3_s64)
 
-### IEEE 754 roundToIntegral, ties to even. Never crashes.
-### :returns: `me` rounded with ties to even.
+### Rounds to the nearest integral value, ties to even (IEEE roundTiesToEven). Never crashes.
 routine D32.rint() -> D32
     return d32_round_int(x: me, mode: 4_s64)
 
-### Fractional part me - trunc(me) (carries me's sign). NaN/inf -> NaN/±0. Never crashes.
-### :returns: The signed fractional part of `me`.
+### Fractional part me - trunc(me), with me's sign. A NaN propagates, ±inf gives ±0. Never crashes.
 routine D32.frac() -> D32
     if me.is_nan()
         return me
-    var p = me.decode()
-    if LLVM::int_eq(a: p.special, b: 1_u64)
-        return d32_of_parts(p: D32Parts(sign: p.sign, special: 0_u64, exp: 0_s64, coeff: 0_u64))
+    if me.is_infinite()
+        return D32.from_components(sign: me.decode().sign, coeff: 0_u64, exp: 0_s64)
     return me - me.trunc()

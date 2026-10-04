@@ -148,45 +148,19 @@ routine B32(from: B64) -> B32
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B32` value.
 routine B32(from: D32) -> B32
-    var d = from.decode()
-    return B32.from_bits(
-        bits: LLVM::int_truncate[U128, U32](
-            decimal_to_binary_bits(
-                sign: d.sign,
-                special: d.special,
-                coeff: d.coeff,
-                exp: d.exp,
-                p: 24_s64,
-                emin: -126_s64,
-                emax: 127_s64,
-            ),
-        ),
-    )
+    return B32.from_bits(bits: LLVM::int_truncate[U128, U32](d32_to_binary(x: from, which: 32_u32)))
 
 ### Converts a decimal64 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B32` value.
 routine B32(from: D64) -> B32
-    var d = from.decode()
-    return B32.from_bits(
-        bits: LLVM::int_truncate[U128, U32](
-            decimal_to_binary_bits(
-                sign: d.sign,
-                special: d.special,
-                coeff: d.coeff,
-                exp: d.exp,
-                p: 24_s64,
-                emin: -126_s64,
-                emax: 127_s64,
-            ),
-        ),
-    )
+    return B32.from_bits(bits: LLVM::int_truncate[U128, U32](d64_to_binary(x: from, which: 32_u32)))
 
 ### Converts a decimal128 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B32` value.
 routine B32(from: D128) -> B32
-    return B32(from: B64(from))
+    return B32.from_bits(bits: LLVM::int_truncate[U128, U32](d128_to_binary(x: from, which: 32_u32)))
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
@@ -1278,3 +1252,9 @@ routine B32.tanpi() -> B32
 ### :returns: The correctly rounded gamma function.
 routine B32.tgamma_unchecked() -> B32
     return C::ingrid_b32_tgamma(x: me)
+
+### The unbiased binary exponent of a finite nonzero B64, -2000 for zero.
+@inline
+secret routine b64_exponent(x: B64) -> S64
+    var be = LLVM::reinterpret_bits[U64, S64]((x.to_bits() >>> 52) & 0x7FF_u64)
+    return if be == 0_s64 then -2000_s64 else be -% 1023_s64

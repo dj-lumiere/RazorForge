@@ -828,3 +828,35 @@ secret routine b128_lgamma_neg_fx(x: B128) -> (Bool, B128Fx)
     if not ok3
         return (false, xf)
     return b128fx_add(a: s1, b: b128fx_neg(v: second))
+
+### v with its relative bound raised by r.
+@inline
+secret routine b128fx_widen(v: B128Fx, r: B64) -> B128Fx
+    return B128Fx(neg: v.neg, m: v.m, e: v.e, rel: v.rel +! r)
+
+### ln(w) for a positive B128Fx w in the normal B128 range as a B128Fx, or false: w is split into its B128
+### truncation v and the rest c (below 2^-112 v), and ln w = ln v + c/v, the CORE-MATH logarithm of v
+### (at least 2^-21 away from 1, else log1p(w - 1) takes it) plus c times 1/v in B64 (ample for a term
+### below 2^-110 of the result), (c/v)^2/2 (below 2^-220) dropped.
+secret routine b128fx_ln(w: B128Fx) -> (Bool, B128Fx)
+    var (okv, v) = b128fx_to_b128(v: w)
+    if not okv or w.neg
+        return (false, w)
+    var (ok, hi, lo) = b128_log_scaled_ok(x: v)
+    if not ok
+        var (ok1, t) = b128fx_add(a: w, b: b128fx_neg(v: b128fx_one()))
+        if not ok1
+            return (false, w)
+        return b128fx_log1p(t: t)
+    var (lneg, mag) = b128_fs_magnitude(fs: b128_log_fs(hi: hi, lo: lo))
+    if mag == 0_u256
+        return (false, w)
+    var l = b128fx_norm(neg: lneg, mag: mag, scale: -148_s64, abserr: 12.0)
+    var (okc, c) = b128fx_add(a: w, b: b128fx_neg(v: b128fx_of(x: v)))
+    if not okc
+        return (true, b128fx_widen(v: l, r: w.rel *! 1.001 /! b128fx_b64(v: l)))
+    var cv = b128fx_mul(a: c, b: b128fx_of_b64(v: 1.0 /! B64(from: v), rel: 0x1p-51))
+    var (oka, s) = b128fx_add(a: l, b: cv)
+    if not oka
+        return (false, w)
+    return (true, b128fx_widen(v: s, r: 0x1p-200))

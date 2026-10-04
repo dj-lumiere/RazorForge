@@ -784,55 +784,471 @@ routine C::ingrid_b128_fma(low: U64, high: U64, y_low: U64, y_high: U64, z_low: 
 # ============================================================================
 # Decimal floats (Ingrid/tessera/decimal/)
 # ============================================================================
-# D32, D64 and D128's arithmetic, from Ingrid's decimal engine (written in Tessera). A D32 crosses as its 32 BID
-# bits, a D64 as its 64, and a D128 goes in as its low and high 64 bits and comes back in `IngridWords` (`w0` low,
-# `w1` high). Each is the raw IEEE operation (an infinity or a NaN passes through): the checked operators crash in
-# RazorForge. An order is -1, 0 or 1 as a is below, equal to or above b, and 2 when either is a NaN.
+# D32, D64 and D128 are computed by Ingrid's decimal engine (written in Tessera): the arithmetic, the rounding and
+# exponent operations, the conversions, DPD, and the transcendentals, each correctly rounded. A D32 crosses as its 32
+# BID bits, a D64 as its 64, and a D128 goes in as its low and high 64 bits and comes back in `IngridWords` (`w0`
+# low, `w1` high). A flag crosses as a U32 (0 or 1). Each is the raw IEEE operation (an infinity or a NaN passes
+# through): the checked routines crash in RazorForge. An order is -1, 0 or 1 as a is below, equal to or above b, and
+# 2 when either is a NaN.
 
-### `a + b` of two D32s, rounded half to even to 7 digits.
+### `a + b`, rounded half to even to 7 digits.
 routine C::ingrid_d32_add(a: U32, b: U32) -> U32
 
-### `a - b` of two D32s, rounded half to even to 7 digits.
+### `a - b`, rounded half to even to 7 digits.
 routine C::ingrid_d32_sub(a: U32, b: U32) -> U32
 
-### `a * b` of two D32s, rounded half to even to 7 digits.
+### `a * b`, rounded half to even to 7 digits.
 routine C::ingrid_d32_mul(a: U32, b: U32) -> U32
 
-### `a / b` of two D32s: a nonzero value over zero is an infinity, zero over zero a NaN.
+### `a / b`, rounded half to even to 7 digits: a nonzero value over zero is an infinity, zero over zero a NaN.
 routine C::ingrid_d32_div(a: U32, b: U32) -> U32
 
-### The order of two D32s.
+### The order of a and b.
 routine C::ingrid_d32_order(a: U32, b: U32) -> S64
 
-### `a + b` of two D64s, rounded half to even to 16 digits.
+### `a * b + c` rounded once to 7 digits.
+routine C::ingrid_d32_fma(a: U32, b: U32, c: U32) -> U32
+
+### The square root, correctly rounded and reduced (NaN for a negative number).
+routine C::ingrid_d32_sqrt(x: U32) -> U32
+
+### sqrt(x^2 + y^2), correctly rounded (+infinity when either is infinite).
+routine C::ingrid_d32_hypot(x: U32, y: U32) -> U32
+
+### sqrt(x^2 + y^2 + z^2), correctly rounded.
+routine C::ingrid_d32_hypot3(x: U32, y: U32, z: U32) -> U32
+
+### x rounded to an integral value: mode 0 toward zero, 1 down, 2 up, 3 nearest with ties away from zero, 4 nearest with ties to even. A special, a zero, or a value without a fraction comes back as it is.
+routine C::ingrid_d32_round_int(x: U32, mode: U32) -> U32
+
+### a with b's exponent, rounded half to even (NaN when that needs more than the digits there are). a comes back as it is when the exponents match or both are infinite.
+routine C::ingrid_d32_quantize(a: U32, b: U32) -> U32
+
+### The remainder of a truncated division, exact, with a's sign: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
+routine C::ingrid_d32_fmod(a: U32, b: U32) -> U32
+
+### The IEEE remainder a - n b, n the integer nearest a / b (ties to even), exact: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
+routine C::ingrid_d32_remainder(a: U32, b: U32) -> U32
+
+### The simplest member of x's cohort (trailing zeros stripped, a zero with exponent 0); a special comes back as it is.
+routine C::ingrid_d32_normalize(x: U32) -> U32
+
+### x × 10^n by the exponent alone (an infinity above the range, a zero below it); a special or a zero comes back as it is.
+routine C::ingrid_d32_scaleb(x: U32, n: S64) -> U32
+
+### The exponent e with 10^e <= |x| < 10^(e + 1) (-infinity for a zero).
+routine C::ingrid_d32_logb(x: U32) -> U32
+
+### (-1)^neg × coeff × 10^exp, coeff = c_high × 2^64 + c_low, rounded half to even to 7 digits with exp as the preferred exponent.
+routine C::ingrid_d32_from_parts(neg: U32, c_low: U64, c_high: U64, exp: S64) -> U32
+
+### The integer (-1)^neg × (m3 m2 m1 m0, 64 bits each, m0 lowest), rounded half to even to 7 digits, exponent 0 when it fits.
+routine C::ingrid_d32_from_integer(neg: U32, m0: U64, m1: U64, m2: U64, m3: U64) -> U32
+
+### x in the DPD interchange encoding.
+routine C::ingrid_d32_to_dpd(x: U32) -> U32
+
+### The D32 whose DPD interchange encoding is bits.
+routine C::ingrid_d32_from_dpd(bits: U32) -> U32
+
+### The F128 high × 2^64 + low (a narrower binary float widened to F128 first, which is exact), rounded once to 7 digits and reduced.
+routine C::ingrid_d32_from_binary(low: U64, high: U64) -> U32
+
+### The bits of the binary float of `which` bits (16, 32, 64, or 128) nearest x: w0 the low 64 bits, w1 the high ones.
+routine C::ingrid_d32_to_binary(x: U32, which: U32) -> IngridWords
+
+### `a + b`, rounded half to even to 16 digits.
 routine C::ingrid_d64_add(a: U64, b: U64) -> U64
 
-### `a - b` of two D64s, rounded half to even to 16 digits.
+### `a - b`, rounded half to even to 16 digits.
 routine C::ingrid_d64_sub(a: U64, b: U64) -> U64
 
-### `a * b` of two D64s, rounded half to even to 16 digits.
+### `a * b`, rounded half to even to 16 digits.
 routine C::ingrid_d64_mul(a: U64, b: U64) -> U64
 
-### `a / b` of two D64s: a nonzero value over zero is an infinity, zero over zero a NaN.
+### `a / b`, rounded half to even to 16 digits: a nonzero value over zero is an infinity, zero over zero a NaN.
 routine C::ingrid_d64_div(a: U64, b: U64) -> U64
 
-### The order of two D64s.
+### The order of a and b.
 routine C::ingrid_d64_order(a: U64, b: U64) -> S64
 
-### `a + b` of two D128s, rounded half to even to 34 digits.
+### `a * b + c` rounded once to 16 digits.
+routine C::ingrid_d64_fma(a: U64, b: U64, c: U64) -> U64
+
+### The square root, correctly rounded and reduced (NaN for a negative number).
+routine C::ingrid_d64_sqrt(x: U64) -> U64
+
+### sqrt(x^2 + y^2), correctly rounded (+infinity when either is infinite).
+routine C::ingrid_d64_hypot(x: U64, y: U64) -> U64
+
+### sqrt(x^2 + y^2 + z^2), correctly rounded.
+routine C::ingrid_d64_hypot3(x: U64, y: U64, z: U64) -> U64
+
+### x rounded to an integral value: mode 0 toward zero, 1 down, 2 up, 3 nearest with ties away from zero, 4 nearest with ties to even. A special, a zero, or a value without a fraction comes back as it is.
+routine C::ingrid_d64_round_int(x: U64, mode: U32) -> U64
+
+### a with b's exponent, rounded half to even (NaN when that needs more than the digits there are). a comes back as it is when the exponents match or both are infinite.
+routine C::ingrid_d64_quantize(a: U64, b: U64) -> U64
+
+### The remainder of a truncated division, exact, with a's sign: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
+routine C::ingrid_d64_fmod(a: U64, b: U64) -> U64
+
+### The IEEE remainder a - n b, n the integer nearest a / b (ties to even), exact: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
+routine C::ingrid_d64_remainder(a: U64, b: U64) -> U64
+
+### The simplest member of x's cohort (trailing zeros stripped, a zero with exponent 0); a special comes back as it is.
+routine C::ingrid_d64_normalize(x: U64) -> U64
+
+### x × 10^n by the exponent alone (an infinity above the range, a zero below it); a special or a zero comes back as it is.
+routine C::ingrid_d64_scaleb(x: U64, n: S64) -> U64
+
+### The exponent e with 10^e <= |x| < 10^(e + 1) (-infinity for a zero).
+routine C::ingrid_d64_logb(x: U64) -> U64
+
+### (-1)^neg × coeff × 10^exp, coeff = c_high × 2^64 + c_low, rounded half to even to 16 digits with exp as the preferred exponent.
+routine C::ingrid_d64_from_parts(neg: U32, c_low: U64, c_high: U64, exp: S64) -> U64
+
+### The integer (-1)^neg × (m3 m2 m1 m0, 64 bits each, m0 lowest), rounded half to even to 16 digits, exponent 0 when it fits.
+routine C::ingrid_d64_from_integer(neg: U32, m0: U64, m1: U64, m2: U64, m3: U64) -> U64
+
+### x in the DPD interchange encoding.
+routine C::ingrid_d64_to_dpd(x: U64) -> U64
+
+### The D64 whose DPD interchange encoding is bits.
+routine C::ingrid_d64_from_dpd(bits: U64) -> U64
+
+### The F128 high × 2^64 + low (a narrower binary float widened to F128 first, which is exact), rounded once to 16 digits and reduced.
+routine C::ingrid_d64_from_binary(low: U64, high: U64) -> U64
+
+### The bits of the binary float of `which` bits (16, 32, 64, or 128) nearest x: w0 the low 64 bits, w1 the high ones.
+routine C::ingrid_d64_to_binary(x: U64, which: U32) -> IngridWords
+
+### `a + b`, rounded half to even to 34 digits.
 routine C::ingrid_d128_add(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
 
-### `a - b` of two D128s, rounded half to even to 34 digits.
+### `a - b`, rounded half to even to 34 digits.
 routine C::ingrid_d128_sub(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
 
-### `a * b` of two D128s, rounded half to even to 34 digits.
+### `a * b`, rounded half to even to 34 digits.
 routine C::ingrid_d128_mul(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
 
-### `a / b` of two D128s: a nonzero value over zero is an infinity, zero over zero a NaN.
+### `a / b`, rounded half to even to 34 digits: a nonzero value over zero is an infinity, zero over zero a NaN.
 routine C::ingrid_d128_div(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
 
-### The order of two D128s.
+### The order of a and b.
 routine C::ingrid_d128_order(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S64
+
+### `a * b + c` rounded once to 34 digits.
+routine C::ingrid_d128_fma(a_low: U64, a_high: U64, b_low: U64, b_high: U64, c_low: U64, c_high: U64) -> IngridWords
+
+### The square root, correctly rounded and reduced (NaN for a negative number).
+routine C::ingrid_d128_sqrt(x_low: U64, x_high: U64) -> IngridWords
+
+### sqrt(x^2 + y^2), correctly rounded (+infinity when either is infinite).
+routine C::ingrid_d128_hypot(x_low: U64, x_high: U64, y_low: U64, y_high: U64) -> IngridWords
+
+### sqrt(x^2 + y^2 + z^2), correctly rounded.
+routine C::ingrid_d128_hypot3(x_low: U64, x_high: U64, y_low: U64, y_high: U64, z_low: U64, z_high: U64) -> IngridWords
+
+### x rounded to an integral value: mode 0 toward zero, 1 down, 2 up, 3 nearest with ties away from zero, 4 nearest with ties to even. A special, a zero, or a value without a fraction comes back as it is.
+routine C::ingrid_d128_round_int(x_low: U64, x_high: U64, mode: U32) -> IngridWords
+
+### a with b's exponent, rounded half to even (NaN when that needs more than the digits there are). a comes back as it is when the exponents match or both are infinite.
+routine C::ingrid_d128_quantize(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+
+### The remainder of a truncated division, exact, with a's sign: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
+routine C::ingrid_d128_fmod(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+
+### The IEEE remainder a - n b, n the integer nearest a / b (ties to even), exact: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
+routine C::ingrid_d128_remainder(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+
+### The simplest member of x's cohort (trailing zeros stripped, a zero with exponent 0); a special comes back as it is.
+routine C::ingrid_d128_normalize(x_low: U64, x_high: U64) -> IngridWords
+
+### x × 10^n by the exponent alone (an infinity above the range, a zero below it); a special or a zero comes back as it is.
+routine C::ingrid_d128_scaleb(x_low: U64, x_high: U64, n: S64) -> IngridWords
+
+### The exponent e with 10^e <= |x| < 10^(e + 1) (-infinity for a zero).
+routine C::ingrid_d128_logb(x_low: U64, x_high: U64) -> IngridWords
+
+### (-1)^neg × coeff × 10^exp, coeff = c_high × 2^64 + c_low, rounded half to even to 34 digits with exp as the preferred exponent.
+routine C::ingrid_d128_from_parts(neg: U32, c_low: U64, c_high: U64, exp: S64) -> IngridWords
+
+### The integer (-1)^neg × (m3 m2 m1 m0, 64 bits each, m0 lowest), rounded half to even to 34 digits, exponent 0 when it fits.
+routine C::ingrid_d128_from_integer(neg: U32, m0: U64, m1: U64, m2: U64, m3: U64) -> IngridWords
+
+### x in the DPD interchange encoding.
+routine C::ingrid_d128_to_dpd(x_low: U64, x_high: U64) -> IngridWords
+
+### The D128 whose DPD interchange encoding is high × 2^64 + low.
+routine C::ingrid_d128_from_dpd(low: U64, high: U64) -> IngridWords
+
+### The F128 high × 2^64 + low (a narrower binary float widened to F128 first, which is exact), rounded once to 34 digits and reduced.
+routine C::ingrid_d128_from_binary(low: U64, high: U64) -> IngridWords
+
+### The bits of the binary float of `which` bits (16, 32, 64, or 128) nearest x: w0 the low 64 bits, w1 the high ones.
+routine C::ingrid_d128_to_binary(x_low: U64, x_high: U64, which: U32) -> IngridWords
+
+### A D32 as a D128 (exact).
+routine C::ingrid_d128_from_d32(x: U32) -> IngridWords
+
+### A D64 as a D128 (exact).
+routine C::ingrid_d128_from_d64(x: U64) -> IngridWords
+
+### A D32 as a D64 (exact).
+routine C::ingrid_d64_from_d32(x: U32) -> U64
+
+### A D128 rounded half to even to 16 digits, its exponent kept when the digits allow.
+routine C::ingrid_d64_from_d128(x_low: U64, x_high: U64) -> U64
+
+### A D64 rounded half to even to 7 digits and reduced.
+routine C::ingrid_d32_from_d64(x: U64) -> U32
+
+### A D128 rounded half to even to 7 digits and reduced.
+routine C::ingrid_d32_from_d128(x_low: U64, x_high: U64) -> U32
+
+### e^x, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_exp(x: U32) -> U32
+
+### e^x - 1, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_expm1(x: U32) -> U32
+
+### 2^x, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_exp2(x: U32) -> U32
+
+### 10^x, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_exp10(x: U32) -> U32
+
+### The natural logarithm (NaN below 0, -infinity at 0), correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_log(x: U32) -> U32
+
+### ln(1 + x), correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_log1p(x: U32) -> U32
+
+### The base-2 logarithm, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_log2(x: U32) -> U32
+
+### The base-10 logarithm, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_log10(x: U32) -> U32
+
+### The arc sine (NaN past ±1), correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_asin(x: U32) -> U32
+
+### The arc cosine (NaN past ±1), correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_acos(x: U32) -> U32
+
+### The arc tangent, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_atan(x: U32) -> U32
+
+### The hyperbolic sine, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_sinh(x: U32) -> U32
+
+### The hyperbolic cosine, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_cosh(x: U32) -> U32
+
+### The hyperbolic tangent, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_tanh(x: U32) -> U32
+
+### The inverse hyperbolic sine, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_asinh(x: U32) -> U32
+
+### The inverse hyperbolic cosine (NaN below 1), correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_acosh(x: U32) -> U32
+
+### The inverse hyperbolic tangent (NaN past ±1, an infinity at ±1), correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_atanh(x: U32) -> U32
+
+### The error function, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_erf(x: U32) -> U32
+
+### The complementary error function, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_erfc(x: U32) -> U32
+
+### The gamma function (NaN at the negative integers), correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_tgamma(x: U32) -> U32
+
+### ln|Γ(x)| (+infinity at the poles), correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_lgamma(x: U32) -> U32
+
+### The sine, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_sin(x: U32) -> U32
+
+### The cosine, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_cos(x: U32) -> U32
+
+### The tangent, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_tan(x: U32) -> U32
+
+### The cube root, correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_cbrt(x: U32) -> U32
+
+### x^y, correctly rounded to 7 digits and reduced (C99's special cases).
+routine C::ingrid_d32_pow(x: U32, y: U32) -> U32
+
+### The angle of (x, y) in (-pi, pi], correctly rounded to 7 digits and reduced.
+routine C::ingrid_d32_atan2(y: U32, x: U32) -> U32
+
+### e^x, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_exp(x: U64) -> U64
+
+### e^x - 1, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_expm1(x: U64) -> U64
+
+### 2^x, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_exp2(x: U64) -> U64
+
+### 10^x, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_exp10(x: U64) -> U64
+
+### The natural logarithm (NaN below 0, -infinity at 0), correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_log(x: U64) -> U64
+
+### ln(1 + x), correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_log1p(x: U64) -> U64
+
+### The base-2 logarithm, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_log2(x: U64) -> U64
+
+### The base-10 logarithm, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_log10(x: U64) -> U64
+
+### The arc sine (NaN past ±1), correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_asin(x: U64) -> U64
+
+### The arc cosine (NaN past ±1), correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_acos(x: U64) -> U64
+
+### The arc tangent, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_atan(x: U64) -> U64
+
+### The hyperbolic sine, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_sinh(x: U64) -> U64
+
+### The hyperbolic cosine, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_cosh(x: U64) -> U64
+
+### The hyperbolic tangent, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_tanh(x: U64) -> U64
+
+### The inverse hyperbolic sine, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_asinh(x: U64) -> U64
+
+### The inverse hyperbolic cosine (NaN below 1), correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_acosh(x: U64) -> U64
+
+### The inverse hyperbolic tangent (NaN past ±1, an infinity at ±1), correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_atanh(x: U64) -> U64
+
+### The error function, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_erf(x: U64) -> U64
+
+### The complementary error function, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_erfc(x: U64) -> U64
+
+### The gamma function (NaN at the negative integers), correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_tgamma(x: U64) -> U64
+
+### ln|Γ(x)| (+infinity at the poles), correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_lgamma(x: U64) -> U64
+
+### The sine, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_sin(x: U64) -> U64
+
+### The cosine, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_cos(x: U64) -> U64
+
+### The tangent, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_tan(x: U64) -> U64
+
+### The cube root, correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_cbrt(x: U64) -> U64
+
+### x^y, correctly rounded to 16 digits and reduced (C99's special cases).
+routine C::ingrid_d64_pow(x: U64, y: U64) -> U64
+
+### The angle of (x, y) in (-pi, pi], correctly rounded to 16 digits and reduced.
+routine C::ingrid_d64_atan2(y: U64, x: U64) -> U64
+
+### e^x, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_exp(x_low: U64, x_high: U64) -> IngridWords
+
+### e^x - 1, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_expm1(x_low: U64, x_high: U64) -> IngridWords
+
+### 2^x, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_exp2(x_low: U64, x_high: U64) -> IngridWords
+
+### 10^x, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_exp10(x_low: U64, x_high: U64) -> IngridWords
+
+### The natural logarithm (NaN below 0, -infinity at 0), correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_log(x_low: U64, x_high: U64) -> IngridWords
+
+### ln(1 + x), correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_log1p(x_low: U64, x_high: U64) -> IngridWords
+
+### The base-2 logarithm, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_log2(x_low: U64, x_high: U64) -> IngridWords
+
+### The base-10 logarithm, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_log10(x_low: U64, x_high: U64) -> IngridWords
+
+### The arc sine (NaN past ±1), correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_asin(x_low: U64, x_high: U64) -> IngridWords
+
+### The arc cosine (NaN past ±1), correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_acos(x_low: U64, x_high: U64) -> IngridWords
+
+### The arc tangent, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_atan(x_low: U64, x_high: U64) -> IngridWords
+
+### The hyperbolic sine, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_sinh(x_low: U64, x_high: U64) -> IngridWords
+
+### The hyperbolic cosine, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_cosh(x_low: U64, x_high: U64) -> IngridWords
+
+### The hyperbolic tangent, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_tanh(x_low: U64, x_high: U64) -> IngridWords
+
+### The inverse hyperbolic sine, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_asinh(x_low: U64, x_high: U64) -> IngridWords
+
+### The inverse hyperbolic cosine (NaN below 1), correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_acosh(x_low: U64, x_high: U64) -> IngridWords
+
+### The inverse hyperbolic tangent (NaN past ±1, an infinity at ±1), correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_atanh(x_low: U64, x_high: U64) -> IngridWords
+
+### The error function, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_erf(x_low: U64, x_high: U64) -> IngridWords
+
+### The complementary error function, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_erfc(x_low: U64, x_high: U64) -> IngridWords
+
+### The gamma function (NaN at the negative integers), correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_tgamma(x_low: U64, x_high: U64) -> IngridWords
+
+### ln|Γ(x)| (+infinity at the poles), correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_lgamma(x_low: U64, x_high: U64) -> IngridWords
+
+### The sine, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_sin(x_low: U64, x_high: U64) -> IngridWords
+
+### The cosine, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_cos(x_low: U64, x_high: U64) -> IngridWords
+
+### The tangent, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_tan(x_low: U64, x_high: U64) -> IngridWords
+
+### The cube root, correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_cbrt(x_low: U64, x_high: U64) -> IngridWords
+
+### x^y, correctly rounded to 34 digits and reduced (C99's special cases).
+routine C::ingrid_d128_pow(x_low: U64, x_high: U64, y_low: U64, y_high: U64) -> IngridWords
+
+### The angle of (x, y) in (-pi, pi], correctly rounded to 34 digits and reduced.
+routine C::ingrid_d128_atan2(y_low: U64, y_high: U64, x_low: U64, x_high: U64) -> IngridWords
 
 # ============================================================================
 # Roamed runtime (Ingrid/tessera/roam.tess)
