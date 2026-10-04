@@ -1,0 +1,143 @@
+module Tests/Stdlib/RecoveryOperatorsApi
+
+import IO/Console
+# With `try`, `grab` or `lookup` in front of a call, a checked operator anywhere beneath it is recovered like a
+# `throw`: a division by zero, an overflow, the negation of the minimum, a compound assignment, inside a loop,
+# in a routine called bare, in a routine that is not failable at all. Only the carrier differs.
+
+crashable NopeError
+
+routine NopeError.crash_message() -> Text
+    return "nope"
+
+# depth 1: the operator is in the routine the keyword calls
+routine ten_over!(n: S64) -> S64
+    if n < 0
+        throw NopeError()
+    var k = 10 // n
+    return k
+
+routine grow!(n: S64) -> S64
+    if n < 0
+        absent
+    return n + 9223372036854775800
+
+routine bump!(n: S64) -> S64
+    if n < 0
+        absent
+    var total = n
+    total += 9223372036854775800
+    return total
+
+routine negate!(n: S64) -> S64
+    if n > 0
+        absent
+    return -n
+
+routine sum_quotients!(n: S64) -> S64
+    if n < 0
+        absent
+    var total = 0
+    var i = 0
+    while i < 3
+        total = total + 60 // (n - i)
+        i = i + 1
+    return total
+
+# depth 2: the operator is in a failable routine called bare
+routine via_bare!(n: S64) -> S64
+    var v = ten_over(n: n)
+    return v + 1
+
+# depth 2: the operator is in a routine that is not failable
+routine hundred_over(n: S64) -> S64
+    return 100 // n
+
+routine via_plain!(n: S64) -> S64
+    if n < 0
+        absent
+    return hundred_over(n: n) + 1
+
+# depth 3: a failable routine calls a routine that is not failable, which calls a failable one bare
+routine inner_check!(n: S64) -> S64
+    if n == 0
+        throw NopeError()
+    return n
+
+routine middle(n: S64) -> S64
+    var v = inner_check(n: n)
+    return v * 2
+
+routine outer!(n: S64) -> S64
+    if n < 0
+        absent
+    var v = middle(n: n)
+    return v + 1
+
+# a loop condition, a branch of a conditional return and the fallback of `??` run only when reached
+routine count_below!(n: S64) -> S64
+    if n < 0
+        absent
+    var i = 0
+    while i < 10 // n
+        i = i + 1
+    return i
+
+routine pick_branch!(n: S64) -> S64
+    if n < 0
+        absent
+    return if n > -5 then 10 // n else 0
+
+routine negative_only!(n: S64) -> S64
+    if n >= 0
+        absent
+    return n
+
+routine or_quotient!(n: S64) -> S64
+    if n < -100
+        absent
+    return (try negative_only(n: n)) ?? 10 // n
+
+record Pair
+    a: S64
+    b: S64
+
+routine Pair.ratio() -> S64
+    return me.a // me.b
+
+routine start()
+    show(f"try ten_over(5): {try ten_over(n: 5)}")
+    show(f"try ten_over(0): {try ten_over(n: 0)}")
+    show(f"grab ten_over(0): {grab ten_over(n: 0)}")
+    show(f"lookup ten_over(0): {lookup ten_over(n: 0)}")
+    show(f"grab ten_over(-1): {grab ten_over(n: -1)}")
+    show(f"try grow(100): {try grow(n: 100)}")
+    show(f"grab grow(100): {grab grow(n: 100)}")
+    show(f"lookup grow(-1): {lookup grow(n: -1)}")
+    show(f"try bump(7): {try bump(n: 7)}")
+    show(f"grab bump(100): {grab bump(n: 100)}")
+    show(f"grab negate(min): {grab negate(n: -9223372036854775807 - 1)}")
+    show(f"try negate(-4): {try negate(n: -4)}")
+    show(f"try sum_quotients(10): {try sum_quotients(n: 10)}")
+    show(f"lookup sum_quotients(1): {lookup sum_quotients(n: 1)}")
+    show(f"try via_bare(2): {try via_bare(n: 2)}")
+    show(f"grab via_bare(0): {grab via_bare(n: 0)}")
+    show(f"lookup via_bare(0): {lookup via_bare(n: 0)}")
+    show(f"grab via_plain(0): {grab via_plain(n: 0)}")
+    show(f"try hundred_over(0): {try hundred_over(n: 0)}")
+    show(f"grab hundred_over(4): {grab hundred_over(n: 4)}")
+    show(f"try outer(3): {try outer(n: 3)}")
+    show(f"grab outer(0): {grab outer(n: 0)}")
+    show(f"lookup outer(0): {lookup outer(n: 0)}")
+    show(f"lookup outer(-1): {lookup outer(n: -1)}")
+    var p = Pair(a: 6, b: 0)
+    show(f"grab p.ratio(): {grab p.ratio()}")
+    show(f"try (ratio) + 1: {try p.ratio() + 1}")
+    when grab via_bare(n: 0)
+        is DivisionByZeroError e => show(f"when: {e.crash_title()}")
+        else v => show(f"when: {v}")
+    show(f"try count_below: {try count_below(n: 2)} {try count_below(n: 0)}")
+    show(f"grab pick_branch: {grab pick_branch(n: 2)} {grab pick_branch(n: 0)}")
+    show(f"lookup or_quotient: {lookup or_quotient(n: -3)} {lookup or_quotient(n: 5)} {lookup or_quotient(n: 0)}")
+    show("DONE")
+    return

@@ -58,10 +58,26 @@ When unsure, consult ground truth in the repo/package:
    `try EXPR` → `Maybe[T]` (present | absent, no error kept);
    `grab EXPR` → `Check[T]` (T | the caught `Crashables`);
    `lookup EXPR` → `Lookup[T]` (T | absent | `Crashables`).
-   The keyword composes EVERY failable call inside the expression — AND every
-   checked-arithmetic operator (`try a + b` recovers the overflow, `grab a // b` the
-   divide-by-zero) — short-circuiting to the carrier on the first failure. It takes
-   the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
+   **With a keyword in front, every failure beneath it is recovered, at any depth;
+   only `pierce` still crashes.** That covers a `throw`/`absent` in the called
+   routine and in every routine it calls, bare calls included (failable or not:
+   `try f()` also recovers a division by zero inside a plain helper `f` calls); a
+   checked operator (`try a + b` recovers the overflow, `grab a // b` the
+   divide-by-zero, `-x` of the minimum, `x += d`); a subscript out of range or a
+   missing key (`try xs[9]`); a failing conversion (`S8(from: 300)`,
+   `Integer(text: "x")`). Each becomes the carrier's failure (`try`: absent;
+   `grab`: the error, an absence as `AbsentValueError`; `lookup`: the error or
+   absent), and evaluation stops at the first one. A bare call (no keyword)
+   still crashes loudly. Not covered: a lambda handed to another routine
+   (`xs.select(transform: x => 10 // x)`) runs as a routine value inside the
+   routine that receives it, so its failure crashes even under a keyword around
+   the call. Out of memory and running out of stack are fatal everywhere.
+   **`pierce`** is the failure that must NOT be recovered: `pierce NopeError()`
+   crashes like an unrecovered `throw` (status 82), and it crashes the same way
+   under `try`/`grab`/`lookup` at any depth. Use it for a broken invariant (state
+   the program can no longer trust), never for a condition a caller could handle.
+   It does not make a routine failable (no `!` needed for it).
+   The keyword takes the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
    a trailing `!!` applies to the recovery result. There is no `try_foo` name form —
    recovery is a keyword at the call site, not a mangled variant name. There are no
    exceptions in the Java/C# sense.

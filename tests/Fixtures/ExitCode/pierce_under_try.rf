@@ -1,0 +1,29 @@
+module Tests/ExitCode/PierceUnderTry
+
+import IO/Console
+# `pierce` is the one failure a recovery keyword does not catch: everything else beneath `try`, `grab` or
+# `lookup` is recovered, but a `pierce` two calls down still crashes loudly (status 82).
+
+crashable BrokenInvariantError
+
+routine BrokenInvariantError.crash_message() -> Text
+    return "the ledger no longer balances"
+
+routine check_ledger!(total: S64) -> S64
+    if total < 0
+        throw BrokenInvariantError()
+    if total > 100
+        pierce BrokenInvariantError()
+    return total
+
+routine audit!(total: S64) -> S64
+    var checked = check_ledger(total: total)
+    return checked + 1
+
+routine start()
+    show(f"recovered throw: {try audit(total: -1)}")
+    show(f"value: {try audit(total: 5)}")
+    show("piercing")
+    show(f"{try audit(total: 500)}")
+    show("not reached")
+    return

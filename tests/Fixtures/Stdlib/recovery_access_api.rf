@@ -1,0 +1,89 @@
+module Tests/Stdlib/RecoveryAccessApi
+
+import IO/Console
+import Numerics
+# With `try`, `grab` or `lookup` in front of a call, a failing subscript or conversion anywhere beneath it is
+# recovered: an index out of range on a list or a text, a missing dictionary key, a value that does not fit
+# the target type, a text that does not parse, also through a generic routine and a routine that is not
+# failable. Only the carrier differs.
+
+crashable NopeError
+
+routine NopeError.crash_message() -> Text
+    return "nope"
+
+routine pick!(xs: Viewing[List[S64]], i: U64) -> S64
+    if i > 1000
+        throw NopeError()
+    var v = xs[i]
+    return v
+
+routine letter!(t: Text, i: U64) -> Character
+    if i > 1000
+        absent
+    return t[i]
+
+routine score!(d: Viewing[Dict[Text, S64]], name: Text) -> S64
+    if name == ""
+        throw NopeError()
+    return d[name] * 10
+
+routine narrow!(n: S64) -> S8
+    if n < 0
+        absent
+    var b = S8(from: n)
+    return b
+
+routine parsed!(t: Text) -> S64
+    if t == ""
+        absent
+    var big = Integer(text: t)
+    return S64(from: big)
+
+# a generic routine: the subscript is the instance's own
+routine first_of![T](xs: Viewing[List[T]]) -> T
+needs RecordType T
+    if xs.count() > 1000
+        absent
+    return xs[0]
+
+# a routine that is not failable, with a subscript, called bare by a failable one
+routine last_of(xs: Viewing[List[S64]]) -> S64
+    return xs[xs.count() - 1]
+
+routine last_plus_one!(xs: Viewing[List[S64]]) -> S64
+    if xs.count() > 1000
+        absent
+    return last_of(xs: xs) + 1
+
+routine start()
+    var xs = List[S64]()
+    xs.add_last(value: 4)
+    xs.add_last(value: 5)
+    var empty = List[S64]()
+    show(f"try pick(1): {try pick(xs: xs.view(), i: 1)}")
+    show(f"try pick(9): {try pick(xs: xs.view(), i: 9)}")
+    show(f"grab pick(9): {grab pick(xs: xs.view(), i: 9)}")
+    show(f"lookup pick(9): {lookup pick(xs: xs.view(), i: 9)}")
+    show(f"try letter(1): {try letter(t: "abc", i: 1)}")
+    show(f"grab letter(9): {grab letter(t: "abc", i: 9)}")
+    var d = Dict[Text, S64]()
+    discard d.add(key: "ann", value: 3)
+    show(f"try score(ann): {try score(d: d.view(), name: "ann")}")
+    show(f"lookup score(bob): {lookup score(d: d.view(), name: "bob")}")
+    show(f"grab score(empty): {grab score(d: d.view(), name: "")}")
+    show(f"try narrow(100): {try narrow(n: 100)}")
+    show(f"grab narrow(300): {grab narrow(n: 300)}")
+    show(f"try parsed(42): {try parsed(t: "42")}")
+    show(f"grab parsed(4x): {grab parsed(t: "4x")}")
+    show(f"grab parsed(huge): {grab parsed(t: "99999999999999999999")}")
+    show(f"try first_of(xs): {try first_of(xs: xs.view())}")
+    show(f"try first_of(empty): {try first_of(xs: empty.view())}")
+    var words = List[Text]()
+    show(f"lookup first_of(words): {lookup first_of(xs: words.view())}")
+    show(f"try last_plus_one(xs): {try last_plus_one(xs: xs.view())}")
+    show(f"grab last_plus_one(empty): {grab last_plus_one(xs: empty.view())}")
+    show(f"try xs[7]: {try xs[7]}")
+    show(f"try xs[0] + xs[1]: {try xs[0] + xs[1]}")
+    show("DONE")
+    return
