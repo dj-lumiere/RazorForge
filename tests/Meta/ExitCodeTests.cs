@@ -6,7 +6,8 @@ namespace RazorForge.Tests.Meta;
 /// <summary>
 /// End-to-end check of <c>set_exit_code</c>: a program that returns from <c>start</c> normally ends with the status
 /// it set last, which the builder's <c>main</c> returns after <c>start</c>. Builds and runs
-/// <c>tests/Fixtures/ExitCode/set_exit_code.rf</c> through <c>buildandrun</c>.
+/// <c>tests/Fixtures/ExitCode/set_exit_code.rf</c> through <c>buildandrun</c>. Also holds the fixtures that must
+/// crash (status 82), which the one-program stdlib harness cannot run.
 /// </summary>
 public sealed class ExitCodeTests
 {
@@ -20,6 +21,20 @@ public sealed class ExitCodeTests
         Assert.True(condition: exit == 42,
             userMessage: $"expected exit 42, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "returning", actualString: stdout);
+    }
+
+    /// <summary>A bare <c>Real</c> division by zero is not recovered, so the program crashes with status 82 and the
+    /// <c>DivisionByZeroError</c> instead of printing an infinity.</summary>
+    [Fact]
+    public void RealDivisionByZero_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "real_divide_by_zero.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "dividing by zero", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "DivisionByZeroError: You tried to divide by zero", actualString: stdout + stderr);
     }
 
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)

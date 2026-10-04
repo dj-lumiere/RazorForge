@@ -8,6 +8,11 @@ module Numerics
 ### Division, `sqrt` and the transcendentals round to a generous default working precision (1024 bits,
 ### about 308 decimal digits) under round-to-nearest-ties-to-even, or to a requested number of decimal
 ### digits in the `precision:` variants.
+###
+### Dividing by zero crashes as it does for every other number type: `x / 0` with `x` not zero throws
+### {DivisionByZeroError}, and `0 / 0` throws {NumericDomainError}. The same holds for `divide`, and
+### `**` with a zero base and a negative exponent throws {DivisionByZeroError}. Recover with `try` or
+### `grab` like any other failable call.
 ### :see: {Integer}, {Decimal}
 record Real
 obeys Assignable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable,
@@ -211,10 +216,16 @@ routine Real.mul(you: Real) -> Real
         return r
 
 ### Divides this value by `other`, rounded to the working precision.
-### :param you: The divisor.
+### :param you: The non-zero divisor.
 ### :returns: The resulting `Real` value.
+### :throws: {DivisionByZeroError} when `you` is zero and this value is not, and {NumericDomainError}
+###     for 0 / 0, as with the binary and decimal floats.
 @readonly
-routine Real.truediv(you: Real) -> Real
+routine Real.truediv!(you: Real) -> Real
+    if you.is_zero()
+        if me.is_zero()
+            throw NumericDomainError(description: "domain error: 0 / 0 has no real result")
+        throw DivisionByZeroError()
     danger
         var mark = C::rf_region_mark()
         var r = real_from_bf(
@@ -300,8 +311,11 @@ routine Real.log() -> Real
 ### :returns: The resulting `Real` value.
 ### :throws: {NumericDomainError} when the base is negative and the exponent is not an
 ###          integer — that power has no real result (it would be complex).
+### :throws: {DivisionByZeroError} when the base is zero and the exponent is negative, as 1 / 0 is.
 @readonly
 routine Real.pow!(exp: Real) -> Real
+    if me.is_zero() and exp.is_negative()
+        throw DivisionByZeroError()
     if me.is_negative() and not exp.eq(you: exp.trunc())
         throw NumericDomainError(description: "pow: negative base with non-integer exponent has no real result")
     return me.pow(exp: exp, precision: 0_s32)
@@ -406,8 +420,17 @@ routine Real.cbrt() -> Real
 # --- Precision-aware variants (precision = decimal significant digits; 0 or less = the default) ---
 
 ### Divides this value by `other`, rounding to `precision` decimal digits.
+### :param you: The non-zero divisor.
+### :param precision: The number of decimal significant digits.
+### :returns: The resulting `Real` value.
+### :throws: {DivisionByZeroError} when `you` is zero and this value is not, and {NumericDomainError}
+###     for 0 / 0.
 @readonly
-routine Real.divide(you: Real, precision: S32) -> Real
+routine Real.divide!(you: Real, precision: S32) -> Real
+    if you.is_zero()
+        if me.is_zero()
+            throw NumericDomainError(description: "domain error: 0 / 0 has no real result")
+        throw DivisionByZeroError()
     danger
         var mark = C::rf_region_mark()
         var r = real_from_bf(
@@ -455,8 +478,14 @@ routine Real.log(precision: S32) -> Real
         return r
 
 ### Raises this value to `exp` to `precision` decimal digits.
+### :param exp: The exponent.
+### :param precision: The number of decimal significant digits.
+### :returns: The resulting `Real` value.
+### :throws: {DivisionByZeroError} when the base is zero and the exponent is negative, as 1 / 0 is.
 @readonly
-routine Real.pow(exp: Real, precision: S32) -> Real
+routine Real.pow!(exp: Real, precision: S32) -> Real
+    if me.is_zero() and exp.is_negative()
+        throw DivisionByZeroError()
     danger
         var mark = C::rf_region_mark()
         var r = real_from_bf(

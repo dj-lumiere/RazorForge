@@ -33,6 +33,12 @@ When unsure, consult ground truth in the repo/package:
    (a result that is not finite crashes) and unchecked `+! -! *! /! **!` = raw
    IEEE 754 (±infinity and NaN pass through; no `danger` block needed, unlike
    integers). Decimal, Real, Complex, C64/C128/C256 have only `+ - * / **`.
+   Division by zero crashes on every number type, arbitrary precision included.
+   On the floats, `Decimal`, `Real` and the complex types `x / 0` with `x` not
+   zero throws `DivisionByZeroError` and `0 / 0` throws `NumericDomainError`
+   (integer `//` and `%` by zero throw `DivisionByZeroError`). `Real` never hands
+   back an infinity or NaN from a division: `divide(you:, precision:)` and
+   `0 ** -n` (a `DivisionByZeroError`) follow the same rule.
 6. **Entities have a single owner.** Assigning or passing an entity requires
    explicit transfer: `consume(r: steal b)`. Plain `var s = obj.field_entity`
    is rejected (RF-S413).
