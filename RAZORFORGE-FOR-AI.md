@@ -70,7 +70,10 @@ When unsure, consult ground truth in the repo/package:
    arithmetic failure, out of memory, stack overflow). If a run ended with 82, it
    crashed: read stderr for the error name, message, and stack trace. Status 1 is NOT a
    crash. A native signal (e.g. a segfault) is not 82 either — that is a builder or
-   runtime bug (or `danger` code), not a language failure.
+   runtime bug (or `danger` code), not a language failure. A run that returns from
+   `start` normally exits with 0, or with the status `set_exit_code(code)` (an `S32`,
+   in Core) set last: one atomic value, so any thread may set it and the last call
+   wins. A crash keeps 82 whatever was set.
 8. **Bare integer literals adapt to context; variables do not.**
    `h << 5` and `x.clamp(0, 100)` are fine (literals conform), but mixing a
    `U64` variable with an `S64` variable needs explicit conversion.
