@@ -8,6 +8,7 @@ import Collections
 ### record that doesn't provide its own (a hand-written `T.represent` or a kind-specialized
 ### `@override` takes precedence). Secret fields are hidden — the `openmemvarof` walk yields only the
 ### publicly-readable (OPEN ∪ POSTED) members. Each value renders via its own `represent`.
+@readonly
 @overridable
 routine T.represent() -> Text
 needs AnyType T
@@ -40,6 +41,7 @@ needs AnyType T
 ### for the absent arm. The `@override needs VariantType T` gate makes the wired synthesizer pick this
 ### over the record default for a variant type. `expand m in branchof(T)` generates one arm clause each;
 ### the explicit `is None` clause covers the absent arm the payload expansion skips.
+@readonly
 @override
 routine T.represent() -> Text
 needs VariantType T
@@ -52,6 +54,7 @@ needs VariantType T
 ### `branchof`; the live arm's `typeidof(m)` (its stable type id) and the payload's `diagnose()`. The absent
 ### `None` arm shows `(type_id: 0, none)`. (No `None`/void arms exist — `None` is the canonical empty
 ### branch — so no bindingless-arm form is needed.)
+@readonly
 @override
 routine T.diagnose() -> Text
 needs VariantType T
@@ -63,6 +66,7 @@ needs VariantType T
 ### Choice `represent()`: VALUE-dispatch on the S32 discriminant via `caseof`, returning the bare case
 ### name (`READ`). `S32(from: me)` reads the discriminant; `$valueof(c)` is each case's constant. The
 ### walk is exhaustive (one case always matches), so the trailing `pierce` is unreachable.
+@readonly
 @override
 routine T.represent() -> Text
 needs ChoiceType T
@@ -72,6 +76,7 @@ needs ChoiceType T
     pierce LogicBreachedError()
 
 ### Choice `diagnose()`: `Module.ChoiceName(id: <discriminant>, CaseName)`, matching the C# builder.
+@readonly
 @override
 routine T.diagnose() -> Text
 needs ChoiceType T
@@ -83,6 +88,7 @@ needs ChoiceType T
 ### Flags `represent()`: the ON members joined by `" and "` (`READ and WRITE`), or `<none>` if the
 ### bitmask is empty. A flags value is a COMBINATION, so `caseof` ACCUMULATES (no `when`): a SUBSET
 ### test per member `(U64(from: me) & $valueof(c)) != 0` appends its name.
+@readonly
 @override
 routine T.represent() -> Text
 needs FlagsType T
@@ -101,6 +107,7 @@ needs FlagsType T
 
 ### Flags `diagnose()`: `Module.FlagsName(value: %<bits>, <members>)` — `<bits>` is LSB-first, one
 ### digit per declared member in declaration order ('1' if set), matching the C# builder.
+@readonly
 @override
 routine T.diagnose() -> Text
 needs FlagsType T
@@ -167,6 +174,7 @@ needs FlagsType T
 ### Tuple `represent()`: the SPECIAL tuple format `(v0, v1, …)` — no type name, no field names, each
 ### element via its own `represent`. Distinct from the record `TypeName(field: value)` shape, hence the
 ### `is TupleType` override.
+@readonly
 @override
 routine T.represent() -> Text
 needs TupleType T
@@ -181,6 +189,7 @@ needs TupleType T
 
 ### Tuple `diagnose()`: `Module.Tuple[…](v0, v1, …)` — the qualified type name prefixed onto the same
 ### element walk (elements still render via `represent`, not `diagnose`, matching the C# builder).
+@readonly
 @override
 routine T.diagnose() -> Text
 needs TupleType T
@@ -198,11 +207,13 @@ needs TupleType T
 ### signature Text: serializing code is meaningless, but the signature is the useful view. These make a
 ### routine-typed member (an entity may hold one — `entity Callback { f: Routine[...] }`) serialize
 ### uniformly through the universal walk, no capability gate.
+@readonly
 @override
 routine T.represent() -> Text
 needs RoutineType T
     return me.type_name()
 
+@readonly
 @override
 routine T.diagnose() -> Text
 needs RoutineType T
@@ -215,6 +226,7 @@ needs RoutineType T
 
 ### A crashable's `crash_title()`, as a `needs CrashableType T` body sees it. The builder gives every crashable its
 ### title, its type name in sentence case (`AbsentValueError` -> "Absent value error"), which wins over this one.
+@readonly
 @overridable
 routine T.crash_title() -> Text
 needs CrashableType T
@@ -223,6 +235,7 @@ needs CrashableType T
 ### A crashable's `crash_message()`, as a `needs CrashableType T` body sees it. Every crashable writes its own
 ### (RF-S704), which wins over this one, so this body never runs: it only lets a crashable derive call
 ### `me.crash_message()`.
+@readonly
 @overridable
 routine T.crash_message() -> Text
 needs CrashableType T
@@ -232,6 +245,7 @@ needs CrashableType T
 ### crashable is surfaced to users, logs and `f"{err}"` by its message. The `needs CrashableType T` kind gate
 ### makes the derive selector pick this over the record `needs AnyType T` default (which would show the empty
 ### `TypeName()` for a fieldless error); `crash_message` resolves via the CrashableType derive above.
+@readonly
 @override
 routine T.represent() -> Text
 needs CrashableType T
@@ -240,6 +254,7 @@ needs CrashableType T
 ### Crashable `diagnose()`: `Module.CrashableName(<crash_message>[, field: value, …])` — the qualified type
 ### name, the message as the first element, then each declared field via its own `represent` (matching the
 ### former C# builder).
+@readonly
 @override
 routine T.diagnose() -> Text
 needs CrashableType T
@@ -261,6 +276,7 @@ needs RoutineType T
 ### The auto-derived default `diagnose()` for any record: `Module.TypeName(field: value, …)`. Uses the
 ### fully-qualified name and shows ALL fields (secret ones prefixed `[secret] ` via `visibilityof`); each
 ### value still renders via `represent` (never `diagnose`) to avoid exponentially verbose nested output.
+@readonly
 @overridable
 routine T.diagnose() -> Text
 needs AnyType T
@@ -281,7 +297,7 @@ needs AnyType T
 ### builder (`return not me.eq(...)`). The buildtime `expand` field-walk replaces the hand-written C#
 ### builder — a zero-field type expands to no comparisons and returns `true`.
 @overridable
-routine T.eq(you: T) -> Bool
+routine T.eq(you: Accessing[T]) -> Bool
 needs T obeys Equatable
     expand m in allmemvarof(T)
         if me.$nameof(m) != you.$nameof(m)
@@ -293,7 +309,7 @@ needs T obeys Equatable
 ### `@overridable routine T.cmp()`; `lt`/`le`/`gt`/`ge` are derived from this by the builder. A
 ### zero-field type expands to no comparisons and returns `SAME`.
 @overridable
-routine T.cmp(you: T) -> ComparisonSign
+routine T.cmp(you: Accessing[T]) -> ComparisonSign
 needs T obeys Comparable
     expand m in allmemvarof(T)
         if me.$nameof(m).cmp(you: you.$nameof(m)) != SAME
@@ -320,12 +336,12 @@ needs FlagsType T
 ### `S32(from: me)` reinterprets the discriminant (the same reader the choice `represent` uses); the inner
 ### `==`/`cmp` resolve to the hand-written `S32` ops, so there is no recursion back into this derive.
 @override
-routine T.eq(you: T) -> Bool
+routine T.eq(you: Accessing[T]) -> Bool
 needs ChoiceType T
     return S32(from: me) == S32(from: you)
 
 @override
-routine T.cmp(you: T) -> ComparisonSign
+routine T.cmp(you: Accessing[T]) -> ComparisonSign
 needs ChoiceType T
     return S32(from: me).cmp(you: S32(from: you))
 
@@ -342,7 +358,7 @@ needs ChoiceType T
 ### the choice derives, this compares the reinterpreted U64 bitmask via the hand-written `U64` op — no
 ### field-walk, no recursion. Flags have no natural total order, so no `cmp` derive.
 @override
-routine T.eq(you: T) -> Bool
+routine T.eq(you: Accessing[T]) -> Bool
 needs FlagsType T
     return U64(from: me) == U64(from: you)
 
@@ -385,19 +401,19 @@ needs FlagsType T
 ### which the collector/harness codegen path lost; deriving them here routes them through the same
 ### everywhere-derive template mechanism as `represent`/`cmp` (registered + materialized by the collector),
 ### so `a < b` (-> `a.lt(b)`) resolves for Character, numerics, records, collections uniformly.
-routine T.lt(you: T) -> Bool
+routine T.lt(you: Accessing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) == ME_SMALL
 
-routine T.le(you: T) -> Bool
+routine T.le(you: Accessing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) != ME_LARGE
 
-routine T.gt(you: T) -> Bool
+routine T.gt(you: Accessing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) == ME_LARGE
 
-routine T.ge(you: T) -> Bool
+routine T.ge(you: Accessing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) != ME_SMALL
 
@@ -517,7 +533,6 @@ routine T.duplicate() -> Me
 needs VariantType T
 needs T obeys Copyable
     when me
-        is None => return me
         expand m in branchof(T)
             is $typeof(m) v =>
                 return T(from: v.duplicate())
@@ -554,29 +569,27 @@ needs T obeys Copyable
 ### additionally frees its heap allocation via `hijack().invalidate()`, mirroring a hand-written entity
 ### destructor. The `allmemvarof` walk covers every owned member including `secret`.
 @overridable
-routine T.destroy()
+dangerous routine T.destroy()
 needs RecordType T
     expand m in allmemvarof(T)
         me.$nameof(m).destroy()
     return
 
 @override
-routine T.destroy()
+dangerous routine T.destroy()
 needs EntityType T
     expand m in allmemvarof(T)
         me.$nameof(m).destroy()
-    danger
-        me.hijack().invalidate()
+    me.hijack().invalidate()
     return
 
 ### Variant `destroy()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,
 ### one arm live at a time). `branchof` generates one `is $typeof(m) v =>` clause per payload arm; the
-### explicit `is None` + `else` cover the payload-less / void arms (nothing to destroy).
+### `else` arm covers the payload-less / void arms (nothing to destroy).
 @override
-routine T.destroy()
+dangerous routine T.destroy()
 needs VariantType T
     when me
-        is None => return
         expand m in branchof(T)
             is $typeof(m) v =>
                 v.destroy()
@@ -603,7 +616,6 @@ needs AnyType T
 dangerous routine T.roam_trace()
 needs VariantType T
     when me
-        is None => return
         expand m in branchof(T)
             is $typeof(m) v =>
                 v.roam_trace()
@@ -628,8 +640,7 @@ dangerous routine T.roam_free()
 needs EntityType T
     expand m in allmemvarof(T)
         me.$nameof(m).roam_free()
-    danger
-        me.hijack().invalidate()
+    me.hijack().invalidate()
     return
 
 ### Variant `roam_free()`: tear down ONLY the live arm's payload, skipping its `Roamed` edges.
@@ -637,7 +648,6 @@ needs EntityType T
 dangerous routine T.roam_free()
 needs VariantType T
     when me
-        is None => return
         expand m in branchof(T)
             is $typeof(m) v =>
                 v.roam_free()
@@ -670,7 +680,6 @@ routine T.assign() -> Me
 needs VariantType T
 needs T obeys Assignable
     when me
-        is None => return me
         expand m in branchof(T)
             is $typeof(m) v =>
                 return T(from: v.assign())

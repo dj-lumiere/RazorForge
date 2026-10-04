@@ -130,14 +130,14 @@ record Directory
 @readonly
 routine File.exists() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_exists(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_exists(path: cstr, len: cstr.count().S32())
 
 ### Whether this names a regular file. Missing paths return `false`.
 ### :returns: `true` when the path is a regular file.
 @readonly
 routine File.is_file() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_is_file(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_is_file(path: cstr, len: cstr.count().S32())
 
 ### The size of this file in bytes.
 ### :returns: The size in bytes.
@@ -145,7 +145,7 @@ routine File.is_file() -> Bool
 @readonly
 routine File.size!() -> S64
     var cstr = CStr(from: me.at)
-    var size = rf_fs_file_size(path: cstr, len: cstr.count().S32())
+    var size = C::rf_fs_file_size(path: cstr, len: cstr.count().S32())
     if size == -1s64
         throw IOError(description: f"Cannot read file size: {me.at}")
     return size
@@ -156,15 +156,15 @@ routine File.size!() -> S64
 @readonly
 routine File.metadata!() -> FileMetadata
     var cstr = CStr(from: me.at)
-    var status = rf_fs_metadata(path: cstr, len: cstr.count().S32())
+    var status = C::rf_fs_metadata(path: cstr, len: cstr.count().S32())
     if status == -1
         throw IOError(description: f"Cannot read metadata: {me.at}")
     return FileMetadata(
-        size: rf_fs_meta_size(),
-        modified: Moment.from_timestamp(seconds: rf_fs_meta_modified()),
-        created: Moment.from_timestamp(seconds: rf_fs_meta_created()),
-        is_directory: rf_fs_meta_is_directory(),
-        readonly: rf_fs_meta_readonly(),
+        size: C::rf_fs_meta_size(),
+        modified: Moment.from_timestamp(seconds: C::rf_fs_meta_modified()),
+        created: Moment.from_timestamp(seconds: C::rf_fs_meta_created()),
+        is_directory: C::rf_fs_meta_is_directory(),
+        readonly: C::rf_fs_meta_readonly(),
     )
 
 ### This file's extension, without the leading dot (empty when absent).
@@ -204,8 +204,8 @@ routine File.with_extension(ext: Text) -> File
 @readonly
 routine File.absolute!() -> File
     var cstr = CStr(from: me.at)
-    var ptr = rf_fs_absolute_path(path: cstr, len: cstr.count().S32())
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_absolute_path(path: cstr, len: cstr.count().S32())
+    var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: f"Cannot resolve absolute path: {me.at}")
     var bytes = Bytes(ptr: ptr, count: len)
@@ -217,8 +217,8 @@ routine File.absolute!() -> File
 @readonly
 routine File.canonical!() -> File
     var cstr = CStr(from: me.at)
-    var ptr = rf_fs_canonical_path(path: cstr, len: cstr.count().S32())
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_canonical_path(path: cstr, len: cstr.count().S32())
+    var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: f"Cannot resolve canonical path: {me.at}")
     var bytes = Bytes(ptr: ptr, count: len)
@@ -248,7 +248,7 @@ routine File.write_text(content: Text) -> S64
 ### :throws: {IOError} when the size cannot be set.
 routine File.set_size!(bytes: U64)
     var cstr = CStr(from: me.at)
-    var result = rf_fs_set_size(path: cstr, len: cstr.count().S32(), size: bytes)
+    var result = C::rf_fs_set_size(path: cstr, len: cstr.count().S32(), size: bytes)
     if result == -1
         throw IOError(description: f"Cannot set size of: {me.at}")
     return
@@ -262,28 +262,28 @@ routine File.set_size!(bytes: U64)
 @readonly
 routine File.can_read() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_can_read(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_can_read(path: cstr, len: cstr.count().S32())
 
 ### Whether the current process can write to this path. Non-throwing capability probe.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine File.can_write() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_can_write(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_can_write(path: cstr, len: cstr.count().S32())
 
 ### Whether the current process can execute this path. Non-throwing capability probe.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine File.can_execute() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_can_execute(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_can_execute(path: cstr, len: cstr.count().S32())
 
 ### Enables or disables the readonly attribute for this path (filesystem metadata, not an in-memory flag).
 ### :param readonly: `true` to enable readonly mode; `false` to disable it.
 ### :throws: {IOError} when the attribute cannot be set.
 routine File.set_readonly!(readonly: Bool = true)
     var cstr = CStr(from: me.at)
-    var result = rf_fs_set_readonly(cstr, cstr.count().S32(), readonly)
+    var result = C::rf_fs_set_readonly(cstr, cstr.count().S32(), readonly)
     if result == -1
         throw IOError(description: f"Cannot set readonly on: {me.at}")
     return
@@ -300,7 +300,7 @@ routine File.set_readonly!(readonly: Bool = true)
 routine File.copy_to!(destination: File)
     var src_cstr = CStr(from: me.at)
     var dst_cstr = CStr(from: destination.at)
-    var result = rf_fs_copy(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
+    var result = C::rf_fs_copy(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
     if result == -1
         throw IOError(description: f"Cannot copy '{me.at}' to '{destination.at}'")
     return
@@ -312,7 +312,7 @@ routine File.copy_to!(destination: File)
 routine File.move_to!(destination: File)
     var src_cstr = CStr(from: me.at)
     var dst_cstr = CStr(from: destination.at)
-    var result = rf_fs_move(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
+    var result = C::rf_fs_move(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
     if result == -1
         throw IOError(description: f"Cannot move '{me.at}' to '{destination.at}'")
     return
@@ -326,7 +326,7 @@ routine File.move_to!(destination: File)
 routine File.move_to_if_absent!(destination: File) -> Bool
     var src_cstr = CStr(from: me.at)
     var dst_cstr = CStr(from: destination.at)
-    var result = rf_fs_move_no_replace(
+    var result = C::rf_fs_move_no_replace(
         src_cstr,
         src_cstr.count().S32(),
         dst_cstr,
@@ -340,7 +340,7 @@ routine File.move_to_if_absent!(destination: File) -> Bool
 ### :throws: {IOError} when the file cannot be removed.
 routine File.delete!()
     var cstr = CStr(from: me.at)
-    var result = rf_fs_remove(path: cstr, len: cstr.count().S32())
+    var result = C::rf_fs_remove(path: cstr, len: cstr.count().S32())
     if result == -1
         throw IOError(description: "Cannot remove path")
     return
@@ -350,7 +350,7 @@ routine File.delete!()
 ### :throws: {IOError} when the file cannot be created or updated.
 routine File.touch!()
     var cstr = CStr(from: me.at)
-    var result = rf_fs_touch(path: cstr, len: cstr.count().S32())
+    var result = C::rf_fs_touch(path: cstr, len: cstr.count().S32())
     if result == -1
         throw IOError(description: f"Cannot touch: {me.at}")
     return
@@ -364,7 +364,7 @@ routine File.touch!()
 ### :throws: {IOError} when the file cannot be opened for reading.
 routine File.open_read!() -> FileSource
     var cstr = CStr(from: me.at)
-    var fd = rf_file_open(cstr, cstr.count().S32(), 0)
+    var fd = C::rf_file_open(cstr, cstr.count().S32(), 0)
     if fd == -1
         throw IOError(description: f"Cannot open file for reading: {me.at}")
     return FileSource(fd: fd, is_closed: false)
@@ -375,7 +375,7 @@ routine File.open_read!() -> FileSource
 ### :throws: {IOError} when the file cannot be opened for writing.
 routine File.open_write!() -> FileSink
     var cstr = CStr(from: me.at)
-    var fd = rf_file_open(cstr, cstr.count().S32(), 1)
+    var fd = C::rf_file_open(cstr, cstr.count().S32(), 1)
     if fd == -1
         throw IOError(description: f"Cannot open file for writing: {me.at}")
     return FileSink(fd: fd, is_closed: false)
@@ -385,7 +385,7 @@ routine File.open_write!() -> FileSink
 ### :throws: {IOError} when the file cannot be opened for appending.
 routine File.open_append!() -> FileSink
     var cstr = CStr(from: me.at)
-    var fd = rf_file_open(cstr, cstr.count().S32(), 2)
+    var fd = C::rf_file_open(cstr, cstr.count().S32(), 2)
     if fd == -1
         throw IOError(description: f"Cannot open file for appending: {me.at}")
     return FileSink(fd: fd, is_closed: false)
@@ -401,12 +401,12 @@ routine File.open_append!() -> FileSink
 ### :returns: The resulting {Exposed} view, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be exposed (missing or non-regular; an empty file yields an
 ###   empty view, `count() == 0`, rather than throwing).
-dangerous routine File.expose[T]() -> Exposed[T]
+dangerous routine File.expose![T]() -> Exposed[T]
     var cstr = CStr(from: me.at)
-    var buf = rf_file_map_path(cstr, cstr.count().S32())
+    var buf = C::rf_file_map_path(cstr, cstr.count().S32())
     if buf.is_none()
         throw IOError(description: f"Cannot expose file: {me.at}")
-    var byte_len = rf_get_result_len()
+    var byte_len = C::rf_get_result_len()
     return Exposed[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0u64)
 
 ### Exposes a WINDOW of this file's bytes as a read-only sequence of `T`: `count` elements starting at
@@ -419,14 +419,14 @@ dangerous routine File.expose[T]() -> Exposed[T]
 ### :param count: The number of `T` elements to map (clamped to the file end).
 ### :returns: The resulting {Exposed} window, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be mapped.
-dangerous routine File.expose_range[T](start: U64, count: U64) -> Exposed[T]
+dangerous routine File.expose_range![T](start: U64, count: U64) -> Exposed[T]
     var cstr = CStr(from: me.at)
     var esize = T.data_size().byte_size()
-    var buf = rf_file_map_path_range(cstr, cstr.count().S32(), start *% esize, count *% esize)
+    var buf = C::rf_file_map_path_range(cstr, cstr.count().S32(), start *% esize, count *% esize)
     if buf.is_none()
         throw IOError(description: f"Cannot expose range of file: {me.at}")
-    var user_len = rf_get_result_len()
-    var delta = rf_file_map_delta()
+    var user_len = C::rf_get_result_len()
+    var delta = C::rf_file_map_delta()
     var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
     return Exposed[T](buf: user, byte_len: user_len, map_delta: delta)
 
@@ -437,12 +437,12 @@ dangerous routine File.expose_range[T](start: U64, count: U64) -> Exposed[T]
 ### :returns: The resulting {Wielded} view, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be wielded (missing or non-regular; an empty file yields an
 ###   empty view rather than throwing).
-dangerous routine File.wield[T]() -> Wielded[T]
+dangerous routine File.wield![T]() -> Wielded[T]
     var cstr = CStr(from: me.at)
-    var buf = rf_file_map_path_rw(cstr, cstr.count().S32())
+    var buf = C::rf_file_map_path_rw(cstr, cstr.count().S32())
     if buf.is_none()
         throw IOError(description: f"Cannot wield file: {me.at}")
-    var byte_len = rf_get_result_len()
+    var byte_len = C::rf_get_result_len()
     return Wielded[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0u64)
 
 ### Wields a WINDOW of this file's bytes as a read/write sequence of `T` (SHARED: writes land in the
@@ -456,14 +456,14 @@ dangerous routine File.wield[T]() -> Wielded[T]
 ### :param count: The number of `T` elements to map (clamped to the file end).
 ### :returns: The resulting {Wielded} window, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be mapped.
-dangerous routine File.wield_range[T](start: U64, count: U64) -> Wielded[T]
+dangerous routine File.wield_range![T](start: U64, count: U64) -> Wielded[T]
     var cstr = CStr(from: me.at)
     var esize = T.data_size().byte_size()
-    var buf = rf_file_map_path_range_rw(cstr, cstr.count().S32(), start *% esize, count *% esize)
+    var buf = C::rf_file_map_path_range_rw(cstr, cstr.count().S32(), start *% esize, count *% esize)
     if buf.is_none()
         throw IOError(description: f"Cannot wield range of file: {me.at}")
-    var user_len = rf_get_result_len()
-    var delta = rf_file_map_delta()
+    var user_len = C::rf_get_result_len()
+    var delta = C::rf_file_map_delta()
     var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
     return Wielded[T](buf: user, byte_len: user_len, map_delta: delta)
 
@@ -478,7 +478,7 @@ routine Exposed[T].enter!() -> Exposed[T]
 routine Exposed[T].exit()
     danger
         var base = me.buf.recast_as[Byte]().stride(count: 0s64 -% me.map_delta.S64())
-        rf_file_unmap(base, me.byte_len +% me.map_delta)
+        C::rf_file_unmap(base, me.byte_len +% me.map_delta)
     return
 
 ### The number of `T` elements in the exposed view (`byte_len // T.data_size()`).
@@ -519,7 +519,7 @@ routine Wielded[T].exit()
     me.flush()
     danger
         var base = me.buf.recast_as[Byte]().stride(count: 0s64 -% me.map_delta.S64())
-        rf_file_unmap(base, me.byte_len +% me.map_delta)
+        C::rf_file_unmap(base, me.byte_len +% me.map_delta)
     return
 
 ### The number of `T` elements in the wielded view (`byte_len // T.data_size()`).
@@ -559,7 +559,7 @@ routine Wielded[T].poke!(index: U64, value: T)
 routine Wielded[T].flush()
     danger
         var base = me.buf.recast_as[Byte]().stride(count: 0s64 -% me.map_delta.S64())
-        rf_file_map_flush(base, me.byte_len +% me.map_delta)
+        C::rf_file_map_flush(base, me.byte_len +% me.map_delta)
     return
 
 ### Hands out the raw view pointer for hot, bounds-check-free scanning or bulk writes. `dangerous`: the
@@ -575,8 +575,8 @@ dangerous routine Wielded[T].raw_buffer() -> Hijacked[T]
 ### :param max: The maximum byte count to load.
 ### :returns: The bytes loaded.
 routine FileSource.load(max: U64) -> Bytes
-    var ptr = rf_file_read_bytes(me.fd, max)
-    var len = rf_get_result_len()
+    var ptr = C::rf_file_read_bytes(me.fd, max)
+    var len = C::rf_get_result_len()
     return Bytes(ptr: ptr, count: len)
 
 ### Closes the descriptor. Idempotent — `close()`, scope-exit `exit`, and teardown `destroy` never
@@ -584,7 +584,7 @@ routine FileSource.load(max: U64) -> Bytes
 routine FileSource.close()
     if me.is_closed
         return
-    rf_file_close(me.fd)
+    C::rf_file_close(me.fd)
     me.is_closed = true
     return
 
@@ -610,11 +610,11 @@ dangerous routine FileSource.destroy()
 ### :returns: The number of bytes accepted.
 routine FileSink.store(data: Bytes) -> U64
     danger
-        return rf_file_write(me.fd, data.raw_buffer(), data.count())
+        return C::rf_file_write(me.fd, data.raw_buffer(), data.count())
 
 ### Flushes buffered output to the underlying file.
 routine FileSink.flush()
-    rf_file_flush(me.fd)
+    C::rf_file_flush(me.fd)
     return
 
 ### Closes the descriptor. Idempotent — `close()`, scope-exit `exit`, and teardown `destroy` never
@@ -622,7 +622,7 @@ routine FileSink.flush()
 routine FileSink.close()
     if me.is_closed
         return
-    rf_file_close(me.fd)
+    C::rf_file_close(me.fd)
     me.is_closed = true
     return
 
@@ -657,8 +657,8 @@ dangerous routine FileSink.destroy()
 ### :returns: The file contents as `Text`.
 routine read_text(path: Text) -> Text
     var cstr = CStr(from: path)
-    var ptr = rf_io_read_file_all(cstr, cstr.count().S32())
-    var len = rf_io_get_result_len()
+    var ptr = C::rf_io_read_file_all(cstr, cstr.count().S32())
+    var len = C::rf_io_get_result_len()
     var bytes = Bytes(ptr: ptr, count: len)
     return bytes.decode_as_utf8_lossy()
 
@@ -672,7 +672,7 @@ routine read_text(path: Text) -> Text
 routine write_text(path: Text, content: Text) -> S64
     var cstr = CStr(from: path)
     var data = CStr(from: content)
-    return rf_io_write_file_all(
+    return C::rf_io_write_file_all(
         path: cstr,
         path_len: cstr.count().S32(),
         data: data.ptr(),
@@ -688,14 +688,14 @@ routine write_text(path: Text, content: Text) -> S64
 @readonly
 routine Directory.exists() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_exists(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_exists(path: cstr, len: cstr.count().S32())
 
 ### Whether this actually names a directory. Missing paths return `false`.
 ### :returns: `true` when the path is a directory.
 @readonly
 routine Directory.is_directory() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_is_directory(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_is_directory(path: cstr, len: cstr.count().S32())
 
 ### Filesystem metadata for this directory, captured in a single stat.
 ### :returns: The resulting {FileMetadata}.
@@ -703,15 +703,15 @@ routine Directory.is_directory() -> Bool
 @readonly
 routine Directory.metadata!() -> FileMetadata
     var cstr = CStr(from: me.at)
-    var status = rf_fs_metadata(path: cstr, len: cstr.count().S32())
+    var status = C::rf_fs_metadata(path: cstr, len: cstr.count().S32())
     if status == -1
         throw IOError(description: f"Cannot read metadata: {me.at}")
     return FileMetadata(
-        size: rf_fs_meta_size(),
-        modified: Moment.from_timestamp(seconds: rf_fs_meta_modified()),
-        created: Moment.from_timestamp(seconds: rf_fs_meta_created()),
-        is_directory: rf_fs_meta_is_directory(),
-        readonly: rf_fs_meta_readonly(),
+        size: C::rf_fs_meta_size(),
+        modified: Moment.from_timestamp(seconds: C::rf_fs_meta_modified()),
+        created: Moment.from_timestamp(seconds: C::rf_fs_meta_created()),
+        is_directory: C::rf_fs_meta_is_directory(),
+        readonly: C::rf_fs_meta_readonly(),
     )
 
 ### This directory's final path component.
@@ -746,8 +746,8 @@ routine Directory.subdir(name: Text) -> Directory
 @readonly
 routine Directory.absolute!() -> Directory
     var cstr = CStr(from: me.at)
-    var ptr = rf_fs_absolute_path(path: cstr, len: cstr.count().S32())
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_absolute_path(path: cstr, len: cstr.count().S32())
+    var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: f"Cannot resolve absolute path: {me.at}")
     var bytes = Bytes(ptr: ptr, count: len)
@@ -760,8 +760,8 @@ routine Directory.absolute!() -> Directory
 @readonly
 routine Directory.canonical!() -> Directory
     var cstr = CStr(from: me.at)
-    var ptr = rf_fs_canonical_path(path: cstr, len: cstr.count().S32())
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_canonical_path(path: cstr, len: cstr.count().S32())
+    var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: f"Cannot resolve canonical path: {me.at}")
     var bytes = Bytes(ptr: ptr, count: len)
@@ -776,28 +776,28 @@ routine Directory.canonical!() -> Directory
 @readonly
 routine Directory.can_read() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_can_read(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_can_read(path: cstr, len: cstr.count().S32())
 
 ### Whether the current process can write to this directory. Non-throwing capability probe.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Directory.can_write() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_can_write(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_can_write(path: cstr, len: cstr.count().S32())
 
 ### Whether the current process can execute (enter) this directory. Non-throwing capability probe.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Directory.can_execute() -> Bool
     var cstr = CStr(from: me.at)
-    return rf_fs_can_execute(path: cstr, len: cstr.count().S32())
+    return C::rf_fs_can_execute(path: cstr, len: cstr.count().S32())
 
 ### Enables or disables the readonly attribute for this directory (filesystem metadata).
 ### :param readonly: `true` to enable readonly mode; `false` to disable it.
 ### :throws: {IOError} when the attribute cannot be set.
 routine Directory.set_readonly!(readonly: Bool = true)
     var cstr = CStr(from: me.at)
-    var result = rf_fs_set_readonly(cstr, cstr.count().S32(), readonly)
+    var result = C::rf_fs_set_readonly(cstr, cstr.count().S32(), readonly)
     if result == -1
         throw IOError(description: f"Cannot set readonly on: {me.at}")
     return
@@ -810,7 +810,7 @@ routine Directory.set_readonly!(readonly: Bool = true)
 ### :throws: {IOError} when the directory cannot be created.
 routine Directory.create!()
     var cstr = CStr(from: me.at)
-    var result = rf_fs_create_dir(path: cstr, len: cstr.count().S32())
+    var result = C::rf_fs_create_dir(path: cstr, len: cstr.count().S32())
     if result == -1
         throw IOError(description: f"Cannot create directory: {me.at}")
     return
@@ -819,7 +819,7 @@ routine Directory.create!()
 ### :throws: {IOError} when the directories cannot be created.
 routine Directory.create_all!()
     var cstr = CStr(from: me.at)
-    var result = rf_fs_create_dir_all(path: cstr, len: cstr.count().S32())
+    var result = C::rf_fs_create_dir_all(path: cstr, len: cstr.count().S32())
     if result == -1
         throw IOError(description: f"Cannot create directories: {me.at}")
     return
@@ -828,7 +828,7 @@ routine Directory.create_all!()
 ### :throws: {IOError} when the directory cannot be removed.
 routine Directory.delete!()
     var cstr = CStr(from: me.at)
-    var result = rf_fs_remove(path: cstr, len: cstr.count().S32())
+    var result = C::rf_fs_remove(path: cstr, len: cstr.count().S32())
     if result == -1
         throw IOError(description: "Cannot remove path")
     return
@@ -837,7 +837,7 @@ routine Directory.delete!()
 ### :throws: {IOError} when the tree cannot be removed.
 routine Directory.delete_all!()
     var cstr = CStr(from: me.at)
-    var result = rf_fs_remove_all(path: cstr, len: cstr.count().S32())
+    var result = C::rf_fs_remove_all(path: cstr, len: cstr.count().S32())
     if result == -1
         throw IOError(description: "Cannot remove directory tree")
     return
@@ -848,7 +848,7 @@ routine Directory.delete_all!()
 routine Directory.move_to!(destination: Directory)
     var src_cstr = CStr(from: me.at)
     var dst_cstr = CStr(from: destination.at)
-    var result = rf_fs_move(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
+    var result = C::rf_fs_move(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
     if result == -1
         throw IOError(description: f"Cannot move '{me.at}' to '{destination.at}'")
     return
@@ -860,7 +860,7 @@ routine Directory.move_to!(destination: Directory)
 routine Directory.move_to_if_absent!(destination: Directory) -> Bool
     var src_cstr = CStr(from: me.at)
     var dst_cstr = CStr(from: destination.at)
-    var result = rf_fs_move_no_replace(
+    var result = C::rf_fs_move_no_replace(
         src_cstr,
         src_cstr.count().S32(),
         dst_cstr,
@@ -897,8 +897,8 @@ routine Directory.copy_to!(destination: Directory)
 @readonly
 routine Directory.list!() -> List[Text]
     var cstr = CStr(from: me.at)
-    var ptr = rf_fs_list_dir(path: cstr, len: cstr.count().S32())
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_list_dir(path: cstr, len: cstr.count().S32())
+    var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: f"Cannot list directory: {me.at}")
     if len == 0u64
@@ -917,8 +917,8 @@ routine Directory.list!() -> List[Text]
 @readonly
 routine Directory.entries!() -> List[DirEntry]
     var cstr = CStr(from: me.at)
-    var ptr = rf_fs_list_dir_typed(path: cstr, len: cstr.count().S32())
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_list_dir_typed(path: cstr, len: cstr.count().S32())
+    var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: f"Cannot list directory: {me.at}")
     var result = List[DirEntry]()
@@ -969,8 +969,8 @@ routine Directory.walk!() -> List[Text]
 ### :returns: The resulting `Directory`.
 ### :throws: {IOError} when the working directory cannot be read.
 routine current_dir!() -> Directory
-    var ptr = rf_fs_current_dir()
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_current_dir()
+    var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: "Cannot read current working directory")
     var bytes = Bytes(ptr: ptr, count: len)
@@ -981,7 +981,7 @@ routine current_dir!() -> Directory
 ### :throws: {IOError} when the directory cannot be entered.
 routine set_current_dir!(directory: Directory)
     var cstr = CStr(from: directory.at)
-    var result = rf_fs_set_current_dir(path: cstr, len: cstr.count().S32())
+    var result = C::rf_fs_set_current_dir(path: cstr, len: cstr.count().S32())
     if result == -1
         throw IOError(description: f"Cannot change directory to: {directory.at}")
     return
@@ -990,8 +990,8 @@ routine set_current_dir!(directory: Directory)
 ### fails.
 ### :returns: The resulting `Directory`.
 routine temp_dir() -> Directory
-    var ptr = rf_fs_temp_dir()
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_temp_dir()
+    var len = C::rf_get_result_len()
     var bytes = Bytes(ptr: ptr, count: len)
     return Directory(at: bytes.decode_as_utf8_lossy())
 
@@ -999,8 +999,8 @@ routine temp_dir() -> Directory
 ### :returns: The resulting `Directory`.
 ### :throws: {IOError} when the home directory cannot be determined.
 routine home_dir!() -> Directory
-    var ptr = rf_fs_home_dir()
-    var len = rf_get_result_len()
+    var ptr = C::rf_fs_home_dir()
+    var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: "Cannot determine home directory")
     var bytes = Bytes(ptr: ptr, count: len)

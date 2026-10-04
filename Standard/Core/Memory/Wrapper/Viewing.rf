@@ -1,9 +1,10 @@
 module Core
 
 import BuilderQuery
-### Represents temporary read-only access to an entity.
+### Represents temporary read-only access to a value where it is stored: an entity, or a record in its place
+### (a variable, a field, a container slot). It is the address of that place, the same as `Hijacked[T]`.
 ### `Viewing[T]` is the non-Assignable access token produced by `.view()` for single-threaded observation.
-### :typeparam T: The entity type being viewed.
+### :typeparam T: The type being viewed.
 ### :see: {Modifying[T]}, {Amending[T]}, {Consulting[T]}, {Access-Types}
 @llvm("ptr")
 record Viewing[T]
@@ -12,8 +13,8 @@ obeys Accessing[T], Enterable
 
 ### Produces a temporary read-only view of `me`.
 ### :returns: The resulting `Viewing[T]` value.
-### :note: Entity-only. Records are value-typed — scoped access to record-typed values is
-###        not supported in v0.0.1a. Use `entity` if you need a viewable reference.
+### :note: Entity-only. A record's token is made by whatever holds the record in place (a container hands
+###        one out for its element), from that place's address: `me` here could be a copy.
 routine T.view() -> Viewing[T]
 needs EntityType T
     danger
@@ -46,7 +47,21 @@ routine Viewing[T].exit()
 ### :returns: The inner entity as `T`.
 @readonly
 @inline
+@overridable
 routine Viewing[T].access() -> T
+needs AnyType T
+needs T obeys Assignable
+    # A record read out of its place is a holder of its own, as `getitem` gives one.
+    danger
+        return Hijacked[T](me).peek().assign()
+
+### `access` for a single-owner entity: the entity itself, which the token only points at.
+### :returns: The viewed entity.
+@readonly
+@inline
+@override
+routine Viewing[T].access() -> T
+needs EntityType T
     danger
         return Hijacked[T](me).as_entity()
 
@@ -54,23 +69,20 @@ routine Viewing[T].access() -> T
 # Display (transparent - delegates to inner value)
 # ============================================================================
 
-### Returns the display form of the viewed entity.
+### Returns the display form of the viewed value.
 ### :returns: The resulting `Text` value.
 @readonly
 @override
 routine Viewing[T].represent() -> Text
-    danger
-        var hijacked = Hijacked[T](me)
-        return hijacked.as_entity().represent()
+    # Through `access`, which reads an entity in place and a record out of its slot.
+    return me.access().represent()
 
-### Returns the diagnostic form of the viewed entity.
+### Returns the diagnostic form of the viewed value.
 ### :returns: The resulting `Text` value.
 @readonly
 @override
 routine Viewing[T].diagnose() -> Text
-    danger
-        var hijacked = Hijacked[T](me)
-        return me.type_name() + "(" + hijacked.as_entity().diagnose() + ")"
+    return me.type_name() + "(" + me.access().diagnose() + ")"
 
 @override
 dangerous routine Viewing[T].destroy()

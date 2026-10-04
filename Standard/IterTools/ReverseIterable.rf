@@ -12,10 +12,13 @@ needs TSource obeys Iterable[T]
     secret source: Hijacked[TSource]
 
 ### Iterates over a pre-materialized buffer from back to front.
+### The buffer holds the source's values as read, not copies it owns: an adapter is used only in the statement
+### that makes it, so the source outlives it, and a source cannot change while it is iterated. The buffer frees
+### its storage and leaves the values to the source.
 ### :typeparam T: The element type of the reversed sequence.
 entity ReverseEmittable[T]
 obeys Emittable[T]
-    ### Stores the materialized buffer of source values.
+    ### Stores the source's values in source order, read through, not owned.
     secret buffer: List[T]
     ### Stores the next read position, counting down toward zero.
     secret index: U64
@@ -36,7 +39,15 @@ routine ReverseEmittable[T].emit!() -> T
     if me.index == 0u64
         absent
     me.index = me.index - 1u64
-    return me.buffer[me.index]
+    return me.buffer.get_raw(index: me.index)
+
+### Frees the buffer's storage without tearing down the values in it, which belong to the source.
+@override
+dangerous routine ReverseEmittable[T].destroy()
+    me.buffer.clear()
+    me.buffer.destroy()
+    me.hijack().invalidate()
+    return
 
 ### Returns a lazy adapter that yields this iterable's elements in reverse order.
 ### The source is fully consumed when the returned adapter is first iterated.

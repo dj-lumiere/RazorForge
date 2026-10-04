@@ -54,10 +54,10 @@ obeys Iterable[T], MutableIndexable[T], Sized, Container, Equatable,
 # Iterable protocol support
 # ============================================================================
 
-### Walks the elements of a `List[T]` from front to back.
-### The iterator captures a raw pointer and element count at creation so it does
-### not hold a live reference to the list; mutations during iteration are unsafe.
-### :typeparam T: The element type produced by the iterator.
+### Walks the elements of a `List[T]` from front to back, handing out a write token on each element in its slot.
+### The walk points at the list's buffer and has no rights over it: the list outlives the walk and cannot change
+### its shape while it is walked (RF-S625). A walk that starts from a read-only list hands out read tokens.
+### :typeparam T: The element type the tokens point at.
 entity ListEmittable[T]
 obeys Emittable[T]
     ### Stores a pointer into the source list buffer.
@@ -370,11 +370,21 @@ routine List[T].setitem!(index: U64, value: T)
         me.data.offset(byte_offset).poke(value)
     return
 
-### Returns a write token on the entity stored at `index`, so one call through it changes the element in
-### place: `grid[0].add_last(value: 1)` lowers to `grid.modify_at(index: 0).add_last(value: 1)`. A plain
-### `getitem` hands back a copy, and a call on that copy would change only the copy. Like `T.modify()`, the
-### token lives only for that one call (the builder keeps the container still meanwhile, RF-S639). Entity
-### elements only.
+### Returns a write token on the element stored at `index`, so a call or a write through it changes the
+### element in place: `grid[0].add_last(value: 1)` lowers to `grid.modify_at(index: 0).add_last(value: 1)`. A
+### plain `getitem` hands back a copy, and a call on that copy would change only the copy. The token lives
+### while the list keeps its shape (RF-S639).
+@overridable
+routine List[T].modify_at!(index: U64) -> Modifying[T]
+needs AnyType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    # A record element's token is the address of its slot.
+    danger
+        return Modifying[T](me.data.offset(T.data_size() * index))
+
+### `modify_at` for a single-owner entity: the slot holds the entity's address, which is the token.
+@override
 routine List[T].modify_at!(index: U64) -> Modifying[T]
 needs EntityType T
     if index >= me.count
@@ -382,11 +392,22 @@ needs EntityType T
     danger
         return Modifying[T](me.data.offset(T.data_size() * index).peek_as[Hijacked[T]]())
 
-### Returns a read token on the entity stored at `index`, so one call through it reads the element without
-### copying it: `grid[0].count()` lowers to `grid.view_at(index: 0).count()`. A plain `getitem` hands back a
-### copy, and a call on that copy would copy the whole element first. Like `T.view()`, the token lives only
-### for that one call (the builder keeps the container still meanwhile, RF-S639). Entity elements only.
+### Returns a read token on the element stored at `index`, so a read through it does not copy the element
+### first: `grid[0].count()` lowers to `grid.view_at(index: 0).count()`. A plain `getitem` hands back a copy.
+### The token lives while the list keeps its shape (RF-S639).
 @readonly
+@overridable
+routine List[T].view_at!(index: U64) -> Viewing[T]
+needs AnyType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    # A record element's token is the address of its slot.
+    danger
+        return Viewing[T](me.data.offset(T.data_size() * index))
+
+### `view_at` for a single-owner entity: the slot holds the entity's address, which is the token.
+@readonly
+@override
 routine List[T].view_at!(index: U64) -> Viewing[T]
 needs EntityType T
     if index >= me.count
@@ -465,13 +486,31 @@ routine List[T].iter() -> ListEmittable[T]
     danger
         return ListEmittable[T](data: me.data, count: me.count(), index: 0u64)
 
-routine ListEmittable[T].emit!() -> T
+### Returns a write token on the next element: the address of its slot.
+### :returns: The token.
+### :absent: The walk is over.
+@overridable
+routine ListEmittable[T].emit!() -> Modifying[T]
+needs AnyType T
     if me.index >= me.count
         absent
     danger
-        var _result = me.data.offset(T.data_size() * me.index).peek()
+        var slot = me.data.offset(T.data_size() * me.index)
         me.index = me.index + 1u64
-        return _result
+        return Modifying[T](slot)
+
+### `emit` for a single-owner entity: the slot holds the entity's address, which is the token.
+### :returns: The token.
+### :absent: The walk is over.
+@override
+routine ListEmittable[T].emit!() -> Modifying[T]
+needs EntityType T
+    if me.index >= me.count
+        absent
+    danger
+        var address = me.data.offset(T.data_size() * me.index).peek_as[Hijacked[T]]()
+        me.index = me.index + 1u64
+        return Modifying[T](address)
 
 ### Returns true if both lists contain the same elements in the same order.
 ### :param you: The other list to compare against.

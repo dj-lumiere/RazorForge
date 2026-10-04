@@ -1,9 +1,10 @@
 module Core
 
 import BuilderQuery
-### Represents temporary unmanaged mutable access to an entity.
+### Represents temporary mutable access to a value where it is stored: an entity, or a record in its place
+### (a container slot). It is the address of that place, the same as `Hijacked[T]`.
 ### `Modifying[T]` is the non-Assignable access type used for explicit low-level manipulation outside the scoped-access wrappers.
-### :typeparam T: The entity type being accessed.
+### :typeparam T: The type being accessed.
 ### :see: {Viewing[T]}, {Hijacked[T]}, {Access-Types}
 @llvm("ptr")
 record Modifying[T]
@@ -42,20 +43,46 @@ routine Modifying[T].exit()
 # Marker-protocol coercion (access/control) — yields the inner entity as T
 # ============================================================================
 
-### Yields the inner entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
+### Yields the value the token points at, for read-only access: a record read out of its place as a holder
+### of its own (as `getitem` gives one). Inserted implicitly at call sites whose parameter is `Accessing[T]`.
+### :returns: The value as `T`.
+@readonly
+@inline
+@overridable
+routine Modifying[T].access() -> T
+needs AnyType T
+needs T obeys Assignable
+    danger
+        return Hijacked[T](me).peek().assign()
+
+### `access` for a single-owner entity: the entity itself as an in-flight `T` reference.
 ### :returns: The inner entity as `T`.
 @readonly
 @inline
+@override
 routine Modifying[T].access() -> T
+needs EntityType T
     danger
         return Hijacked[T](me).as_entity()
 
-### Yields the inner entity as an in-flight `T` reference for read/write access.
+### Yields the value the token points at, for read/write access: a record read out of its place. A write to a
+### record's member through the token goes to the place itself, not to this value.
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
+### :returns: The value as `T`.
+@inline
+@overridable
+routine Modifying[T].control() -> T
+needs AnyType T
+needs T obeys Assignable
+    danger
+        return Hijacked[T](me).peek().assign()
+
+### `control` for a single-owner entity: the entity itself as an in-flight `T` reference, changed in place.
 ### :returns: The inner entity as `T`.
 @inline
+@override
 routine Modifying[T].control() -> T
+needs EntityType T
     danger
         return Hijacked[T](me).as_entity()
 
@@ -68,18 +95,15 @@ routine Modifying[T].control() -> T
 @readonly
 @override
 routine Modifying[T].represent() -> Text
-    danger
-        var hijacked = Hijacked[T](me)
-        return hijacked.as_entity().represent()
+    # Through `access`, which reads an entity in place and a record out of its slot.
+    return me.access().represent()
 
 ### Returns the diagnostic form of the modifying entity.
 ### :returns: The resulting `Text` value.
 @readonly
 @override
 routine Modifying[T].diagnose() -> Text
-    danger
-        var hijacked = Hijacked[T](me)
-        return me.type_name() + "(" + hijacked.as_entity().diagnose() + ")"
+    return me.type_name() + "(" + me.access().diagnose() + ")"
 
 @override
 dangerous routine Modifying[T].destroy()

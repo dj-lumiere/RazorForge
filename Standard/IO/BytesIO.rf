@@ -101,13 +101,13 @@ routine S64.to_digit_bytes!() -> Bytes
     if me == 0_s64
         var buf: List[Byte] = []
         buf.add_last(value: Byte(from: 0x30_u8))  # '0'
-        return Bytes(from_list: buf)
+        return Bytes(from_list: steal buf)
 
     var negative = me.is_negative()
     # Compute the magnitude in U64 space. `me.abs()` overflows for S64_MIN (|S64_MIN| = 2^63 is not
     # representable in S64), so reinterpret the bits and take the two's-complement magnitude in U64,
     # where 2^63 fits. For non-negative values the bit pattern already equals the value.
-    var bits: U64 = reinterpret_bits[S64, U64](me)
+    var bits: U64 = LLVM::reinterpret_bits[S64, U64](me)
     var mag: U64 = if negative then 0_u64 -% bits else bits
     var digits: List[Byte] = []
 
@@ -121,7 +121,7 @@ routine S64.to_digit_bytes!() -> Bytes
         digits.add_last(value: Byte(from: 0x2D_u8))  # '-'
 
     digits.reverse_in_place()
-    return Bytes(from_list: digits)
+    return Bytes(from_list: steal digits)
 
 # ============================================================================
 # U64
@@ -171,7 +171,7 @@ routine U64.to_digit_bytes!() -> Bytes
     if me == 0u64
         var buf: List[Byte] = []
         buf.add_last(value: Byte(from: 0x30_u8))
-        return Bytes(from_list: buf)
+        return Bytes(from_list: steal buf)
 
     var v = me
     var digits: List[Byte] = []
@@ -182,7 +182,7 @@ routine U64.to_digit_bytes!() -> Bytes
         v = v // 10u64
 
     digits.reverse_in_place()
-    return Bytes(from_list: digits)
+    return Bytes(from_list: steal digits)
 
 # ============================================================================
 # Narrower signed widths — delegate to S64 then narrow.
@@ -318,19 +318,19 @@ routine S128.to_digit_bytes!() -> Bytes
     if me == 0_s128
         var buf: List[Byte] = []
         buf.add_last(value: Byte(from: 0x30_u8))
-        return Bytes(from_list: buf)
+        return Bytes(from_list: steal buf)
 
     var negative = me.is_negative()
     # Compute the magnitude in U128 space. `me.abs()` overflows for S128_MIN (|S128_MIN| = 2^127 is
     # not representable in S128), so reinterpret the bits and take the two's-complement magnitude in
     # U128, where 2^127 fits. For non-negative values the bit pattern already equals the value.
-    var bits: U128 = reinterpret_bits[S128, U128](me)
+    var bits: U128 = LLVM::reinterpret_bits[S128, U128](me)
     var mag: U128 = if negative then 0_u128 -% bits else bits
     var digits: List[Byte] = u128_digits_lsd(mag: mag)
     if negative
         digits.add_last(value: Byte(from: 0x2D_u8))
     digits.reverse_in_place()
-    return Bytes(from_list: digits)
+    return Bytes(from_list: steal digits)
 
 # ============================================================================
 # U128 — direct accumulation in U128.
@@ -364,11 +364,11 @@ routine U128.to_digit_bytes!() -> Bytes
     if me == 0_u128
         var buf: List[Byte] = []
         buf.add_last(value: Byte(from: 0x30_u8))
-        return Bytes(from_list: buf)
+        return Bytes(from_list: steal buf)
 
     var digits: List[Byte] = u128_digits_lsd(mag: me)
     digits.reverse_in_place()
-    return Bytes(from_list: digits)
+    return Bytes(from_list: steal digits)
 
 # ============================================================================
 # Integer (arbitrary precision).
@@ -409,7 +409,7 @@ routine Integer.to_digit_bytes!() -> Bytes
     if me == zero
         var buf: List[Byte] = []
         buf.add_last(value: Byte(from: 0x30_u8))
-        return Bytes(from_list: buf)
+        return Bytes(from_list: steal buf)
 
     var negative = me < zero
     var abs_val: Integer = if negative then -me else me
@@ -417,14 +417,14 @@ routine Integer.to_digit_bytes!() -> Bytes
     var digits: List[Byte] = []
     while abs_val > zero
         var d: Integer = abs_val % ten
-        var d_u8: U8 = U8(from: d)
+        var d_u8: U8 = U8(from: U64(from: d))
         var b: U8 = 0x30_u8 + d_u8
         digits.add_last(value: Byte(from: b))
         abs_val = abs_val // ten
     if negative
         digits.add_last(value: Byte(from: 0x2D_u8))
     digits.reverse_in_place()
-    return Bytes(from_list: digits)
+    return Bytes(from_list: steal digits)
 
 # ============================================================================
 # Floats / Decimals / Complex — TODO (deferred to a later v0.1.x patch).
