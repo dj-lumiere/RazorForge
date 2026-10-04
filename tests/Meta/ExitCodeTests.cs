@@ -37,6 +37,22 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "DivisionByZeroError: You tried to divide by zero", actualString: stdout + stderr);
     }
 
+    /// <summary><c>Real</c> is finite-only: a bare square root of a negative value is not recovered, so the program
+    /// crashes with status 82 and the <c>NumericDomainError</c> instead of printing a NaN.</summary>
+    [Fact]
+    public void RealSqrtOfNegative_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "real_sqrt_negative.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "taking the square root of -4", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "NaN", actualString: stdout);
+        Assert.Contains(expectedSubstring: "NumericDomainError: domain error: a negative number has no real square root",
+            actualString: stdout + stderr);
+    }
+
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
         string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ExitCode", fixture]);

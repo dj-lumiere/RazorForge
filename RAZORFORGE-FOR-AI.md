@@ -36,9 +36,18 @@ When unsure, consult ground truth in the repo/package:
    Division by zero crashes on every number type, arbitrary precision included.
    On the floats, `Decimal`, `Real` and the complex types `x / 0` with `x` not
    zero throws `DivisionByZeroError` and `0 / 0` throws `NumericDomainError`
-   (integer `//` and `%` by zero throw `DivisionByZeroError`). `Real` never hands
-   back an infinity or NaN from a division: `divide(you:, precision:)` and
-   `0 ** -n` (a `DivisionByZeroError`) follow the same rule.
+   (integer `//` and `%` by zero throw `DivisionByZeroError`).
+   `Real` is finite-only like `Decimal`: no operation hands back an infinity or
+   NaN, the operation throws instead (recover with `try`/`grab`). Poles throw
+   `DivisionByZeroError` (`x / 0`, `divide`, `0 ** -n`, `log`/`log2`/`log10` of 0,
+   `atanh(±1)`). No real result throws `NumericDomainError` (`0 / 0`, `sqrt` or
+   `log*` of a negative, `asin`/`acos` outside [-1, 1], `acosh` below 1, `atanh`
+   outside [-1, 1], a negative base to a non-integer power, `pow!` and
+   `pow(exp:, precision:)` alike). A result past the exponent range (about
+   2^(2^60)) throws `NumericOverflowError` (`exp`, `exp2`, `exp10`, `sinh`,
+   `cosh`, `pow`/`**`, `hypot`, and `+ - * /` at that edge). `Real(text:)` rejects
+   `nan`/`inf`/`infinity` with `InvalidValueError`, and `Real(from: B64)` throws
+   `NumericOverflowError` for ±inf and `NumericDomainError` for NaN.
 6. **Entities have a single owner.** Assigning or passing an entity requires
    explicit transfer: `consume(r: steal b)`. Plain `var s = obj.field_entity`
    is rejected (RF-S413).
