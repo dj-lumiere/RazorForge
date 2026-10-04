@@ -10,6 +10,10 @@ module Random
 ### The output is deterministic for a given seed: the same seed always replays
 ### the same sequence. This is a statistical generator for simulations, games,
 ### sampling, and shuffling — it is NOT cryptographically secure.
+###
+### The generator's arithmetic is Tessera's `Xoshiro256` (Standard/Random.tess), called
+### through Ingrid (`C::ingrid_xoshiro256ss_*`): this entity keeps the four state words, and
+### a seed gives the same stream in Tessera, RazorForge, and Suflae.
 entity Random
     ### Stores state word 0 of the xoshiro256** state.
     secret s0: U64
@@ -33,29 +37,19 @@ routine splitmix64_next(x: U64) -> U64
 ### :param seed: The seed value; equal seeds replay equal streams.
 ### :returns: A fresh `Random` generator.
 routine make_random(seed: U64) -> Random
-    var acc = seed
-    acc = splitmix64_next(x: acc)
-    var w0 = acc
-    acc = splitmix64_next(x: acc)
-    var w1 = acc
-    acc = splitmix64_next(x: acc)
-    var w2 = acc
-    acc = splitmix64_next(x: acc)
-    var w3 = acc
-    return Random(s0: w0, s1: w1, s2: w2, s3: w3)
+    var state = C::ingrid_xoshiro256ss_seed(seed: seed)
+    return Random(s0: state.w0, s1: state.w1, s2: state.w2, s3: state.w3)
 
 ### Advances the generator and returns the next 64-bit output.
 ### This is the core primitive; all other draws derive from it.
 ### :returns: The next uniformly distributed `U64` in the full 64-bit range.
 routine Random.next_u64() -> U64
-    var result = (me.s1 *% 5u64).rotate_left(bits: 7u32) *% 9u64
-    var t = me.s1 << 17u32
-    me.s2 = me.s2 ^ me.s0
-    me.s3 = me.s3 ^ me.s1
-    me.s1 = me.s1 ^ me.s2
-    me.s0 = me.s0 ^ me.s3
-    me.s2 = me.s2 ^ t
-    me.s3 = me.s3.rotate_left(bits: 45u32)
+    var result = C::ingrid_xoshiro256ss_output(s0: me.s0, s1: me.s1, s2: me.s2, s3: me.s3)
+    var stepped = C::ingrid_xoshiro256ss_step(s0: me.s0, s1: me.s1, s2: me.s2, s3: me.s3)
+    me.s0 = stepped.w0
+    me.s1 = stepped.w1
+    me.s2 = stepped.w2
+    me.s3 = stepped.w3
     return result
 
 ### Advances the generator and returns the next 32-bit output.
@@ -70,7 +64,7 @@ routine Random.next_u32() -> U32
 ### Uses the top 53 bits of a fresh draw, matching the mantissa width of `B64`.
 ### :returns: A uniformly distributed `B64` in `[0.0, 1.0)`.
 routine Random.next_b64() -> B64
-    return B64(from: me.next_u64() >>> 11u32) / 9007199254740992.0_b64
+    return C::ingrid_random_unit_b64(bits: me.next_u64())
 
 ### Returns whether a Bernoulli trial with the given success probability
 ### succeeds. A probability of `0.0` never succeeds and `1.0` always does.
