@@ -1,0 +1,93 @@
+module Tests/Stdlib/RecoveryLambdaApi
+
+import IO/Console
+import IterTools
+# With `try`, `grab` or `lookup` in front, a failure inside a lambda or routine value is recovered too, wherever
+# the value is called beneath the keyword: through the iterator adapters (`select`, `where`) and the terminals
+# that drive them, through `any`/`all`/`sort_by`, through a user routine that calls the value it was handed,
+# a value passed down two levels, a value kept in an entity's field, and an `each` loop over an adapter.
+
+routine apply(f: Routine[(S32,), S32], x: S32) -> S32
+    return f(x)
+
+routine apply_twice(f: Routine[(S32,), S32], x: S32) -> S32
+    return apply(f: f, x: apply(f: f, x: x))
+
+routine sum_inverse(xs: List[S32]) -> S32
+    var total = 0_s32
+    each y in xs.select(transform: x => 100 // x)
+        total += y
+    return total
+
+routine hundred_over(x: S32) -> S32
+    return 100 // x
+
+entity Holder
+    secret f: Routine[(S32,), S32]
+
+routine Holder.run(x: S32) -> S32
+    return me.f(x)
+
+routine start()
+    var ok = List[S32]()
+    ok.add_last(value: 5)
+    ok.add_last(value: 2)
+    var bad = List[S32]()
+    bad.add_last(value: 5)
+    bad.add_last(value: 0)
+
+    # select (lazy: the lambda runs when List() drives it)
+    show(f"select ok: {try ok.select(transform: x => 10 // x).List()}")
+    show(f"select try: {try bad.select(transform: x => 10 // x).List()}")
+    show(f"select grab: {grab bad.select(transform: x => 10 // x).List()}")
+    show(f"select lookup: {lookup bad.select(transform: x => 10 // x).List()}")
+    when grab bad.select(transform: x => 10 // x).List()
+        is DivisionByZeroError e => show(f"select arm: {e.crash_title()}")
+        is Crashables e => show(f"select other: {e.crash_title()}")
+        else values => show(f"select values: {values}")
+
+    # where
+    show(f"where ok: {try ok.where(predicate: x => 10 // x > 2).List()}")
+    show(f"where try: {try bad.where(predicate: x => 10 // x > 1).List()}")
+
+    # any / all
+    show(f"any ok: {try ok.any(predicate: x => 10 // x == 2)}")
+    show(f"any try: {try bad.any(predicate: x => 10 // x == 7)}")
+    show(f"all grab: {grab bad.all(predicate: x => 10 // x > 0)}")
+
+    # sort_by: the routine returns nothing, so try gives Bool and grab Check[None]
+    var sorted = ok.duplicate()
+    show(f"sort ok: {try sorted.sort_by(compare: (a, b) => 10 // a < 10 // b)} {sorted}")
+    show(f"sort try: {try bad.sort_by(compare: (a, b) => 10 // a < 10 // b)}")
+
+    # each over an adapter, inside a routine called beneath the keyword
+    show(f"each ok: {try sum_inverse(xs: ok.duplicate())}")
+    show(f"each try: {try sum_inverse(xs: bad.duplicate())}")
+
+    # a user higher-order routine, a captured local, a value passed down two levels
+    show(f"apply ok: {try apply(f: x => 10 // x, x: 5)}")
+    show(f"apply try: {try apply(f: x => 10 // x, x: 0)}")
+    var divisor = 0_s32
+    show(f"capture try: {try apply(f: x given divisor => x // divisor, x: 7)}")
+    divisor = 2_s32
+    show(f"capture ok: {try apply(f: x given divisor => x // divisor, x: 7)}")
+    show(f"two levels ok: {try apply_twice(f: x => 64 // x, x: 2)}")
+    show(f"two levels try: {try apply_twice(f: x => 64 // (x - 32), x: 32)}")
+    show(f"two levels lookup: {lookup apply_twice(f: x => 64 // (x - 2), x: 2)}")
+
+    # a routine named as a value
+    show(f"named ok: {try apply(f: hundred_over, x: 4)}")
+    show(f"named try: {try apply(f: hundred_over, x: 0)}")
+
+    # a value stored in an entity's field, called later beneath the keyword
+    var holder = Holder(f: x => 10 // x)
+    show(f"stored ok: {try holder.run(x: 2)}")
+    show(f"stored try: {try holder.run(x: 0)}")
+    show(f"stored grab: {grab holder.run(x: 0)}")
+
+    # a local routine value called directly beneath the keyword
+    var g: Routine[(S32,), S32] = x => 10 // x
+    show(f"local try: {try g(0_s32)}")
+    show(f"local ok: {try g(5_s32)}")
+    show("DONE")
+    return

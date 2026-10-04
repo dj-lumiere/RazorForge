@@ -68,10 +68,18 @@ When unsure, consult ground truth in the repo/package:
    `Integer(text: "x")`). Each becomes the carrier's failure (`try`: absent;
    `grab`: the error, an absence as `AbsentValueError`; `lookup`: the error or
    absent), and evaluation stops at the first one. A bare call (no keyword)
-   still crashes loudly. Not covered: a lambda handed to another routine
-   (`xs.select(transform: x => 10 // x)`) runs as a routine value inside the
-   routine that receives it, so its failure crashes even under a keyword around
-   the call. Out of memory and running out of stack are fatal everywhere.
+   still crashes loudly. Lambdas and routine values are covered the same way: a
+   failure inside a lambda handed to another routine
+   (`try xs.select(transform: x => 10 // x).List()`, `grab xs.sort_by(compare: f)`,
+   a user routine that calls the value it was given, a routine value passed down
+   several levels or kept in a field) is recovered by the keyword above the call
+   that reaches it, at any depth. A routine value called with no keyword above
+   that call still crashes on failure. An `each` loop over an adapter holding a
+   lambda ends only when its source ends: a failure inside the lambda is the
+   loop's failure, recovered by a keyword above the loop or crashing without one.
+   Not covered: a crash inside a library routine declared without `!` (other
+   than in a routine value you handed it) stays a crash, and native runtime
+   fatal errors, out of memory and running out of stack are fatal everywhere.
    **`pierce`** is the failure that must NOT be recovered: `pierce NopeError()`
    crashes like an unrecovered `throw` (status 82), and it crashes the same way
    under `try`/`grab`/`lookup` at any depth. Use it for a broken invariant (state
@@ -112,7 +120,11 @@ When unsure, consult ground truth in the repo/package:
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
 9. **Ignored Bool returns need `discard`**: `discard seen.add(value: v)` (RF-W007).
 10. **Indentation is 4 spaces and blocks are indentation-delimited.** No braces.
-11. **Chained comparisons are one expression**: `0 <= x <= 10` works.
+11. **Chained comparisons are one expression**: `0 <= x <= 10` works. Every
+    operand is evaluated once, eagerly, left to right, before any comparison:
+    `a < b < f()` calls `f` even when `a < b` is false. Only the comparisons stop
+    at the first false link. A failure in any operand is a failure like any
+    other (`try 1 < 5 < 10 // n` recovers the division by zero).
 12. **Printing is `show(...)`** (after `import IO/Console`), not print/println.
 13. **The entry point is `routine start()`**, not `main`.
 

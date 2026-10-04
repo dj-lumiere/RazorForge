@@ -486,17 +486,18 @@ public class CompilerPipelineLoweringTests
             });
 
         string llvmIr = generator.Generate();
-        // Wired-ness is NOT part of the mangled symbol name (it is a routine PROPERTY, not an
-        // overload axis) — the attribute prefix carries only crashable/member here.
-        Assert.Contains(expectedSubstring: "\"[crashable, member] Core.S32.sub(you: Core.S32)\"",
+        // Beneath `try` every failure is recovered, so the checked `-`/`+` inside floordiv's try variant go
+        // through their own try variants, which are defined (not merely declared). Wired-ness is NOT part of
+        // the mangled symbol name (it is a routine PROPERTY, not an overload axis).
+        Assert.Contains(expectedSubstring: "@\"[member, try] Core.S32.sub(you: Core.S32)\"(i32 %me, i32 %you)",
             actualString: llvmIr);
-        Assert.Contains(expectedSubstring: "\"[crashable, member] Core.S32.add(you: Core.S32)\"",
-            actualString: llvmIr);
-        Assert.DoesNotContain(
-            expectedSubstring: "declare void @\"[crashable, member] Core.S32.sub",
+        Assert.Contains(expectedSubstring: "@\"[member, try] Core.S32.add(you: Core.S32)\"(i32 %me, i32 %you)",
             actualString: llvmIr);
         Assert.DoesNotContain(
-            expectedSubstring: "declare void @\"[crashable, member] Core.S32.add",
+            expectedSubstring: "declare %\"Record.Core.Maybe[Core.S32]\" @\"[member, try] Core.S32.sub",
+            actualString: llvmIr);
+        Assert.DoesNotContain(
+            expectedSubstring: "declare %\"Record.Core.Maybe[Core.S32]\" @\"[member, try] Core.S32.add",
             actualString: llvmIr);
     }
 

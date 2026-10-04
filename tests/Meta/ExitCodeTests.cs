@@ -70,6 +70,40 @@ public sealed class ExitCodeTests
             actualString: stdout + stderr);
     }
 
+    /// <summary>A lambda's failure is recovered only beneath a recovery keyword: called with no keyword above
+    /// the call (here by an <c>each</c> loop over a <c>select</c>) it crashes with status 82, and the loop does
+    /// not quietly end early.</summary>
+    [Fact]
+    public void LambdaFailureWithoutKeyword_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "lambda_bare_crash.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "recovered: none", actualString: stdout);
+        Assert.Contains(expectedSubstring: "step 2", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "step 5", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "DivisionByZeroError", actualString: stdout + stderr);
+    }
+
+    /// <summary>A <c>pierce</c> inside a lambda another routine calls still crashes with status 82 beneath
+    /// <c>try</c>, after the same call recovered the lambda's ordinary failure.</summary>
+    [Fact]
+    public void PierceInLambdaUnderTry_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "pierce_in_lambda.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "recovered: none", actualString: stdout);
+        Assert.Contains(expectedSubstring: "value: 25", actualString: stdout);
+        Assert.Contains(expectedSubstring: "piercing", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "BrokenInvariantError: the ledger no longer balances",
+            actualString: stdout + stderr);
+    }
+
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
         string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ExitCode", fixture]);

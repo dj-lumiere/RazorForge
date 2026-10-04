@@ -1,0 +1,26 @@
+module Tests/ExitCode/PierceInLambda
+
+import IO/Console
+# `pierce` stays a crash beneath `try` even when it happens inside a lambda that another routine calls: the
+# lambda's ordinary failures are recovered, its `pierce` is not (status 82).
+
+crashable BrokenInvariantError
+
+routine BrokenInvariantError.crash_message() -> Text
+    return "the ledger no longer balances"
+
+routine check(total: S64) -> S64
+    if total > 100
+        pierce BrokenInvariantError()
+    return 100 // total
+
+routine apply(f: Routine[(S64,), S64], x: S64) -> S64
+    return f(x)
+
+routine start()
+    show(f"recovered: {try apply(f: t => check(total: t), x: 0)}")
+    show(f"value: {try apply(f: t => check(total: t), x: 4)}")
+    show("piercing")
+    show(f"{try apply(f: t => check(total: t), x: 500)}")
+    show("not reached")
+    return
