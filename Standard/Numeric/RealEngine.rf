@@ -2182,15 +2182,9 @@ secret routine bf_cmp(a: BfT, b: BfT) -> S64
 secret routine bf_pow10(e: U64) -> BfT
     return bf_pow_radix(radix: 10u64, e: e)
 
-# T * 10^expn, rounded to prec: a mul for expn >= 0, a div for expn < 0. 10^|expn| is exact, so the one
-# operation rounds correctly. (libbf bf_mul_pow_radix, radix 10)
+# T * 10^expn, rounded to prec. (libbf bf_mul_pow_radix, radix 10)
 secret routine bf_mul10exp(t: BfT, expn: S64, prec: U64, fl: U32) -> BfT
-    danger
-        if expn == 0s64
-            return bf_round(a: t, prec: prec, fl: fl)
-        if expn > 0s64
-            return bf_mul(a: t, b: bf_pow10(e: U64(from: expn)), prec: prec, fl: fl)
-        return bf_div(a: t, b: bf_pow10(e: U64(from: 0s64 -% expn)), prec: prec, fl: fl)
+    return bf_mul_pow_radix(t: t, radix: 10u64, expn: expn, prec: prec, fl: fl)
 
 # ── Phase 6: transcendentals — π via Chudnovsky binary splitting (libbf bf_const_pi) ──────────────────
 secret routine bf_mul_ui(a: BfT, n: U64, prec: U64, fl: U32) -> BfT
@@ -3447,6 +3441,130 @@ secret routine bf_pow_radix(radix: U64, e: U64) -> BfT
                 base = bf_mul(a: base, b: base, prec: bf_prec_inf(), fl: 0u32)
         return result
 
+# radix^e rounded to nearest at prec bits by square and multiply, every product rounded. Squaring doubles
+# the relative error a power carries, so the result is off by less than 2^(ceil_log2(e) + 2 - prec)
+# relative (2e + 1 roundings of 2^-prec at most, compounded).
+secret routine bf_pow_radix_rounded(radix: U64, e: U64, prec: U64) -> BfT
+    danger
+        var result = bf_set_ui(a: 1u64)
+        var base = bf_set_ui(a: radix)
+        var ee = e
+        while ee > 0u64
+            if (ee & 1u64) != 0u64
+                result = bf_mul(a: result, b: base, prec: prec, fl: 0u32)
+            ee = ee >> 1u32
+            if ee > 0u64
+                base = bf_mul(a: base, b: base, prec: prec, fl: 0u32)
+        return result
+
+# floor(log2) of the odd part of `radix`: 0 for a power of two. A power radix^e then has an odd part of
+# at least 2^(e * this).
+secret routine radix_odd_bits(radix: U64) -> U64
+    var o = radix
+    while o > 1u64 and (o & 1u64) == 0u64
+        o = o >> 1u32
+    var bits = 0u64
+    while o > 1u64
+        o = o >> 1u32
+        bits = bits +% 1u64
+    return bits
+
+# The exponent of the lowest set bit of a finite nonzero `a`: a = A * 2^result with A an odd integer.
+secret routine bf_low_bit_expn(a: BfT) -> S64
+    danger
+        var i = 0u64
+        while i < a.len and limb(tab: a.tab, i: i) == 0u64
+            i = i +% 1u64
+        var w = limb(tab: a.tab, i: i)
+        var pos = i *% 64u64
+        while (w & 1u64) == 0u64
+            w = w >> 1u32
+            pos = pos +% 1u64
+        return a.expn -% S64(from: a.len *% 64u64) +% S64(from: pos)
+
+# Does every value within 2^(x.expn - k) of `x` round (prec bits, fl) to what `x` rounds to? The settling
+# test of a Ziv loop whose approximation `x` is off by less than that. Rounding is monotone, so the two
+# ends of the interval decide it.
+secret routine bf_round_settled(x: BfT, k: S64, prec: U64, fl: U32) -> Bool
+    danger
+        var err = bf_mul_2exp(a: bf_set_ui(a: 1u64), e: x.expn -% k, prec: bf_prec_inf(), fl: 0u32)
+        var lo = bf_round(
+            a: bf_sub(a: x, b: err, prec: bf_prec_inf(), fl: 0u32),
+            prec: prec,
+            fl: fl,
+        )
+        var hi = bf_round(
+            a: bf_add(a: x, b: err, prec: bf_prec_inf(), fl: 0u32),
+            prec: prec,
+            fl: fl,
+        )
+        return bf_cmp(a: lo, b: hi) == 0s64
+
+# T * radix^expn rounded to prec: a mul for expn >= 0, a div for expn < 0. A small power is built exactly,
+# so the one operation rounds correctly. A large one would take e * log2(radix) bits to hold exactly, so it
+# is rounded instead, a few guard bits above prec, and a Ziv loop raises the working precision until the
+# result settles. A large power has an odd part beyond 2^(prec + 2) and beyond T's mantissa, so the exact
+# result is neither representable at prec bits nor halfway between two such values, and the loop ends.
+# (libbf bf_mul_pow_radix)
+secret routine bf_mul_pow_radix(t: BfT, radix: U64, expn: S64, prec: U64, fl: U32) -> BfT
+    danger
+        if expn == 0s64 or t.len == 0u64
+            return bf_round(a: t, prec: prec, fl: fl)
+        var e = if expn > 0s64 then U64(from: expn) else U64(from: 0s64 -% expn)
+        var odd_bits = radix_odd_bits(radix: radix)
+        if odd_bits == 0u64 or e *% odd_bits <= prec +% t.len *% 64u64 +% 2u64
+            if expn > 0s64
+                return bf_mul(a: t, b: bf_pow_radix(radix: radix, e: e), prec: prec, fl: fl)
+            return bf_div(a: t, b: bf_pow_radix(radix: radix, e: e), prec: prec, fl: fl)
+        var lost = ceil_log2(a: e) +% 4u64
+        var prec1 = prec +% lost +% 32u64
+        while true
+            var pw = bf_pow_radix_rounded(radix: radix, e: e, prec: prec1)
+            var x = bf_set_zero(is_neg: false)
+            if expn > 0s64
+                x = bf_mul(a: t, b: pw, prec: prec1, fl: 0u32)
+            else
+                x = bf_div(a: t, b: pw, prec: prec1, fl: 0u32)
+            if scratch_exhausted()
+                return x
+            if bf_round_settled(x: x, k: S64(from: prec1 -% lost), prec: prec, fl: fl)
+                return bf_round(a: x, prec: prec, fl: fl)
+            prec1 = prec1 +% prec1 // 2u64
+        return bf_set_nan()
+
+# rint(a * 10^s), nearest even, for finite a > 0 whose scaled value is meant to have about p digits. A small
+# power of ten is built exactly (s >= 0) or divided at 4p + 128 bits (s < 0). A large one is rounded and a
+# Ziv loop settles the integer. That loop only runs where a * 10^s can't be exactly halfway between two
+# integers: for s >= 0 the halfway case needs a = A * 2^(-1 - s) with A odd, for s < 0 it needs 5^-s to
+# divide a's mantissa.
+secret routine bf_rint_mul10exp(a: BfT, s: S64, p: U64) -> BfT
+    danger
+        var e = if s >= 0s64 then U64(from: s) else U64(from: 0s64 -% s)
+        if s >= 0s64
+            if e *% 2u64 <= p *% 4u64 +% 16u64 or bf_low_bit_expn(a: a) +% s == -1s64
+                return bf_rint(
+                    a: bf_mul(a: a, b: bf_pow10(e: e), prec: bf_prec_inf(), fl: 0u32),
+                    rnd: 0u32,
+                )
+        elseif e *% 2u64 <= a.len *% 64u64 +% 2u64
+            var q = bf_div(a: a, b: bf_pow10(e: e), prec: p *% 4u64 +% 128u64, fl: 0u32)
+            return bf_rint(a: q, rnd: 0u32)
+        var lost = ceil_log2(a: e) +% 4u64
+        var prec1 = p *% 4u64 +% lost +% 64u64
+        while true
+            var pw = bf_pow_radix_rounded(radix: 10u64, e: e, prec: prec1)
+            var x = bf_set_zero(is_neg: false)
+            if s >= 0s64
+                x = bf_mul(a: a, b: pw, prec: prec1, fl: 0u32)
+            else
+                x = bf_div(a: a, b: pw, prec: prec1, fl: 0u32)
+            if scratch_exhausted()
+                return x
+            if bf_round_settled(x: x, k: S64(from: prec1 -% lost), prec: 0u64, fl: 0x10u32)
+                return bf_rint(a: x, rnd: 0u32)
+            prec1 = prec1 +% prec1 // 2u64
+        return bf_set_nan()
+
 # For finite a > 0 and a digit count p: (r, e) with r an integer, 10^(p-1) <= r < 10^p, and
 # a ~ r * 10^(e-p), r rounded to nearest even. (libbf bf_convert_to_radix)
 secret routine bf_to_decimal(a: BfT, p: U64) -> (BfT, S64)
@@ -3457,20 +3575,7 @@ secret routine bf_to_decimal(a: BfT, p: U64) -> (BfT, S64)
         var r = bf_set_ui(a: 0u64)
         var going = true
         while going
-            var s = S64(from: p) -% big_e
-            if s >= 0s64
-                r = bf_rint(
-                    a: bf_mul(a: a, b: bf_pow10(e: U64(from: s)), prec: bf_prec_inf(), fl: 0u32),
-                    rnd: 0u32,
-                )
-            else
-                var q = bf_div(
-                    a: a,
-                    b: bf_pow10(e: U64(from: 0s64 -% s)),
-                    prec: p *% 4u64 +% 128u64,
-                    fl: 0u32,
-                )
-                r = bf_rint(a: q, rnd: 0u32)
+            r = bf_rint_mul10exp(a: a, s: S64(from: p) -% big_e, p: p)
             if scratch_exhausted()
                 going = false
             elseif bf_cmpu(a: r, b: limit) >= 0s64
@@ -3796,22 +3901,4 @@ secret routine bf_atof(chars: Hijacked[Character], count: U64, radix: U64, prec:
             fl: 0u32,
         )
         var scale = expn -% frac_digits
-        if scale == 0s64
-            return (bf_round(a: m, prec: prec, fl: 0u32), true)
-        if scale > 0s64
-            return (
-                bf_mul(
-                    a: m,
-                    b: bf_pow_radix(radix: radix, e: U64(from: scale)),
-                    prec: prec,
-                    fl: 0u32,
-                ), true,
-            )
-        return (
-            bf_div(
-                a: m,
-                b: bf_pow_radix(radix: radix, e: U64(from: 0s64 -% scale)),
-                prec: prec,
-                fl: 0u32,
-            ), true,
-        )
+        return (bf_mul_pow_radix(t: m, radix: radix, expn: scale, prec: prec, fl: 0u32), true)
