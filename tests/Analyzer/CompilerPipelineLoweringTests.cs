@@ -587,7 +587,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine start()
-                            var items = List[S64]()
+                            danger
+                                discard rf_allocate_dynamic_uninit(size: 64b)
                             return
                         """;
 
