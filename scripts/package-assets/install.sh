@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # RazorForge installer (Linux / macOS)
 #
-# Symlinks `razorforge` and `rf` into ~/.local/bin so they work from any
+# Symlinks `razorforge`, `rf`, `suflae`, and `sf` into ~/.local/bin so they work from any
 # terminal. Everything runs from this folder — no root, no other downloads.
 #
 # Usage:  ./install.sh
@@ -42,7 +42,9 @@ fi
 mkdir -p "$BIN"
 ln -sf "$DIR/RazorForge" "$BIN/razorforge"
 ln -sf "$DIR/RazorForge" "$BIN/rf"
-echo "Linked razorforge + rf into $BIN"
+ln -sf "$DIR/Suflae" "$BIN/suflae"
+ln -sf "$DIR/Suflae" "$BIN/sf"
+echo "Linked razorforge, rf, suflae, and sf into $BIN"
 
 case ":$PATH:" in
   *":$BIN:"*)
