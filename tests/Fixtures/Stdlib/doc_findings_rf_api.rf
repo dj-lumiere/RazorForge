@@ -1,0 +1,101 @@
+module Tests/Stdlib/DocFindingsRfApi
+
+import IO/Console
+import Numerics
+
+# The RazorForge side of forms found while verifying the Suflae documentation: each once passed `check` and then
+# failed in the emitter or at link time.
+
+record Circle
+    center: S64
+    radius: S64
+
+record Square
+    side: S64
+
+variant Shape
+    Circle
+    Square
+
+choice Color
+    RED
+    GREEN
+    BLUE
+
+record Settings
+    name: Text
+    level: S64 = 3
+
+protocol Sized
+    routine Me.size() -> S64
+
+record Box
+obeys Sized
+    n: S64
+
+routine Box.size() -> S64
+    return me.n
+
+# A routine written on a protocol: every type obeying it gets it.
+routine Sized.doubled() -> S64
+    return me.size() * 2
+
+routine find!(n: S64) -> S64
+    if n < 0
+        absent
+    return n
+
+# A conditional expression as a variable's initializer inside a generic routine.
+routine pick[T](a: T, b: T, first: Bool) -> T
+needs RecordType T
+    var chosen = if first then a else b
+    return chosen
+
+# A `when` over a choice with an `==` arm for every case covers it: no `else` is needed.
+routine color_name(c: Color) -> Text
+    when c
+        == Color.RED => return "red"
+        == Color.GREEN => return "green"
+        == Color.BLUE => return "blue"
+
+# A vararg parameter followed by a parameter that has a default.
+routine joined(nums...: S64, separator: Text = ", ") -> Text
+    var out = ""
+    each n in nums
+        if out != ""
+            out = out + separator
+        out = out + f"{n}"
+    return out
+
+routine describe(s: Shape) -> Text
+    when s
+        is Circle (center, radius) => return f"circle at {center}, radius {radius}"
+        is Square sq => return f"square of side {sq.side}"
+
+routine start()
+    show(describe(s: Circle(center: 1, radius: 5)))
+    show(describe(s: Square(side: 4)))
+
+    var found = try find(n: 3) ?? stop()
+    var again = try find(n: 4) ?? breach()
+    show(found + again)
+
+    show(pick(a: 1, b: 2, first: false))
+    show(Box(n: 4).doubled())
+    show(color_name(c: Color.GREEN))
+    show(Settings(name: "x").level)
+    show("-" * 4)
+    show(joined(1, 2, 3))
+
+    # A bare literal right of `**` takes the left side's type.
+    var x = 1.5
+    show(x ** 2.0)
+
+    # An Integer converted to a Decimal.
+    var big = Integer(from: 7_s64)
+    show(Decimal(from: big))
+
+    # `verify` crashes only when its condition is false.
+    verify(expr: found == 3)
+    show("verified")
+    return

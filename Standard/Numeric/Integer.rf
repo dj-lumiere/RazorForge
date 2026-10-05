@@ -8,10 +8,11 @@ module Numerics
 ### buffer shared by copies under an atomic refcount. Copying bumps the refcount (no number data is
 ### copied), and the last drop frees the buffer + controller. Division is Euclidean: `a // b` and
 ### `a % b` satisfy `a == b * (a // b) + a % b` with `0 <= a % b < |b|`. The bitwise operators act on
-### the two's-complement form.
+### the two's-complement form. There is no `/`: an integer quotient is `//`, and a fractional one is
+### computed in `Decimal` or `Real`.
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
 record Integer
-obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable
+obeys Assignable, Copyable, Integral, Negatable, Ordered, Hashable
     ### True when the value is negative (never true for zero).
     secret neg: Bool
     ### The number of 64-bit magnitude limbs (0 for zero).
@@ -912,6 +913,16 @@ routine U64!(from: Integer) -> U64
     if from.cmp(you: Integer(from: U64_MAX)) == ME_LARGE
         throw IntegerOverflowError()
     return integer_low_word(v: from)
+
+### Converts an arbitrary-precision integer to `Decimal`, rounding half-even to its 34 significant digits.
+### :param from: The source value to convert.
+### :returns: The resulting `Decimal` value.
+### :throws: {NumericOverflowError} if `from` is beyond the range of `Decimal` (about `1e6144`).
+routine Decimal!(from: Integer) -> Decimal
+    var d = D128(from_text: from.represent())
+    if not d.is_finite()
+        throw NumericOverflowError(description: "overflow: the integer is too large for Decimal")
+    return Decimal(from: d)
 
 ### Formats this value as base-10 text. Standard `represent` shape (no args)
 ### so the f-string machinery can dispatch without supplying a radix.
