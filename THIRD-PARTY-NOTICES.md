@@ -56,11 +56,9 @@ DEALINGS IN THE SOFTWARE.
 
 ## LibBF — tiny arbitrary-precision floating-point library
 
-Used by the RazorForge arbitrary-precision engines: **`Real`** (`RealEngine`) and **`Integer`**
-(`IntegerEngine`, built on the same limb layer). The limb primitives, the NTT multiplication over
-five ~2^62 primes, Newton-reciprocal division and square root, the rounding core, decimal
-conversion, and the transcendentals with Ziv correct-rounding loops are ports of LibBF (64-bit limb
-configuration).
+Used by the RazorForge arbitrary-precision **`Integer`** engine (`IntegerEngine`, built on the limb
+layer in `LimbEngine`). The limb primitives, the NTT multiplication over five ~2^62 primes, and
+Newton-reciprocal division and square root are ports of LibBF (64-bit limb configuration).
 
 - Project: **LibBF** — https://bellard.org/libbf/
 - Copyright © 2017-2025 Fabrice Bellard.

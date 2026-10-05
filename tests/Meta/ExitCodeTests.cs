@@ -23,36 +23,6 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "returning", actualString: stdout);
     }
 
-    /// <summary>A bare <c>Real</c> division by zero is not recovered, so the program crashes with status 82 and the
-    /// <c>DivisionByZeroError</c> instead of printing an infinity.</summary>
-    [Fact]
-    public void RealDivisionByZero_CrashesLoudly()
-    {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "real_divide_by_zero.rf");
-
-        Assert.True(condition: exit == 82,
-            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-        Assert.Contains(expectedSubstring: "dividing by zero", actualString: stdout);
-        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "DivisionByZeroError: You tried to divide by zero", actualString: stdout + stderr);
-    }
-
-    /// <summary><c>Real</c> is finite-only: a bare square root of a negative value is not recovered, so the program
-    /// crashes with status 82 and the <c>NumericDomainError</c> instead of printing a NaN.</summary>
-    [Fact]
-    public void RealSqrtOfNegative_CrashesLoudly()
-    {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "real_sqrt_negative.rf");
-
-        Assert.True(condition: exit == 82,
-            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-        Assert.Contains(expectedSubstring: "taking the square root of -4", actualString: stdout);
-        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.DoesNotContain(expectedSubstring: "NaN", actualString: stdout);
-        Assert.Contains(expectedSubstring: "NumericDomainError: domain error: a negative number has no real square root",
-            actualString: stdout + stderr);
-    }
-
     /// <summary>A recovery keyword recovers every failure beneath it except <c>pierce</c>: a <c>pierce</c> two
     /// calls under <c>try</c> still crashes with status 82, after the same call recovered a plain throw.</summary>
     [Fact]

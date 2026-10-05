@@ -32,25 +32,13 @@ When unsure, consult ground truth in the repo/package:
    types (B16/B32/B64/B128/D32/D64/D128) have two tiers only: checked `+ - * / **`
    (a result that is not finite crashes) and unchecked `+! -! *! /! **!` = raw
    IEEE 754 (±infinity and NaN pass through; no `danger` block needed, unlike
-   integers). Decimal, Real, Complex, C64/C128/C256 have only `+ - * / **`.
+   integers). Decimal and C64/C128/C256 have only `+ - * / **`.
    Division by zero crashes on every number type, arbitrary precision included.
-   On the floats, `Decimal`, `Real` and the complex types `x / 0` with `x` not
+   On the floats, `Decimal` and the complex types `x / 0` with `x` not
    zero throws `DivisionByZeroError` and `0 / 0` throws `NumericDomainError`
    (integer `//` and `%` by zero throw `DivisionByZeroError`).
-   `Real` is finite-only like `Decimal`: no operation hands back an infinity or
-   NaN, the operation throws instead (recover with `try`/`grab`). Poles throw
-   `DivisionByZeroError` (`x / 0`, `divide`, `0 ** -n`, `log`/`log2`/`log10` of 0,
-   `atanh(±1)`). No real result throws `NumericDomainError` (`0 / 0`, `sqrt` or
-   `log*` of a negative, `asin`/`acos` outside [-1, 1], `acosh` below 1, `atanh`
-   outside [-1, 1], a negative base to a non-integer power, `pow!` and
-   `pow(exp:, precision:)` alike). A result past the exponent range (about
-   2^(2^60)) throws `NumericOverflowError` (`exp`, `exp2`, `exp10`, `sinh`,
-   `cosh`, `pow`/`**`, `hypot`, and `+ - * /` at that edge). `+ - *` stay exact, but
-   one whose exact result would need more than 2^32 bits (a sum of operands whose
-   exponents are far apart, a product of two very long mantissas) throws
-   `NumericOverflowError` before allocating anything. `Real(text:)` rejects
-   `nan`/`inf`/`infinity` with `InvalidValueError`, and `Real(from: B64)` throws
-   `NumericOverflowError` for ±inf and `NumericDomainError` for NaN.
+   There is no arbitrary-precision binary float: `B128` is the widest, and exact
+   arithmetic is `Integer` and the decimals.
 6. **Entities have a single owner.** Assigning or passing an entity requires
    explicit transfer: `consume(r: steal b)`. Plain `var s = obj.field_entity`
    is rejected (RF-S413).
@@ -244,9 +232,10 @@ binding RazorForge has.
   EXACTLY: too many significant bits or a bit below the smallest subnormal is RF-S018, not a rounding. On a
   `D32`/`D64`/`D128`/`Decimal` type it is RF-S017. Unsuffixed it takes a binary float context, else `B64`
   (in Suflae too).
-- Arbitrary precision: `Integer` (literal suffix `n`), `Decimal` (`dn`), `Real` (binary), `Complex`
+- Arbitrary precision: `Integer` (literal suffix `n`), `Decimal` (`dn`). No arbitrary-precision binary float or
+  complex: `B128` and `C256` are the widest.
 - Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
-  `i` (also `_i`): `3 + 4i`. Width/radix comes from context (a `C64`/`Complex` slot); with no context it
+  `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
   defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
 - `Bool`, `Text` (UTF-32 string), `Character`, `Byte`, `Bytes`
 - `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals
@@ -573,9 +562,9 @@ inside the braces:
 - **Integers** (`S8`..`S256`, `U8`..`U256`, `Integer`): `to_text(radix:)` (2 to 36, lowercase
   digits, `-` for negatives, crashes on another radix) and the shorthands `hex()` / `bin()` / `oct()`.
   No `0x` prefix; `.to_uppercase()` for `FF`.
-- **Reals** (`B16`..`B128`, `D32`..`D128`, `Decimal`, `Real`): `fixed(places)` — exactly `places`
+- **Reals** (`B16`..`B128`, `D32`..`D128`, `Decimal`): `fixed(places)` — exactly `places`
   digits after the point, integer part in full, rounded half to even from the exact value
-  (`2.675.fixed(2)` is `2.67`; `Real` rounds ties away from zero). `to_text(sig_digits:)` on
+  (`2.675.fixed(2)` is `2.67`). `to_text(sig_digits:)` on
   `B16`/`B32`/`B64` is the significant-digit (`%g`) form. A binary float's plain text (`show(x)`,
   `f"{x}"`, `represent()`) is the SHORTEST decimal that reads back as the same value, so
   `B64(from_text: x.represent())` returns `x` bit for bit on `B16`..`B128` (`0.1 + 0.2` shows

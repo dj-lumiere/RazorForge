@@ -8,7 +8,7 @@ using static TestHelpers;
 /// <summary>
 /// RF-S640: putting an existing value's buffer refcount (<c>r.ctrl</c>, a <c>Hijacked[FrozenController]</c>)
 /// into a new value needs a <c>hold()</c> on it in the same routine, the way every shared-buffer
-/// <c>assign()</c> (Text, Bytes, Integer, Real) does. Without it both values release one count and the
+/// <c>assign()</c> (Text, Bytes, Integer) does. Without it both values release one count and the
 /// buffer is freed twice.
 /// </summary>
 public class ControllerRewrapTests

@@ -77,7 +77,7 @@ call: `try` gives `Maybe[T]`, `grab` gives `Check[T]` (which keeps the error), a
 **Numbers mean what they say.** `+ - *` are checked and crash on overflow; wrapping (`+%`) and
 clamping (`+^`) are separate operators you choose. Integers go from `S8`/`U8` to `S256`/`U256`, and
 next to the binary floats `B16`–`B128` sit decimal floats `D32`/`D64`/`D128` and arbitrary-precision
-`Integer`, `Decimal`, and `Real`. The float math library is correctly rounded, and a float prints as
+`Integer` and `Decimal`. The float math library is correctly rounded, and a float prints as
 the shortest text that reads back as the same value.
 
 **Markers go where a danger is silent.** Ownership transfers are marked (`steal`), overflow behavior
@@ -201,7 +201,7 @@ so `cd` into a project and run `razorforge buildandrun`.
 - **Error handling:** failable routines (`throw` / `absent`), the `try` / `grab` / `lookup` recovery
   keywords, and `when` pattern matching with exhaustiveness checks.
 - **Numerics:** `S8`–`S256`, `U8`–`U256`, `B16`–`B128` (plus `BF16` for storage), `D32` / `D64` /
-  `D128`, arbitrary-precision `Integer` / `Decimal` / `Real`, complex `C64` / `C128` / `C256`,
+  `D128`, arbitrary-precision `Integer` / `Decimal`, complex `C64` / `C128` / `C256`,
   quaternions, vectors, and SIMD `Vector[T, N]`, with checked, wrapping, and clamping arithmetic.
 - **Collections:** `List`, `Dict`, `Set`, `CircularList`, `BitList`, `PriorityQueue`, the sorted
   collections, `SplitList` (struct of arrays), fixed-size `Array[T, N]`, and lazy iterator adapters
