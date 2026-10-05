@@ -522,7 +522,8 @@ parameter to values (`needs RecordType T`, or `needs T obeys Assignable`), or wo
 `needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
 kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
 `SplitArray`, `DictEntry`, `PQEntry` (tuples and variants follow their elements the same way). `Range[T]`,
-`Atomic[T]`, `PriorityQueue`'s priority, and `SplitArray`'s element iterator are `needs RecordType`. An
+`Atomic[T]` and `SplitArray`'s element iterator are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
+asks only `TPriority obeys Comparable`. An
 `Array`'s iterator reads each element in place, so `each r in arr` works on an array of entities (the binding
 only reads; the array keeps owning each element). Suflae has no
 `bundle` (an SF entity is shared, so a record holding one copies the handle).
