@@ -23,7 +23,7 @@ preset D128_EPSILON: D128 = 1e-33_d128
 ### A software decimal128 value in BID storage.
 @llvm("i128")
 record D128
-obeys Numeric, Ordered, Assignable, Copyable
+obeys Numeric, Comparable, Assignable, Copyable
     pass
 
 ### The decoded fields of a decimal128: value = (-1)^sign * coeff * 10^exp.
@@ -41,6 +41,7 @@ record D128Parts
     coeff: U128
 
 ### Reinterprets this value as its raw decimal128 bit pattern.
+@readonly
 routine D128.to_bits() -> U128
     return LLVM::reinterpret_bits[D128, U128](me)
 
@@ -72,6 +73,7 @@ common routine D128.from_dpd(bits: U128) -> D128
 
 ### BINARY decode — sign / specials (combination prefix) / 14-bit biased exponent /
 ### 113-bit coefficient.
+@readonly
 routine D128.decode() -> D128Parts
     var bits = me.to_bits()
     # bit127 = sign.
@@ -216,6 +218,7 @@ routine D128.is_signaling() -> Bool
     return LLVM::int_eq(a: me.decode().special, b: 3_u64)
 
 ### True when this is a finite zero (±0).
+@readonly
 routine D128.is_zero() -> Bool
     var p = me.decode()
     return LLVM::int_eq(a: p.special, b: 0_u64)
@@ -363,6 +366,7 @@ routine S256!(from: D128) -> S256
 
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
+@readonly
 routine D128.add!(you: D128) -> D128
     var r = d128_of_words(w: C::ingrid_d128_add(
         a_low: d128_low(v: me),
@@ -378,6 +382,7 @@ routine D128.add!(you: D128) -> D128
 
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
+@readonly
 routine D128.sub!(you: D128) -> D128
     var r = d128_of_words(w: C::ingrid_d128_sub(
         a_low: d128_low(v: me),
@@ -393,6 +398,7 @@ routine D128.sub!(you: D128) -> D128
 
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
+@readonly
 routine D128.mul!(you: D128) -> D128
     var r = d128_of_words(w: C::ingrid_d128_mul(
         a_low: d128_low(v: me),
@@ -409,6 +415,7 @@ routine D128.mul!(you: D128) -> D128
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
 ### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+@readonly
 routine D128.truediv!(you: D128) -> D128
     var r = d128_of_words(w: C::ingrid_d128_div(
         a_low: d128_low(v: me),
@@ -484,11 +491,13 @@ secret routine d128_ingrid_order(a: D128, b: D128) -> S64
 ### Decimal value equality. NaN is never equal to anything (including itself);
 ### infinities are equal only with the same sign; finite values compare by value
 ### (so different cohorts of the same number — e.g. 1.0 and 1.00 — are equal).
+@readonly
 routine D128.eq(you: D128) -> Bool
     return d128_ingrid_order(a: me, b: you) == 0_s64
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
+@readonly
 routine D128.cmp(you: D128) -> ComparisonSign
     var o = d128_ingrid_order(a: me, b: you)
     if o == -1_s64
@@ -500,6 +509,7 @@ routine D128.cmp(you: D128) -> ComparisonSign
 ### Returns `me` raised to the `you` power. Delegates to the transcendental `pow`;
 ### follows IEEE semantics (overflow/domain errors yield inf/NaN, never throw), so the
 ### wired `pow!` is crashable and satisfies `Exponentiable`.
+@readonly
 routine D128.pow!(you: D128) -> D128
     var r = me.pow_unchecked(you: you)
     if r.is_finite()

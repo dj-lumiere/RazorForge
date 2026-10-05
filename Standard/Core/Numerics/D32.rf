@@ -23,7 +23,7 @@ preset D32_EPSILON: D32 = 1e-6_d32
 ### A software decimal32 value in BID storage.
 @llvm("i32")
 record D32
-obeys Numeric, Ordered, Assignable, Copyable
+obeys Numeric, Comparable, Assignable, Copyable
     pass
 
 ### Narrow decoded fields (U64 coefficient — decimal32 has <= 7 digits).
@@ -43,6 +43,7 @@ routine d32parts_to_d128(p: D32Parts) -> D128Parts
     )
 
 ### Reinterprets the 32-bit BID storage as a raw U32 (no decode).
+@readonly
 routine D32.to_bits() -> U32
     return LLVM::reinterpret_bits[D32, U32](me)
 
@@ -59,6 +60,7 @@ common routine D32.from_dpd(bits: U32) -> D32
     return D32.from_bits(bits: C::ingrid_d32_from_dpd(bits: bits))
 
 ### BID32 decode -> narrow parts.
+@readonly
 routine D32.decode() -> D32Parts
     var bits = me.to_bits()
     # sign = bit 31
@@ -175,6 +177,7 @@ routine D32.is_signaling() -> Bool
     return LLVM::int_eq(a: me.decode().special, b: 3_u64)
 
 ### True when this is a finite zero (±0).
+@readonly
 routine D32.is_zero() -> Bool
     var p = me.decode()
     return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_eq(a: p.coeff, b: 0_u64)
@@ -220,6 +223,7 @@ routine d32_of_b128(x: B128) -> D32
 
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
+@readonly
 routine D32.add!(you: D32) -> D32
     var r = D32.from_bits(bits: C::ingrid_d32_add(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -230,6 +234,7 @@ routine D32.add!(you: D32) -> D32
 
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
+@readonly
 routine D32.sub!(you: D32) -> D32
     var r = D32.from_bits(bits: C::ingrid_d32_sub(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -240,6 +245,7 @@ routine D32.sub!(you: D32) -> D32
 
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
+@readonly
 routine D32.mul!(you: D32) -> D32
     var r = D32.from_bits(bits: C::ingrid_d32_mul(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -251,6 +257,7 @@ routine D32.mul!(you: D32) -> D32
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
 ### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+@readonly
 routine D32.truediv!(you: D32) -> D32
     var r = D32.from_bits(bits: C::ingrid_d32_div(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -279,11 +286,13 @@ routine D32.truediv_unchecked(you: D32) -> D32
 
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;
 ### finite values compare by value, so different cohorts of the same number are equal).
+@readonly
 routine D32.eq(you: D32) -> Bool
     return C::ingrid_d32_order(a: me.to_bits(), b: you.to_bits()) == 0_s64
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
+@readonly
 routine D32.cmp(you: D32) -> ComparisonSign
     var o = C::ingrid_d32_order(a: me.to_bits(), b: you.to_bits())
     if o == -1_s64
@@ -293,6 +302,7 @@ routine D32.cmp(you: D32) -> ComparisonSign
     return SAME
 
 ### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
+@readonly
 routine D32.pow!(you: D32) -> D32
     var r = me.pow_unchecked(you: you)
     if r.is_finite()

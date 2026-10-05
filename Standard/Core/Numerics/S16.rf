@@ -14,7 +14,7 @@ preset S16_ONE: S16 = 1_s16
 ### and other values that fit in 16 bits with a sign.
 @llvm("i16")
 record S16
-obeys SignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable, Splittable
+obeys SignedIntegral, Comparable, ConstCompatible, AtomicType, Assignable, Copyable, Splittable
     pass
 
 # ============================================================================
@@ -262,6 +262,7 @@ routine S16.mod!(you: S16) -> S16
 ### Returns `-me` (arithmetic negation), throwing on overflow.
 ### :returns: The negated value.
 ### :throws: {IntegerOverflowError} when `me` is `S16_MIN` (its negation is not representable).
+@readonly
 routine S16.neg!() -> S16
     if me == -32768_s16
         throw IntegerOverflowError()
@@ -390,6 +391,7 @@ dangerous routine S16.mul_unchecked(you: S16) -> S16
 ### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
+@readonly
 dangerous routine S16.floordiv_unchecked(you: S16) -> S16
     var quotient = LLVM::signed_div(a: me, b: you)
     var remainder = LLVM::signed_rem(a: me, b: you)
@@ -402,6 +404,7 @@ dangerous routine S16.floordiv_unchecked(you: S16) -> S16
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The euclidean remainder, assuming `you != 0`.
+@readonly
 dangerous routine S16.mod_unchecked(you: S16) -> S16
     var remainder = LLVM::signed_rem(a: me, b: you)
     if remainder < 0_s16
@@ -417,18 +420,21 @@ dangerous routine S16.mod_unchecked(you: S16) -> S16
 ### Returns `me + you`, clamped to `S16_MAX` or `S16_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, or `32767` / `−32768` if it would overflow.
+@readonly
 routine S16.add_clamp(you: S16) -> S16
     return LLVM::signed_add_sat[S16](a: me, b: you)
 
 ### Returns `me - you`, clamped to `S16_MAX` or `S16_MIN` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `32767` / `−32768` if it would overflow.
+@readonly
 routine S16.sub_clamp(you: S16) -> S16
     return LLVM::signed_sub_sat[S16](a: me, b: you)
 
 ### Returns `me * you`, clamped to `S16_MAX` or `S16_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `32767` / `−32768` if it would overflow.
+@readonly
 routine S16.mul_clamp(you: S16) -> S16
     var wide = LLVM::mul(LLVM::sign_extend[S16, S32](me), LLVM::sign_extend[S16, S32](you))
     if LLVM::signed_gt(wide, 32767_s32)
@@ -527,6 +533,7 @@ routine S16.pow_wrap!(exp: S16) -> S16
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result, or `32767` / `−32768` if it would overflow.
 ### :throws: {NumericDomainError} if `exp < 0`.
+@readonly
 routine S16.pow_clamp!(exp: S16) -> S16
     if exp < 0
         throw NumericDomainError(description: "negative exponent: no integer result")
@@ -565,6 +572,7 @@ routine S16.bitxor(you: S16) -> S16
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
+@readonly
 routine S16.bitnot() -> S16
     return LLVM::bit_xor[S16](a: me, b: -1)
 
@@ -608,12 +616,14 @@ routine S16.lshr(bits: U32) -> S16
 ### Returns `true` when both values are equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
+@readonly
 routine S16.eq(you: S16) -> Bool
     return LLVM::int_eq(a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+@readonly
 routine S16.cmp(you: S16) -> ComparisonSign
     if LLVM::signed_lt(me, you)
         return ME_SMALL

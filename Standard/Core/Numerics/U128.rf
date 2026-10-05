@@ -15,7 +15,7 @@ preset U128_ONE: U128 = 1_u128
 ### values are not universally available.
 @llvm("i128")
 record U128
-obeys UnsignedIntegral, Ordered, ConstCompatible, Assignable, Copyable, Splittable
+obeys UnsignedIntegral, Comparable, ConstCompatible, Assignable, Copyable, Splittable
     pass
 
 # ============================================================================
@@ -402,6 +402,7 @@ dangerous routine U128.mul_unchecked(you: U128) -> U128
 ### Returns `me // you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
+@readonly
 dangerous routine U128.floordiv_unchecked(you: U128) -> U128
     # Use the hand-written base-2⁶⁴ Knuth divider, not LLVM's `udiv i128` (`__udivti3`): the bench shows
     # `u128_floordiv` is faster (~11 vs ~17 ns) and it matches `floordiv!`'s kernel (sans the zero check).
@@ -410,6 +411,7 @@ dangerous routine U128.floordiv_unchecked(you: U128) -> U128
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
+@readonly
 dangerous routine U128.mod_unchecked(you: U128) -> U128
     return u128_mod(a: me, b: you)
 
@@ -420,18 +422,21 @@ dangerous routine U128.mod_unchecked(you: U128) -> U128
 ### Returns `me + you`, clamped to `U128_MAX` on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, or `U128_MAX` if it would overflow.
+@readonly
 routine U128.add_clamp(you: U128) -> U128
     return LLVM::unsigned_add_sat[U128](a: me, b: you)
 
 ### Returns `me - you`, clamped to `U128_MIN` on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `0` if it would go below `U128_MIN`.
+@readonly
 routine U128.sub_clamp(you: U128) -> U128
     return LLVM::unsigned_sub_sat[U128](a: me, b: you)
 
 ### Returns `me * you`, clamped to `U128_MAX` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `U128_MAX` if it would overflow.
+@readonly
 routine U128.mul_clamp(you: U128) -> U128
     var wide = LLVM::mul(LLVM::zero_extend[U128, U256](me), LLVM::zero_extend[U128, U256](you))
     if LLVM::unsigned_gt(wide, 340282366920938463463374607431768211455_u256)
@@ -542,6 +547,7 @@ routine U128.pow_wrap(exp: U128) -> U128
 ### Returns `me ** exp`, clamped to `U128_MAX` on overflow.
 ### :param exp: The exponent.
 ### :returns: The result, or `U128_MAX` if it would overflow.
+@readonly
 routine U128.pow_clamp(exp: U128) -> U128
     var result: U128 = 1
     var base: U128 = me
@@ -577,6 +583,7 @@ routine U128.bitxor(you: U128) -> U128
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
+@readonly
 routine U128.bitnot() -> U128
     return LLVM::bit_xor(a: me, b: U128_MAX)
 
@@ -620,12 +627,14 @@ routine U128.lshr(bits: U32) -> U128
 ### Returns `true` when both values are equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
+@readonly
 routine U128.eq(you: U128) -> Bool
     return LLVM::int_eq(a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+@readonly
 routine U128.cmp(you: U128) -> ComparisonSign
     if LLVM::unsigned_lt(me, you)
         return ME_SMALL

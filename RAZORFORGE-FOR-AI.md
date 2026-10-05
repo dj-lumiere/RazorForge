@@ -583,7 +583,7 @@ sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
   case, padding) — e.g. `count_of`, `find!`/`find_last!`, `split_once!`,
   `replace_first`, `capitalize`, `center`, `eq_ignore_case`. Verify exact names
   in `Standard/RazorForge/Core/Types/Text.rf`.
-- **`Bytes` `obeys Ordered, Hashable`** — usable as a `Dict` key and sortable.
+- **`Bytes` `obeys Comparable, Hashable`** — usable as a `Dict` key and sortable.
   It supports range slicing (`bs[a til b]`), sub-sequence `contains`/`find!`/
   `split`, and hex `to_hex`/`from_hex!`. Container `represent` quotes elements
   by type (Text/Bytes → `"…"`, Char/Byte → `'…'`).

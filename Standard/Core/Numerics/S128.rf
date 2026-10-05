@@ -14,7 +14,7 @@ preset S128_ONE: S128 = 1_s128
 ### because hardware atomic operations on 128-bit values are not universally available.
 @llvm("i128")
 record S128
-obeys SignedIntegral, Ordered, ConstCompatible, Assignable, Copyable, Splittable
+obeys SignedIntegral, Comparable, ConstCompatible, Assignable, Copyable, Splittable
     pass
 
 # ============================================================================
@@ -321,6 +321,7 @@ routine S128.divmod!(you: S128) -> (S128, S128)
 
 ### Returns `-me` (arithmetic negation), with wrapping behavior on `S128_MIN`.
 ### :returns: The negated value. `-S128_MIN` wraps to `S128_MIN`.
+@readonly
 routine S128.neg!() -> S128
     if me == S128_MIN
         throw IntegerOverflowError()
@@ -449,6 +450,7 @@ dangerous routine S128.mul_unchecked(you: S128) -> S128
 ### Returns `me // you` (euclidean division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The euclidean quotient, assuming `you != 0` and no overflow.
+@readonly
 dangerous routine S128.floordiv_unchecked(you: S128) -> S128
     # Mirror floordiv! (euclidean, custom base-2⁶⁴ Knuth on magnitudes) minus the zero/overflow guards —
     # NOT LLVM `sdiv`+`srem` i128 (two `__divti3`/`__modti3` libcalls). Faster AND now consistent with the
@@ -468,6 +470,7 @@ dangerous routine S128.floordiv_unchecked(you: S128) -> S128
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The euclidean remainder, assuming `you != 0`.
+@readonly
 dangerous routine S128.mod_unchecked(you: S128) -> S128
     # Mirror mod! (euclidean, custom Knuth magnitude kernel) minus the zero guard — not LLVM `srem` i128.
     var bmag = s128_abs_u128(x: you)
@@ -483,12 +486,14 @@ dangerous routine S128.mod_unchecked(you: S128) -> S128
 ### Returns `me + you`, clamped to `S128_MAX` or `S128_MIN` on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, or `S128_MAX` / `S128_MIN` if it would overflow.
+@readonly
 routine S128.add_clamp(you: S128) -> S128
     return LLVM::signed_add_sat[S128](a: me, b: you)
 
 ### Returns `me - you`, clamped to `S128_MAX` or `S128_MIN` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `S128_MAX` / `S128_MIN` if it would overflow.
+@readonly
 routine S128.sub_clamp(you: S128) -> S128
     return LLVM::signed_sub_sat[S128](a: me, b: you)
 
@@ -497,6 +502,7 @@ routine S128.sub_clamp(you: S128) -> S128
 ### The clamp direction (MAX vs MIN) is determined by whether the operands have the same sign.
 ### :param you: The right operand.
 ### :returns: The product, or `S128_MAX` / `S128_MIN` if it would overflow.
+@readonly
 routine S128.mul_clamp(you: S128) -> S128
     # Can't widen to 256-bit, use division-based overflow check
     if LLVM::int_eq(a: me, b: 0_s128) or LLVM::int_eq(a: you, b: 0_s128)
@@ -600,6 +606,7 @@ routine S128.pow_wrap!(exp: S128) -> S128
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result, or `S128_MAX` / `S128_MIN` if it would overflow.
 ### :throws: {NumericDomainError} if `exp < 0`.
+@readonly
 routine S128.pow_clamp!(exp: S128) -> S128
     if exp < 0
         throw NumericDomainError(description: "negative exponent: no integer result")
@@ -638,6 +645,7 @@ routine S128.bitxor(you: S128) -> S128
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
+@readonly
 routine S128.bitnot() -> S128
     return LLVM::bit_xor[S128](a: me, b: -1)
 
@@ -681,12 +689,14 @@ routine S128.lshr(bits: U32) -> S128
 ### Returns `true` when both values are equal.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
+@readonly
 routine S128.eq(you: S128) -> Bool
     return LLVM::int_eq(a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+@readonly
 routine S128.cmp(you: S128) -> ComparisonSign
     if LLVM::signed_lt(me, you)
         return ME_SMALL

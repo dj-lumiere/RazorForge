@@ -12,7 +12,7 @@ module Numerics
 ### form. There is no `/`: an integer quotient is `//`, and a fractional one is computed in `Decimal`.
 ### :see: {Decimal}, {Numeric-Types}
 record Integer
-obeys Assignable, Copyable, Integral, Negatable, Ordered, Hashable
+obeys Assignable, Copyable, Integral, Negatable, Comparable, Hashable
     ### True when the value is negative (never true for zero).
     secret neg: Bool
     ### The magnitude: in the value itself below 2^64, else in limbs.
@@ -866,6 +866,31 @@ routine Integer.shl(bits: S32) -> Integer
     if bits < 0_s32
         return integer_shift(a: me, bits: U64(from: 0s64 -% S64(from: bits)), left: false)
     return integer_shift(a: me, bits: U64(from: S64(from: bits)), left: true)
+
+### Shifts this value left by `bits` positions (`me << bits`): `me * 2^bits`.
+### :param bits: The number of bit positions to shift.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.ashl(bits: U32) -> Integer
+    return integer_shift(a: me, bits: U64(from: bits), left: true)
+
+### Shifts this value right by `bits` positions (`me >> bits`): `floor(me / 2^bits)`, so `-5 >> 1` is `-3`.
+### :param bits: The number of bit positions to shift.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.ashr(bits: U32) -> Integer
+    return integer_shift(a: me, bits: U64(from: bits), left: false)
+
+### Shifts this value right by `bits` positions filling with zeros (`me >>> bits`). An `Integer` has no fixed
+### width, so a negative value has no zero-filled form: this is `>>` for a value that is not negative.
+### :param bits: The number of bit positions to shift.
+### :returns: The resulting `Integer` value.
+### :throws: {NumericDomainError} when this value is negative.
+@readonly
+routine Integer.lshr!(bits: U32) -> Integer
+    if me.neg
+        throw NumericDomainError(description: ">>> on a negative Integer: it has no width to fill with zeros")
+    return integer_shift(a: me, bits: U64(from: bits), left: false)
 
 ### Shifts this value right by `bits` positions: `floor(me / 2^bits)`, the arithmetic shift of the
 ### two's-complement form (so `-5 >> 1` is `-3`). A negative count shifts left.

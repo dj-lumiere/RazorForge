@@ -39,7 +39,7 @@ preset B128_LN_10: B128 = 2.302585092994045684017991454684364208_b128
 ### platform without relying on compiler-rt `__*tf*` libcalls.
 @llvm("i128")
 record B128
-obeys Numeric, Ordered, Assignable, Copyable, Splittable
+obeys Numeric, Comparable, Assignable, Copyable, Splittable
     pass
 
 # ============================================================================
@@ -48,6 +48,7 @@ obeys Numeric, Ordered, Assignable, Copyable, Splittable
 
 ### Reinterprets this value as its raw IEEE 754 bit pattern.
 ### :returns: The underlying 128-bit encoding.
+@readonly
 routine B128.to_bits() -> U128
     return LLVM::reinterpret_bits[B128, U128](me)
 
@@ -59,6 +60,7 @@ common routine B128.from_bits(bits: U128) -> B128
 
 ### Returns the raw biased exponent field (0..32767).
 ### :returns: The 15-bit exponent field.
+@readonly
 routine B128.raw_exponent() -> U64
     return LLVM::int_truncate[U128, U64](
         LLVM::bit_and(a: LLVM::shift_right_unsigned(me.to_bits(), 112_u128), b: 32767_u128),
@@ -66,6 +68,7 @@ routine B128.raw_exponent() -> U64
 
 ### Returns the raw 112-bit mantissa field (no implicit bit).
 ### :returns: The stored fraction bits.
+@readonly
 routine B128.raw_mantissa() -> U128
     return LLVM::bit_and(a: me.to_bits(), b: b128_mant_mask())
 
@@ -85,6 +88,7 @@ routine B128.is_positive() -> Bool
 
 ### Returns `true` when the value encodes a NaN.
 ### :returns: Whether the bit pattern is not-a-number.
+@readonly
 routine B128.is_nan() -> Bool
     return me.raw_exponent() == 0x7FFF_u64 and LLVM::int_ne(a: me.raw_mantissa(), b: 0_u128)
 
@@ -111,6 +115,7 @@ routine B128.is_finite() -> Bool
 
 ### Returns `true` when the value is zero (either sign).
 ### :returns: Whether the value is +0 or -0.
+@readonly
 routine B128.is_zero() -> Bool
     return me.raw_exponent() == 0_u64 and LLVM::int_eq(a: me.raw_mantissa(), b: 0_u128)
 
@@ -306,6 +311,7 @@ routine B128.frac() -> B128
 ### Returns the arithmetic negation (sign bit flipped).
 ### :returns: The negated value.
 @inline
+@readonly
 routine B128.neg() -> B128
     return B128.from_bits(bits: LLVM::bit_xor(a: me.to_bits(), b: b128_sign_mask()))
 
@@ -330,6 +336,7 @@ routine B128.copysign(sign: B128) -> B128
 ### Returns whether two values compare equal (NaN compares unequal; +0 == -0).
 ### :param you: The value to compare against.
 ### :returns: Whether the values are ordered-equal.
+@readonly
 routine B128.eq(you: B128) -> Bool
     if me.is_nan() or you.is_nan()
         return false
@@ -340,6 +347,7 @@ routine B128.eq(you: B128) -> Bool
 ### Compares this value with `you` under IEEE ordered semantics (pure bit logic).
 ### :param you: The value to compare against.
 ### :returns: The comparison sign (SAME for unordered/NaN).
+@readonly
 routine B128.cmp(you: B128) -> ComparisonSign
     if me.is_nan() or you.is_nan()
         return SAME
@@ -365,6 +373,7 @@ routine B128.cmp(you: B128) -> ComparisonSign
 ### non-finite. Use `add_unchecked` for raw IEEE 754 propagation.
 ### :param you: The addend.
 ### :returns: The sum (always finite).
+@readonly
 routine B128.add!(you: B128) -> B128
     var r = B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -377,6 +386,7 @@ routine B128.add!(you: B128) -> B128
 ### Use `sub_unchecked` for raw IEEE 754 propagation.
 ### :param you: The value to subtract.
 ### :returns: The difference (always finite).
+@readonly
 routine B128.sub!(you: B128) -> B128
     var yb = LLVM::bit_xor(a: you.to_bits(), b: b128_sign_mask())
     var r = B128.from_bits(bits: b128_add_bits(a: me.to_bits(), b: yb))
@@ -403,6 +413,7 @@ routine B128.sub(you: C256) -> C256
 ### Use `mul_unchecked` for raw IEEE 754 propagation.
 ### :param you: The multiplier.
 ### :returns: The product (always finite).
+@readonly
 routine B128.mul!(you: B128) -> B128
     var r = B128.from_bits(bits: b128_mul_bits(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -415,6 +426,7 @@ routine B128.mul!(you: B128) -> B128
 ### overflow -> overflow. Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 ### :param you: The divisor.
 ### :returns: The quotient (always finite).
+@readonly
 routine B128.truediv!(you: B128) -> B128
     var r = B128.from_bits(bits: b128_div_bits(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -1746,11 +1758,13 @@ routine B128.signum() -> B128
 
 ### Returns the low 64 bits of the raw `B128` encoding.
 ### :returns: The least-significant half of the bit pattern.
+@readonly
 routine B128.low_bits() -> U64
     return LLVM::int_truncate[U128, U64](me.to_bits())
 
 ### Returns the high 64 bits of the raw `B128` encoding.
 ### :returns: The most-significant half of the bit pattern.
+@readonly
 routine B128.high_bits() -> U64
     return LLVM::int_truncate[U128, U64](me.to_bits() >>> 64u32)
 

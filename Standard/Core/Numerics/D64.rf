@@ -23,7 +23,7 @@ preset D64_EPSILON: D64 = 1e-15_d64
 ### A software decimal64 value in BID storage.
 @llvm("i64")
 record D64
-obeys Numeric, Ordered, Assignable, Copyable
+obeys Numeric, Comparable, Assignable, Copyable
     pass
 
 ### Narrow decoded fields (U64 coefficient — decimal64 has <= 16 digits).
@@ -43,6 +43,7 @@ routine d64parts_to_d128(p: D64Parts) -> D128Parts
     )
 
 ### Reinterprets the 64-bit BID storage as a raw U64 (no decode).
+@readonly
 routine D64.to_bits() -> U64
     return LLVM::reinterpret_bits[D64, U64](me)
 
@@ -59,6 +60,7 @@ common routine D64.from_dpd(bits: U64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_dpd(bits: bits))
 
 ### BID64 decode -> narrow parts.
+@readonly
 routine D64.decode() -> D64Parts
     var bits = me.to_bits()
     # sign = bit 63
@@ -167,6 +169,7 @@ routine D64.is_signaling() -> Bool
     return LLVM::int_eq(a: me.decode().special, b: 3_u64)
 
 ### True when this is a finite zero (±0).
+@readonly
 routine D64.is_zero() -> Bool
     var p = me.decode()
     return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_eq(a: p.coeff, b: 0_u64)
@@ -212,6 +215,7 @@ routine d64_of_b128(x: B128) -> D64
 
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
+@readonly
 routine D64.add!(you: D64) -> D64
     var r = D64.from_bits(bits: C::ingrid_d64_add(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -222,6 +226,7 @@ routine D64.add!(you: D64) -> D64
 
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
+@readonly
 routine D64.sub!(you: D64) -> D64
     var r = D64.from_bits(bits: C::ingrid_d64_sub(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -232,6 +237,7 @@ routine D64.sub!(you: D64) -> D64
 
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
+@readonly
 routine D64.mul!(you: D64) -> D64
     var r = D64.from_bits(bits: C::ingrid_d64_mul(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -243,6 +249,7 @@ routine D64.mul!(you: D64) -> D64
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
 ### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+@readonly
 routine D64.truediv!(you: D64) -> D64
     var r = D64.from_bits(bits: C::ingrid_d64_div(a: me.to_bits(), b: you.to_bits()))
     if r.is_finite()
@@ -271,11 +278,13 @@ routine D64.truediv_unchecked(you: D64) -> D64
 
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;
 ### finite values compare by value, so different cohorts of the same number are equal).
+@readonly
 routine D64.eq(you: D64) -> Bool
     return C::ingrid_d64_order(a: me.to_bits(), b: you.to_bits()) == 0_s64
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
+@readonly
 routine D64.cmp(you: D64) -> ComparisonSign
     var o = C::ingrid_d64_order(a: me.to_bits(), b: you.to_bits())
     if o == -1_s64
@@ -285,6 +294,7 @@ routine D64.cmp(you: D64) -> ComparisonSign
     return SAME
 
 ### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
+@readonly
 routine D64.pow!(you: D64) -> D64
     var r = me.pow_unchecked(you: you)
     if r.is_finite()
