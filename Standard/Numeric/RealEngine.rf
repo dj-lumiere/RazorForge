@@ -1978,8 +1978,16 @@ secret routine bf_add_internal(a0: BfT, b0: BfT, prec: U64, fl: U32, b_neg: Bool
         var sub_mask = 0u64 -% is_sub_u
         var carry = is_sub_u
         var z = 0u64
-        # sticky bits below the result window (naive; only runs when precl < tot_len)
+        # sticky bits below the result window (only runs when precl < tot_len). Between the bottom of `a`
+        # (its limbs are zero below limb index ia_lo) and the top of `b` (its bits are zero from limb index
+        # ib_hi up) every limb adds 0 to sub_mask (all ones for a subtraction), and one such limb already
+        # brings the carry and the sticky word to their final state, since a second one changes neither. After
+        # the first limb of that gap the walk jumps to its end, so the cost is O(lengths) at any exponent gap.
         var i = S64(from: r_len) -% S64(from: tot_len)
+        var ia_lo = S64(from: r_len) -% S64(from: a.len)
+        var ib_hi = S64(from: r_len) -% (d >> 6u32)
+        var gap_lo = if ib_hi > i then ib_hi else i
+        var gap_hi = if ia_lo < 0s64 then ia_lo else 0s64
         while i < 0s64
             var v1 = get_limbz(a: a, idx: a_offset +% i)
             var v2 = get_bits_s(tab: b.tab, len: b.len, pos: b_bit_offset +% i *% 64s64)
@@ -1989,7 +1997,10 @@ secret routine bf_add_internal(a0: BfT, b0: BfT, prec: U64, fl: U32, b_neg: Bool
             u = u +% carry
             carry = (if u < carry then 1u64 else 0u64) | carry1
             z = z | u
-            i = i +% 1s64
+            if i == gap_lo and gap_hi > i +% 1s64
+                i = gap_hi
+            else
+                i = i +% 1s64
         # the result window
         var k = 0u64
         while k < r_len
