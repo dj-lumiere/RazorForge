@@ -1,5 +1,6 @@
 package com.razorforge.rider
 
+import com.intellij.DynamicBundle
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.Disposable
@@ -110,6 +111,8 @@ private class RazorForgeClientDescriptor(project: Project) :
         // source the build copied it from, which it finds from the build folder this copy was made of.
         return command.withWorkDirectory(staged.parent.toFile()).withCharset(StandardCharsets.UTF_8)
             .withEnvironment("ANVILA_BUILD_DIR", server.parent.toString())
+            // Hover and doc text in the IDE's language.
+            .withEnvironment("LSP_LOCALE", DynamicBundle.getLocale().toLanguageTag())
     }
 }
 

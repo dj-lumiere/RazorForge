@@ -60,18 +60,18 @@ internal object RazorForgeSemanticTokens : LspSemanticTokensSupport() {
 /** Settings | Editor | Color Scheme | RazorForge. */
 class RazorForgeColorSettingsPage : ColorSettingsPage {
     private val descriptors = arrayOf(
-        AttributesDescriptor("Types//Record, choice, flags, crashable, bundle of values", RazorForgeColors.RECORD),
-        AttributesDescriptor("Types//Entity, bundle holding an entity", RazorForgeColors.ENTITY),
-        AttributesDescriptor("Types//Bundle, kind not decided yet", RazorForgeColors.BUNDLE),
-        AttributesDescriptor("Types//Protocol", RazorForgeColors.PROTOCOL),
-        AttributesDescriptor("Types//Generic parameter", RazorForgeColors.GENERIC_PARAMETER),
-        AttributesDescriptor("Routine", RazorForgeColors.ROUTINE),
-        AttributesDescriptor("Module", RazorForgeColors.MODULE),
-        AttributesDescriptor("Preset", RazorForgeColors.PRESET),
-        AttributesDescriptor("Operator", RazorForgeColors.OPERATOR),
-        AttributesDescriptor("Doc comment//Field (:param, :returns)", RazorForgeColors.DOC_TAG),
-        AttributesDescriptor("Doc comment//Field name, reference", RazorForgeColors.DOC_VALUE),
-        AttributesDescriptor("Annotation", RazorForgeColors.ANNOTATION),
+        AttributesDescriptor(RazorForgeBundle.message("color.types.record"), RazorForgeColors.RECORD),
+        AttributesDescriptor(RazorForgeBundle.message("color.types.entity"), RazorForgeColors.ENTITY),
+        AttributesDescriptor(RazorForgeBundle.message("color.types.bundle"), RazorForgeColors.BUNDLE),
+        AttributesDescriptor(RazorForgeBundle.message("color.types.protocol"), RazorForgeColors.PROTOCOL),
+        AttributesDescriptor(RazorForgeBundle.message("color.types.generic"), RazorForgeColors.GENERIC_PARAMETER),
+        AttributesDescriptor(RazorForgeBundle.message("color.routine"), RazorForgeColors.ROUTINE),
+        AttributesDescriptor(RazorForgeBundle.message("color.module"), RazorForgeColors.MODULE),
+        AttributesDescriptor(RazorForgeBundle.message("color.preset"), RazorForgeColors.PRESET),
+        AttributesDescriptor(RazorForgeBundle.message("color.operator"), RazorForgeColors.OPERATOR),
+        AttributesDescriptor(RazorForgeBundle.message("color.doc.tag"), RazorForgeColors.DOC_TAG),
+        AttributesDescriptor(RazorForgeBundle.message("color.doc.value"), RazorForgeColors.DOC_VALUE),
+        AttributesDescriptor(RazorForgeBundle.message("color.annotation"), RazorForgeColors.ANNOTATION),
     )
 
     private val tags = mapOf(

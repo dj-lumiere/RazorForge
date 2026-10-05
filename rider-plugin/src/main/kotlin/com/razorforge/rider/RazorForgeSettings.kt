@@ -38,14 +38,11 @@ internal class RazorForgeConfigurable : BoundConfigurable("RazorForge") {
     private val settings = RazorForgeSettings.getInstance()
 
     override fun createPanel(): DialogPanel = panel {
-        row("Language server:") {
-            textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile().withTitle("RazorForge Language Server"))
+        row(RazorForgeBundle.message("settings.label")) {
+            textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile().withTitle(RazorForgeBundle.message("settings.title")))
                 .bindText(settings::serverPath)
                 .align(AlignX.FILL)
-                .comment(
-                    "RazorForge.dll (run with dotnet) or a RazorForge executable. Empty uses the dev build, " +
-                        "&lt;project&gt;/RazorForge/bin/Debug/net10.0/RazorForge.dll."
-                )
+                .comment(RazorForgeBundle.message("settings.comment"))
         }
     }
 
