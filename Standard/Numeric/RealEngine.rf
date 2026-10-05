@@ -22,10 +22,19 @@ obeys Assignable, Copyable
 # core, decimal conversion, and the transcendentals (Chudnovsky pi, log 2, exp, log, sin/cos, tan,
 # atan, asin/acos, pow) with Ziv correct-rounding loops.
 #
-# Memory: every buffer the engine allocates comes from the calling thread's scratch region
-# (`C::rf_region_alloc`). Intermediate values freely share limb buffers with one another, so nothing is
-# freed individually. {Real} takes a region mark around each operation, copies the final result into a
-# buffer it owns, and releases the region. The engine is `secret` to the module, only {Real} calls it.
+# This engine runs in Ingrid: `RazorForge export-ingrid` writes it, with the routines of IngridExport/real.rf
+# (and IngridExport/integer.rf, for the limb layer the integer engine shares) that call it, to
+# Ingrid/tessera/generated/, and {Real} calls those exports. The engine is `secret` to the module, so the export
+# files declare `module Numerics` to reach it.
+#
+# Memory: the engine allocates nothing. Every buffer it takes comes from the call's scratch arena
+# (Ingrid/tessera/scratch.tess), a buffer the caller hands over, and the result is copied into another buffer the
+# caller hands over. Intermediate values freely share limb buffers with one another, so nothing is given back
+# individually. Each operation that takes limbs (a `BfT` operation, or an integer engine operation) first asks
+# the arena to admit the most it takes, its own buffers and those of the limb routines it calls: when that
+# doesn't fit, the call is exhausted, the operation returns a NaN (or zero) without computing, every later
+# admission fails too, the Ziv loops and the decimal exponent search stop, and the call reports the room it
+# needed so that the caller retries with a larger buffer.
 
 # Low 64 bits of a 128-bit value (the stdlib only narrows U128->U64 via this intrinsic; U64(from: U128)
 # is a CHECKED conversion that throws on overflow, so it can't take a limb's low word).
@@ -38,10 +47,19 @@ secret routine s128_lo(t: S128) -> U64
     danger
         return LLVM::int_truncate[S128, U64](t)
 
-# Allocate `n` zeroed U64 limbs in the current scratch region (freed when {Real} releases the region).
+# Take `n` zeroed U64 limbs from the call's scratch arena. An admission covering them comes first.
 secret dangerous routine alloc_limbs(n: U64) -> Hijacked[U64]
-    var raw = C::rf_region_alloc(bytes: 8u64 *% n).get_address()
-    return Hijacked[U64](from: raw)
+    return C::ingrid_scratch_take(limbs: n)
+
+# True when `limbs` more limbs fit in the call's scratch arena. A refusal exhausts the call.
+secret routine scratch_admit(limbs: U64) -> Bool
+    danger
+        return C::ingrid_scratch_admit(limbs: limbs)
+
+# True once the call is exhausted: its values are placeholders, and loops that wait for a value stop.
+secret routine scratch_exhausted() -> Bool
+    danger
+        return C::ingrid_scratch_exhausted()
 
 # limb i of a buffer (pointer + element stride).
 secret dangerous routine limb(tab: Hijacked[U64], i: U64) -> U64
@@ -983,6 +1001,47 @@ secret dangerous routine limbs_mul(
         )
     return
 
+# The most limbs `limbs_mul` takes for an op1_size x op2_size product (the NTT's buffers), 0 for the
+# schoolbook.
+secret routine limbs_mul_scratch(op1_size: U64, op2_size: U64) -> U64
+    var smaller = if op1_size < op2_size then op1_size else op2_size
+    if smaller < 100u64
+        return 0u64
+    var params = bf_get_fft_size(len: op1_size +% op2_size)
+    var fft_len_log2 = params.item0
+    var nb_mods = params.item2
+    var fft_len = 1u64 << U32(from: fft_len_log2)
+    # buf1 and buf2, each convolution, and ntt_to_limb's three 5-limb vectors
+    return 2u64 *% fft_len *% nb_mods +% nb_mods *% ntt_conv_scratch(k: fft_len_log2) +% 15u64
+
+# The most limbs one `ntt_conv` of a 2^k transform takes.
+secret routine ntt_conv_scratch(k: U64) -> U64
+    var k1 = 0u64
+    if k <= 19u64
+        k1 = k
+    else
+        var half = k // 2u64
+        k1 = if half < 19u64 then half else 19u64
+    var k2 = k -% k1
+    # two forward transforms and the inverse
+    var total = 3u64 *% ntt_fft_partial_scratch(k1: k1, k2: k2)
+    if k2 != 0u64
+        total = total +% (1u64 << U32(from: k1)) *% ntt_conv_scratch(k: k2)
+    return total
+
+# The most limbs one `ntt_fft_partial` of a 2^(k1+k2) transform takes.
+secret routine ntt_fft_partial_scratch(k1: U64, k2: U64) -> U64
+    var n1 = 1u64 << U32(from: k1)
+    if k2 == 0u64
+        return n1 +% ntt_fft_scratch(k: k1)
+    # buf3, buf2's 16 strips, and a transform of each column (strips of 16 columns, at least one strip)
+    var n2 = 1u64 << U32(from: k2)
+    return 17u64 *% n1 +% (n2 +% 16u64) *% ntt_fft_scratch(k: k1)
+
+# The most limbs one `ntt_fft` of a 2^k transform takes: a twiddle table per level.
+secret routine ntt_fft_scratch(k: U64) -> U64
+    return 2u64 << U32(from: k)
+
 # ── Phase 3: O(n log n) division via Newton reciprocal (mp_recip / mp_divnorm / mp_divnorm_large) ──────
 # Division is reduced to multiplication: r ~ B^(2n)/d is found by Newton iteration (precision doubles each
 # step), so divmod costs O(M(n)) = O(n log n) on top of the NTT multiply. (libbf mp_recip, Brent-Zimmermann
@@ -1448,6 +1507,65 @@ secret dangerous routine limbs_divmod(
         discard limbs_shr(tab_r: r, tab: an, n: nb, shift: U32(from: shift), high: 0u64)
     return
 
+# ── scratch bounds of the division and square-root layer ──────────────────────────────────────────
+
+# The most limbs `limbs_divmod_norm` takes dividing na limbs by nb (Newton's buffers, 0 on the quadratic
+# path).
+secret routine limbs_divmod_norm_scratch(na: U64, nb: U64) -> U64
+    if nb == 1u64
+        return 0u64
+    var n = na -% nb
+    if (if n < nb then n else nb) >= 2300u64
+        return limbs_divmod_newton_scratch(na: na, nb: nb)
+    return 0u64
+
+# The most limbs `limbs_divmod_newton` takes dividing na limbs by nb.
+secret routine limbs_divmod_newton_scratch(na: U64, nb: U64) -> U64
+    var nq = na -% nb
+    var n = nq
+    if nq < nb
+        n = n +% 1u64
+    var own = (n +% 1u64) +% 2u64 *% (n +% 1u64) +% (na +% 1u64)
+    return own +% limbs_reciprocal_scratch(n: n) +% limbs_mul_scratch(
+        op1_size: n +% 1u64,
+        op2_size: n +% 1u64,
+    ) +% limbs_mul_scratch(op1_size: nq +% 1u64, op2_size: nb)
+
+# The most limbs `limbs_reciprocal` of n limbs takes.
+secret routine limbs_reciprocal_scratch(n: U64) -> U64
+    if n <= 2u64
+        return (2u64 *% n +% 1u64) +% (n +% 2u64) +% limbs_divmod_norm_scratch(
+            na: 2u64 *% n +% 1u64,
+            nb: n,
+        )
+    var l = (n -% 1u64) // 2u64
+    var h = n -% l
+    var own = (n +% h +% 1u64) +% (n +% 2u64 *% h -% l +% 2u64)
+    return own +% limbs_reciprocal_scratch(n: h) +% limbs_mul_scratch(
+        op1_size: n,
+        op2_size: h +% 1u64,
+    ) +% limbs_mul_scratch(op1_size: n +% h +% 1u64 -% l, op2_size: h +% 1u64)
+
+# The most limbs `limbs_divmod` takes dividing na limbs by nb (its normalized copies and quotient, and the
+# division under them).
+secret routine limbs_divmod_scratch(na: U64, nb: U64) -> U64
+    return nb +% (na +% 1u64) +% (na +% 2u64 -% nb) +% limbs_divmod_norm_scratch(na: na +% 1u64, nb: nb)
+
+# The most limbs `limbs_sqrt_rem` of 2n limbs takes.
+secret routine limbs_sqrt_rem_scratch(n: U64) -> U64
+    return n // 2u64 +% 1u64 +% limbs_sqrt_rec_scratch(n: n)
+
+# The most limbs `limbs_sqrt_rec` of 2n limbs takes.
+secret routine limbs_sqrt_rec_scratch(n: U64) -> U64
+    if n <= 1u64
+        return 0u64
+    var l = n // 2u64
+    var h = n -% l
+    return limbs_sqrt_rec_scratch(n: h) +% limbs_divmod_norm_scratch(na: n, nb: h) +% limbs_mul_scratch(
+        op1_size: l,
+        op2_size: l,
+    )
+
 # Special exponents (BF_EXP_ZERO = S64_MIN, BF_EXP_INF = S64_MAX-1, BF_EXP_NAN = S64_MAX).
 secret routine bf_exp_zero() -> S64
     return -9223372036854775807s64 -% 1s64
@@ -1491,6 +1609,8 @@ secret routine bf_set_ui(a: U64) -> BfT
     danger
         if a == 0u64
             return bf_set_zero(is_neg: false)
+        if not scratch_admit(limbs: 1u64)
+            return bf_set_nan()
         var shift = LLVM::leading_zeros(a)
         var tab = alloc_limbs(n: 1u64)
         set_limb(tab: tab, i: 0u64, value: a << U32(from: shift))
@@ -1709,6 +1829,8 @@ secret routine bf_round(a: BfT, prec: U64, fl: U32) -> BfT
     danger
         if a.len == 0u64
             return a
+        if not scratch_admit(limbs: a.len)
+            return bf_set_nan()
         var cpy = alloc_limbs(n: a.len)
         var i = 0u64
         while i < a.len
@@ -1820,6 +1942,8 @@ secret routine bf_add_internal(a0: BfT, b0: BfT, prec: U64, fl: U32, b_neg: Bool
                     return bf_set_nan()
                 return bf_set_inf(is_neg: a_sign)
             # a nonzero finite, b zero: result = a rounded
+            if not scratch_admit(limbs: a.len)
+                return bf_set_nan()
             var cpy = alloc_limbs(n: a.len)
             var ci = 0u64
             while ci < a.len
@@ -1845,6 +1969,8 @@ secret routine bf_add_internal(a0: BfT, b0: BfT, prec: U64, fl: U32, b_neg: Bool
         var d_limbs = (U64(from: d) +% 63u64) // 64u64
         var tot_len = if a.len > b.len +% d_limbs then a.len else b.len +% d_limbs
         var r_len = if precl < tot_len then precl else tot_len
+        if not scratch_admit(limbs: r_len +% 1u64)
+            return bf_set_nan()
         var tab = alloc_limbs(n: r_len +% 1u64)
         var a_offset = S64(from: a.len) -% S64(from: r_len)
         var b_bit_offset = (S64(from: b.len) -% S64(from: r_len)) *% 64s64 +% d
@@ -1923,6 +2049,8 @@ secret routine bf_mul(a: BfT, b: BfT, prec: U64, fl: U32) -> BfT
             return bf_set_zero(is_neg: r_sign)
         var na = aa.len
         var nb = bb.len
+        if not scratch_admit(limbs: na +% nb +% limbs_mul_scratch(op1_size: na, op2_size: nb))
+            return bf_set_nan()
         var tab = alloc_limbs(n: na +% nb)
         limbs_mul(result: tab, op1: aa.tab, op1_size: na, op2: bb.tab, op2_size: nb)
         return bf_normalize_and_round(
@@ -1957,6 +2085,10 @@ secret routine bf_div(a: BfT, b: BfT, prec: U64, fl: U32) -> BfT
         var nb = b.len
         var n = if a.len > precl then a.len else precl
         var na = n +% nb
+        if not scratch_admit(
+            limbs: na +% 1u64 +% n +% 1u64 +% limbs_divmod_norm_scratch(na: na, nb: nb),
+        )
+            return bf_set_nan()
         var taba = alloc_limbs(n: na +% 1u64)
         var d = na -% a.len
         zero_limbs(tab: taba, n: d)
@@ -1989,6 +2121,9 @@ secret routine bf_sqrt(a: BfT, prec: U64, fl: U32) -> BfT
         if a.sign
             return bf_set_nan()
         var n = (2u64 *% (prec +% 2u64) +% (2u64 *% 64u64 -% 1u64)) // (2u64 *% 64u64)
+        # a1, the root, its scratch, and the closing round's copy
+        if not scratch_admit(limbs: 4u64 *% n +% limbs_sqrt_rem_scratch(n: n))
+            return bf_set_nan()
         var a1 = alloc_limbs(n: 2u64 *% n)
         var n1 = if 2u64 *% n < a.len then 2u64 *% n else a.len
         zero_limbs(tab: a1, n: 2u64 *% n -% n1)
@@ -2097,6 +2232,8 @@ secret routine chud_bs(a: S64, b: S64, need_g: Bool, prec: U64) -> (BfT, BfT, Bf
 secret routine bf_const_pi(prec: U64) -> BfT
     danger
         if prec <= 480u64
+            if not scratch_admit(limbs: 16u64)
+                return bf_set_nan()
             var tab = alloc_limbs(n: 8u64)
             set_limb(tab: tab, i: 0u64, value: 5755940542857986630u64)
             set_limb(tab: tab, i: 1u64, value: 3470879405153129527u64)
@@ -2119,7 +2256,8 @@ secret routine bf_const_pi(prec: U64) -> BfT
         while going
             var prec1 = prec +% extra
             r = bf_const_pi_internal(prec: prec1)
-            if bf_can_round(a: r, prec: S64(from: prec), rnd_mode: 0u32, k: S64(from: prec1))
+            if scratch_exhausted()
+                or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: 0u32, k: S64(from: prec1))
                 going = false
             else
                 extra = extra +% extra // 2u64
@@ -2209,6 +2347,8 @@ secret routine bf_const_log2_rec(n1: U64, n2: U64, need_p: Bool) -> (BfT, BfT, B
 secret routine bf_const_log2(prec: U64, fl: U32) -> BfT
     danger
         if prec <= 480u64
+            if not scratch_admit(limbs: 16u64)
+                return bf_set_nan()
             var tab = alloc_limbs(n: 8u64)
             set_limb(tab: tab, i: 0u64, value: 2834799538024855589u64)
             set_limb(tab: tab, i: 1u64, value: 17090789181815791940u64)
@@ -2233,7 +2373,8 @@ secret routine bf_const_log2(prec: U64, fl: U32) -> BfT
             var nn = w // 3u64 +% 1u64
             var r = bf_const_log2_rec(n1: 0u64, n2: nn, need_p: false)
             v = bf_div(a: r.item0, b: r.item2, prec: prec1, fl: 0u32)
-            if bf_can_round(a: v, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+            if scratch_exhausted()
+                or bf_can_round(a: v, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
                 going = false
             else
                 extra = extra +% extra // 2u64
@@ -2267,6 +2408,25 @@ secret routine bf_get_si(a: BfT) -> S64
         var top = limb(tab: a.tab, i: a.len -% 1u64)
         var mag = if e >= 64u64 then top else top >> U32(from: 64u64 -% e)
         return if a.sign then 0s64 -% S64(from: mag) else S64(from: mag)
+
+# The integer `n` (a whole BfT of any size) modulo 4, as `n & 3` gives it for an S64: 0 to 3, a negative
+# `n` counted from the top.
+secret routine bf_low_two_bits(n: BfT) -> S64
+    danger
+        if n.len == 0u64
+            return 0s64
+        var width = S64(from: n.len) *% 64s64
+        var m = 0s64
+        var k = 0s64
+        while k < 2s64
+            # bit k of the integer is mantissa bit `pos` counted from the bottom limb's lowest bit
+            var pos = width -% n.expn +% k
+            if pos >= 0s64 and pos < width
+                var w = limb(tab: n.tab, i: U64(from: pos >> 6u32))
+                var bit = (w >> U32(from: pos & 63s64)) & 1u64
+                m = m | (S64(from: bit) << U32(from: k))
+            k = k +% 1s64
+        return if n.sign then (4s64 -% m) & 3s64 else m
 
 secret routine bf_isqrt(x: U64) -> U64
     var s = 0u64
@@ -2333,7 +2493,8 @@ secret routine bf_exp(a: BfT, prec: U64, fl: U32) -> BfT
             var prec1 = prec +% extra
             r = bf_exp_internal(a: a, prec: prec1)
             # An overflow (infinity) or an underflow (zero) is final: more precision cannot round it.
-            if r.len == 0u64
+            if scratch_exhausted()
+                or r.len == 0u64
                 or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: rnd_mode, k: S64(from: prec1))
                 going = false
             else
@@ -2415,7 +2576,8 @@ secret routine bf_log(a: BfT, prec: U64, fl: U32) -> BfT
         while going
             var prec1 = prec +% extra
             r = bf_log_internal(a: a, prec: prec1)
-            if r.is_zero()
+            if scratch_exhausted()
+                or r.is_zero()
                 or bf_can_round(
                     a: r,
                     prec: S64(from: prec),
@@ -2454,20 +2616,29 @@ secret routine bf_sincos(a: BfT, prec: U64, want_sin: Bool) -> BfT
                 prec: bf_prec_inf(),
                 fl: 1u32,
             )
-            var n = bf_get_si(
-                a: bf_round(
-                    a: bf_div(a: a, b: pi2, prec: prec2, fl: 0u32),
-                    prec: 0u64,
-                    fl: 0x10u32,
-                ),
+            var quotient = bf_round(
+                a: bf_div(a: a, b: pi2, prec: prec2, fl: 0u32),
+                prec: 0u64,
+                fl: 0x10u32,
             )
-            mod = n & 3s64
-            t = bf_sub(
-                a: a,
-                b: bf_mul_si(a: pi2, n: n, prec: prec2, fl: 0u32),
-                prec: prec2,
-                fl: 0u32,
-            )
+            if quotient.expn <= 62s64
+                var n = bf_get_si(a: quotient)
+                mod = n & 3s64
+                t = bf_sub(
+                    a: a,
+                    b: bf_mul_si(a: pi2, n: n, prec: prec2, fl: 0u32),
+                    prec: prec2,
+                    fl: 0u32,
+                )
+            else
+                # a quotient past S64 stays a BfT: its low two bits pick the quadrant
+                mod = bf_low_two_bits(n: quotient)
+                t = bf_sub(
+                    a: a,
+                    b: bf_mul(a: pi2, b: quotient, prec: prec2, fl: 0u32),
+                    prec: prec2,
+                    fl: 0u32,
+                )
         var is_neg = t.sign
         var t2 = bf_mul_2exp(
             a: bf_mul(a: t, b: t, prec: prec1, fl: 0u32),
@@ -2533,7 +2704,8 @@ secret routine bf_cos(a: BfT, prec: U64, fl: U32) -> BfT
         while going
             var prec1 = prec +% extra
             r = bf_sincos(a: a, prec: prec1, want_sin: false)
-            if r.is_zero()
+            if scratch_exhausted()
+                or r.is_zero()
                 or bf_can_round(
                     a: r,
                     prec: S64(from: prec),
@@ -2557,7 +2729,8 @@ secret routine bf_sin(a: BfT, prec: U64, fl: U32) -> BfT
         while going
             var prec1 = prec +% extra
             r = bf_sincos(a: a, prec: prec1, want_sin: true)
-            if r.is_zero()
+            if scratch_exhausted()
+                or r.is_zero()
                 or bf_can_round(
                     a: r,
                     prec: S64(from: prec),
@@ -2590,7 +2763,8 @@ secret routine bf_tan(a: BfT, prec: U64, fl: U32) -> BfT
             var sn = bf_sincos(a: a, prec: inner, want_sin: true)
             var cs = bf_sincos(a: a, prec: inner, want_sin: false)
             r = bf_div(a: sn, b: cs, prec: inner, fl: 6u32)
-            if bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+            if scratch_exhausted()
+                or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
                 going = false
             else
                 extra = extra *% 2u64
@@ -2677,7 +2851,8 @@ secret routine bf_atan(a: BfT, prec: U64, fl: U32) -> BfT
         while going
             var prec1 = prec +% extra
             r = bf_atan_internal(a: a, prec: prec1, add_pi2: false)
-            if r.is_zero()
+            if scratch_exhausted()
+                or r.is_zero()
                 or bf_can_round(
                     a: r,
                     prec: S64(from: prec),
@@ -2720,7 +2895,8 @@ secret routine bf_asin(a: BfT, prec: U64, fl: U32) -> BfT
         while going
             var prec1 = prec +% extra
             r = bf_asin_internal(a: a, prec: prec1, is_acos: false)
-            if r.is_zero()
+            if scratch_exhausted()
+                or r.is_zero()
                 or bf_can_round(
                     a: r,
                     prec: S64(from: prec),
@@ -2746,7 +2922,8 @@ secret routine bf_acos(a: BfT, prec: U64, fl: U32) -> BfT
         while going
             var prec1 = prec +% extra
             r = bf_asin_internal(a: a, prec: prec1, is_acos: true)
-            if r.is_zero()
+            if scratch_exhausted()
+                or r.is_zero()
                 or bf_can_round(
                     a: r,
                     prec: S64(from: prec),
@@ -2857,7 +3034,7 @@ secret routine bf_pow_ziv(x: BfT, y: BfT, prec: U64, fl: U32, is_int: Bool) -> B
                 y: y,
                 prec: prec1,
             )
-            if r.len == 0u64 or extra > 65536u64
+            if scratch_exhausted() or r.len == 0u64 or extra > 65536u64
                 going = false
             elseif bf_can_round(
                 a: r,
@@ -2934,17 +3111,6 @@ secret routine bf_pow(x: BfT, y: BfT, prec: U64, fl: U32) -> BfT
 
 # ── Real support: working precision, rounding to integers, B64, atan2, composed functions, decimal text ──
 
-# Default working precision in bits for inexact {Real} operations (~308 decimal digits).
-secret routine real_prec() -> U64
-    return 1024u64
-
-# Decimal significant digits -> binary working precision (digits * log2(10) + 16 guard bits). A
-# non-positive digit count selects the default working precision.
-secret routine real_prec_bits(digits: S32) -> U64
-    if digits <= 0s32
-        return real_prec()
-    return U64(from: S64(from: digits)) *% 3402u64 // 1024u64 +% 16u64
-
 # The value of `a` with its sign replaced.
 secret routine bf_with_sign(a: BfT, sign: Bool) -> BfT
     return BfT(sign: sign, expn: a.expn, len: a.len, tab: a.tab)
@@ -3000,6 +3166,8 @@ secret routine bf_set_b64(d: B64) -> BfT
             e = 0s64 -% S64(from: shift)
         else
             m = (m << 11u32) | 0x8000000000000000u64
+        if not scratch_admit(limbs: 1u64)
+            return bf_set_nan()
         var tab = alloc_limbs(n: 1u64)
         set_limb(tab: tab, i: 0u64, value: m)
         return BfT(sign: sgn, expn: e -% 1022s64, len: 1u64, tab: tab)
@@ -3038,7 +3206,8 @@ secret routine bf_atan2(y: BfT, x: BfT, prec: U64, fl: U32) -> BfT
         while going
             var prec1 = prec +% extra
             r = bf_atan2_internal(y: y, x: x, prec: prec1)
-            if r.is_zero()
+            if scratch_exhausted()
+                or r.is_zero()
                 or bf_can_round(
                     a: r,
                     prec: S64(from: prec),
@@ -3125,6 +3294,116 @@ secret routine bf_cbrt(a: BfT, prec: U64) -> BfT
         var r = bf_pow(x: bf_with_sign(a: a, sign: false), y: third, prec: prec, fl: 0u32)
         return if neg then bf_neg(a: r) else r
 
+# ── {Real}'s guarded operations: the engine work around the functions whose argument can leave the range ──
+# Each is unchecked: a result past the exponent range comes back as an infinity, which {Real} turns into a
+# throw. The inputs are finite (Real is finite-only).
+
+# e**a at `prec` bits. An argument of 2^61 or more never reaches the engine, whose range reduction needs
+# a/log(2) to fit in 63 bits: that result is certainly out of range (an infinity) or certainly below it
+# (zero).
+secret routine real_exp_body(a: BfT, prec: U64) -> BfT
+    if a.expn > 61s64
+        if a.sign
+            return bf_set_zero(is_neg: false)
+        return bf_set_inf(is_neg: false)
+    return bf_exp(a: a, prec: prec, fl: 0u32)
+
+# sinh(a) or cosh(a) at `prec` bits, guarded like `real_exp_body` (an argument of 2^61 or more overflows).
+secret routine real_sinhcosh_body(a: BfT, prec: U64, is_cosh: Bool) -> BfT
+    if a.expn > 61s64
+        return bf_set_inf(is_neg: false)
+    return bf_sinhcosh(a: a, prec: prec, is_cosh: is_cosh)
+
+# x ** y at `prec` bits. The caller has already rejected a zero base with a negative exponent and a negative
+# base with a non-integer exponent. Before the power is built, y * log2|x| is estimated at 64 bits: at 2^61
+# or more in size the result is certainly out of the exponent range (an infinity) or certainly below it
+# (zero), and the power is not built. The estimate is skipped when |y| < 2^31 and |log2|x|| < 2^27, where
+# the result is surely in range.
+secret routine real_pow_body(x: BfT, y: BfT, prec: U64) -> BfT
+    var magnitude = bf_with_sign(a: x, sign: false)
+    var small = y.expn <= 31s64 and x.expn < 134217728s64 and x.expn > -134217728s64
+    if not small
+        and x.len > 0u64
+        and y.len > 0u64
+        and bf_cmp(a: magnitude, b: bf_set_ui(a: 1u64)) != 0s64
+        var estimate = bf_mul(
+            a: y,
+            b: bf_logbase(a: magnitude, prec: 64u64, base10: false),
+            prec: 64u64,
+            fl: 0u32,
+        )
+        if estimate.expn > 61s64
+            if estimate.sign
+                return bf_set_zero(is_neg: false)
+            return bf_set_inf(is_neg: false)
+    return bf_pow(x: x, y: y, prec: prec, fl: 0u32)
+
+# tanh(a) at `prec` bits, always finite. tanh forms e^(2a), which overflows for a large positive `a`, so a
+# positive argument from 2^30 up is computed as -tanh(-a). From 2^60 up the result is +-1 at any precision.
+secret routine real_tanh_body(a: BfT, prec: U64) -> BfT
+    if a.expn > 60s64
+        return bf_set_si(a: if a.sign then -1s64 else 1s64)
+    if not a.sign and a.expn > 30s64
+        return bf_neg(a: bf_tanh(a: bf_neg(a: a), prec: prec))
+    return bf_tanh(a: a, prec: prec)
+
+# asinh(a) (or acosh(a), whose caller has already rejected a < 1) at `prec` bits, always finite. A negative
+# asinh argument is computed as -asinh(-a), since a + sqrt(a^2 + 1) cancels to zero for a large negative
+# `a`. Once a^2 + 1 rounds to a^2 the result is log(2a) = log(a) + log(2), computed that way so a^2 never
+# leaves the exponent range.
+secret routine real_asinh_acosh_body(a: BfT, prec: U64, is_acosh: Bool) -> BfT
+    var x = a
+    var negate = a.sign and not is_acosh
+    if negate
+        x = bf_neg(a: x)
+    var r = bf_set_zero(is_neg: false)
+    if x.expn > S64(from: prec >> 1u32) +% 2s64
+        r = bf_add(
+            a: bf_log(a: x, prec: prec, fl: 0u32),
+            b: bf_const_log2(prec: prec, fl: 0u32),
+            prec: prec,
+            fl: 0u32,
+        )
+    else
+        r = bf_asinh_acosh(a: x, prec: prec, is_acosh: is_acosh)
+    if negate
+        r = bf_neg(a: r)
+    return r
+
+# sqrt(x^2 + y^2) at `prec` bits. Both legs are scaled by the same power of two first (exact), so the
+# squares stay inside the exponent range whenever the result does.
+secret routine real_hypot_body(x: BfT, y: BfT, prec: U64) -> BfT
+    var a = x
+    var b = y
+    var k = 0s64
+    if a.len > 0u64 and b.len > 0u64
+        k = if a.expn > b.expn then a.expn else b.expn
+    elseif a.len > 0u64
+        k = a.expn
+    elseif b.len > 0u64
+        k = b.expn
+    if a.len > 0u64
+        a = BfT(sign: a.sign, expn: a.expn -% k, len: a.len, tab: a.tab)
+    if b.len > 0u64
+        b = BfT(sign: b.sign, expn: b.expn -% k, len: b.len, tab: b.tab)
+    return bf_mul_2exp(a: bf_hypot(a: a, b: b, prec: prec), e: k, prec: prec, fl: 0u32)
+
+# ── scratch estimates ─────────────────────────────────────────────────────────────────────────────
+
+# A scratch size for a Real function of `a_len`- and `b_len`-limb arguments at `prec` bits: room for the
+# operations of a few Ziv rounds at that precision. An estimate (a call that needs more says so, and its
+# caller retries), sized so that the functions rarely need a second try.
+secret routine real_scratch_estimate(a_len: U64, b_len: U64, prec: U64) -> U64
+    var n = prec // 64u64 +% a_len +% b_len +% 4u64
+    var product = 2u64 *% n +% limbs_mul_scratch(op1_size: n, op2_size: n)
+    var quotient = 4u64 *% n +% limbs_divmod_norm_scratch(na: 2u64 *% n, nb: n)
+    var per_op = if product > quotient then product else quotient
+    # the series take about sqrt(prec) terms of a few operations each
+    var terms = 8u64
+    while terms *% terms < prec
+        terms = terms +% 8u64
+    return (8u64 *% terms +% 64u64) *% per_op
+
 # ── decimal text ────────────────────────────────────────────────────────────────────────────────────
 # log10(2) in 0.64 fixed point, rounded down.
 secret routine log10_2_fixed() -> U64
@@ -3181,7 +3460,9 @@ secret routine bf_to_decimal(a: BfT, p: U64) -> (BfT, S64)
                     fl: 0u32,
                 )
                 r = bf_rint(a: q, rnd: 0u32)
-            if bf_cmpu(a: r, b: limit) >= 0s64
+            if scratch_exhausted()
+                going = false
+            elseif bf_cmpu(a: r, b: limit) >= 0s64
                 big_e = big_e +% 1s64
             elseif bf_cmpu(a: r, b: lower) < 0s64
                 big_e = big_e -% 1s64
@@ -3189,114 +3470,161 @@ secret routine bf_to_decimal(a: BfT, p: U64) -> (BfT, S64)
                 going = false
         return (r, big_e)
 
-# The decimal digits of a positive integer-valued BfT, most significant first.
-secret routine bf_integer_digits(r: BfT) -> Text
-    danger
-        var n = (U64(from: r.expn) +% 63u64) // 64u64
-        var buf = alloc_limbs(n: n)
-        var base_pos = S64(from: r.len *% 64u64) -% r.expn
-        var k = 0u64
-        while k < n
-            set_limb(
-                tab: buf,
-                i: k,
-                value: get_bits_s(tab: r.tab, len: r.len, pos: base_pos +% S64(from: k *% 64u64)),
-            )
-            k = k +% 1u64
-        # peel base-10^19 chunks off the bottom, least significant digit first
-        var rev = List[Character]()
-        var len = n
+# The `count` decimal digits of a positive integer-valued BfT below 10^count, most significant first, as
+# one digit value per limb of `digits`. False when the call is exhausted.
+secret dangerous routine bf_integer_digits_into(r: BfT, count: U64, digits: Hijacked[U64]) -> Bool
+    var n = (U64(from: r.expn) +% 63u64) // 64u64
+    if not scratch_admit(limbs: n)
+        return false
+    var buf = alloc_limbs(n: n)
+    var base_pos = S64(from: r.len *% 64u64) -% r.expn
+    var k = 0u64
+    while k < n
+        set_limb(
+            tab: buf,
+            i: k,
+            value: get_bits_s(tab: r.tab, len: r.len, pos: base_pos +% S64(from: k *% 64u64)),
+        )
+        k = k +% 1u64
+    # peel base-10^19 chunks off the bottom, filling the digits from the least significant end
+    var at = count
+    var len = n
+    while len > 0u64 and limb(tab: buf, i: len -% 1u64) == 0u64
+        len = len -% 1u64
+    while len > 0u64
+        var chunk = limbs_divmod_word(
+            tabr: buf,
+            taba: buf,
+            n: len,
+            b: 10000000000000000000u64,
+            r0: 0u64,
+        )
         while len > 0u64 and limb(tab: buf, i: len -% 1u64) == 0u64
             len = len -% 1u64
-        while len > 0u64
-            var chunk = limbs_divmod_word(
-                tabr: buf,
-                taba: buf,
-                n: len,
-                b: 10000000000000000000u64,
-                r0: 0u64,
-            )
-            while len > 0u64 and limb(tab: buf, i: len -% 1u64) == 0u64
-                len = len -% 1u64
-            var c = 0u64
-            while c < 19u64 and (len > 0u64 or chunk != 0u64)
-                rev.add_last(value: Character(from: 48u32 +% U32(from: chunk % 10u64)))
-                chunk = chunk // 10u64
-                c = c +% 1u64
-        var digits = List[Character]()
-        var i = rev.count()
-        while i > 0u64
-            i = i -% 1u64
-            digits.add_last(value: rev[i])
-        return Text(from_list: steal digits)
+        var c = 0u64
+        while c < 19u64 and (len > 0u64 or chunk != 0u64) and at > 0u64
+            at = at -% 1u64
+            set_limb(tab: digits, i: at, value: chunk % 10u64)
+            chunk = chunk // 10u64
+            c = c +% 1u64
+    return true
 
-# The characters of `text` in [from_index, to_index).
-secret routine text_range(text: Text, from_index: U64, to_index: U64) -> Text
-    var chars = List[Character]()
+# The most characters `bf_ftoa_into` writes at `prec` bits: the digit budget, a sign, the point, up to five
+# leading zeros or four trailing ones, and an exponent.
+secret routine bf_ftoa_capacity(prec: U64) -> U64
+    return ceil_mul_log10_2(bits: prec) +% 32u64
+
+# Writes `cp` at `out[at]` and returns the next position.
+secret dangerous routine put_char(out: Hijacked[Character], at: U64, cp: U32) -> U64
+    out.stride(count: S64(from: at)).poke(value: Character(from: cp))
+    return at +% 1u64
+
+# Writes the decimal digits of `v` at `out[at]` (a '-' first when negative) and returns the next position.
+secret dangerous routine put_s64(out: Hijacked[Character], at: U64, v: S64) -> U64
+    var pos = at
+    var mag = if v < 0s64 then 0u64 -% LLVM::reinterpret_bits[S64, U64](v) else LLVM::reinterpret_bits[S64, U64](v)
+    if v < 0s64
+        pos = put_char(out: out, at: pos, cp: 45u32)
+    var width = 1u64
+    var scale = 1u64
+    while mag // scale >= 10u64
+        scale = scale *% 10u64
+        width = width +% 1u64
+    while scale > 0u64
+        pos = put_char(out: out, at: pos, cp: 48u32 +% U32(from: mag // scale % 10u64))
+        scale = scale // 10u64
+    return pos
+
+# Writes digits [from_index, to_index) of `digits` (one digit value per limb) at `out[at]` and returns the
+# next position.
+secret dangerous routine put_digits(
+    out: Hijacked[Character],
+    at: U64,
+    digits: Hijacked[U64],
+    from_index: U64,
+    to_index: U64,
+) -> U64
+    var pos = at
     var i = from_index
     while i < to_index
-        chars.add_last(value: text[i])
+        pos = put_char(out: out, at: pos, cp: 48u32 +% U32(from: limb(tab: digits, i: i)))
         i = i +% 1u64
-    return Text(from_list: steal chars)
+    return pos
 
-# `count` zero digits.
-secret routine zeros_text(count: S64) -> Text
-    var chars = List[Character]()
+# Writes `count` zero digits at `out[at]` and returns the next position.
+secret dangerous routine put_zeros(out: Hijacked[Character], at: U64, count: S64) -> U64
+    var pos = at
     var i = 0s64
     while i < count
-        chars.add_last(value: Character(from: 48u32))
+        pos = put_char(out: out, at: pos, cp: 48u32)
         i = i +% 1s64
-    return Text(from_list: steal chars)
+    return pos
 
-# Shortest decimal text that reads back (at `prec` bits, nearest) to exactly `a`. Plain notation unless
-# the decimal exponent is below -5 or beyond the digit budget, then `d.ddde<exp>`. NaN is "NaN" and
-# infinity "Inf". (libbf bf_ftoa, radix 10, BF_FTOA_FORMAT_FREE_MIN)
-secret routine bf_ftoa_free_min(a: BfT, prec: U64) -> Text
-    danger
-        if a.expn == bf_exp_nan()
-            return "NaN"
-        var sign = if a.sign then "-" else ""
-        if a.expn == bf_exp_inf()
-            return sign + "Inf"
-        if a.expn == bf_exp_zero()
-            return sign + "0"
-        var aa = bf_with_sign(a: a, sign: false)
-        var n_digits_budget = 1u64 +% ceil_mul_log10_2(bits: prec)
-        # the minimum digit count, by dichotomy
-        var lo = 1u64
-        var hi = n_digits_budget
-        while lo < hi
-            var mid = (lo +% hi) // 2u64
-            var probe = bf_to_decimal(a: aa, p: mid)
-            var back = bf_mul10exp(
-                t: probe.item0,
-                expn: probe.item1 -% S64(from: mid),
-                prec: prec,
-                fl: 0u32,
-            )
-            if bf_cmpu(a: back, b: aa) == 0s64
-                hi = mid
-            else
-                lo = mid +% 1u64
-        var nd = hi
-        var conv = bf_to_decimal(a: aa, p: nd)
-        var digits = bf_integer_digits(r: conv.item0)
-        var n = conv.item1
-        var n_max = S64(from: n_digits_budget) +% 4s64
-        var snd = S64(from: nd)
-        if n <= -6s64 or n > n_max
-            var mantissa = text_range(text: digits, from_index: 0u64, to_index: 1u64)
-            if nd > 1u64
-                mantissa = mantissa + "." + text_range(text: digits, from_index: 1u64, to_index: nd)
-            return sign + mantissa + f"e{n -% 1s64}"
-        if n <= 0s64
-            return sign + "0." + zeros_text(count: 0s64 -% n) + digits
-        if snd <= n
-            return sign + digits + zeros_text(count: n -% snd)
-        var dot = U64(from: n)
-        var int_part = text_range(text: digits, from_index: 0u64, to_index: dot)
-        var frac_part = text_range(text: digits, from_index: dot, to_index: nd)
-        return sign + int_part + "." + frac_part
+# The shortest decimal text that reads back (at `prec` bits, nearest) to exactly `a`, written into `out` (at
+# least `bf_ftoa_capacity(prec)` characters). Plain notation unless the decimal exponent is below -5 or
+# beyond the digit budget, then `d.ddde<exp>`. NaN is "NaN" and infinity "Inf". Returns the character count,
+# 0 when the call is exhausted. (libbf bf_ftoa, radix 10, BF_FTOA_FORMAT_FREE_MIN)
+secret dangerous routine bf_ftoa_into(a: BfT, prec: U64, out: Hijacked[Character]) -> U64
+    if a.expn == bf_exp_nan()
+        var p = put_char(out: out, at: 0u64, cp: 78u32)
+        p = put_char(out: out, at: p, cp: 97u32)
+        return put_char(out: out, at: p, cp: 78u32)
+    var pos = 0u64
+    if a.sign
+        pos = put_char(out: out, at: pos, cp: 45u32)
+    if a.expn == bf_exp_inf()
+        pos = put_char(out: out, at: pos, cp: 73u32)
+        pos = put_char(out: out, at: pos, cp: 110u32)
+        return put_char(out: out, at: pos, cp: 102u32)
+    if a.expn == bf_exp_zero()
+        return put_char(out: out, at: pos, cp: 48u32)
+    var aa = bf_with_sign(a: a, sign: false)
+    var n_digits_budget = 1u64 +% ceil_mul_log10_2(bits: prec)
+    # the minimum digit count, by dichotomy
+    var lo = 1u64
+    var hi = n_digits_budget
+    while lo < hi
+        var mid = (lo +% hi) // 2u64
+        var probe = bf_to_decimal(a: aa, p: mid)
+        var back = bf_mul10exp(
+            t: probe.item0,
+            expn: probe.item1 -% S64(from: mid),
+            prec: prec,
+            fl: 0u32,
+        )
+        if bf_cmpu(a: back, b: aa) == 0s64
+            hi = mid
+        else
+            lo = mid +% 1u64
+    var nd = hi
+    var conv = bf_to_decimal(a: aa, p: nd)
+    if scratch_exhausted() or not scratch_admit(limbs: nd)
+        return 0u64
+    var digits = alloc_limbs(n: nd)
+    if not bf_integer_digits_into(r: conv.item0, count: nd, digits: digits)
+        return 0u64
+    var n = conv.item1
+    var n_max = S64(from: n_digits_budget) +% 4s64
+    var snd = S64(from: nd)
+    if n <= -6s64 or n > n_max
+        pos = put_digits(out: out, at: pos, digits: digits, from_index: 0u64, to_index: 1u64)
+        if nd > 1u64
+            pos = put_char(out: out, at: pos, cp: 46u32)
+            pos = put_digits(out: out, at: pos, digits: digits, from_index: 1u64, to_index: nd)
+        pos = put_char(out: out, at: pos, cp: 101u32)
+        return put_s64(out: out, at: pos, v: n -% 1s64)
+    if n <= 0s64
+        pos = put_char(out: out, at: pos, cp: 48u32)
+        pos = put_char(out: out, at: pos, cp: 46u32)
+        pos = put_zeros(out: out, at: pos, count: 0s64 -% n)
+        return put_digits(out: out, at: pos, digits: digits, from_index: 0u64, to_index: nd)
+    if snd <= n
+        pos = put_digits(out: out, at: pos, digits: digits, from_index: 0u64, to_index: nd)
+        return put_zeros(out: out, at: pos, count: n -% snd)
+    var dot = U64(from: n)
+    pos = put_digits(out: out, at: pos, digits: digits, from_index: 0u64, to_index: dot)
+    pos = put_char(out: out, at: pos, cp: 46u32)
+    return put_digits(out: out, at: pos, digits: digits, from_index: dot, to_index: nd)
 
 # Digit value of a codepoint in radices up to 36 (36 when it is not a digit).
 secret routine digit_value(cp: U32) -> U64
@@ -3314,43 +3642,58 @@ secret routine lower_cp(cp: U32) -> U32
         return cp +% 32u32
     return cp
 
-# Does `text` from `at` to its end spell `word` (lowercase ASCII), ignoring case?
-secret routine rest_is_word(text: Text, at: U64, word: Text) -> Bool
-    var n = text.count()
-    var w = word.count()
-    if at > n or n -% at != w
+# The codepoint of character `i` of a character buffer.
+secret dangerous routine char_at(chars: Hijacked[Character], i: U64) -> U32
+    return chars.stride(count: S64(from: i)).peek().codepoint()
+
+# "nan", "inf" and "infinity" as packed ASCII: the letters from the low byte up.
+secret preset WORD_NAN: U64 = 0x6E616Eu64
+secret preset WORD_INF: U64 = 0x666E69u64
+secret preset WORD_INFINITY: U64 = 0x7974696E69666E69u64
+
+# Do the `count` characters at `chars`, from `at` to their end, spell the `length` lowercase ASCII letters
+# packed in `word` (the first in the low byte), ignoring case?
+secret dangerous routine rest_is_word(
+    chars: Hijacked[Character],
+    count: U64,
+    at: U64,
+    word: U64,
+    length: U64,
+) -> Bool
+    if at > count or count -% at != length
         return false
     var i = 0u64
-    while i < w
-        if lower_cp(cp: text[at +% i].codepoint()) != word[i].codepoint()
+    while i < length
+        var letter = U32(from: (word >> U32(from: 8u64 *% i)) & 0xFFu64)
+        if lower_cp(cp: char_at(chars: chars, i: at +% i)) != letter
             return false
         i = i +% 1u64
     return true
 
-# Parse `text` in `radix` (2..36) to the nearest BfT at `prec` bits. Accepts an optional sign, "nan" /
-# "inf" / "infinity" (any case, radix <= 16), a "0x" prefix in radix 16, digits with at most one '.',
-# and an optional exponent of `radix` ('e'/'E' in radix 10, '@' in any radix) written in decimal. The
-# whole text must be consumed. Returns (value, ok), ok false for malformed text. (libbf bf_atof)
-secret routine bf_atof(text: Text, radix: U64, prec: U64) -> (BfT, Bool)
+# Parse the `count` characters at `chars` in `radix` (2..36) to the nearest BfT at `prec` bits. Accepts an
+# optional sign, "nan" / "inf" / "infinity" (any case, radix <= 16), a "0x" prefix in radix 16, digits with
+# at most one '.', and an optional exponent of `radix` ('e'/'E' in radix 10, '@' in any radix) written in
+# decimal. The whole text must be consumed. Returns (value, ok), ok false for malformed text. (libbf bf_atof)
+secret routine bf_atof(chars: Hijacked[Character], count: U64, radix: U64, prec: U64) -> (BfT, Bool)
     danger
-        var n = text.count()
+        var n = count
         var i = 0u64
-        if radix <= 16u64 and rest_is_word(text: text, at: 0u64, word: "nan")
+        if radix <= 16u64 and rest_is_word(chars: chars, count: n, at: 0u64, word: WORD_NAN, length: 3u64)
             return (bf_set_nan(), true)
         var neg = false
-        if i < n and text[i].codepoint() == 45u32
+        if i < n and char_at(chars: chars, i: i) == 45u32
             neg = true
             i = i +% 1u64
-        elseif i < n and text[i].codepoint() == 43u32
+        elseif i < n and char_at(chars: chars, i: i) == 43u32
             i = i +% 1u64
         if radix <= 16u64
-            and (rest_is_word(text: text, at: i, word: "inf")
-                or rest_is_word(text: text, at: i, word: "infinity"))
+            and (rest_is_word(chars: chars, count: n, at: i, word: WORD_INF, length: 3u64)
+                or rest_is_word(chars: chars, count: n, at: i, word: WORD_INFINITY, length: 8u64))
             return (bf_set_inf(is_neg: neg), true)
         if radix == 16u64
             and i +% 1u64 < n
-            and text[i].codepoint() == 48u32
-            and lower_cp(cp: text[i +% 1u64].codepoint()) == 120u32
+            and char_at(chars: chars, i: i) == 48u32
+            and lower_cp(cp: char_at(chars: chars, i: i +% 1u64)) == 120u32
             i = i +% 2u64
         # digits per chunk: the largest k with radix^k < 2^64
         var chunk_pow_max = 1u64
@@ -3358,6 +3701,8 @@ secret routine bf_atof(text: Text, radix: U64, prec: U64) -> (BfT, Bool)
         while chunk_pow_max <= 0xFFFFFFFFFFFFFFFFu64 // radix
             chunk_pow_max = chunk_pow_max *% radix
             k_max = k_max +% 1u64
+        if not scratch_admit(limbs: n *% 6u64 // 64u64 +% 2u64)
+            return (bf_set_nan(), true)
         var mant = alloc_limbs(n: n *% 6u64 // 64u64 +% 2u64)
         var mlen = 0u64
         var cur = 0u64
@@ -3368,7 +3713,7 @@ secret routine bf_atof(text: Text, radix: U64, prec: U64) -> (BfT, Bool)
         var seen_dot = false
         var parsing = true
         while parsing and i < n
-            var cp = text[i].codepoint()
+            var cp = char_at(chars: chars, i: i)
             if cp == 46u32 and not seen_dot
                 seen_dot = true
                 i = i +% 1u64
@@ -3408,19 +3753,19 @@ secret routine bf_atof(text: Text, radix: U64, prec: U64) -> (BfT, Bool)
         # exponent of the radix, in decimal
         var expn = 0s64
         if i < n
-            var ec = text[i].codepoint()
+            var ec = char_at(chars: chars, i: i)
             if (radix == 10u64 and (ec == 101u32 or ec == 69u32)) or ec == 64u32
                 i = i +% 1u64
                 var exp_neg = false
-                if i < n and text[i].codepoint() == 45u32
+                if i < n and char_at(chars: chars, i: i) == 45u32
                     exp_neg = true
                     i = i +% 1u64
-                elseif i < n and text[i].codepoint() == 43u32
+                elseif i < n and char_at(chars: chars, i: i) == 43u32
                     i = i +% 1u64
                 var exp_digits = 0u64
-                while i < n and digit_value(cp: text[i].codepoint()) < 10u64
+                while i < n and digit_value(cp: char_at(chars: chars, i: i)) < 10u64
                     if expn < 100000000000000s64
-                        expn = expn *% 10s64 +% S64(from: digit_value(cp: text[i].codepoint()))
+                        expn = expn *% 10s64 +% S64(from: digit_value(cp: char_at(chars: chars, i: i)))
                     exp_digits = exp_digits +% 1u64
                     i = i +% 1u64
                 if exp_digits == 0u64

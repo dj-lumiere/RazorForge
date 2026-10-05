@@ -1,6 +1,6 @@
 module Numerics
 
-### Represents an arbitrary-precision signed integer, computed by a pure-RazorForge limb engine.
+### Represents an arbitrary-precision signed integer, computed by the integer engine in Ingrid.
 ### `Integer` is the unbounded integer type for workloads where fixed-width overflow is not acceptable.
 ### It preserves exact integer semantics across arithmetic, parsing, and formatting operations.
 ###
@@ -22,48 +22,385 @@ obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable
     secret ctrl: Hijacked[FrozenController]
 
 # ============================================================================
-# Bridge to the engine
+# Calls into Ingrid
 # ============================================================================
+# The bodies are Numeric/IntegerEngine.rf, which runs in Ingrid (Ingrid/tessera/generated/numerics.tess,
+# written from RazorForge/IngridExport/numerics.rf, which describes the call protocol). RazorForge allocates
+# every buffer: the result buffer, which becomes the new value's limbs, and the scratch the engine takes its
+# temporaries from. A call that needs more of either says so, and is made again with that much.
 
-# Borrows this value's limbs as an engine value (no copy). The engine never writes an input's limbs.
-secret routine integer_view(v: Integer) -> IntV
-    return IntV(neg: v.neg, len: v.len, tab: v.tab)
+# A buffer of `n` limbs for one Ingrid call (none when `n` is 0).
+secret dangerous routine limb_buffer(n: U64) -> Hijacked[U64]
+    if n == 0u64
+        return hijacked_none[U64]()
+    return Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8u64 *% n))
 
-# Copies an engine result into a new owned `Integer`. The engine's buffers live in the scratch region,
-# so the limbs are copied out before the caller releases it.
-secret routine integer_from_view(x: IntV) -> Integer
+# Frees a buffer from `limb_buffer`.
+secret dangerous routine limb_free(p: Hijacked[U64])
+    if not p.is_none()
+        p.invalidate()
+    return
+
+# The scratch a retry hands over after a call that had `room` limbs needed `need` at least.
+secret routine scratch_retry(room: U64, need: U64) -> U64
+    var doubled = room *% 2u64
+    var wanted = need +% need // 2u64
+    return if doubled > wanted then doubled else wanted
+
+# 1 when `neg`, else 0: a sign as it crosses the C ABI.
+secret routine sign_word(neg: Bool) -> U64
+    return if neg then 1u64 else 0u64
+
+# The zero `Integer`.
+secret routine integer_zero() -> Integer
     danger
-        if x.len == 0u64
-            return Integer(
-                neg: false,
-                len: 0u64,
-                tab: hijacked_none[U64](),
-                ctrl: hijacked_none[FrozenController](),
-            )
-        var tab = Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8u64 *% x.len))
-        var i = 0u64
-        while i < x.len
-            tab.stride(count: S64(from: i)).poke(value: x.tab.stride(count: S64(from: i)).peek())
-            i = i +% 1u64
-        return Integer(neg: x.neg, len: x.len, tab: tab, ctrl: fresh_frozen_controller())
-
-# a + b computed straight into a new owned buffer. Addition needs no scratch memory, so this skips the
-# region and the copy-out that the other operations pay.
-secret routine integer_sum(a: IntV, b: IntV) -> Integer
-    danger
-        var tab = Hijacked[U64](
-            from: C::rf_allocate_dynamic_uninit(size: 8u64 *% bigint_add_capacity(a: a, b: b)),
+        return Integer(
+            neg: false,
+            len: 0u64,
+            tab: hijacked_none[U64](),
+            ctrl: hijacked_none[FrozenController](),
         )
-        var x = bigint_add_into(a: a, b: b, r: tab)
-        if x.len == 0u64
-            tab.invalidate()
-            return Integer(
-                neg: false,
-                len: 0u64,
-                tab: hijacked_none[U64](),
-                ctrl: hijacked_none[FrozenController](),
+
+# The `Integer` an Ingrid call left in `out`: `len` limbs, negative when `neg`. Frees `out` when the value is
+# zero.
+secret dangerous routine integer_adopt(out: Hijacked[U64], len: U64, neg: Bool) -> Integer
+    if len == 0u64
+        limb_free(p: out)
+        return integer_zero()
+    return Integer(neg: neg, len: len, tab: out, ctrl: fresh_frozen_controller())
+
+# `v` with its sign `neg` (zero stays non-negative), sharing its limbs.
+secret routine integer_with_sign(v: Integer, neg: Bool) -> Integer
+    if v.len == 0u64
+        return integer_zero()
+    danger
+        if not v.ctrl.is_none()
+            v.ctrl.as_entity().hold()
+    return Integer(neg: neg, len: v.len, tab: v.tab, ctrl: v.ctrl)
+
+# a + b, or a - b when `negate_b`. Addition needs no scratch: the sum goes straight into its own buffer.
+secret routine integer_sum(a: Integer, b: Integer, negate_b: Bool) -> Integer
+    danger
+        var b_neg = if negate_b then b.len != 0u64 and not b.neg else b.neg
+        var cap = (if a.len > b.len then a.len else b.len) +% 1u64
+        var out = limb_buffer(n: cap)
+        var w = C::ingrid_integer_add(
+            a_neg: sign_word(neg: a.neg),
+            a_len: a.len,
+            a_tab: a.tab,
+            b_neg: sign_word(neg: b_neg),
+            b_len: b.len,
+            b_tab: b.tab,
+            out: out,
+            out_cap: cap,
+        )
+        return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
+
+# The low 64 bits of the magnitude.
+secret routine integer_low_word(v: Integer) -> U64
+    if v.len == 0u64
+        return 0u64
+    danger
+        return v.tab.peek()
+
+# One two's-complement bitwise operation (0 AND, 1 OR, 2 XOR). It needs no scratch.
+secret routine integer_bitop(a: Integer, b: Integer, op: U32) -> Integer
+    danger
+        var cap = (if a.len > b.len then a.len else b.len) +% 1u64
+        var out = limb_buffer(n: cap)
+        var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
+        if op == 0u32
+            w = C::ingrid_integer_and(
+                a_neg: sign_word(neg: a.neg),
+                a_len: a.len,
+                a_tab: a.tab,
+                b_neg: sign_word(neg: b.neg),
+                b_len: b.len,
+                b_tab: b.tab,
+                out: out,
+                out_cap: cap,
             )
-        return Integer(neg: x.neg, len: x.len, tab: tab, ctrl: fresh_frozen_controller())
+        elseif op == 1u32
+            w = C::ingrid_integer_or(
+                a_neg: sign_word(neg: a.neg),
+                a_len: a.len,
+                a_tab: a.tab,
+                b_neg: sign_word(neg: b.neg),
+                b_len: b.len,
+                b_tab: b.tab,
+                out: out,
+                out_cap: cap,
+            )
+        else
+            w = C::ingrid_integer_xor(
+                a_neg: sign_word(neg: a.neg),
+                a_len: a.len,
+                a_tab: a.tab,
+                b_neg: sign_word(neg: b.neg),
+                b_len: b.len,
+                b_tab: b.tab,
+                out: out,
+                out_cap: cap,
+            )
+        return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
+
+# Shifts the magnitude by `bits` (left when `left`), keeping the sign. It needs no scratch.
+secret routine integer_shift(a: Integer, bits: U64, left: Bool) -> Integer
+    danger
+        if a.len == 0u64
+            return integer_zero()
+        var cap = 0u64
+        if left
+            cap = a.len +% bits // 64u64 +% 1u64
+        else
+            var limb_shift = bits // 64u64
+            cap = if limb_shift >= a.len then 1u64 else a.len -% limb_shift +% 1u64
+        var out = limb_buffer(n: cap)
+        var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
+        if left
+            w = C::ingrid_integer_shift_left(
+                a_neg: sign_word(neg: a.neg),
+                a_len: a.len,
+                a_tab: a.tab,
+                bits: bits,
+                out: out,
+                out_cap: cap,
+            )
+        else
+            w = C::ingrid_integer_shift_right(
+                a_neg: sign_word(neg: a.neg),
+                a_len: a.len,
+                a_tab: a.tab,
+                bits: bits,
+                out: out,
+                out_cap: cap,
+            )
+        return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
+
+# a * b.
+secret routine integer_product(a: Integer, b: Integer) -> Integer
+    if a.len == 0u64 or b.len == 0u64
+        return integer_zero()
+    danger
+        var cap = a.len +% b.len
+        var room = C::ingrid_integer_mul_scratch_size(a_len: a.len, b_len: b.len)
+        loop
+            var out = limb_buffer(n: cap)
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_integer_mul(
+                a_neg: sign_word(neg: a.neg),
+                a_len: a.len,
+                a_tab: a.tab,
+                b_neg: sign_word(neg: b.neg),
+                b_len: b.len,
+                b_tab: b.tab,
+                out: out,
+                out_cap: cap,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
+            limb_free(p: out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
+
+# The Euclidean quotient and remainder of a / b (b nonzero).
+secret routine integer_divmod(a: Integer, b: Integer) -> (Integer, Integer)
+    danger
+        var q_cap = (if a.len > b.len then a.len -% b.len else 0u64) +% 2u64
+        var r_cap = b.len
+        var room = C::ingrid_integer_divmod_scratch_size(a_len: a.len, b_len: b.len)
+        loop
+            var q_out = limb_buffer(n: q_cap)
+            var r_out = limb_buffer(n: r_cap)
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_integer_divmod(
+                a_neg: sign_word(neg: a.neg),
+                a_len: a.len,
+                a_tab: a.tab,
+                b_neg: sign_word(neg: b.neg),
+                b_len: b.len,
+                b_tab: b.tab,
+                q_out: q_out,
+                q_cap: q_cap,
+                r_out: r_out,
+                r_cap: r_cap,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                return (
+                    integer_adopt(out: q_out, len: w.w1, neg: w.w2 != 0u64),
+                    integer_adopt(out: r_out, len: w.w3, neg: false),
+                )
+            limb_free(p: q_out)
+            limb_free(p: r_out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                q_cap = w.w1
+                r_cap = w.w2
+
+# a^e.
+secret routine integer_power(a: Integer, e: U64) -> Integer
+    danger
+        var bits = a.bit_length()
+        var cap = U64(from: (U128(from: bits) *% U128(from: e)) // 64u128) +% 2u64
+        var room = C::ingrid_integer_pow_scratch_size(a_len: a.len, a_bits: bits, e: e)
+        loop
+            var out = limb_buffer(n: cap)
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_integer_pow(
+                a_neg: sign_word(neg: a.neg),
+                a_len: a.len,
+                a_tab: a.tab,
+                e: e,
+                out: out,
+                out_cap: cap,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
+            limb_free(p: out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
+
+# (floor(sqrt(a)), a - floor(sqrt(a))^2) of a non-negative a, the remainder only when `want_rem`.
+secret routine integer_root(a: Integer, want_rem: Bool) -> (Integer, Integer)
+    danger
+        var s_cap = (a.len +% 1u64) // 2u64 +% 1u64
+        var r_cap = if want_rem then s_cap +% 1u64 else 0u64
+        var room = C::ingrid_integer_sqrt_scratch_size(a_len: a.len)
+        loop
+            var s_out = limb_buffer(n: s_cap)
+            var r_out = limb_buffer(n: r_cap)
+            var scratch = limb_buffer(n: room)
+            var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
+            if want_rem
+                w = C::ingrid_integer_sqrtrem(
+                    a_len: a.len,
+                    a_tab: a.tab,
+                    s_out: s_out,
+                    s_cap: s_cap,
+                    r_out: r_out,
+                    r_cap: r_cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            else
+                w = C::ingrid_integer_sqrt(
+                    a_len: a.len,
+                    a_tab: a.tab,
+                    out: s_out,
+                    out_cap: s_cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                return (
+                    integer_adopt(out: s_out, len: w.w1, neg: false),
+                    integer_adopt(out: r_out, len: w.w3, neg: false),
+                )
+            limb_free(p: s_out)
+            limb_free(p: r_out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                s_cap = w.w1
+                r_cap = w.w2
+
+# gcd(|a|, |b|), or lcm(|a|, |b|) when `lcm`.
+secret routine integer_gcd_lcm(a: Integer, b: Integer, lcm: Bool) -> Integer
+    danger
+        var cap = if a.len > b.len then a.len else b.len
+        if lcm
+            cap = a.len +% b.len
+        var room = C::ingrid_integer_gcd_scratch_size(a_len: a.len, b_len: b.len)
+        loop
+            var out = limb_buffer(n: cap)
+            var scratch = limb_buffer(n: room)
+            var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
+            if lcm
+                w = C::ingrid_integer_lcm(
+                    a_len: a.len,
+                    a_tab: a.tab,
+                    b_len: b.len,
+                    b_tab: b.tab,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            else
+                w = C::ingrid_integer_gcd(
+                    a_len: a.len,
+                    a_tab: a.tab,
+                    b_len: b.len,
+                    b_tab: b.tab,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                return integer_adopt(out: out, len: w.w1, neg: false)
+            limb_free(p: out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
+
+# -1 / 0 / 1 comparing values.
+secret routine integer_compare(a: Integer, b: Integer) -> S64
+    danger
+        return C::ingrid_integer_compare(
+            a_neg: sign_word(neg: a.neg),
+            a_len: a.len,
+            a_tab: a.tab,
+            b_neg: sign_word(neg: b.neg),
+            b_len: b.len,
+            b_tab: b.tab,
+        )
+
+# `v` in `radix` (2 to 64): an optional '-' then the digits (0-9, A-Z, a-z, '+', '/'), "0" for zero.
+secret routine integer_text(v: Integer, radix: U64) -> Text
+    danger
+        var cap = C::ingrid_integer_text_capacity(a_len: v.len, radix: radix)
+        var room = v.len
+        loop
+            var out = Hijacked[Character](from: C::rf_allocate_dynamic_uninit(size: 4u64 *% cap))
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_integer_to_text(
+                a_neg: sign_word(neg: v.neg),
+                a_len: v.len,
+                a_tab: v.tab,
+                radix: radix,
+                out: out,
+                out_cap: cap,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                var text = Text(from_span: out, count: w.w1)
+                out.invalidate()
+                return text
+            out.invalidate()
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
 
 # ============================================================================
 # Lifecycle Management
@@ -74,7 +411,7 @@ secret routine integer_sum(a: IntV, b: IntV) -> Integer
 ### instead of a fixed-width literal.
 ### :returns: The resulting `Integer` value.
 routine Integer() -> Integer
-    return integer_from_view(x: bigint_zero())
+    return integer_zero()
 
 ### Creates an `Integer` from a signed 64-bit source value.
 ### The numeric payload is copied into the arbitrary-precision representation,
@@ -98,21 +435,20 @@ routine Integer(from: U64) -> Integer
 # Integer exactly).
 # ============================================================================
 
-# 64-bit base builders. They construct through the engine, so they avoid the `Integer(from:)` call
-# form (which mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
+# 64-bit base builders: one limb holds the magnitude. They avoid the `Integer(from:)` call form (which
+# mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
 routine integer_of_s64(v: S64) -> Integer
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_from_s64(v: v))
-        C::rf_region_release(mark: mark)
-        return r
+    if v < 0s64
+        return integer_with_sign(v: integer_of_u64(v: 0u64 -% LLVM::reinterpret_bits[S64, U64](v)), neg: true)
+    return integer_of_u64(v: LLVM::reinterpret_bits[S64, U64](v))
 
 routine integer_of_u64(v: U64) -> Integer
+    if v == 0u64
+        return integer_zero()
     danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_from_u64(v: v, neg: false))
-        C::rf_region_release(mark: mark)
-        return r
+        var tab = limb_buffer(n: 1u64)
+        tab.poke(value: v)
+        return Integer(neg: false, len: 1u64, tab: tab, ctrl: fresh_frozen_controller())
 
 ### Widens a fixed-width integer into an `Integer` (exact). 64-bit limbs go through the
 ### base builders; wider widths compose them with shift+add.
@@ -167,15 +503,39 @@ routine Integer(from: U256) -> Integer
     var lo = Integer(from: LLVM::int_truncate[U256, U128](from))
     return hi.shl(bits: 128_s32).add(other: lo)
 
-# Parses `text` in `radix`, or returns (_, false). See `bigint_parse` for the accepted form.
+# Parses `text` in `radix`, or returns (_, false): an optional leading '-', then digits up to the first
+# character outside the radix, where the text must end or hold a '\r' or '\n'. Empty digits read as 0.
 secret routine integer_parse(text: Text, radix: S32) -> (Integer, Bool)
     danger
-        var mark = C::rf_region_mark()
-        var parsed = bigint_parse(text: text, radix: U64(from: S64(from: radix)))
-        var ok = parsed.item1
-        var r = integer_from_view(x: parsed.item0)
-        C::rf_region_release(mark: mark)
-        return (r, ok)
+        var count = text.count()
+        var chars = Hijacked[Character](from: C::rf_allocate_dynamic_uninit(size: 4u64 *% count +% 4u64))
+        var i = 0u64
+        while i < count
+            chars.stride(count: S64(from: i)).poke(value: text[i])
+            i = i +% 1u64
+        var cap = count *% 6u64 // 64u64 +% 2u64
+        var room = cap
+        loop
+            var out = limb_buffer(n: cap)
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_integer_parse(
+                chars: chars,
+                count: count,
+                radix: U64(from: S64(from: radix)),
+                out: out,
+                out_cap: cap,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                chars.invalidate()
+                return (integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64), w.w3 != 0u64)
+            limb_free(p: out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
 
 ### Parses an integer from text using the requested radix (2 to 64).
 ### The input is an optional leading `-` followed by digits of the selected base (letters are
@@ -234,25 +594,21 @@ dangerous routine Integer.destroy()
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.add(other: Integer) -> Integer
-    return integer_sum(a: integer_view(v: me), b: integer_view(v: other))
+    return integer_sum(a: me, b: other, negate_b: false)
 
 ### Subtracts `other` from this value using exact integer arithmetic.
 ### :param other: The value to subtract.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.sub(other: Integer) -> Integer
-    return integer_sum(a: integer_view(v: me), b: bigint_neg(a: integer_view(v: other)))
+    return integer_sum(a: me, b: other, negate_b: true)
 
 ### Multiplies this value by `other` using exact integer arithmetic.
 ### :param other: The value to multiply by.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.mul(other: Integer) -> Integer
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_mul(a: integer_view(v: me), b: integer_view(v: other)))
-        C::rf_region_release(mark: mark)
-        return r
+    return integer_product(a: me, b: other)
 
 ### Divides this value by `other` and returns the Euclidean quotient: the `q` for which
 ### `me - other * q` lies in `[0, |other|)`.
@@ -262,13 +618,7 @@ routine Integer.mul(other: Integer) -> Integer
 routine Integer.floordiv!(other: Integer) -> Integer
     if other.is_zero()
         throw DivisionByZeroError()
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(
-            x: bigint_divmod(a: integer_view(v: me), b: integer_view(v: other)).item0,
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    return integer_divmod(a: me, b: other).item0
 
 ### Returns the Euclidean remainder of this value divided by `other`.
 ### :param other: The non-zero divisor.
@@ -277,17 +627,13 @@ routine Integer.floordiv!(other: Integer) -> Integer
 routine Integer.mod!(other: Integer) -> Integer
     if other.is_zero()
         throw DivisionByZeroError()
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_mod(a: integer_view(v: me), b: integer_view(v: other)))
-        C::rf_region_release(mark: mark)
-        return r
+    return integer_divmod(a: me, b: other).item1
 
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.neg() -> Integer
-    return integer_from_view(x: bigint_neg(a: integer_view(v: me)))
+    return integer_with_sign(v: me, neg: not me.neg)
 
 # ============================================================================
 # Comparison Operations
@@ -298,14 +644,14 @@ routine Integer.neg() -> Integer
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.eq(you: Integer) -> Bool
-    return bigint_cmp(a: integer_view(v: me), b: integer_view(v: you)) == 0s64
+    return integer_compare(a: me, b: you) == 0s64
 
 ### Compares this value with `you` using numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Integer.cmp(you: Integer) -> ComparisonSign
-    var comparison_value = bigint_cmp(a: integer_view(v: me), b: integer_view(v: you))
+    var comparison_value = integer_compare(a: me, b: you)
     if comparison_value < 0s64
         return ME_SMALL
     elseif comparison_value > 0s64
@@ -316,16 +662,6 @@ routine Integer.cmp(you: Integer) -> ComparisonSign
 # ============================================================================
 # Bitwise Operations
 # ============================================================================
-
-# One two's-complement bitwise op (0 AND, 1 OR, 2 XOR).
-secret routine integer_bitop(a: Integer, b: Integer, op: U32) -> Integer
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(
-            x: bigint_bitop(a: integer_view(v: a), b: integer_view(v: b), op: op),
-        )
-        C::rf_region_release(mark: mark)
-        return r
 
 ### Computes the bitwise AND of this value and `other` (two's-complement form).
 ### :param other: The other operand.
@@ -347,17 +683,6 @@ routine Integer.bitor(other: Integer) -> Integer
 @readonly
 routine Integer.bitxor(other: Integer) -> Integer
     return integer_bitop(a: me, b: other, op: 2u32)
-
-# Shifts the magnitude by `bits` (left when `left`), keeping the sign.
-secret routine integer_shift(a: Integer, bits: U64, left: Bool) -> Integer
-    danger
-        var mark = C::rf_region_mark()
-        var view = integer_view(v: a)
-        var r = integer_from_view(
-            x: if left then bigint_shl(a: view, bits: bits) else bigint_shr(a: view, bits: bits),
-        )
-        C::rf_region_release(mark: mark)
-        return r
 
 ### Shifts this value left by `bits` positions (a negative count shifts right).
 ### Positive left shifts are equivalent to multiplication by powers of two.
@@ -387,18 +712,14 @@ routine Integer.shr(bits: S32) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.abs() -> Integer
-    return integer_from_view(x: bigint_abs(a: integer_view(v: me)))
+    return integer_with_sign(v: me, neg: false)
 
 ### Raises this value to a non-negative integer exponent.
 ### :param exp: The exponent value.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.pow(exp: U32) -> Integer
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_pow(a: integer_view(v: me), e: U64(from: exp)))
-        C::rf_region_release(mark: mark)
-        return r
+    return integer_power(a: me, e: U64(from: exp))
 
 ### Returns the integer square root of this value.
 ### The result is the greatest integer whose square does not exceed the input.
@@ -408,11 +729,7 @@ routine Integer.pow(exp: U32) -> Integer
 routine Integer.sqrt!() -> Integer
     if me.is_negative()
         throw NumericDomainError(description: "sqrt: negative Integer has no real square root")
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_isqrt(a: integer_view(v: me)))
-        C::rf_region_release(mark: mark)
-        return r
+    return integer_root(a: me, want_rem: false).item0
 
 ### Returns the integer square root together with its remainder: `(s, r)` with `s = ⌊√me⌋` and
 ### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
@@ -422,36 +739,21 @@ routine Integer.sqrt!() -> Integer
 routine Integer.sqrtrem!() -> (Integer, Integer)
     if me.is_negative()
         throw NumericDomainError(description: "sqrtrem: negative Integer has no real square root")
-    danger
-        var mark = C::rf_region_mark()
-        var a = integer_view(v: me)
-        var s = bigint_isqrt(a: a)
-        var root = integer_from_view(x: s)
-        var remainder = integer_from_view(x: bigint_sub(a: a, b: bigint_mul(a: s, b: s)))
-        C::rf_region_release(mark: mark)
-        return (root, remainder)
+    return integer_root(a: me, want_rem: true)
 
 ### Computes the greatest common divisor of this value and `other` (non-negative).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.gcd(other: Integer) -> Integer
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_gcd(a: integer_view(v: me), b: integer_view(v: other)))
-        C::rf_region_release(mark: mark)
-        return r
+    return integer_gcd_lcm(a: me, b: other, lcm: false)
 
 ### Computes the least common multiple of this value and `other` (non-negative, 0 when either is 0).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.lcm(other: Integer) -> Integer
-    danger
-        var mark = C::rf_region_mark()
-        var r = integer_from_view(x: bigint_lcm(a: integer_view(v: me), b: integer_view(v: other)))
-        C::rf_region_release(mark: mark)
-        return r
+    return integer_gcd_lcm(a: me, b: other, lcm: true)
 
 # ============================================================================
 # Utility Methods
@@ -488,7 +790,7 @@ routine Integer.signum() -> S32
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.is_even() -> Bool
-    return (bigint_low_u64(a: integer_view(v: me)) & 1u64) == 0u64
+    return (integer_low_word(v: me) & 1u64) == 0u64
 
 ### Returns `true` when this value is odd.
 ### :returns: The resulting `Bool` value.
@@ -559,13 +861,7 @@ routine Integer.clamp(low: Integer, high: Integer) -> Integer
 routine Integer.divmod!(other: Integer) -> (Integer, Integer)
     if other.is_zero()
         throw DivisionByZeroError()
-    danger
-        var mark = C::rf_region_mark()
-        var qr = bigint_divmod(a: integer_view(v: me), b: integer_view(v: other))
-        var quotient = integer_from_view(x: qr.item0)
-        var remainder = integer_from_view(x: qr.item1)
-        C::rf_region_release(mark: mark)
-        return (quotient, remainder)
+    return integer_divmod(a: me, b: other)
 
 ### Modular exponentiation `me^exp mod modulus` via right-to-left binary exponentiation
 ### (each step reduced modulo `modulus`, so intermediates never blow up).
@@ -602,7 +898,9 @@ routine S64!(from: Integer) -> S64
         throw IntegerOverflowError()
     if from.cmp(you: Integer(from: S64_MIN)) == ME_SMALL
         throw IntegerOverflowError()
-    return bigint_low_s64(a: integer_view(v: from))
+    # in range, so the magnitude is one limb: wrap it to 64 bits in two's complement
+    var mag = integer_low_word(v: from)
+    return LLVM::reinterpret_bits[U64, S64](if from.neg then 0u64 -% mag else mag)
 
 ### Converts an arbitrary-precision integer to `U64`.
 ### :param from: The source value to convert.
@@ -613,7 +911,7 @@ routine U64!(from: Integer) -> U64
         throw IntegerOverflowError()
     if from.cmp(you: Integer(from: U64_MAX)) == ME_LARGE
         throw IntegerOverflowError()
-    return bigint_low_u64(a: integer_view(v: from))
+    return integer_low_word(v: from)
 
 ### Formats this value as base-10 text. Standard `represent` shape (no args)
 ### so the f-string machinery can dispatch without supplying a radix.
@@ -645,11 +943,7 @@ routine Integer!(from: SerialValue) -> Integer
 routine Integer.represent_radix(radix: S32) -> Text
     if radix < 2_s32 or radix > 64_s32
         return ""
-    danger
-        var mark = C::rf_region_mark()
-        var text = bigint_to_text(a: integer_view(v: me), radix: U64(from: S64(from: radix)))
-        C::rf_region_release(mark: mark)
-        return text
+    return integer_text(v: me, radix: U64(from: S64(from: radix)))
 
 ### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
 ### when negative. Crashes on any other radix (unlike `represent_radix`, which renders an empty text).

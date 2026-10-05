@@ -1,10 +1,11 @@
 module Numerics
 
-### Arbitrary-precision binary floating-point real, computed by the pure-RazorForge libbf engine.
+### Arbitrary-precision binary floating-point real, computed by the libbf engine in Ingrid.
 ###
 ### `Real` is a value record that mirrors {Integer}: its mantissa limbs live in one heap buffer shared
 ### by copies under an atomic refcount (a copy bumps the count, no number data is copied), and the last
-### drop frees it. Addition, subtraction and multiplication are EXACT (the precision grows as needed).
+### drop frees it. Addition, subtraction and multiplication are EXACT (the precision grows as needed, up to
+### 2^32 bits).
 ### Division, `sqrt` and the transcendentals round to a generous default working precision (1024 bits,
 ### about 308 decimal digits) under round-to-nearest-ties-to-even, or to a requested number of decimal
 ### digits in the `precision:` variants.
@@ -18,7 +19,10 @@ module Numerics
 ###   negative value, `asin` / `acos` outside [-1, 1], `acosh` below 1, `atanh` outside [-1, 1], and a
 ###   negative base raised to a non-integer power.
 ### - {NumericOverflowError} when the result is too large for Real's binary exponent range (about
-###   2^(2^60)): `exp`, `exp2`, `exp10`, `sinh`, `cosh`, `pow`, `hypot`, and arithmetic at that edge.
+###   2^(2^60)): `exp`, `exp2`, `exp10`, `sinh`, `cosh`, `pow`, `hypot`, and arithmetic at that edge. An
+###   exact sum, difference or product whose result would need more than 2^32 bits throws it too (a sum of
+###   operands whose exponents are far apart, a product of two very long mantissas), before anything is
+###   allocated, rather than rounding.
 ### Text such as `nan` or `inf` is not a `Real`, and building one from a non-finite `B64` throws.
 ### :see: {Integer}, {Decimal}
 record Real
@@ -36,177 +40,333 @@ obeys Assignable, Copyable, Equatable, Comparable, Negatable, Addable, Subtracta
     secret ctrl: Hijacked[FrozenController]
 
 # ============================================================================
-# Bridge to the engine
+# Calls into Ingrid
 # ============================================================================
+# The bodies are Numeric/RealEngine.rf, which runs in Ingrid (Ingrid/tessera/generated/numerics.tess, written
+# from RazorForge/IngridExport/numerics.rf, which describes the call protocol). RazorForge allocates every
+# buffer: the result buffer, which becomes the new value's limbs, and the scratch the engine takes its
+# temporaries from (`limb_buffer` and the retry rule are Integer.rf's). A call that needs more of either says so,
+# and is made again with that much.
 
-# Borrows this value's limbs as an engine value (no copy). The engine never writes an input's limbs.
-secret routine real_bf(r: Real) -> BfT
-    return BfT(sign: r.sign, expn: r.expn, len: r.len, tab: r.tab)
+# Default working precision in bits for inexact {Real} operations (~308 decimal digits).
+secret routine real_prec() -> U64
+    return 1024u64
 
-# Copies an engine result into a new owned `Real`. The engine's buffers live in the scratch region, so
-# the limbs are copied out before the caller releases it.
-secret routine real_from_bf(x: BfT) -> Real
+# Decimal significant digits -> binary working precision (digits * log2(10) + 16 guard bits). A
+# non-positive digit count selects the default working precision.
+secret routine real_prec_bits(digits: S32) -> U64
+    if digits <= 0s32
+        return real_prec()
+    return U64(from: S64(from: digits)) *% 3402u64 // 1024u64 +% 16u64
+
+# The exponent of zero, of an infinity and of a NaN (none of them has limbs).
+secret preset REAL_EXPN_ZERO: S64 = -9223372036854775808s64
+secret preset REAL_EXPN_INF: S64 = 9223372036854775806s64
+secret preset REAL_EXPN_NAN: S64 = 9223372036854775807s64
+
+# The most limbs an exact sum, difference or product may take (2^32 bits). Past it the operation throws
+# NumericOverflowError before it allocates anything: a sum whose operands' exponents are too far apart, or a
+# product of two very long mantissas.
+secret preset REAL_EXACT_MAX_LIMBS: U64 = 67108864u64
+
+# True when the exact sum or difference of `a` and `b` would need more than REAL_EXACT_MAX_LIMBS limbs.
+secret routine real_sum_too_long(a: Real, b: Real) -> Bool
     danger
-        if x.len == 0u64
-            return Real(
-                sign: x.sign,
-                expn: x.expn,
-                len: 0u64,
-                tab: hijacked_none[U64](),
-                ctrl: hijacked_none[FrozenController](),
-            )
-        var tab = Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8u64 *% x.len))
-        var i = 0u64
-        while i < x.len
-            tab.stride(count: S64(from: i)).poke(value: x.tab.stride(count: S64(from: i)).peek())
-            i = i +% 1u64
+        var limbs = C::ingrid_real_sum_size(a_len: a.len, a_expn: a.expn, b_len: b.len, b_expn: b.expn)
+        return limbs > REAL_EXACT_MAX_LIMBS
+
+# True when the exact product of `a` and `b` would need more than REAL_EXACT_MAX_LIMBS limbs.
+secret routine real_product_too_long(a: Real, b: Real) -> Bool
+    return a.len +% b.len > REAL_EXACT_MAX_LIMBS
+
+# The numbers of Ingrid's Real functions (ingrid_real_function).
+secret preset REAL_SQRT: U64 = 0u64
+secret preset REAL_EXP: U64 = 1u64
+secret preset REAL_LOG: U64 = 2u64
+secret preset REAL_SIN: U64 = 3u64
+secret preset REAL_COS: U64 = 4u64
+secret preset REAL_TAN: U64 = 5u64
+secret preset REAL_ASIN: U64 = 6u64
+secret preset REAL_ACOS: U64 = 7u64
+secret preset REAL_ATAN: U64 = 8u64
+secret preset REAL_SINH: U64 = 9u64
+secret preset REAL_COSH: U64 = 10u64
+secret preset REAL_TANH: U64 = 11u64
+secret preset REAL_ASINH: U64 = 12u64
+secret preset REAL_ACOSH: U64 = 13u64
+secret preset REAL_ATANH: U64 = 14u64
+secret preset REAL_LOG2: U64 = 15u64
+secret preset REAL_LOG10: U64 = 16u64
+secret preset REAL_CBRT: U64 = 17u64
+secret preset REAL_RINT: U64 = 18u64
+secret preset REAL_FLOOR: U64 = 19u64
+secret preset REAL_CEIL: U64 = 20u64
+secret preset REAL_TRUNC: U64 = 21u64
+secret preset REAL_ROUND: U64 = 22u64
+
+# The numbers of the two-argument calls (`real_binary`).
+secret preset REAL_DIVIDE: U32 = 0u32
+secret preset REAL_ATAN2: U32 = 1u32
+secret preset REAL_HYPOT: U32 = 2u32
+secret preset REAL_POW: U32 = 3u32
+secret preset REAL_ADD: U32 = 4u32
+secret preset REAL_SUB: U32 = 5u32
+secret preset REAL_MUL: U32 = 6u32
+
+# A limbless Real: zero, an infinity or a NaN by its exponent.
+secret routine real_special(sign: Bool, expn: S64) -> Real
+    danger
         return Real(
-            sign: x.sign,
-            expn: x.expn,
-            len: x.len,
-            tab: tab,
-            ctrl: fresh_frozen_controller(),
+            sign: sign,
+            expn: expn,
+            len: 0u64,
+            tab: hijacked_none[U64](),
+            ctrl: hijacked_none[FrozenController](),
         )
 
-# True when `r` is an infinity. Only the unchecked engine helpers below can hold one, and every
-# public routine turns it into a throw before a caller sees it.
+# The Real an Ingrid call left in `out`, as its words describe it. Frees `out` when the value has no limbs.
+secret dangerous routine real_adopt(out: Hijacked[U64], w: IngridWords) -> Real
+    var sign = (w.w2 & 1u64) != 0u64
+    var expn = LLVM::reinterpret_bits[U64, S64](w.w3)
+    if w.w1 == 0u64
+        limb_free(p: out)
+        return real_special(sign: sign, expn: expn)
+    return Real(sign: sign, expn: expn, len: w.w1, tab: out, ctrl: fresh_frozen_controller())
+
+# The limbs a value rounded to `prec` bits has at most.
+secret routine real_rounded_capacity(prec: U64) -> U64
+    return prec // 64u64 +% 2u64
+
+# -1, 0 or 1 as a is below, equal to or above b (2 when either is a NaN).
+secret routine real_compare(a: Real, b: Real) -> S64
+    danger
+        return C::ingrid_real_compare(
+            a_sign: sign_word(neg: a.sign),
+            a_expn: a.expn,
+            a_len: a.len,
+            a_tab: a.tab,
+            b_sign: sign_word(neg: b.sign),
+            b_expn: b.expn,
+            b_len: b.len,
+            b_tab: b.tab,
+        )
+
+# The comparison of a with positive zero.
+secret routine real_compare_zero(a: Real) -> S64
+    return real_compare(a: a, b: real_special(sign: false, expn: REAL_EXPN_ZERO))
+
+# One Real function of `a` at `prec` bits (REAL_SQRT to REAL_ROUND), unchecked: an argument outside the
+# domain gives a NaN, an overflow an infinity.
+secret routine real_function(op: U64, a: Real, prec: U64) -> Real
+    danger
+        # a rounding to an integer keeps at most the argument's limbs
+        var cap = if op >= REAL_RINT then a.len +% 1u64 else real_rounded_capacity(prec: prec)
+        var room = C::ingrid_real_scratch_size(a_len: a.len, b_len: 0u64, prec: prec)
+        loop
+            var out = limb_buffer(n: cap)
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_real_function(
+                op: op,
+                a_sign: sign_word(neg: a.sign),
+                a_expn: a.expn,
+                a_len: a.len,
+                a_tab: a.tab,
+                prec: prec,
+                out: out,
+                out_cap: cap,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                return real_adopt(out: out, w: w)
+            limb_free(p: out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
+
+# One two-argument call: REAL_DIVIDE, REAL_ATAN2, REAL_HYPOT or REAL_POW at `prec` bits, or the exact
+# REAL_ADD, REAL_SUB or REAL_MUL (`prec` unused). Unchecked like `real_function`.
+secret routine real_binary(op: U32, a: Real, b: Real, prec: U64) -> Real
+    danger
+        var cap = real_rounded_capacity(prec: prec)
+        var room = 0u64
+        if op == REAL_ADD or op == REAL_SUB
+            cap = C::ingrid_real_sum_size(a_len: a.len, a_expn: a.expn, b_len: b.len, b_expn: b.expn)
+            room = cap
+        elseif op == REAL_MUL
+            cap = a.len +% b.len
+            room = C::ingrid_real_mul_scratch_size(a_len: a.len, b_len: b.len)
+        else
+            room = C::ingrid_real_scratch_size(a_len: a.len, b_len: b.len, prec: prec)
+        var a_sign = sign_word(neg: a.sign)
+        var b_sign = sign_word(neg: b.sign)
+        loop
+            var out = limb_buffer(n: cap)
+            var scratch = limb_buffer(n: room)
+            var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
+            if op == REAL_ADD
+                w = C::ingrid_real_add(
+                    a_sign: a_sign,
+                    a_expn: a.expn,
+                    a_len: a.len,
+                    a_tab: a.tab,
+                    b_sign: b_sign,
+                    b_expn: b.expn,
+                    b_len: b.len,
+                    b_tab: b.tab,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            elseif op == REAL_SUB
+                w = C::ingrid_real_sub(
+                    a_sign: a_sign,
+                    a_expn: a.expn,
+                    a_len: a.len,
+                    a_tab: a.tab,
+                    b_sign: b_sign,
+                    b_expn: b.expn,
+                    b_len: b.len,
+                    b_tab: b.tab,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            elseif op == REAL_MUL
+                w = C::ingrid_real_mul(
+                    a_sign: a_sign,
+                    a_expn: a.expn,
+                    a_len: a.len,
+                    a_tab: a.tab,
+                    b_sign: b_sign,
+                    b_expn: b.expn,
+                    b_len: b.len,
+                    b_tab: b.tab,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            elseif op == REAL_DIVIDE
+                w = C::ingrid_real_divide(
+                    a_sign: a_sign,
+                    a_expn: a.expn,
+                    a_len: a.len,
+                    a_tab: a.tab,
+                    b_sign: b_sign,
+                    b_expn: b.expn,
+                    b_len: b.len,
+                    b_tab: b.tab,
+                    prec: prec,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            elseif op == REAL_ATAN2
+                w = C::ingrid_real_atan2(
+                    y_sign: a_sign,
+                    y_expn: a.expn,
+                    y_len: a.len,
+                    y_tab: a.tab,
+                    x_sign: b_sign,
+                    x_expn: b.expn,
+                    x_len: b.len,
+                    x_tab: b.tab,
+                    prec: prec,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            elseif op == REAL_HYPOT
+                w = C::ingrid_real_hypot(
+                    x_sign: a_sign,
+                    x_expn: a.expn,
+                    x_len: a.len,
+                    x_tab: a.tab,
+                    y_sign: b_sign,
+                    y_expn: b.expn,
+                    y_len: b.len,
+                    y_tab: b.tab,
+                    prec: prec,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            else
+                w = C::ingrid_real_pow(
+                    x_sign: a_sign,
+                    x_expn: a.expn,
+                    x_len: a.len,
+                    x_tab: a.tab,
+                    y_sign: b_sign,
+                    y_expn: b.expn,
+                    y_len: b.len,
+                    y_tab: b.tab,
+                    prec: prec,
+                    out: out,
+                    out_cap: cap,
+                    scratch: scratch,
+                    scratch_cap: room,
+                )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                return real_adopt(out: out, w: w)
+            limb_free(p: out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
+
+# Parses `text` in `radix` (2 to 36) at `prec` bits: (value, ok), ok false for malformed text. The value can
+# be an infinity or a NaN (the engine reads "inf" and "nan"), which the caller rejects.
+secret routine real_parse(text: Text, radix: U64, prec: U64) -> (Real, Bool)
+    danger
+        var count = text.count()
+        var chars = Hijacked[Character](from: C::rf_allocate_dynamic_uninit(size: 4u64 *% count +% 4u64))
+        var i = 0u64
+        while i < count
+            chars.stride(count: S64(from: i)).poke(value: text[i])
+            i = i +% 1u64
+        var cap = real_rounded_capacity(prec: prec)
+        var room = C::ingrid_real_scratch_size(a_len: count *% 6u64 // 64u64 +% 2u64, b_len: 0u64, prec: prec)
+        loop
+            var out = limb_buffer(n: cap)
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_real_parse(
+                chars: chars,
+                count: count,
+                radix: radix,
+                prec: prec,
+                out: out,
+                out_cap: cap,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                chars.invalidate()
+                return (real_adopt(out: out, w: w), (w.w2 & 2u64) == 0u64)
+            limb_free(p: out)
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
+
+# True when `r` is an infinity. Only the unchecked helpers above can hand one back, and every public
+# routine turns it into a throw before a caller sees it.
 secret routine real_is_infinite(r: Real) -> Bool
-    return r.len == 0u64 and r.expn == bf_exp_inf()
+    return r.len == 0u64 and r.expn == REAL_EXPN_INF
 
 # True when `r` is a NaN (same rule as `real_is_infinite`).
 secret routine real_is_nan(r: Real) -> Bool
-    return r.len == 0u64 and r.expn == bf_exp_nan()
-
-# The positive infinity the unchecked helpers report an overflow with.
-secret routine real_overflow() -> Real
-    danger
-        return real_from_bf(x: bf_set_inf(is_neg: false))
-
-# e**a at `prec` bits, unchecked: a result past the exponent range comes back as an infinity. An
-# argument of 2^61 or more never reaches the engine, whose range reduction needs a/log(2) to fit in
-# 63 bits: that result is certainly out of range (an infinity) or certainly below it (zero).
-secret routine real_exp_raw(a: Real, prec: U64) -> Real
-    if a.expn > 61s64
-        if a.sign
-            return Real()
-        return real_overflow()
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_exp(a: real_bf(r: a), prec: prec, fl: 0u32))
-        C::rf_region_release(mark: mark)
-        return r
-
-# sinh(a) or cosh(a) at `prec` bits, unchecked like `real_exp_raw` (an overflow is an infinity).
-secret routine real_sinhcosh_raw(a: Real, prec: U64, is_cosh: Bool) -> Real
-    if a.expn > 61s64
-        return real_overflow()
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_sinhcosh(a: real_bf(r: a), prec: prec, is_cosh: is_cosh))
-        C::rf_region_release(mark: mark)
-        return r
-
-# x ** y at `prec` bits, unchecked: an overflow is an infinity. The caller has already rejected a zero
-# base with a negative exponent and a negative base with a non-integer exponent. Before the engine
-# runs, y * log2|x| is estimated at 64 bits: at 2^61 or more in size the result is certainly out of the
-# exponent range (an infinity) or certainly below it (zero), and the engine is not asked to build it.
-# The estimate is skipped when |y| < 2^31 and |log2|x|| < 2^27, where the result is surely in range.
-secret routine real_pow_raw(x: Real, y: Real, prec: U64) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var bbase = real_bf(r: x)
-        var bexp = real_bf(r: y)
-        var magnitude = bf_with_sign(a: bbase, sign: false)
-        var small = bexp.expn <= 31s64 and bbase.expn < 134217728s64 and bbase.expn > -134217728s64
-        if not small
-            and bbase.len > 0u64
-            and bexp.len > 0u64
-            and bf_cmp(a: magnitude, b: bf_set_ui(a: 1u64)) != 0s64
-            var estimate = bf_mul(
-                a: bexp,
-                b: bf_logbase(a: magnitude, prec: 64u64, base10: false),
-                prec: 64u64,
-                fl: 0u32,
-            )
-            if estimate.expn > 61s64
-                C::rf_region_release(mark: mark)
-                if estimate.sign
-                    return Real()
-                return real_overflow()
-        var r = real_from_bf(x: bf_pow(x: bbase, y: bexp, prec: prec, fl: 0u32))
-        C::rf_region_release(mark: mark)
-        return r
-
-# tanh(a) at `prec` bits, always finite. The engine forms e^(2a), which overflows for a large positive
-# `a`, so a positive argument from 2^30 up is computed as -tanh(-a). From 2^60 up the result is +-1 at
-# any precision.
-secret routine real_tanh_raw(a: Real, prec: U64) -> Real
-    if a.expn > 60s64
-        if a.sign
-            return Real(from: -1_s64)
-        return Real(from: 1_s64)
-    danger
-        var mark = C::rf_region_mark()
-        var x = real_bf(r: a)
-        var t = bf_set_zero(is_neg: false)
-        if not a.sign and a.expn > 30s64
-            t = bf_neg(a: bf_tanh(a: bf_neg(a: x), prec: prec))
-        else
-            t = bf_tanh(a: x, prec: prec)
-        var r = real_from_bf(x: t)
-        C::rf_region_release(mark: mark)
-        return r
-
-# asinh(a) (or acosh(a), whose caller has already rejected a < 1) at `prec` bits, always finite. A
-# negative asinh argument is computed as -asinh(-a), since a + sqrt(a^2 + 1) cancels to zero for a large
-# negative `a`. Once a^2 + 1 rounds to a^2 the result is log(2a) = log(a) + log(2), computed that way
-# so a^2 never leaves the exponent range.
-secret routine real_asinh_acosh_raw(a: Real, prec: U64, is_acosh: Bool) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var x = real_bf(r: a)
-        var negate = a.sign and not is_acosh
-        if negate
-            x = bf_neg(a: x)
-        var r = bf_set_zero(is_neg: false)
-        if x.expn > S64(from: prec >> 1u32) +% 2s64
-            r = bf_add(
-                a: bf_log(a: x, prec: prec, fl: 0u32),
-                b: bf_const_log2(prec: prec, fl: 0u32),
-                prec: prec,
-                fl: 0u32,
-            )
-        else
-            r = bf_asinh_acosh(a: x, prec: prec, is_acosh: is_acosh)
-        if negate
-            r = bf_neg(a: r)
-        var result = real_from_bf(x: r)
-        C::rf_region_release(mark: mark)
-        return result
-
-# sqrt(x^2 + y^2) at `prec` bits, unchecked: an overflow is an infinity. Both legs are scaled by the
-# same power of two first (exact), so the squares stay inside the exponent range whenever the result
-# does.
-secret routine real_hypot_raw(x: Real, y: Real, prec: U64) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var a = real_bf(r: x)
-        var b = real_bf(r: y)
-        var k = 0s64
-        if a.len > 0u64 and b.len > 0u64
-            k = if a.expn > b.expn then a.expn else b.expn
-        elseif a.len > 0u64
-            k = a.expn
-        elseif b.len > 0u64
-            k = b.expn
-        if a.len > 0u64
-            a = BfT(sign: a.sign, expn: a.expn -% k, len: a.len, tab: a.tab)
-        if b.len > 0u64
-            b = BfT(sign: b.sign, expn: b.expn -% k, len: b.len, tab: b.tab)
-        var r = bf_mul_2exp(a: bf_hypot(a: a, b: b, prec: prec), e: k, prec: prec, fl: 0u32)
-        var result = real_from_bf(x: r)
-        C::rf_region_release(mark: mark)
-        return result
+    return r.len == 0u64 and r.expn == REAL_EXPN_NAN
 
 # ============================================================================
 # Construction
@@ -215,18 +375,29 @@ secret routine real_hypot_raw(x: Real, y: Real, prec: U64) -> Real
 ### Constructs the real value zero.
 ### :returns: The resulting `Real` value.
 routine Real() -> Real
-    danger
-        return real_from_bf(x: bf_set_zero(is_neg: false))
+    return real_special(sign: false, expn: REAL_EXPN_ZERO)
 
 ### Constructs a `Real` from a signed 64-bit integer (exact).
 ### :param from: The initial signed value.
 ### :returns: The resulting `Real` value.
 routine Real(from: S64) -> Real
+    if from == 0s64
+        return Real()
+    # one limb, normalized so its top bit is set: |from| = 0.limb * 2^(64 - shift)
+    var neg = from < 0s64
+    var bits = LLVM::reinterpret_bits[S64, U64](from)
+    var mag = if neg then 0u64 -% bits else bits
+    var shift = LLVM::leading_zeros(mag)
     danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_set_si(a: from))
-        C::rf_region_release(mark: mark)
-        return r
+        var tab = limb_buffer(n: 1u64)
+        tab.poke(value: mag << U32(from: shift))
+        return Real(
+            sign: neg,
+            expn: S64(from: 64u64 -% shift),
+            len: 1u64,
+            tab: tab,
+            ctrl: fresh_frozen_controller(),
+        )
 
 ### Constructs a `Real` from an B64 (exact — the double is widened, not re-rounded).
 ### :param from: The initial double value, which must be finite.
@@ -239,10 +410,17 @@ routine Real!(from: B64) -> Real
     if from.is_infinite()
         throw NumericOverflowError(description: "overflow: an infinity is not a Real")
     danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_set_b64(d: from))
-        C::rf_region_release(mark: mark)
-        return r
+        var out = limb_buffer(n: 1u64)
+        var scratch = limb_buffer(n: 1u64)
+        var w = C::ingrid_real_from_b64(
+            bits: from.to_bits(),
+            out: out,
+            out_cap: 1u64,
+            scratch: scratch,
+            scratch_cap: 1u64,
+        )
+        limb_free(p: scratch)
+        return real_adopt(out: out, w: w)
 
 ### Returns the real value zero.
 ### :returns: The resulting `Real` value.
@@ -266,25 +444,18 @@ common routine Real.one() -> Real
 routine Real!(text: Text, radix: S32 = 10) -> Real
     if radix < 2_s32 or radix > 36_s32
         throw InvalidValueError(input: text, target: "Real")
-    danger
-        var mark = C::rf_region_mark()
-        var parsed = bf_atof(text: text, radix: U64(from: S64(from: radix)), prec: real_prec())
-        var ok = parsed.item1
-        var r = real_from_bf(x: parsed.item0)
-        C::rf_region_release(mark: mark)
-        if not ok or real_is_infinite(r: r) or real_is_nan(r: r)
-            throw InvalidValueError(input: text, target: "Real")
-        return r
+    var parsed = real_parse(text: text, radix: U64(from: S64(from: radix)), prec: real_prec())
+    var ok = parsed.item1
+    var r = parsed.item0
+    if not ok or real_is_infinite(r: r) or real_is_nan(r: r)
+        throw InvalidValueError(input: text, target: "Real")
+    return r
 
 ### Materializes a `Real` from a tokenizer-validated decimal string (literal lowering).
 ### :param text: The decimal string (no suffix, no separators).
 ### :returns: The resulting `Real` value.
 common routine Real.from_literal(text: Text) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_atof(text: text, radix: 10u64, prec: real_prec()).item0)
-        C::rf_region_release(mark: mark)
-        return r
+    return real_parse(text: text, radix: 10u64, prec: real_prec()).item0
 
 # ============================================================================
 # Lifetime (atomic refcount over the shared limb buffer)
@@ -318,34 +489,30 @@ dangerous routine Real.destroy()
 ### Adds `other` to this value (exact).
 ### :param you: The value to add.
 ### :returns: The resulting `Real` value.
-### :throws: {NumericOverflowError} when the sum is too large for Real's exponent range.
+### :throws: {NumericOverflowError} when the sum is too large for Real's exponent range, or would need more
+###     than 2^32 bits to be exact.
 @readonly
 routine Real.add!(you: Real) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_add(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        if real_is_infinite(r: r)
-            throw NumericOverflowError(description: "overflow: the sum is too large for Real")
-        return r
+    if real_sum_too_long(a: me, b: you)
+        throw NumericOverflowError(description: "overflow: the exact sum would need more than 2^32 bits")
+    var r = real_binary(op: REAL_ADD, a: me, b: you, prec: 0u64)
+    if real_is_infinite(r: r)
+        throw NumericOverflowError(description: "overflow: the sum is too large for Real")
+    return r
 
 ### Subtracts `other` from this value (exact).
 ### :param you: The value to subtract.
 ### :returns: The resulting `Real` value.
-### :throws: {NumericOverflowError} when the difference is too large for Real's exponent range.
+### :throws: {NumericOverflowError} when the difference is too large for Real's exponent range, or would
+###     need more than 2^32 bits to be exact.
 @readonly
 routine Real.sub!(you: Real) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_sub(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        if real_is_infinite(r: r)
-            throw NumericOverflowError(description: "overflow: the difference is too large for Real")
-        return r
+    if real_sum_too_long(a: me, b: you)
+        throw NumericOverflowError(description: "overflow: the exact difference would need more than 2^32 bits")
+    var r = real_binary(op: REAL_SUB, a: me, b: you, prec: 0u64)
+    if real_is_infinite(r: r)
+        throw NumericOverflowError(description: "overflow: the difference is too large for Real")
+    return r
 
 ### Returns `me + you`, promoting the real `me` to complex (imaginary part 0). Only `+`/`-` allow
 ### real↔complex mixing (arbitrary Real pairs with arbitrary Complex).
@@ -365,18 +532,16 @@ routine Real.sub(you: Complex) -> Complex
 ### Multiplies this value by `other` (exact).
 ### :param you: The value to multiply by.
 ### :returns: The resulting `Real` value.
-### :throws: {NumericOverflowError} when the product is too large for Real's exponent range.
+### :throws: {NumericOverflowError} when the product is too large for Real's exponent range, or would need
+###     more than 2^32 bits to be exact.
 @readonly
 routine Real.mul!(you: Real) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_mul(a: real_bf(r: me), b: real_bf(r: you), prec: bf_prec_inf(), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        if real_is_infinite(r: r)
-            throw NumericOverflowError(description: "overflow: the product is too large for Real")
-        return r
+    if real_product_too_long(a: me, b: you)
+        throw NumericOverflowError(description: "overflow: the exact product would need more than 2^32 bits")
+    var r = real_binary(op: REAL_MUL, a: me, b: you, prec: 0u64)
+    if real_is_infinite(r: r)
+        throw NumericOverflowError(description: "overflow: the product is too large for Real")
+    return r
 
 ### Divides this value by `other`, rounded to the working precision.
 ### :param you: The non-zero divisor.
@@ -390,34 +555,32 @@ routine Real.truediv!(you: Real) -> Real
         if me.is_zero()
             throw NumericDomainError(description: "domain error: 0 / 0 has no real result")
         throw DivisionByZeroError()
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_div(a: real_bf(r: me), b: real_bf(r: you), prec: real_prec(), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        if real_is_infinite(r: r)
-            throw NumericOverflowError(description: "overflow: the quotient is too large for Real")
-        return r
+    var r = real_binary(op: REAL_DIVIDE, a: me, b: you, prec: real_prec())
+    if real_is_infinite(r: r)
+        throw NumericOverflowError(description: "overflow: the quotient is too large for Real")
+    return r
 
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.neg() -> Real
+    # the limbs are shared, the sign flips (zero included, as -0)
     danger
-        return real_from_bf(x: bf_neg(a: real_bf(r: me)))
+        if not me.ctrl.is_none()
+            me.ctrl.as_entity().hold()
+    return Real(sign: not me.sign, expn: me.expn, len: me.len, tab: me.tab, ctrl: me.ctrl)
 
 ### Returns `true` when this value is strictly less than zero.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Real.is_negative() -> Bool
-    return bf_cmp(a: real_bf(r: me), b: bf_set_zero(is_neg: false)) < 0s64
+    return real_compare_zero(a: me) < 0s64
 
 ### Returns `true` when this value is exactly zero.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Real.is_zero() -> Bool
-    return bf_cmp(a: real_bf(r: me), b: bf_set_zero(is_neg: false)) == 0s64
+    return real_compare_zero(a: me) == 0s64
 
 ### Returns the absolute value of this real number.
 ### :returns: The resulting `Real` value.
@@ -436,14 +599,14 @@ routine Real.abs() -> Real
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Real.eq(you: Real) -> Bool
-    return bf_cmp(a: real_bf(r: me), b: real_bf(r: you)) == 0s64
+    return real_compare(a: me, b: you) == 0s64
 
 ### Compares this value with `you` under numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Real.cmp(you: Real) -> ComparisonSign
-    var c = bf_cmp(a: real_bf(r: me), b: real_bf(r: you))
+    var c = real_compare(a: me, b: you)
     if c < 0s64
         return ME_SMALL
     elseif c > 0s64
@@ -468,7 +631,7 @@ routine Real.sqrt!() -> Real
 ### :throws: {NumericOverflowError} when the result is too large for Real's exponent range.
 @readonly
 routine Real.exp!() -> Real
-    var r = real_exp_raw(a: me, prec: real_prec())
+    var r = real_function(op: REAL_EXP, a: me, prec: real_prec())
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the result of exp is too large for Real")
     return r
@@ -498,7 +661,7 @@ routine Real.pow!(exp: Real) -> Real
         throw DivisionByZeroError()
     if me.is_negative() and not exp.eq(you: exp.trunc())
         throw NumericDomainError(description: "pow: negative base with non-integer exponent has no real result")
-    var r = real_pow_raw(x: me, y: exp, prec: real_prec())
+    var r = real_binary(op: REAL_POW, a: me, b: exp, prec: real_prec())
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the power is too large for Real")
     return r
@@ -551,7 +714,7 @@ routine atan2(y: Real, x: Real) -> Real
 ### :throws: {NumericOverflowError} when the result is too large for Real's exponent range.
 @readonly
 routine Real.sinh!() -> Real
-    var r = real_sinhcosh_raw(a: me, prec: real_prec(), is_cosh: false)
+    var r = real_function(op: REAL_SINH, a: me, prec: real_prec())
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the result of sinh is too large for Real")
     return r
@@ -560,7 +723,7 @@ routine Real.sinh!() -> Real
 ### :throws: {NumericOverflowError} when the result is too large for Real's exponent range.
 @readonly
 routine Real.cosh!() -> Real
-    var r = real_sinhcosh_raw(a: me, prec: real_prec(), is_cosh: true)
+    var r = real_function(op: REAL_COSH, a: me, prec: real_prec())
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the result of cosh is too large for Real")
     return r
@@ -568,12 +731,12 @@ routine Real.cosh!() -> Real
 ### Hyperbolic tangent.
 @readonly
 routine Real.tanh() -> Real
-    return real_tanh_raw(a: me, prec: real_prec())
+    return real_function(op: REAL_TANH, a: me, prec: real_prec())
 
 ### Inverse hyperbolic sine.
 @readonly
 routine Real.asinh() -> Real
-    return real_asinh_acosh_raw(a: me, prec: real_prec(), is_acosh: false)
+    return real_function(op: REAL_ASINH, a: me, prec: real_prec())
 
 ### Inverse hyperbolic cosine.
 ### :throws: {NumericDomainError} when this value is below 1.
@@ -581,7 +744,7 @@ routine Real.asinh() -> Real
 routine Real.acosh!() -> Real
     if me.cmp(you: Real.one()) == ME_SMALL
         throw NumericDomainError(description: "domain error: acosh needs a value of at least 1")
-    return real_asinh_acosh_raw(a: me, prec: real_prec(), is_acosh: true)
+    return real_function(op: REAL_ACOSH, a: me, prec: real_prec())
 
 ### Inverse hyperbolic tangent.
 ### :throws: {DivisionByZeroError} when this value is 1 or -1 (the poles), and {NumericDomainError}
@@ -620,7 +783,7 @@ routine Real.log10!() -> Real
 ### :param y: The other leg.
 ### :throws: {NumericOverflowError} when the distance is too large for Real's exponent range.
 routine hypot!(x: Real, y: Real) -> Real
-    var r = real_hypot_raw(x: x, y: y, prec: real_prec())
+    var r = real_binary(op: REAL_HYPOT, a: x, b: y, prec: real_prec())
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the distance is too large for Real")
     return r
@@ -632,10 +795,10 @@ routine hypot!(x: Real, y: Real) -> Real
 ### :param z: Third leg.
 ### :throws: {NumericOverflowError} when the distance is too large for Real's exponent range.
 routine hypot!(x: Real, y: Real, z: Real) -> Real
-    var xy = real_hypot_raw(x: x, y: y, prec: real_prec())
+    var xy = real_binary(op: REAL_HYPOT, a: x, b: y, prec: real_prec())
     if real_is_infinite(r: xy)
         throw NumericOverflowError(description: "overflow: the distance is too large for Real")
-    var r = real_hypot_raw(x: xy, y: z, prec: real_prec())
+    var r = real_binary(op: REAL_HYPOT, a: xy, b: z, prec: real_prec())
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the distance is too large for Real")
     return r
@@ -660,20 +823,10 @@ routine Real.divide!(you: Real, precision: S32) -> Real
         if me.is_zero()
             throw NumericDomainError(description: "domain error: 0 / 0 has no real result")
         throw DivisionByZeroError()
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_div(
-                a: real_bf(r: me),
-                b: real_bf(r: you),
-                prec: real_prec_bits(digits: precision),
-                fl: 0u32,
-            ),
-        )
-        C::rf_region_release(mark: mark)
-        if real_is_infinite(r: r)
-            throw NumericOverflowError(description: "overflow: the quotient is too large for Real")
-        return r
+    var r = real_binary(op: REAL_DIVIDE, a: me, b: you, prec: real_prec_bits(digits: precision))
+    if real_is_infinite(r: r)
+        throw NumericOverflowError(description: "overflow: the quotient is too large for Real")
+    return r
 
 ### Square root to `precision` decimal digits.
 ### :throws: {NumericDomainError} when this value is negative (no real square root).
@@ -681,19 +834,14 @@ routine Real.divide!(you: Real, precision: S32) -> Real
 routine Real.sqrt!(precision: S32) -> Real
     if me.is_negative()
         throw NumericDomainError(description: "domain error: a negative number has no real square root")
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_sqrt(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_SQRT, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Natural exponential to `precision` decimal digits.
 ### :throws: {NumericOverflowError} when the result is too large for Real's exponent range.
 @readonly
 routine Real.exp!(precision: S32) -> Real
-    var r = real_exp_raw(a: me, prec: real_prec_bits(digits: precision))
+    var r = real_function(op: REAL_EXP, a: me, prec: real_prec_bits(digits: precision))
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the result of exp is too large for Real")
     return r
@@ -707,13 +855,8 @@ routine Real.log!(precision: S32) -> Real
         throw DivisionByZeroError()
     if me.is_negative()
         throw NumericDomainError(description: "domain error: a negative number has no real logarithm")
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_log(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_LOG, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Raises this value to `exp` to `precision` decimal digits.
 ### :param exp: The exponent.
@@ -728,7 +871,7 @@ routine Real.pow!(exp: Real, precision: S32) -> Real
         throw DivisionByZeroError()
     if me.is_negative() and not exp.eq(you: exp.trunc())
         throw NumericDomainError(description: "pow: negative base with non-integer exponent has no real result")
-    var r = real_pow_raw(x: me, y: exp, prec: real_prec_bits(digits: precision))
+    var r = real_binary(op: REAL_POW, a: me, b: exp, prec: real_prec_bits(digits: precision))
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the power is too large for Real")
     return r
@@ -736,35 +879,20 @@ routine Real.pow!(exp: Real, precision: S32) -> Real
 ### Sine (radians) to `precision` decimal digits.
 @readonly
 routine Real.sin(precision: S32) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_sin(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_SIN, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Cosine (radians) to `precision` decimal digits.
 @readonly
 routine Real.cos(precision: S32) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_cos(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_COS, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Tangent (radians) to `precision` decimal digits.
 @readonly
 routine Real.tan(precision: S32) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_tan(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_TAN, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Inverse sine (radians) to `precision` decimal digits.
 ### :throws: {NumericDomainError} when this value is outside [-1, 1].
@@ -772,13 +900,8 @@ routine Real.tan(precision: S32) -> Real
 routine Real.asin!(precision: S32) -> Real
     if me.abs().cmp(you: Real.one()) == ME_LARGE
         throw NumericDomainError(description: "domain error: asin needs a value between -1 and 1")
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_asin(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_ASIN, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Inverse cosine (radians) to `precision` decimal digits.
 ### :throws: {NumericDomainError} when this value is outside [-1, 1].
@@ -786,47 +909,27 @@ routine Real.asin!(precision: S32) -> Real
 routine Real.acos!(precision: S32) -> Real
     if me.abs().cmp(you: Real.one()) == ME_LARGE
         throw NumericDomainError(description: "domain error: acos needs a value between -1 and 1")
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_acos(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_ACOS, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Inverse tangent (radians) to `precision` decimal digits.
 @readonly
 routine Real.atan(precision: S32) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_atan(a: real_bf(r: me), prec: real_prec_bits(digits: precision), fl: 0u32),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_ATAN, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Two-argument inverse tangent to `precision` decimal digits.
 ### :param y: The y-coordinate.
 ### :param x: The x-coordinate.
 routine atan2(y: Real, x: Real, precision: S32) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_atan2(
-                y: real_bf(r: y),
-                x: real_bf(r: x),
-                prec: real_prec_bits(digits: precision),
-                fl: 0u32,
-            ),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_binary(op: REAL_ATAN2, a: y, b: x, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Hyperbolic sine to `precision` decimal digits.
 ### :throws: {NumericOverflowError} when the result is too large for Real's exponent range.
 @readonly
 routine Real.sinh!(precision: S32) -> Real
-    var r = real_sinhcosh_raw(a: me, prec: real_prec_bits(digits: precision), is_cosh: false)
+    var r = real_function(op: REAL_SINH, a: me, prec: real_prec_bits(digits: precision))
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the result of sinh is too large for Real")
     return r
@@ -835,7 +938,7 @@ routine Real.sinh!(precision: S32) -> Real
 ### :throws: {NumericOverflowError} when the result is too large for Real's exponent range.
 @readonly
 routine Real.cosh!(precision: S32) -> Real
-    var r = real_sinhcosh_raw(a: me, prec: real_prec_bits(digits: precision), is_cosh: true)
+    var r = real_function(op: REAL_COSH, a: me, prec: real_prec_bits(digits: precision))
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the result of cosh is too large for Real")
     return r
@@ -843,12 +946,12 @@ routine Real.cosh!(precision: S32) -> Real
 ### Hyperbolic tangent to `precision` decimal digits.
 @readonly
 routine Real.tanh(precision: S32) -> Real
-    return real_tanh_raw(a: me, prec: real_prec_bits(digits: precision))
+    return real_function(op: REAL_TANH, a: me, prec: real_prec_bits(digits: precision))
 
 ### Inverse hyperbolic sine to `precision` decimal digits.
 @readonly
 routine Real.asinh(precision: S32) -> Real
-    return real_asinh_acosh_raw(a: me, prec: real_prec_bits(digits: precision), is_acosh: false)
+    return real_function(op: REAL_ASINH, a: me, prec: real_prec_bits(digits: precision))
 
 ### Inverse hyperbolic cosine to `precision` decimal digits.
 ### :throws: {NumericDomainError} when this value is below 1.
@@ -856,7 +959,7 @@ routine Real.asinh(precision: S32) -> Real
 routine Real.acosh!(precision: S32) -> Real
     if me.cmp(you: Real.one()) == ME_SMALL
         throw NumericDomainError(description: "domain error: acosh needs a value of at least 1")
-    return real_asinh_acosh_raw(a: me, prec: real_prec_bits(digits: precision), is_acosh: true)
+    return real_function(op: REAL_ACOSH, a: me, prec: real_prec_bits(digits: precision))
 
 ### Inverse hyperbolic tangent to `precision` decimal digits.
 ### :throws: {DivisionByZeroError} when this value is 1 or -1 (the poles), and {NumericDomainError}
@@ -868,13 +971,8 @@ routine Real.atanh!(precision: S32) -> Real
         throw DivisionByZeroError()
     if size == ME_LARGE
         throw NumericDomainError(description: "domain error: atanh needs a value between -1 and 1")
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_atanh(a: real_bf(r: me), prec: real_prec_bits(digits: precision)),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_ATANH, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Base-2 logarithm to `precision` decimal digits.
 ### :throws: {DivisionByZeroError} when this value is zero, and {NumericDomainError} when it is negative.
@@ -884,17 +982,8 @@ routine Real.log2!(precision: S32) -> Real
         throw DivisionByZeroError()
     if me.is_negative()
         throw NumericDomainError(description: "domain error: a negative number has no real logarithm")
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_logbase(
-                a: real_bf(r: me),
-                prec: real_prec_bits(digits: precision),
-                base10: false,
-            ),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_LOG2, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Base-10 logarithm to `precision` decimal digits.
 ### :throws: {DivisionByZeroError} when this value is zero, and {NumericDomainError} when it is negative.
@@ -904,20 +993,15 @@ routine Real.log10!(precision: S32) -> Real
         throw DivisionByZeroError()
     if me.is_negative()
         throw NumericDomainError(description: "domain error: a negative number has no real logarithm")
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(
-            x: bf_logbase(a: real_bf(r: me), prec: real_prec_bits(digits: precision), base10: true),
-        )
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_LOG10, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 ### Euclidean distance to `precision` decimal digits, without intermediate overflow.
 ### :param x: One leg.
 ### :param y: The other leg.
 ### :throws: {NumericOverflowError} when the distance is too large for Real's exponent range.
 routine hypot!(x: Real, y: Real, precision: S32) -> Real
-    var r = real_hypot_raw(x: x, y: y, prec: real_prec_bits(digits: precision))
+    var r = real_binary(op: REAL_HYPOT, a: x, b: y, prec: real_prec_bits(digits: precision))
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the distance is too large for Real")
     return r
@@ -925,11 +1009,8 @@ routine hypot!(x: Real, y: Real, precision: S32) -> Real
 ### Cube root to `precision` decimal digits.
 @readonly
 routine Real.cbrt(precision: S32) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var r = real_from_bf(x: bf_cbrt(a: real_bf(r: me), prec: real_prec_bits(digits: precision)))
-        C::rf_region_release(mark: mark)
-        return r
+    var r = real_function(op: REAL_CBRT, a: me, prec: real_prec_bits(digits: precision))
+    return r
 
 # ============================================================================
 # Sign predicates, selection, rounding, extra exponentials, and constants
@@ -939,7 +1020,7 @@ routine Real.cbrt(precision: S32) -> Real
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Real.is_positive() -> Bool
-    var c = bf_cmp(a: real_bf(r: me), b: bf_set_zero(is_neg: false))
+    var c = real_compare_zero(a: me)
     return c > 0s64 and c != 2s64
 
 ### Returns the sign of this value as a `Real` -1, 0, or +1.
@@ -979,43 +1060,39 @@ routine Real.copysign(you: Real) -> Real
         return me.abs().neg()
     return me.abs()
 
-# Rounds `r` to an integer in the engine rounding mode `rnd`.
-secret routine real_rint(r: Real, rnd: U32) -> Real
-    danger
-        var mark = C::rf_region_mark()
-        var result = real_from_bf(x: bf_rint(a: real_bf(r: r), rnd: rnd))
-        C::rf_region_release(mark: mark)
-        return result
+# Rounds `r` to an integer by Ingrid's function `op` (REAL_RINT to REAL_ROUND).
+secret routine real_rint(r: Real, op: U64) -> Real
+    return real_function(op: op, a: r, prec: 0u64)
 
 ### Rounds toward negative infinity (the largest integer not greater than `me`).
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.floor() -> Real
-    return real_rint(r: me, rnd: 2u32)
+    return real_rint(r: me, op: REAL_FLOOR)
 
 ### Rounds toward positive infinity (the smallest integer not less than `me`).
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.ceil() -> Real
-    return real_rint(r: me, rnd: 3u32)
+    return real_rint(r: me, op: REAL_CEIL)
 
 ### Truncates toward zero (drops the fractional part).
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.trunc() -> Real
-    return real_rint(r: me, rnd: 1u32)
+    return real_rint(r: me, op: REAL_TRUNC)
 
 ### Rounds to the nearest integer, ties away from zero.
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.round() -> Real
-    return real_rint(r: me, rnd: 4u32)
+    return real_rint(r: me, op: REAL_ROUND)
 
 ### Rounds to the nearest integer, ties to even (banker's rounding).
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.rint() -> Real
-    return real_rint(r: me, rnd: 0u32)
+    return real_rint(r: me, op: REAL_RINT)
 
 ### Returns the fractional part `me - trunc(me)` (same sign as `me`).
 ### :returns: The resulting `Real` value.
@@ -1028,7 +1105,7 @@ routine Real.frac() -> Real
 ### :throws: {NumericOverflowError} when the result is too large for Real's exponent range.
 @readonly
 routine Real.exp2!() -> Real
-    var r = real_pow_raw(x: Real(from: 2_s64), y: me, prec: real_prec())
+    var r = real_binary(op: REAL_POW, a: Real(from: 2_s64), b: me, prec: real_prec())
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the result of exp2 is too large for Real")
     return r
@@ -1038,7 +1115,7 @@ routine Real.exp2!() -> Real
 ### :throws: {NumericOverflowError} when the result is too large for Real's exponent range.
 @readonly
 routine Real.exp10!() -> Real
-    var r = real_pow_raw(x: Real(from: 10_s64), y: me, prec: real_prec())
+    var r = real_binary(op: REAL_POW, a: Real(from: 10_s64), b: me, prec: real_prec())
     if real_is_infinite(r: r)
         throw NumericOverflowError(description: "overflow: the result of exp10 is too large for Real")
     return r
@@ -1074,10 +1151,21 @@ common routine Real.pi(precision: S32) -> Real
 @readonly
 routine Real.to_b64() -> B64
     danger
-        var mark = C::rf_region_mark()
-        var d = bf_get_b64(a: real_bf(r: me))
-        C::rf_region_release(mark: mark)
-        return d
+        var room = me.len
+        loop
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_real_to_b64(
+                a_sign: sign_word(neg: me.sign),
+                a_expn: me.expn,
+                a_len: me.len,
+                a_tab: me.tab,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                return B64.from_bits(bits: w.w1)
+            room = scratch_retry(room: room, need: w.w1)
 
 ### Serializes this value as its shortest round-tripping decimal text (see `represent`).
 ### :returns: The `SerialValue` text arm.
@@ -1100,10 +1188,33 @@ routine Real!(from: SerialValue) -> Real
 @override
 routine Real.represent() -> Text
     danger
-        var mark = C::rf_region_mark()
-        var text = bf_ftoa_free_min(a: real_bf(r: me), prec: real_prec())
-        C::rf_region_release(mark: mark)
-        return text
+        var prec = real_prec()
+        var cap = C::ingrid_real_text_capacity(prec: prec)
+        var room = C::ingrid_real_scratch_size(a_len: me.len, b_len: 0u64, prec: prec)
+        loop
+            var out = Hijacked[Character](from: C::rf_allocate_dynamic_uninit(size: 4u64 *% cap))
+            var scratch = limb_buffer(n: room)
+            var w = C::ingrid_real_to_text(
+                a_sign: sign_word(neg: me.sign),
+                a_expn: me.expn,
+                a_len: me.len,
+                a_tab: me.tab,
+                prec: prec,
+                out: out,
+                out_cap: cap,
+                scratch: scratch,
+                scratch_cap: room,
+            )
+            limb_free(p: scratch)
+            if w.w0 == 0u64
+                var text = Text(from_span: out, count: w.w1)
+                out.invalidate()
+                return text
+            out.invalidate()
+            if w.w0 == 1u64
+                room = scratch_retry(room: room, need: w.w1)
+            else
+                cap = w.w1
 
 ### Renders this value with exactly `places` digits after the point, the integer part written out in
 ### full. Same as `represent_with_places`, so ties round away from zero (the binary and decimal floats'

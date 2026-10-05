@@ -1256,6 +1256,461 @@ routine C::ingrid_d128_pow(x_low: U64, x_high: U64, y_low: U64, y_high: U64) -> 
 routine C::ingrid_d128_atan2(y_low: U64, y_high: U64, x_low: U64, x_high: U64) -> IngridWords
 
 # ============================================================================
+# Arbitrary-precision Integer and Real (Ingrid/tessera/generated/numerics.tess)
+# ============================================================================
+# The bodies of Integer and Real: Numeric/IntegerEngine.rf and Numeric/RealEngine.rf, which
+# `RazorForge export-ingrid` writes to Ingrid's library from RazorForge/IngridExport/numerics.rf (that file
+# describes the call protocol). A value crosses as its parts, a sign as a U64. RazorForge allocates and frees
+# every buffer, the engine takes its temporaries from the `scratch` buffer it is handed, and a result comes back
+# in IngridWords: `w0` 0 done, 1 more scratch needed (`w1` at least), 2 a larger result buffer needed (`w1`).
+
+### Starts the scratch arena of an engine call on `limbs` limbs at `base` (Ingrid/tessera/scratch.tess). The
+### engines call the arena routines, RazorForge's own code doesn't.
+### :param base: The buffer.
+### :param limbs: Its size in limbs.
+dangerous routine C::ingrid_scratch_open(base: Hijacked[U64], limbs: U64)
+
+### Ends the call's scratch arena.
+### :returns: 0 when everything fit, else the limbs the call needs at least.
+routine C::ingrid_scratch_close() -> U64
+
+### Asks the arena to admit `limbs` more limbs before an operation takes them. A refusal exhausts the call.
+### :param limbs: The most the operation takes.
+### :returns: True when they fit.
+routine C::ingrid_scratch_admit(limbs: U64) -> Bool
+
+### True once an admission of the call was refused.
+### :returns: Whether the call is exhausted.
+routine C::ingrid_scratch_exhausted() -> Bool
+
+### Takes `limbs` zeroed limbs from the arena (admitted before).
+### :param limbs: How many limbs.
+### :returns: The first of them.
+dangerous routine C::ingrid_scratch_take(limbs: U64) -> Hijacked[U64]
+
+### The most limbs the last engine call on this thread had taken at once.
+### :returns: Its high-water mark in limbs.
+routine C::ingrid_scratch_peak() -> U64
+
+### a + b into `out`, which holds at least max(a_len, b_len) + 1 limbs. Takes no scratch.
+dangerous routine C::ingrid_integer_add(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_neg: U64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+) -> IngridWords
+
+### a * b into `out` (a_len + b_len limbs).
+dangerous routine C::ingrid_integer_mul(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_neg: U64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The scratch `ingrid_integer_mul` takes.
+routine C::ingrid_integer_mul_scratch_size(a_len: U64, b_len: U64) -> U64
+
+### The Euclidean quotient into `q_out` and remainder into `r_out` of a / b, b nonzero. Done: `w1` the quotient's
+### length, `w2` its sign, `w3` the remainder's length.
+dangerous routine C::ingrid_integer_divmod(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_neg: U64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    q_out: Hijacked[U64],
+    q_cap: U64,
+    r_out: Hijacked[U64],
+    r_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The scratch `ingrid_integer_divmod` takes.
+routine C::ingrid_integer_divmod_scratch_size(a_len: U64, b_len: U64) -> U64
+
+### a * 2^bits into `out` (a_len + bits / 64 + 1 limbs). Takes no scratch.
+dangerous routine C::ingrid_integer_shift_left(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    bits: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+) -> IngridWords
+
+### floor(a / 2^bits) into `out` (a_len - bits / 64 + 1 limbs, and 1). Takes no scratch.
+dangerous routine C::ingrid_integer_shift_right(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    bits: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+) -> IngridWords
+
+### a AND b over the two's-complement forms into `out` (max(a_len, b_len) + 1 limbs). Takes no scratch.
+dangerous routine C::ingrid_integer_and(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_neg: U64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+) -> IngridWords
+
+### a OR b, like `ingrid_integer_and`.
+dangerous routine C::ingrid_integer_or(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_neg: U64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+) -> IngridWords
+
+### a XOR b, like `ingrid_integer_and`.
+dangerous routine C::ingrid_integer_xor(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_neg: U64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+) -> IngridWords
+
+### a^e into `out`.
+dangerous routine C::ingrid_integer_pow(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    e: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The scratch `ingrid_integer_pow` takes for a base of `a_bits` significant bits.
+routine C::ingrid_integer_pow_scratch_size(a_len: U64, a_bits: U64, e: U64) -> U64
+
+### floor(sqrt(a)) of a non-negative a into `out`.
+dangerous routine C::ingrid_integer_sqrt(
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### s = floor(sqrt(a)) into `s_out` and a - s*s into `r_out`. Done: `w1` the root's length, `w3` the
+### remainder's.
+dangerous routine C::ingrid_integer_sqrtrem(
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    s_out: Hijacked[U64],
+    s_cap: U64,
+    r_out: Hijacked[U64],
+    r_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The scratch `ingrid_integer_sqrt` and `ingrid_integer_sqrtrem` take.
+routine C::ingrid_integer_sqrt_scratch_size(a_len: U64) -> U64
+
+### gcd(|a|, |b|) into `out`.
+dangerous routine C::ingrid_integer_gcd(
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### lcm(|a|, |b|) into `out`.
+dangerous routine C::ingrid_integer_lcm(
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The scratch `ingrid_integer_gcd` and `ingrid_integer_lcm` take.
+routine C::ingrid_integer_gcd_scratch_size(a_len: U64, b_len: U64) -> U64
+
+### -1, 0 or 1 as a is below, equal to or above b.
+dangerous routine C::ingrid_integer_compare(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_neg: U64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+) -> S64
+
+### The most characters `ingrid_integer_to_text` writes for an a_len-limb value in `radix`.
+routine C::ingrid_integer_text_capacity(a_len: U64, radix: U64) -> U64
+
+### `a` in `radix` (2 to 64) into the characters at `out`. Takes a_len limbs of scratch. Done: `w1` the count.
+dangerous routine C::ingrid_integer_to_text(
+    a_neg: U64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    radix: U64,
+    out: Hijacked[Character],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### Parses `count` characters in `radix` (2 to 64). Takes count * 6 / 64 + 2 limbs of scratch and of result.
+### Done: the value, and `w3` 1 when the text is an integer.
+dangerous routine C::ingrid_integer_parse(
+    chars: Hijacked[Character],
+    count: U64,
+    radix: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The scratch a Real routine takes for arguments of a_len and b_len limbs at `prec` bits (an estimate).
+routine C::ingrid_real_scratch_size(a_len: U64, b_len: U64, prec: U64) -> U64
+
+### The scratch and result limbs of the exact sum or difference of a and b.
+routine C::ingrid_real_sum_size(a_len: U64, a_expn: S64, b_len: U64, b_expn: S64) -> U64
+
+### The scratch of the exact product of a_len x b_len limbs.
+routine C::ingrid_real_mul_scratch_size(a_len: U64, b_len: U64) -> U64
+
+### a + b, exact. Done: `w1` the length, `w2` the sign, `w3` the exponent's bits.
+dangerous routine C::ingrid_real_add(
+    a_sign: U64,
+    a_expn: S64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_sign: U64,
+    b_expn: S64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### a - b, exact.
+dangerous routine C::ingrid_real_sub(
+    a_sign: U64,
+    a_expn: S64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_sign: U64,
+    b_expn: S64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### a * b, exact.
+dangerous routine C::ingrid_real_mul(
+    a_sign: U64,
+    a_expn: S64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_sign: U64,
+    b_expn: S64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### a / b at `prec` bits, nearest.
+dangerous routine C::ingrid_real_divide(
+    a_sign: U64,
+    a_expn: S64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_sign: U64,
+    b_expn: S64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+    prec: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### atan2(y, x) at `prec` bits.
+dangerous routine C::ingrid_real_atan2(
+    y_sign: U64,
+    y_expn: S64,
+    y_len: U64,
+    y_tab: Hijacked[U64],
+    x_sign: U64,
+    x_expn: S64,
+    x_len: U64,
+    x_tab: Hijacked[U64],
+    prec: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### sqrt(x^2 + y^2) at `prec` bits (an overflow is an infinity).
+dangerous routine C::ingrid_real_hypot(
+    x_sign: U64,
+    x_expn: S64,
+    x_len: U64,
+    x_tab: Hijacked[U64],
+    y_sign: U64,
+    y_expn: S64,
+    y_len: U64,
+    y_tab: Hijacked[U64],
+    prec: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### x ** y at `prec` bits (an overflow is an infinity).
+dangerous routine C::ingrid_real_pow(
+    x_sign: U64,
+    x_expn: S64,
+    x_len: U64,
+    x_tab: Hijacked[U64],
+    y_sign: U64,
+    y_expn: S64,
+    y_len: U64,
+    y_tab: Hijacked[U64],
+    prec: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### One Real function of `a` at `prec` bits by number (the table is in Real.rf's `REAL_*` presets).
+dangerous routine C::ingrid_real_function(
+    op: U64,
+    a_sign: U64,
+    a_expn: S64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    prec: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### -1, 0 or 1 as a is below, equal to or above b (2 when either is a NaN).
+dangerous routine C::ingrid_real_compare(
+    a_sign: U64,
+    a_expn: S64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    b_sign: U64,
+    b_expn: S64,
+    b_len: U64,
+    b_tab: Hijacked[U64],
+) -> S64
+
+### The exact Real of an S64 into `out` (one limb).
+dangerous routine C::ingrid_real_from_s64(
+    v: S64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The exact Real of a B64's bits into `out` (one limb).
+dangerous routine C::ingrid_real_from_b64(
+    bits: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The B64 nearest a: done with its bits in `w1`. Takes a_len limbs of scratch.
+dangerous routine C::ingrid_real_to_b64(
+    a_sign: U64,
+    a_expn: S64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### The most characters `ingrid_real_to_text` writes at `prec` bits.
+routine C::ingrid_real_text_capacity(prec: U64) -> U64
+
+### The shortest decimal text that reads back to `a` at `prec` bits. Done: `w1` the count.
+dangerous routine C::ingrid_real_to_text(
+    a_sign: U64,
+    a_expn: S64,
+    a_len: U64,
+    a_tab: Hijacked[U64],
+    prec: U64,
+    out: Hijacked[Character],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+### Parses `count` characters in `radix` (2 to 36) to the nearest Real at `prec` bits. Done: the value, with
+### bit 1 of `w2` set when the text is malformed.
+dangerous routine C::ingrid_real_parse(
+    chars: Hijacked[Character],
+    count: U64,
+    radix: U64,
+    prec: U64,
+    out: Hijacked[U64],
+    out_cap: U64,
+    scratch: Hijacked[U64],
+    scratch_cap: U64,
+) -> IngridWords
+
+# ============================================================================
 # Roamed runtime (Ingrid/tessera/roam.tess)
 # ============================================================================
 # Each takes the address of a `RoamController[T]`, whose layout Ingrid's `RoamHeader` repeats field for field.

@@ -45,7 +45,10 @@ When unsure, consult ground truth in the repo/package:
    outside [-1, 1], a negative base to a non-integer power, `pow!` and
    `pow(exp:, precision:)` alike). A result past the exponent range (about
    2^(2^60)) throws `NumericOverflowError` (`exp`, `exp2`, `exp10`, `sinh`,
-   `cosh`, `pow`/`**`, `hypot`, and `+ - * /` at that edge). `Real(text:)` rejects
+   `cosh`, `pow`/`**`, `hypot`, and `+ - * /` at that edge). `+ - *` stay exact, but
+   one whose exact result would need more than 2^32 bits (a sum of operands whose
+   exponents are far apart, a product of two very long mantissas) throws
+   `NumericOverflowError` before allocating anything. `Real(text:)` rejects
    `nan`/`inf`/`infinity` with `InvalidValueError`, and `Real(from: B64)` throws
    `NumericOverflowError` for ±inf and `NumericDomainError` for NaN.
 6. **Entities have a single owner.** Assigning or passing an entity requires
