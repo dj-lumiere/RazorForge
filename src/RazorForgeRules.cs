@@ -57,6 +57,7 @@ public sealed class RazorForgeRules : LanguageRules
     public override bool ChecksAccessTokens => true;
     public override bool ChecksReadonly => true;
     public override bool ChecksShapeAtRunTime => false;
+    public override bool ZeroIsEmptyPlace => false;
 
     public override bool RequiresLateinitForDeferredInit => true;
     public override bool RequiresInferableLambdaParameters => true;
