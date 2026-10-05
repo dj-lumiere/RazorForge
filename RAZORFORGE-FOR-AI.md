@@ -556,6 +556,9 @@ relates ListEmitter[T] as Iter        # associated type binding
   settled by name lookup after parsing (`BracketReclassifyPass`), not by a
   heuristic. A generic argument is a type-level `getitem`.
 - Everything monomorphizes; there is **no runtime dispatch** of any kind.
+- A protocol member declared `@readonly` (`eq`, `cmp`, `hash`, the arithmetic operators, `count`, `iter`,
+  `getitem`, `duplicate`, …) is implemented `@readonly` too, and its body is checked to change nothing:
+  an implementation without it is RF-S771. Suflae has neither `@readonly` nor `@reshaping`.
 
 ## 9. Text and formatting
 
