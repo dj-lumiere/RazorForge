@@ -96,6 +96,7 @@ routine Range[T].is_empty() -> Bool
 @readonly
 routine Range[T].contains(value: T) -> Bool
 needs T obeys FloorDivisible
+    me.require_positive_step()
     var zero = me.start - me.start
     if me.is_ascending()
         if value < me.start
@@ -113,11 +114,21 @@ needs T obeys FloorDivisible
         return false
     return (me.start - value).mod(you: me.step) == zero
 
+### Crashes when the step is zero or negative. The endpoints decide the direction of a range, so its step is
+### always a positive distance, and a step that is not would never reach the end.
+### :throws: {RangeStepNotPositiveError} when `step` is zero or negative.
+@readonly
+routine Range[T].require_positive_step!()
+    if me.step <= me.start - me.start
+        throw RangeStepNotPositiveError()
+    return
+
 ### Creates an iterator for this value.
-### The emitter starts at `me.start`.
+### The emitter starts at `me.start`. A step that is zero or negative crashes here.
 ### :returns: The resulting `RangeEmittable[T]` value.
 @readonly
 routine Range[T].iter() -> RangeEmittable[T]
+    me.require_positive_step()
     return RangeEmittable[T](
         current: me.start,
         end: me.end,

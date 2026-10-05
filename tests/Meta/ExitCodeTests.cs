@@ -74,6 +74,21 @@ public sealed class ExitCodeTests
             actualString: stdout + stderr);
     }
 
+    /// <summary>A range step held in a variable is checked when the range is iterated: a positive step counts down
+    /// from the larger endpoint, and a negative one crashes with status 82 instead of looping forever.</summary>
+    [Fact]
+    public void RangeStepNotPositive_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "range_step_not_positive.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "step 10", actualString: stdout);
+        Assert.Contains(expectedSubstring: "step 1", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "RangeStepNotPositiveError", actualString: stdout + stderr);
+    }
+
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
         string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ExitCode", fixture]);

@@ -623,7 +623,9 @@ that differ from other languages:
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive; direction
   is inferred from the endpoints (`10 to 1` counts down — there is no `step -1`).
   `by N` sets a positive step magnitude (`1 to 10 by 2`); direction stays driven
-  by the endpoints.
+  by the endpoints. A literal step that is zero or negative (`by -3`, `by 0`) is
+  RF-S516. A step held in a variable crashes with `RangeStepNotPositiveError`
+  when the range is iterated if it is not positive.
 - `List`, `Set`, `Dict` live in **`Core`** (always available — never suggest
   `using Collections`). Only these three canonical collections have literal
   syntax of their own (`[1, 2]`, `{1, 2}`, `{1: 10}`); a specialized container
