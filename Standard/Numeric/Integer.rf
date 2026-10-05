@@ -4,24 +4,96 @@ module Numerics
 ### `Integer` is the unbounded integer type for workloads where fixed-width overflow is not acceptable.
 ### It preserves exact integer semantics across arithmetic, parsing, and formatting operations.
 ###
-### `Integer` is a record (value semantics from the user's view): its magnitude limbs live in one heap
-### buffer shared by copies under an atomic refcount. Copying bumps the refcount (no number data is
-### copied), and the last drop frees the buffer + controller. Division is Euclidean: `a // b` and
-### `a % b` satisfy `a == b * (a // b) + a % b` with `0 <= a % b < |b|`. The bitwise operators act on
-### the two's-complement form. There is no `/`: an integer quotient is `//`, and a fractional one is
-### computed in `Decimal`.
+### `Integer` is a record (value semantics from the user's view). A magnitude below 2^64 is held in the value
+### itself, so small numbers need no heap and are computed without calling the engine. A bigger magnitude lives in
+### a heap buffer of 64-bit limbs shared by copies under an atomic refcount: copying bumps the refcount (no number
+### data is copied), and the last drop frees the buffer + controller. Division is Euclidean: `a // b` and `a % b`
+### satisfy `a == b * (a // b) + a % b` with `0 <= a % b < |b|`. The bitwise operators act on the two's-complement
+### form. There is no `/`: an integer quotient is `//`, and a fractional one is computed in `Decimal`.
 ### :see: {Decimal}, {Numeric-Types}
 record Integer
 obeys Assignable, Copyable, Integral, Negatable, Ordered, Hashable
     ### True when the value is negative (never true for zero).
     secret neg: Bool
-    ### The number of 64-bit magnitude limbs (0 for zero).
+    ### The magnitude: in the value itself below 2^64, else in limbs.
+    secret magnitude: IntegerMagnitude
+
+### The magnitude of an `Integer`. A magnitude below 2^64 is always the `U64` arm (zero included), so two equal
+### values always have the same arm.
+variant IntegerMagnitude
+    U64
+    IntegerLimbs
+
+### A magnitude of at least 2^64, as little-endian 64-bit limbs.
+record IntegerLimbs
+    ### The number of limbs (at least 2).
     secret len: U64
-    ### The magnitude limbs, little-endian, with a nonzero top limb.
+    ### The limbs, with a nonzero top limb.
     secret tab: Hijacked[U64]
-    ### Atomic strong-count cell governing the limb buffer's lifetime (none for zero, and for a literal, whose
-    ### limbs are read-only static data that is never counted or freed).
+    ### Atomic strong-count cell governing the limb buffer's lifetime (none for a literal, whose limbs are read-only
+    ### static data that is never counted or freed).
     secret ctrl: Hijacked[FrozenController]
+
+### The limbs one engine call reads for a value: its own limbs, or a one-limb buffer made for the call that `temp`
+### says to free afterward.
+record IntegerLimbView
+    ### The number of limbs (0 for zero).
+    secret len: U64
+    ### The limbs.
+    secret tab: Hijacked[U64]
+    ### Whether `tab` was made for this call.
+    secret temp: Bool
+
+# ============================================================================
+# Small values and limbs
+# ============================================================================
+
+# The zero `Integer`.
+secret routine integer_zero() -> Integer
+    return Integer(neg: false, magnitude: IntegerMagnitude(0u64))
+
+# The `Integer` with magnitude `mag` below 2^64, negative when `neg` (zero stays non-negative).
+secret routine integer_small(neg: Bool, mag: U64) -> Integer
+    return Integer(neg: neg and mag != 0u64, magnitude: IntegerMagnitude(mag))
+
+# The magnitude when it is below 2^64, and whether it is.
+secret routine integer_small_part(v: Integer) -> (Bool, U64)
+    when v.magnitude
+        is U64 small =>
+            return (true, small)
+        is IntegerLimbs =>
+            return (false, 0u64)
+
+# The `Integer` with magnitude `hi * 2^64 + lo`, negative when `neg`.
+secret routine integer_two_limbs(neg: Bool, lo: U64, hi: U64) -> Integer
+    if hi == 0u64
+        return integer_small(neg: neg, mag: lo)
+    danger
+        var tab = limb_buffer(n: 2u64)
+        tab.poke(value: lo)
+        tab.stride(count: 1s64).poke(value: hi)
+        return Integer(
+            neg: neg,
+            magnitude: IntegerMagnitude(IntegerLimbs(len: 2u64, tab: tab, ctrl: fresh_frozen_controller())),
+        )
+
+# The limbs an engine call reads for `v`. Free them with `limb_view_free`.
+secret dangerous routine limb_view(v: Integer) -> IntegerLimbView
+    when v.magnitude
+        is U64 small =>
+            if small == 0u64
+                return IntegerLimbView(len: 0u64, tab: hijacked_none[U64](), temp: false)
+            var tab = limb_buffer(n: 1u64)
+            tab.poke(value: small)
+            return IntegerLimbView(len: 1u64, tab: tab, temp: true)
+        is IntegerLimbs big =>
+            return IntegerLimbView(len: big.len, tab: big.tab, temp: false)
+
+# Frees what `limb_view` made for a call.
+secret dangerous routine limb_view_free(view: IntegerLimbView)
+    if view.temp
+        limb_free(p: view.tab)
+    return
 
 # ============================================================================
 # Calls into Ingrid
@@ -29,7 +101,8 @@ obeys Assignable, Copyable, Integral, Negatable, Ordered, Hashable
 # The bodies are Numeric/IntegerEngine.rf, which runs in Ingrid (Ingrid/tessera/generated/numerics.tess,
 # written from RazorForge/IngridExport/numerics.rf, which describes the call protocol). RazorForge allocates
 # every buffer: the result buffer, which becomes the new value's limbs, and the scratch the engine takes its
-# temporaries from. A call that needs more of either says so, and is made again with that much.
+# temporaries from. A call that needs more of either says so, and is made again with that much. Values below
+# 2^64 mostly never get here: the routines below compute them directly.
 
 # A buffer of `n` limbs for one Ingrid call (none when `n` is 0).
 secret dangerous routine limb_buffer(n: U64) -> Hijacked[U64]
@@ -53,117 +126,154 @@ secret routine scratch_retry(room: U64, need: U64) -> U64
 secret routine sign_word(neg: Bool) -> U64
     return if neg then 1u64 else 0u64
 
-# The zero `Integer`.
-secret routine integer_zero() -> Integer
-    danger
-        return Integer(
-            neg: false,
-            len: 0u64,
-            tab: hijacked_none[U64](),
-            ctrl: hijacked_none[FrozenController](),
-        )
-
-# The `Integer` an Ingrid call left in `out`: `len` limbs, negative when `neg`. Frees `out` when the value is
-# zero.
+# The `Integer` an Ingrid call left in `out`: `len` limbs, negative when `neg`. A magnitude that fits one limb
+# becomes a small value and `out` is freed.
 secret dangerous routine integer_adopt(out: Hijacked[U64], len: U64, neg: Bool) -> Integer
     if len == 0u64
         limb_free(p: out)
         return integer_zero()
-    return Integer(neg: neg, len: len, tab: out, ctrl: fresh_frozen_controller())
+    if len == 1u64
+        var small = out.peek()
+        limb_free(p: out)
+        return integer_small(neg: neg, mag: small)
+    return Integer(neg: neg, magnitude: IntegerMagnitude(IntegerLimbs(len: len, tab: out, ctrl: fresh_frozen_controller())))
 
 # `v` with its sign `neg` (zero stays non-negative), sharing its limbs.
 secret routine integer_with_sign(v: Integer, neg: Bool) -> Integer
-    if v.len == 0u64
-        return integer_zero()
-    danger
-        if not v.ctrl.is_none()
-            v.ctrl.as_entity().hold()
-    return Integer(neg: neg, len: v.len, tab: v.tab, ctrl: v.ctrl)
+    when v.magnitude
+        is U64 small =>
+            return integer_small(neg: neg, mag: small)
+        is IntegerLimbs big =>
+            danger
+                if not big.ctrl.is_none()
+                    big.ctrl.as_entity().hold()
+            return Integer(neg: neg, magnitude: IntegerMagnitude(IntegerLimbs(len: big.len, tab: big.tab, ctrl: big.ctrl)))
 
 # a + b, or a - b when `negate_b`. Addition needs no scratch: the sum goes straight into its own buffer.
 secret routine integer_sum(a: Integer, b: Integer, negate_b: Bool) -> Integer
+    var b_neg = if negate_b then not b.neg and not b.is_zero() else b.neg
+    var sa = integer_small_part(v: a)
+    var sb = integer_small_part(v: b)
+    if sa.item0 and sb.item0
+        if a.neg == b_neg
+            var lo = sa.item1 +% sb.item1
+            var carry = if lo < sa.item1 then 1u64 else 0u64
+            return integer_two_limbs(neg: a.neg, lo: lo, hi: carry)
+        if sa.item1 >= sb.item1
+            return integer_small(neg: a.neg, mag: sa.item1 -% sb.item1)
+        return integer_small(neg: b_neg, mag: sb.item1 -% sa.item1)
     danger
-        var b_neg = if negate_b then b.len != 0u64 and not b.neg else b.neg
-        var cap = (if a.len > b.len then a.len else b.len) +% 1u64
+        var av = limb_view(v: a)
+        var bv = limb_view(v: b)
+        var cap = (if av.len > bv.len then av.len else bv.len) +% 1u64
         var out = limb_buffer(n: cap)
         var w = C::ingrid_integer_add(
             a_neg: sign_word(neg: a.neg),
-            a_len: a.len,
-            a_tab: a.tab,
+            a_len: av.len,
+            a_tab: av.tab,
             b_neg: sign_word(neg: b_neg),
-            b_len: b.len,
-            b_tab: b.tab,
+            b_len: bv.len,
+            b_tab: bv.tab,
             out: out,
             out_cap: cap,
         )
+        limb_view_free(view: av)
+        limb_view_free(view: bv)
         return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
 
 # The low 64 bits of the magnitude.
 secret routine integer_low_word(v: Integer) -> U64
-    if v.len == 0u64
-        return 0u64
-    danger
-        return v.tab.peek()
+    when v.magnitude
+        is U64 small =>
+            return small
+        is IntegerLimbs big =>
+            danger
+                return big.tab.peek()
 
 # One two's-complement bitwise operation (0 AND, 1 OR, 2 XOR). It needs no scratch.
 secret routine integer_bitop(a: Integer, b: Integer, op: U32) -> Integer
+    var sa = integer_small_part(v: a)
+    var sb = integer_small_part(v: b)
+    if sa.item0 and sb.item0 and not a.neg and not b.neg
+        if op == 0u32
+            return integer_small(neg: false, mag: sa.item1 & sb.item1)
+        if op == 1u32
+            return integer_small(neg: false, mag: sa.item1 | sb.item1)
+        return integer_small(neg: false, mag: sa.item1 ^ sb.item1)
     danger
-        var cap = (if a.len > b.len then a.len else b.len) +% 1u64
+        var av = limb_view(v: a)
+        var bv = limb_view(v: b)
+        var cap = (if av.len > bv.len then av.len else bv.len) +% 1u64
         var out = limb_buffer(n: cap)
         var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
         if op == 0u32
             w = C::ingrid_integer_and(
                 a_neg: sign_word(neg: a.neg),
-                a_len: a.len,
-                a_tab: a.tab,
+                a_len: av.len,
+                a_tab: av.tab,
                 b_neg: sign_word(neg: b.neg),
-                b_len: b.len,
-                b_tab: b.tab,
+                b_len: bv.len,
+                b_tab: bv.tab,
                 out: out,
                 out_cap: cap,
             )
         elseif op == 1u32
             w = C::ingrid_integer_or(
                 a_neg: sign_word(neg: a.neg),
-                a_len: a.len,
-                a_tab: a.tab,
+                a_len: av.len,
+                a_tab: av.tab,
                 b_neg: sign_word(neg: b.neg),
-                b_len: b.len,
-                b_tab: b.tab,
+                b_len: bv.len,
+                b_tab: bv.tab,
                 out: out,
                 out_cap: cap,
             )
         else
             w = C::ingrid_integer_xor(
                 a_neg: sign_word(neg: a.neg),
-                a_len: a.len,
-                a_tab: a.tab,
+                a_len: av.len,
+                a_tab: av.tab,
                 b_neg: sign_word(neg: b.neg),
-                b_len: b.len,
-                b_tab: b.tab,
+                b_len: bv.len,
+                b_tab: bv.tab,
                 out: out,
                 out_cap: cap,
             )
+        limb_view_free(view: av)
+        limb_view_free(view: bv)
         return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
 
 # Shifts the magnitude by `bits` (left when `left`), keeping the sign. It needs no scratch.
 secret routine integer_shift(a: Integer, bits: U64, left: Bool) -> Integer
-    danger
-        if a.len == 0u64
+    var sa = integer_small_part(v: a)
+    if sa.item0
+        var m = sa.item1
+        if m == 0u64
             return integer_zero()
+        if not left
+            var capped = if bits > 64u64 then 64u64 else bits
+            var k = U32(from: capped)
+            # floor(m / 2^k), and for a negative value floor(-m / 2^k) = -(((m - 1) >> k) + 1).
+            if not a.neg
+                return integer_small(neg: false, mag: m >>> k)
+            return integer_small(neg: true, mag: ((m -% 1u64) >>> k) +% 1u64)
+        if bits < 64u64 and m >>> U32(from: 64u64 -% bits) == 0u64
+            return integer_small(neg: a.neg, mag: m << U32(from: bits))
+    danger
+        var av = limb_view(v: a)
         var cap = 0u64
         if left
-            cap = a.len +% bits // 64u64 +% 1u64
+            cap = av.len +% bits // 64u64 +% 1u64
         else
             var limb_shift = bits // 64u64
-            cap = if limb_shift >= a.len then 1u64 else a.len -% limb_shift +% 1u64
+            cap = if limb_shift >= av.len then 1u64 else av.len -% limb_shift +% 1u64
         var out = limb_buffer(n: cap)
         var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
         if left
             w = C::ingrid_integer_shift_left(
                 a_neg: sign_word(neg: a.neg),
-                a_len: a.len,
-                a_tab: a.tab,
+                a_len: av.len,
+                a_tab: av.tab,
                 bits: bits,
                 out: out,
                 out_cap: cap,
@@ -171,31 +281,43 @@ secret routine integer_shift(a: Integer, bits: U64, left: Bool) -> Integer
         else
             w = C::ingrid_integer_shift_right(
                 a_neg: sign_word(neg: a.neg),
-                a_len: a.len,
-                a_tab: a.tab,
+                a_len: av.len,
+                a_tab: av.tab,
                 bits: bits,
                 out: out,
                 out_cap: cap,
             )
+        limb_view_free(view: av)
         return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
 
 # a * b.
 secret routine integer_product(a: Integer, b: Integer) -> Integer
-    if a.len == 0u64 or b.len == 0u64
+    if a.is_zero() or b.is_zero()
         return integer_zero()
+    var sa = integer_small_part(v: a)
+    var sb = integer_small_part(v: b)
+    if sa.item0 and sb.item0
+        var p = U128(from: sa.item1) *% U128(from: sb.item1)
+        return integer_two_limbs(
+            neg: a.neg != b.neg,
+            lo: LLVM::int_truncate[U128, U64](p),
+            hi: LLVM::int_truncate[U128, U64](p >>> 64u32),
+        )
     danger
-        var cap = a.len +% b.len
-        var room = C::ingrid_integer_mul_scratch_size(a_len: a.len, b_len: b.len)
+        var av = limb_view(v: a)
+        var bv = limb_view(v: b)
+        var cap = av.len +% bv.len
+        var room = C::ingrid_integer_mul_scratch_size(a_len: av.len, b_len: bv.len)
         loop
             var out = limb_buffer(n: cap)
             var scratch = limb_buffer(n: room)
             var w = C::ingrid_integer_mul(
                 a_neg: sign_word(neg: a.neg),
-                a_len: a.len,
-                a_tab: a.tab,
+                a_len: av.len,
+                a_tab: av.tab,
                 b_neg: sign_word(neg: b.neg),
-                b_len: b.len,
-                b_tab: b.tab,
+                b_len: bv.len,
+                b_tab: bv.tab,
                 out: out,
                 out_cap: cap,
                 scratch: scratch,
@@ -203,6 +325,8 @@ secret routine integer_product(a: Integer, b: Integer) -> Integer
             )
             limb_free(p: scratch)
             if w.w0 == 0u64
+                limb_view_free(view: av)
+                limb_view_free(view: bv)
                 return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
             limb_free(p: out)
             if w.w0 == 1u64
@@ -212,21 +336,35 @@ secret routine integer_product(a: Integer, b: Integer) -> Integer
 
 # The Euclidean quotient and remainder of a / b (b nonzero).
 secret routine integer_divmod(a: Integer, b: Integer) -> (Integer, Integer)
+    var sa = integer_small_part(v: a)
+    var sb = integer_small_part(v: b)
+    if sa.item0 and sb.item0
+        var am = sa.item1
+        var bm = sb.item1
+        var qt = am // bm
+        var rt = am -% qt *% bm
+        if not a.neg
+            return (integer_small(neg: b.neg, mag: qt), integer_small(neg: false, mag: rt))
+        if rt == 0u64
+            return (integer_small(neg: not b.neg, mag: qt), integer_zero())
+        return (integer_small(neg: not b.neg, mag: qt +% 1u64), integer_small(neg: false, mag: bm -% rt))
     danger
-        var q_cap = (if a.len > b.len then a.len -% b.len else 0u64) +% 2u64
-        var r_cap = b.len
-        var room = C::ingrid_integer_divmod_scratch_size(a_len: a.len, b_len: b.len)
+        var av = limb_view(v: a)
+        var bv = limb_view(v: b)
+        var q_cap = (if av.len > bv.len then av.len -% bv.len else 0u64) +% 2u64
+        var r_cap = bv.len
+        var room = C::ingrid_integer_divmod_scratch_size(a_len: av.len, b_len: bv.len)
         loop
             var q_out = limb_buffer(n: q_cap)
             var r_out = limb_buffer(n: r_cap)
             var scratch = limb_buffer(n: room)
             var w = C::ingrid_integer_divmod(
                 a_neg: sign_word(neg: a.neg),
-                a_len: a.len,
-                a_tab: a.tab,
+                a_len: av.len,
+                a_tab: av.tab,
                 b_neg: sign_word(neg: b.neg),
-                b_len: b.len,
-                b_tab: b.tab,
+                b_len: bv.len,
+                b_tab: bv.tab,
                 q_out: q_out,
                 q_cap: q_cap,
                 r_out: r_out,
@@ -236,6 +374,8 @@ secret routine integer_divmod(a: Integer, b: Integer) -> (Integer, Integer)
             )
             limb_free(p: scratch)
             if w.w0 == 0u64
+                limb_view_free(view: av)
+                limb_view_free(view: bv)
                 return (
                     integer_adopt(out: q_out, len: w.w1, neg: w.w2 != 0u64),
                     integer_adopt(out: r_out, len: w.w3, neg: false),
@@ -252,15 +392,16 @@ secret routine integer_divmod(a: Integer, b: Integer) -> (Integer, Integer)
 secret routine integer_power(a: Integer, e: U64) -> Integer
     danger
         var bits = a.bit_length()
+        var av = limb_view(v: a)
         var cap = U64(from: (U128(from: bits) *% U128(from: e)) // 64u128) +% 2u64
-        var room = C::ingrid_integer_pow_scratch_size(a_len: a.len, a_bits: bits, e: e)
+        var room = C::ingrid_integer_pow_scratch_size(a_len: av.len, a_bits: bits, e: e)
         loop
             var out = limb_buffer(n: cap)
             var scratch = limb_buffer(n: room)
             var w = C::ingrid_integer_pow(
                 a_neg: sign_word(neg: a.neg),
-                a_len: a.len,
-                a_tab: a.tab,
+                a_len: av.len,
+                a_tab: av.tab,
                 e: e,
                 out: out,
                 out_cap: cap,
@@ -269,6 +410,7 @@ secret routine integer_power(a: Integer, e: U64) -> Integer
             )
             limb_free(p: scratch)
             if w.w0 == 0u64
+                limb_view_free(view: av)
                 return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0u64)
             limb_free(p: out)
             if w.w0 == 1u64
@@ -279,9 +421,10 @@ secret routine integer_power(a: Integer, e: U64) -> Integer
 # (floor(sqrt(a)), a - floor(sqrt(a))^2) of a non-negative a, the remainder only when `want_rem`.
 secret routine integer_root(a: Integer, want_rem: Bool) -> (Integer, Integer)
     danger
-        var s_cap = (a.len +% 1u64) // 2u64 +% 1u64
+        var av = limb_view(v: a)
+        var s_cap = (av.len +% 1u64) // 2u64 +% 1u64
         var r_cap = if want_rem then s_cap +% 1u64 else 0u64
-        var room = C::ingrid_integer_sqrt_scratch_size(a_len: a.len)
+        var room = C::ingrid_integer_sqrt_scratch_size(a_len: av.len)
         loop
             var s_out = limb_buffer(n: s_cap)
             var r_out = limb_buffer(n: r_cap)
@@ -289,8 +432,8 @@ secret routine integer_root(a: Integer, want_rem: Bool) -> (Integer, Integer)
             var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
             if want_rem
                 w = C::ingrid_integer_sqrtrem(
-                    a_len: a.len,
-                    a_tab: a.tab,
+                    a_len: av.len,
+                    a_tab: av.tab,
                     s_out: s_out,
                     s_cap: s_cap,
                     r_out: r_out,
@@ -300,8 +443,8 @@ secret routine integer_root(a: Integer, want_rem: Bool) -> (Integer, Integer)
                 )
             else
                 w = C::ingrid_integer_sqrt(
-                    a_len: a.len,
-                    a_tab: a.tab,
+                    a_len: av.len,
+                    a_tab: av.tab,
                     out: s_out,
                     out_cap: s_cap,
                     scratch: scratch,
@@ -309,6 +452,7 @@ secret routine integer_root(a: Integer, want_rem: Bool) -> (Integer, Integer)
                 )
             limb_free(p: scratch)
             if w.w0 == 0u64
+                limb_view_free(view: av)
                 return (
                     integer_adopt(out: s_out, len: w.w1, neg: false),
                     integer_adopt(out: r_out, len: w.w3, neg: false),
@@ -324,20 +468,22 @@ secret routine integer_root(a: Integer, want_rem: Bool) -> (Integer, Integer)
 # gcd(|a|, |b|), or lcm(|a|, |b|) when `lcm`.
 secret routine integer_gcd_lcm(a: Integer, b: Integer, lcm: Bool) -> Integer
     danger
-        var cap = if a.len > b.len then a.len else b.len
+        var av = limb_view(v: a)
+        var bv = limb_view(v: b)
+        var cap = if av.len > bv.len then av.len else bv.len
         if lcm
-            cap = a.len +% b.len
-        var room = C::ingrid_integer_gcd_scratch_size(a_len: a.len, b_len: b.len)
+            cap = av.len +% bv.len
+        var room = C::ingrid_integer_gcd_scratch_size(a_len: av.len, b_len: bv.len)
         loop
             var out = limb_buffer(n: cap)
             var scratch = limb_buffer(n: room)
             var w = IngridWords(w0: 0u64, w1: 0u64, w2: 0u64, w3: 0u64)
             if lcm
                 w = C::ingrid_integer_lcm(
-                    a_len: a.len,
-                    a_tab: a.tab,
-                    b_len: b.len,
-                    b_tab: b.tab,
+                    a_len: av.len,
+                    a_tab: av.tab,
+                    b_len: bv.len,
+                    b_tab: bv.tab,
                     out: out,
                     out_cap: cap,
                     scratch: scratch,
@@ -345,10 +491,10 @@ secret routine integer_gcd_lcm(a: Integer, b: Integer, lcm: Bool) -> Integer
                 )
             else
                 w = C::ingrid_integer_gcd(
-                    a_len: a.len,
-                    a_tab: a.tab,
-                    b_len: b.len,
-                    b_tab: b.tab,
+                    a_len: av.len,
+                    a_tab: av.tab,
+                    b_len: bv.len,
+                    b_tab: bv.tab,
                     out: out,
                     out_cap: cap,
                     scratch: scratch,
@@ -356,6 +502,8 @@ secret routine integer_gcd_lcm(a: Integer, b: Integer, lcm: Bool) -> Integer
                 )
             limb_free(p: scratch)
             if w.w0 == 0u64
+                limb_view_free(view: av)
+                limb_view_free(view: bv)
                 return integer_adopt(out: out, len: w.w1, neg: false)
             limb_free(p: out)
             if w.w0 == 1u64
@@ -365,28 +513,48 @@ secret routine integer_gcd_lcm(a: Integer, b: Integer, lcm: Bool) -> Integer
 
 # -1 / 0 / 1 comparing values.
 secret routine integer_compare(a: Integer, b: Integer) -> S64
+    var sa = integer_small_part(v: a)
+    var sb = integer_small_part(v: b)
+    if sa.item0 and sb.item0
+        if a.neg != b.neg
+            return if a.neg then -1s64 else 1s64
+        var order = 0s64
+        if sa.item1 < sb.item1
+            order = -1s64
+        elseif sa.item1 > sb.item1
+            order = 1s64
+        return if a.neg then 0s64 -% order else order
     danger
-        return C::ingrid_integer_compare(
+        var av = limb_view(v: a)
+        var bv = limb_view(v: b)
+        var result = C::ingrid_integer_compare(
             a_neg: sign_word(neg: a.neg),
-            a_len: a.len,
-            a_tab: a.tab,
+            a_len: av.len,
+            a_tab: av.tab,
             b_neg: sign_word(neg: b.neg),
-            b_len: b.len,
-            b_tab: b.tab,
+            b_len: bv.len,
+            b_tab: bv.tab,
         )
+        limb_view_free(view: av)
+        limb_view_free(view: bv)
+        return result
 
 # `v` in `radix` (2 to 64): an optional '-' then the digits (0-9, A-Z, a-z, '+', '/'), "0" for zero.
 secret routine integer_text(v: Integer, radix: U64) -> Text
+    var sv = integer_small_part(v: v)
+    if sv.item0 and radix == 10u64
+        return if v.neg then f"-{sv.item1}" else f"{sv.item1}"
     danger
-        var cap = C::ingrid_integer_text_capacity(a_len: v.len, radix: radix)
-        var room = v.len
+        var view = limb_view(v: v)
+        var cap = C::ingrid_integer_text_capacity(a_len: view.len, radix: radix)
+        var room = view.len
         loop
             var out = Hijacked[Character](from: C::rf_allocate_dynamic_uninit(size: 4u64 *% cap))
             var scratch = limb_buffer(n: room)
             var w = C::ingrid_integer_to_text(
                 a_neg: sign_word(neg: v.neg),
-                a_len: v.len,
-                a_tab: v.tab,
+                a_len: view.len,
+                a_tab: view.tab,
                 radix: radix,
                 out: out,
                 out_cap: cap,
@@ -395,6 +563,7 @@ secret routine integer_text(v: Integer, radix: U64) -> Text
             )
             limb_free(p: scratch)
             if w.w0 == 0u64
+                limb_view_free(view: view)
                 var text = Text(from_span: out, count: w.w1)
                 out.invalidate()
                 return text
@@ -441,16 +610,11 @@ routine Integer(from: U64) -> Integer
 # mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
 routine integer_of_s64(v: S64) -> Integer
     if v < 0s64
-        return integer_with_sign(v: integer_of_u64(v: 0u64 -% LLVM::reinterpret_bits[S64, U64](v)), neg: true)
-    return integer_of_u64(v: LLVM::reinterpret_bits[S64, U64](v))
+        return integer_small(neg: true, mag: 0u64 -% LLVM::reinterpret_bits[S64, U64](v))
+    return integer_small(neg: false, mag: LLVM::reinterpret_bits[S64, U64](v))
 
 routine integer_of_u64(v: U64) -> Integer
-    if v == 0u64
-        return integer_zero()
-    danger
-        var tab = limb_buffer(n: 1u64)
-        tab.poke(value: v)
-        return Integer(neg: false, len: 1u64, tab: tab, ctrl: fresh_frozen_controller())
+    return integer_small(neg: false, mag: v)
 
 ### Widens a fixed-width integer into an `Integer` (exact). 64-bit limbs go through the
 ### base builders; wider widths compose them with shift+add.
@@ -562,28 +726,35 @@ routine Integer!(text: Text, radix: S32 = 10) -> Integer
 common routine Integer.from_literal(text: Text) -> Integer
     return integer_parse(text: text, radix: 10_s32).item0
 
-### Returns a copy of this value with the underlying refcount bumped.
-### The limb buffer is shared; no big-integer data is copied. For zero (no
-### controller) the copy is a bitwise duplicate with no atomic op.
+### Returns a copy of this value. A value below 2^64 is copied as it is. A bigger one shares its limb buffer
+### with the copy and bumps its refcount: no big-integer data is copied.
 ### :returns: The resulting `Integer` value.
 @readonly
 @inline
 routine Integer.assign() -> Integer
-    danger
-        if not me.ctrl.is_none()
-            me.ctrl.as_entity().hold()
-    return Integer(neg: me.neg, len: me.len, tab: me.tab, ctrl: me.ctrl)
+    when me.magnitude
+        is U64 small =>
+            return Integer(neg: me.neg, magnitude: IntegerMagnitude(small))
+        is IntegerLimbs big =>
+            danger
+                if not big.ctrl.is_none()
+                    big.ctrl.as_entity().hold()
+            return Integer(neg: me.neg, magnitude: IntegerMagnitude(IntegerLimbs(len: big.len, tab: big.tab, ctrl: big.ctrl)))
 
-### Releases this value's reference. Frees the limb buffer + controller when this
-### was the last live ref. No-op when `ctrl` is none.
+### Releases this value's reference. Frees the limb buffer + controller when this was the last live ref. Nothing
+### to do for a value below 2^64, or for a literal's static limbs.
 @override
 dangerous routine Integer.destroy()
-    if me.ctrl.is_none()
-        return
-    var prev = me.ctrl.as_entity().unhold()
-    if prev <= 1_u64
-        me.tab.invalidate()
-        me.ctrl.invalidate()
+    when me.magnitude
+        is U64 =>
+            return
+        is IntegerLimbs big =>
+            if big.ctrl.is_none()
+                return
+            var prev = big.ctrl.as_entity().unhold()
+            if prev <= 1_u64
+                big.tab.invalidate()
+                big.ctrl.invalidate()
     return
 
 # ============================================================================
@@ -765,7 +936,8 @@ routine Integer.lcm(other: Integer) -> Integer
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.is_zero() -> Bool
-    return me.len == 0u64
+    var s = integer_small_part(v: me)
+    return s.item0 and s.item1 == 0u64
 
 ### Returns `true` when this value is less than zero.
 ### :returns: The resulting `Bool` value.
@@ -818,11 +990,13 @@ routine Integer.bitnot() -> Integer
 ### :returns: The resulting `U64` value.
 @readonly
 routine Integer.bit_length() -> U64
-    if me.is_zero()
-        return 0_u64
-    danger
-        var top = me.tab.stride(count: S64(from: me.len -% 1u64)).peek()
-        return me.len *% 64u64 -% LLVM::leading_zeros(top)
+    when me.magnitude
+        is U64 small =>
+            return 64u64 -% LLVM::leading_zeros(small)
+        is IntegerLimbs big =>
+            danger
+                var top = big.tab.stride(count: S64(from: big.len -% 1u64)).peek()
+                return big.len *% 64u64 -% LLVM::leading_zeros(top)
 
 ### Returns the smaller of this value and `other`.
 ### :param other: The value to compare against.
@@ -896,24 +1070,25 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
 ### :returns: The resulting `S64` value.
 ### :throws: {IntegerOverflowError} if `from` is outside `S64_MIN..S64_MAX`.
 routine S64!(from: Integer) -> S64
-    if from.cmp(you: Integer(from: S64_MAX)) == ME_LARGE
+    var s = integer_small_part(v: from)
+    if not s.item0
         throw IntegerOverflowError()
-    if from.cmp(you: Integer(from: S64_MIN)) == ME_SMALL
+    var limit = if from.neg then 9223372036854775808u64 else 9223372036854775807u64
+    if s.item1 > limit
         throw IntegerOverflowError()
-    # in range, so the magnitude is one limb: wrap it to 64 bits in two's complement
-    var mag = integer_low_word(v: from)
-    return LLVM::reinterpret_bits[U64, S64](if from.neg then 0u64 -% mag else mag)
+    # in range: wrap the magnitude to 64 bits in two's complement
+    var bits = if from.neg then 0u64 -% s.item1 else s.item1
+    return LLVM::reinterpret_bits[U64, S64](bits)
 
 ### Converts an arbitrary-precision integer to `U64`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U64` value.
 ### :throws: {IntegerOverflowError} if `from` is negative or exceeds `U64_MAX`.
 routine U64!(from: Integer) -> U64
-    if from.is_negative()
+    var s = integer_small_part(v: from)
+    if from.is_negative() or not s.item0
         throw IntegerOverflowError()
-    if from.cmp(you: Integer(from: U64_MAX)) == ME_LARGE
-        throw IntegerOverflowError()
-    return integer_low_word(v: from)
+    return s.item1
 
 ### Converts an arbitrary-precision integer to `Decimal`, rounding half-even to its 34 significant digits.
 ### :param from: The source value to convert.
@@ -970,13 +1145,17 @@ routine Integer.to_text(radix: S32) -> Text
 # Hashing
 # ============================================================================
 
-### Returns a SipHash-2-4 keyed hash of this value.
-### Hashes the canonical base-10 representation under the supplied key pair.
+### Returns a SipHash-2-4 keyed hash of this value: of the magnitude word (with the key changed for a negative
+### value) below 2^64, of the base-10 text above. A value has one form only, so equal values hash equal.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The 64-bit keyed hash.
 @readonly
 routine Integer.hash(k0: U64, k1: U64) -> U64
+    var s = integer_small_part(v: me)
+    if s.item0
+        var key = if me.neg then k1 ^ 0x9E3779B97F4A7C15u64 else k1
+        return s.item1.hash(k0: k0, k1: key)
     return me.represent_radix(radix: 10_s32).hash(k0: k0, k1: k1)
 
 # ============================================================================
