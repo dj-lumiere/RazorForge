@@ -634,9 +634,11 @@ that differ from other languages:
   by the endpoints.
 - `List`, `Set`, `Dict` live in **`Core`** (always available — never suggest
   `using Collections`). Only these three canonical collections have literal
-  syntax (`[]`/`{}`); specialized containers (`SortedSet`, `CircularList`, `Array`,
-  `BitList`, `PriorityQueue`, …) are constructor-only
-  (`SortedSet.from([1, 2, 3])`, `Array[3](1, 2, 3)`).
+  syntax of their own (`[1, 2]`, `{1, 2}`, `{1: 10}`); a specialized container
+  (`SortedSet`, `CircularList`, `Array`, `BitArray`, `BitList`, `PriorityQueue`, …)
+  takes the same literal when the variable names its type
+  (`var s: SortedSet[S64] = {3, 1, 2}`, `var pq: PriorityQueue[S32, Text] = {1: "high"}`).
+  An `Array` is also built from its elements: `Array[3](1, 2, 3)`.
 - Tuple fields are accessed as `t.item0`, `t.item1`, … (NOT `t.0`/`t.first`);
   destructure with `var (q, r) = pair`.
 
