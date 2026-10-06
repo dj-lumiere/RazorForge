@@ -123,6 +123,18 @@ routine Roamed[T].require_shape_free!()
             throw ReshapingWhileInUseError(container: T.type_name())
     return
 
+### Takes the entity out of this handle, which ends: the handle's controller is freed and the bare entity comes
+### back, for a new handle to own. Suflae's builder calls this where a creator returns an entity that is already
+### behind a handle, since the creator's caller makes the handle itself.
+### :returns: The entity.
+### :throws: {SharedEntityHandOffError} when another handle or a weak observer still reaches the entity.
+dangerous routine Roamed[T].release_inner!() -> T
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var data = ctrl.release_inner()
+    if data.is_none()
+        throw SharedEntityHandOffError(creating: T.type_name())
+    return Hijacked[T](from: data).as_entity()
+
 ### Marks one more `each` loop or element call as using this entity's element positions. Only the builder
 ### calls this, paired with `end_shape_use` when that use ends.
 dangerous routine Roamed[T].begin_shape_use()
