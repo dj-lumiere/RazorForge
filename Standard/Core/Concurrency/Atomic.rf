@@ -3,7 +3,7 @@ module Core
 ### A lock-free atomic cell — the cross-thread data primitive of the concurrency tier.
 ###
 ### `Atomic[T]` is a single-field struct record whose method receiver is passed by
-### reference (v0.0.4 by-ref `me`), so `me.value.hijack()` yields the live address of
+### reference (v0.0.4 by-ref `me`), so `me.initial.hijack()` yields the live address of
 ### the cell's storage. The atomic intrinsics (`Core/LLVMIntrinsics.rf`) then drive
 ### sequentially-consistent `load`/`store`/`atomicrmw`/`cmpxchg` on that address.
 ###
@@ -28,28 +28,23 @@ module Core
 record Atomic[T]
 needs RecordType T
 needs T obeys AtomicType
-    ### The payload. Driven through SeqCst atomic intrinsics on its live address;
-    ### never read directly (see the by-ref `me` note above).
-    secret value: T
-
-### Creates an atomic cell holding `initial`.
-### :param initial: The starting value.
-### :returns: The new `Atomic[T]`.
-routine Atomic[T](initial: T) -> Atomic[T]
-    return Atomic[T](value: initial)
+    ### The payload, starting as the value the cell is created with (`Atomic(initial: x)`, the memberwise
+    ### creator). Driven through SeqCst atomic intrinsics on its live address; never read directly (see the
+    ### by-ref `me` note above).
+    secret initial: T
 
 ### Atomically reads the current value.
 ### :returns: The value observed.
 @readonly
 routine Atomic[T].load() -> T
     danger
-        return LLVM::atomic_load[T](ptr: me.value.hijack())
+        return LLVM::atomic_load[T](ptr: me.initial.hijack())
 
 ### Atomically writes `desired`.
 ### :param desired: The replacement value.
 routine Atomic[T].store(desired: T)
     danger
-        LLVM::atomic_store[T](ptr: me.value.hijack(), value: desired)
+        LLVM::atomic_store[T](ptr: me.initial.hijack(), value: desired)
     return
 
 ### Atomically writes `desired` and returns the value that was present before.
@@ -57,7 +52,7 @@ routine Atomic[T].store(desired: T)
 ### :returns: The previous value.
 routine Atomic[T].swap(desired: T) -> T
     danger
-        return LLVM::atomic_exchange[T](ptr: me.value.hijack(), value: desired)
+        return LLVM::atomic_exchange[T](ptr: me.initial.hijack(), value: desired)
 
 ### Atomically installs `desired` iff the cell currently equals `expected`.
 ### :param expected: The value that must be present for the exchange to occur.
@@ -66,7 +61,7 @@ routine Atomic[T].swap(desired: T) -> T
 routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
     danger
         var result = LLVM::atomic_compare_and_exchange[T](
-            ptr: me.value.hijack(),
+            ptr: me.initial.hijack(),
             expected: expected,
             desired: desired,
         )
@@ -77,32 +72,32 @@ routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
 ### :returns: The previous value.
 routine Atomic[T].fetch_add(delta: T) -> T
     danger
-        return LLVM::atomic_add[T](ptr: me.value.hijack(), value: delta)
+        return LLVM::atomic_add[T](ptr: me.initial.hijack(), value: delta)
 
 ### Atomically subtracts `delta`, returning the value before the subtraction. Integer `T` only.
 ### :param delta: The decrement to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_sub(delta: T) -> T
     danger
-        return LLVM::atomic_sub[T](ptr: me.value.hijack(), value: delta)
+        return LLVM::atomic_sub[T](ptr: me.initial.hijack(), value: delta)
 
 ### Atomically ANDs the cell with `mask`, returning the value before the update. Integer `T` only.
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_and(mask: T) -> T
     danger
-        return LLVM::atomic_and[T](ptr: me.value.hijack(), value: mask)
+        return LLVM::atomic_and[T](ptr: me.initial.hijack(), value: mask)
 
 ### Atomically ORs the cell with `mask`, returning the value before the update. Integer `T` only.
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_or(mask: T) -> T
     danger
-        return LLVM::atomic_or[T](ptr: me.value.hijack(), value: mask)
+        return LLVM::atomic_or[T](ptr: me.initial.hijack(), value: mask)
 
 ### Atomically XORs the cell with `mask`, returning the value before the update. Integer `T` only.
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 routine Atomic[T].fetch_xor(mask: T) -> T
     danger
-        return LLVM::atomic_xor[T](ptr: me.value.hijack(), value: mask)
+        return LLVM::atomic_xor[T](ptr: me.initial.hijack(), value: mask)
