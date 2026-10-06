@@ -59,6 +59,10 @@ routine start()
 > 1,500 unit tests and 240+ end-to-end programs (RazorForge and Suflae) on Windows, Linux, and
 > macOS in CI. APIs will still change between releases, and you will find bugs.
 
+## What it keeps
+
+The feeling of finishing something the way you meant it, and of the builder recognizing it.
+
 ## What it is like
 
 **Single ownership, no borrow checker.** Containment is ownership. An entity has one owner, every
