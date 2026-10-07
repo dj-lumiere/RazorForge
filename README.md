@@ -38,8 +38,8 @@ routine consume(r: Resource)
     # r is destroyed here, exactly once
 
 routine parse_digit!(c: Character) -> S64
-    unless "0123456789" have c
-        absent                      # fail without an error object
+    if "0123456789" lack c
+        throw InvalidDigitError()   # the failure carries the error that says why
     return S64(from_text: Text(from: c))
 
 routine start()
@@ -77,11 +77,11 @@ syntax and cannot outlive the call or `using` block it appears in. When you want
 into reference counting with `Retained[T]`, `Guarded[T, P]`, or the weak `Tracked[T]` /
 `Witnessed[T]`.
 
-**Failure is loud by default, and recovery takes one keyword.** A routine that can `throw` or go
-`absent` carries `!` on its declaration, never at its call sites. A bare call that fails crashes the
+**Failure is loud by default, and recovery takes one keyword.** A routine that can `throw` carries
+`!` on its declaration, never at its call sites. A bare call that fails crashes the
 program with a message and a stack trace (exit status 82). To recover, put a keyword in front of the
-call: `try` gives `Maybe[T]`, `grab` gives `Check[T]` (which keeps the error), and `lookup` gives
-`Lookup[T]`. There are no exceptions to declare or catch.
+call: `try` gives `Maybe[T]`, and `check` gives `Check[T]` (which keeps the error). There are no
+exceptions to declare or catch.
 
 **Numbers mean what they say.** `+ - *` are checked and crash on overflow; wrapping (`+%`) and
 clamping (`+^`) are separate operators you choose. Integers go from `S8`/`U8` to `S256`/`U256`, and
@@ -207,8 +207,8 @@ so `cd` into a project and run `razorforge buildandrun`.
 - **Memory model:** single-ownership entities with deterministic `destroy`, `steal` transfers,
   scope-bound access tokens, the `Retained` / `Guarded` / `Tracked` / `Witnessed` reference-counted
   wrappers, and `danger` blocks.
-- **Error handling:** failable routines (`throw` / `absent`), the `try` / `grab` / `lookup` recovery
-  keywords, and `when` pattern matching with exhaustiveness checks.
+- **Error handling:** failable routines (`throw`), the `try` / `check` recovery keywords, and `when`
+  pattern matching with exhaustiveness checks.
 - **Numerics:** `S8`–`S256`, `U8`–`U256`, `B16`–`B128` (plus `BF16` for storage), `D32` / `D64` /
   `D128`, arbitrary-precision `Integer` / `Decimal`, complex `C64` / `C128` / `C256`,
   quaternions, vectors, and SIMD `Vector[T, N]`, with checked, wrapping, and clamping arithmetic.
