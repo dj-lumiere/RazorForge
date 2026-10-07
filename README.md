@@ -64,6 +64,7 @@ routine start()
 - **No ceremony.** Nothing you write is there only because the language asks for it.
 - **Code is the expression of intent.** What you write says what you mean.
 - **What should work, works.** Code that looks like it should work does, and it does what it looks like it does.
+- **One acceptable way.** There is a way that works for everyone, even if it isn't everyone's favorite.
 
 And for RazorForge, the feeling of finishing something the way you meant it, and of the builder recognizing it.
 
