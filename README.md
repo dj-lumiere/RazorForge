@@ -65,6 +65,8 @@ routine start()
 - **Code is the expression of intent.** What you write says what you mean.
 - **What should work, works.** Code that looks like it should work does, and it does what it looks like it does.
 - **One acceptable way.** There is a way that works for everyone, even if it isn't everyone's favorite.
+- **Nothing goes wrong silently.** A failure is loud, a hang is reported, and no work is left running that nobody will
+  ever check.
 
 And for RazorForge, the feeling of finishing something the way you meant it, and of the builder recognizing it.
 
