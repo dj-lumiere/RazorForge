@@ -1106,7 +1106,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             State entry = _state!.Clone();
             State head = entry;
             bool reporting = _reporting;
-            (List<State?> Breaks, List<State?> Continues) exits = ([], []);
+            (List<State?> Breaks, List<State?> Continues) exits;
 
             // Walk the loop until the token states at its head stop changing, then once more to report.
             for (int round = 0; round < 20; round++)
