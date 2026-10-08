@@ -343,6 +343,22 @@ when v
     is S64 x       => show(f"ok: {x}")     # type pattern with binding
 ```
 
+In a `when` statement an arm may be a block: break the line after `=>` and indent
+the statements one level, as in an `if` body. Keep a one-statement arm on one line.
+
+```razorforge
+when terrain
+    == Terrain.SPIKE_TRAP =>
+        me.hero.position = cell
+        me.spring_trap()
+    == Terrain.MONSTER => me.battle(cell)
+    else => me.hero.position = cell
+```
+
+A `when` that gives a value (`var label = when …`) takes one expression per arm.
+Several statements there are a build error: compute the value first, or write a
+`when` statement that sets a variable.
+
 ## 6. Routines
 
 ```razorforge
