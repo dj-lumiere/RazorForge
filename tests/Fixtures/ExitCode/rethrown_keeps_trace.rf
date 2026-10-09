@@ -1,0 +1,33 @@
+module Tests/ExitCode/RethrownKeepsTrace
+
+import IO/Console
+# A caught error thrown again keeps the trace it was first thrown with: `helper` grabs the failure of `innermost`
+# (two calls down) and throws it again, and the crash report still shows `innermost` and `middle`, then where it
+# was thrown again. A `when` that does not handle the error passes it on the same way.
+
+crashable DeepError
+    reason: Text
+
+routine DeepError.crash_message() -> Text
+    return f"deep failure: {me.reason}"
+
+routine innermost!(n: S64) -> S64
+    if n > 2
+        throw DeepError(reason: "n too big")
+    return n
+
+routine middle!(n: S64) -> S64
+    return innermost(n: n) + 1
+
+routine helper!(n: S64) -> S64
+    when grab middle(n: n)
+        is S64 value => return value
+        is Crashables failure =>
+            show(f"caught: {failure}")
+            throw failure
+
+routine start()
+    show(f"ok: {helper(n: 1)}")
+    show(f"bad: {helper(n: 5)}")
+    show("not reached")
+    return

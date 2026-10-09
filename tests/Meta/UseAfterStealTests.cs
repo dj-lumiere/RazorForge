@@ -21,7 +21,7 @@ public sealed class UseAfterStealTests
             userMessage: $"expected a crash, got exit 0\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "consumed 1", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "UseAfterStealError: 'a' was used after it was moved out with steal.",
+        Assert.Contains(expectedSubstring: "Use after steal error: 'a' was used after it was moved out with steal.",
             actualString: stderr);
     }
 

@@ -39,18 +39,68 @@ routine crash_report(type_name: Text, message: Text, file: Text, line: S32, colu
     C::rf_crash_exit()
     return
 
-### Writes the calling thread's crash trace, most recent frame first: the trace keeps the last 32 frames
-### and says how many there were in all when there were more. Writes nothing when the build keeps no trace.
+### Ends the program with the report of a caught error thrown again (a `throw e` of a `Crashables`, or a
+### `when` that does not handle the error passing it on): the error's title and message, where it was first
+### thrown, the trace it was first thrown with, and where it was thrown again, then exit status 82. By the
+### time it is thrown again, the routines between the first throw and the catcher have returned, so the
+### calling thread's own trace no longer has them.
+### :param type_name: The error's title.
+### :param message: What went wrong.
+### :param error: The caught error, which kept the trace it was first thrown with.
+### :param file: The source file it was thrown again in.
+### :param line: That source line.
+### :param column: That source column.
+@untraced
+routine crash_report_rethrown(type_name: Text, message: Text, error: Crashables, file: Text, line: S32, column: S32)
+    C::rf_flush_output()
+    crash_write(text: "\u00001B[91m")
+    crash_write(text: type_name)
+    crash_write(text: ": ")
+    crash_write(text: message)
+    crash_write(text: "\n")
+    danger
+        var depth = error.thrown_trace_depth()
+        var frames = error.thrown_trace_frames()
+        if depth > 0_s32
+            var first = frames.stride(count: LLVM::sign_extend[S32, S64](LLVM::bit_and(a: depth -% 1_s32, b: 31_s32))).peek()
+            crash_write(text: "at ")
+            crash_write_c_text(text: first.file)
+            crash_write(text: ":")
+            crash_write_number(value: first.line)
+            crash_write(text: ":")
+            crash_write_number(value: first.column)
+            crash_write(text: "\n")
+        crash_write_frames(depth: depth, frames: frames)
+    crash_write(text: "Thrown again at ")
+    crash_write(text: file)
+    crash_write(text: ":")
+    crash_write_number(value: line)
+    crash_write(text: ":")
+    crash_write_number(value: column)
+    crash_write(text: "\n")
+    crash_write(text: "\u00001B[0m")
+    C::rf_crash_exit()
+    return
+
+### Writes the calling thread's crash trace, most recent frame first. Writes nothing when the build keeps no
+### trace.
 @untraced
 routine crash_write_trace()
-    var depth = LLVM::trace_depth()
+    crash_write_frames(depth: LLVM::trace_depth(), frames: LLVM::trace_frames())
+    return
+
+### Writes a crash trace, most recent frame first: the trace keeps the last 32 frames and says how many there
+### were in all when there were more. Writes nothing when the depth is 0 (a build that keeps no trace).
+### :param depth: How many frames were pushed in all.
+### :param frames: The first of the 32 frames, a ring the depth indexes modulo 32.
+@untraced
+routine crash_write_frames(depth: S32, frames: Hijacked[TraceFrame])
     if depth <= 0_s32
         return
     crash_write(text: "Stack trace:\n")
     var shown = depth
     if shown > 32_s32
         shown = 32_s32
-    var frames = LLVM::trace_frames()
     var i = 0_s32
     while i < shown
         # The frames are a ring of 32: the most recent is at (depth - 1) mod 32.

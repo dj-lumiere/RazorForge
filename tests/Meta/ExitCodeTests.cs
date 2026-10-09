@@ -36,7 +36,7 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "value: 6", actualString: stdout);
         Assert.Contains(expectedSubstring: "piercing", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "BrokenInvariantError: the ledger no longer balances",
+        Assert.Contains(expectedSubstring: "Broken invariant error: the ledger no longer balances",
             actualString: stdout + stderr);
     }
 
@@ -54,7 +54,7 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "step 2", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "step 5", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "DivisionByZeroError", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Division by zero error", actualString: stdout + stderr);
     }
 
     /// <summary>A <c>pierce</c> inside a lambda another routine calls still crashes with status 82 beneath
@@ -70,7 +70,7 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "value: 25", actualString: stdout);
         Assert.Contains(expectedSubstring: "piercing", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "BrokenInvariantError: the ledger no longer balances",
+        Assert.Contains(expectedSubstring: "Broken invariant error: the ledger no longer balances",
             actualString: stdout + stderr);
     }
 
@@ -86,7 +86,28 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "step 10", actualString: stdout);
         Assert.Contains(expectedSubstring: "step 1", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "RangeStepNotPositiveError", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Range step not positive error", actualString: stdout + stderr);
+    }
+
+    /// <summary>A caught error thrown again crashes with the trace it was first thrown with: the routines between
+    /// the first throw and the catcher had returned by then, and the report still names them, the first throw's
+    /// line, and where the error was thrown again.</summary>
+    [Fact]
+    public void RethrownError_KeepsTheTraceOfItsFirstThrow()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "rethrown_keeps_trace.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "ok: 2", actualString: stdout);
+        Assert.Contains(expectedSubstring: "caught: deep failure: n too big", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        string report = stdout + stderr;
+        Assert.Contains(expectedSubstring: "innermost!(Core.S64) (", actualString: report);
+        Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rf:16:9)", actualString: report);
+        Assert.Contains(expectedSubstring: "middle!(Core.S64) (", actualString: report);
+        Assert.Contains(expectedSubstring: "Thrown again at", actualString: report);
+        Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rf:27:13", actualString: report);
     }
 
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)

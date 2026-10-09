@@ -93,7 +93,11 @@ When unsure, consult ground truth in the repo/package:
    crashable and binds it as a `NopeError` (fields readable); `x is NopeError` works
    as an expression too. A `when` with NO error arm passes the error on: in a
    failable routine as if `is Crashables e => throw e` were written (it propagates),
-   anywhere else it crashes loudly. `throw e` of a caught `Crashables` rethrows it.
+   anywhere else it crashes loudly. `throw e` of a caught `Crashables` rethrows it. A caught error keeps the
+   trace of its first throw: if it ends the program after being rethrown or passed on, the report shows that
+   trace (the routines between the throw and the catcher included) and a `Thrown again at file:line:col` line.
+   Every crash report is headed by the error's crash title (`Division error: ...`, the type name in sentence
+   case unless the crashable writes its own `crash_title`), runtime crashes too (`Integer overflow error: ...`).
    `is None` is a `Lookup`/`Maybe` arm only (a `Check` has no absent state).
    **A crash exits the process with status 82** (`0x52`, `'R'` for Runtime error —
    `RF_EXIT_CRASH`), for every runtime crash (unrecovered `throw`/`absent`, checked-

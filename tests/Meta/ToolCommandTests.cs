@@ -176,7 +176,7 @@ public sealed class ToolCommandTests : IDisposable
         (int exit, string stdout, string stderr) = Tool("run", program);
 
         Assert.Equal(expected: 82, actual: exit);
-        Assert.Contains(expectedSubstring: "StackOverflowError: the routine calls went", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Stack overflow error: the routine calls went", actualString: stdout + stderr);
     }
 
     private string Write(string name, string source)
