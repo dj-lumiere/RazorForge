@@ -738,6 +738,7 @@ Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
 ## 11. CLI and project manifest
 
 ```
+razorforge new [folder]             # start a project: config.toml, main.rf, .gitignore, .vscode/ (keeps existing files)
 razorforge check [entry]            # check the program without building it
 razorforge build [entry]            # build a native executable, don't run
 razorforge run [entry]              # build and run
