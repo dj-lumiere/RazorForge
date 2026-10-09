@@ -1,6 +1,7 @@
 package com.razorforge.rider
 
 import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
+import com.intellij.openapi.editor.colors.CodeInsightColors
 import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.fileTypes.PlainSyntaxHighlighter
 import com.intellij.openapi.fileTypes.SyntaxHighlighter
@@ -31,6 +32,9 @@ object RazorForgeColors {
     val DOC_VALUE = key("RAZORFORGE_DOC_VALUE", DefaultLanguageHighlighterColors.DOC_COMMENT_TAG_VALUE)
     val ANNOTATION = key("RAZORFORGE_ANNOTATION", DefaultLanguageHighlighterColors.METADATA)
 
+    /** A keyword the next version drops or renames: struck through over its keyword color. */
+    val RETIRED = key("RAZORFORGE_RETIRED_KEYWORD", CodeInsightColors.DEPRECATED_ATTRIBUTES)
+
     private fun key(name: String, csharp: TextAttributesKey) = TextAttributesKey.createTextAttributesKey(name, csharp)
 }
 
@@ -54,7 +58,8 @@ internal object RazorForgeSemanticTokens : LspSemanticTokensSupport() {
     override val tokenTypes: List<String> = (super.tokenTypes + keys.keys).distinct()
 
     override fun getTextAttributesKey(tokenType: String, modifiers: List<String>): TextAttributesKey? =
-        keys[tokenType] ?: super.getTextAttributesKey(tokenType, modifiers)
+        if ("retired" in modifiers) RazorForgeColors.RETIRED
+        else keys[tokenType] ?: super.getTextAttributesKey(tokenType, modifiers)
 }
 
 /** Settings | Editor | Color Scheme | RazorForge. */

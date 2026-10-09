@@ -23,6 +23,18 @@ internal sealed class RazorForgeLanguageServer : LanguageServerProfile
     public override IReadOnlyList<string> Keywords => RazorForgeLexer.KeywordSpellings;
 
     /// <inheritdoc/>
+    /// <remarks>From the improvement plan: `agent` in front of a call, `until` loops, `becomes` in an expression `when`,
+    /// and the renames `discard` → `drop`, `grab` → `check`.</remarks>
+    public override IReadOnlyList<string> PlannedKeywords { get; } = ["agent", "until", "becomes", "inject", "drop", "check"];
+
+    /// <inheritdoc/>
+    /// <remarks>From the improvement plan: `absent` / `lookup` go with their failure kinds, `onlyif` becomes `when`,
+    /// `threaded` / `suspended` give way to `agent` at the call, `unless` / `but` / `disobeys` go, and `discard` /
+    /// `grab` are renamed `drop` / `check`.</remarks>
+    public override IReadOnlyList<string> RetiredKeywords { get; } =
+        ["absent", "lookup", "onlyif", "threaded", "suspended", "unless", "but", "disobeys", "discard", "grab"];
+
+    /// <inheritdoc/>
     public override string? Format(string text, string fileName)
     {
         return Builder.Formatting.SourceFormatter.Format(source: text, fileName: fileName, language: Language)
