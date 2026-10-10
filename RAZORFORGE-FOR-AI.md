@@ -77,6 +77,10 @@ When unsure, consult ground truth in the repo/package:
    under `try`/`check` at any depth. Use it for a broken invariant (state
    the program can no longer trust), never for a condition a caller could handle.
    It does not make a routine failable (no `!` needed for it).
+   **`todo`** is a statement for code not written yet (`routine parse(bytes: Bytes) -> Header` with the body
+   `todo`): running it crashes with `NotImplementedError` naming the routine, like `pierce`. It does not make
+   the routine failable and ends its path, so a body that is only `todo` needs no `return`. The build warns
+   once per routine that still has one (RF-W303). `pass` is an empty body on purpose, a different thing.
    The keyword takes the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
    a trailing `!!` applies to the recovery result. There is no `try_foo` name form —
    recovery is a keyword at the call site, not a mangled variant name. There are no
@@ -1154,7 +1158,7 @@ you are writing another language.
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop`
-  `while` `each` `break` `continue` `return` `throw` `pierce`
+  `while` `each` `break` `continue` `return` `throw` `pierce` `todo`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`
