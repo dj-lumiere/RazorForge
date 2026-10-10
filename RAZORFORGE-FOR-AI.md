@@ -18,7 +18,9 @@ When unsure, consult ground truth in the repo/package:
    `gcd(252, 105)` ✗ → `gcd(a: 252, b: 105)` ✓
    Single-argument calls may be positional. A few stdlib routines annotated
    `@positional` (e.g. `x.clamp(0, 100)`) accept all-positional; mixing named
-   and positional in one call is always an error (RF-S512).
+   and positional in one call is always an error (RF-S512). A variable named
+   like its parameter goes by its name alone (`area(width, height: 4)` =
+   `area(width: width, height: 4)`); it counts as named.
 2. **Normal routine completion uses an explicit `return`** — even void ones.
    This is load-bearing (destructor scheduling anchors at `return`), not style.
    Failable routines may also terminate with `throw`.
