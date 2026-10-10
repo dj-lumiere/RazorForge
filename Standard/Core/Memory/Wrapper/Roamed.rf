@@ -2,7 +2,7 @@ module Core
 
 import BuilderQuery
 ### Biased-reference-counted handle — the auto-promoting hybrid of {Retained[T]} and {Guarded[T, P]}.
-### Thin pointer to {RoamController[T]}. Backs Suflae's `entity` (the monitor-flavored actor): behaves
+### Thin pointer to {RoamManager[T]}. Backs Suflae's `entity` (the monitor-flavored actor): behaves
 ### like {Retained[T]} (non-atomic, unlocked, fast) while it stays on one thread, and — the moment it
 ### escapes across a concurrency boundary — promotes itself to atomic reference counting plus a
 ### reentrant, task-keyed exclusive lock that serializes all access (the actor "one at a time"
@@ -44,7 +44,7 @@ needs EntityType T
 routine Roamed[T](from: T) -> Roamed[T]
 needs EntityType T
     danger
-        var ctrl = RoamController[T](data: from.hijack()).hijack()
+        var ctrl = RoamManager[T](data: from.hijack()).hijack()
         return Roamed[T](ctrl)
 
 ### The absent `Roamed[T]` — a null handle owning nothing. Lets an entity with a `Roamed[T]` field be
@@ -55,7 +55,7 @@ needs EntityType T
 routine roamed_none[T]() -> Roamed[T]
 needs EntityType T
     danger
-        return Roamed[T](Hijacked[RoamController[T]](from: 0_addr))
+        return Roamed[T](Hijacked[RoamManager[T]](from: 0_addr))
 
 ### Whether this is the absent handle (owns nothing). :returns: `true` if none.
 @readonly
@@ -63,14 +63,14 @@ routine Roamed[T].is_none() -> Bool
     danger
         return me.controller_address() == 0_addr
 
-### Reinterprets a raw {RoamController[T]} address as a `Roamed[T]` handle WITHOUT retaining — a
+### Reinterprets a raw {RoamManager[T]} address as a `Roamed[T]` handle WITHOUT retaining — a
 ### low-level plumbing / test hatch (Stage-1 cyclic-graph construction). The caller is responsible for
 ### the reference count: the returned handle does not add a strong ref.
 ### :param addr: The controller address (0 for the absent handle).
 ### :returns: The `Roamed[T]` viewing that controller.
 dangerous routine roamed_from_addr[T](addr: Address) -> Roamed[T]
 needs EntityType T
-    return Roamed[T](Hijacked[RoamController[T]](from: addr))
+    return Roamed[T](Hijacked[RoamManager[T]](from: addr))
 
 ### Returns a new alias to the same object (biased retain), or the absent handle unchanged. This is
 ### what `b = a` lowers to.
@@ -80,7 +80,7 @@ needs EntityType T
 secret routine Roamed[T].share() -> Roamed[T]
     danger
         if me.controller_address() != 0_addr
-            var ctrl = Hijacked[RoamController[T]](me).as_entity()
+            var ctrl = Hijacked[RoamManager[T]](me).as_entity()
             ctrl.hold()
     return me
 
@@ -95,7 +95,7 @@ secret routine Roamed[T].share() -> Roamed[T]
 
 ### Escapes this object to ESCAPED mode (atomic refcount + armed lock). Idempotent.
 dangerous routine Roamed[T].promote()
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.promote()
     return
 
@@ -103,7 +103,7 @@ dangerous routine Roamed[T].promote()
 ### :returns: `true` if ESCAPED.
 routine Roamed[T].is_escaped() -> Bool
     danger
-        var ctrl = Hijacked[RoamController[T]](me).as_entity()
+        var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         return ctrl.is_escaped()
 
 ### Crashes when an `each` loop over this entity, or a call on one of its elements, is still running. Suflae's
@@ -113,7 +113,7 @@ routine Roamed[T].is_escaped() -> Bool
 @readonly
 routine Roamed[T].require_shape_free!()
     danger
-        var ctrl = Hijacked[RoamController[T]](me).as_entity()
+        var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         if ctrl.shape_users != 0_u64
             throw ReshapingWhileInUseError(container: T.type_name())
     return
@@ -124,7 +124,7 @@ routine Roamed[T].require_shape_free!()
 ### :returns: The entity.
 ### :throws: {SharedEntityHandOffError} when another handle or a weak observer still reaches the entity.
 dangerous routine Roamed[T].release_inner!() -> T
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     var data = ctrl.release_inner()
     if data.is_none()
         throw SharedEntityHandOffError(creating: T.type_name())
@@ -133,25 +133,25 @@ dangerous routine Roamed[T].release_inner!() -> T
 ### Marks one more `each` loop or element call as using this entity's element positions. Only the builder
 ### calls this, paired with `end_shape_use` when that use ends.
 dangerous routine Roamed[T].begin_shape_use()
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.shape_users = ctrl.shape_users +% 1_u64
     return
 
 ### Ends one use started by `begin_shape_use`.
 dangerous routine Roamed[T].end_shape_use()
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.shape_users = ctrl.shape_users -% 1_u64
     return
 
 ### Enters the access lock: a no-op in LOCAL mode, a reentrant task-keyed acquire in ESCAPED mode.
 dangerous routine Roamed[T].lock_enter()
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.guard_enter()
     return
 
 ### Leaves the access lock: a no-op in LOCAL mode, a reentrant release in ESCAPED mode.
 dangerous routine Roamed[T].lock_exit()
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.guard_exit()
     return
 
@@ -163,7 +163,7 @@ dangerous routine Roamed[T].lock_exit()
 ### :returns: The number of live strong handles.
 routine Roamed[T].strong_count() -> U64
     danger
-        var ctrl = Hijacked[RoamController[T]](me).as_entity()
+        var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         return ctrl.strong_count()
 
 ### Mints a NON-PINNING weak observation of this entity — ObjectHacker's `watch`. The returned
@@ -174,7 +174,7 @@ routine Roamed[T].watch() -> Watched[T]
     danger
         if me.controller_address() == 0_addr
             return Watched[T](ctrl: 0_addr)
-        var ctrl = Hijacked[RoamController[T]](me).as_entity()
+        var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         ctrl.observe()
         return Watched[T](ctrl: me.controller_address())
 
@@ -203,20 +203,20 @@ dangerous routine Roamed[T].roam_trace()
 dangerous routine Roamed[T].roam_free()
     return
 
-### The address of the underlying {RoamController[T]} — the collector's currency and a Stage-1 test
+### The address of the underlying {RoamManager[T]} — the collector's currency and a Stage-1 test
 ### hatch. `Roamed[T]` is `@llvm("ptr")` and its bit pattern IS the controller pointer, so this is a
 ### pure reinterpretation, no load.
 ### :returns: The controller address.
 @readonly
 routine Roamed[T].controller_address() -> Address
-    return Hijacked[RoamController[T]](me).get_address()
+    return Hijacked[RoamManager[T]](me).get_address()
 
 ### The inner entity as a raw reference. Real access is lock-wrapped by the builder's lock-bracket
 ### lowering around the enclosing access scope, so this coercion is safe: it is the deref half, the
 ### bracket pass is the lock half. Kept as the low-level plumbing name behind `access`/`control`.
 ### :returns: The inner entity.
 dangerous routine Roamed[T].raw_inner() -> T
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     return ctrl.data_ptr().as_entity()
 
 # ============================================================================
@@ -232,7 +232,7 @@ dangerous routine Roamed[T].raw_inner() -> T
 @inline
 routine Roamed[T].access() -> T
     danger
-        var ctrl = Hijacked[RoamController[T]](me).as_entity()
+        var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         return ctrl.data_ptr().as_entity()
 
 ### Yields the inner entity as an in-flight `T` reference for read/write access.
@@ -242,7 +242,7 @@ routine Roamed[T].access() -> T
 @inline
 routine Roamed[T].control() -> T
     danger
-        var ctrl = Hijacked[RoamController[T]](me).as_entity()
+        var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         return ctrl.data_ptr().as_entity()
 
 ### Read access to the held entity. A call hands this to a `Viewing[T]` parameter given the handle.
@@ -250,13 +250,13 @@ routine Roamed[T].control() -> T
 @readonly
 routine Roamed[T].view() -> Viewing[T]
     danger
-        return Viewing[T](Hijacked[RoamController[T]](me).as_entity().data_ptr())
+        return Viewing[T](Hijacked[RoamManager[T]](me).as_entity().data_ptr())
 
 ### Write access to the held entity. A call hands this to a `Modifying[T]` parameter given the handle.
 ### :returns: The token.
 routine Roamed[T].modify() -> Modifying[T]
     danger
-        return Modifying[T](Hijacked[RoamController[T]](me).as_entity().data_ptr())
+        return Modifying[T](Hijacked[RoamManager[T]](me).as_entity().data_ptr())
 
 # ============================================================================
 # Display (opaque — the inner value is reachable only through the lock in real use)
@@ -268,12 +268,12 @@ routine Roamed[T].modify() -> Modifying[T]
 # the inner and reintroduce the opaque-wrapper rendering.
 
 ### Decrements the biased count, tearing down the entity at zero. A no-op on the absent handle. This IS
-### the decrement — no separate `release` verb; `destruct` is the teardown (calls the RoamController's
+### the decrement — no separate `release` verb; `destruct` is the teardown (calls the RoamManager's
 ### own `release` count primitive, a different type — no recursion).
 @override
 dangerous routine Roamed[T].destruct()
     if me.controller_address() == 0_addr
         return
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.unhold()
     return

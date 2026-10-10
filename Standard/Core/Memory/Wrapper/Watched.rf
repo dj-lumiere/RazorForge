@@ -3,7 +3,7 @@ module Core
 ### ObjectHacker's weak observation of a Roamed entity — a NON-PINNING handle minted by
 ### `Roamed[T].watch()`. It does NOT keep the entity alive; after the entity dies it survives as a
 ### tombstone view so `is_alive()`/`is_destroyed()` stay answerable without dangling. "Weak" is an
-### internal property of the substrate (RoamController's weak/tombstone layer) — users of ObjectHacker
+### internal property of the substrate (RoamManager's weak/tombstone layer) — users of ObjectHacker
 ### just hold a `Watched` and ask whether the object is still there; they never see a weak-reference
 ### concept. Holds only the controller address (the weak edge); `0` = the absent observation.
 ### :typeparam T: The observed entity type.
@@ -14,7 +14,7 @@ module Core
 ### unobserves once. Do not COPY a `Watched` yet (a bitwise copy would unbalance the weak count).
 record Watched[T]
 needs EntityType T
-    ### The observed entity's {RoamController} address — the weak edge. `0` for the absent observation.
+    ### The observed entity's {RoamManager} address — the weak edge. `0` for the absent observation.
     secret ctrl: Address
 
 ### Whether the observed entity is still alive. Safe after the entity's death (reads the tombstone's
@@ -23,19 +23,19 @@ routine Watched[T].is_alive() -> Bool
     danger
         if me.ctrl == 0_addr
             return false
-        return Hijacked[RoamController[T]](from: me.ctrl).as_entity().is_alive()
+        return Hijacked[RoamManager[T]](from: me.ctrl).as_entity().is_alive()
 
 ### Whether the observed entity has been destroyed (by either free path). :returns: `true` once gone.
 routine Watched[T].is_destroyed() -> Bool
     danger
         if me.ctrl == 0_addr
             return true
-        return Hijacked[RoamController[T]](from: me.ctrl).as_entity().is_destroyed()
+        return Hijacked[RoamManager[T]](from: me.ctrl).as_entity().is_destroyed()
 
 ### Releases the weak observation. If this was the last observer of an already-dead (tombstoned)
 ### controller, the controller struct is finally freed. Called at scope exit like any owned handle.
 @override
 dangerous routine Watched[T].destruct()
     if me.ctrl != 0_addr
-        Hijacked[RoamController[T]](from: me.ctrl).as_entity().unobserve()
+        Hijacked[RoamManager[T]](from: me.ctrl).as_entity().unobserve()
     return
