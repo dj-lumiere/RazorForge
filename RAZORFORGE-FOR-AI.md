@@ -552,7 +552,9 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     a `Guarded[T, TPolicy]`, lock-guarded by the policy `TPolicy`. Produced by `s.consult()` /
     `s.amend()`, always via a `using` block; `s.try_amend()` is the NON-BLOCKING
     acquire (a hand-written method returning the token, used with `using … fallback`
-    — NOT a recovery variant, so no `try` keyword).
+    — NOT a recovery variant, so no `try` keyword). Two handles at once:
+    `using multiamend(first: xs[i], second: xs[j]) as (a, b)` (address-ordered holds, one hold when the same
+    handle, never nested `amend()`s). `using r as (a, b)` names the items of the tuple `r` gives.
 - **RC wrappers** (opt-in shared ownership, reference-counted):
   - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, `=` makes one more holder);
     forwards direct access to the retained entity.
