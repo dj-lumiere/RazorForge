@@ -966,8 +966,9 @@ Verbs (methods on `Agent[T]`, all failable):
 - On a `List[Agent[T]]`: `gather() -> List[T]` (wait for all, input order, throws the first failure it
   meets in list order), `race() -> T` (the first finisher, throws the winner's failure), `cancel_all()`
   (no `!`, returns nothing: cancels every Agent and waits until each has stopped, dropping what each came
-  to, work nothing started yet never runs). `gather` and `race` start the Agents nothing started with
-  `start_now()`.
+  to, work nothing started yet never runs), `take_finished() -> List[Agent[T]]` (takes the finished Agents
+  out in place and returns them, leaving the rest: rebuilding the list with `where` would drop work still
+  running). `gather` and `race` start the Agents nothing started with `start_now()`.
 - A dropped Agent that was never retrieved is not cancelled for you. Collect what you start.
 - There is no fire-and-forget verb: start with `start_now()` and collect later with `retrieve()` or
   `gather()`. An Agent thrown away before anything starts it (`agent f()` as a statement, or
@@ -1043,6 +1044,8 @@ opening a `FileHandle` inside a job.
 - `make_shared_channel[T](capacity: U64) -> (Sender[T], SharedReceiver[T])` — multiple consumers
   COMPETE for each item (fan-out, not broadcast).
 - `sender.send(item: x)` moves `x` in; FAILABLE (`ChannelClosedError` if closed / no consumers).
+  `sender.send_if_room(item: x) -> Bool` never waits: `true` when it went in, `false` when the channel was full
+  (the item is destroyed), `ChannelClosedError` like `send`.
   `sender.duplicate()` clones a producer for fan-in; `sender.close()` / `is_closed()`.
 - `Receiver`/`SharedReceiver` are `Iterable[T]` — drain with `each x in rx` (ends when closed + empty).
 
