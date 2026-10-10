@@ -6,34 +6,35 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// A range's step is always a positive distance and its endpoints decide the direction, so a literal step that is
-/// zero or negative is a build error (RF-S516) instead of a loop that never ends. A step held in a variable is
-/// checked when the range is iterated (tests/Fixtures/ExitCode/range_step_not_positive.rf).
+/// The sign of a range's step sets its direction (`10 to 0 by -1` counts down), so only a literal step of zero is a
+/// build error (RF-S516) instead of a loop that never ends. A step held in a variable is checked when the range is
+/// iterated (tests/Fixtures/ExitCode/range_step_zero.rf).
 /// </summary>
 public sealed class RangeStepTests
 {
     [Theory]
-    [InlineData("10 til 0 by -3")]
     [InlineData("0 to 10 by 0")]
     [InlineData("0 to 10 by 0x0")]
     [InlineData("0.0 to 1.0 by 0.0")]
-    [InlineData("0.0 to 1.0 by -0.5")]
-    public void Analyze_LiteralStepNotPositive_ReportsError(string range)
+    [InlineData("0.0 to 1.0 by -0.0")]
+    public void Analyze_LiteralStepZero_ReportsError(string range)
     {
         AnalysisResult result = AnalyzeSa(source: Walk(range: range));
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RangeStepNotPositive);
+            filter: e => e.Code == SemanticDiagnosticCode.RangeStepZero);
     }
 
     [Theory]
+    [InlineData("10 til 0 by -3")]
     [InlineData("10 til 0 by 3")]
     [InlineData("0 to 10 by 2")]
     [InlineData("0.0 to 1.0 by 0.25")]
-    public void Analyze_LiteralStepPositive_NoError(string range)
+    [InlineData("1.0 to 0.0 by -0.5")]
+    public void Analyze_LiteralStepNonZero_NoError(string range)
     {
         AnalysisResult result = AnalyzeSa(source: Walk(range: range));
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RangeStepNotPositive);
+            filter: e => e.Code == SemanticDiagnosticCode.RangeStepZero);
     }
 
     /// <summary>A step held in a variable is not a build error: it is checked when the range is iterated.</summary>
@@ -49,7 +50,7 @@ public sealed class RangeStepTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RangeStepNotPositive);
+            filter: e => e.Code == SemanticDiagnosticCode.RangeStepZero);
     }
 
     private static string Walk(string range)

@@ -74,19 +74,19 @@ public sealed class ExitCodeTests
             actualString: stdout + stderr);
     }
 
-    /// <summary>A range step held in a variable is checked when the range is iterated: a positive step counts down
-    /// from the larger endpoint, and a negative one crashes with status 82 instead of looping forever.</summary>
+    /// <summary>A range step held in a variable is checked when the range is iterated: a negative step counts down,
+    /// and a step of zero crashes with status 82 instead of looping forever.</summary>
     [Fact]
-    public void RangeStepNotPositive_CrashesLoudly()
+    public void RangeStepZero_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "range_step_not_positive.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "range_step_zero.rf");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "step 10", actualString: stdout);
         Assert.Contains(expectedSubstring: "step 1", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "Range step not positive error", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Range step zero error", actualString: stdout + stderr);
     }
 
     /// <summary>A caught error thrown again crashes with the trace it was first thrown with: the routines between

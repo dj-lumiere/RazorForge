@@ -425,17 +425,37 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts chained logical.
+    /// Verifies that the parser accepts a chain of one logical operator, and mixed `and`/`or` once parenthesized.
     /// </summary>
     [Fact]
     public void Parse_ChainedLogical()
     {
         string source = """
                         routine test() -> bool
-                            return a and b or c and not d
+                            return (a and b) or (c and not d) or e
                         """;
 
         AssertParses(source: source);
+    }
+
+    /// <summary>`and` and `or` share a level: mixing them without parentheses is a grammar error.</summary>
+    [Fact]
+    public void Parse_MixedLogical_NeedsParentheses()
+    {
+        string source = """
+                        routine test() -> bool
+                            return a and b or c
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    /// <summary>Different bitwise operators share a level: side by side they need parentheses, one of them chains.</summary>
+    [Fact]
+    public void Parse_MixedBitwise_NeedsParentheses()
+    {
+        AssertParseError(source: "routine test() -> S64\n    return a | b & c\n");
+        AssertParses(source: "routine test() -> S64\n    return (a & b) | c | d\n");
     }
     /// <summary>
     /// Verifies that the parser accepts logical with comparison.
