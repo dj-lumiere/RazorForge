@@ -354,6 +354,48 @@ public sealed class MultiFileModuleImportTests
         Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
     }
 
+    /// <summary>
+    /// A statement the parser recovered from is missing from the program, so its error stops the build. It used to
+    /// be printed and then forgotten: the build went on without the statement and ran.
+    /// </summary>
+    [Fact]
+    public void RecoveredParseError_StopsTheBuild()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import IO/Console
+                                                             routine start()
+                                                                 var m: Maybe[S64] = None
+                                                                 show("DONE")
+                                                                 return
+                                                             """,
+            moduleFiles: []);
+
+        SemanticError error = Assert.Single(collection: errors);
+        Assert.Equal(expected: "RF-G112", actual: error.CodeString);
+        Assert.Contains(expectedSubstring: "`none`", actualString: error.Message);
+    }
+
+    /// <summary>
+    /// `None` is a type argument in an expression too (`List[Agent[None]]()`), not only in a type annotation.
+    /// </summary>
+    [Fact]
+    public void NoneTypeArgument_InExpression()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import IO/Console
+                                                             routine work()
+                                                                 show("work")
+                                                                 return
+                                                             routine start()
+                                                                 var jobs = List[Agent[None]]()
+                                                                 jobs.add_last(agent work())
+                                                                 return
+                                                             """,
+            moduleFiles: []);
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+    }
+
     private static List<SemanticError> RunProject(string entrySource,
         IReadOnlyList<(string RelPath, string Source)> moduleFiles,
         string entryRelPath = "ImportProbe.rf")
