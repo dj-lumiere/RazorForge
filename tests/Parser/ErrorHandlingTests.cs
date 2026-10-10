@@ -181,7 +181,7 @@ public class ErrorHandlingTests
         // unless parses til IfStatement with negated condition
         string source = """
                         routine get!(key: Text) -> Value
-                            unless cache.has(key)
+                            if not (cache.has(key))
                                 absent
                             return cache.get(key)
                         """;
@@ -217,7 +217,7 @@ public class ErrorHandlingTests
                         routine get_user!(id: U64) -> User
                             if id == 0
                                 throw ValidationError("invalid id")
-                            unless database.has_user(id)
+                            if not (database.has_user(id))
                                 absent
                             return database.get_user(id)
                         """;

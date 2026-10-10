@@ -136,7 +136,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                            unless x.is_valid()
+                            if not (x.is_valid())
                                 return
                         """;
 
@@ -158,7 +158,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                            unless condition
+                            if not (condition)
                                 show("condition is false")
                             else
                                 show("condition is true")
@@ -175,7 +175,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine process!(data: Text)
-                            unless data.length() > 0
+                            if not (data.length() > 0)
                                 absent
                             show(data)
                             return

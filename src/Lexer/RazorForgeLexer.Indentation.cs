@@ -223,18 +223,17 @@ public partial class RazorForgeLexer
     /// <remarks>
     /// Other symbolic operators (<c>==</c>, <c>&lt;</c>, …) are deliberately excluded: a <c>when</c> writes its
     /// arms as leading comparison patterns (<c>== 0x22 =&gt;</c>), so treating such a line as a continuation would
-    /// swallow those arms. No statement or <c>when</c> arm begins with <c>and</c>/<c>or</c>/<c>but</c> or with a
+    /// swallow those arms. No statement or <c>when</c> arm begins with <c>and</c>/<c>or</c> or with a
     /// single <c>.</c>, so these are unambiguous. A <c>...</c> and a <c>.</c> before a digit are not member access.
     /// </remarks>
     private bool StartsWithContinuationOperator()
     {
-        // Require a trailing word boundary so identifiers like `orange`, `android`, or
-        // `button` are not misread as `or`/`and`/`but`.
+        // Require a trailing word boundary so identifiers like `orange` or `android` are not misread as
+        // `or`/`and`.
         return Peek() switch
         {
             'a' => MatchesKeywordAhead(word: "and"),
             'o' => MatchesKeywordAhead(word: "or"),
-            'b' => MatchesKeywordAhead(word: "but"),
             '.' => Peek(offset: 1) != '.' && !char.IsDigit(c: Peek(offset: 1)),
             _ => false
         };

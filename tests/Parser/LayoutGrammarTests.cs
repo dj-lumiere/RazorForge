@@ -210,7 +210,7 @@ public class LayoutGrammarTests
     {
         Program program = AssertParses(source: """
                                                routine start()
-                                                   unless ready
+                                                   if not (ready)
                                                        wait()
                                                    else
                                                        go()

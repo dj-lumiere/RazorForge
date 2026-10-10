@@ -971,13 +971,13 @@ you are writing another language.
 - **Bindings**: `var` `preset` `lateinit`
 - **Visibility / receiver**: `secret` `posted` `common`
 - **Self**: `me` `Me`
-- **Protocols & constraints**: `obeys` `disobeys` `needs` `relates` `everywhere`
-- **Control flow**: `if` `elseif` `else` `then` `unless` `when` `is` `isnot` `loop`
+- **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
+- **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop`
   `while` `each` `break` `continue` `return` `throw` `pierce` `absent`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`
-- **Logical operators**: `and` `or` `not` `but`
+- **Logical operators**: `and` `or` `not`
 - **Literals**: `true` `false` `None` `none`
 - **Concurrency**: `suspended` `threaded`†
 - **Danger**†: `danger` (block) `dangerous` (modifier)

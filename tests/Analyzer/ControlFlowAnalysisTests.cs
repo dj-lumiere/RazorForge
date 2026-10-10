@@ -82,7 +82,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine validate!(value: S32) -> S32
-                            unless value > 0
+                            if not (value > 0)
                                 throw ValueError("Must be positive")
                             return value
                         """;

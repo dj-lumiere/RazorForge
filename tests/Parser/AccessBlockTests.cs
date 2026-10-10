@@ -317,7 +317,7 @@ public class AccessBlockTests
                             each path in paths
                                 using open_file(path) as file
                                     var content = file.read_all()
-                                    unless content.is_empty()
+                                    if not (content.is_empty())
                                         process(content)
                             return
                         """;

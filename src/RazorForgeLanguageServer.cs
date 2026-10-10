@@ -28,9 +28,9 @@ internal sealed class RazorForgeLanguageServer : LanguageServerProfile
 
     /// <inheritdoc/>
     /// <remarks>From the improvement plan: `absent` / `lookup` go with their failure kinds,
-    /// `threaded` / `suspended` give way to `agent` at the call, `unless` / `but` / `disobeys` go.</remarks>
+    /// `threaded` / `suspended` give way to `agent` at the call.</remarks>
     public override IReadOnlyList<string> RetiredKeywords { get; } =
-        ["absent", "lookup", "threaded", "suspended", "unless", "but", "disobeys"];
+        ["absent", "lookup", "threaded", "suspended"];
 
     /// <inheritdoc/>
     public override string? Format(string text, string fileName)

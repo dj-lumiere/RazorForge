@@ -23,7 +23,7 @@ public class TypeNarrowingTests
         // is narrowed from Maybe[S32] to S32 inside the block
         string source = """
                         routine process(value: S32?) -> S32
-                            unless value is None
+                            if not (value is None)
                                 return value
                             return 0
                         """;
@@ -185,7 +185,7 @@ public class TypeNarrowingTests
         // After the unless block (if execution reaches there), value is still S32?.
         string source = """
                         routine process(value: S32?) -> S32
-                            unless value is None
+                            if not (value is None)
                                 return value
                             return value
                         """;

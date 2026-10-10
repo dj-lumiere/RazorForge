@@ -415,30 +415,6 @@ public class FlagsValidationTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownType);
     }
-    /// <summary>
-    /// Verifies flags validation behavior for but operator type mismatch and reports the expected error.
-    /// </summary>
-    [Fact]
-    public void Flags_ButOperator_TypeMismatch_ReportsError()
-    {
-        string source = """
-                        flags Perms
-                            READ
-                            WRITE
-
-                        flags Roles
-                            ADMIN
-                            USER
-
-                        routine test(p: Perms, r: Roles)
-                            var result = p but r
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
-    }
 
     #endregion
 

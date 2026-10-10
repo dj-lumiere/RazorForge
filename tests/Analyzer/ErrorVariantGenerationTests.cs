@@ -24,7 +24,7 @@ public class ErrorVariantGenerationTests
         // - try_get() -> T?
         string source = """
                         routine get!(id: U64) -> User
-                            unless has_user(id)
+                            if not (has_user(id))
                                 absent
                             return fetch_user(id)
 
@@ -126,7 +126,7 @@ public class ErrorVariantGenerationTests
                         routine get_user!(id: U64) -> User
                             if id == 0
                                 throw DatabaseError(code: 1)
-                            unless user_exists(id)
+                            if not (user_exists(id))
                                 absent
                             return fetch_user(id)
 
@@ -167,7 +167,7 @@ public class ErrorVariantGenerationTests
                             data: Dict[Text, S32]
 
                         routine Cache.get!(key: Text) -> S32
-                            unless me.data.has(key)
+                            if not (me.data.has(key))
                                 absent
                             return me.data.get(key)
 

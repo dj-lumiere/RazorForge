@@ -265,7 +265,7 @@ public class ErrorHandlingValidationTests
                         routine get_value!(id: U64) -> S32
                             if id == 0
                                 throw DbError(message: "bad")
-                            unless id == 1
+                            if not (id == 1)
                                 absent
                             return 42
 
