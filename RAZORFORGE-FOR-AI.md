@@ -390,6 +390,8 @@ loop                      # infinite loop, exit with break
         break
 ```
 
+`until c` loops while `c` is false (`while not (c)`). A `while`, `until` or `each` may end
+with a `then` block, run when the loop ends by itself and never after its own `break`.
 A `while` or `each` may end with an `else`, which runs only when the body ran
 zero times: the condition was false at the very first check, or the source was
 empty. Once the body has run, the `else` never runs, however the loop ended
@@ -1163,7 +1165,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop`
-  `while` `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes`
+  `while` `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes` `until`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`
