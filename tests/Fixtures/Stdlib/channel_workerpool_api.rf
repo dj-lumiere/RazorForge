@@ -7,7 +7,7 @@ module Tests/Stdlib/ChannelWorkerPoolApi
 # the channel auto-closes and both workers' `for` loops end.
 
 import IO/Console
-suspended routine feed_jobs(out: Sender[S64], n: S64) -> S64
+routine feed_jobs(out: Sender[S64], n: S64) -> S64
     var i = 1_s64
     danger
         while i <= n
@@ -16,7 +16,7 @@ suspended routine feed_jobs(out: Sender[S64], n: S64) -> S64
     return n
 
 # Counts how many jobs this worker handled (sum of all workers' counts == jobs fed).
-suspended routine worker(belt: SharedReceiver[S64]) -> S64
+routine worker(belt: SharedReceiver[S64]) -> S64
     var done = 0_s64
     each job in belt
         done = done + 1
@@ -30,7 +30,7 @@ routine start()
         # and awaited via `gather` so they run CONCURRENTLY and split the jobs (driving them one-by-one
         # would let the first worker drain the whole belt before the second ever started). The split is
         # nondeterministic; the total is not.
-        feed_jobs(out: steal feeder, n: 6).execute()
-        var counts = [worker(belt: steal belt.duplicate()), worker(belt: steal belt)].gather()
+        (agent feed_jobs(out: steal feeder, n: 6)).start_now()
+        var counts = [agent worker(belt: steal belt.duplicate()), agent worker(belt: steal belt)].gather()
         show(f"total={counts[0] + counts[1]}")
     return

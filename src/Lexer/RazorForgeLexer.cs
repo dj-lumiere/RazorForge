@@ -227,9 +227,6 @@ public partial class RazorForgeLexer
             // Associated types
             [key: "relates"] = TokenType.Relates,
 
-            // Concurrency (SF has cooperative coroutines; `threaded` stays RF-only)
-            [key: "suspended"] = TokenType.Suspended,
-
             // `needs P everywhere` — the structural-conferral gate of the protocol model (a `needs`-clause
             // modifier, NOT a reflection construct). It lives with `needs`/`obeys`/`protocol`, which SF
             // shares, so it is a SHARED keyword. The derive TEMPLATES it gates (e.g. `routine T.eq` with an
@@ -240,7 +237,7 @@ public partial class RazorForgeLexer
             // Reserved for keywords a later release uses: none of them can name anything now.
             [key: "until"] = TokenType.ReservedWord,
             [key: "becomes"] = TokenType.ReservedWord,
-            [key: "agent"] = TokenType.ReservedWord,
+            [key: "agent"] = TokenType.Agent,
             [key: "inject"] = TokenType.ReservedWord
         };
 
@@ -248,7 +245,6 @@ public partial class RazorForgeLexer
         _keywords[key: "danger"] = TokenType.Danger;
         _keywords[key: "dangerous"] = TokenType.Dangerous;
         _keywords[key: "steal"] = TokenType.Steal;
-        _keywords[key: "threaded"] = TokenType.Threaded;
         // Buildtime reflection is RF's model (monomorph unroll). Suflae's reflection is the runtime
         // ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via wholesale Core
         // reuse, so it never needs `expand` itself. `expand` is the ONLY reflection keyword; the sources

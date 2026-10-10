@@ -11,7 +11,7 @@ module Tests/Stdlib/SignalCasterApi
 # `Hijacked[S64]` aliasing a slot on start()'s frame, written by the caster under the same lock.
 
 import IO/Console
-suspended routine waiter(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+routine waiter(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     sig.lock()
     danger
         while cell.peek() == 0_s64  # the flag, tested under the lock
@@ -19,7 +19,7 @@ suspended routine waiter(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     sig.unlock()
     return 1
 
-suspended routine caster(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+routine caster(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     sig.lock()
     danger
         cell.poke(value: 1_s64)  # make the flag true under the lock...
@@ -37,7 +37,7 @@ routine start()
         # can `cast_one` to wake it. Retrieving the waiter ALONE would hang — the caster would never be
         # launched to cast. gather returns results in input order: [waiter, caster].
         var results = [
-            waiter(sig: steal sig.duplicate(), cell: cell), caster(sig: steal sig, cell: cell),
+            agent waiter(sig: steal sig.duplicate(), cell: cell), agent caster(sig: steal sig, cell: cell),
         ].gather()
         show(f"waiter={results[0]} caster={results[1]}")
     return

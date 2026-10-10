@@ -23,11 +23,11 @@ internal sealed class RazorForgeLanguageServer : LanguageServerProfile
     public override IReadOnlyList<string> Keywords => RazorForgeLexer.KeywordSpellings;
 
     /// <inheritdoc/>
-    /// <remarks>From the improvement plan: `agent` in front of a call, `until` loops, `becomes` in an expression `when`.</remarks>
-    public override IReadOnlyList<string> PlannedKeywords { get; } = ["agent", "until", "becomes", "inject"];
+    /// <remarks>From the improvement plan: `until` loops, `becomes` in an expression `when`, `inject` after `steal … as`.</remarks>
+    public override IReadOnlyList<string> PlannedKeywords { get; } = ["until", "becomes", "inject"];
 
     /// <inheritdoc/>
-    /// <remarks>From the improvement plan: `threaded` / `suspended` give way to `agent` at the call.</remarks>
+    /// <remarks>`threaded` / `suspended` gave way to `agent` at the call.</remarks>
     public override IReadOnlyList<string> RetiredKeywords { get; } =
         ["threaded", "suspended"];
 

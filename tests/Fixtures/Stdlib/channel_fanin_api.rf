@@ -12,7 +12,7 @@ module Tests/Stdlib/ChannelFanInApi
 
 import IO/Console
 # Feeds lo..hi-1, parking cooperatively whenever the buffer is full. `out` drops on return.
-suspended routine produce(out: Sender[S64], lo: S64, hi: S64) -> S64
+routine produce(out: Sender[S64], lo: S64, hi: S64) -> S64
     var i = lo
     danger
         while i < hi
@@ -21,7 +21,7 @@ suspended routine produce(out: Sender[S64], lo: S64, hi: S64) -> S64
     return hi - lo
 
 # Drains the channel until it closes, summing the values; parks cooperatively while empty.
-suspended routine consume(inbox: Receiver[S64]) -> S64
+routine consume(inbox: Receiver[S64]) -> S64
     var total = 0_s64
     each v in inbox
         total = total + v
@@ -34,8 +34,8 @@ routine start()
         # LAZY model: launch the two producers in the BACKGROUND (`execute` — fire-and-forget, we don't
         # need their counts), then await the consumer (`retrieve`). All three run concurrently on the
         # scheduler, ping-ponging under backpressure until both Feeders drop and the channel closes.
-        produce(out: steal feeder.duplicate(), lo: 1, hi: 6).execute()  # 1+2+3+4+5     = 15
-        produce(out: steal feeder, lo: 10, hi: 15).execute()  # 10+11+12+13+14 = 60
-        var sum = consume(inbox: steal hop).retrieve()
+        (agent produce(out: steal feeder.duplicate(), lo: 1, hi: 6)).start_now()  # 1+2+3+4+5     = 15
+        (agent produce(out: steal feeder, lo: 10, hi: 15)).start_now()  # 10+11+12+13+14 = 60
+        var sum = (agent consume(inbox: steal hop)).retrieve()
         show(f"sum={sum}")
     return

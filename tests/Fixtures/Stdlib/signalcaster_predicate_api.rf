@@ -11,7 +11,7 @@ module Tests/Stdlib/SignalCasterPredicateApi
 # so the producer writes the cell under the same monitor lock the consumer reads it under.
 
 import IO/Console
-suspended routine consumer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+routine consumer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     sig.lock()
     danger
         while cell.peek() == 0_s64  # predicate, tested under the lock
@@ -20,7 +20,7 @@ suspended routine consumer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     danger
         return cell.peek()
 
-suspended routine producer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+routine producer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     sig.lock()
     danger
         cell.poke(value: 42_s64)  # make the predicate true under the lock...
@@ -37,7 +37,7 @@ routine start()
         # the producer can set it + cast. Retrieving the consumer ALONE would hang. Both complete before we
         # read the shared cell, so the frame-aliased slot stays valid. Results in input order: [consumer, producer].
         var results = [
-            consumer(sig: steal sig.duplicate(), cell: cell), producer(sig: steal sig, cell: cell),
+            agent consumer(sig: steal sig.duplicate(), cell: cell), agent producer(sig: steal sig, cell: cell),
         ].gather()
         show(f"got={results[0]}")
     return

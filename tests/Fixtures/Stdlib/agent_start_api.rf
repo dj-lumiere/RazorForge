@@ -1,0 +1,89 @@
+module Tests/Stdlib/AgentStartApi
+
+import IO/Console
+
+# `agent f(...)` computes the arguments now and defers the call into an Agent. A verb chooses where it runs:
+# start_now() on the pool of threads, start_here() on this thread beside its other start_here() jobs,
+# start_apart() on a thread of its own. retrieve() starts an Agent nothing started with start_now().
+
+record Pair
+    a: S64
+    b: S64
+
+routine Pair.sum() -> S64
+    return me.a + me.b
+
+routine Pair.twice() -> Pair
+    return Pair(a: me.a * 2, b: me.b * 2)
+
+routine add(a: S64, b: S64) -> S64
+    return a + b
+
+routine bump(cell: Atomic[S64], times: S64)
+    each i in 0 til times
+        drop cell.fetch_add(delta: 1)
+    return
+
+routine checked!(n: S64) -> S64
+    if n < 0
+        throw VerificationFailedError()
+    return n
+
+routine start()
+    var now = agent add(a: 1, b: 2)
+    now.start_now()
+    show(f"now: {now.retrieve()}")
+
+    var here = agent add(a: 3, b: 4)
+    here.start_here()
+    show(f"here: {here.retrieve()}")
+
+    var apart = agent add(a: 5, b: 6)
+    apart.start_apart()
+    show(f"apart: {apart.retrieve()}")
+
+    # Nothing started it: retrieve() starts it with start_now().
+    var waiting = agent add(a: 7, b: 8)
+    show(f"waiting: {waiting.retrieve()}")
+
+    # The arguments are computed when the agent is made, not when it runs.
+    var x = 40
+    var early = agent add(a: x, b: 2)
+    x = 0
+    show(f"arguments now: {early.retrieve()}")
+
+    # A receiver that is a value is computed now too, and the rest of the chain is deferred.
+    var p = Pair(a: 2, b: 3)
+    show(f"member: {(agent p.sum()).retrieve()}")
+    show(f"chain: {(agent p.twice().sum()).retrieve()}")
+
+    # An Atomic is shared with the work, never copied.
+    var counter = Atomic[S64](initial: 0)
+    var jobs = [agent bump(cell: counter, times: 1000), agent bump(cell: counter, times: 1000),
+        agent bump(cell: counter, times: 1000)]
+    drop jobs.gather()
+    show(f"atomic: {counter.load()}")
+
+    # `try agent` recovers inside the work: the Agent holds a Maybe.
+    var failing = try agent checked(n: -1)
+    show(f"try agent: {failing.retrieve()}")
+    var fine = try agent checked(n: 5)
+    show(f"try agent ok: {fine.retrieve()}")
+
+    # An Agent starts once.
+    var twice = agent add(a: 1, b: 1)
+    twice.start_now()
+    when check twice.start_here()
+        is AgentStartError as e => show(f"second start: {e.crash_message()}")
+        else => show("second start: ran")
+    drop twice.retrieve()
+
+    # A deadline needs a thread of its own: a fiber cannot be given up on while it runs.
+    var fiber = agent add(a: 2, b: 2)
+    fiber.start_now()
+    when check fiber.waitfor(deadline: 5s).retrieve()
+        is AgentStartError => show("deadline on a fiber: refused")
+        else => show("deadline on a fiber: ran")
+    drop fiber.retrieve()
+    show("DONE")
+    return

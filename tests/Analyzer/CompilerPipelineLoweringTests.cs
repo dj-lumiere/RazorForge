@@ -1699,14 +1699,6 @@ public class CompilerPipelineLoweringTests
                                                             ContainsLambda(
                                                                 expression: part.Expression)),
             StealExpression steal => ContainsLambda(expression: steal.Operand),
-            WaitforExpression waitfor => ContainsLambda(expression: waitfor.Operand) ||
-                                         waitfor.Timeout != null &&
-                                         ContainsLambda(expression: waitfor.Timeout),
-            DependentWaitforExpression dependent =>
-                ContainsLambda(expression: dependent.Operand) ||
-                dependent.Dependencies.Any(predicate: dep =>
-                    ContainsLambda(expression: dep.DependencyExpr)) || dependent.Timeout != null &&
-                ContainsLambda(expression: dependent.Timeout),
             CarrierPayloadExpression payload => ContainsLambda(expression: payload.Carrier),
             BackIndexExpression backIndex => ContainsLambda(expression: backIndex.Operand),
             WhenExpression whenExpr => whenExpr.Expression != null &&

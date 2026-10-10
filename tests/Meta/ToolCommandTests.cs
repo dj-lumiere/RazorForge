@@ -121,7 +121,7 @@ public sealed class ToolCommandTests : IDisposable
             @blocking
             routine C::labs(n: S64) -> S64
 
-            suspended routine nap(id: S64) -> S64
+            routine nap(id: S64) -> S64
                 pause()
                 return id
 
@@ -133,7 +133,7 @@ public sealed class ToolCommandTests : IDisposable
                 var agents = List[Agent[S64]]()
                 var i = 0
                 while i < 4
-                    agents.add_last(value: nap(id: i))
+                    agents.add_last(value: agent nap(id: i))
                     i += 1
                 show(f"results {agents.gather()}")
                 var t1 = 0_u64
