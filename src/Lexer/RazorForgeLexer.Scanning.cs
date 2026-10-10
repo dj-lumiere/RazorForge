@@ -49,6 +49,11 @@ public partial class RazorForgeLexer
                 ScanComment();
                 break;
 
+            // A name between backticks: a keyword as a name (`check`), or words with spaces (`total count`)
+            case '`':
+                ScanBacktickName();
+                break;
+
             // String and character literals
             case '"':
                 ScanString();

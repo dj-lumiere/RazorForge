@@ -494,6 +494,9 @@ public partial class RazorForgeLexer
             case '\'':
                 ScanCharacter();
                 break;
+            case '`':
+                ScanBacktickName();
+                break;
             // Prefixed string literals (b"..", r"..", f"..", rf"..", br"..") —
             // mirror Tokenizer.Scanning so nested literals work inside f-string
             // interpolation holes, e.g. f"{try parse(bytes: b"42")}".

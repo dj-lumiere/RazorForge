@@ -1153,6 +1153,9 @@ both realms. There is NO `for`, `external`, `async`, `spawn`, `let`, `const`, `f
 `class`, `struct`, `enum`, `match`, `trait`, or `impl` keyword — if you reach for one,
 you are writing another language.
 
+A keyword can still be a name when written between backticks (`` `check` ``), and so can words with one space
+between them (`` `total count` ``); `` `count` `` and `count` are the same name.
+
 - **Declarations**: `routine` `entity` `record` `bundle`† `choice` `flags` `crashable`
   `variant` `protocol`
 - **Bindings**: `var` `preset` `lateinit`

@@ -1,3 +1,4 @@
+using Builder.Diagnostics;
 using Builder.Tokenizer;
 
 namespace RazorForge.Lexer;
@@ -54,6 +55,45 @@ public partial class RazorForgeLexer
     /// </list>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Scans a name written between backticks: any text up to the closing backtick on the same line, a keyword
+    /// included, so <c>`check`</c> names what <c>check</c> would if it weren't a keyword, and <c>`total count`</c> is
+    /// one name. Spaces go between words only: one at a time, none at either end, and no tab.
+    /// </summary>
+    private void ScanBacktickName()
+    {
+        _hasTokenOnLine = true;
+        int startLine = _line;
+        int startColumn = _column - 1;
+        int start = _position;
+        while (!IsAtEnd() && Peek() != '`' && Peek() != '\n')
+        {
+            Advance();
+        }
+
+        string name = _source.Substring(startIndex: start, length: _position - start);
+        string? problem = IsAtEnd() || Peek() == '\n'
+            ? "is never closed on its line: close it with a backtick"
+            : name.Length == 0
+                ? "is empty: write the name between the backticks"
+                : name.Contains(value: '\t') || name.StartsWith(value: ' ') || name.EndsWith(value: ' ') ||
+                  name.Contains(value: "  ")
+                    ? "has a tab or spaces at its ends or two in a row: put one space between words"
+                    : null;
+        if (problem != null)
+        {
+            throw new GrammarException(code: GrammarDiagnosticCode.InvalidBacktickName,
+                message: $"The name `{name}` {problem}.",
+                fileName: _fileName,
+                line: startLine,
+                column: startColumn,
+                language: _language);
+        }
+
+        Advance(); // the closing backtick
+        AddToken(type: TokenType.Identifier, text: name);
+    }
+
     private void ScanIdentifier()
     {
         _hasTokenOnLine = true;
