@@ -175,7 +175,7 @@ secret routine BTreeDictNode[TKey, TValue].value_replace(i: U64, value: TValue)
             .values_base()
             .stride(count: i.to[S64]())
             .peek()
-            .destruct()
+            .dispose()
     me.value_set(i: i, value: value)
     return
 
@@ -203,14 +203,13 @@ dangerous routine BTreeDictNode[TKey, TValue].destruct()
             me
                 .children_get(ci)
                 .as_entity()
-                .destruct()
+                .dispose()
             ci = ci + 1u64
     var ki = 0u64
     while ki < me.key_count
-        me.key_get(ki).destruct()
-        me.value_get(ki).destruct()
+        me.key_get(ki).dispose()
+        me.value_get(ki).dispose()
         ki = ki + 1u64
-    me.hijack().invalidate()
     return
 
 ### Cycle-collector TRACE: recurse into every child node, then report each stored key AND value to the
@@ -243,19 +242,16 @@ dangerous routine BTreeDictNode[TKey, TValue].roam_free()
             me
                 .children_get(ci)
                 .as_entity()
-                .roam_free()
+                .roam_dispose()
             ci = ci + 1u64
-    me.hijack().invalidate()
     return
 
 ### Frees the entire backing B-tree — every node, key, and value — at scope exit.
 @override
 dangerous routine SortedDict[TKey, TValue].destruct()
     if me.root is None
-        me.hijack().invalidate()
         return
-    me.root!!.as_entity().destruct()
-    me.hijack().invalidate()
+    me.root!!.as_entity().dispose()
     return
 
 ### Cycle-collector TRACE: delegate to the root node's recursive trace (reports every key/value).
@@ -271,10 +267,8 @@ dangerous routine SortedDict[TKey, TValue].roam_trace()
 @override
 dangerous routine SortedDict[TKey, TValue].roam_free()
     if me.root is None
-        me.hijack().invalidate()
         return
-    me.root!!.as_entity().roam_free()
-    me.hijack().invalidate()
+    me.root!!.as_entity().roam_dispose()
     return
 
 ### Writes `value` to the child slot at position `i`.

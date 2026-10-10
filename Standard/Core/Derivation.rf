@@ -573,23 +573,22 @@ needs T obeys Copyable
             result.$nameof(m) = me.$nameof(m).duplicate()
         return result
 
-### The auto-derived `destruct()`: tear down each member (unconditionally — every type has a `destruct`,
-### a no-op for a raw-pointer / scalar / borrow leaf). Records/tuples stop here (stack values); an ENTITY
-### additionally frees its heap allocation via `hijack().invalidate()`, mirroring a hand-written entity
-### destructor. The `allmemvarof` walk covers every owned member including `secret`.
+### The auto-derived `destruct()`: end each member (unconditionally, every type has a `dispose`, a no-op for
+### a raw-pointer / scalar / borrow leaf). It tears down what the value owns and nothing else: an entity's own box
+### is given back by whoever allocated it (`dispose` below, or an RC controller holding the entity in its own
+### block). The `allmemvarof` walk covers every owned member including `secret`.
 @overridable
 dangerous routine T.destruct()
 needs RecordType T
     expand m in allmemvarof(T)
-        me.$nameof(m).destruct()
+        me.$nameof(m).dispose()
     return
 
 @override
 dangerous routine T.destruct()
 needs EntityType T
     expand m in allmemvarof(T)
-        me.$nameof(m).destruct()
-    me.hijack().invalidate()
+        me.$nameof(m).dispose()
     return
 
 ### Variant `destruct()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,
@@ -601,7 +600,7 @@ needs VariantType T
     when me
         expand m in branchof(T)
             is $typeof(m) as v =>
-                v.destruct()
+                v.dispose()
                 return
         else => return
 
@@ -642,14 +641,14 @@ needs AnyType T
     me.destruct()
     return
 
-### Entity `roam_free()`: walk each member's `roam_free` (so a `Roamed` member is SKIPPED via
-### its no-op override, while an owned member is torn down) then free this entity's own heap box.
+### Entity `roam_free()`: end each member through its `roam_dispose` (so a `Roamed` member is SKIPPED via its
+### no-op `roam_free`, while an owned member is torn down and its box given back). The entity's own box is left to
+### `roam_dispose`.
 @override
 dangerous routine T.roam_free()
 needs EntityType T
     expand m in allmemvarof(T)
-        me.$nameof(m).roam_free()
-    me.hijack().invalidate()
+        me.$nameof(m).roam_dispose()
     return
 
 ### Variant `roam_free()`: tear down ONLY the live arm's payload, skipping its `Roamed` edges.
@@ -659,7 +658,7 @@ needs VariantType T
     when me
         expand m in branchof(T)
             is $typeof(m) as v =>
-                v.roam_free()
+                v.roam_dispose()
                 return
         else => return
 
@@ -687,3 +686,35 @@ needs VariantType T
             is $typeof(m) as v =>
                 return T(from: v.share())
         else => return me
+
+### What an owner runs to end a value it holds: its `destruct`. A value lives inside its holder, so nothing else
+### is given back.
+@overridable
+dangerous routine T.dispose()
+needs AnyType T
+    me.destruct()
+    return
+
+### An entity in a box of its own: its `destruct`, then the box given back. An RC controller holding the entity in
+### its own block calls `destruct` and gives the whole block back itself.
+@override
+dangerous routine T.dispose()
+needs EntityType T
+    me.destruct()
+    me.hijack().invalidate()
+    return
+
+### The cycle collector's counterpart of `dispose`: `roam_free` (the owned resources, not the `Roamed` edges).
+@overridable
+dangerous routine T.roam_dispose()
+needs AnyType T
+    me.roam_free()
+    return
+
+### An entity in a box of its own: its `roam_free`, then the box given back.
+@override
+dangerous routine T.roam_dispose()
+needs EntityType T
+    me.roam_free()
+    me.hijack().invalidate()
+    return
