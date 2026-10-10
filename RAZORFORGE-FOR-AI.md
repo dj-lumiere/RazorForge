@@ -1155,6 +1155,12 @@ you are writing another language.
 - **Danger**†: `danger` (block) `dangerous` (modifier)
 - **Buildtime reflection**†: `expand` (loop) — the ONLY reflection keyword.
 
+The word operators `to` `til` `by` `have` `lack` `is` `isnot` `in` `as` `and` `or` are keywords only where an
+operator stands, right after something that ends an expression (`0 to 10`, `xs have v`, `each x in xs`). Anywhere
+else they are names: `var to = 3`, `routine step(by: S64, to: S64)`, `by + to`. Two places keep them keywords: a
+`when` arm that starts with `is`/`isnot`, and `else as p`. `not` starts an expression, so it is always a keyword.
+`inject` is a keyword only after `steal … as …`.
+
 The reflection **sources** `openmemvarof` `allmemvarof` `branchof` `caseof` (there is no
 `memvarof`) and the metadata **accessors** `nameof` `orderof` `placeof` `sizeof` `typeof`
 `typeidof` `valueof` `visibilityof` are **buildtime builtin intrinsics, NOT reserved
