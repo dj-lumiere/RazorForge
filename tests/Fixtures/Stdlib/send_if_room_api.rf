@@ -1,11 +1,21 @@
 module Tests/Stdlib/SendIfRoomApi
 
 # `send_if_room` puts an item into a channel only when it has room, never waiting, and `take_finished` takes the
-# finished Agents out of a list in place, leaving the rest.
+# finished Agents out of a list in place, leaving the rest. `next_finished` hands Agents over in the order they finish,
+# and `gather_all` keeps every result and failure.
 
 import IO/Console
 routine double(n: S64) -> S64
     return n * 2
+
+routine slow(n: S64, ms: S64) -> S64
+    waitfor(Duration.from_milliseconds(ms: ms))
+    return n
+
+routine risky!(n: S64) -> S64
+    if n == 2
+        throw ChannelClosedError()
+    return n * 10
 
 routine start()
     var (feeder, hop) = make_channel[S64](capacity: 2)
@@ -29,5 +39,22 @@ routine start()
     var done = jobs.take_finished()
     show(f"taken: {done.count()} left: {jobs.count()} value: {two}")
     show(f"rest: {jobs.gather()}")
+
+    var racers = List[Agent[S64]]()
+    racers.add_last(value: agent slow(n: 1, ms: 60))
+    racers.add_last(value: agent slow(n: 2, ms: 5))
+    racers.add_last(value: agent slow(n: 3, ms: 30))
+    var order = List[S64]()
+    while not racers.is_empty()
+        var next = racers.next_finished()
+        order.add_last(value: next.retrieve())
+    show(f"finish order: {order}")
+
+    var tries = List[Agent[S64]]()
+    tries.add_last(value: agent risky(n: 1))
+    tries.add_last(value: agent risky(n: 2))
+    tries.add_last(value: agent risky(n: 3))
+    var outcomes = tries.gather_all()
+    show(f"all: {outcomes.count()} first: {outcomes[0]} third: {outcomes[2]}")
     show("DONE")
     return

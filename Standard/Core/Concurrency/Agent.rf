@@ -616,6 +616,45 @@ routine List[Agent[T]].cancel_all()
             i = i + 1
     return
 
+### Waits until one of the Agents finishes, takes it out of the list and returns it, starting the ones nothing
+### started. Called again and again it hands the Agents over in the order they finish, so each result is handled as
+### soon as it is there. `retrieve` the returned Agent for its value or its failure.
+### :throws: {TaskSpawnError} if the list is empty or an Agent cannot be started.
+### :returns: The first Agent of the list to finish.
+routine List[Agent[T]].next_finished!() -> Agent[T]
+    danger
+        var n = me.count()
+        if n == 0_u64
+            throw TaskSpawnError()
+        var race = C::rf_race_begin()
+        var i = 0_u64
+        while i < n
+            if not me[i].launch()
+                throw TaskSpawnError()
+            if me[i].is_coro()
+                C::rf_race_add_coro(race: race, coro: me[i].coro_handle())
+            else
+                C::rf_race_add_task(race: race, task: me[i].task_handle())
+            i = i + 1
+        var winner = C::rf_race_wait(race: race)
+        C::rf_race_end(race: race)
+        return me.remove_at(index: winner.to[U64]())
+
+### Drives the Agents concurrently and waits for all of them, returning each one's result or failure in INPUT
+### order: an Agent that fails does not stop the others or hide their results (`gather` throws the first failure).
+### :returns: Each Agent's value or failure, in the order they appear in the list.
+routine List[Agent[T]].gather_all() -> List[Check[T]]
+    danger
+        var n = me.count()
+        var i = 0_u64
+        while i < n
+            drop me[i].launch()
+            i = i + 1
+        var results = List[Check[T]]()
+        each job in me
+            results.add_last(value: check job.retrieve())
+        return results
+
 ### Takes the finished Agents out of the list and returns them, in order, leaving the ones still waiting or
 ### running in place. A long-running server collects the work of its departed clients this way: rebuilding the list
 ### with `where` would drop the old list, and with it the work that still runs. `retrieve` what a taken Agent came to,
