@@ -411,7 +411,7 @@ when m
 
 when n
     == 0 => throw DivisionByZeroError()
-    == 1 => return "one"
+    == 1, 2 => return "one or two"    # several values in one arm, after ==
     else => return "many"
 
 when v
