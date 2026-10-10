@@ -235,4 +235,40 @@ public class ShapeEffectTests
             expectedErrorSubstring: "You are trying to pass 'nums' to 'pong'");
         Assert.Contains(collection: result.Errors, filter: e => e.Message.Contains(value: "to 'ping'"));
     }
+
+    /// <summary>
+    /// A routine on <c>me</c> that changes one member variable (<c>me.log</c>) may run inside a loop over another
+    /// (<c>me.commands</c>); one that changes the looped member variable may not.
+    /// </summary>
+    [Fact]
+    public void Analyze_ChangeOfAnotherMemberVariable_Passes_SameOne_Errors()
+    {
+        string robot = """
+                       entity Robot
+                           commands: List[Text]
+                           log: List[Text]
+
+                       routine Robot.note(text: Text)
+                           me.log.add_last(value: text)
+                           return
+
+                       routine Robot.enqueue(text: Text)
+                           me.commands.add_last(value: text)
+                           return
+
+                       """;
+        AssertAnalyzesSa(source: robot + """
+                                          routine Robot.run()
+                                              each c in me.commands
+                                                  me.note(text: c)
+                                              return
+                                          """);
+        AssertHasErrorSa(source: robot + """
+                                         routine Robot.run()
+                                             each c in me.commands
+                                                 me.enqueue(text: c)
+                                             return
+                                         """,
+            expectedErrorSubstring: "while an `each` loop is going through 'me.commands'");
+    }
 }
