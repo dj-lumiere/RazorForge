@@ -133,6 +133,9 @@ When unsure, consult ground truth in the repo/package:
 12. **Printing is `show(...)`** (after `import IO/Console`), not print/println. Reading a line as a value is `ask[T]()`
     (`var n: S64 = ask()`), failing like `line.to[T]()`.
 13. **The entry point is `routine start()`**, not `main`.
+14. **Infix routines**: a member routine with one parameter, marked `@infix`, is written between its
+    operands (`a dot b` = `a.dot(b)`), left to right, looser than ranges and tighter than comparisons
+    (`(a dot b) / n` needs the parentheses, `a dot b > 0` does not). Unmarked: RF-S706.
 
 ## 1b. Naming, terminology, and conventions (use the RIGHT word)
 
