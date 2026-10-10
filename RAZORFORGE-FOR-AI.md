@@ -750,7 +750,8 @@ that differ from other languages:
   (`var s: SortedSet[S64] = {3, 1, 2}`, `var pq: PriorityQueue[S32, Text] = {1: "high"}`).
   An `Array` is also built from its elements: `Array[3](1, 2, 3)`.
 - Tuple fields are accessed as `t.item0`, `t.item1`, … (NOT `t.0`/`t.first`);
-  destructure with `var (q, r) = pair`.
+  destructure with `var (q, r) = pair`. `(a, b) = (b, a)` swaps places (locals, member variables, entities
+  included: values move, nothing is copied, no `steal`); any other tuple on the left is a build error.
 
 **Mutating a collection while `each`-looping it is banned** (RF-S625): calling a
 `@reshaping` mutator (`add`/`remove`/…) on the variable being iterated is a
