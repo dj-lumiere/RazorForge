@@ -10,7 +10,8 @@ namespace RazorForge;
 
 /// <summary>
 /// RazorForge's rules: single ownership checked at build time, memory-unsafe surface behind
-/// <c>dangerous</c>/<c>danger</c>, no module-level mutable state, and fixed-width numeric defaults.
+/// <c>dangerous</c>/<c>danger</c>, module-level <c>global</c>s only of types threads may share, and fixed-width numeric
+/// defaults.
 /// </summary>
 public sealed class RazorForgeRules : LanguageRules
 {
@@ -46,7 +47,7 @@ public sealed class RazorForgeRules : LanguageRules
 
     public override bool AllowsUnsafeCode => true;
     public override bool HasPassStatement => true;
-    public override bool HasModuleGlobals => false;
+    public override bool HasModuleGlobals => true;
     public override bool HasTargetDirectives => true;
     public override bool DefaultsToArbitraryPrecision => false;
     public override bool HasDataSizeQuery => true;
@@ -66,7 +67,14 @@ public sealed class RazorForgeRules : LanguageRules
 
     public override string ScriptVariableAdvice(string name)
     {
-        return "Pass it in as an argument. RazorForge has no module-level mutable state.";
+        return $"Pass it in as an argument, or declare it as 'global {name}: <Type> = ...', of a type threads may " +
+               "share (an Atomic, a Guarded, or a value the program only reads).";
+    }
+
+    public override bool SynthesizeBeforeAnalysis(List<(SyntaxTree.Program Program, string FilePath)> files,
+        Action<Builder.Diagnostics.SemanticDiagnosticCode, string, SyntaxTree.SourceLocation> report)
+    {
+        return Passes.GlobalInitPass.Run(orderedFiles: files, report: report);
     }
 
     /// <summary>Access tokens are RazorForge's: their lifetimes are checked here (see
