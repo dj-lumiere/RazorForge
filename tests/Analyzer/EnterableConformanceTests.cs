@@ -49,7 +49,7 @@ public class EnterableConformanceTests
                             secret n: S32
 
                         routine Door.go!()
-                            absent
+                            throw AbsentValueError()
                         """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,

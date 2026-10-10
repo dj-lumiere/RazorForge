@@ -142,23 +142,6 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// An <c>absent</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
-    /// </summary>
-    [Fact]
-    public void Analyze_AbsentInNonFailableRoutine_RequiresBangOnDeclaration()
-    {
-        string source = """
-                        routine test() -> S32
-                            absent
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
-    }
-
-    /// <summary>
     /// Verifies that a failable routine must contain throw or absent.
     /// </summary>
     [Fact]
@@ -172,7 +155,7 @@ public class WikiLanguageBreakageTests
         AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrow);
     }
 
     /// <summary>
@@ -254,12 +237,11 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Verifies that Result and Lookup are not valid parameter types for user APIs.
+    /// Verifies that Check is not valid parameter types for user APIs.
     /// </summary>
     /// <param name="typeName">The error-handling type name.</param>
     [Theory]
     [InlineData("Check[S32]")]
-    [InlineData("Lookup[S32]")]
     public void Analyze_ErrorHandlingTypeAsParameter_ReportsError(string typeName)
     {
         string source = $"""
@@ -274,12 +256,11 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Verifies that Result and Lookup are not valid member variable types.
+    /// Verifies that Check is not valid member variable types.
     /// </summary>
     /// <param name="typeName">The error-handling type name.</param>
     [Theory]
     [InlineData("Check[S32]")]
-    [InlineData("Lookup[S32]")]
     public void Analyze_ErrorHandlingTypeAsMemberVariable_ReportsError(string typeName)
     {
         string source = $"""
@@ -386,7 +367,7 @@ public class WikiLanguageBreakageTests
         string source = $"""
                          routine parse!(x: S32) -> S32
                              if x < 0
-                                 absent
+                                 throw AbsentValueError()
                              return x
                          routine {routineName}(x: S32) -> S32
                              return x

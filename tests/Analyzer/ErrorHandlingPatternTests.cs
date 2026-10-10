@@ -28,13 +28,13 @@ public class ErrorHandlingPatternTests
     }
 
     /// <summary>
-    /// Verifies that Lookup[T] is rejected as a routine parameter type.
+    /// Verifies that Check[T] is rejected as a routine parameter type.
     /// </summary>
     [Fact]
     public void Analyze_LookupAsParameter_ReportsError()
     {
         string source = """
-                        routine test(value: Lookup[S32])
+                        routine test(value: Check[S32])
                             return
                         """;
 
@@ -135,28 +135,6 @@ public class ErrorHandlingPatternTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
-    }
-
-    /// <summary>
-    /// Verifies semantic analysis behavior for lookup uses blank absent arm without pattern mismatch errors.
-    /// </summary>
-    [Fact]
-    public void Analyze_LookupUsesNoneAbsentArm_NoPatternMismatch()
-    {
-        string source = """
-                        routine test(value: Lookup[S32])
-                            when value
-                                is None => pass
-                                is Crashables as err => pass
-                                else as v => pass
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
 
     /// <summary>

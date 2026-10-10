@@ -186,12 +186,10 @@ public partial class RazorForgeLexer
             [key: "return"] = TokenType.Return,
             [key: "throw"] = TokenType.Throw,
             [key: "pierce"] = TokenType.Pierce,
-            [key: "absent"] = TokenType.Absent,
-            // Recovery prefix keywords: wrap a failable call into a carrier (Maybe/Check/Lookup).
-            // Bare words only — `try_foo`/`check_foo`/`lookup_foo` tokenize as single identifiers, untouched.
+            // Recovery prefix keywords: wrap a failable call into a carrier (Maybe/Check).
+            // Bare words only — `try_foo`/`check_foo` tokenize as single identifiers, untouched.
             [key: "try"] = TokenType.Try,
             [key: "check"] = TokenType.Check,
-            [key: "lookup"] = TokenType.Lookup,
             // Module system
             [key: "import"] = TokenType.Import,
             [key: "module"] = TokenType.Module,

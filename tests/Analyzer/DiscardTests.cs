@@ -182,7 +182,7 @@ public class DiscardTests
         string source = """
                         routine get!(flag: Bool) -> S32
                             if flag
-                                absent
+                                throw AbsentValueError()
                             return 42
 
                         routine test!()
@@ -205,7 +205,7 @@ public class DiscardTests
         string source = """
                         routine get!(flag: Bool) -> S32
                             if flag
-                                absent
+                                throw AbsentValueError()
                             return 42
 
                         routine test()
@@ -227,7 +227,7 @@ public class DiscardTests
         string source = """
                         routine get!(flag: Bool) -> S32
                             if flag
-                                absent
+                                throw AbsentValueError()
                             return 42
 
                         routine test()

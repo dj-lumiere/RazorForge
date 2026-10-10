@@ -67,7 +67,7 @@ public class ControlFlowAnalysisTests
                             each item in items
                                 if item == target
                                     return item
-                            absent
+                            throw AbsentValueError()
                             return
                         """;
 
@@ -120,7 +120,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test!() -> S32
-                            absent
+                            throw AbsentValueError()
                             var x = 10
                             return
                         """;
@@ -220,22 +220,6 @@ public class ControlFlowAnalysisTests
     #region Failable Routine Analysis
 
     /// <summary>
-    /// An <c>absent</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
-    /// </summary>
-    [Fact]
-    public void Analyze_AbsentInNonFailable_RequiresBangOnDeclaration()
-    {
-        string source = """
-                        routine test() -> S32
-                            absent
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
-    }
-    /// <summary>
     /// Verifies semantic analysis behavior for throw in non failable and reports the expected error.
     /// </summary>
     [Fact]
@@ -258,7 +242,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test!() -> S32
-                            absent
+                            throw AbsentValueError()
                             return
                         """;
 
@@ -442,7 +426,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine lookup!(key: S32) -> S32
-                            absent
+                            throw AbsentValueError()
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

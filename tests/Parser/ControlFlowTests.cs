@@ -176,7 +176,7 @@ public class ControlFlowTests
         string source = """
                         routine process!(data: Text)
                             if not (data.length() > 0)
-                                absent
+                                throw AbsentValueError()
                             show(data)
                             return
                         """;
@@ -691,7 +691,7 @@ public class ControlFlowTests
                             each (index, item) in items.enumerate()
                                 if item == target
                                     return index
-                            absent
+                            throw AbsentValueError()
                             return
                         """;
 

@@ -25,7 +25,7 @@ public class UnwrapOperatorTests
         string source = """
                         routine get!(flag: Bool) -> S64
                             if flag
-                                absent
+                                throw AbsentValueError()
                             return 42
 
                         routine trigger_variants(flag: Bool) -> S64?
@@ -51,7 +51,7 @@ public class UnwrapOperatorTests
         string source = """
                         routine get!(flag: Bool) -> S64
                             if flag
-                                absent
+                                throw AbsentValueError()
                             return 42
                         routine test!() -> S64
                             var x = get(flag: true)!!
@@ -75,7 +75,7 @@ public class UnwrapOperatorTests
         string source = """
                         routine get!(flag: Bool) -> S64
                             if flag
-                                absent
+                                throw AbsentValueError()
                             return 42
                         routine test!() -> S64
                             var x = get(flag: true) ?? 0

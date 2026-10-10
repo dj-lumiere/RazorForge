@@ -142,112 +142,6 @@ public class ErrorHandlingTests
 
     #endregion
 
-    #region Absent Statement
-
-    /// <summary>
-    /// Verifies that the parser accepts absent statement.
-    /// </summary>
-    [Fact]
-    public void Parse_AbsentStatement()
-    {
-        string source = """
-                        routine find!(id: U64) -> User
-                            if id == 0
-                                absent
-                            return get_user(id)
-                        """;
-
-        Program program = AssertParses(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-
-        var body = routine.Body as BlockStatement;
-        Assert.NotNull(@object: body);
-        IfStatement ifStmt = body.Statements
-                                 .OfType<IfStatement>()
-                                 .First();
-        var thenBlock = ifStmt.ThenStatement as BlockStatement;
-        Assert.NotNull(@object: thenBlock);
-        AbsentStatement? absentStmt = thenBlock.Statements
-                                               .OfType<AbsentStatement>()
-                                               .FirstOrDefault();
-        Assert.NotNull(@object: absentStmt);
-    }
-    /// <summary>
-    /// Verifies that the parser accepts absent statement in unless.
-    /// </summary>
-    [Fact]
-    public void Parse_AbsentStatement_InUnless()
-    {
-        // unless parses til IfStatement with negated condition
-        string source = """
-                        routine get!(key: Text) -> Value
-                            if not (cache.has(key))
-                                absent
-                            return cache.get(key)
-                        """;
-
-        Program program = AssertParses(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-
-        var body = routine.Body as BlockStatement;
-        Assert.NotNull(@object: body);
-        // Unless is parsed as an IfStatement with negated condition
-        IfStatement ifStmt = body.Statements
-                                 .OfType<IfStatement>()
-                                 .First();
-        var thenBlock = ifStmt.ThenStatement as BlockStatement;
-        Assert.NotNull(@object: thenBlock);
-        AbsentStatement? absentStmt = thenBlock.Statements
-                                               .OfType<AbsentStatement>()
-                                               .FirstOrDefault();
-        Assert.NotNull(@object: absentStmt);
-    }
-
-    #endregion
-
-    #region Combined Throw and Absent
-
-    /// <summary>
-    /// Verifies that the parser accepts routine with both throw and absent.
-    /// </summary>
-    [Fact]
-    public void Parse_RoutineWithBothThrowAndAbsent()
-    {
-        string source = """
-                        routine get_user!(id: U64) -> User
-                            if id == 0
-                                throw ValidationError("invalid id")
-                            if not (database.has_user(id))
-                                absent
-                            return database.get_user(id)
-                        """;
-
-        Program program = AssertParses(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-
-        Assert.True(condition: routine.IsFailable);
-
-        var body = routine.Body as BlockStatement;
-        Assert.NotNull(@object: body);
-
-        // Has both throw and absent
-        bool hasThrow = body.Statements
-                            .OfType<IfStatement>()
-                            .Any(predicate: s => (s.ThenStatement as BlockStatement)?.Statements
-                                .OfType<ThrowStatement>()
-                                .Any() ?? false);
-        bool hasAbsent = body.Statements
-                             .OfType<IfStatement>()
-                             .Any(predicate: s => (s.ThenStatement as BlockStatement)?.Statements
-                                 .OfType<AbsentStatement>()
-                                 .Any() ?? false);
-
-        Assert.True(condition: hasThrow);
-        Assert.True(condition: hasAbsent);
-    }
-
-    #endregion
-
     #region Maybe Type (?)
 
     /// <summary>
@@ -365,7 +259,7 @@ public class ErrorHandlingTests
         Assert.NotNull(@object: whenStmt);
     }
 
-    // Check[T] and Lookup[T] parameter tests moved til Analyzer/ErrorVariantGenerationTests.cs
+    // Check[T] and Check[T] parameter tests moved til Analyzer/ErrorVariantGenerationTests.cs
     // They parse correctly but should be rejected by semantic analysis
 
     #endregion
@@ -388,22 +282,6 @@ public class ErrorHandlingTests
         Program program = Parse(source: source);
         Assert.NotNull(@object: program);
         // Semantic analysis will catch this error
-    }
-    /// <summary>
-    /// Verifies that the parser accepts absent in non failable routine so semantic analysis can validate it.
-    /// </summary>
-    [Fact]
-    public void Parse_AbsentInNonFailableRoutine_ShouldParse()
-    {
-        // Parser accepts, semantic analyzer should reject
-        string source = """
-                        routine not_failable()
-                            absent
-                            return
-                        """;
-
-        Program program = Parse(source: source);
-        Assert.NotNull(@object: program);
     }
     /// <summary>
     /// Verifies that the parser accepts throw without expression and fails in the expected way.

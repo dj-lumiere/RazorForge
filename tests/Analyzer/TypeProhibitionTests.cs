@@ -37,7 +37,7 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine bar() -> Maybe[None]
-                            absent
+                            throw AbsentValueError()
                             return
                         """;
 
@@ -100,25 +100,6 @@ public class TypeProhibitionTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
-    /// <summary>
-    /// `Lookup[None]` COLLAPSES to Check[None] (Lookup's extra absent state is meaningless with no
-    /// success payload) — no error.
-    /// </summary>
-    [Fact]
-    public void Analyze_LookupNone_CollapsesToCheck()
-    {
-        // Lookup[None] ≡ Check[None] (carrier None-collapse)
-        string source = """
-                        routine foo(x: Lookup[None])
-                            pass
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
-    }
-
     #endregion
 
     #region Nested Maybe Prohibition
@@ -169,7 +150,7 @@ public class TypeProhibitionTests
         string source = """
                         routine find!(text: Text?) -> Text
                             if text is None
-                                absent
+                                throw AbsentValueError()
                             return text
                         """;
 

@@ -21,7 +21,7 @@ When unsure, consult ground truth in the repo/package:
    and positional in one call is always an error (RF-S512).
 2. **Normal routine completion uses an explicit `return`** — even void ones.
    This is load-bearing (destructor scheduling anchors at `return`), not style.
-   Failable routines may also terminate with `throw` or `absent`.
+   Failable routines may also terminate with `throw`.
 3. **Conditional expressions are top-level only.**
    `return if c then a else b` ✓ — but `f(x: if c then a else b)` or
    `(if c then a else b) + 1` are parse errors *by design*. Use `when` or a
@@ -47,18 +47,19 @@ When unsure, consult ground truth in the repo/package:
    crashes LOUDLY on failure. To RECOVER, prefix the whole expression with a
    keyword and match the carrier with `when`:
    `try EXPR` → `Maybe[T]` (present | absent, no error kept);
-   `check EXPR` → `Check[T]` (T | the caught `Crashables`);
-   `lookup EXPR` → `Lookup[T]` (T | absent | `Crashables`).
+   `check EXPR` → `Check[T]` (T | the caught `Crashables`).
+   A routine with no value to give throws `AbsentValueError()`, an ordinary
+   stdlib crashable: `throw AbsentValueError()`. To tell "not found" apart from
+   other failures, match it by type: `is AbsentValueError => ...` on a `check`.
    **With a keyword in front, every failure beneath it is recovered, at any depth;
-   only `pierce` still crashes.** That covers a `throw`/`absent` in the called
+   only `pierce` still crashes.** That covers a `throw` in the called
    routine and in every routine it calls, bare calls included (failable or not:
    `try f()` also recovers a division by zero inside a plain helper `f` calls); a
    checked operator (`try a + b` recovers the overflow, `check a // b` the
    divide-by-zero, `-x` of the minimum, `x += d`); a subscript out of range or a
    missing key (`try xs[9]`); a failing conversion (`S8(from: 300)`,
    `Integer(text: "x")`). Each becomes the carrier's failure (`try`: absent;
-   `check`: the error, an absence as `AbsentValueError`; `lookup`: the error or
-   absent), and evaluation stops at the first one. A bare call (no keyword)
+   `check`: the error), and evaluation stops at the first one. A bare call (no keyword)
    still crashes loudly. Lambdas and routine values are covered the same way: a
    failure inside a lambda handed to another routine
    (`try xs.select(transform: x => 10 // x).List()`, `check xs.sort_by(compare: f)`,
@@ -73,7 +74,7 @@ When unsure, consult ground truth in the repo/package:
    fatal errors, out of memory and running out of stack are fatal everywhere.
    **`pierce`** is the failure that must NOT be recovered: `pierce NopeError()`
    crashes like an unrecovered `throw` (status 82), and it crashes the same way
-   under `try`/`check`/`lookup` at any depth. Use it for a broken invariant (state
+   under `try`/`check` at any depth. Use it for a broken invariant (state
    the program can no longer trust), never for a condition a caller could handle.
    It does not make a routine failable (no `!` needed for it).
    The keyword takes the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
@@ -87,8 +88,7 @@ When unsure, consult ground truth in the repo/package:
    stdlib record for "any caught error": `crash_title()`, `crash_message()`,
    `represent()`, `diagnose()` and `crash_type_id()` on it reach the actual
    crashable's own routines.
-   **Matching a carrier.** `Check[T]` is the variant `T | Crashables`, `Lookup[T]` is
-   `None | T | Crashables`. A `when` on one MUST have the `T` arm (build error
+   **Matching a carrier.** `Check[T]` is the variant `T | Crashables`. A `when` on one MUST have the `T` arm (build error
    otherwise). `is Crashables as e` takes any error; `is NopeError as e` takes only that
    crashable and binds it as a `NopeError` (fields readable); `x is NopeError` works
    as an expression too. A `when` with NO error arm passes the error on: in a
@@ -98,9 +98,10 @@ When unsure, consult ground truth in the repo/package:
    trace (the routines between the throw and the catcher included) and a `Thrown again at file:line:col` line.
    Every crash report is headed by the error's crash title (`Division error: ...`, the type name in sentence
    case unless the crashable writes its own `crash_title`), runtime crashes too (`Integer overflow error: ...`).
-   `is None` is a `Lookup`/`Maybe` arm only (a `Check` has no absent state).
+   `is None` is a `Maybe` arm only (a `Check` has no absent state: "not found" in a
+   `Check` is the arm `is AbsentValueError`).
    **A crash exits the process with status 82** (`0x52`, `'R'` for Runtime error —
-   `RF_EXIT_CRASH`), for every runtime crash (unrecovered `throw`/`absent`, checked-
+   `RF_EXIT_CRASH`), for every runtime crash (unrecovered `throw`, checked-
    arithmetic failure, out of memory, stack overflow). If a run ended with 82, it
    crashed: read stderr for the error name, message, and stack trace. Status 1 is NOT a
    crash. A native signal (e.g. a segfault) is not 82 either — that is a builder or
@@ -247,9 +248,9 @@ binding RazorForge has.
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
   fixed-size `Array[T, COUNT]`, `BitArray[BITS]`
 - Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
-- Carriers: `Maybe[T]`, `Check[T]`, `Lookup[T]` (builder-synthesized only —
+- Carriers: `Maybe[T]`, `Check[T]` (builder-synthesized only —
   user routines cannot declare them as return types; you obtain one by wrapping a
-  failable call with the `try`/`check`/`lookup` keyword).
+  failable call with the `try`/`check` keyword).
 - Typed literal suffixes exist: `7s32`, `0_s64`, `1.5f32` (underscore optional)
 
 **Optionals and `none`:**
@@ -258,10 +259,10 @@ binding RazorForge has.
 - **`None` (capital)** is the type / pattern marker (`when x is None`, type
   position). **`none` (lowercase)** is the value literal (like `true`/`false`).
 - `none` is legal ONLY where the target type is a carrier with an absent arm
-  (`Maybe[T]`, `Lookup[T]`) or a variant with a `None` member.
+  (`Maybe[T]`) or a variant with a `None` member.
   `var x = none`, `var x: S64 = none`, `foo(none)` into a non-carrier slot are all
   errors — `none` has no free-standing type.
-- Absent is matched by `is None` on `Maybe[T]` / `Lookup[T]` / a variant's zero
+- Absent is matched by `is None` on `Maybe[T]` / a variant's zero
   tag. `Check[T]` has no absent state (only `Crashables | T`).
 
 ## 4. Variables and operators
@@ -384,14 +385,13 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
 
 - Call with named args: `add(a: 1, b: 2)`. Recover a failable call with a keyword:
   `try get_text(n: 0)` → `Maybe[Text]`/`Text?`; `check get_text(n: 0)` → `Check[Text]`
-  (keeps the `Crashables`); `lookup get_text(n: 0)` → `Lookup[Text]` (T | absent |
-  `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
+  (keeps the `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
   the constructor `T(...)`, `destruct`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
-- Failure inside a failable routine: `throw SomeError(...)` or `absent`
-  (absence without an error object).
+- Failure inside a failable routine: `throw SomeError(...)`. A routine with no
+  value to give throws `AbsentValueError()`.
 - The `!` goes on the DECLARATION only (`routine S64.from_digit_bytes_at!(...)`,
   `routine S32!(from_text: Text)`). Calls never write it:
   `S64.from_digit_bytes_at(bytes: bs)`, `x.divmod(other: m)`, `S32(from_text: t)`.
@@ -782,7 +782,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 |--------------|---------------------------------------|----------------------------------------------------|
 | RF-S510/S512 | positional args in a multi-param call | name every argument                                |
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
-| RF-S753      | failable call left unhandled          | recover with `try`/`check`/`lookup` + `when`        |
+| RF-S753      | failable call left unhandled          | recover with `try`/`check` + `when`                 |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
@@ -801,7 +801,7 @@ routine find_qty!(items: Viewing[List[Item]], name: Text) -> S64
     each item in items
         if item.name == name
             return item.qty
-    absent
+    throw AbsentValueError()
 
 routine start()
     var items = List[Item]()
@@ -973,7 +973,7 @@ you are writing another language.
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop`
-  `while` `each` `break` `continue` `return` `throw` `pierce` `absent`
+  `while` `each` `break` `continue` `return` `throw` `pierce`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`

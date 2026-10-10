@@ -430,7 +430,7 @@ public class PatternMatchingTests
     public void Parse_WhenLookup()
     {
         string source = """
-                        routine handle(result: Lookup[User])
+                        routine handle(result: Check[User])
                             when result
                                 is Crashables as e => show(f"Error: {e.message()}")
                                 is None => show("User not found")
@@ -447,7 +447,7 @@ public class PatternMatchingTests
     public void Parse_WhenLookupSpecificErrors()
     {
         string source = """
-                        routine handle(result: Lookup[Config])
+                        routine handle(result: Check[Config])
                             when result
                                 is ValidationError as e => stop(f"Invalid config name: {e.message}")
                                 is IOError as e => show(f"IO error: {e.message}")
@@ -530,7 +530,7 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Check[S32])
                             when result
-                                is Crashables => absent
+                                is Crashables => throw AbsentValueError()
                                 else as value => value
                             return
                         """;
@@ -654,7 +654,7 @@ public class PatternMatchingTests
     public void Parse_ComplexNestedPatterns()
     {
         string source = """
-                        routine process(result: Lookup[Shape])
+                        routine process(result: Check[Shape])
                             when result
                                 is Crashables as e =>
                                     log_error(e)

@@ -974,7 +974,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
                     _state = null;
                     return;
-                case ThrowStatement or AbsentStatement:
+                case ThrowStatement:
                     if (stmt is ThrowStatement t)
                     {
                         Expr(expr: t.Error);

@@ -61,7 +61,7 @@ public class ErrorHandlingValidationTests
     /// Verifies semantic analysis behavior for failable without throw or absent and reports the expected warning.
     /// </summary>
     [Fact]
-    public void Analyze_FailableWithoutThrowOrAbsent_ReportsWarning()
+    public void Analyze_FailableWithoutThrow_ReportsWarning()
     {
         string source = """
                         routine useless!() -> S32
@@ -70,7 +70,7 @@ public class ErrorHandlingValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrow);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for failable with throw without unexpected diagnostics.
@@ -89,7 +89,7 @@ public class ErrorHandlingValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrow);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for failable with absent without unexpected diagnostics.
@@ -99,13 +99,13 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         routine find!() -> S32
-                            absent
+                            throw AbsentValueError()
                             return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrow);
     }
 
     #endregion
@@ -166,10 +166,9 @@ public class ErrorHandlingValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Should NOT generate try_, check_, or lookup_ variants
+        // Should NOT generate try or check variants
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Try));
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Check));
-        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Lookup));
     }
     /// <summary>
     /// Verifies semantic analysis behavior for non crash only generates variants.
@@ -246,38 +245,6 @@ public class ErrorHandlingValidationTests
             filter: w => w.Code == SemanticWarningCode.UnhandledCrashableCall);
     }
 
-    /// <summary>
-    /// Verifies semantic analysis behavior for lookup variable not dismantled before scope exit and reports the expected error.
-    /// </summary>
-    [Fact]
-    public void Analyze_LookupVariable_NotDismantledBeforeScopeExit_ReportsError()
-    {
-        string source = """
-                        crashable DbError
-                            message: Text
-                        routine DbError.crash_message() -> Text
-                            return "DbError"
-
-                        @readonly
-                        routine DbError.crash_message() -> Text
-                            return me.message
-
-                        routine get_value!(id: U64) -> S32
-                            if id == 0
-                                throw DbError(message: "bad")
-                            if not (id == 1)
-                                absent
-                            return 42
-
-                        routine test()
-                            var pending = lookup get_value(id: 1)
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.LookupNotDismantled);
-    }
 
     /// <summary>
     /// Verifies semantic analysis behavior for result copied from variable and reports the expected error.
@@ -356,7 +323,7 @@ public class ErrorHandlingValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowRequiresRecordType);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrow);
     }
 
     /// <summary>
@@ -380,7 +347,7 @@ public class ErrorHandlingValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrow);
     }
 
     #endregion

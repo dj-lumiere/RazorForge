@@ -30,7 +30,7 @@ public class FailableDeclarationTests
                         module L/Test
                         routine find(n: S64) -> S64
                             if n == 0
-                                absent
+                                throw AbsentValueError()
                             return n
                         """;
         AssertHasErrorSa(source: source, expectedErrorSubstring: "its declaration needs '!'");

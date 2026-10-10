@@ -642,7 +642,7 @@ public class TypeResolutionTests
     public void Analyze_RoutineReturnsLookup_ReportsError()
     {
         string source = """
-                        routine foo() -> Lookup[S32]
+                        routine foo() -> Check[S32]
                             return 42
                         """;
 

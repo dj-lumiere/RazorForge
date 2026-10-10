@@ -25,7 +25,7 @@ public class ErrorVariantGenerationTests
         string source = """
                         routine get!(id: U64) -> User
                             if not (has_user(id))
-                                absent
+                                throw AbsentValueError()
                             return fetch_user(id)
 
                         entity User
@@ -97,17 +97,17 @@ public class ErrorVariantGenerationTests
 
     #endregion
 
-    #region Lookup Variant (throw AND absent)
+    #region Check Variant (several errors)
 
     /// <summary>
     /// Verifies semantic analysis behavior for failable with both throw and absent generates lookup and try variants.
     /// </summary>
     [Fact]
-    public void Analyze_FailableWithBothThrowAndAbsent_GeneratesLookupAndTryVariants()
+    public void Analyze_FailableWithBothThrowAndAbsent_GeneratesCheckAndTryVariants()
     {
-        // Routine with both 'throw' and 'absent' generates:
-        // - lookup_get_user() -> Lookup[T]
-        // - try_get_user() -> T?
+        // A routine that throws two errors (one of them AbsentValueError) generates:
+        // - its check variant -> Check[T]
+        // - its try variant -> T?
         string source = """
                         crashable DatabaseError
                             code: S32
@@ -127,7 +127,7 @@ public class ErrorVariantGenerationTests
                             if id == 0
                                 throw DatabaseError(code: 1)
                             if not (user_exists(id))
-                                absent
+                                throw AbsentValueError()
                             return fetch_user(id)
 
                         routine user_exists(id: U64) -> bool
@@ -137,15 +137,15 @@ public class ErrorVariantGenerationTests
                             return User(name: "test")
 
                         routine trigger_variants(id: U64) -> User?
-                            lookup get_user(id: id)
+                            drop check get_user(id: id)
                             return try get_user(id: id)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Variants are synthesized ON DEMAND — the `lookup`/`try` keywords above generate lookup_/try_get_user.
-        RoutineInfo? lookupVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "get_user")!, kind: RecoveryKind.Lookup);
-        Assert.NotNull(@object: lookupVariant);
+        // Variants are synthesized ON DEMAND: the `check`/`try` keywords above generate them.
+        RoutineInfo? checkVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "get_user")!, kind: RecoveryKind.Check);
+        Assert.NotNull(@object: checkVariant);
 
         // Should also generate try_get_user variant
         RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "get_user")!, kind: RecoveryKind.Try);
@@ -168,7 +168,7 @@ public class ErrorVariantGenerationTests
 
                         routine Cache.get!(key: Text) -> S32
                             if not (me.data.has(key))
-                                absent
+                                throw AbsentValueError()
                             return me.data.get(key)
 
                         routine Cache.trigger(key: Text) -> S32?
@@ -199,10 +199,9 @@ public class ErrorVariantGenerationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Should NOT generate try_add, check_add, or lookup_add
+        // Should NOT generate try or check variants
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Try));
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Check));
-        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Lookup));
     }
     /// <summary>
     /// Verifies semantic analysis behavior for failable with no throw or absent warns or errors.
@@ -251,22 +250,6 @@ public class ErrorVariantGenerationTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
-    }
-    /// <summary>
-    /// An <c>absent</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
-    /// </summary>
-    [Fact]
-    public void Analyze_AbsentInNonFailableRoutine_RequiresBangOnDeclaration()
-    {
-        string source = """
-                        routine might_fail() -> S32
-                            absent
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for throw non crashable and reports the expected error.
@@ -369,13 +352,13 @@ public class ErrorVariantGenerationTests
     [Fact]
     public void Analyze_LookupAsParameter_ReportsError()
     {
-        // Lookup[T] should not be passable as a function argument
+        // Check[T] should not be passable as a function argument
         // It is an internal type for error handling flow, not a first-class type
         string source = """
                         entity User
                             name: Text
 
-                        routine handle_lookup(result: Lookup[User])
+                        routine handle_lookup(result: Check[User])
                             pass
                             return
                         """;

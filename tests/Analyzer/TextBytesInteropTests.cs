@@ -135,7 +135,7 @@ public class TextBytesInteropTests
                                                       var view = bytes.interpret_as_utf8()
                                                       each ch in view
                                                           var cp: U32 = ch.codepoint()
-                                                      absent
+                                                      throw AbsentValueError()
                                                   """);
 
         Assert.Empty(collection: result.Errors);

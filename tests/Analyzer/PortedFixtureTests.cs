@@ -49,7 +49,7 @@ public class PortedFixtureTests
         string source = """
                         routine get_text!(n: S64) -> Text
                             when n
-                                == 0 => absent
+                                == 0 => throw AbsentValueError()
                                 == 1 => return "hello"
                                 else => return "world"
 
