@@ -128,7 +128,8 @@ When unsure, consult ground truth in the repo/package:
     `a < b < f()` calls `f` even when `a < b` is false. Only the comparisons stop
     at the first false link. A failure in any operand is a failure like any
     other (`try 1 < 5 < 10 // n` recovers the division by zero).
-12. **Printing is `show(...)`** (after `import IO/Console`), not print/println.
+12. **Printing is `show(...)`** (after `import IO/Console`), not print/println. Reading a line as a value is `ask[T]()`
+    (`var n: S64 = ask()`), failing like `line.to[T]()`.
 13. **The entry point is `routine start()`**, not `main`.
 
 ## 1b. Naming, terminology, and conventions (use the RIGHT word)
