@@ -491,6 +491,10 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
   (`steal items[0] as first inject Item(name: "y")`). A whole variable still moves
   as an expression (`consume(r: steal b)`). The statement takes only a place
   (RF-S648 otherwise).
+- Writing over a place (`slot.item = Item(name: "b")`, `items[0] = item`,
+  `d[k] = v` on a key that is there) tears the old value down first, an entity
+  included, so a token on it ends. To keep the old one, take it out with
+  `steal … as old inject …`.
   Returning a bare entity transfers ownership to the caller (`var a = make()`
   owns it, torn down at scope exit). A routine handing back an entity it does NOT
   own (e.g. a container's element) must return an access token, never a bare

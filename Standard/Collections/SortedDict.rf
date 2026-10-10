@@ -166,6 +166,19 @@ secret routine BTreeDictNode[TKey, TValue].value_set(i: U64, value: TValue)
             .poke(value: value)
     return
 
+### Puts `value` at slot `i` in place of the value there, which is torn down (a key written again).
+### :param i: The slot.
+### :param value: The value that goes in.
+secret routine BTreeDictNode[TKey, TValue].value_replace(i: U64, value: TValue)
+    danger
+        me
+            .values_base()
+            .stride(count: i.to[S64]())
+            .peek()
+            .destruct()
+    me.value_set(i: i, value: value)
+    return
+
 ### Returns a non-owning pointer to the child node at slot `i`.
 ### The tree owns its children; this LENDS the pointer (no ownership transfer). Callers `.as_entity()`
 ### it to read the node. Returning a bare `?BTreeDictNode` would make `var c = node.children_get(i)` a
@@ -683,7 +696,7 @@ secret routine SortedDict[TKey, TValue].insert_non_full(
         var i = me.lower_bound(node: node, key: key)
 
         if i < node.keys_count() and node.key_get(i) == key
-            node.value_set(i: i, value: value)
+            node.value_replace(i: i, value: value)
             return false
 
         if node.is_leaf
@@ -697,7 +710,7 @@ secret routine SortedDict[TKey, TValue].insert_non_full(
                 .keys_count() >= B_DICT -% 1u64
                 me.split_child(parent_node: node, child_idx: i)
                 if key == node.key_get(i)
-                    node.value_set(i: i, value: value)
+                    node.value_replace(i: i, value: value)
                     return false
                 if key > node.key_get(i)
                     i = i +% 1u64

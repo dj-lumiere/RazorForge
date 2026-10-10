@@ -118,6 +118,16 @@ routine Array[T, COUNT].setitem!(index: U64, value: T)
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
+        LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index).destruct()
+    me.put_raw(index: index, value: value)
+    return
+
+### Writes `value` at `index` without tearing down what is there: for a place that holds nothing yet.
+### :param index: The zero-based position, already known to be in range.
+### :param value: The value that goes in.
+@inline
+secret routine Array[T, COUNT].put_raw(index: U64, value: T)
+    danger
         LLVM::store_element_ref[Array[T, COUNT], T](me.hijack(), index, value)
     return
 
@@ -196,7 +206,7 @@ needs RecordType T
     var result = Array[T, COUNT]()
     var i = 0u64
     while i < COUNT
-        result[i] = me[i].share()
+        result.put_raw(index: i, value: me[i].share())
         i = i + 1u64
     return result
 
@@ -208,7 +218,7 @@ needs RecordType T
     var result = Array[T, COUNT]()
     var i = 0u64
     while i < COUNT
-        result[i] = me[i]
+        result.put_raw(index: i, value: me[i])
         i = i + 1u64
     return result
 
