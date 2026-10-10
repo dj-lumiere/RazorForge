@@ -140,6 +140,8 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
 - tagged union / sum type → **variant**; plain enum → **choice**; bitfield →
   **flags**. `choice`/`flags` **variant names are SCREAMING_SNAKE_CASE**
   (`LIVE`, `READ`, `NEGATIVE_INF`); routine names and locals stay `snake_case`.
+  A flags value combines with `and`, tests with `have` / `lack` / `==`, and drops members with `without`
+  (`perms.without(WRITE)`: where a value of the flags type goes, its members are named bare).
   A `choice` auto-provides `Equatable`/`Comparable`/`Hashable` — no `obeys` and no
   method bodies needed.
 - **`Me` (capital) = the receiver's TYPE (the Self type); `me` (lowercase) = the
