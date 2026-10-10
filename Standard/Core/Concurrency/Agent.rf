@@ -27,7 +27,7 @@ choice AgentKind
 ### self-freeing) and returns immediately. Both substrates have the same lifecycle, only the place the work
 ### runs differs: a coroutine on this thread's implicit scheduler, a thread on its own OS thread.
 ###
-### Teardown: `destroy` is a NO-OP. The single consuming verb (`retrieve!`/`execute!`/`race!`/`gather!`)
+### Teardown: `destruct` is a NO-OP. The single consuming verb (`retrieve!`/`execute!`/`race!`/`gather!`)
 ### owns the whole lifecycle — it spawns, then reaps (coroutine deleted/abandoned, result block freed).
 ### A handle copy (from `waitfor`, or a `List[Agent]` element read as a temporary) tearing down frees
 ### nothing → no double-free even when the same coroutine/worker is aliased across copies. A recipe no
@@ -40,7 +40,7 @@ record Agent[T]
     secret coro: CPtr
     ### The task control block that holds the produced value (the coroutine's result block, or the
     ### worker's rf_task* for kind THREAD).
-    secret agent: Address
+    secret task: Address
     ### The wait deadline; only meaningful when `has_deadline` is true (THREAD).
     secret deadline: Duration
     ### Whether a deadline has been attached via `waitfor`.
@@ -101,7 +101,7 @@ dangerous routine agent_suspended[T](entry: CPtr, recipe: Address) -> Agent[T]
     return Agent[T](
         kind: AgentKind.CORO,
         coro: coro,
-        agent: task,
+        task: task,
         deadline: Duration(seconds: 0, nanoseconds: 0_u32),
         has_deadline: false,
         entry: cptr_none(),
@@ -117,7 +117,7 @@ dangerous routine agent_threaded[T](entry: CPtr, recipe: Address) -> Agent[T]
     return Agent[T](
         kind: AgentKind.THREAD,
         coro: cptr_none(),
-        agent: task,
+        task: task,
         deadline: Duration(seconds: 0, nanoseconds: 0_u32),
         has_deadline: false,
         entry: entry,
@@ -155,7 +155,7 @@ dangerous routine Agent[T].launch() -> Bool
             return false
         C::rf_sched_spawn_default(coro: me.coro)
         return true
-    return C::rf_task_spawn_threaded(task: me.agent, entry: me.entry, userdata: me.recipe) != 0_s32
+    return C::rf_task_spawn_threaded(task: me.task, entry: me.entry, userdata: me.recipe) != 0_s32
 
 ### Whether this Agent is coroutine-backed (kind CORO). Internal plumbing for `race!`, which dispatches
 ### on kind while reading List elements as temporaries (a direct `agent.kind` field read on a generic
@@ -173,7 +173,7 @@ routine Agent[T].coro_handle() -> CPtr
 ### plumbing; also where the winner's value is read from.
 ### :returns: the rf_task* as an Address.
 routine Agent[T].task_handle() -> Address
-    return me.agent
+    return me.task
 
 ### Whether the work has finished (its value is ready to `retrieve!` without waiting). A racy snapshot
 ### for polling/heuristics, not a synchronization decision — it can flip to true the instant after you
@@ -186,7 +186,7 @@ routine Agent[T].is_done() -> Bool
         danger
             return C::rf_coro_status_get(coro: me.coro) == 3_u32
     danger
-        return C::rf_task_status_get(task: me.agent) == 4_u32
+        return C::rf_task_status_get(task: me.task) == 4_u32
 
 ### Whether the work was spawned and has not yet finished. Racy snapshot (see `is_done`).
 ### :returns: `true` if still in flight.
@@ -194,7 +194,7 @@ routine Agent[T].is_running() -> Bool
     return not me.is_done()
 
 ### Requests cooperative cancellation of this agent — sets a flag in NATIVE memory (reached through
-### the handle) and returns; it NEVER frees or unwinds (teardown stays in `destroy`, the sole
+### the handle) and returns; it NEVER frees or unwinds (teardown stays in `destruct`, the sole
 ### freer). A coroutine observes the request at its next suspend point (`waitfor` returns early) or
 ### via `cancellation_requested()`; a worker thread observes it only by polling
 ### `cancellation_requested()` (a thread cannot be killed). Internal plumbing for `Nursery[T].cancel`,
@@ -205,7 +205,7 @@ dangerous routine Agent[T].request_cancel()
         if not me.coro.is_none()
             C::rf_coro_request_cancel(coro: me.coro)
         return
-    C::rf_task_request_cancel(task: me.agent)
+    C::rf_task_request_cancel(task: me.task)
     return
 
 ### Attaches a deadline and returns the updated handle, enabling `agent.waitfor(5s).retrieve()` on a
@@ -217,7 +217,7 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
     return Agent[T](
         kind: me.kind,
         coro: me.coro,
-        agent: me.agent,
+        task: me.task,
         deadline: deadline,
         has_deadline: true,
         entry: me.entry,
@@ -231,7 +231,7 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
 ### (`agent.waitfor(d).retrieve()`) races completion against the timer and throws {TaskTimeoutError}
 ### if the deadline wins. `retrieve!` reads the value out and (threaded) releases the task to the
 ### worker↔consumer rendezvous; on a deadline give-up it releases too, letting the still-running worker
-### free its own block. A coroutine agent's result block is freed by `destroy`.
+### free its own block. A coroutine agent's result block is freed by `destruct`.
 ### :throws: {TaskSpawnError} if the work could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
@@ -244,7 +244,7 @@ routine Agent[T].retrieve!() -> T
             # thread's pool until it finishes.
             drop me.launch()
             C::rf_sched_run_until_default(coro: me.coro)
-            var payload = C::rf_task_result_payload(task: me.agent)
+            var payload = C::rf_task_result_payload(task: me.task)
             var value = Hijacked[T](from: payload).peek()
             rf_invalidate(ptr: payload)
             # Value is copied out; reap the coroutine + its result block. This is the single consumer.
@@ -261,7 +261,7 @@ routine Agent[T].retrieve!() -> T
                 # blocking. Park on a deadline timer that is also externally wakeable; siblings run.
                 # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — destroy
                 # joins the still-running worker before freeing (the timeout does not stop it).
-                var outcome = C::rf_task_await_coro_deadline(task: me.agent, timeout_ns: U64(total))
+                var outcome = C::rf_task_await_coro_deadline(task: me.task, timeout_ns: U64(total))
                 if outcome == 0_u32
                     # Deadline won; give up. Reap hands the free to the still-running worker, which frees its own
                     # block as its final act (non-blocking; destroy is a no-op).
@@ -270,7 +270,7 @@ routine Agent[T].retrieve!() -> T
             else
                 var secs = total // 1000000000
                 var nanos = U32(total - secs * 1000000000)
-                var kind = C::rf_task_wait_within(task: me.agent, secs: secs, ns: nanos)
+                var kind = C::rf_task_wait_within(task: me.task, secs: secs, ns: nanos)
                 if kind != 1
                     # Deadline won on a plain thread; give up. Reap lets the still-running worker free its own
                     # block on exit (non-blocking; destroy is a no-op).
@@ -281,16 +281,16 @@ routine Agent[T].retrieve!() -> T
                 # Inside a scheduler-driven coroutine: park instead of blocking. Register as the task's
                 # awaiter and yield; the worker wakes us (cross-thread) on completion. The loop re-checks
                 # under the lock so no wake is lost, and tolerates spurious wakes.
-                while C::rf_task_await_coro(task: me.agent) == 0_u32
+                while C::rf_task_await_coro(task: me.task) == 0_u32
                     C::rf_sched_park_external()
             else
-                drop C::rf_task_wait(task: me.agent)
+                drop C::rf_task_wait(task: me.task)
 
-        var payload = C::rf_task_result_payload(task: me.agent)
+        var payload = C::rf_task_result_payload(task: me.task)
         var value = Hijacked[T](from: payload).peek()
         rf_invalidate(ptr: payload)
         # Value is copied out; reap. This is the single driving retrieve!; handle copies (e.g. from
-        # `waitfor`) never reach here — their `destroy` is a no-op — so the worker is freed exactly once.
+        # `waitfor`) never reach here — their `destruct` is a no-op — so the worker is freed exactly once.
         me.reap()
         return value
 
@@ -301,7 +301,7 @@ routine Agent[T].retrieve!() -> T
 ### a scheduler-driven coroutine) or blocks (on a plain thread); a deadline still races the timer. This
 ### is a CONSUMING operation exactly like `retrieve!` — it drives to completion and reaps, so the agent
 ### is finished (not abandoned, which is what merely dropping an un-consumed handle does). The produced
-### value is torn down like any dropped local (its `destroy` runs), so an owned result frees cleanly.
+### value is torn down like any dropped local (its `destruct` runs), so an owned result frees cleanly.
 ### :throws: {TaskSpawnError} if the work could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 routine Agent[T].execute!()
@@ -315,20 +315,20 @@ routine Agent[T].execute!()
             # to completion in the background. An owned return value's box is freed as raw memory (its typed
             # destroy does not run yet — a discard thunk is the follow-up; None/trivial returns are exact).
             C::rf_coro_set_detached(coro: me.coro)
-            C::rf_task_set_detached(task: me.agent)
+            C::rf_task_set_detached(task: me.task)
             drop me.launch()
         return
     # THREAD: mark the task detached BEFORE starting the worker, so it frees the task itself on exit and
     # its result is torn down instead of boxed (no consumer), then start it and return immediately.
     danger
-        C::rf_task_set_detached(task: me.agent)
+        C::rf_task_set_detached(task: me.task)
         if not me.launch()
             throw TaskSpawnError()
     return
 
 ### Reaps this agent's work — the SOLE freeing path, called EXACTLY ONCE by the consumer that is done
 ### with it (`retrieve!` after reading the value or a deadline give-up; `race!` over its whole set).
-### NOT called from `destroy` (a handle copy must free nothing), so aliasing a handle via `waitfor` /
+### NOT called from `destruct` (a handle copy must free nothing), so aliasing a handle via `waitfor` /
 ### reading a `List[Agent]` element as a temporary never double-frees. For a coroutine: a completed one
 ### is disposed + deleted, an in-flight one is disposed + abandoned (its cancellation shadow stack runs),
 ### and its result block is freed. For a thread: `rf_task_release` hands the free to the worker↔consumer
@@ -354,7 +354,7 @@ dangerous routine Agent[T].reap()
                 # completion and the worker frees it — its own scope teardown replaces the abandon walk.
                 if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
                     C::rf_coro_abandon(coro: me.coro)
-            C::rf_task_destroy(task: me.agent)
+            C::rf_task_destroy(task: me.task)
             # The coroutine + task are freed; NULL the handle so a post-consume query on this Agent
             # (`is_done()` / `is_running()`) reports "done" via the is_none short-circuit instead of reading
             # the freed rf_coro's status — that read is a use-after-free whose result depends on what the
@@ -366,7 +366,7 @@ dangerous routine Agent[T].reap()
     # Threaded: hand the free to the worker↔consumer rendezvous. A completed worker's block is freed here
     # or at the worker's exit (whichever is last); a still-running worker (deadline give-up / race loser)
     # frees its own block on exit — no join.
-    C::rf_task_release(task: me.agent)
+    C::rf_task_release(task: me.task)
     return
 
 ### Teardown is a NO-OP: an Agent handle never owns its work's lifetime — the sole consuming operation
@@ -375,7 +375,7 @@ dangerous routine Agent[T].reap()
 ### same worker/coroutine is aliased across copies. A container of Agents dropped WITHOUT being consumed
 ### leaks its children (rare — structured-concurrency scopes always race/gather them).
 @override
-dangerous routine Agent[T].destroy()
+dangerous routine Agent[T].destruct()
     return
 
 # --- Structured concurrency over a set of Agents -----------------------------------------------

@@ -218,7 +218,7 @@ a type/routine/preset in module `Foo`). `Core` is auto-imported everywhere.
 **No module-level mutable state (RazorForge).** There is no module global `var` and no
 module `const`. Thread shared state through parameters or a heap entity; for constants,
 use a `preset` (or inline the literal). This is a consequence of deterministic scope
-teardown — a mutable global has no owning scope to anchor its `destroy`. A `var` at module
+teardown — a mutable global has no owning scope to anchor its `destruct`. A `var` at module
 level is an error (RF-S435); the `global` keyword is **Suflae-only** and rejected in RF
 (see SUFLAE-FOR-AI §2). `preset` (a build-time constant, inlined) is the only module-level
 binding RazorForge has.
@@ -387,7 +387,7 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   (keeps the `Crashables`); `lookup get_text(n: 0)` → `Lookup[Text]` (T | absent |
   `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
-  the constructor `T(...)`, `destroy`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
+  the constructor `T(...)`, `destruct`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
 - Failure inside a failable routine: `throw SomeError(...)` or `absent`
@@ -411,12 +411,12 @@ record Point          # VALUE type: copied, no identity, no destructor
 # construct memberwise, strictly named:
 var p = Point(x: 3, y: 4)
 
-entity Resource       # HEAP type: single owner, deterministic destroy
+entity Resource       # HEAP type: single owner, deterministic destruct
     tag: S64
 
 var b = Resource(tag: 7s32)
 consume(r: steal b)   # ownership moves; using b afterwards = build error
-# destroy runs exactly once, at the owner's scope exit (anchored at `return`)
+# destruct runs exactly once, at the owner's scope exit (anchored at `return`)
 ```
 
 - Containment is ownership: one owner at a time; `steal` marks every transfer.
@@ -466,7 +466,7 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
   - **`Guarded[T, TPolicy]`** — multi-thread strong handle (atomic, `=` makes one more holder);
     reaching its inner value goes through a `Consulting`/`Amending` token.
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
-- **`Hijacked[T]`** — a non-owning raw handle (no-op destroy); the stdlib's
+- **`Hijacked[T]`** — a non-owning raw handle (no-op destruct); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
 - Records never use tokens or `as_entity` — those are entity concepts.
 - `danger` blocks / `dangerous` routines mark **only** operations that can
@@ -851,7 +851,7 @@ Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
 - `waitfor(d)` — wait `d` (parks in a coroutine, sleeps on a thread). Durations: `50ms`, `5s`, or
   `Duration.from_milliseconds(ms: n)`.
 - `agent.waitfor(d).retrieve()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
-  `try agent.waitfor(d).retrieve()` returns `None` on timeout instead of throwing.
+  `try job.waitfor(d).retrieve()` returns `None` on timeout instead of throwing.
 - `agents.race() -> T` — run every Agent of a `List[Agent[T]]` concurrently, return the FIRST finisher.
 - `agents.gather() -> List[T]` — run them all concurrently, wait for ALL; results in input order.
 - `race`/`gather` work on the list in place; the list is torn down by its owner as usual.

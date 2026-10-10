@@ -139,17 +139,17 @@ needs RecordType T
     return steal result
 
 ### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
-### entity elements. Invoked through an owning entity's generated `destroy` field-recursion when
+### entity elements. Invoked through an owning entity's generated `destruct` field-recursion when
 ### the array is an entity field — all `COUNT` inline slots are live, so the full range is visited.
 ### (`Array` is a value record, so it has no separate allocation of its own to free.)
 @override
-dangerous routine Array[T, COUNT].destroy()
+dangerous routine Array[T, COUNT].destruct()
     var i = 0u64
     while i < COUNT
         # Read element i in place through the storage pointer (element_at's by-VALUE form copies the whole
         # array — which also draws a spurious retaining `me.share()` at the copy-lowering pass; the pointer
         # form is what getitem/setitem use). The routine is already `dangerous`, so no nested `danger` block.
-        LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), i).destroy()
+        LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), i).destruct()
         i = i + 1u64
     return
 
@@ -166,13 +166,13 @@ dangerous routine Array[T, COUNT].roam_trace()
 
 ### Cycle-collector FREE: a NO-OP. `Array` is a value record with no allocation of its own, and its
 ### elements are freed by the collector as part of the white cycle — the default `roam_free` forwards to
-### `destroy`, which WOULD tear down every element (a double-free here), so it must be overridden.
+### `destruct`, which WOULD tear down every element (a double-free here), so it must be overridden.
 @override
 dangerous routine Array[T, COUNT].roam_free()
     return
 
 ### Returns a copy with each element STORED (refcount-bumped for managed element types like `Text`; a
-### plain bitwise duplicate for trivially-copyable elements). Element-wise so the per-element `destroy`
+### plain bitwise duplicate for trivially-copyable elements). Element-wise so the per-element `destruct`
 ### at scope teardown stays balanced — a whole-array bitwise copy would alias element handles at
 ### refcount 1 and double-free. Storability CASCADES: `Array[T, COUNT]` is Assignable iff `T` is.
 @readonly

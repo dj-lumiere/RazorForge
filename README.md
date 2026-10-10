@@ -206,7 +206,7 @@ so `cd` into a project and run `razorforge buildandrun`.
   analysis, type-aware lowering, monomorphization, LLVM IR, and a native executable. Only code
   reachable from `start()` is built. Diagnostics read `error[RF-S###]: file:line:col: message` with a
   source excerpt.
-- **Memory model:** single-ownership entities with deterministic `destroy`, `steal` transfers,
+- **Memory model:** single-ownership entities with deterministic `destruct`, `steal` transfers,
   scope-bound access tokens, the `Retained` / `Guarded` / `Tracked` / `Witnessed` reference-counted
   wrappers, and `danger` blocks.
 - **Error handling:** failable routines (`throw`), the `try` / `check` recovery keywords, and `when`

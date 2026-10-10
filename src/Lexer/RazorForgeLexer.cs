@@ -238,7 +238,12 @@ public partial class RazorForgeLexer
             // `expand` body) are RF stdlib that SF reuses wholesale; authoring such a template needs
             // `expand` (RF-only), but the gate itself and the built-in structural protocols apply to SF
             // types just as well.
-            [key: "everywhere"] = TokenType.Everywhere
+            [key: "everywhere"] = TokenType.Everywhere,
+            // Reserved for keywords a later release uses: none of them can name anything now.
+            [key: "until"] = TokenType.ReservedWord,
+            [key: "becomes"] = TokenType.ReservedWord,
+            [key: "agent"] = TokenType.ReservedWord,
+            [key: "inject"] = TokenType.ReservedWord
         };
 
         // RazorForge-only keywords

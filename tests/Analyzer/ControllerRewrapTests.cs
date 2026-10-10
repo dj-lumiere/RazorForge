@@ -31,7 +31,7 @@ public class ControllerRewrapTests
                                   return Blob(count: me.count, ctrl: me.ctrl)
 
                               @override
-                              dangerous routine Blob.destroy()
+                              dangerous routine Blob.destruct()
                                   if me.ctrl.is_none()
                                       return
                                   var prev = me.ctrl.as_entity().unhold()
@@ -79,7 +79,7 @@ public class ControllerRewrapTests
                                   return Blob(count: me.count, ctrl: me.ctrl)
 
                               @override
-                              dangerous routine Blob.destroy()
+                              dangerous routine Blob.destruct()
                                   if me.ctrl.is_none()
                                       return
                                   var prev = me.ctrl.as_entity().unhold()

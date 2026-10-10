@@ -269,9 +269,9 @@ needs CrashableType T
 ### a captureless function pointer, or a bound word managed elsewhere — so its teardown is a no-op. The
 ### record/entity/variant destroy templates are kind-gated and none match a RoutineType, so without this a
 ### routine-typed member (`entity Callback { f: Callable[...] }`, an iterator's `transform`/`predicate`) would
-### field-walk into an UNDEFINED `Callable[(…),…].destroy()` at link.
+### field-walk into an UNDEFINED `Callable[(…),…].destruct()` at link.
 @override
-routine T.destroy()
+routine T.destruct()
 needs RoutineType T
     return
 
@@ -566,35 +566,35 @@ needs T obeys Copyable
             result.$nameof(m) = me.$nameof(m).duplicate()
         return result
 
-### The auto-derived `destroy()`: tear down each member (unconditionally — every type has a `destroy`,
+### The auto-derived `destruct()`: tear down each member (unconditionally — every type has a `destruct`,
 ### a no-op for a raw-pointer / scalar / borrow leaf). Records/tuples stop here (stack values); an ENTITY
 ### additionally frees its heap allocation via `hijack().invalidate()`, mirroring a hand-written entity
 ### destructor. The `allmemvarof` walk covers every owned member including `secret`.
 @overridable
-dangerous routine T.destroy()
+dangerous routine T.destruct()
 needs RecordType T
     expand m in allmemvarof(T)
-        me.$nameof(m).destroy()
+        me.$nameof(m).destruct()
     return
 
 @override
-dangerous routine T.destroy()
+dangerous routine T.destruct()
 needs EntityType T
     expand m in allmemvarof(T)
-        me.$nameof(m).destroy()
+        me.$nameof(m).destruct()
     me.hijack().invalidate()
     return
 
-### Variant `destroy()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,
+### Variant `destruct()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,
 ### one arm live at a time). `branchof` generates one `is $typeof(m) v =>` clause per payload arm; the
 ### `else` arm covers the payload-less / void arms (nothing to destroy).
 @override
-dangerous routine T.destroy()
+dangerous routine T.destruct()
 needs VariantType T
     when me
         expand m in branchof(T)
             is $typeof(m) as v =>
-                v.destroy()
+                v.destruct()
                 return
         else => return
 
@@ -627,12 +627,12 @@ needs VariantType T
 ### The auto-derived cycle-collector FREE hook `roam_free()`: tears down this value's OWNED
 ### resources but NOT its `Roamed` edges — the collector frees the whole white cycle directly, so
 ### following a `Roamed` edge here would double-free a sibling reaped in the same batch. The universal
-### default is a plain `destroy` (a value / plain record owns no `Roamed` edge, so full teardown is
+### default is a plain `destruct` (a value / plain record owns no `Roamed` edge, so full teardown is
 ### safe); `Roamed[T]` overrides to a no-op (Roamed.rf).
 @overridable
 dangerous routine T.roam_free()
 needs AnyType T
-    me.destroy()
+    me.destruct()
     return
 
 ### Entity `roam_free()`: walk each member's `roam_free` (so a `Roamed` member is SKIPPED via

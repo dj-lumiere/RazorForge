@@ -229,7 +229,7 @@ routine CircularList[T].remove_first!() -> T
 ### allocation. Nothing is copied and no growth occurs — the front index simply advances,
 ### so this is the fixed-space "keep the latest N" primitive (a rolling history that never
 ### reallocates). When `n` is at least the current count, the list is left unchanged.
-### Dropped elements are torn down in place, mirroring `destroy` — they are discarded, not
+### Dropped elements are torn down in place, mirroring `destruct` — they are discarded, not
 ### handed back (a no-op for value types; frees owned entity elements).
 ### :param n: The maximum number of most-recent elements to retain.
 routine CircularList[T].keep_last(n: U64)
@@ -243,7 +243,7 @@ routine CircularList[T].keep_last(n: U64)
             me.data
                 .offset(T.data_size() * me.start)
                 .peek()
-                .destroy()
+                .destruct()
             me.start = me.wrap_index(me.start +% 1u64)
             i = i +% 1u64
     me.count = n
@@ -253,7 +253,7 @@ routine CircularList[T].keep_last(n: U64)
 ### The mirror of `keep_last`: elements are dropped from the back (the front index is untouched),
 ### so this retains the OLDEST `n` in fixed space with no copy and no growth. When `n` is at least
 ### the current count, the list is left unchanged.
-### Dropped elements are torn down in place, mirroring `destroy` — they are discarded, not handed
+### Dropped elements are torn down in place, mirroring `destruct` — they are discarded, not handed
 ### back (a no-op for value types; frees owned entity elements).
 ### :param n: The maximum number of oldest elements to retain.
 routine CircularList[T].keep_first(n: U64)
@@ -267,7 +267,7 @@ routine CircularList[T].keep_first(n: U64)
             me.data
                 .offset(T.data_size() * physical)
                 .peek()
-                .destroy()
+                .destruct()
             i = i +% 1u64
     me.count = n
     return
@@ -600,7 +600,7 @@ needs T obeys Equatable
     return true
 
 @override
-dangerous routine CircularList[T].destroy()
+dangerous routine CircularList[T].destruct()
     # Tear down each live element in logical front-to-back (ring) order before freeing the buffer
     # (mirrors CircularListEmittable.emit!). No-op for value types; frees owned entity elements.
     var i = 0u64
@@ -609,7 +609,7 @@ dangerous routine CircularList[T].destroy()
         me.data
             .offset(T.data_size() * physical)
             .peek()
-            .destroy()
+            .destruct()
         i = i + 1u64
     me.data.invalidate()
     me.hijack().invalidate()
@@ -617,7 +617,7 @@ dangerous routine CircularList[T].destroy()
 
 ### Cycle-collector TRACE: report every live element to the collector, walking the ring in logical
 ### order (elements are NOT contiguous, so `cyclic_trace_buffer` cannot be used — this mirrors the
-### physical-index walk in `destroy` but calls `cyclic_visit` instead of `destroy`).
+### physical-index walk in `destruct` but calls `cyclic_visit` instead of `destruct`).
 @override
 dangerous routine CircularList[T].roam_trace()
     var i = 0u64

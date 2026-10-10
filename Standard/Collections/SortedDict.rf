@@ -56,7 +56,7 @@ needs TKey obeys Comparable
 ### Emittable that yields entries of a {SortedDict[TKey, TValue]} in ascending key order.
 ### Holds a NON-OWNING `Hijacked` pointer to the dict — a cursor borrows its container, it does not
 ### own it. An owning `dict: SortedDict` field would make the iterator's teardown free the whole tree,
-### double-freeing it against the real owner's scope-exit `destroy` (containment = ownership).
+### double-freeing it against the real owner's scope-exit `destruct` (containment = ownership).
 ### :typeparam TKey: The key type.
 ### :typeparam TValue: The value type.
 entity SortedDictEmittable[TKey, TValue]
@@ -183,19 +183,19 @@ dangerous routine BTreeDictNode[TKey, TValue].children_get(i: U64) -> Hijacked[B
 ### stored key and value, then frees this node's own allocation. Visited inline (never bound to a
 ### `var`) so scope-exit teardown doesn't double-free.
 @override
-dangerous routine BTreeDictNode[TKey, TValue].destroy()
+dangerous routine BTreeDictNode[TKey, TValue].destruct()
     if not me.is_leaf
         var ci = 0u64
         while ci < me.child_count
             me
                 .children_get(ci)
                 .as_entity()
-                .destroy()
+                .destruct()
             ci = ci + 1u64
     var ki = 0u64
     while ki < me.key_count
-        me.key_get(ki).destroy()
-        me.value_get(ki).destroy()
+        me.key_get(ki).destruct()
+        me.value_get(ki).destruct()
         ki = ki + 1u64
     me.hijack().invalidate()
     return
@@ -237,11 +237,11 @@ dangerous routine BTreeDictNode[TKey, TValue].roam_free()
 
 ### Frees the entire backing B-tree — every node, key, and value — at scope exit.
 @override
-dangerous routine SortedDict[TKey, TValue].destroy()
+dangerous routine SortedDict[TKey, TValue].destruct()
     if me.root is None
         me.hijack().invalidate()
         return
-    me.root!!.as_entity().destroy()
+    me.root!!.as_entity().destruct()
     me.hijack().invalidate()
     return
 
