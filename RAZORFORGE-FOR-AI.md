@@ -610,9 +610,11 @@ it (`var y = x`, `return me.value`, a tuple of it) is RF-S413 on the template's 
 parameter to values (`needs RecordType T`), or work on it in place.
 `needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
 kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
-`SplitArray`, `DictEntry`, `PQEntry` (tuples and variants follow their elements the same way). `Range[T]`,
+`SplitArray`, `DictEntry` (tuples and variants follow their elements the same way). `Range[T]`,
 `Atomic[T]` and `SplitArray`'s element iterator are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
-asks only `TPriority obeys Comparable`. An
+asks only `TPriority obeys Comparable`. A queue is not walked directly: `pq.unordered()` and `pq.ordered()` copy its
+`(priority, element)` pairs (storage order / smallest priority first, `needs RecordType TElement`), `pq.drain()`
+empties it into them smallest first (`each (priority, element) in pq.drain()`). An
 `Array`'s iterator reads each element in place, so `each r in arr` works on an array of entities (the binding
 only reads; the array keeps owning each element). Suflae has no
 `bundle` (an SF entity is shared, so a record holding one copies the handle).
