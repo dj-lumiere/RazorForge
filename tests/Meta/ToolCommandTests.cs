@@ -47,7 +47,7 @@ public sealed class ToolCommandTests : IDisposable
     {
         string program = Write(name: "crash.rf", source: "module ToolCrash\nimport IO/Console\n\n" + Nope + """
             routine start()
-                when grab fails(n: 1)
+                when check fails(n: 1)
                     is S64 v =>
                         show(f"never {v}")
                 show("not reached")
@@ -115,7 +115,7 @@ public sealed class ToolCommandTests : IDisposable
     {
         string sleep = OperatingSystem.IsWindows()
             ? "@link(\"kernel32\")\n@blocking\nroutine C::Sleep(ms: U32)\n\nroutine pause()\n    C::Sleep(ms: 300_u32)\n    return\n"
-            : "@blocking\nroutine C::usleep(us: U32) -> S32\n\nroutine pause()\n    discard C::usleep(us: 300000_u32)\n    return\n";
+            : "@blocking\nroutine C::usleep(us: U32) -> S32\n\nroutine pause()\n    drop C::usleep(us: 300000_u32)\n    return\n";
         string program = Write(name: "blocking.rf", source: "module ToolBlocking\nimport IO/Console\n\n" + sleep + """
 
             @blocking

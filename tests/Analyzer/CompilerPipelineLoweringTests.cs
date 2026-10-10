@@ -588,7 +588,7 @@ public class CompilerPipelineLoweringTests
         string source = """
                         routine start()
                             danger
-                                discard rf_allocate_dynamic_uninit(size: 64b)
+                                drop rf_allocate_dynamic_uninit(size: 64b)
                             return
                         """;
 
@@ -631,7 +631,7 @@ public class CompilerPipelineLoweringTests
                             return 1_s64 +% 2_s64
 
                         routine start()
-                            discard test()
+                            drop test()
                             return
                         """;
 
@@ -668,7 +668,7 @@ public class CompilerPipelineLoweringTests
                             return 1_u64.to_bytes_le()
 
                         routine start()
-                            discard test()
+                            drop test()
                             return
                         """;
 
@@ -753,12 +753,12 @@ public class CompilerPipelineLoweringTests
                             return bits.to_u8()
 
                         routine trigger(bits: BitList) -> U8
-                            discard try bits.to_u8()
+                            drop try bits.to_u8()
                             return 0u8
 
                         routine start()
                             var bits = BitList()
-                            discard trigger(bits: steal bits)
+                            drop trigger(bits: steal bits)
                             return
                         """;
 
@@ -1026,7 +1026,7 @@ public class CompilerPipelineLoweringTests
                             return helper(text.count().S32())
 
                         routine start()
-                            discard test(text: "")
+                            drop test(text: "")
                             return
                         """;
 
@@ -1651,7 +1651,7 @@ public class CompilerPipelineLoweringTests
             DangerStatement danger => ContainsLambda(statement: danger.Body),
             UsingStatement usingStmt => ContainsLambda(expression: usingStmt.Resource) ||
                                         ContainsLambda(statement: usingStmt.Body),
-            DiscardStatement discard => ContainsLambda(expression: discard.Expression),
+            DropStatement discard => ContainsLambda(expression: discard.Expression),
             ThrowStatement throwStmt => ContainsLambda(expression: throwStmt.Error),
             _ => false
         };

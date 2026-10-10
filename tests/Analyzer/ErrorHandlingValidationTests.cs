@@ -168,7 +168,7 @@ public class ErrorHandlingValidationTests
 
         // Should NOT generate try_, check_, or lookup_ variants
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Try));
-        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Grab));
+        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Check));
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "crash_routine")!, kind: RecoveryKind.Lookup));
     }
     /// <summary>
@@ -301,7 +301,7 @@ public class ErrorHandlingValidationTests
                             return value
 
                         routine test()
-                            var first = grab validate(value: 1)
+                            var first = check validate(value: 1)
                             var second = first
                             return
                         """;

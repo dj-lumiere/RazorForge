@@ -152,7 +152,7 @@ public class ShapeEffectTests
                                       nums.add_last(value: 1)
                                       var other = List[S64]()
                                       each x in nums
-                                          discard total(xs: nums.view())
+                                          drop total(xs: nums.view())
                                           nums[0] = 5
                                           grow(xs: other.modify())
                                       grow(xs: nums.modify())

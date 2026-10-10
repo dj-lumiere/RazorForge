@@ -71,32 +71,13 @@ needs U64 COUNT
 @inline
 @overridable
 routine Array[T, COUNT].getitem!(index: U64) -> T
-needs AnyType T
-needs T obeys Assignable
+needs RecordType T
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     # Read in place through the storage pointer — no whole-array copy.
     danger
         var element: T = LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
-        return element.assign()
-
-### `getitem` for a single-owner entity element: the array keeps its element, so the caller gets an independent
-### duplicate, which needs the entity to declare it can be copied. (A call or field access on `cells[0]` works on
-### the element in place through `modify_at`/`view_at`, and `var c = cells[0]` holds a read token on it.)
-### :param index: The zero-based position to read.
-### :returns: A duplicate of the element stored at that position.
-### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
-@readonly
-@inline
-@override
-routine Array[T, COUNT].getitem!(index: U64) -> T
-needs EntityType T
-needs T obeys Copyable
-    if index >= COUNT
-        throw IndexOutOfBoundsError(index: index, count: me.count())
-    danger
-        var element: T = LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
-        return element.duplicate()
+        return element.share()
 
 ### Returns the element at `index` as the array holds it, without bounds checking and without a holder of
 ### its own. Only call this when the index is already proven to be in range.
@@ -150,7 +131,7 @@ routine Array[T, COUNT].setitem!(index: U64, value: T)
 ### :returns: A `List[T]` owning copies of the selected elements.
 @readonly
 routine Array[T, COUNT].getitem(range: Range[U64]) -> List[T]
-needs T obeys Assignable
+needs RecordType T
     var result = List[T]()
     each i in range
         if i < COUNT
@@ -166,7 +147,7 @@ dangerous routine Array[T, COUNT].destroy()
     var i = 0u64
     while i < COUNT
         # Read element i in place through the storage pointer (element_at's by-VALUE form copies the whole
-        # array — which also draws a spurious retaining `me.assign()` at the copy-lowering pass; the pointer
+        # array — which also draws a spurious retaining `me.share()` at the copy-lowering pass; the pointer
         # form is what getitem/setitem use). The routine is already `dangerous`, so no nested `danger` block.
         LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), i).destroy()
         i = i + 1u64
@@ -195,12 +176,13 @@ dangerous routine Array[T, COUNT].roam_free()
 ### at scope teardown stays balanced — a whole-array bitwise copy would alias element handles at
 ### refcount 1 and double-free. Storability CASCADES: `Array[T, COUNT]` is Assignable iff `T` is.
 @readonly
-routine Array[T, COUNT].assign() -> Array[T, COUNT]
-needs T obeys Assignable
+@override
+secret routine Array[T, COUNT].share() -> Array[T, COUNT]
+needs RecordType T
     var result = Array[T, COUNT]()
     var i = 0u64
     while i < COUNT
-        result[i] = me[i].assign()
+        result[i] = me[i].share()
         i = i + 1u64
     return result
 
@@ -208,7 +190,7 @@ needs T obeys Assignable
 ### cascades: `Array[T, COUNT]` is copyable iff `T` is.
 @readonly
 routine Array[T, COUNT].duplicate() -> Array[T, COUNT]
-needs T obeys Assignable
+needs RecordType T
     var result = Array[T, COUNT]()
     var i = 0u64
     while i < COUNT

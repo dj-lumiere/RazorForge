@@ -34,7 +34,6 @@ choice AgentKind
 ### verb ever runs leaks its task, recipe and (coroutine) context — rare, and the routine body never runs,
 ### which is the point of laziness.
 record Agent[T]
-obeys Assignable
     ### CORO = coroutine-backed (suspended routine); THREAD = thread-backed (threaded routine).
     secret kind: AgentKind
     ### The coroutine handle (rf_coro*) — created INERT at the call site (kind CORO), spawned by a verb.
@@ -243,7 +242,7 @@ routine Agent[T].retrieve!() -> T
         danger
             # The recipe's coroutine was created inert at the call site: launch it now, then drive this
             # thread's pool until it finishes.
-            discard me.launch()
+            drop me.launch()
             C::rf_sched_run_until_default(coro: me.coro)
             var payload = C::rf_task_result_payload(task: me.agent)
             var value = Hijacked[T](from: payload).peek()
@@ -285,7 +284,7 @@ routine Agent[T].retrieve!() -> T
                 while C::rf_task_await_coro(task: me.agent) == 0_u32
                     C::rf_sched_park_external()
             else
-                discard C::rf_task_wait(task: me.agent)
+                drop C::rf_task_wait(task: me.agent)
 
         var payload = C::rf_task_result_payload(task: me.agent)
         var value = Hijacked[T](from: payload).peek()
@@ -317,7 +316,7 @@ routine Agent[T].execute!()
             # destroy does not run yet — a discard thunk is the follow-up; None/trivial returns are exact).
             C::rf_coro_set_detached(coro: me.coro)
             C::rf_task_set_detached(task: me.agent)
-            discard me.launch()
+            drop me.launch()
         return
     # THREAD: mark the task detached BEFORE starting the worker, so it frees the task itself on exit and
     # its result is torn down instead of boxed (no consumer), then start it and return immediately.

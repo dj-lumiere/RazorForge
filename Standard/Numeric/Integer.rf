@@ -12,7 +12,7 @@ module Numerics
 ### form. There is no `/`: an integer quotient is `//`, and a fractional one is computed in `Decimal`.
 ### :see: {Decimal}, {Numeric-Types}
 record Integer
-obeys Assignable, Copyable, Integral, Negatable, Comparable, Hashable
+obeys Copyable, Integral, Negatable, Comparable, Hashable
     ### True when the value is negative (never true for zero).
     secret neg: Bool
     ### The magnitude: in the value itself below 2^64, else in limbs.
@@ -731,7 +731,8 @@ common routine Integer.from_literal(text: Text) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 @inline
-routine Integer.assign() -> Integer
+@override
+secret routine Integer.share() -> Integer
     when me.magnitude
         is U64 small =>
             return Integer(neg: me.neg, magnitude: IntegerMagnitude(small))
@@ -1029,8 +1030,8 @@ routine Integer.bit_length() -> U64
 @readonly
 routine Integer.min(other: Integer) -> Integer
     if me.cmp(you: other) == ME_LARGE
-        return other.assign()
-    return me.assign()
+        return other.share()
+    return me.share()
 
 ### Returns the larger of this value and `other`.
 ### :param other: The value to compare against.
@@ -1038,8 +1039,8 @@ routine Integer.min(other: Integer) -> Integer
 @readonly
 routine Integer.max(other: Integer) -> Integer
     if me.cmp(you: other) == ME_SMALL
-        return other.assign()
-    return me.assign()
+        return other.share()
+    return me.share()
 
 ### Clamps this value into the inclusive range `[low, high]`.
 ### :param low: The lower bound.
@@ -1048,10 +1049,10 @@ routine Integer.max(other: Integer) -> Integer
 @readonly
 routine Integer.clamp(low: Integer, high: Integer) -> Integer
     if me.cmp(you: low) == ME_SMALL
-        return low.assign()
+        return low.share()
     if me.cmp(you: high) == ME_LARGE
-        return high.assign()
-    return me.assign()
+        return high.share()
+    return me.share()
 
 ### Divides by `other`, returning the Euclidean quotient and remainder together
 ### (`me == other * q + r`, `0 <= r < |other|`).
@@ -1078,7 +1079,7 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
         throw NumericDomainError(description: "modpow: negative exponent")
     var result = Integer.one()
     var base = me.mod(other: modulus)
-    var e = exp.assign()
+    var e = exp.share()
     while not e.is_zero()
         if e.is_odd()
             result = result.mul(other: base).mod(other: modulus)

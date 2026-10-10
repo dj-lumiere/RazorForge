@@ -31,18 +31,18 @@ routine MultiRead.acquire_read()
     var tid = C::rf_current_thread_id()
     loop
         if me.writer.load() == 0_u8
-            discard me.readers.fetch_add(delta: 1_s32)
+            drop me.readers.fetch_add(delta: 1_s32)
             if me.writer.load() == 0_u8
                 break
             # A writer slipped in between the check and the bump — back out and retry.
-            discard me.readers.fetch_sub(delta: 1_s32)
+            drop me.readers.fetch_sub(delta: 1_s32)
         if me.writer_owner.load() == tid
             crash_reentrant_lock()
     return
 
 ### Releases a shared read lock.
 routine MultiRead.release_read()
-    discard me.readers.fetch_sub(delta: 1_s32)
+    drop me.readers.fetch_sub(delta: 1_s32)
     return
 
 ### Acquires the exclusive write lock: claims the writer flag, then waits for all readers to drain.
@@ -108,10 +108,10 @@ routine MultiRead.remove_claimer()
 ### :returns: `true` if a read hold was taken.
 routine MultiRead.try_add_inspector() -> Bool
     if me.writer.load() == 0_u8
-        discard me.readers.fetch_add(delta: 1_s32)
+        drop me.readers.fetch_add(delta: 1_s32)
         if me.writer.load() == 0_u8
             return true
-        discard me.readers.fetch_sub(delta: 1_s32)
+        drop me.readers.fetch_sub(delta: 1_s32)
     return false
 
 ### Tries the exclusive write lock with one non-blocking attempt: claims the writer flag only if it

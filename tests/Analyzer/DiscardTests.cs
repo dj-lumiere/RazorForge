@@ -6,18 +6,18 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for the discard keyword behavior:
-/// - discard routine_call() - no warning
+/// Tests for the drop keyword behavior:
+/// - drop routine_call() - no warning
 /// - routine_call() with non-None return - warning
 /// - routine_call() with None return - no warning
-/// - discard x or discard 42 - parser error (must be call)
+/// - drop 42 - error (must be call)
 /// </summary>
 public class DiscardTests
 {
     #region RazorForge - Discard With Call
 
     /// <summary>
-    /// Verifies semantic analysis behavior for discard call without unexpected warnings.
+    /// Verifies semantic analysis behavior for drop call without unexpected warnings.
     /// </summary>
     [Fact]
     public void Analyze_DiscardCall_NoWarning()
@@ -27,7 +27,7 @@ public class DiscardTests
                             return 42
 
                         routine test()
-                            discard get_value()
+                            drop get_value()
                             return
                         """;
 
@@ -36,15 +36,15 @@ public class DiscardTests
         Assert.Empty(collection: result.Warnings);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for call without discard non blank return warning.
+    /// Verifies semantic analysis behavior for call without drop non blank return warning.
     /// </summary>
     [Fact]
     public void Analyze_CallWithoutDiscard_NonNoneReturn_WarningCurrentlySuppressed()
     {
         // The UnusedRoutineReturnValue (SW007) warning is currently in SemanticVerifier's
         // SuppressedWarnings set (alongside UnhandledCrashableCall), so an unused non-None return
-        // is NOT flagged today. CLAUDE.md still recommends `discard`; if enforcement is wanted,
-        // remove SW007 from SuppressedWarnings (and expect fixtures/stdlib to need `discard`).
+        // is NOT flagged today. CLAUDE.md still recommends `drop`; if enforcement is wanted,
+        // remove SW007 from SuppressedWarnings (and expect fixtures/stdlib to need `drop`).
         string source = """
                         routine get_value() -> S32
                             return 42
@@ -60,7 +60,7 @@ public class DiscardTests
             filter: w => w.Code == SemanticWarningCode.UnusedRoutineReturnValue);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for call without discard blank return without unexpected warnings.
+    /// Verifies semantic analysis behavior for call without drop blank return without unexpected warnings.
     /// </summary>
     [Fact]
     public void Analyze_CallWithoutDiscard_NoneReturn_NoWarning()
@@ -102,7 +102,7 @@ public class DiscardTests
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for discard member call without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for drop member call without unexpected diagnostics.
     /// </summary>
     [Fact]
     public void Analyze_DiscardMemberCall_NoError()
@@ -119,7 +119,7 @@ public class DiscardTests
 
                         routine test()
                             var w = Wrapper(value: 0)
-                            discard w.extract(w)
+                            drop w.extract(w)
                             return
                         """;
 
@@ -127,7 +127,7 @@ public class DiscardTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Verifies that the parser accepts discard member call succeeds.
+    /// Verifies that the parser accepts drop member call succeeds.
     /// </summary>
     [Fact]
     public void Parse_DiscardMemberCall_Succeeds()
@@ -141,14 +141,14 @@ public class DiscardTests
 
                         routine test()
                             var c = Counter(value: 0)
-                            discard c.increment()
+                            drop c.increment()
                             return
                         """;
 
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts discard failable member call succeeds.
+    /// Verifies that the parser accepts drop failable member call succeeds.
     /// </summary>
     [Fact]
     public void Parse_DiscardFailableMemberCall_Succeeds()
@@ -162,7 +162,7 @@ public class DiscardTests
 
                         routine test()
                             var w = Wrapper(value: 42)
-                            discard w.get_value()
+                            drop w.get_value()
                             return
                         """;
 
@@ -174,7 +174,7 @@ public class DiscardTests
     #region RazorForge - Discard In Failable Context
 
     /// <summary>
-    /// Verifies that discard on a failable call inside a failable routine produces no error.
+    /// Verifies that drop on a failable call inside a failable routine produces no error.
     /// </summary>
     [Fact]
     public void Analyze_DiscardFailableCallInFailableContext_NoError()
@@ -186,7 +186,7 @@ public class DiscardTests
                             return 42
 
                         routine test!()
-                            discard get(flag: true)
+                            drop get(flag: true)
                             return
                         """;
 
@@ -209,7 +209,7 @@ public class DiscardTests
                             return 42
 
                         routine test()
-                            discard get(flag: true)
+                            drop get(flag: true)
                             return
                         """;
 
@@ -219,7 +219,7 @@ public class DiscardTests
     }
 
     /// <summary>
-    /// Verifies that discard on a `try`-recovered call in a non-failable context produces no error.
+    /// Verifies that drop on a `try`-recovered call in a non-failable context produces no error.
     /// </summary>
     [Fact]
     public void Analyze_DiscardTryVariantInNonFailableContext_NoError()
@@ -231,7 +231,7 @@ public class DiscardTests
                             return 42
 
                         routine test()
-                            discard try get(flag: true)
+                            drop try get(flag: true)
                             return
                         """;
 
@@ -244,7 +244,7 @@ public class DiscardTests
     #region RazorForge - Discard Chained And Constructed Calls
 
     /// <summary>
-    /// Verifies that the parser accepts discard on a chained memberRoutine call.
+    /// Verifies that the parser accepts drop on a chained memberRoutine call.
     /// </summary>
     [Fact]
     public void Parse_DiscardChainedCall_Succeeds()
@@ -261,7 +261,7 @@ public class DiscardTests
 
                         routine test()
                             var c = Counter(value: 0)
-                            discard c.incremented(n: 1).get_value()
+                            drop c.incremented(n: 1).get_value()
                             return
                         """;
 
@@ -269,7 +269,7 @@ public class DiscardTests
     }
 
     /// <summary>
-    /// Verifies that the parser accepts discard on a constructor-style call expression.
+    /// Verifies that the parser accepts drop on a constructor-style call expression.
     /// </summary>
     [Fact]
     public void Parse_DiscardConstructorCall_Succeeds()
@@ -280,7 +280,7 @@ public class DiscardTests
                             y: S32
 
                         routine test()
-                            discard Point(x: 1, y: 2)
+                            drop Point(x: 1, y: 2)
                             return
                         """;
 
@@ -288,7 +288,7 @@ public class DiscardTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis of sequential discard calls produces no unexpected errors.
+    /// Verifies semantic analysis of sequential drop calls produces no unexpected errors.
     /// </summary>
     [Fact]
     public void Analyze_MultipleDiscardCallsSequentially_NoError()
@@ -301,8 +301,8 @@ public class DiscardTests
                             return 2
 
                         routine test()
-                            discard get_a()
-                            discard get_b()
+                            drop get_a()
+                            drop get_b()
                             return
                         """;
 
@@ -312,7 +312,7 @@ public class DiscardTests
     }
 
     /// <summary>
-    /// Verifies that discard on a void member call produces no warnings.
+    /// Verifies that drop on a void member call produces no warnings.
     /// </summary>
     [Fact]
     public void Analyze_DiscardVoidMemberCall_NoWarning()
@@ -327,7 +327,7 @@ public class DiscardTests
 
                         routine test()
                             var lg = Logger(count: 0)
-                            discard lg.log(message: "hello")
+                            drop lg.log(message: "hello")
                             return
                         """;
 
@@ -340,8 +340,8 @@ public class DiscardTests
     #region RazorForge - Discard Non-Call Targets (semantic error)
 
     // Whether the discarded expression is a routine call is a SEMANTIC check (RF-S421
-    // InvalidDiscardTarget), not a grammatical one — the parser records whatever expression
-    // follows `discard`, and the semantic verifier rejects non-call targets.
+    // InvalidDropTarget), not a grammatical one — the parser records whatever expression
+    // follows `drop`, and the semantic verifier rejects non-call targets.
 
     /// <summary>Verifies that discarding a bare variable is a semantic error.</summary>
     [Fact]
@@ -350,13 +350,13 @@ public class DiscardTests
         string source = """
                         routine test()
                             var x = 42
-                            discard x
+                            drop x
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.InvalidDiscardTarget);
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidDropTarget);
     }
 
     /// <summary>Verifies that discarding an integer literal is a semantic error.</summary>
@@ -365,13 +365,13 @@ public class DiscardTests
     {
         string source = """
                         routine test()
-                            discard 42
+                            drop 42
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.InvalidDiscardTarget);
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidDropTarget);
     }
 
     /// <summary>Verifies that discarding a string literal is a semantic error.</summary>
@@ -380,13 +380,13 @@ public class DiscardTests
     {
         string source = """
                         routine test()
-                            discard "hello"
+                            drop "hello"
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.InvalidDiscardTarget);
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidDropTarget);
     }
 
     /// <summary>Verifies that discarding a member field access (not a call) is a semantic error.</summary>
@@ -399,13 +399,13 @@ public class DiscardTests
 
                         routine test()
                             var w = Wrapper(value: 42)
-                            discard w.value
+                            drop w.value
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.InvalidDiscardTarget);
+            filter: e => e.Code == SemanticDiagnosticCode.InvalidDropTarget);
     }
 
     #endregion

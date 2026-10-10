@@ -80,14 +80,14 @@ public class ErrorVariantGenerationTests
                             return value
 
                         routine trigger_variants(value: S32) -> S32?
-                            discard grab validate(value: value)
+                            drop check validate(value: value)
                             return try validate(value: value)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Variants are synthesized ON DEMAND — the `grab`/`try` keywords above generate check_/try_validate.
-        RoutineInfo? checkVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "validate")!, kind: RecoveryKind.Grab);
+        // Variants are synthesized ON DEMAND — the `check`/`try` keywords above generate check_/try_validate.
+        RoutineInfo? checkVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "validate")!, kind: RecoveryKind.Check);
         Assert.NotNull(@object: checkVariant);
 
         // Should also generate try_validate variant
@@ -201,7 +201,7 @@ public class ErrorVariantGenerationTests
 
         // Should NOT generate try_add, check_add, or lookup_add
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Try));
-        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Grab));
+        Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Check));
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Lookup));
     }
     /// <summary>
@@ -319,14 +319,14 @@ public class ErrorVariantGenerationTests
                             throw SomeError(msg: "parse failed")
 
                         routine trigger_variants(text: Text) -> S32?
-                            discard grab parse_number(text: text)
+                            drop check parse_number(text: text)
                             return try parse_number(text: text)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Variants are synthesized ON DEMAND — the `grab`/`try` keywords above generate check_/try_parse_number.
-        RoutineInfo? checkVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "parse_number")!, kind: RecoveryKind.Grab);
+        // Variants are synthesized ON DEMAND — the `check`/`try` keywords above generate check_/try_parse_number.
+        RoutineInfo? checkVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "parse_number")!, kind: RecoveryKind.Check);
         RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "parse_number")!, kind: RecoveryKind.Try);
 
         Assert.NotNull(@object: checkVariant);

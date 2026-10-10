@@ -487,7 +487,7 @@ needs AnyType T
         else =>
             var __sv = Dict[Text, SerialValue]()
             expand m in openmemvarof(T)
-                discard __sv.add(key: nameof(m), value: me.$nameof(m).serialize())
+                drop __sv.add(key: nameof(m), value: me.$nameof(m).serialize())
             return SerialValue(steal __sv)
 
 ### Choice `serialize()`: the bare case name as Text (`GREEN`), which `T(from: SerialValue)` looks up again.
@@ -516,7 +516,7 @@ needs VariantType T
         expand m in branchof(T)
             is $typeof(m) v =>
                 var table = Dict[Text, SerialValue]()
-                discard table.add(key: nameof(m), value: v.serialize())
+                drop table.add(key: nameof(m), value: v.serialize())
                 return SerialValue(steal table)
 
 ### The auto-derived deep `copy()` (Copyable): forwards to `store` — a bitwise copy for a pure value
@@ -524,7 +524,7 @@ needs VariantType T
 @overridable
 routine T.duplicate() -> Me
 needs T obeys Copyable
-    return me.assign()
+    return me.share()
 
 ### Variant `copy()`: TAG-dispatch DEEP copy — reconstruct the live arm with a copied payload, so a
 ### heap arm (a collection, a managed leaf) is NOT bitwise-aliased (which would double-free). `branchof`
@@ -656,33 +656,27 @@ needs VariantType T
                 return
         else => return
 
-### The auto-derived `assign()` (Assignable — the shallow store / alias-safe verb): a shallow `var result
-### = me` (the builder does NOT re-enter `store` on this self-copy — no recursion), then re-store each
-### member IN PLACE via its OWN `assign()`. `assign` is UNIVERSAL (Assignable is conferred everywhere), so
-### the walk is unconditional: a managed leaf (Text/Decimal, or a record owning one) bumps its refcount on
-### the copy — a bare bitwise alias would double-free at teardown — while a pure value field's `assign` is
-### the bitwise `return me`. Replaces the C# reconstruction `T(f: me.f.assign(), …)` with a mutation walk
-### — no creator arg-list needed.
+### The copy step `=` runs for a record: a bitwise `var result = me` (the builder does not run `share` on this
+### self-copy, so there is no recursion), then each member is copied in place by its own `share`. A plain value
+### field's `share` is the bitwise `return me`, and a field holding a handle (a `Guarded` buffer of a `Text`, an RC
+### wrapper) gains one more holder, so the two copies tear down in balance.
 @overridable
-routine T.assign() -> Me
-needs T obeys Assignable
-needs Assignable everywhere
+secret routine T.share() -> Me
+needs RecordType T
     var result = me
     expand m in allmemvarof(T)
-        result.$nameof(m) = me.$nameof(m).assign()
+        result.$nameof(m) = me.$nameof(m).share()
     return result
 
-### Variant `assign()`: TAG-dispatch shallow store — reconstruct the live arm with a RE-STORED payload,
-### so a retaining arm (managed leaf) gets its refcount bumped rather than bitwise-aliased. Mirrors the
-### variant `copy()` but with the arm's shallow `.assign()` instead of the deep `.duplicate()`. None / void
-### arms fall to `else => return me` (nothing to re-store). A variant used as a plain record member (e.g.
-### `Maybe[S32]` in a struct) MUST resolve `.assign()` — the record's own `assign` field-walk calls it.
+### The copy step `=` runs for a variant: the live case is rebuilt around a copy made by its own `share`, so a
+### case holding a handle gains one more holder instead of being aliased bit for bit. Empty cases fall to
+### `else => return me`. A variant held in a record field (`Maybe[S32]` in a record) needs it too: the record's
+### own `share` walk calls it.
 @override
-routine T.assign() -> Me
+secret routine T.share() -> Me
 needs VariantType T
-needs T obeys Assignable
     when me
         expand m in branchof(T)
             is $typeof(m) v =>
-                return T(from: v.assign())
+                return T(from: v.share())
         else => return me

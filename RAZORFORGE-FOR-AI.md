@@ -47,21 +47,21 @@ When unsure, consult ground truth in the repo/package:
    crashes LOUDLY on failure. To RECOVER, prefix the whole expression with a
    keyword and match the carrier with `when`:
    `try EXPR` → `Maybe[T]` (present | absent, no error kept);
-   `grab EXPR` → `Check[T]` (T | the caught `Crashables`);
+   `check EXPR` → `Check[T]` (T | the caught `Crashables`);
    `lookup EXPR` → `Lookup[T]` (T | absent | `Crashables`).
    **With a keyword in front, every failure beneath it is recovered, at any depth;
    only `pierce` still crashes.** That covers a `throw`/`absent` in the called
    routine and in every routine it calls, bare calls included (failable or not:
    `try f()` also recovers a division by zero inside a plain helper `f` calls); a
-   checked operator (`try a + b` recovers the overflow, `grab a // b` the
+   checked operator (`try a + b` recovers the overflow, `check a // b` the
    divide-by-zero, `-x` of the minimum, `x += d`); a subscript out of range or a
    missing key (`try xs[9]`); a failing conversion (`S8(from: 300)`,
    `Integer(text: "x")`). Each becomes the carrier's failure (`try`: absent;
-   `grab`: the error, an absence as `AbsentValueError`; `lookup`: the error or
+   `check`: the error, an absence as `AbsentValueError`; `lookup`: the error or
    absent), and evaluation stops at the first one. A bare call (no keyword)
    still crashes loudly. Lambdas and routine values are covered the same way: a
    failure inside a lambda handed to another routine
-   (`try xs.select(transform: x => 10 // x).List()`, `grab xs.sort_by(compare: f)`,
+   (`try xs.select(transform: x => 10 // x).List()`, `check xs.sort_by(compare: f)`,
    a user routine that calls the value it was given, a routine value passed down
    several levels or kept in a field) is recovered by the keyword above the call
    that reaches it, at any depth. A routine value called with no keyword above
@@ -73,7 +73,7 @@ When unsure, consult ground truth in the repo/package:
    fatal errors, out of memory and running out of stack are fatal everywhere.
    **`pierce`** is the failure that must NOT be recovered: `pierce NopeError()`
    crashes like an unrecovered `throw` (status 82), and it crashes the same way
-   under `try`/`grab`/`lookup` at any depth. Use it for a broken invariant (state
+   under `try`/`check`/`lookup` at any depth. Use it for a broken invariant (state
    the program can no longer trust), never for a condition a caller could handle.
    It does not make a routine failable (no `!` needed for it).
    The keyword takes the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
@@ -113,7 +113,7 @@ When unsure, consult ground truth in the repo/package:
    `U64` variable with an `S64` variable needs explicit conversion.
    Out-of-range literals are build errors (RF-S010): `-1` never fits an
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
-9. **Ignored Bool returns need `discard`**: `discard seen.add(value: v)` (RF-W007).
+9. **A result you mean to throw away takes `drop`**: `drop seen.add(value: v)` (RF-W007 otherwise).
 10. **Indentation is 4 spaces and blocks are indentation-delimited.** No braces.
 11. **Chained comparisons are one expression**: `0 <= x <= 10` works. Every
     operand is evaluated once, eagerly, left to right, before any comparison:
@@ -249,7 +249,7 @@ binding RazorForge has.
 - Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
 - Carriers: `Maybe[T]`, `Check[T]`, `Lookup[T]` (builder-synthesized only —
   user routines cannot declare them as return types; you obtain one by wrapping a
-  failable call with the `try`/`grab`/`lookup` keyword).
+  failable call with the `try`/`check`/`lookup` keyword).
 - Typed literal suffixes exist: `7s32`, `0_s64`, `1.5f32` (underscore optional)
 
 **Optionals and `none`:**
@@ -383,7 +383,7 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
 ```
 
 - Call with named args: `add(a: 1, b: 2)`. Recover a failable call with a keyword:
-  `try get_text(n: 0)` → `Maybe[Text]`/`Text?`; `grab get_text(n: 0)` → `Check[Text]`
+  `try get_text(n: 0)` → `Maybe[Text]`/`Text?`; `check get_text(n: 0)` → `Check[Text]`
   (keeps the `Crashables`); `lookup get_text(n: 0)` → `Lookup[Text]` (T | absent |
   `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
@@ -461,9 +461,9 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     acquire (a hand-written method returning the token, used with `using … fallback`
     — NOT a recovery variant, so no `try` keyword).
 - **RC wrappers** (opt-in shared ownership, reference-counted):
-  - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, copy verb `.share()`);
+  - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, `=` makes one more holder);
     forwards direct access to the retained entity.
-  - **`Guarded[T, TPolicy]`** — multi-thread strong handle (atomic, copy verb `.share()`);
+  - **`Guarded[T, TPolicy]`** — multi-thread strong handle (atomic, `=` makes one more holder);
     reaching its inner value goes through a `Consulting`/`Amending` token.
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
 - **`Hijacked[T]`** — a non-owning raw handle (no-op destroy); the stdlib's
@@ -498,7 +498,7 @@ using c.modify() as m        # Modifying[Counter], write intent
 
 ```razorforge
 var r1 = Retained(from: steal a)   # Retained[Node]
-var r2 = r1.share()                # second handle to the SAME node
+var r2 = r1                        # second handle to the SAME node (one more holder)
 show(r1 === r2)              # true  — same object
 show(a === make_other())    # false — different objects
 ```
@@ -511,7 +511,7 @@ show(a === make_other())    # false — different objects
 >   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
 >   nullable pointer; unique ownership makes the structure a tree = acyclic = deterministic teardown).
 > - Generic param kinds: bare `[TKey, TValue]` = `AnyType`; annotate `T: record` / `T: entity` only to constrain.
->   No `Assignable`/`Copyable` bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the ownership
+>   No copyability bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the ownership
 >   wrappers below name only *departures* from the bare-entity default (unique ownership is unnamed).
 > - Entity allocation is stack/inline by default; heap is induced by a wrapper (`Retained`/…) or recursion,
 >   not a marked concern.
@@ -522,12 +522,12 @@ by declaring the type `entity`, holding a handle that copies (`Retained[E]`), ke
 (`needs RecordType T`), or declaring it `bundle`. A `bundle` is the generic aggregate whose kind each
 instantiation decides: `bundle Pair[T]` with `T = S64` is a copyable value; with an entity `T` it is
 single-owner (moved with `steal`, RF-S413 on a copy), has no identity (`===` is an error), is laid out in
-place, has no `assign`, and has `duplicate()` only when every member is Copyable (RF-S150 naming the member
+place, is never copied by `=`, and has `duplicate()` only when every member is Copyable (RF-S150 naming the member
 otherwise). A bundle needs type parameters (**RF-S445**) and cannot contain itself (**RF-S446**; a recursive
 structure is an entity, as for records, RF-S960).
 In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
 it (`var y = x`, `return me.value`, a tuple of it) is RF-S413 on the template's own line: `steal` it, keep the
-parameter to values (`needs RecordType T`, or `needs T obeys Assignable`), or work on it in place.
+parameter to values (`needs RecordType T`), or work on it in place.
 `needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
 kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
 `SplitArray`, `DictEntry`, `PQEntry` (tuples and variants follow their elements the same way). `Range[T]`,
@@ -616,7 +616,7 @@ that differ from other languages:
 - `list.add_last(value: v)`, `list.remove_first!()`, `list.remove_at!(0)` —
   removal is failable (empty/out-of-range throws); `try list.remove_first()`
   returns `Maybe`.
-- `set.add(value: v)` returns Bool — `discard` it if unused.
+- `set.add(value: v)` returns Bool — `drop` it if unused.
 - `dict.add(key: k, value: v)` returns Bool; indexing is failable under the
   hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Maybe[TValue]`.
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
@@ -686,11 +686,11 @@ element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
 explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
 where it sits. A new variable (`var x = boxes[0]`) is the exception: it holds a
 read token on the element (see access tokens). Calling the reading routines
-yourself copies instead: `boxes.getitem(index: 0)`, `boxes.first()` and
-`boxes.last()` on single-owner ENTITY elements return an independent
-`duplicate()` (the entity must `obeys Copyable`, else RF-S150), so
-`var f = boxes.first()` then `f.n = 9` leaves `boxes[0].n` unchanged. On value
-or RC elements they return the element's `assign()` (a copy / a share). Element
+yourself copies a VALUE or handle element (`=`: a copy, one more holder for a
+handle). A single-owner ENTITY element is never copied behind your back: there
+is no copying `getitem`/`first()`/`last()` for it. Read it in place
+(`boxes[0]`), or make a new one on purpose with `boxes[0].duplicate()` (the
+entity must `obeys Copyable`, else RF-S150). Element
 calls and field access (`cells[0].v = 5`, `grid[0].add_last(value: 1)`) still act
 in place through `modify_at`/`view_at`, `var c = cells[0]` is still a read
 token, and passing an entity element to an owning parameter
@@ -782,9 +782,9 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 |--------------|---------------------------------------|----------------------------------------------------|
 | RF-S510/S512 | positional args in a multi-param call | name every argument                                |
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
-| RF-S753      | failable call left unhandled          | recover with `try`/`grab`/`lookup` + `when`        |
+| RF-S753      | failable call left unhandled          | recover with `try`/`check`/`lookup` + `when`        |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
-| RF-W007      | ignored Bool return                   | `discard expr`                                     |
+| RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 
 ## 13. A complete worked example
@@ -927,7 +927,7 @@ routine start()
   ```razorforge
   routine on_stop(box: Guarded[Flags, Exclusive])   # or Roamed[T]
       ...
-  when_interrupted(handler: on_stop, context: flags.share())   # .share() / (Roamed) .share()
+  when_interrupted(handler: on_stop, context: flags)   # `=` gives the handler one more holder
   ```
 
   The registration retains the handle for the process lifetime (a `Roamed` context is
@@ -976,7 +976,7 @@ you are writing another language.
   `while` `each` `break` `continue` `return` `throw` `pierce` `absent`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
-- **Other statements**: `using` `as` `define` `pass` `given` `discard`
+- **Other statements**: `using` `as` `define` `pass` `given` `drop`
 - **Logical operators**: `and` `or` `not` `but`
 - **Literals**: `true` `false` `None` `none`
 - **Concurrency**: `suspended` `threaded`†

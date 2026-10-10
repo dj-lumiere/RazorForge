@@ -483,7 +483,7 @@ needs TKey obeys Comparable
     # Each pair is read in place: `add` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
     while i < pairs.count()
-        discard result.add(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
+        drop result.add(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
         i = i +% 1u64
     return result
 
@@ -567,13 +567,12 @@ routine SortedDict[TKey, TValue].search_node(node: Accessing[BTreeDictNode[TKey,
 @readonly
 @overridable
 routine SortedDict[TKey, TValue].getitem!(key: Accessing[TKey]) -> TValue
-needs AnyType TValue
-needs TValue obeys Assignable
+needs RecordType TValue
     if me.root is None
         throw KeyNotFoundError(key: key.represent())
     danger
         var root_ref = me.root!!.as_entity()
-        return me.get_from_node(node: root_ref, key: key).assign()
+        return me.get_from_node(node: root_ref, key: key).share()
 
 ### `getitem!` for a single-owner entity: the container keeps its value, so
 ### the caller gets an independent duplicate, which needs the entity to declare it can be copied.
@@ -610,7 +609,7 @@ routine SortedDict[TKey, TValue].get_from_node!(node: Accessing[BTreeDictNode[TK
 routine SortedDict[TKey, TValue].setitem!(key: Accessing[TKey], value: TValue)
     if me lack key
         absent
-    discard me.add(key: key, value: value)
+    drop me.add(key: key, value: value)
     return
 
 ### Find-or-insert returning a raw handle to the VALUE slot for `key` — the ordered analog of
@@ -624,7 +623,7 @@ routine SortedDict[TKey, TValue].setitem!(key: Accessing[TKey], value: TValue)
 ### :returns: A {Hijacked[TValue]} addressing the value cell for `key`.
 routine SortedDict[TKey, TValue].slot(key: TKey, seed: TValue) -> Hijacked[TValue]
     if not me.contains(key: key)
-        discard me.add(key: key, value: seed)
+        drop me.add(key: key, value: seed)
     danger
         var root_ref = me.root!!.as_entity()
         return me.value_slot_in(node: root_ref, key: key)
@@ -825,14 +824,14 @@ routine SortedDict[TKey, TValue].remove_from_node(node: Controlling[BTreeDictNod
                     var pred = me.get_predecessor(node: node, idx: i)
                     node.key_set(i: i, value: pred.key)
                     node.value_set(i: i, value: pred.value)
-                    discard me.remove_from_node(node: left, key: pred.key)
+                    drop me.remove_from_node(node: left, key: pred.key)
                     node.subtree_size = node.subtree_size -% 1u64
                     return true
                 elseif right.keys_count() > MIN_KEYS_DICT
                     var succ = me.get_successor(node: node, idx: i)
                     node.key_set(i: i, value: succ.key)
                     node.value_set(i: i, value: succ.value)
-                    discard me.remove_from_node(node: right, key: succ.key)
+                    drop me.remove_from_node(node: right, key: succ.key)
                     node.subtree_size = node.subtree_size -% 1u64
                     return true
                 else
@@ -1330,5 +1329,5 @@ routine SortedDict[TKey, TValue].diagnose() -> Text
 routine SortedDict[TKey, TValue].serialize() -> SerialValue
     var __sv = Dict[Text, SerialValue]()
     each __e in me
-        discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
+        drop __sv.add(key: __e.key.represent(), value: __e.value.serialize())
     return SerialValue(steal __sv)

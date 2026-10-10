@@ -31,7 +31,7 @@ import BuilderQuery
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
 record Roamed[T]
-obeys Controlling[T], Assignable, Copyable onlyif T obeys Copyable
+obeys Controlling[T], Copyable onlyif T obeys Copyable
 needs EntityType T
     pass
 
@@ -76,18 +76,13 @@ needs EntityType T
 ### what `b = a` lowers to.
 ### :returns: A new handle sharing the same underlying entity.
 @readonly
-routine Roamed[T].share() -> Roamed[T]
+@override
+secret routine Roamed[T].share() -> Roamed[T]
     danger
         if me.controller_address() != 0_addr
             var ctrl = Hijacked[RoamController[T]](me).as_entity()
             ctrl.hold()
     return me
-
-### Binds one more handle to the same entity (`b = a`): every handle can be assigned, whatever the entity.
-### :returns: A new handle sharing the same underlying entity.
-@readonly
-routine Roamed[T].assign() -> Roamed[T]
-    return me.share()
 
 # No `duplicate` here: an entity that obeys Copyable declares its own, and a Suflae entity's routines already
 # take the Roamed handle as `me` and return a Roamed handle, so `handle.duplicate()` resolves straight to the
@@ -172,16 +167,16 @@ routine Roamed[T].strong_count() -> U64
         return ctrl.strong_count()
 
 ### Mints a NON-PINNING weak observation of this entity — ObjectHacker's `watch`. The returned
-### {Watching[T]} does NOT keep the entity alive, but survives its death as a tombstone view so
+### {Watched[T]} does NOT keep the entity alive, but survives its death as a tombstone view so
 ### `is_alive()`/`is_destroyed()` stay answerable. The absent handle yields an absent observation.
-### :returns: A `Watching[T]` observing this entity's controller.
-routine Roamed[T].watch() -> Watching[T]
+### :returns: A `Watched[T]` observing this entity's controller.
+routine Roamed[T].watch() -> Watched[T]
     danger
         if me.controller_address() == 0_addr
-            return Watching[T](ctrl: 0_addr)
+            return Watched[T](ctrl: 0_addr)
         var ctrl = Hijacked[RoamController[T]](me).as_entity()
         ctrl.observe()
-        return Watching[T](ctrl: me.controller_address())
+        return Watched[T](ctrl: me.controller_address())
 
 ### Reports this handle's controller to the collector as a traced child. The builder-synthesized
 ### `roam_trace` calls this for each `Roamed` field of an entity, so the collector sees the

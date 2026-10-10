@@ -373,7 +373,7 @@ public class WikiLanguageBreakageTests
 
     /// <summary>
     /// A recovery form of a failable routine is not a name: `try_parse`, `check_parse` and `lookup_parse` are
-    /// ordinary routines even next to a failable `parse!` whose `try`/`grab`/`lookup` forms the builder
+    /// ordinary routines even next to a failable `parse!` whose `try`/`check`/`lookup` forms the builder
     /// generates, and calling either never reaches the other.
     /// </summary>
     /// <param name="routineName">The routine name.</param>

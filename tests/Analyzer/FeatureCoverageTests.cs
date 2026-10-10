@@ -261,7 +261,7 @@ public class FeatureCoverageTests
                               needs T obeys Equatable, Hashable
                                   var s: Set[T] = Set[T]()
                                   each x in items
-                                      discard s.add(value: x)
+                                      drop s.add(value: x)
                                   return s have target
 
                               routine start()
@@ -310,8 +310,8 @@ public class FeatureCoverageTests
                                   return a // b
 
                               routine start()
-                                  var ok = grab guard_div(a: 10, b: 2)
-                                  var err = grab guard_div(a: 10, b: 0)
+                                  var ok = check guard_div(a: 10, b: 2)
+                                  var err = check guard_div(a: 10, b: 0)
                                   when ok
                                       is DivisionByZeroError => show("caught")
                                       else v                 => show(f"ok:{v}")
@@ -422,8 +422,8 @@ public class FeatureCoverageTests
                                   var b = Point(x: 1_s64, y: 2_s64)
                                   show(f"{a == b}")
                                   var s = Set[Point]()
-                                  discard s.add(value: a)
-                                  discard s.add(value: b)
+                                  drop s.add(value: a)
+                                  drop s.add(value: b)
                                   show(f"{s.count()}")
                                   return
                               """;

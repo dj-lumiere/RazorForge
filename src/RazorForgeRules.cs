@@ -56,6 +56,7 @@ public sealed class RazorForgeRules : LanguageRules
     public override bool ChecksOwnership => true;
     public override bool ChecksAccessTokens => true;
     public override bool ChecksReadonly => true;
+    public override bool MarksDroppedResults => true;
     public override bool ChecksShapeAtRunTime => false;
     public override bool ZeroIsEmptyPlace => false;
 

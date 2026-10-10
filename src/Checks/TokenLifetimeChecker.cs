@@ -1095,7 +1095,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             return stmt switch
             {
                 ExpressionStatement s => [s.Expression],
-                DiscardStatement s => [s.Expression],
+                DropStatement s => [s.Expression],
                 DestructuringStatement s => [s.Initializer],
                 _ => []
             };

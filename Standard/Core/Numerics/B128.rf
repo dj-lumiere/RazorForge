@@ -39,7 +39,7 @@ preset B128_LN_10: B128 = 2.302585092994045684017991454684364208_b128
 ### platform without relying on compiler-rt `__*tf*` libcalls.
 @llvm("i128")
 record B128
-obeys Numeric, Comparable, Assignable, Copyable, Splittable
+obeys Numeric, Comparable, Copyable, Splittable
     pass
 
 # ============================================================================
@@ -1795,16 +1795,16 @@ routine B128.S128!() -> S128
 ### Shifts `sig` right by `drop` bits, rounding to nearest with ties to even.
 ### Used by the `B128 -> B64` narrowing to discard the low significand bits.
 ### :param sig: The significand to round (up to 113 significant bits).
-### :param drop: The count of low bits to discard.
+### :param amount: The count of low bits to discard.
 ### :returns: The rounded, right-shifted magnitude.
-routine b128_rshift_rne(sig: U128, drop: U64) -> U64
-    if drop == 0_u64
+routine b128_rshift_rne(sig: U128, amount: U64) -> U64
+    if amount == 0_u64
         return LLVM::int_truncate[U128, U64](sig)
-    if drop >= 128_u64
+    if amount >= 128_u64
         return 0_u64
-    var dm1 = LLVM::zero_extend[U64, U128](LLVM::sub(a: drop, b: 1_u64))
+    var dm1 = LLVM::zero_extend[U64, U128](LLVM::sub(a: amount, b: 1_u64))
     var keep = LLVM::int_truncate[U128, U64](
-        LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U128](drop)),
+        LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U128](amount)),
     )
     var roundbit = LLVM::int_truncate[U128, U64](
         LLVM::bit_and(a: LLVM::shift_right_unsigned(sig, dm1), b: 1_u128),
@@ -1850,7 +1850,7 @@ routine B64(from: B128) -> B64
         return LLVM::reinterpret_bits[U64, B64](inf64)
     # normal B64 result.
     if LLVM::signed_ge(a: e64s, b: 1_s64)
-        var r = b128_rshift_rne(sig: sig, drop: 60_u64)
+        var r = b128_rshift_rne(sig: sig, amount: 60_u64)
         var exp = LLVM::reinterpret_bits[S64, U64](e64s)
         if r >= LLVM::shift_left(1_u64, 53_u64)
             exp = LLVM::add(a: exp, b: 1_u64)
@@ -1862,8 +1862,8 @@ routine B64(from: B128) -> B64
             LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: LLVM::shift_left(exp, 52_u64)), b: mant),
         )
     # subnormal B64 result or underflow to zero.
-    var drop = LLVM::sub(a: 61_s64, b: e64s)
-    var rs = b128_rshift_rne(sig: sig, drop: LLVM::reinterpret_bits[S64, U64](drop))
+    var amount = LLVM::sub(a: 61_s64, b: e64s)
+    var rs = b128_rshift_rne(sig: sig, amount: LLVM::reinterpret_bits[S64, U64](amount))
     if rs == 0_u64
         return LLVM::reinterpret_bits[U64, B64](sbit)
     # rounding up across the subnormal/normal boundary yields the smallest normal.

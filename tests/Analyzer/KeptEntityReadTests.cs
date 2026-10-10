@@ -106,7 +106,7 @@ public class KeptEntityReadTests
                                         boxes.add_last(value: Box(n: 1))
                                         var holder = List[Box]()
                                         holder.add_last(value: boxes[0])
-                                        discard take(b: boxes[0])
+                                        drop take(b: boxes[0])
                                         return
                                     """,
             expected: "'add_last' takes ownership of its 'value'"));
