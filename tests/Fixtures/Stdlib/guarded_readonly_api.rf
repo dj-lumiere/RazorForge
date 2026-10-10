@@ -1,0 +1,28 @@
+module Tests/Stdlib/GuardedReadOnlyApi
+
+import IO/Console
+# A Guarded with the ReadOnly policy is read directly, without `using`, and an Atomic changes through a read token.
+
+entity Stats
+    name: Text
+    open: Atomic[U64]
+
+@readonly
+routine Stats.label() -> Text
+    return f"{me.name}!"
+
+routine start()
+    var a = Atomic[U64](initial: 1)
+    a.store(desired: 5)
+    a.fetch_add(delta: 2)
+    show(f"{a.load()}")
+    var g = Guarded[Stats, ReadOnly](from: Stats(name: "srv", open: Atomic[U64](initial: 0)))
+    g.open.fetch_add(delta: 1)
+    g.open.fetch_add(delta: 1)
+    show(f"{g.name} {g.open.load()} {g.label()}")
+    var m = Guarded[Stats, MultiRead](from: Stats(name: "m", open: Atomic[U64](initial: 10)))
+    using m.consult() as c
+        c.open.fetch_add(delta: 3)
+        show(f"{c.open.load()}")
+    show("DONE")
+    return

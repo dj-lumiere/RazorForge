@@ -559,7 +559,10 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
   - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, `=` makes one more holder);
     forwards direct access to the retained entity.
   - **`Guarded[T, TPolicy]`** — multi-thread strong handle (atomic, `=` makes one more holder);
-    reaching its inner value goes through a `Consulting`/`Amending` token.
+    reaching its inner value goes through a `Consulting`/`Amending` token (RF-S649 on the handle), except
+    `Guarded[T, ReadOnly]`, which has no lock and is read directly (`g.name`, `g.label()`, reads only).
+    Every `Atomic` routine is `@readonly` (each change synchronizes itself): `stats.open.fetch_add(delta: 1)`
+    works through a read token or a `ReadOnly` Guarded.
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
 - **`Hijacked[T]`** — a non-owning raw handle (no-op destruct); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
@@ -893,6 +896,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
 | RF-S646      | no conversion between the two types (or to its own type) | convert to a type that has one, or drop the `.to` |
 | RF-S647      | `steal place as old` leaves a non-optional place empty | add `inject <new value>` |
+| RF-S649      | value of a locked `Guarded` reached on the handle | `using g.amend() as v` / `consult()`, or the `ReadOnly` policy |
 | RF-S648      | `steal … as …` on something that is not a place | take from a variable, member variable or element |
 | RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |

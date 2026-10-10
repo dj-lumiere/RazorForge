@@ -2,6 +2,9 @@ module Core
 
 ### A lock-free atomic cell — the cross-thread data primitive of the concurrency tier.
 ###
+### Every change to the cell synchronizes itself, so every routine on it is `@readonly`: a read token
+### (`Viewing`, `Consulting`, a `Guarded[T, ReadOnly]` field) is enough to `fetch_add` or `store`.
+###
 ### `Atomic[T]` is a single-field struct record whose method receiver is passed by
 ### reference (v0.0.4 by-ref `me`), so `me.initial.hijack()` yields the live address of
 ### the cell's storage. The atomic intrinsics (`Core/LLVMIntrinsics.rf`) then drive
@@ -41,6 +44,7 @@ routine Atomic[T].load() -> T
 
 ### Atomically writes `desired`.
 ### :param desired: The replacement value.
+@readonly
 routine Atomic[T].store(desired: T)
     danger
         LLVM::atomic_store[T](ptr: me.initial.hijack(), value: desired)
@@ -50,6 +54,7 @@ routine Atomic[T].store(desired: T)
 ### :param desired: The replacement value.
 ### :returns: The previous value.
 @discardable
+@readonly
 routine Atomic[T].swap(desired: T) -> T
     danger
         return LLVM::atomic_exchange[T](ptr: me.initial.hijack(), value: desired)
@@ -58,6 +63,7 @@ routine Atomic[T].swap(desired: T) -> T
 ### :param expected: The value that must be present for the exchange to occur.
 ### :param desired: The value to install on success.
 ### :returns: `true` if the exchange happened.
+@readonly
 routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
     danger
         var result = LLVM::atomic_compare_and_exchange[T](
@@ -71,6 +77,7 @@ routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
 ### :param delta: The increment to apply.
 ### :returns: The previous value.
 @discardable
+@readonly
 routine Atomic[T].fetch_add(delta: T) -> T
     danger
         return LLVM::atomic_add[T](ptr: me.initial.hijack(), value: delta)
@@ -79,6 +86,7 @@ routine Atomic[T].fetch_add(delta: T) -> T
 ### :param delta: The decrement to apply.
 ### :returns: The previous value.
 @discardable
+@readonly
 routine Atomic[T].fetch_sub(delta: T) -> T
     danger
         return LLVM::atomic_sub[T](ptr: me.initial.hijack(), value: delta)
@@ -87,6 +95,7 @@ routine Atomic[T].fetch_sub(delta: T) -> T
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 @discardable
+@readonly
 routine Atomic[T].fetch_and(mask: T) -> T
     danger
         return LLVM::atomic_and[T](ptr: me.initial.hijack(), value: mask)
@@ -95,6 +104,7 @@ routine Atomic[T].fetch_and(mask: T) -> T
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 @discardable
+@readonly
 routine Atomic[T].fetch_or(mask: T) -> T
     danger
         return LLVM::atomic_or[T](ptr: me.initial.hijack(), value: mask)
@@ -103,6 +113,7 @@ routine Atomic[T].fetch_or(mask: T) -> T
 ### :param mask: The bit mask to apply.
 ### :returns: The previous value.
 @discardable
+@readonly
 routine Atomic[T].fetch_xor(mask: T) -> T
     danger
         return LLVM::atomic_xor[T](ptr: me.initial.hijack(), value: mask)
