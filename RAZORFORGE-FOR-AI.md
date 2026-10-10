@@ -576,6 +576,8 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
   - **`Guarded[T, TPolicy]`** — multi-thread strong handle (atomic, `=` makes one more holder);
     reaching its inner value goes through a `Consulting`/`Amending` token (RF-S649 on the handle), except
     `Guarded[T, ReadOnly]`, which has no lock and is read directly (`g.name`, `g.label()`, reads only).
+  - A binding from outside an `if`/`when`/loop is taken with `steal` on every path going on past it or on none
+    (RF-S616); a loop turn may not take it and go on (only where the loop ends).
   - `steal` on a `Retained`/`Guarded` gives the entity inside (`var t: Table = steal table`) when it is the last
     strong handle, crashing with `SharedHandleStealError` otherwise; weak handles can't be stolen.
     Every `Atomic` routine is `@readonly` (each change synchronizes itself): `stats.open.fetch_add(delta: 1)`
