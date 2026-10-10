@@ -181,7 +181,7 @@ routine List[T].add_last(value: T)
 ### NOTE: Stub signature — implementation pending. Tracking:
 ###       memory/bytes_io_api_plan.md (v0.1.0 first additions).
 @reshaping
-routine List[T].add_range(you: Accessing[Iterable[T]])
+routine List[T].add_range(you: Viewing[Iterable[T]])
     # TODO(fast-io): hoist capacity-reserve when `you` exposes a known count.
     # For now, fall back to per-element append so the routine type-checks while the
     # optimized path is being designed.
@@ -219,7 +219,7 @@ routine List[T].add_first(value: T)
 @reshaping
 routine List[T].add_at!(index: U64, value: T)
     if index > me.count
-        throw IndexOutOfBoundsError(index: index.to[U64](), count: me.count.to[U64]())
+        throw IndexOutOfBoundsError(index: index, count: me.count)
 
     if me.count >= me.capacity
         me.reserve(
@@ -263,7 +263,7 @@ routine List[T].remove_first!() -> T
 @reshaping
 routine List[T].remove_at!(index: U64) -> T
     if index >= me.count
-        throw IndexOutOfBoundsError(index: index.to[U64](), count: me.count.to[U64]())
+        throw IndexOutOfBoundsError(index: index, count: me.count)
 
     var byte_offset = T.data_size() * index
     danger
@@ -333,6 +333,19 @@ routine List[T].setitem!(index: U64, value: T)
     danger
         me.data.offset(byte_offset).poke(value)
     return
+
+### Puts `value` at `index` and gives back the element that was there, in one step. This is what
+### `steal xs[i] as old inject fresh` runs, so the place is never empty.
+### :param index: The zero-based position to exchange.
+### :param value: The element that goes in.
+### :returns: The element that was there.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+secret routine List[T].exchange!(index: U64, value: T) -> T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var old = me.get_raw(index: index)
+    me.set_raw(index: index, value: value)
+    return old
 
 ### Returns a write token on the element stored at `index`, so a call or a write through it changes the
 ### element in place: `grid[0].add_last(value: 1)` lowers to `grid.modify_at(index: 0).add_last(value: 1)`. A
@@ -480,7 +493,7 @@ needs EntityType T
 ### :param you: The other list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine List[T].eq(you: Accessing[List[T]]) -> Bool
+routine List[T].eq(you: Viewing[List[T]]) -> Bool
 needs T obeys Equatable
     if me.count() != you.count()
         return false
@@ -496,7 +509,7 @@ needs T obeys Equatable
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
-routine List[T].contains(value: Accessing[T]) -> Bool
+routine List[T].contains(value: Viewing[T]) -> Bool
 needs T obeys Equatable
     var i = 0u64
     while i < me.count()
@@ -538,7 +551,7 @@ routine List[T].diagnose() -> Text
 ### :param count: The number of elements to copy.
 ### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
 @reshaping
-routine List[T].add_range!(source: Accessing[List[T]], from: U64, count: U64)
+routine List[T].add_range!(source: Viewing[List[T]], from: U64, count: U64)
 needs RecordType T
     if count == 0u64
         return
@@ -828,7 +841,7 @@ routine List[T].insertion_sort_by(start: U64, end: U64, compare: Callable[(T, T)
 ### :param mid: Start index of the second sorted run (and exclusive end of the first).
 ### :param right: Exclusive end index of the second sorted run.
 ### :param buffer: A pre-allocated list used as temporary storage during the merge.
-routine List[T].merge_into(left: U64, mid: U64, right: U64, buffer: Controlling[List[T]])
+routine List[T].merge_into(left: U64, mid: U64, right: U64, buffer: Modifying[List[T]])
 needs T obeys Comparable
     # Copy [left, right) into the buffer
     var i = left
@@ -883,7 +896,7 @@ routine List[T].merge_into_by(
     left: U64,
     mid: U64,
     right: U64,
-    buffer: Controlling[List[T]],
+    buffer: Modifying[List[T]],
     compare: Callable[(T, T), Bool],
 )
     var i = left

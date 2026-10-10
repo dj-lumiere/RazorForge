@@ -64,10 +64,9 @@ routine BF16.to_bytes_be() -> Array[Byte, 2]
 
 ### Narrows a single-precision float to bfloat16: the nearest value, ties to even (a value past the largest
 ### finite `BF16` becomes infinity, and a NaN stays a NaN, made quiet).
-### :param from: The `B32` value to convert.
 ### :returns: The nearest `BF16` value.
-secret routine BF16(from: B32) -> BF16
-    var u = from.to_bits()
+routine B32.to[BF16]() -> BF16
+    var u = me.to_bits()
     if (u & 0x7FFFFFFF_u32) > 0x7F800000_u32
         # a NaN keeps its sign and top payload bits, with the quiet bit set
         return BF16.from_bits(bits: LLVM::int_truncate[U32, U16](u >>> 16_u32) | 0x0040_u16)
@@ -80,10 +79,9 @@ secret routine BF16(from: B32) -> BF16
 ### through `B32`, whose own rounding could land on a bfloat16 midpoint). Values below half the smallest
 ### subnormal `BF16` (2^-134) become a signed zero, values past the largest finite one infinity, and a NaN
 ### stays a NaN, made quiet.
-### :param from: The `B64` value to convert.
 ### :returns: The nearest `BF16` value.
-secret routine BF16(from: B64) -> BF16
-    var u = from.to_bits()
+routine B64.to[BF16]() -> BF16
+    var u = me.to_bits()
     var sign = LLVM::int_truncate[U64, U16](u >>> 48_u32) & 0x8000_u16
     var ef = LLVM::reinterpret_bits[U64, S64]((u >>> 52_u32) & 0x7FF_u64)
     var frac = u & 0x000FFFFFFFFFFFFF_u64
@@ -195,13 +193,12 @@ routine BF16.diagnose() -> Text
 
 ### Parses decimal text into the nearest `BF16` (one rounding from the exact decimal value, ties to even).
 ### Accepts the forms `B32(from_text:)` accepts, including `nan` and `inf`.
-### :param from: The decimal literal.
 ### :returns: The nearest `BF16` value.
 ### :throws: {InvalidValueError} on malformed input.
-secret routine BF16!(from: Text) -> BF16
-    var pc = parse_float_components(from_text: from, target: "BF16")
+routine Text.to![BF16]() -> BF16
+    var pc = parse_float_components(from_text: me, target: "BF16")
     if pc.kind == 3_s32
-        throw InvalidValueError(input: from, target: "BF16")
+        throw InvalidValueError(input: me, target: "BF16")
     if pc.kind == 1_s32
         return BF16.from_bits(bits: 0x7FC0_u16)
     if pc.kind == 2_s32

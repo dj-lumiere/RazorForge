@@ -6,7 +6,7 @@ import BuilderQuery
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
 record Retained[T]
-obeys Controlling[T], Copyable when T obeys Copyable
+obeys Copyable when T obeys Copyable
 needs EntityType T
     pass
 
@@ -43,7 +43,7 @@ secret routine Retained[T].share() -> Retained[T]
 @readonly
 routine Retained[T].duplicate() -> Retained[T]
 needs T obeys Copyable
-    return Retained[T](from: me.access().duplicate())
+    return Retained[T](from: me.view().access().duplicate())
 
 ### Creates a weak reference to the same entity.
 ### :returns: A new weak handle to the same entity's controller.
@@ -72,27 +72,21 @@ routine Retained[T].weak_count() -> U32
         return ctrl.weak_count()
 
 # ============================================================================
-# Marker-protocol coercion (access/control) — yields the inner entity as T
+# Tokens on the held entity
 # ============================================================================
 
-### Yields the inner entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
-### :returns: The inner entity as `T`.
+### Read access to the held entity. A call hands this to a `Viewing[T]` parameter given the `Retained[T]`.
+### :returns: The token.
 @readonly
-@inline
-routine Retained[T].access() -> T
+routine Retained[T].view() -> Viewing[T]
     danger
-        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
-        return ctrl.raw_data().as_entity()
+        return Viewing[T](Hijacked[RetainManager[T]](me).as_entity().raw_data())
 
-### Yields the inner entity as an in-flight `T` reference for read/write access.
-### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
-### :returns: The inner entity as `T`.
-@inline
-routine Retained[T].control() -> T
+### Write access to the held entity. A call hands this to a `Modifying[T]` parameter given the `Retained[T]`.
+### :returns: The token.
+routine Retained[T].modify() -> Modifying[T]
     danger
-        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
-        return ctrl.raw_data().as_entity()
+        return Modifying[T](Hijacked[RetainManager[T]](me).as_entity().raw_data())
 
 # ============================================================================
 # Display (transparent — delegates to inner value)

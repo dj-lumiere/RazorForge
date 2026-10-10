@@ -257,7 +257,7 @@ public class FeatureCoverageTests
                               module Test/Feat/Generic
                               import IO/Console
 
-                              routine in_set[T](items: Accessing[List[T]], target: T) -> Bool
+                              routine in_set[T](items: Viewing[List[T]], target: T) -> Bool
                               needs T obeys Equatable, Hashable
                                   var s: Set[T] = Set[T]()
                                   each x in items

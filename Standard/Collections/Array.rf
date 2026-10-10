@@ -121,6 +121,20 @@ routine Array[T, COUNT].setitem!(index: U64, value: T)
         LLVM::store_element_ref[Array[T, COUNT], T](me.hijack(), index, value)
     return
 
+### Puts `value` at `index` and gives back the element that was there, in one step. This is what
+### `steal a[i] as old inject fresh` runs, so the place is never empty.
+### :param index: The zero-based position to exchange.
+### :param value: The element that goes in.
+### :returns: The element that was there.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
+secret routine Array[T, COUNT].exchange!(index: U64, value: T) -> T
+    if index >= COUNT
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        var old: T = LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
+        LLVM::store_element_ref[Array[T, COUNT], T](me.hijack(), index, value)
+        return old
+
 ### Returns a `List[T]` holding independent copies of the elements in `range` — the slice form of
 ### indexing (`array[a til b]`). Unlike scalar indexing this returns a `List`, NOT an `Array[T, M]`: the
 ### slice length is a runtime value, whereas an `Array`'s size is a buildtime parameter, so it cannot
@@ -271,7 +285,7 @@ routine Array[T, COUNT].iter() -> ArrayEmittable[T, COUNT]
 ### :returns: The element at the current index.
 ### :throws: {AbsentValueError} All `COUNT` elements have been yielded.
 routine ArrayEmittable[T, COUNT].emit!() -> T
-    if me.index >= COUNT.to[U64]()
+    if me.index >= COUNT
         throw AbsentValueError()
     danger
         var value: T = LLVM::load_element_ref[Array[T, COUNT], T](me.data, me.index)

@@ -9,8 +9,8 @@ import BuilderQuery
 ### guarantee). Aliasing is free (`.roam()`), so `b = a` maps here, NOT to a bare single-owner entity.
 ###
 ### **Access is coerced through `control`/`access`, with the lock applied TRANSPARENTLY.** `Roamed`
-### `obeys Controlling[T]`: a deref (method dispatch on a `Roamed` receiver, or passing one to a
-### `Controlling[T]`/`Accessing[T]` parameter) coerces to the inner entity via `control()`/`access()`.
+### `obeys Modifying[T]`: a deref (method dispatch on a `Roamed` receiver, or passing one to a
+### `Modifying[T]`/`Viewing[T]` parameter) coerces to the inner entity via `control()`/`access()`.
 ### That coercion does NOT bypass serialization — the builder's lock-bracket lowering wraps the
 ### enclosing access scope in `lock_enter`/`lock_exit` (no-op in LOCAL mode, a reentrant task-keyed
 ### acquire once ESCAPED), so Suflae code never sees the lock while access stays serialized. Holding a
@@ -31,7 +31,7 @@ import BuilderQuery
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
 record Roamed[T]
-obeys Controlling[T], Copyable when T obeys Copyable
+obeys Copyable when T obeys Copyable
 needs EntityType T
     pass
 
@@ -226,7 +226,7 @@ dangerous routine Roamed[T].raw_inner() -> T
 # ============================================================================
 
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
+### Inserted implicitly at call sites whose parameter is `Viewing[T]`.
 ### :returns: The inner entity as `T`.
 @readonly
 @inline
@@ -236,7 +236,7 @@ routine Roamed[T].access() -> T
         return ctrl.data_ptr().as_entity()
 
 ### Yields the inner entity as an in-flight `T` reference for read/write access.
-### Inserted implicitly at call sites whose parameter is `Controlling[T]`, and at method-dispatch
+### Inserted implicitly at call sites whose parameter is `Modifying[T]`, and at method-dispatch
 ### deref on a `Roamed` receiver.
 ### :returns: The inner entity as `T`.
 @inline
@@ -244,6 +244,19 @@ routine Roamed[T].control() -> T
     danger
         var ctrl = Hijacked[RoamController[T]](me).as_entity()
         return ctrl.data_ptr().as_entity()
+
+### Read access to the held entity. A call hands this to a `Viewing[T]` parameter given the handle.
+### :returns: The token.
+@readonly
+routine Roamed[T].view() -> Viewing[T]
+    danger
+        return Viewing[T](Hijacked[RoamController[T]](me).as_entity().data_ptr())
+
+### Write access to the held entity. A call hands this to a `Modifying[T]` parameter given the handle.
+### :returns: The token.
+routine Roamed[T].modify() -> Modifying[T]
+    danger
+        return Modifying[T](Hijacked[RoamController[T]](me).as_entity().data_ptr())
 
 # ============================================================================
 # Display (opaque — the inner value is reachable only through the lock in real use)

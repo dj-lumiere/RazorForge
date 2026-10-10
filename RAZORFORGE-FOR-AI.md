@@ -307,7 +307,8 @@ var small = count.to[U8]()        # number to number
 var big = count.to[Integer]()      # Integer/Decimal convert on to B32/B64 (nearest value)
 var n = "42".to[S64]()             # text parsing (also Integer, Decimal, B64, ...)
 var code = c.to[U32]()             # a Char's codepoint (b.to[U8]() for a Byte, a.to[U64]() for an Address)
-var letter = 65u8.to[Char]()       # 'A', and 'x'.to[Text]() makes one-character text
+var letter = 65u8.to[Char]()       # 'A' (also 0x41u32.to[Char]()), and 'x'.to[Text]() makes one-character text
+var byte = 0x41u8.to[Byte]()       # the same bits as a Byte
 var raw = status.to[S32]()         # a choice's value (also to[S64]()), perms.to[U64]() a flags bitmask
 var wide: U64 = count.to()         # T left out: the declared type gives it
 var fits: U8? = try count.to()     # none when it does not fit
@@ -321,17 +322,22 @@ var why: Check[S64] = check line.to()
   routine's return type (`return count.to()`), a parameter (`takes(n: x.to())`), and through
   `try`/`check`. Where nothing gives it (`var n = count.to()`, mid-chain `count.to().add(1)`) it is
   RF-S645: write `.to[S64]()`.
-- A pair with no conversion is RF-S150 at the call ("There is no conversion from 'Text' to 'Bool'.").
-- Building a number type from one value (`S64(from: x)`, `S64(x)`, `S64(from: status)`) is RF-S403
-  ("You built a 'S64' from a value. To convert a value, write 'value.to[S64]()'"). The member form
-  (`x.S32()`, `f.Celsius()`, `'x'.Text()`) is RF-S646 ("A conversion is written '.to[S32]()'").
-  Taking a variant's arm out (`sv.Dict()`) is not a conversion and stays. Constructors build a value
-  from its parts (`Point(x: 1, y: 2)`). Building a `Char`/`Byte`/`Address` from a number stays a
-  creator too: `Char(0x41u32)`, `Byte(from: n)`.
-- `to` is an ordinary Core routine: `routine N.to![T]() -> T` with `needs T obeys ConvertibleFrom[N]`.
-  `protocol ConvertibleFrom[S]` requires one creator, `routine Me!(from: S) -> Me`. A user type gets
-  `to` by declaring one: with `routine Celsius(from: Fahrenheit) -> Celsius`, `f.to[Celsius]()` and
-  `var c: Celsius = f.to()` work.
+- A pair with no conversion is RF-S646 at the call ("There is no conversion from 'Text' to 'Bool'.").
+  Converting a value to its own type is RF-S646 too (use the value as it is), and so is `.to[...]()` on a
+  value of a type parameter: conversions are written per concrete type, so take the parameter as the
+  target type or convert where the type is known.
+- There are no conversion creators: `S64(from: x)` is not a routine. Constructors build a value from its
+  parts (`Point(x: 1, y: 2)`). Taking a variant's arm out (`sv.Dict()`) is not a conversion and stays.
+- Each conversion is its own routine, a specialization written with the target type in the bracket:
+
+  ```razorforge
+  routine Fahrenheit.to[Celsius]() -> Celsius
+      return Celsius(degrees: (me.degrees - 32.0) * 5.0 / 9.0)
+  ```
+
+  A call picks the one whose bracket matches (`f.to[Celsius]()`, or `var c: Celsius = f.to()`). A
+  conversion that can fail is declared `routine Text.to![S64]() -> S64`. A routine written for every
+  choice (`routine T.to[S32]() needs ChoiceType T`) reaches every choice type.
 
 **Precedence**, tightest first:
 
@@ -475,6 +481,14 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
 ```
 
 - Containment is ownership: one owner at a time; `steal` marks every transfer.
+- Taking a value out of a member variable or an element is a statement:
+  `steal slot.item as old inject Item(name: "b")` puts the new value in and binds the
+  old one to `old` in one step (`fresh` is computed first, so the place is never
+  seen empty). Without `inject`, a `T?` place is left `none` (`steal slot.spare as
+  kept`), and any other place is RF-S647. An element goes through its container
+  (`steal items[0] as first inject Item(name: "y")`). A whole variable still moves
+  as an expression (`consume(r: steal b)`). The statement takes only a place
+  (RF-S648 otherwise).
   Returning a bare entity transfers ownership to the caller (`var a = make()`
   owns it, torn down at scope exit). A routine handing back an entity it does NOT
   own (e.g. a container's element) must return an access token, never a bare
@@ -495,10 +509,12 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     RF-S639 (`h.replace_with(t: h.inner.view())`).
   - A token parameter takes the entity itself: `total(items: xs)` passes
     `xs.view()` for `Viewing[T]` (a temporary works too), `grow(items: xs)` passes
-    `xs.modify()` for `Modifying[T]`, and `Accessing[T]`/`Controlling[T]` take
-    `.view()`/`.modify()` the same way.
+    `xs.modify()` for `Modifying[T]`. A record value or a value of a type parameter
+    is handed over as the address of the place it is in, and a handle or a wider
+    token over a `T` is narrowed the same way (`Retained[T]` or `Modifying[T]` to
+    `Viewing[T]`, `Retained[T]` to `Modifying[T]`).
   - A routine may return a token taken from `me` or from a parameter the caller
-    keeps owning (a token parameter, or an `Accessing`/`Controlling` one):
+    keeps owning (a token parameter):
     `return me.inner.view()`, or `peek(h: Viewing[Holder])` returning
     `h.inner.view()`. Every return takes it from the same parameter, never from a
     local, a temporary, or an entity parameter the routine owns (RF-S600). The
@@ -847,6 +863,10 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-S632      | `agent` argument unsafe to hand over  | `steal` the entity, or pass `Atomic`/`Guarded`/…   |
 | RF-S642      | `agent` before a non-call, or over generic-parameter-typed values | put it before a call with concrete types |
+| RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
+| RF-S646      | no conversion between the two types (or to its own type) | convert to a type that has one, or drop the `.to` |
+| RF-S647      | `steal place as old` leaves a non-optional place empty | add `inject <new value>` |
+| RF-S648      | `steal … as …` on something that is not a place | take from a variable, member variable or element |
 | RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |

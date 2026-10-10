@@ -64,14 +64,14 @@ needs VariantType T
             is $typeof(m) as v => return me.full_type_name() + "(type_id: " + typeidof(m).represent() + ", " + v.diagnose() + ")"
 
 ### Choice `represent()`: VALUE-dispatch on the S32 discriminant via `caseof`, returning the bare case
-### name (`READ`). `S32(from: me)` reads the discriminant; `$valueof(c)` is each case's constant. The
-### walk is exhaustive (one case always matches), so the trailing `pierce` is unreachable.
+### name (`READ`). `LLVM::reinterpret_bits[T, S32](me)` reads the discriminant, and `$valueof(c)` is each case's
+### constant. The walk is exhaustive (one case always matches), so the trailing `pierce` is unreachable.
 @readonly
 @override
 routine T.represent() -> Text
 needs ChoiceType T
     expand c in caseof(T)
-        if S32(from: me) == $valueof(c)
+        if LLVM::reinterpret_bits[T, S32](me) == $valueof(c)
             return nameof(c)
     pierce LogicBreachedError()
 
@@ -81,13 +81,13 @@ needs ChoiceType T
 routine T.diagnose() -> Text
 needs ChoiceType T
     expand c in caseof(T)
-        if S32(from: me) == $valueof(c)
-            return me.full_type_name() + "(id: " + S32(from: me).represent() + ", " + nameof(c) + ")"
+        if LLVM::reinterpret_bits[T, S32](me) == $valueof(c)
+            return me.full_type_name() + "(id: " + LLVM::reinterpret_bits[T, S32](me).represent() + ", " + nameof(c) + ")"
     pierce LogicBreachedError()
 
 ### Flags `represent()`: the ON members joined by `" and "` (`READ and WRITE`), or `<none>` if the
 ### bitmask is empty. A flags value is a COMBINATION, so `caseof` ACCUMULATES (no `when`): a SUBSET
-### test per member `(U64(from: me) & $valueof(c)) != 0` appends its name.
+### test per member (the bitmask `&` the member's value is not `0`) appends its name.
 @readonly
 @override
 routine T.represent() -> Text
@@ -95,7 +95,7 @@ needs FlagsType T
     var result = ""
     var first = true
     expand c in caseof(T)
-        if (U64(from: me) & $valueof(c)) != 0u64
+        if (LLVM::reinterpret_bits[T, U64](me) & $valueof(c)) != 0u64
             if first
                 result = nameof(c)
             else
@@ -115,7 +115,7 @@ needs FlagsType T
     var first = true
     var bits = "%"
     expand c in caseof(T)
-        if (U64(from: me) & $valueof(c)) != 0u64
+        if (LLVM::reinterpret_bits[T, U64](me) & $valueof(c)) != 0u64
             if first
                 result = nameof(c)
             else
@@ -299,7 +299,7 @@ needs AnyType T
 ### builder (`return not me.eq(...)`). The buildtime `expand` field-walk replaces the hand-written C#
 ### builder — a zero-field type expands to no comparisons and returns `true`.
 @overridable
-routine T.eq(you: Accessing[T]) -> Bool
+routine T.eq(you: Viewing[T]) -> Bool
 needs T obeys Equatable
     expand m in allmemvarof(T)
         if me.$nameof(m) != you.$nameof(m)
@@ -311,63 +311,65 @@ needs T obeys Equatable
 ### `@overridable routine T.cmp()`; `lt`/`le`/`gt`/`ge` are derived from this by the builder. A
 ### zero-field type expands to no comparisons and returns `SAME`.
 @overridable
-routine T.cmp(you: Accessing[T]) -> ComparisonSign
+routine T.cmp(you: Viewing[T]) -> ComparisonSign
 needs T obeys Comparable
     expand m in allmemvarof(T)
         if me.$nameof(m).cmp(you: you.$nameof(m)) != SAME
             return me.$nameof(m).cmp(you: you.$nameof(m))
     return SAME
 
-### A choice value IS its S32 discriminant and a flags value IS its U64 bitmask (both are the raw backing
-### scalar at the machine level), so `S32(from: choice)` / `U64(from: flags)` are pure representation
-### reinterprets — a `bitcast` of identical width, i.e. a no-op. Written as universal templates so the demand
-### collector materializes a REAL body per concrete choice/flags (rather than a bodyless phantom creator that
-### would link-fail). The choice/flags eq/cmp/represent/diagnose derives below, and `is`/`in` pattern
-### lowering, read the discriminant/bitmask through these.
-secret routine S32(from: T) -> S32
+### Returns this choice's discriminant: `status.to[S32]()`.
+### :returns: The discriminant.
+@readonly
+routine T.to[S32]() -> S32
 needs ChoiceType T
-    return LLVM::reinterpret_bits[T, S32](from)
+    return LLVM::reinterpret_bits[T, S32](me)
 
-secret routine U64(from: T) -> U64
+### Returns this choice's discriminant widened to `S64`: `status.to[S64]()`.
+### :returns: The discriminant.
+@readonly
+routine T.to[S64]() -> S64
+needs ChoiceType T
+    return LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[T, S32](me))
+
+### Returns this flags value's bitmask: `perms.to[U64]()`.
+### :returns: The bitmask.
+@readonly
+routine T.to[U64]() -> U64
 needs FlagsType T
-    return LLVM::reinterpret_bits[T, U64](from)
-
-### A choice's discriminant widened to `S64` (`c.to[S64]()`, and the choice `hash`).
-secret routine S64(from: T) -> S64
-needs ChoiceType T
-    return LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[T, S32](from))
+    return LLVM::reinterpret_bits[T, U64](me)
 
 ### Choice `eq`/`cmp`: a choice holds EXACTLY ONE case, so equality and ordering are just a compare of
 ### the S32 discriminant — NOT the record field-walk above (a choice has no member variables, so
 ### `allmemvarof(T)` is empty and the record template would wrongly return `true`/`SAME` for every pair).
-### `S32(from: me)` reinterprets the discriminant (the same reader the choice `represent` uses); the inner
+### Reading the discriminant is a reinterpretation of the value (the same read the choice `represent` makes), and the inner
 ### `==`/`cmp` resolve to the hand-written `S32` ops, so there is no recursion back into this derive.
 @override
-routine T.eq(you: Accessing[T]) -> Bool
+routine T.eq(you: Viewing[T]) -> Bool
 needs ChoiceType T
-    return S32(from: me) == S32(from: you)
+    return LLVM::reinterpret_bits[T, S32](me) == LLVM::reinterpret_bits[T, S32](you)
 
 @override
-routine T.cmp(you: Accessing[T]) -> ComparisonSign
+routine T.cmp(you: Viewing[T]) -> ComparisonSign
 needs ChoiceType T
-    return S32(from: me).cmp(you: S32(from: you))
+    return LLVM::reinterpret_bits[T, S32](me).cmp(you: LLVM::reinterpret_bits[T, S32](you))
 
 ### Choice `hash`: a choice IS its S32 discriminant, so hashing reinterprets to the integral identity
-### (`S64(from: me)`, the ChoiceType conversion) and defers to the hand-written `S64` keyed hash. Without
+### (the discriminant widened to `S64`) and defers to the hand-written `S64` keyed hash. Without
 ### this override the call binds to the abstract `Hashable.hash` and the protocol type leaks to codegen.
 @override
 routine T.hash(k0: U64, k1: U64) -> U64
 needs ChoiceType T
-    return S64(from: me).hash(k0: k0, k1: k1)
+    return LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[T, S32](me)).hash(k0: k0, k1: k1)
 
 ### Flags `eq`: EXACT bitmask equality (`perms == READ` means "exactly READ, nothing else"). A flags value
 ### is a SET of bits, so membership/subset ("is READ on?") is the separate `in` operator, never `==`. Like
 ### the choice derives, this compares the reinterpreted U64 bitmask via the hand-written `U64` op — no
 ### field-walk, no recursion. Flags have no natural total order, so no `cmp` derive.
 @override
-routine T.eq(you: Accessing[T]) -> Bool
+routine T.eq(you: Viewing[T]) -> Bool
 needs FlagsType T
-    return U64(from: me) == U64(from: you)
+    return LLVM::reinterpret_bits[T, U64](me) == LLVM::reinterpret_bits[T, U64](you)
 
 ### Flags bitwise combinators: `a and b` (union) lowers to `bitor`, `a but b` (intersection) to `bitand`;
 ### `bitxor` for symmetry. A flags value IS its U64 bitmask, so each reads both operands as U64, applies the
@@ -377,17 +379,17 @@ needs FlagsType T
 @override
 routine T.bitor(you: T) -> Me
 needs FlagsType T
-    return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitor(you: U64(from: you)))
+    return LLVM::reinterpret_bits[U64, Me](LLVM::reinterpret_bits[T, U64](me).bitor(you: LLVM::reinterpret_bits[T, U64](you)))
 
 @override
 routine T.bitand(you: T) -> Me
 needs FlagsType T
-    return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitand(you: U64(from: you)))
+    return LLVM::reinterpret_bits[U64, Me](LLVM::reinterpret_bits[T, U64](me).bitand(you: LLVM::reinterpret_bits[T, U64](you)))
 
 @override
 routine T.bitxor(you: T) -> Me
 needs FlagsType T
-    return LLVM::reinterpret_bits[U64, Me](U64(from: me).bitxor(you: U64(from: you)))
+    return LLVM::reinterpret_bits[U64, Me](LLVM::reinterpret_bits[T, U64](me).bitxor(you: LLVM::reinterpret_bits[T, U64](you)))
 
 ### Flags `all_off` (empty mask) / `all_on` (union of every declared member bit, folded over `caseof`).
 @override
@@ -408,19 +410,19 @@ needs FlagsType T
 ### which the collector/harness codegen path lost; deriving them here routes them through the same
 ### everywhere-derive template mechanism as `represent`/`cmp` (registered + materialized by the collector),
 ### so `a < b` (-> `a.lt(b)`) resolves for Char, numerics, records, collections uniformly.
-routine T.lt(you: Accessing[T]) -> Bool
+routine T.lt(you: Viewing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) == ME_SMALL
 
-routine T.le(you: Accessing[T]) -> Bool
+routine T.le(you: Viewing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) != ME_LARGE
 
-routine T.gt(you: Accessing[T]) -> Bool
+routine T.gt(you: Viewing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) == ME_LARGE
 
-routine T.ge(you: Accessing[T]) -> Bool
+routine T.ge(you: Viewing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) != ME_SMALL
 
@@ -472,7 +474,7 @@ needs AnyType T
         is Moment => return SerialValue(from: me)
         is Bytes => return SerialValue(from: me)
         is Text => return SerialValue(from: me)
-        is Byte => return SerialValue(from: U8(me))
+        is Byte => return SerialValue(from: LLVM::reinterpret_bits[Byte, U8](value: me))
         is Char => return SerialValue(from: me.represent())
         is S128 => return SerialValue(from: me.represent())
         is U128 => return SerialValue(from: me.represent())
@@ -507,7 +509,7 @@ routine T.serialize() -> SerialValue
 needs FlagsType T
     var names = List[SerialValue]()
     expand c in caseof(T)
-        if (U64(from: me) & $valueof(c)) != 0u64
+        if (LLVM::reinterpret_bits[T, U64](me) & $valueof(c)) != 0u64
             names.add_last(value: SerialValue(from: nameof(c)))
     return SerialValue(steal names)
 

@@ -83,14 +83,14 @@ public class IterPrivacyTests
     [Fact]
     public void ReferringParam_CallSiteCoercion_Resolves()
     {
-        // The builder injects `.access()` automatically at the Accessing[T] param.
+        // The builder injects `.access()` automatically at the Viewing[T] param.
         // No user-visible $access call appears in source; the check must not fire on the
         // synthesized coercion.
         string source = """
                         record Box
                             n: S64
 
-                        routine echo(b: Accessing[Box]) -> S64
+                        routine echo(b: Viewing[Box]) -> S64
                             return 0_s64
 
                         routine start()
