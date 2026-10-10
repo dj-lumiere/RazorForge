@@ -279,6 +279,11 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
 - Absent is matched by `is None` on `Maybe[T]` / a variant's zero
   tag. `Check[T]` has no absent state (only `Crashables | T`).
 
+**Variants written in place:** `-> S64 | Text`, `List[Circle | Square]`, `x: S64 | Text | Bool`. The same types in
+any order are one type; a value of a member goes in as an argument, initializer, `return` or new value; a smaller
+variant goes where a larger one is expected; `define Circle | Square as Shape` names it. Taken apart with `when` /
+`is T as t`.
+
 ## 4. Variables and operators
 
 ```razorforge
