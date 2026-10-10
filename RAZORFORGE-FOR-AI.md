@@ -996,7 +996,8 @@ Verbs (methods on `Agent[T]`, all failable):
 - **A failure stays in its Agent.** A failure inside the work does not end the program where the work
   runs, and sibling Agents keep running. It surfaces where the Agent is retrieved: `job.retrieve()`
   rethrows it (bare, it crashes loudly there like any failure), `check job.retrieve()` /
-  `try job.retrieve()` recover it (or `try agent f()` up front).
+  `try job.retrieve()` recover it (or `try agent f()` up front). The crash report's trace ends with
+  `agent in start()` (the line of the `agent` call) and `Thrown again at` names the `retrieve()` line.
 - `cancel()` — asks the work to stop. Work nothing started yet never runs. Running work sees the request at
   its next wait (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there
   (a thread of its own cannot be stopped from outside). Retrieving a cancelled Agent waits for it to stop,

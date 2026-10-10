@@ -48,7 +48,8 @@ routine crash_report(type_name: Text, message: Text, file: Text, line: S32, colu
 ### :param message: What went wrong.
 ### :param error: The caught error, which kept the trace it was first thrown with.
 ### :param file: The source file it was thrown again in.
-### :param line: That source line.
+### :param line: That source line, or 0 for a rethrow written in the standard library, named by where the
+###     program called into it.
 ### :param column: That source column.
 @untraced
 routine crash_report_rethrown(type_name: Text, message: Text, error: Crashables, file: Text, line: S32, column: S32)
@@ -72,15 +73,95 @@ routine crash_report_rethrown(type_name: Text, message: Text, error: Crashables,
             crash_write(text: "\n")
         crash_write_frames(depth: depth, frames: frames)
     crash_write(text: "Thrown again at ")
-    crash_write(text: file)
-    crash_write(text: ":")
-    crash_write_number(value: line)
-    crash_write(text: ":")
-    crash_write_number(value: column)
-    crash_write(text: "\n")
+    if line == 0_s32 and crash_write_library_caller(library: file)
+        crash_write(text: "\n")
+    else
+        crash_write(text: file)
+        crash_write(text: ":")
+        crash_write_number(value: line)
+        crash_write(text: ":")
+        crash_write_number(value: column)
+        crash_write(text: "\n")
     crash_write(text: "\u00001B[0m")
     C::rf_crash_exit()
     return
+
+### Writes where the program called into the standard library a rethrow is written in: the position of the most
+### recent frame of the live trace whose file is outside the library's directory (an Agent's error rethrown in the
+### library is named by the `retrieve()` call that took it).
+### :param library: The standard library's directory.
+### :returns: `false` when the trace has no such frame (a build that keeps no trace), and nothing was written.
+@untraced
+routine crash_write_library_caller(library: Text) -> Bool
+    var depth = LLVM::trace_depth()
+    if depth <= 0_s32
+        return false
+    var shown = depth
+    if shown > 32_s32
+        shown = 32_s32
+    danger
+        var frames = LLVM::trace_frames()
+        var i = 0_s32
+        while i < shown
+            var index = LLVM::bit_and(a: depth -% 1_s32 -% i, b: 31_s32)
+            var frame = frames.stride(count: LLVM::sign_extend[S32, S64](index)).peek()
+            if not c_text_starts_with(text: frame.file, prefix: library)
+                crash_write_c_text(text: frame.file)
+                crash_write(text: ":")
+                crash_write_number(value: frame.line)
+                crash_write(text: ":")
+                crash_write_number(value: frame.column)
+                return true
+            i = i +% 1_s32
+    return false
+
+### Whether a NUL-terminated byte string starts with the UTF-8 bytes of a text.
+### :param text: The string.
+### :param prefix: The text it may start with.
+### :returns: `true` when it does.
+@untraced
+routine c_text_starts_with(text: Address, prefix: Text) -> Bool
+    var at = 0_u64
+    var i = 0_u64
+    while i < prefix.count
+        danger
+            var code = prefix.data.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek().codepoint()
+            var matched = c_text_code_point_at(text: text, at: at, code: code)
+            if matched == 0_u64
+                return false
+            at = at +% matched
+        i = i +% 1_u64
+    return true
+
+### Whether a NUL-terminated byte string holds the UTF-8 bytes of one code point at a byte offset.
+### :param text: The string.
+### :param at: The byte offset.
+### :param code: The code point.
+### :returns: how many bytes it took, or 0 when the bytes there differ.
+@untraced
+routine c_text_code_point_at(text: Address, at: U64, code: U32) -> U64
+    var count = 4_u64
+    var lead = 0xF0u32
+    if code <= 0x7Fu32
+        count = 1_u64
+        lead = 0x00u32
+    elseif code <= 0x7FFu32
+        count = 2_u64
+        lead = 0xC0u32
+    elseif code <= 0xFFFFu32
+        count = 3_u64
+        lead = 0xE0u32
+    var k = 0_u64
+    while k < count
+        var expected = crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32 * LLVM::int_truncate[U64, U32](count -% 1_u64 -% k))
+        if k == 0_u64
+            expected = crash_utf8_byte(lead: lead, code: code, shift: 6u32 * LLVM::int_truncate[U64, U32](count -% 1_u64))
+        danger
+            var actual = Hijacked[Byte](text).stride(count: LLVM::reinterpret_bits[U64, S64](at +% k)).peek()
+            if LLVM::reinterpret_bits[Byte, U8](actual) != expected
+                return 0_u64
+        k = k +% 1_u64
+    return count
 
 ### Writes the calling thread's crash trace, most recent frame first. Writes nothing when the build keeps no
 ### trace.

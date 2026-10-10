@@ -137,6 +137,25 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rf:27:13", actualString: report);
     }
 
+    /// <summary>An error in an Agent's work crashes where the Agent is retrieved. The report names the work's
+    /// frames, the Agent by the routine it was made in (not the routines the builder wrote to run it), and the
+    /// program's own `retrieve()` line as where the error was thrown again (not the standard library's).</summary>
+    [Fact]
+    public void AgentCrash_ReportsTheProgramsOwnPlaces()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "agent_crash_report.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        string report = stdout + stderr;
+        Assert.Contains(expectedSubstring: "boom!(Core.S64) (", actualString: report);
+        Assert.Contains(expectedSubstring: "agent in Tests/ExitCode/AgentCrashReport.start() (", actualString: report);
+        Assert.DoesNotContain(expectedSubstring: "__agent", actualString: report);
+        Assert.Contains(expectedSubstring: "Thrown again at", actualString: report);
+        Assert.Contains(expectedSubstring: "agent_crash_report.rf:16:13", actualString: report);
+    }
+
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
         string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ExitCode", fixture]);
