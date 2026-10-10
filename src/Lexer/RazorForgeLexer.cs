@@ -237,7 +237,7 @@ public partial class RazorForgeLexer
             [key: "everywhere"] = TokenType.Everywhere,
             // Reserved for keywords a later release uses: none of them can name anything now.
             [key: "until"] = TokenType.ReservedWord,
-            [key: "becomes"] = TokenType.ReservedWord,
+            [key: "becomes"] = TokenType.Becomes,
             [key: "agent"] = TokenType.Agent,
             [key: "inject"] = TokenType.ReservedWord
         };

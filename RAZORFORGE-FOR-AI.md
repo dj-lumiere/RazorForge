@@ -431,9 +431,9 @@ when terrain
     else => me.hero.position = cell
 ```
 
-A `when` that gives a value (`var label = when …`) takes one expression per arm.
-Several statements there are a build error: compute the value first, or write a
-`when` statement that sets a variable.
+A `when` that gives a value (`var label = when …`) takes one expression per arm,
+or a block arm that ends with `becomes value` (its lines run, then `value` is the
+arm's value). A block arm without `becomes` is RF-S307, `becomes` elsewhere RF-S308.
 
 ## 6. Routines
 
@@ -1163,7 +1163,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop`
-  `while` `each` `break` `continue` `return` `throw` `pierce` `todo`
+  `while` `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`

@@ -24,7 +24,7 @@ internal sealed class RazorForgeLanguageServer : LanguageServerProfile
 
     /// <inheritdoc/>
     /// <remarks>From the improvement plan: `until` loops, `becomes` in an expression `when`, `inject` after `steal … as`.</remarks>
-    public override IReadOnlyList<string> PlannedKeywords { get; } = ["until", "becomes", "inject"];
+    public override IReadOnlyList<string> PlannedKeywords { get; } = ["until", "inject"];
 
     /// <inheritdoc/>
     /// <remarks>`threaded` / `suspended` gave way to `agent` at the call.</remarks>
