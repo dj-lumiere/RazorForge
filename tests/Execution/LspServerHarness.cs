@@ -112,7 +112,7 @@ internal static class LspTestHarness
     /// occurrence of <paramref name="needle"/> in <paramref name="text"/>, as LSP positions. Text is
     /// assumed ASCII (UTF-16 code units == chars). Throws if the occurrence is not found.
     /// </summary>
-    public static (int Line, int Character) PositionOf(string text, string needle, int occurrence = 1)
+    public static (int Line, int Char) PositionOf(string text, string needle, int occurrence = 1)
     {
         int idx = -1;
         for (int k = 0; k < occurrence; k++)

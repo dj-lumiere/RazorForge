@@ -18,7 +18,7 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
-                                                      var ch: Character = 'A'
+                                                      var ch: Char = 'A'
                                                       return
                                                   """);
 
@@ -33,7 +33,7 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
-                                                      var ch: Character = "Hello"[0]
+                                                      var ch: Char = "Hello"[0]
                                                       return
                                                   """);
 
@@ -47,18 +47,18 @@ public class TextBytesInteropTests
     public void CharacterUsesIsAlphabetic_NotIsLetter()
     {
         AnalysisResult valid = AnalyzeSa(source: """
-                                                 routine test(ch: Character)
+                                                 routine test(ch: Char)
                                                      var ok: Bool = ch.is_alphabetic()
                                                      return
                                                  """);
         Assert.Empty(collection: valid.Errors);
 
         AnalysisResult invalid = AnalyzeSa(source: """
-                                                   routine test(ch: Character)
+                                                   routine test(ch: Char)
                                                        var bad: Bool = ch.is_letter()
                                                        return
                                                    """);
-        // `is_letter()` calls a routine that does not exist on Character (the API is
+        // `is_letter()` calls a routine that does not exist on Char (the API is
         // `is_alphabetic`), so it is a memberRoutineNotFound — `.name()` is a routine call, distinct
         // from `.name` member access, and an unresolved routine call is RF-S458.
         Assert.Contains(collection: invalid.Errors,

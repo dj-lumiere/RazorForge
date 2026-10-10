@@ -93,7 +93,7 @@ public class ShapeEffectTests
     public void Analyze_LoopHandsItsListToARoutineValue_Errors()
     {
         string source = Prelude + """
-                                  routine run_each(xs: Modifying[List[S64]], action: Routine[(Modifying[List[S64]]), None])
+                                  routine run_each(xs: Modifying[List[S64]], action: Callable[(Modifying[List[S64]]), None])
                                       each x in xs
                                           action(xs)
                                       return

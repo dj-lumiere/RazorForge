@@ -184,7 +184,7 @@ public class FeatureCoverageTests
                               module Test/Feat/Lambda
                               import IO/Console
 
-                              routine make_adder(n: S64) -> Routine[(S64,), S64]
+                              routine make_adder(n: S64) -> Callable[(S64,), S64]
                                   return x given n => x + n
 
                               routine start()

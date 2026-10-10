@@ -241,7 +241,7 @@ binding RazorForge has.
 - Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
   defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
-- `Bool`, `Text` (UTF-32 string), `Character`, `Byte`, `Bytes`
+- `Bool`, `Text` (UTF-32 string), `Char`, `Byte`, `Bytes`
 - `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals
 - Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `CircularList[T]`, `BitList`,
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
@@ -916,7 +916,7 @@ routine start()
 - **The handler runs on a dedicated dispatch thread**, not the main thread — keep it
   small (set a flag, log, save) and thread-aware. Multiple handlers per class all run,
   in registration order.
-- The handler type is **`Routine[(), None]`** — a no-argument, no-return routine value.
+- The handler type is **`Callable[(), None]`** — a no-argument, no-return routine value.
   (`()` is the empty parameter tuple; `None` is the void return. The parameter list is
   always tuple-notation: `()`, `(T,)`, `(A, B)`.)
 - **Carrying state — the context overload.** Because the handler runs on another thread,

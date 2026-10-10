@@ -23,7 +23,7 @@ needs AnyType T
     return result
 
 ### The form a value takes as a CONTAINER ELEMENT: stringy leaves are quoted (Text/Bytes in `"…"`,
-### Character/Byte in `'…'`) so nested strings print delimited (`["a", "b"]` / `['a', 'b']`), while
+### Char/Byte in `'…'`) so nested strings print delimited (`["a", "b"]` / `['a', 'b']`), while
 ### numbers, nested containers and records stay structural. A single generic free routine — the `when T`
 ### type-switch is folded at monomorphization (T is concrete there; RF has no inheritance, so `T is X` is
 ### exact type-identity), so each instantiation collapses to just its arm. Containers call `nested_repr`
@@ -33,7 +33,7 @@ needs AnyType T
     when T
         is Text => return "\"" + value.represent() + "\""
         is Bytes => return "\"" + value.represent() + "\""
-        is Character => return "'" + value.represent() + "'"
+        is Char => return "'" + value.represent() + "'"
         is Byte => return "'" + value.represent() + "'"
         else => return value.represent()
 
@@ -205,9 +205,9 @@ needs TupleType T
     return result + ")"
 
 ### Routine values: `represent`/`diagnose` show the SIGNATURE (the routine type's name, e.g.
-### `Routine[(S32,), S32]`) — executable code has no field structure to walk. `serialize` boxes that same
+### `Callable[(S32,), S32]`) — executable code has no field structure to walk. `serialize` boxes that same
 ### signature Text: serializing code is meaningless, but the signature is the useful view. These make a
-### routine-typed member (an entity may hold one — `entity Callback { f: Routine[...] }`) serialize
+### routine-typed member (an entity may hold one — `entity Callback { f: Callable[...] }`) serialize
 ### uniformly through the universal walk, no capability gate.
 @readonly
 @override
@@ -268,8 +268,8 @@ needs CrashableType T
 ### A routine VALUE (`{ptr fn, ptr bound}`) owns no heap resource that a holding field is responsible for —
 ### a captureless function pointer, or a bound word managed elsewhere — so its teardown is a no-op. The
 ### record/entity/variant destroy templates are kind-gated and none match a RoutineType, so without this a
-### routine-typed member (`entity Callback { f: Routine[...] }`, an iterator's `transform`/`predicate`) would
-### field-walk into an UNDEFINED `Routine[(…),…].destroy()` at link.
+### routine-typed member (`entity Callback { f: Callable[...] }`, an iterator's `transform`/`predicate`) would
+### field-walk into an UNDEFINED `Callable[(…),…].destroy()` at link.
 @override
 routine T.destroy()
 needs RoutineType T
@@ -402,7 +402,7 @@ needs FlagsType T
 ### (`me.cmp(you)` is `ME_SMALL`/`SAME`/`ME_LARGE`). These used to be emitted by the C# DerivedOperatorPass,
 ### which the collector/harness codegen path lost; deriving them here routes them through the same
 ### everywhere-derive template mechanism as `represent`/`cmp` (registered + materialized by the collector),
-### so `a < b` (-> `a.lt(b)`) resolves for Character, numerics, records, collections uniformly.
+### so `a < b` (-> `a.lt(b)`) resolves for Char, numerics, records, collections uniformly.
 routine T.lt(you: Accessing[T]) -> Bool
 needs T obeys Comparable
     return me.cmp(you: you) == ME_SMALL
@@ -446,7 +446,7 @@ needs T obeys Hashable
 ###
 ### `serialize` is UNIVERSAL — EVERY type has one, so the walk calls `me.field.serialize()`
 ### UNCONDITIONALLY (no capability gate, no buildtime prune): a scalar with its own SerialValue arm boxes
-### into that arm; a fixed-width scalar without one (S128, D64, Character, ...) boxes its `represent()`
+### into that arm; a fixed-width scalar without one (S128, D64, Char, ...) boxes its `represent()`
 ### Text, which its `T(from: SerialValue)` parses back; a `Byte` boxes as `U8`; an aggregate record/entity
 ### recurses. `choice`/`flags`/variants override below, a routine value boxes its signature Text.
 @overridable
@@ -468,7 +468,7 @@ needs AnyType T
         is Bytes => return SerialValue(from: me)
         is Text => return SerialValue(from: me)
         is Byte => return SerialValue(from: U8(me))
-        is Character => return SerialValue(from: me.represent())
+        is Char => return SerialValue(from: me.represent())
         is S128 => return SerialValue(from: me.represent())
         is U128 => return SerialValue(from: me.represent())
         is S256 => return SerialValue(from: me.represent())

@@ -1082,13 +1082,13 @@ public class CompilerPipelineLoweringTests
         Assert.NotEmpty(collection: matchingBodies);
         foreach ((string key, Statement body) in matchingBodies)
         {
-            // The lowering pipeline may leave Character(...) as a classified CallExpression
+            // The lowering pipeline may leave Char(...) as a classified CallExpression
             // or lower it to a CreatorExpression — both must carry constructor metadata.
             var constructions = EnumerateExpressions(statement: body)
                                .Where(predicate: e => e is CallExpression
                                 {
-                                    Callee: IdentifierExpression { Name: "Character" }
-                                } or CreatorExpression { TypeName: "Character" })
+                                    Callee: IdentifierExpression { Name: "Char" }
+                                } or CreatorExpression { TypeName: "Char" })
                                .ToList();
 
             Assert.NotEmpty(collection: constructions);
@@ -1101,7 +1101,7 @@ public class CompilerPipelineLoweringTests
                             Assert.True(
                                 condition: ctorCall.LoweringKind ==
                                            CallLoweringKind.TypeConstructor,
-                                userMessage: $"{key} contains unclassified Character(...)");
+                                userMessage: $"{key} contains unclassified Char(...)");
                             Assert.NotNull(@object: ctorCall.ConstructedType);
                             break;
                         case CreatorExpression creator:
@@ -1203,8 +1203,8 @@ public class CompilerPipelineLoweringTests
     public void BackendEntryValidator_RejectsConstructorLikeCallWithoutLoweringMetadata()
     {
         string source = """
-                        routine test() -> Character
-                            return Character(65_u32)
+                        routine test() -> Char
+                            return Char(65_u32)
                         """;
 
         Program program = Parse(source: source);
@@ -1214,9 +1214,9 @@ public class CompilerPipelineLoweringTests
         Assert.Empty(collection: result.Errors);
 
         TypeSymbol characterType = Assert.IsType<RecordTypeSymbol>(
-            @object: result.Registry.LookupType(name: "Character"));
+            @object: result.Registry.LookupType(name: "Char"));
         var leakedCall = new CallExpression(
-            Callee: new IdentifierExpression(Name: "Character", Location: program.Location),
+            Callee: new IdentifierExpression(Name: "Char", Location: program.Location),
             Arguments:
             [
                 new LiteralExpression(Value: "65_u32",

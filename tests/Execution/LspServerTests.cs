@@ -53,7 +53,7 @@ public sealed class LspServerTests
     private const string Shutdown = "{\"jsonrpc\":\"2.0\",\"id\":999,\"method\":\"shutdown\"}";
     private const string Exit = "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}";
 
-    private static (int Line, int Character) Pos(string needle, int occurrence = 1)
+    private static (int Line, int Char) Pos(string needle, int occurrence = 1)
     {
         return LspTestHarness.PositionOf(text: Source, needle: needle, occurrence: occurrence);
     }
