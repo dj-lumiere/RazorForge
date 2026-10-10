@@ -576,6 +576,9 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     case StealExpression steal:
                         RecordWrite(target: steal.Operand);
                         break;
+                    case DropStatement { EndsBinding: true } ended:
+                        RecordWrite(target: ended.Expression);
+                        break;
                     case CallExpression call:
                         foreach (string written in CallWrites(call: call, tokenOrigins: Lookup)
                                     .Select(selector: w => w.Path))
@@ -597,6 +600,37 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
     }
 
     /// <summary>The parts a call may replace, as absolute paths, each with the name of the routine doing it.</summary>
+    /// <summary>The paths a call writes through its own receiver (the parts of <c>me</c> its callee replaces).</summary>
+    private HashSet<string> ReceiverWrites(CallExpression call, RoutineInfo callee,
+        Dictionary<string, HashSet<string>> effects, Func<string, HashSet<string>?> tokenOrigins)
+    {
+        var writes = new HashSet<string>(comparer: StringComparer.Ordinal);
+        if (effects.TryGetValue(key: MeSlot, value: out HashSet<string>? meParts) && TakesReceiver(callee: callee) &&
+            call.Callee is MemberExpression { Object: var receiver } &&
+            PathsOf(expr: receiver, tokenOrigins: tokenOrigins) is { } receivers)
+        {
+            foreach (string r in receivers)
+            {
+                foreach (string part in meParts)
+                {
+                    writes.Add(item: Join(path: r, suffix: part));
+                }
+            }
+        }
+
+        return writes;
+    }
+
+    /// <summary>The paths <paramref name="call"/> writes through its own receiver, for a call that is not made
+    /// through a routine value.</summary>
+    private HashSet<string> ReceiverWrites(CallExpression call, Func<string, HashSet<string>?> tokenOrigins)
+    {
+        return IsRoutineValueCall(call: call) || call.ResolvedRoutine is not { } callee
+            ? []
+            : ReceiverWrites(call: call, callee: callee, effects: CalleeEffects(callee: callee),
+                tokenOrigins: tokenOrigins);
+    }
+
     private List<(string Path, string Callee)> CallWrites(CallExpression call,
         Func<string, HashSet<string>?> tokenOrigins)
     {
@@ -625,17 +659,9 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             return writes;
         }
 
-        if (effects.TryGetValue(key: MeSlot, value: out HashSet<string>? meParts) && TakesReceiver(callee: callee) &&
-            call.Callee is MemberExpression { Object: var receiver } &&
-            PathsOf(expr: receiver, tokenOrigins: tokenOrigins) is { } receivers)
+        foreach (string path in ReceiverWrites(call: call, callee: callee, effects: effects, tokenOrigins: tokenOrigins))
         {
-            foreach (string r in receivers)
-            {
-                foreach (string part in meParts)
-                {
-                    writes.Add(item: (Join(path: r, suffix: part), callee.Name));
-                }
-            }
+            writes.Add(item: (path, callee.Name));
         }
 
         foreach ((string param, Expression arg) in BoundArguments(call: call, callee: callee))
@@ -1079,6 +1105,19 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
                     return;
                 }
+                // `drop x` ends `x` as `steal x` does: a token taken from it ends here.
+                case DropStatement { EndsBinding: true } ended:
+                    Expr(expr: ended.Expression);
+                    if (owner.PathsOf(expr: ended.Expression, tokenOrigins: Held) is { } dropped)
+                    {
+                        foreach (string d in dropped)
+                        {
+                            End(written: d, why: $"was ended by 'drop {Shown(path: d)}'", at: ended.Location);
+                        }
+                    }
+
+                    EndTemporaries(index: index, at: stmt.Location);
+                    return;
                 default:
                     foreach (Expression e in OwnExpressions(stmt: stmt))
                     {
@@ -1375,12 +1414,18 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             List<(string Path, string Callee)> writes = owner.CallWrites(call: call, tokenOrigins: Held);
             if (_reporting && inUse.Count > 0)
             {
+                // A write the callee makes through its own receiver leaves that receiver alive: the call runs on it.
+                Expression? ownReceiver = call.Callee is MemberExpression { Object: var self } ? Unwrap(expr: self) : null;
+                HashSet<string> throughReceiver = owner.ReceiverWrites(call: call, tokenOrigins: Held);
+
                 // A `steal` among the arguments is RF-S615 at the stolen variable's other use in the call (the
                 // builder's own use-after-steal check says it moves out in the same call), so only the call's own
                 // effects are checked here.
                 foreach ((string path, string callee) in writes)
                 {
-                    if (inUse.FirstOrDefault(predicate: u => u.Origin != UnknownOrigin && Ends(written: path, origin: u.Origin)) is
+                    if (inUse.FirstOrDefault(predicate: u => u.Origin != UnknownOrigin && Ends(written: path, origin: u.Origin) &&
+                                                             !(ReferenceEquals(objA: u.Operand, objB: ownReceiver) &&
+                                                               throughReceiver.Contains(item: path))) is
                         { Operand: not null } hit)
                     {
                         string by = callee.Length > 0

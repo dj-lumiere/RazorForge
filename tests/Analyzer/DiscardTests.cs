@@ -362,20 +362,23 @@ public class DiscardTests
     // InvalidDropTarget), not a grammatical one — the parser records whatever expression
     // follows `drop`, and the semantic verifier rejects non-call targets.
 
-    /// <summary>Verifies that discarding a bare variable is a semantic error.</summary>
+    /// <summary>`drop x` on a local ends the binding: a later use is an error.</summary>
     [Fact]
-    public void Analyze_DiscardVariable_ReportsError()
+    public void Analyze_DropVariable_EndsIt()
     {
         string source = """
                         routine test()
                             var x = 42
                             drop x
+                            var y = x
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.InvalidDropTarget);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UseAfterSteal);
     }
 
     /// <summary>Verifies that discarding an integer literal is a semantic error.</summary>

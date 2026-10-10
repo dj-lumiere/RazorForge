@@ -4,25 +4,24 @@ using System.Text;
 namespace RazorForge.Tests.Meta;
 
 /// <summary>
-/// End-to-end check of the runtime use-after-steal net: a read of a binding that a loop moved out on an
-/// earlier pass (the build cannot see it) crashes with UseAfterStealError naming the binding, instead of
-/// using a stale entity. Builds and runs <c>tests/Fixtures/UseAfterSteal/*.rf</c> through <c>buildandrun</c>.
+/// End-to-end checks of a binding a loop moves out on an earlier pass. Builds and runs
+/// <c>tests/Fixtures/UseAfterSteal/*.rf</c> through <c>buildandrun</c>.
 /// </summary>
 public sealed class UseAfterStealTests
 {
     private static readonly string RepoRoot = LocateRepoRoot();
 
+    /// <summary>A loop that moves `a` out on its first pass and reads it on the next is caught by the build
+    /// (RF-S616), before any runtime net is needed.</summary>
     [Fact]
-    public void StealInLoop_CrashesWithUseAfterSteal()
+    public void StealInLoop_IsABuildError()
     {
         (int exit, string stdout, string stderr) = RunFixture(fixture: "steal_in_loop.rf");
 
         Assert.True(condition: exit != 0,
-            userMessage: $"expected a crash, got exit 0\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-        Assert.Contains(expectedSubstring: "consumed 1", actualString: stdout);
-        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "Use after steal error: 'a' was used after it was moved out with steal.",
-            actualString: stderr);
+            userMessage: $"expected a build error, got exit 0\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "RF-S616", actualString: stdout + stderr);
+        Assert.DoesNotContain(expectedSubstring: "consumed 1", actualString: stdout);
     }
 
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)

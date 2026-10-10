@@ -123,7 +123,10 @@ When unsure, consult ground truth in the repo/package:
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
 9. **A result you mean to throw away takes `drop`**: `drop name.trim()` (RF-W007 otherwise). A routine marked
    `@discardable` returns a by-product (`Set.add`/`Set.remove`/`Dict.remove`'s Bool, `Atomic.fetch_*`'s old value,
-   `File.write_text`'s count): its result may be dropped silently, `seen.add(value: v)`.
+   `File.write_text`'s count): its result may be dropped silently, `seen.add(value: v)`. `drop x` on a local
+   binding the routine owns (a local, an entity parameter handed over with `steal`) tears it down there and ends
+   the name like `steal x` (RF-S615 after, RF-S616 on some paths only, tokens from it end, RF-S643); a member
+   variable, a token, `me` or a global is RF-S421.
 10. **Indentation is 4 spaces and blocks are indentation-delimited.** No braces.
 11. **Chained comparisons are one expression**: `0 <= x <= 10` works. Every
     operand is evaluated once, eagerly, left to right, before any comparison:
@@ -912,6 +915,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
+| RF-W009      | a started Agent nothing collects      | `retrieve()` it, or `drop job` to stop it          |
 | RF-S632      | `agent` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
 | RF-S642      | `agent` before a non-call, or over generic-parameter-typed values | put it before a call with concrete types |
 | RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
@@ -1018,7 +1022,9 @@ Verbs (methods on `Agent[T]`, all failable):
   all, each Agent's value or failure in input order), `take_finished() -> List[Agent[T]]` (takes the finished Agents
   out in place and returns them, leaving the rest: rebuilding the list with `where` would drop work still
   running). `gather` and `race` start the Agents nothing started with `start_now()`.
-- A dropped Agent that was never retrieved is not cancelled for you. Collect what you start.
+- An Agent is an entity with one owner: `steal` moves it, `var b = a` is RF-S413. When its owner lets go of it
+  before a verb took its value (`drop job`, or the end of the scope or list that holds it), the work is cancelled
+  and waited for. A started Agent nothing retrieves, drops or hands on is warning RF-W009.
 - There is no fire-and-forget verb: start with `start_now()` and collect later with `retrieve()` or
   `gather()`. An Agent thrown away before anything starts it (`agent f()` as a statement, or
   `drop agent f()`) never runs its work, and is warning RF-W008.

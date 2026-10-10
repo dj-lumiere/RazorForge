@@ -1,0 +1,42 @@
+module Tests/Stdlib/AgentDropApi
+
+# An Agent has one owner. When the owner lets go of it before a verb took its value (`drop job`, or the end of the
+# scope that holds it), running work is cancelled and waited for, work nothing started never runs, and `steal` moves
+# an Agent to a new owner.
+
+import IO/Console
+
+routine spin(stopped: Atomic[S64]) -> S64
+    var turns = 0
+    while not cancellation_requested()
+        waitfor(1ms)
+        turns += 1
+    drop stopped.fetch_add(delta: 1)
+    return turns
+
+routine leave_running(stopped: Atomic[S64])
+    var jobs = List[Agent[S64]]()
+    jobs.add_last(value: agent spin(stopped: stopped))
+    jobs[0].start_now()
+    waitfor(5ms)
+    return
+
+routine start()
+    var stopped = Atomic[S64](initial: 0)
+    var job = agent spin(stopped: stopped)
+    job.start_now()
+    waitfor(5ms)
+    drop job
+    show(f"after drop: {stopped.load()}")
+    leave_running(stopped: stopped)
+    show(f"after scope: {stopped.load()}")
+    var never = agent spin(stopped: stopped)
+    drop never
+    show(f"never started: {stopped.load()}")
+    var a = agent spin(stopped: stopped)
+    var b = steal a
+    b.start_apart()
+    drop b
+    show(f"moved: {stopped.load()}")
+    show("DONE")
+    return
