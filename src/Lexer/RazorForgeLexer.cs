@@ -228,7 +228,6 @@ public partial class RazorForgeLexer
 
             // Generic constraints
             [key: "needs"] = TokenType.Needs,
-            [key: "onlyif"] = TokenType.OnlyIf,
 
             // Associated types
             [key: "relates"] = TokenType.Relates,

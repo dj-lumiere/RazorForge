@@ -27,10 +27,10 @@ internal sealed class RazorForgeLanguageServer : LanguageServerProfile
     public override IReadOnlyList<string> PlannedKeywords { get; } = ["agent", "until", "becomes", "inject"];
 
     /// <inheritdoc/>
-    /// <remarks>From the improvement plan: `absent` / `lookup` go with their failure kinds, `onlyif` becomes `when`,
+    /// <remarks>From the improvement plan: `absent` / `lookup` go with their failure kinds,
     /// `threaded` / `suspended` give way to `agent` at the call, `unless` / `but` / `disobeys` go.</remarks>
     public override IReadOnlyList<string> RetiredKeywords { get; } =
-        ["absent", "lookup", "onlyif", "threaded", "suspended", "unless", "but", "disobeys"];
+        ["absent", "lookup", "threaded", "suspended", "unless", "but", "disobeys"];
 
     /// <inheritdoc/>
     public override string? Format(string text, string fileName)
