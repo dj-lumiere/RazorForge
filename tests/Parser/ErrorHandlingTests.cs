@@ -350,7 +350,7 @@ public class ErrorHandlingTests
                         routine handle(value: User?)
                             when value
                                 is None => show("not found")
-                                else u => show(u.name)
+                                else as u => show(u.name)
                             return
                         """;
 

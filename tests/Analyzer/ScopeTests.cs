@@ -279,8 +279,8 @@ public class ScopeTests
 
                         routine handle(r: Result)
                             when r
-                                is SUCCESS value => show(value)
-                                is ERROR msg => show(msg)
+                                is SUCCESS as value => show(value)
+                                is ERROR as msg => show(msg)
                             return
                         """;
 
@@ -300,8 +300,8 @@ public class ScopeTests
 
                         routine handle(r: Result)
                             when r
-                                is SUCCESS value => show(value)
-                                is ERROR msg => pass
+                                is SUCCESS as value => show(value)
+                                is ERROR as msg => pass
                             show(value)
                             return
                         """;

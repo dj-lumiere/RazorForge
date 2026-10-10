@@ -146,7 +146,7 @@ public class BundleRecordTests
                                                       return me.value
 
                                                   routine keep[T](x: T) -> T
-                                                  needs T obeys Assignable
+                                                  needs RecordType T
                                                       var y = x
                                                       return y
                                                   """);

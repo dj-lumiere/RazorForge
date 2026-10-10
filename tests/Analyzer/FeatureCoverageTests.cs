@@ -92,10 +92,10 @@ public class FeatureCoverageTests
 
                               routine classify(s: Shape) -> Text
                                   when s
-                                      is S32 n and 0 < n < 100 => return f"small:{n}"
-                                      is S32 n                 => return f"big:{n}"
-                                      is Text t and t.count() > 3 => return f"long:{t}"
-                                      is Text t                => return f"short:{t}"
+                                      is S32 as n and 0 < n < 100 => return f"small:{n}"
+                                      is S32 as n                 => return f"big:{n}"
+                                      is Text as t and t.count() > 3 => return f"long:{t}"
+                                      is Text as t                => return f"short:{t}"
                                       else                     => return "none"
 
                               routine start()
@@ -144,9 +144,9 @@ public class FeatureCoverageTests
                                   None
 
                               routine describe(s: Shape) -> Text
-                                  if s is S32 n
+                                  if s is S32 as n
                                       return f"s32:{n}"
-                                  if s is Text t
+                                  if s is Text as t
                                       return f"text:{t}"
                                   return "none"
 
@@ -169,7 +169,7 @@ public class FeatureCoverageTests
                                   var m: Maybe[S64] = 42_s64
                                   when m
                                       is None => show("none")
-                                      else v  => show(f"bound:{v}")
+                                      else as v  => show(f"bound:{v}")
                                   return
                               """;
         _ = GenerateIr(source: source);
@@ -314,10 +314,10 @@ public class FeatureCoverageTests
                                   var err = check guard_div(a: 10, b: 0)
                                   when ok
                                       is DivisionByZeroError => show("caught")
-                                      else v                 => show(f"ok:{v}")
+                                      else as v                 => show(f"ok:{v}")
                                   when err
-                                      is DivisionByZeroError e => show(f"caught:{e.crash_title()}")
-                                      else v                   => show(f"ok:{v}")
+                                      is DivisionByZeroError as e => show(f"caught:{e.crash_title()}")
+                                      else as v                   => show(f"ok:{v}")
                                   return
                               """;
         _ = GenerateIr(source: source);
@@ -339,7 +339,7 @@ public class FeatureCoverageTests
                                   var m = try parse_pos(n: 5)
                                   when m
                                       is None => show("none")
-                                      else v  => show(f"{v}")
+                                      else as v  => show(f"{v}")
                                   return
                               """;
         _ = GenerateIr(source: source);
@@ -445,9 +445,9 @@ public class FeatureCoverageTests
 
                               routine describe(n: Number) -> Text
                                   when n
-                                      is S64 v  => return f"int:{v}"
-                                      is B64 v  => return f"float:{v}"
-                                      is Text v => return f"text:{v}"
+                                      is S64 as v  => return f"int:{v}"
+                                      is B64 as v  => return f"float:{v}"
+                                      is Text as v => return f"text:{v}"
                                       is None   => return "none"
 
                               routine start()

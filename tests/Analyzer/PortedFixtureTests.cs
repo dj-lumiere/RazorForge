@@ -31,7 +31,7 @@ public class PortedFixtureTests
                             var rt = ra.observe()
                             when try rt.hold()
                                 is None => return
-                                else rc => return
+                                else as rc => return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -57,7 +57,7 @@ public class PortedFixtureTests
                             var m1 = try get_text(n: 1)
                             when m1
                                 is None => return
-                                else v => return
+                                else as v => return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -277,10 +277,10 @@ public class AssignableProtocolTests
 
     #endregion
 
-    #region $assign synthesis — direct calls succeed on auto-derived Assignable types
+    #region The copy step: `=` runs it, a program never names it
 
     [Fact]
-    public void Analyze_CopyMemberRoutine_DirectCall_OnPrimitiveRecord_NoError()
+    public void Analyze_ShareCallInAProgram_IsRejected()
     {
         string source = """
                         record Point
@@ -289,57 +289,31 @@ public class AssignableProtocolTests
 
                         routine start()
                             var a = Point(x: 1, y: 2)
-                            var b = a.assign()
+                            var b = a.share()
                             return
                         """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.SecretMemberAccess && e.Message.Contains(value: "'share'"));
+    }
+
+    [Theory]
+    [InlineData("choice Color\n    Red\n    Green\n", "Color.Red")]
+    [InlineData("flags Perms\n    Read\n    Write\n", "Perms.Read")]
+    [InlineData("record Point\n    x: S32\n    y: S32\n", "Point(x: 1, y: 2)")]
+    public void Analyze_AssignmentCopiesAValue_NoError(string declaration, string value)
+    {
+        string source = declaration + "\nroutine start()\n    var a = " + value + "\n    var b = a\n    return\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
     [Fact]
-    public void Analyze_CopyMemberRoutine_DirectCall_OnChoice_NoError()
+    public void Analyze_AssignmentCopiesARecordWithAHandle_NoError()
     {
-        string source = """
-                        choice Color
-                            Red
-                            Green
-                            Blue
-
-                        routine start()
-                            var a = Color.Red
-                            var b = a.assign()
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Empty(collection: result.Errors);
-    }
-
-    [Fact]
-    public void Analyze_CopyMemberRoutine_DirectCall_OnFlags_NoError()
-    {
-        string source = """
-                        flags Perms
-                            Read
-                            Write
-                            Execute
-
-                        routine start()
-                            var a = Perms.Read
-                            var b = a.assign()
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Empty(collection: result.Errors);
-    }
-
-    [Fact]
-    public void Analyze_CopyMemberRoutine_DirectCall_OnRecordWithRetained_Resolves()
-    {
-        // A record with a Retained field auto-derives Assignable (the field's copy is one more share), so
-        // a direct `assign()` call resolves.
+        // A record holding a Retained is copied by `=`: the copy step walks the field, and the handle gains a holder.
         string source = """
                         entity Node
                             value: S64
@@ -350,7 +324,7 @@ public class AssignableProtocolTests
                         routine start()
                             var a = Node(value: 1)
                             var b = Box(handle: Retained(from: steal a))
-                            var c = b.assign()
+                            var c = b
                             return
                         """;
 

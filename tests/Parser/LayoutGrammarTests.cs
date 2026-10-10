@@ -95,7 +95,7 @@ public class LayoutGrammarTests
     public void Parse_FlagsArmsInWhenStatement()
     {
         Program program = AssertParses(source: """
-                                               routine check(p: Perm)
+                                               routine inspect(p: Perm)
                                                    when p
                                                        have READ and WRITE => pass
                                                        lack EXEC => pass
@@ -116,7 +116,7 @@ public class LayoutGrammarTests
                                  routine T.show() -> Text
                                      when me
                                          expand m in brnchof(T)
-                                             is $typeof(m) v => return "x"
+                                             is $typeof(m) as v => return "x"
                                      return "y"
                                  """);
     }

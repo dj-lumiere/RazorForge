@@ -78,7 +78,7 @@ public class ErrorHandlingPatternTests
 
                         routine start()
                             when check fails(n: 1)
-                                is Crashables e => pass
+                                is Crashables as e => pass
                             return
                         """;
 
@@ -105,12 +105,12 @@ public class ErrorHandlingPatternTests
 
                         routine passes!(n: S64) -> S64
                             when check fails(n: n)
-                                is S64 v => return v
+                                is S64 as v => return v
                             return 0
 
                         routine start()
                             when check fails(n: 1)
-                                is S64 v => pass
+                                is S64 as v => pass
                             return
                         """;
 
@@ -147,8 +147,8 @@ public class ErrorHandlingPatternTests
                         routine test(value: Lookup[S32])
                             when value
                                 is None => pass
-                                is Crashables err => pass
-                                else v => pass
+                                is Crashables as err => pass
+                                else as v => pass
                             return
                         """;
 
@@ -168,7 +168,7 @@ public class ErrorHandlingPatternTests
         string source = """
                         routine test(value: Check[None])
                             when value
-                                is Crashables err => pass
+                                is Crashables as err => pass
                                 is None => pass
                             return
                         """;

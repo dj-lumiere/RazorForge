@@ -136,13 +136,13 @@ public class RxwBorrowCheckerTests
     [Fact]
     public void Analyze_NestedClaim_AliasedHandle_Errors()
     {
-        // `s2 = s.share()` is a CLONE — a second handle to the SAME controller. Amending both in
+        // `s2 = s` is a CLONE — a second handle to the SAME controller. Amending both in
         // overlapping scopes deadlocks at runtime; the identity-keyed check catches it even though
         // the handle names differ.
         string source = Prelude + """
                                   routine start()
                                       var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                      var s2 = s.share()
+                                      var s2 = s
                                       using s.amend() as c1
                                           using s2.amend() as c2
                                               show("aliased")
@@ -162,7 +162,7 @@ public class RxwBorrowCheckerTests
         string source = Prelude + """
                                   routine start()
                                       var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                      var s2 = s.share()
+                                      var s2 = s
                                       using s.amend() as c
                                           using s2.consult() as v
                                               show("aliased reader")
@@ -182,7 +182,7 @@ public class RxwBorrowCheckerTests
         string source = Prelude + """
                                   routine start()
                                       var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                                      var s2 = s.share()
+                                      var s2 = s
                                       using s.consult() as v1
                                           using s2.consult() as v2
                                               show("two readers, one controller")

@@ -122,7 +122,7 @@ public class TypeNarrowingTests
                         routine process(value: S32?) -> S32
                             when value
                                 is None => return 0
-                                else v => return v
+                                else as v => return v
                             return
                         """;
 

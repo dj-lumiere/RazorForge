@@ -89,10 +89,10 @@ When unsure, consult ground truth in the repo/package:
    crashable's own routines.
    **Matching a carrier.** `Check[T]` is the variant `T | Crashables`, `Lookup[T]` is
    `None | T | Crashables`. A `when` on one MUST have the `T` arm (build error
-   otherwise). `is Crashables e` takes any error; `is NopeError e` takes only that
+   otherwise). `is Crashables as e` takes any error; `is NopeError as e` takes only that
    crashable and binds it as a `NopeError` (fields readable); `x is NopeError` works
    as an expression too. A `when` with NO error arm passes the error on: in a
-   failable routine as if `is Crashables e => throw e` were written (it propagates),
+   failable routine as if `is Crashables as e => throw e` were written (it propagates),
    anywhere else it crashes loudly. `throw e` of a caught `Crashables` rethrows it. A caught error keeps the
    trace of its first throw: if it ends the program after being rethrown or passed on, the report shows that
    trace (the routines between the throw and the catcher included) and a `Thrown again at file:line:col` line.
@@ -335,7 +335,7 @@ else
 ```razorforge
 when m
     is None => show("absent")
-    else p  => show(f"present: x={p.x}")   # else with binding
+    else as p  => show(f"present: x={p.x}")   # else with binding
 
 when n
     == 0 => throw DivisionByZeroError()
@@ -343,8 +343,8 @@ when n
     else => return "many"
 
 when v
-    is Crashables e => show("failed")
-    is S64 x       => show(f"ok: {x}")     # type pattern with binding
+    is Crashables as e => show("failed")
+    is S64 as x       => show(f"ok: {x}")     # type pattern with binding
 ```
 
 In a `when` statement an arm may be a block: break the line after `=>` and indent
@@ -811,7 +811,7 @@ routine start()
     var q = try find_qty(items: items.view(), name: "bolt")
     when q
         is None => show("not found")
-        else n  => show(f"bolt qty: {n}")
+        else as n  => show(f"bolt qty: {n}")
 
     show("DONE")
     return

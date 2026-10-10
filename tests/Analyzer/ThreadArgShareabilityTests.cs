@@ -93,7 +93,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var s = Guarded[Node, ReadOnly](from: Node(value: 1))
-                                      var t = work(s: s.share())
+                                      var t = work(s: s)
                                       drop t.retrieve()
                                       return
                                   """;

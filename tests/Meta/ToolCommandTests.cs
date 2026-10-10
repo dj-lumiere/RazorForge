@@ -48,7 +48,7 @@ public sealed class ToolCommandTests : IDisposable
         string program = Write(name: "crash.rf", source: "module ToolCrash\nimport IO/Console\n\n" + Nope + """
             routine start()
                 when check fails(n: 1)
-                    is S64 v =>
+                    is S64 as v =>
                         show(f"never {v}")
                 show("not reached")
                 return

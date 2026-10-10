@@ -100,8 +100,8 @@ public class PatternMatchingTests
         string source = """
                         routine test[T](value: T)
                             when value
-                                is S32 n => show(f"Integer: {n}")
-                                is Text t => show(f"Text: {t}")
+                                is S32 as n => show(f"Integer: {n}")
+                                is Text as t => show(f"Text: {t}")
                                 else => show("Unknown type")
                             return
                         """;
@@ -134,8 +134,8 @@ public class PatternMatchingTests
         string source = """
                         routine test[T](value: T)
                             when value
-                                is Point p => show(f"Point: ({p.x}, {p.y})")
-                                is Circle c => show(f"Circle: r={c.radius}")
+                                is Point as p => show(f"Point: ({p.x}, {p.y})")
+                                is Circle as c => show(f"Circle: r={c.radius}")
                                 else => show("Unknown shape")
                             return
                         """;
@@ -233,8 +233,8 @@ public class PatternMatchingTests
         string source = """
                         routine handle(msg: Message)
                             when msg
-                                is Message.TEXT content => process(content)
-                                is Message.NUMBER n => compute(n)
+                                is Message.TEXT as content => process(content)
+                                is Message.NUMBER as n => compute(n)
                                 is Message.QUIT => exit()
                             return
                         """;
@@ -250,8 +250,8 @@ public class PatternMatchingTests
         string source = """
                         routine handle(msg: Message)
                             when msg
-                                is Text content => process(content)
-                                is Number n => compute(n)
+                                is Text as content => process(content)
+                                is Number as n => compute(n)
                                 is Quit => exit()
                             return
                         """;
@@ -325,9 +325,9 @@ public class PatternMatchingTests
         string source = """
                         routine classify(n: S32?)
                             when n
-                                is S32 x and x > 0 => show("Positive")
-                                is S32 x and x < 0 => show("Negative")
-                                is S32 x => show("Zero")
+                                is S32 as x and x > 0 => show("Positive")
+                                is S32 as x and x < 0 => show("Negative")
+                                is S32 as x => show("Zero")
                                 else => show("None")
                             return
                         """;
@@ -360,9 +360,9 @@ public class PatternMatchingTests
         string source = """
                         routine handle(error: Crashables)
                             when error
-                                is NetworkError e and e.code == 404 => show("Not found")
-                                is NetworkError e and e.code >= 500 => show("Server error")
-                                is Crashables e => show(f"Error: {e.message()}")
+                                is NetworkError as e and e.code == 404 => show("Not found")
+                                is NetworkError as e and e.code >= 500 => show("Server error")
+                                is Crashables as e => show(f"Error: {e.message()}")
                             return
                         """;
 
@@ -383,7 +383,7 @@ public class PatternMatchingTests
                         routine handle(value: User?)
                             when value
                                 is None => show("User not found")
-                                else user => show(f"Found: {user.name}")
+                                else as user => show(f"Found: {user.name}")
                             return
                         """;
 
@@ -398,8 +398,8 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Check[User])
                             when result
-                                is Crashables err => show(f"Error: {err.message()}")
-                                else user => show(f"Found: {user.name}")
+                                is Crashables as err => show(f"Error: {err.message()}")
+                                else as user => show(f"Found: {user.name}")
                             return
                         """;
 
@@ -414,10 +414,10 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Check[File])
                             when result
-                                is FileNotFoundError e => show(f"Not found: {e.path}")
-                                is PermissionError e => show(f"Access denied: {e.path}")
-                                is Crashables e => show(f"Unknown error: {e.message()}")
-                                else file => file.read()
+                                is FileNotFoundError as e => show(f"Not found: {e.path}")
+                                is PermissionError as e => show(f"Access denied: {e.path}")
+                                is Crashables as e => show(f"Unknown error: {e.message()}")
+                                else as file => file.read()
                             return
                         """;
 
@@ -432,9 +432,9 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Lookup[User])
                             when result
-                                is Crashables e => show(f"Error: {e.message()}")
+                                is Crashables as e => show(f"Error: {e.message()}")
                                 is None => show("User not found")
-                                else user => show(f"Found: {user.name}")
+                                else as user => show(f"Found: {user.name}")
                             return
                         """;
 
@@ -449,11 +449,11 @@ public class PatternMatchingTests
         string source = """
                         routine handle(result: Lookup[Config])
                             when result
-                                is ValidationError e => stop(f"Invalid config name: {e.message}")
-                                is IOError e => show(f"IO error: {e.message}")
-                                is Crashables e => breach()
+                                is ValidationError as e => stop(f"Invalid config name: {e.message}")
+                                is IOError as e => show(f"IO error: {e.message}")
+                                is Crashables as e => breach()
                                 is None => use_default_config()
-                                else config => apply(config)
+                                else as config => apply(config)
                             return
                         """;
 
@@ -531,7 +531,7 @@ public class PatternMatchingTests
                         routine handle(result: Check[S32])
                             when result
                                 is Crashables => absent
-                                else value => value
+                                else as value => value
                             return
                         """;
 
@@ -569,7 +569,7 @@ public class PatternMatchingTests
                         routine handle(value: Maybe[User])
                             when value
                                 is None => show("Not found")
-                                else u => show(u.name)
+                                else as u => show(u.name)
                             return
                         """;
 
@@ -587,7 +587,7 @@ public class PatternMatchingTests
                                 is None =>
                                     show("Not found")
                                     return
-                                else user =>
+                                else as user =>
                                     show(user.name)
                                     process(user)
                             return
@@ -656,13 +656,13 @@ public class PatternMatchingTests
         string source = """
                         routine process(result: Lookup[Shape])
                             when result
-                                is Crashables e =>
+                                is Crashables as e =>
                                     log_error(e)
                                     return
                                 is None =>
                                     show("No shape found")
                                     return
-                                else shape =>
+                                else as shape =>
                                     when shape
                                         is CIRCLE (center, radius) and radius > 10 =>
                                             show("Large circle")
@@ -685,7 +685,7 @@ public class PatternMatchingTests
         string source = """
                         routine handle(event: Event)
                             when event
-                                is CLICK pos =>
+                                is CLICK as pos =>
                                     var x = pos.x
                                     var y = pos.y
                                     handle_click(x, y)
@@ -902,7 +902,7 @@ public class PatternMatchingTests
         string source = """
                         routine test(n: S32, m: S32)
                             when n
-                                is S32 x and x > 0 and m > 0 => show("both positive")
+                                is S32 as x and x > 0 and m > 0 => show("both positive")
                                 else => show("not both positive")
                             return
                         """;
@@ -918,7 +918,7 @@ public class PatternMatchingTests
         string source = """
                         routine test(n: S32)
                             when n
-                                is S32 x and x < -100 or x > 100 => show("extreme")
+                                is S32 as x and x < -100 or x > 100 => show("extreme")
                                 else => show("moderate")
                             return
                         """;
@@ -952,8 +952,8 @@ public class PatternMatchingTests
         string source = """
                         routine handle(user: User)
                             when user
-                                is User u and u.age >= 18 and u.verified => show("verified adult")
-                                is User u and u.age >= 18 => show("unverified adult")
+                                is User as u and u.age >= 18 and u.verified => show("verified adult")
+                                is User as u and u.age >= 18 => show("unverified adult")
                                 else => show("minor")
                             return
                         """;
@@ -969,8 +969,8 @@ public class PatternMatchingTests
         string source = """
                         routine process(item: Item)
                             when item
-                                is Item i and i.is_valid() and i.count() > 0 => process_valid(i)
-                                is Item i and i.is_valid() => handle_empty(i)
+                                is Item as i and i.is_valid() and i.count() > 0 => process_valid(i)
+                                is Item as i and i.is_valid() => handle_empty(i)
                                 else => reject(item)
                             return
                         """;

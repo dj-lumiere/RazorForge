@@ -283,7 +283,7 @@ public class ExhaustivenessTests
                         routine process(value: S32?) -> S32
                             return when value
                                 is None => 0
-                                else v => v
+                                else as v => v
                             return
                         """;
 
@@ -324,7 +324,7 @@ public class ExhaustivenessTests
                         routine test(x: S32) -> S32
                             return when x
                                 == 1 => 10
-                                else v => v
+                                else as v => v
                             return
                         """;
 
@@ -700,7 +700,7 @@ public class ExhaustivenessTests
                             WEST
                         routine test(d: Direction) -> S32
                             return when d
-                                is NORTH n => 1_s32
+                                is NORTH as n => 1_s32
                                 else => 0_s32
                         """;
 

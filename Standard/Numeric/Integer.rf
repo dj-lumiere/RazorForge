@@ -59,7 +59,7 @@ secret routine integer_small(neg: Bool, mag: U64) -> Integer
 # The magnitude when it is below 2^64, and whether it is.
 secret routine integer_small_part(v: Integer) -> (Bool, U64)
     when v.magnitude
-        is U64 small =>
+        is U64 as small =>
             return (true, small)
         is IntegerLimbs =>
             return (false, 0u64)
@@ -80,13 +80,13 @@ secret routine integer_two_limbs(neg: Bool, lo: U64, hi: U64) -> Integer
 # The limbs an engine call reads for `v`. Free them with `limb_view_free`.
 secret dangerous routine limb_view(v: Integer) -> IntegerLimbView
     when v.magnitude
-        is U64 small =>
+        is U64 as small =>
             if small == 0u64
                 return IntegerLimbView(len: 0u64, tab: hijacked_none[U64](), temp: false)
             var tab = limb_buffer(n: 1u64)
             tab.poke(value: small)
             return IntegerLimbView(len: 1u64, tab: tab, temp: true)
-        is IntegerLimbs big =>
+        is IntegerLimbs as big =>
             return IntegerLimbView(len: big.len, tab: big.tab, temp: false)
 
 # Frees what `limb_view` made for a call.
@@ -121,7 +121,6 @@ secret routine scratch_retry(room: U64, need: U64) -> U64
     var doubled = room *% 2u64
     var wanted = need +% need // 2u64
     return if doubled > wanted then doubled else wanted
-
 # 1 when `neg`, else 0: a sign as it crosses the C ABI.
 secret routine sign_word(neg: Bool) -> U64
     return if neg then 1u64 else 0u64
@@ -141,9 +140,9 @@ secret dangerous routine integer_adopt(out: Hijacked[U64], len: U64, neg: Bool) 
 # `v` with its sign `neg` (zero stays non-negative), sharing its limbs.
 secret routine integer_with_sign(v: Integer, neg: Bool) -> Integer
     when v.magnitude
-        is U64 small =>
+        is U64 as small =>
             return integer_small(neg: neg, mag: small)
-        is IntegerLimbs big =>
+        is IntegerLimbs as big =>
             danger
                 if not big.ctrl.is_none()
                     big.ctrl.as_entity().hold()
@@ -184,9 +183,9 @@ secret routine integer_sum(a: Integer, b: Integer, negate_b: Bool) -> Integer
 # The low 64 bits of the magnitude.
 secret routine integer_low_word(v: Integer) -> U64
     when v.magnitude
-        is U64 small =>
+        is U64 as small =>
             return small
-        is IntegerLimbs big =>
+        is IntegerLimbs as big =>
             danger
                 return big.tab.peek()
 
@@ -636,7 +635,6 @@ routine Integer(from: S128) -> Integer
     ) else LLVM::reinterpret_bits[S128, U128](from)
     var r = Integer(from: mag)
     return if neg then r.neg() else r
-
 routine Integer(from: S256) -> Integer
     var neg = LLVM::signed_lt[S256](a: from, b: 0_s256)
     var mag = if neg then LLVM::reinterpret_bits[S256, U256](
@@ -644,7 +642,6 @@ routine Integer(from: S256) -> Integer
     ) else LLVM::reinterpret_bits[S256, U256](from)
     var r = Integer(from: mag)
     return if neg then r.neg() else r
-
 ### Widens an unsigned fixed-width integer into an `Integer` (exact).
 ### :param from: The unsigned source value.
 ### :returns: The equal `Integer` value.
@@ -734,9 +731,9 @@ common routine Integer.from_literal(text: Text) -> Integer
 @override
 secret routine Integer.share() -> Integer
     when me.magnitude
-        is U64 small =>
+        is U64 as small =>
             return Integer(neg: me.neg, magnitude: IntegerMagnitude(small))
-        is IntegerLimbs big =>
+        is IntegerLimbs as big =>
             danger
                 if not big.ctrl.is_none()
                     big.ctrl.as_entity().hold()
@@ -749,7 +746,7 @@ dangerous routine Integer.destroy()
     when me.magnitude
         is U64 =>
             return
-        is IntegerLimbs big =>
+        is IntegerLimbs as big =>
             if big.ctrl.is_none()
                 return
             var prev = big.ctrl.as_entity().unhold()
@@ -1017,9 +1014,9 @@ routine Integer.bitnot() -> Integer
 @readonly
 routine Integer.bit_length() -> U64
     when me.magnitude
-        is U64 small =>
+        is U64 as small =>
             return 64u64 -% LLVM::leading_zeros(small)
-        is IntegerLimbs big =>
+        is IntegerLimbs as big =>
             danger
                 var top = big.tab.stride(count: S64(from: big.len -% 1u64)).peek()
                 return big.len *% 64u64 -% LLVM::leading_zeros(top)

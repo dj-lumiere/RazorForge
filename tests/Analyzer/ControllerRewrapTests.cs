@@ -19,7 +19,7 @@ public class ControllerRewrapTests
         const string source = """
                               import BuilderQuery
 
-                              record Blob obeys Assignable, Copyable
+                              record Blob obeys Copyable
                                   secret count: U64
                                   secret ctrl: Hijacked[FrozenController]
 
@@ -67,7 +67,7 @@ public class ControllerRewrapTests
         const string source = """
                               import BuilderQuery
 
-                              record Blob obeys Assignable, Copyable
+                              record Blob obeys Copyable
                                   secret count: U64
                                   secret ctrl: Hijacked[FrozenController]
 
