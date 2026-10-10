@@ -121,7 +121,9 @@ When unsure, consult ground truth in the repo/package:
    (`n.to[S64]()`, §4).
    Out-of-range literals are build errors (RF-S010): `-1` never fits an
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
-9. **A result you mean to throw away takes `drop`**: `drop seen.add(value: v)` (RF-W007 otherwise).
+9. **A result you mean to throw away takes `drop`**: `drop name.trim()` (RF-W007 otherwise). A routine marked
+   `@discardable` returns a by-product (`Set.add`/`Set.remove`/`Dict.remove`'s Bool, `Atomic.fetch_*`'s old value,
+   `File.write_text`'s count): its result may be dropped silently, `seen.add(value: v)`.
 10. **Indentation is 4 spaces and blocks are indentation-delimited.** No braces.
 11. **Chained comparisons are one expression**: `0 <= x <= 10` works. Every
     operand is evaluated once, eagerly, left to right, before any comparison:
@@ -709,7 +711,7 @@ that differ from other languages:
 - `list.add_last(value: v)`, `list.remove_first!()`, `list.remove_at!(0)` —
   removal is failable (empty/out-of-range throws); `try list.remove_first()`
   returns `Maybe`.
-- `set.add(value: v)` returns Bool — `drop` it if unused.
+- `set.add(value: v)` returns Bool, `@discardable`: no `drop` needed.
 - `dict[k] = v` puts a value: it replaces the value of a key that is there and adds the key otherwise (there is
   no `dict.add`). Reading `dict[k]` is failable under the hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Maybe[TValue]`.
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing

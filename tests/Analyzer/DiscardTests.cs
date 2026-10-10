@@ -39,12 +39,8 @@ public class DiscardTests
     /// Verifies semantic analysis behavior for call without drop non blank return warning.
     /// </summary>
     [Fact]
-    public void Analyze_CallWithoutDiscard_NonNoneReturn_WarningCurrentlySuppressed()
+    public void Analyze_CallWithoutDiscard_NonNoneReturn_Warns()
     {
-        // The UnusedRoutineReturnValue (SW007) warning is currently in SemanticVerifier's
-        // SuppressedWarnings set (alongside UnhandledCrashableCall), so an unused non-None return
-        // is NOT flagged today. CLAUDE.md still recommends `drop`; if enforcement is wanted,
-        // remove SW007 from SuppressedWarnings (and expect fixtures/stdlib to need `drop`).
         string source = """
                         routine get_value() -> S32
                             return 42
@@ -56,9 +52,32 @@ public class DiscardTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.UnusedRoutineReturnValue);
+    }
+
+    /// <summary>
+    /// A routine marked <c>@discardable</c> returns a by-product: its result may be dropped without <c>drop</c>.
+    /// </summary>
+    [Fact]
+    public void Analyze_CallToDiscardable_NoWarning()
+    {
+        string source = """
+                        @discardable
+                        routine record_value() -> Bool
+                            return true
+
+                        routine test()
+                            record_value()
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.UnusedRoutineReturnValue);
     }
+
     /// <summary>
     /// Verifies semantic analysis behavior for call without drop blank return without unexpected warnings.
     /// </summary>

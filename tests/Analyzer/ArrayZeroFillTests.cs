@@ -54,7 +54,7 @@ public class ArrayZeroFillTests
         AnalysisResult result = AnalyzeSa(source: Prelude + """
                                                      routine start()
                                                          var nums = Array[S64, 4]()
-                                                         var texts = Array[Text, 2]()
+                                                         var texts = Array[2]("a", "b")
                                                          var slots = Array[2](Slot(node: Retained[Node](from: Node(n: 1))), Slot(node: Retained[Node](from: Node(n: 2))))
                                                          return
                                                      """);

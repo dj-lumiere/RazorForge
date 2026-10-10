@@ -18,14 +18,17 @@ public class PositionalGenericCreatorTests
         const string source = """
                               import BuilderQuery
 
-                              dangerous routine alloc_nested(count: U64) -> Hijacked[FrozenController]
-                                  var header = FrozenController.data_size()
-                                  var ctrl = Hijacked[FrozenController](rf_allocate_dynamic(size: header + U32.data_size() * count))
+                              record Header
+                                  count: U64
+
+                              dangerous routine alloc_nested(count: U64) -> Hijacked[Header]
+                                  var header = Header.data_size()
+                                  var ctrl = Hijacked[Header](rf_allocate_dynamic(size: header + U32.data_size() * count))
                                   return ctrl
 
-                              dangerous routine alloc_split(count: U64) -> Hijacked[FrozenController]
+                              dangerous routine alloc_split(count: U64) -> Hijacked[Header]
                                   var raw = rf_allocate_dynamic(size: U32.data_size() * count)
-                                  var ctrl = Hijacked[FrozenController](raw)
+                                  var ctrl = Hijacked[Header](raw)
                                   return ctrl
 
                               routine start()
@@ -40,8 +43,11 @@ public class PositionalGenericCreatorTests
     public void Analyze_PositionalGenericCreatorNoCreatorFits_NamesTheArgumentType()
     {
         const string source = """
-                              dangerous routine wrap(flag: Bool) -> Hijacked[FrozenController]
-                                  return Hijacked[FrozenController](flag)
+                              record Header
+                                  count: U64
+
+                              dangerous routine wrap(flag: Bool) -> Hijacked[Header]
+                                  return Hijacked[Header](flag)
 
                               routine start()
                                   return

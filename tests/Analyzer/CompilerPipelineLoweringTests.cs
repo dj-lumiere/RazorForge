@@ -708,7 +708,7 @@ public class CompilerPipelineLoweringTests
                         import IO/Console
 
                         routine start()
-                            var grid = Array[Array[Text, 2], 2]()
+                            var grid = Array[2](Array[2]("a", "b"), Array[2]("c", "d"))
                             grid[1][0] = "hi"
                             show(grid[1][0])
                             return
