@@ -484,9 +484,8 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
 
 - Containment is ownership: one owner at a time; `steal` marks every transfer.
 - A written `destruct` tears down what the entity owns (its member variables, buffers it holds) and nothing
-  else: the entity's own box is given back by whoever allocated it (the builder at scope exit, a container for
-  its elements, an RC wrapper for its entity). Do not end a `destruct` with `me.hijack().invalidate()`: that
-  frees the box twice. An owner ending a value calls `dispose()` (its `destruct`, then an entity's box).
+  else: the builder gives back the entity's own box before each of its returns, so one `destruct` call still
+  ends the entity. Do not write `me.hijack().invalidate()` in it.
 - Taking a value out of a member variable or an element is a statement:
   `steal slot.item as old inject Item(name: "b")` puts the new value in and binds the
   old one to `old` in one step (`fresh` is computed first, so the place is never
