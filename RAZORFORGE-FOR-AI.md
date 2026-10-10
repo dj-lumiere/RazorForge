@@ -785,6 +785,9 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S753      | failable call left unhandled          | recover with `try`/`check` + `when`                 |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-W007      | ignored result                        | `drop expr`                                        |
+| RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
+| RF-S632      | `agent` argument unsafe to hand over  | `steal` the entity, or pass `Atomic`/`Guarded`/…   |
+| RF-S642      | `agent` before a non-call, or over generic-parameter-typed values | put it before a call with concrete types |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 
 ## 13. A complete worked example
@@ -819,56 +822,133 @@ routine start()
 
 ## 14. Concurrency
 
-Two kinds of concurrent routine. **Calling one returns an `Agent[T]`, a recipe (the routine with its
-arguments bound), and starts nothing.** A verb on the Agent runs it — `retrieve` runs it and waits for
-the value, `execute` runs it in the background. There is no separate `spawn`/`async` keyword:
-
-- `suspended routine f(...) -> T` — a stackful coroutine on this thread's scheduler. Cheap; you can
-  have very many. *Cooperative*: it yields to siblings only when it **parks** (at `waitfor`,
-  `retrieve!`, or async I/O). A CPU-bound `suspended` routine that never parks starves the others —
-  use `suspended` for waiting-heavy work.
-- `threaded routine f(...) -> T` — a real OS thread (true parallelism, OS-preempted). Heavier; use
-  for CPU-bound work you want on another core.
+Any routine can run concurrently, and a routine declares nothing about where it runs. The keyword
+**`agent`** before a call makes it concurrent work: `agent download(url: u)` computes the call's arguments NOW
+(and a receiver that is a value, as in `agent list.sum()`), defers the call into an `Agent[T]`, and starts
+nothing. A verb on the Agent starts it and chooses where it runs. There is no `spawn`/`async` keyword.
 
 ```razorforge
 import IO/Console
 
-suspended routine fetch(id: S64) -> S64
-    waitfor(50ms)                  # parks this coroutine; siblings run meanwhile
-    return id * 10
+routine add(a: S64, b: S64) -> S64
+    return a + b
 
 routine start()
-    var a = fetch(id: 1)           # builds the recipe, an Agent[S64]; nothing runs yet
-    show(f"result => {a.retrieve()}")    # run it to completion, get the value
+    var job = agent add(a: 1, b: 2)    # Agent[S64]: arguments computed, nothing runs yet
+    job.start_now()                    # runs on the runtime's pool of threads
+    # ... other work ...
+    show(f"{job.retrieve()}")          # waits for the value
+    var jobs = [agent add(a: 1, b: 1), agent add(a: 2, b: 2)]
+    show(f"{jobs.gather()}")           # starts both, waits for all, results in input order
     return
 ```
 
-Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
+- **`agent` takes the whole call chain after it**, like `try`: `agent f(x).retrieve()` defers `.retrieve()`
+  too. To start or collect at once, parenthesize: `(agent f(x)).retrieve()`, `(agent f(x)).start_now()`.
+- **Recovery comes first and works inside the work:** `try agent f()` is `Agent[Maybe[T]]`,
+  `check agent f()` is `Agent[Check[T]]`.
+- An Agent of a routine that returns nothing is `Agent[None]`. The type can be inferred:
+  `var jobs = [agent work(), agent work()]` then `jobs.gather()`.
 
-- `agent.retrieve() -> T` — run it, wait for it and take the value. **Uncolored**: inside a coroutine
-  it PARKS (siblings keep running); on a plain thread it blocks. Same call, both contexts. Failable.
-- `agent.execute()` — run it in the background and return at once; the value is discarded.
-- `waitfor(d)` — wait `d` (parks in a coroutine, sleeps on a thread). Durations: `50ms`, `5s`, or
-  `Duration.from_milliseconds(ms: n)`.
-- `agent.waitfor(d).retrieve()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
-  `try job.waitfor(d).retrieve()` returns `None` on timeout instead of throwing.
-- `agents.race() -> T` — run every Agent of a `List[Agent[T]]` concurrently, return the FIRST finisher.
-- `agents.gather() -> List[T]` — run them all concurrently, wait for ALL; results in input order.
-- `race`/`gather` work on the list in place; the list is torn down by its owner as usual.
-- A `List[Agent[T]]` may mix coroutine- and thread-backed agents (one `Agent[T]` type backs both).
-- **Dropping** an Agent that no verb ran runs nothing: the routine body never executes.
+Verbs (methods on `Agent[T]`, all failable):
+
+- `start_now()` — starts now on the runtime's pool of threads (M:N). The default for most work.
+- `start_here()` — starts now on THIS thread beside its other `start_here()` jobs. They take turns only
+  where one waits (`retrieve`, `waitfor`, a channel), so they can share values without a lock, and a job
+  that blocks the thread stops them all. Inside a `start_now()` job it is an `AgentStartError`, because
+  such a job can move between threads.
+- `start_apart()` — starts now on an OS thread of its own, for work that blocks or computes for long.
+- `retrieve() -> T` — waits for the value. An Agent nothing started is started with `start_now()` first.
+  Inside a job it parks (other jobs keep running), elsewhere it blocks.
+- **A failure stays in its Agent.** A failure inside the work does not end the program where the work
+  runs, and sibling Agents keep running. It surfaces where the Agent is retrieved: `job.retrieve()`
+  rethrows it (bare, it crashes loudly there like any failure), `check job.retrieve()` /
+  `try job.retrieve()` recover it (or `try agent f()` up front).
+- `cancel()` — asks the work to stop. Work nothing started yet never runs. Running work sees the request at
+  its next wait (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there
+  (a thread of its own cannot be stopped from outside). Retrieving a cancelled Agent waits for it to stop,
+  then throws `CancelRequested` (a crashable, no `Error` in the name because cancelling is not a failure),
+  recovered with `check`/`try`.
+- `job.waitfor(5s).retrieve()` — retrieve with a deadline, throws `TaskTimeoutError` when it passes
+  (`try job.waitfor(5s).retrieve()` gives `None` instead). A deadline needs a thread of its own: an Agent
+  nothing started yet is started with `start_apart()`, and one already running as a job of
+  `start_now()`/`start_here()` is refused with `AgentStartError`.
+- Starting an Agent twice, or retrieving it twice, is an `AgentStartError` (a crashable carrying
+  `reason: Text`).
+- `is_done()`, `is_running()` — racy snapshots for polling.
+- On a `List[Agent[T]]`: `gather() -> List[T]` (wait for all, input order, throws the first failure it
+  meets in list order), `race() -> T` (the first finisher, throws the winner's failure), `cancel_all()`
+  (no `!`, returns nothing: cancels every Agent and waits until each has stopped, dropping what each came
+  to, work nothing started yet never runs). `gather` and `race` start the Agents nothing started with
+  `start_now()`.
+- A dropped Agent that was never retrieved is not cancelled for you. Collect what you start.
+- There is no fire-and-forget verb: start with `start_now()` and collect later with `retrieve()` or
+  `gather()`. An Agent thrown away before anything starts it (`agent f()` as a statement, or
+  `drop agent f()`) never runs its work, and is warning RF-W008.
+- Free routines: `waitfor(d)` waits `d` (parks inside a job, sleeps elsewhere; `50ms`, `5s`, or
+  `Duration.from_milliseconds(ms: n)`), `yield_now()` lets other jobs run, `cancellation_requested()`
+  tells a long loop to stop early. Cancellation is cooperative: `waitfor` returns early once it is asked.
 
 ```razorforge
-var jobs = List[Agent[S64]]()
-jobs.add_last(value: fetch(id: 1))
-jobs.add_last(value: fetch(id: 2))
-var results = jobs.gather()     # both run concurrently; wait for all
-show(f"{results[0]} {results[1]}")
+routine checked!(n: S64) -> S64
+    if n < 0
+        throw VerificationFailedError()
+    return n
+
+routine relay(n: S64) -> S64
+    return checked(n: n)
+
+routine slow(n: S64) -> S64
+    var i = 0
+    while i < 2000
+        if cancellation_requested()
+            return -1
+        waitfor(1ms)
+        i += 1
+    return n
+
+routine start()
+    var bad = agent relay(n: -1)
+    var good = agent relay(n: 3)
+    bad.start_now()
+    good.start_now()
+    show(f"good: {good.retrieve()}")   # 3, the failure beside it changes nothing here
+    when check bad.retrieve()
+        is S64 as v => show(f"bad: {v}")
+        is Crashables as e => show(f"bad failed: {e.crash_message()}")
+    var running = agent slow(n: 1)
+    running.start_now()
+    running.cancel()
+    when check running.retrieve()
+        is CancelRequested => show("cancelled")
+        else => show("finished")
+    return
 ```
 
-Async file I/O (uncolored — parks a coroutine while waiting), in `IO/File`:
+**What `agent` may hand to the work (RF-S632).** Each value `agent f(...)` computes now must be safe to
+hand to work that may run on another thread: a `steal`-moved bare entity, trivially copyable value data,
+or a thread-shareable wrapper (`Atomic`, `Guarded`, `Witnessed`, `Consulting`, `Claiming`). A `Roamed`
+handle is promoted. Anything else (a bare entity by copy, a record owning `Retained`/`Tracked`/
+`Viewing`/`Modifying`) is rejected. An `Atomic[T]` parameter is always by reference, so a routine taking
+one works on the caller's cell, and sharing one counter across agents just works:
+
+```razorforge
+routine bump(cell: Atomic[S64], times: S64)
+    each i in 0 til times
+        drop cell.fetch_add(delta: 1)
+    return
+
+routine start()
+    var counter = Atomic[S64](initial: 0)
+    var jobs = [agent bump(cell: counter, times: 1000), agent bump(cell: counter, times: 1000)]
+    drop jobs.gather()
+    show(f"{counter.load()}")          # 2000
+    return
+```
+
+Async file I/O (parks a job while waiting, blocks elsewhere), in `IO/File`:
 `read_text(path: Text) -> Text` and `write_text(path: Text, content: Text) -> S64`. Prefer these to
-opening a `FileHandle` inside a coroutine.
+opening a `FileHandle` inside a job.
 
 **Channels** (`Core`, no import) — typed producer/consumer queues:
 - `make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])` — single consumer. `capacity` 0 =
@@ -942,10 +1022,10 @@ routine start()
   (the `dangerous` prefix precedes). Call sites use the same qualifier:
   `C::labs(n: x)`. External calls are positional.
 - **`@blocking`** on a `C::` routine marks a call that may block its thread for long (a read from a pipe, a
-  sleep, a network wait). Inside a `suspended` coroutine such a call runs on one of the runtime's I/O threads
-  while the coroutine parks, so its worker goes on with other coroutines; anywhere else it is an ordinary call.
-  A variadic or failable foreign routine cannot be marked. (`threaded` remains RazorForge's way to put your own
-  long work on an OS thread.)
+  sleep, a network wait). Inside a job started with `start_now()` or `start_here()` such a call runs on one of
+  the runtime's I/O threads while the job parks, so its thread goes on with other jobs, and anywhere else it is
+  an ordinary call. A variadic or failable foreign routine cannot be marked. To put your own long work on an
+  OS thread, start it with `start_apart()`.
 - **`@link("SDL2")`** on a `C::` extern names the C library that resolves its
   symbols (Rust `#[link]` style); merged with `[target] c_libraries` in the
   manifest into clang `-l` flags. Library search paths (`-L`) live in the
@@ -979,7 +1059,7 @@ you are writing another language.
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`
 - **Logical operators**: `and` `or` `not`
 - **Literals**: `true` `false` `None` `none`
-- **Concurrency**: `suspended` `threaded`†
+- **Concurrency**: `agent`
 - **Danger**†: `danger` (block) `dangerous` (modifier)
 - **Buildtime reflection**†: `expand` (loop) — the ONLY reflection keyword.
 

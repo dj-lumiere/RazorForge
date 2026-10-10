@@ -1,11 +1,8 @@
 module Tests/Stdlib/CancelAllApi
 
-# v0.2.x structured concurrency, RF-native shape: a `List[Agent[T]]` bound to a name IS the scope —
-# ownership already guarantees no child outlives it (the list's teardown abandons every in-flight
-# Agent). So the structured-concurrency operations are MEMBER routines on that list: `agents.race()`,
-# `agents.gather()`, `agents.cancel_all()`. They BORROW the list (no consume, no hidden steal);
-# cleanup stays with the list's own teardown. This fixture exercises abandon-on-scope-exit,
-# `gather!`, and `cancel_all` (+ gather to wait out the cooperative wind-down).
+# Operations over a `List[Agent[T]]` are member routines on the list: `agents.race()`, `agents.gather()`,
+# `agents.cancel_all()`. They work on the list in place (no consume, no hidden steal). This fixture exercises
+# a set nobody collects, `gather`, and `cancel_all` (which asks each Agent to stop and waits until each has).
 
 import IO/Console
 # Coroutine child: parks `x` ms, then returns x*10.
@@ -44,12 +41,14 @@ routine start()
     var rs = coros.gather()
     show(f"coros => {rs[0]} {rs[1]} {rs[2]}")
 
-    # 3. cancel_all!: two worker threads spin until asked to stop. cancel_all! sets each cancel flag,
-    #    then waits out the wind-down — each worker observes the flag and returns -1.
+    # 3. cancel_all: two workers spin until asked to stop. cancel_all asks each to stop, then waits until each
+    #    has: each observes the request and returns.
     var jobs = List[Agent[S64]]()
     jobs.add_last(value: agent cancellable())
     jobs.add_last(value: agent cancellable())
+    jobs[0].start_apart()
+    jobs[1].start_apart()
     waitfor(Duration.from_milliseconds(ms: 20))
-    var rc = jobs.cancel_all()
-    show(f"cancel => {rc[0]} {rc[1]}")
+    jobs.cancel_all()
+    show(f"cancel => {jobs[0].is_done()} {jobs[1].is_done()}")
     return

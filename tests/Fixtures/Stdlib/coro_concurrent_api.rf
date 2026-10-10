@@ -1,10 +1,9 @@
 module Tests/Stdlib/CoroConcurrentApi
 
-# v0.2.0 implicit-scheduler surface. Calling a `suspended routine` spawns it onto this thread's
-# scheduler; `retrieve()` drives the loop until THAT handle finishes (run-until-this-handle), so a
-# coroutine spawned earlier progresses concurrently meanwhile. A `waitfor` inside a coroutine PARKS
-# (the scheduler runs the other coroutine) instead of blocking the thread — proven here by the fact
-# that two coroutines, each parking on a timer, both complete (no deadlock, no busy-block).
+# `agent f(...)` builds an Agent and starts nothing. `retrieve()` starts it (with `start_now()`) and
+# waits until THAT handle finishes. A `waitfor` inside the work PARKS the fiber instead of blocking
+# its thread — proven here by two Agents, each parking on a timer, both completing (no deadlock, no
+# busy-block).
 
 import IO/Console
 routine slow_double(x: S64) -> S64
@@ -16,8 +15,8 @@ routine fast_inc(x: S64) -> S64
     return x + 1
 
 routine start()
-    var a = agent slow_double(x: 21)  # spawned, ready
-    var b = agent fast_inc(x: 41)  # spawned, ready — runs concurrently while `a` is retrieved
-    show(f"a => {a.retrieve()}")  # drives the loop until a finishes; b progresses meanwhile
-    show(f"b => {b.retrieve()}")  # b is already partway (or done) — finished here
+    var a = agent slow_double(x: 21)  # Agent[S64], not started
+    var b = agent fast_inc(x: 41)  # Agent[S64], not started
+    show(f"a => {a.retrieve()}")  # starts a and waits until it finishes
+    show(f"b => {b.retrieve()}")  # starts b and waits until it finishes
     return

@@ -1,11 +1,10 @@
 module Tests/Stdlib/ChannelFanInApi
 
-# v0.3.0 channels — single-thread cooperative fan-in with backpressure. Two coroutine producers and
-# one coroutine consumer share a capacity-2 Receiver on this thread's scheduler. When the buffer fills,
-# a producer's send! PARKS (cooperative backpressure) and the scheduler runs the consumer, which
-# drains and wakes the producer; when the buffer empties, the consumer's receive parks and the
-# producers run. No thread crossing (so no entity-aliasing barrier) and no deadlock (parking, not
-# blocking). Driving the consumer with retrieve! advances every sibling coroutine concurrently.
+# Channels — cooperative fan-in with backpressure. Two producer Agents and one consumer Agent share a
+# capacity-2 Receiver, all started with `start_now()` on the runtime's pool. When the buffer fills, a
+# producer's send PARKS (cooperative backpressure) and the consumer runs, draining and waking the
+# producer. When the buffer empties, the consumer's receive parks and the producers run. No deadlock
+# (parking, not blocking).
 #
 # Each producer owns its Sender (one cloned, one the original), so once both finish and their Feeders
 # drop, the channel auto-closes and the consumer's `for` loop ends.
@@ -31,9 +30,9 @@ routine start()
     var (feeder, hop) = make_channel[S64](capacity: 2)
 
     danger
-        # LAZY model: launch the two producers in the BACKGROUND (`execute` — fire-and-forget, we don't
-        # need their counts), then await the consumer (`retrieve`). All three run concurrently on the
-        # scheduler, ping-ponging under backpressure until both Feeders drop and the channel closes.
+        # Start the two producers now (`start_now()` — we don't need their counts), then await the
+        # consumer (`retrieve`). All three run concurrently, ping-ponging under backpressure until both
+        # Feeders drop and the channel closes.
         (agent produce(out: steal feeder.duplicate(), lo: 1, hi: 6)).start_now()  # 1+2+3+4+5     = 15
         (agent produce(out: steal feeder, lo: 10, hi: 15)).start_now()  # 10+11+12+13+14 = 60
         var sum = (agent consume(inbox: steal hop)).retrieve()

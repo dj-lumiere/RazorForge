@@ -4,11 +4,9 @@ module Tests/Stdlib/SignalCasterPredicateApi
 # flag UNDER the monitor lock and only `wait`s while it is unset, so the handoff cannot be lost: the
 # consumer parks, the producer sets the flag and casts, and the consumer re-checks the flag on wake.
 #
-# The predicate cell is a raw `Hijacked[S64]` aliasing a slot on start()'s frame. Coroutines pass
-# value-records BY VALUE (a copy), so an `Atomic[S64]` argument would NOT be shared the way it is
-# across `threaded` workers (those marshal struct args by reference, see shared_counter_api); a raw
-# pointer is the simplest cell two coroutines can share. Workers may run the two coroutines in parallel,
-# so the producer writes the cell under the same monitor lock the consumer reads it under.
+# The predicate cell is a raw `Hijacked[S64]` aliasing a slot on start()'s frame: a raw pointer is
+# the simplest copyable cell two Agents can share. Workers may run the two Agents in parallel, so the
+# producer writes the cell under the same monitor lock the consumer reads it under.
 
 import IO/Console
 routine consumer(sig: SignalCaster, cell: Hijacked[S64]) -> S64
@@ -32,8 +30,8 @@ routine start()
     var slot = 0_s64
     var sig = SignalCaster()
     danger
-        var cell = slot.hijack()  # raw pointer to `slot`, copyable -> both coroutines share it
-        # LAZY: launch consumer + producer TOGETHER (`gather`) so the consumer can park on the predicate and
+        var cell = slot.hijack()  # raw pointer to `slot`, copyable -> both Agents share it
+        # Start consumer + producer TOGETHER (`gather`) so the consumer can park on the predicate and
         # the producer can set it + cast. Retrieving the consumer ALONE would hang. Both complete before we
         # read the shared cell, so the frame-aliased slot stays valid. Results in input order: [consumer, producer].
         var results = [

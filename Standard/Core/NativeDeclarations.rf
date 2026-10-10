@@ -121,7 +121,7 @@ dangerous routine C::rf_blocking_call(entry: CPtr, arg: Address)
 ### detached task frees itself and the box here.
 dangerous routine C::rf_task_complete_value(task: Address, result: Address)
 
-### Whether a task is fire-and-forget (`execute`): its result has no reader.
+### Whether a task is detached: its result has no reader.
 ### :returns: 1 when detached, 0 otherwise.
 dangerous routine C::rf_task_is_detached(task: Address) -> U8
 
@@ -142,11 +142,11 @@ dangerous routine C::rf_task_status_get(task: Address) -> U32
 ### Releases a task control block.
 dangerous routine C::rf_task_destroy(task: Address)
 
-### Marks a result task as fire-and-forget (`execute()`): its completion self-frees the task + result
-### box, no consumer. Set before the coroutine/thread runs.
+### Marks a result task as detached: its completion self-frees the task + result box, no consumer.
+### Set before the coroutine/thread runs.
 dangerous routine C::rf_task_set_detached(task: Address)
 
-### Consumer side of the threaded-task self-reap rendezvous: called once by the driving `retrieve!`
+### Consumer side of the thread task self-reap rendezvous: called once by the driving `retrieve!`
 ### (after reading the value, or on a deadline give-up). Frees the task iff the worker already exited;
 ### else the worker frees it. An Agent handle copy's `destruct` never calls this — so no double-free.
 dangerous routine C::rf_task_release(task: Address)
@@ -188,7 +188,7 @@ routine C::rf_coro_yield()
 ### Reads a coroutine's status (0 new, 1 running, 2 parked, 3 completed, 4 cancelled).
 dangerous routine C::rf_coro_status_get(coro: CPtr) -> U32
 
-### Marks a coroutine as fire-and-forget (`execute()`): the completing worker frees it, no consumer.
+### Marks a coroutine as detached: the completing worker frees it, no consumer.
 ### Call before rf_sched_spawn_default so it is published before any worker runs it.
 dangerous routine C::rf_coro_set_detached(coro: CPtr)
 
@@ -200,7 +200,7 @@ dangerous routine C::rf_coro_abandon(coro: CPtr)
 dangerous routine C::rf_coro_delete(coro: CPtr)
 
 ### Blocks the calling thread for the given duration. The synchronous-sleep backing for the
-### `waitfor` routine; a `suspended` waitfor will instead park on a timer (v0.3.0 scheduler).
+### `waitfor` routine outside a fiber (inside one it parks on a timer instead).
 dangerous routine C::rf_waitfor_duration(secs: S64, ns: U32)
 
 # ============================================================================
@@ -383,10 +383,11 @@ dangerous routine C::rf_signal_cast_all(sig: CPtr)
 ### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as a `CPtr`.
 dangerous routine C::rf_race_begin() -> CPtr
 
-### Appends a coroutine competitor (Agent of kind CORO), preserving add (List) order.
+### Appends a fiber competitor (an Agent started with `start_now()`/`start_here()`), preserving add (List)
+### order.
 dangerous routine C::rf_race_add_coro(race: CPtr, coro: CPtr)
 
-### Appends a thread competitor (Agent of kind THREAD), preserving add (List) order.
+### Appends a thread competitor (an Agent started with `start_apart()`), preserving add (List) order.
 dangerous routine C::rf_race_add_task(race: CPtr, task: Address)
 
 ### Drives the scheduler until one competitor completes; :returns: its index in add (List) order, or
@@ -1724,8 +1725,8 @@ dangerous routine C::rf_file_map_path_range_rw(
 ### :returns: The delta in bytes.
 routine C::rf_file_map_delta() -> U64
 
-### Reads a whole file asynchronously on the runtime's I/O threads. Inside a suspended routine the calling
-### coroutine parks while the read runs (siblings keep progressing); outside one it reads inline.
+### Reads a whole file asynchronously on the runtime's I/O threads. Inside work an Agent runs as a fiber the
+### fiber parks while the read runs (its siblings keep progressing), anywhere else it reads inline.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
 ### :returns: A pointer to the captured byte buffer (length via `rf_io_get_result_len`).
@@ -1736,8 +1737,8 @@ routine C::rf_io_read_file_all(path: CStr, path_len: S32) -> Hijacked[Byte]
 routine C::rf_io_get_result_len() -> U64
 
 ### Writes a whole file asynchronously on the runtime's I/O threads, truncating any existing contents.
-### Inside a suspended routine the calling coroutine parks while the write runs (siblings keep
-### progressing); outside one it writes inline. The payload is copied, so the caller's buffer need not
+### Inside work an Agent runs as a fiber the fiber parks while the write runs (its siblings keep
+### progressing), anywhere else it writes inline. The payload is copied, so the caller's buffer need not
 ### outlive the call.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.

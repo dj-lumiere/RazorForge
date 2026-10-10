@@ -112,21 +112,19 @@ dangerous routine agent_recipe[T](entry: CPtr, recipe: Address) -> Agent[T]
         recipe: recipe,
     )
 
-### Completes a recipe's task with the value its routine returned and frees the recipe. Builder plumbing for the
-### routine that runs a recipe.
-dangerous routine agent_finish[T](recipe: Address, value: T)
+### Completes a recipe's task with what its work came to (the value, or the error it failed with) and frees the
+### recipe. The work's failure stays in its Agent: it surfaces where the Agent is retrieved. The outcome MOVES into
+### the task's box: its bytes are copied, then its tag is cleared, so the caller's teardown of `outcome` frees
+### nothing the box now holds (a caught error is one object, freed once). Builder plumbing for the routine that runs
+### a recipe.
+dangerous routine agent_finish[T](recipe: Address, outcome: Hijacked[Check[T]])
     var task = recipe_task(recipe: recipe)
     rf_invalidate(ptr: recipe)
-    var cell = Hijacked[T](rf_allocate_dynamic(size: T.data_size()))
-    cell.poke(value)
-    C::rf_task_complete_value(task: task, result: cell.address())
-    return
-
-### `agent_finish` for a routine that returns nothing.
-dangerous routine agent_finish_none(recipe: Address)
-    var task = recipe_task(recipe: recipe)
-    rf_invalidate(ptr: recipe)
-    C::rf_task_complete_value(task: task, result: Address(0))
+    var size = Check[T].data_size()
+    var cell = rf_allocate_dynamic(size: size)
+    rf_copy_bytes_at(dest: cell, src: outcome.address(), size: size)
+    Hijacked[U64](outcome.address()).poke(value: 0_u64)
+    C::rf_task_complete_value(task: task, result: cell)
     return
 
 ### Reads word `slot` of the shared cell.
@@ -185,7 +183,7 @@ routine Agent[T].task() -> Address
 ### Takes `me` by reference: the place and handles it sets are what every later verb reads.
 ### :returns: false if the work could not be started, or `place` is HERE inside a `start_now()` job.
 dangerous routine Agent[T].start_at(place: AgentPlace) -> Bool
-    if me.place() != AgentPlace.WAITING
+    if me.place() != AgentPlace.WAITING or me.cancelled()
         return true
     if place == AgentPlace.APART
         me.set_cell_word(slot: 2_u64, value: C::rf_task_create(kind: 1_u32))
@@ -309,8 +307,8 @@ routine Agent[T].is_running() -> Bool
 dangerous routine Agent[T].request_cancel()
     if me.place() == AgentPlace.DONE
         return
+    me.set_cell_word(slot: 3_u64, value: Address(1))
     if me.place() == AgentPlace.WAITING
-        me.set_cell_word(slot: 3_u64, value: Address(1))
         return
     if me.place() != AgentPlace.APART
         if not me.coro().is_none()
@@ -333,6 +331,65 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
         recipe: me.recipe,
     )
 
+### Waits for cancelled work to stop and frees what ran it, dropping what it came to. Work nothing started is
+### only marked done. Plumbing for `cancel_all`.
+dangerous routine Agent[T].wind_down()
+    if me.place() == AgentPlace.DONE
+        return
+    if me.place() == AgentPlace.WAITING
+        me.set_place(place: AgentPlace.DONE)
+        return
+    if me.place() != AgentPlace.APART
+        C::rf_sched_run_until_default(coro: me.coro())
+    elseif C::rf_in_coroutine() != 0_u32
+        while C::rf_task_await_coro(task: me.task()) == 0_u32
+            C::rf_sched_park_external()
+    else
+        drop C::rf_task_wait(task: me.task())
+    # The outcome is dropped: its scope's teardown frees it.
+    var outcome = me.take_outcome()
+    me.reap()
+    return
+
+### Moves the finished work's outcome out of its task block and frees the block.
+### :returns: what the work came to.
+dangerous routine Agent[T].take_outcome() -> Check[T]
+    var payload = C::rf_task_result_payload(task: me.task())
+    var outcome = Hijacked[Check[T]](from: payload).peek()
+    rf_invalidate(ptr: payload)
+    return outcome
+
+### Takes the outcome of finished work and frees what ran it, then gives its value: its error is rethrown here,
+### where the Agent is retrieved, and an Agent that was cancelled reports that instead of its value. The outcome is
+### this routine's own, so a rethrown error moves out of it.
+### :throws: {CancelRequested} if the Agent was cancelled.
+### :returns: The value the work returned.
+routine Agent[T].settle!() -> T
+    danger
+        var outcome = me.take_outcome()
+        me.reap()
+        if me.cancelled()
+            throw CancelRequested()
+        when outcome
+            is T as value =>
+                return value
+            is Crashables as error =>
+                throw error
+
+### Whether `cancel` was called on this Agent (through any copy of it).
+### :returns: `true` once cancellation was requested.
+routine Agent[T].cancelled() -> Bool
+    danger
+        return me.cell_word(slot: 3_u64) != Address(0)
+
+### Asks the work to stop. Work nothing started yet never runs. Running work sees the request at its next wait
+### (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there. Retrieving a cancelled
+### Agent waits for it to stop, then throws {CancelRequested}.
+routine Agent[T].cancel()
+    danger
+        me.request_cancel()
+    return
+
 ### Waits for the work to finish and returns its produced value. An Agent no verb started is started with
 ### `start_now()` first. UNCOLORED: inside a fiber it PARKS (siblings run meanwhile) instead of blocking, on a
 ### plain thread it blocks, and waiting for a `start_here()` job on its own thread runs that thread's jobs until
@@ -342,6 +399,8 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
 ### ran: a thread's task goes to the worker↔consumer rendezvous, so on a deadline give-up the still-running
 ### thread frees its own block.
 ### :throws: {AgentStartError} if the value was taken already, or a deadline was set on a fiber.
+### :throws: {CancelRequested} if the Agent was cancelled.
+### :throws: Whatever the work threw: its failure surfaces here, not where it ran.
 ### :throws: {TaskSpawnError} if the work could not be started.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
@@ -349,6 +408,11 @@ routine Agent[T].retrieve!() -> T
     if me.place() == AgentPlace.DONE
         throw AgentStartError(reason: "You called retrieve() on an Agent whose value was already taken. " +
             "Retrieve an Agent once.")
+    # Cancelled before anything started it: it never runs.
+    if me.place() == AgentPlace.WAITING and me.cancelled()
+        danger
+            me.set_place(place: AgentPlace.DONE)
+        throw CancelRequested()
     # A deadline gives up on work that keeps running, which only a thread of its own can do: an Agent nothing
     # started yet starts there.
     if me.has_deadline and (me.place() == AgentPlace.NOW or me.place() == AgentPlace.HERE)
@@ -365,12 +429,8 @@ routine Agent[T].retrieve!() -> T
     if me.place() != AgentPlace.APART
         danger
             C::rf_sched_run_until_default(coro: me.coro())
-            var payload = C::rf_task_result_payload(task: me.task())
-            var value = Hijacked[T](from: payload).peek()
-            rf_invalidate(ptr: payload)
-            # Value is copied out; reap the coroutine + its result block. This is the single consumer.
-            me.reap()
-            return value
+            # The outcome is taken, then the fiber and its result block are reaped: this is the single consumer.
+            return me.settle()
 
     danger
         if me.has_deadline
@@ -405,13 +465,9 @@ routine Agent[T].retrieve!() -> T
             else
                 drop C::rf_task_wait(task: me.task())
 
-        var payload = C::rf_task_result_payload(task: me.task())
-        var value = Hijacked[T](from: payload).peek()
-        rf_invalidate(ptr: payload)
-        # Value is copied out; reap. This is the single driving retrieve!; handle copies (e.g. from
-        # `waitfor`) never reach here — their `destruct` is a no-op — so the worker is freed exactly once.
-        me.reap()
-        return value
+        # The outcome is taken, then reaped. This is the single driving retrieve!: handle copies (e.g. from
+        # `waitfor`) never reach here, their `destruct` is a no-op, so the worker is freed exactly once.
+        return me.settle()
 
 ### Reaps this agent's work — the SOLE freeing path, called EXACTLY ONCE by the consumer that is done
 ### with it (`retrieve!` after reading the value or a deadline give-up; `race!` over its whole set).
@@ -506,18 +562,15 @@ routine List[Agent[T]].race!() -> T
         var winner = C::rf_race_wait(race: race)
         C::rf_race_end(race: race)
         var w = U64(winner)
-        var payload = C::rf_task_result_payload(task: me[w].task_handle())
-        var value = Hijacked[T](from: payload).peek()
-        rf_invalidate(ptr: payload)
-        # race! is the sole consumer of this set: the winner's value is read, the losers are never
-        # retrieved. Reap EVERY agent exactly once here (winner + losers) — a still-running loser's worker
-        # frees its own block on exit (non-blocking). The List's own teardown (Agent.destroy) is a no-op,
-        # so nothing double-frees; without this, none of the raced agents would ever be freed.
+        # race! is the sole consumer of this set: the losers are never retrieved. Reap every loser exactly once
+        # here (a still-running loser's worker frees its own block on exit, non-blocking), then settle the
+        # winner, which reaps it. The List's own teardown (Agent.destruct) is a no-op, so nothing double-frees.
         var k = 0_u64
         while k < n
-            me[k].reap()
+            if k != w
+                me[k].reap()
             k = k + 1
-        return value
+        return me[w].settle()
 
 ### Drives the Agents CONCURRENTLY and waits for ALL of them to finish, returning their results in
 ### INPUT order. The twin of `race!` (first finisher); `gather!` returns every finisher. BORROWS the
@@ -546,36 +599,22 @@ routine List[Agent[T]].gather!() -> List[T]
             i = i + 1
         return results
 
-### Requests cooperative cancellation of EVERY Agent in the set, then waits out the wind-down,
-### returning each Agent's final value in input order (a cooperative worker returns its own sentinel
-### when it observes the request). BORROWS the list — call it `agents.cancel_all()`. It sets a cancel
-### flag on each Agent (in native memory, through the handle), then drives them to completion with the
-### same uncolored logic as `gather!`: a worker thread observes the flag via `cancellation_requested()`
-### (the only way to halt one — a thread cannot be killed) and returns; a coroutine observes it at its
-### next `waitfor` returning early. `!` because the wind-down join can surface a child's throw. To
-### cancel WITHOUT waiting, simply let the list tear down at scope exit (abandon-all).
-### :returns: Each Agent's final value, in input order.
-routine List[Agent[T]].cancel_all!() -> List[T]
+### Cancels every Agent in the set and waits for each to stop, dropping what it came to. Work nothing started yet
+### never runs. BORROWS the list — call it `agents.cancel_all()`. Running work sees the request at its next wait
+### (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there: a thread of its own
+### cannot be stopped from outside.
+routine List[Agent[T]].cancel_all()
     danger
         var n = me.count()
         var i = 0u64
         while i < n
             me[i].request_cancel()
             i = i + 1
-        # Launch the whole set CONCURRENTLY (so they run + observe the cancel together), then drive each
-        # to its wind-down. Launching is idempotent, so retrieve!'s own launch is a no-op on these.
         i = 0u64
         while i < n
-            if not me[i].launch()
-                throw TaskSpawnError()
+            me[i].wind_down()
             i = i + 1
-        var results = List[T]()
-        i = 0u64
-        while i < n
-            var value = me[i].retrieve()
-            results.add_last(value: value)
-            i = i + 1
-        return results
+    return
 
 ### Waits for `duration` to elapse. UNCOLORED: inside a scheduler-driven coroutine it PARKS — the
 ### scheduler runs other coroutines meanwhile and resumes this one when the timer fires — so it

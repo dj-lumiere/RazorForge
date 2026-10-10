@@ -7,9 +7,9 @@ record Point
     x: S64
     y: S64
 
-# v0.1 concurrency, Phase 1: `threaded routine` spawns an OS thread; calling it yields a
-# Task[T] handle; `.waitfor()` joins (-> T) and `.waitfor(timeout)` joins with a deadline
-# (-> Lookup[T], None on timeout/cancel).
+# `agent f(...)` makes an Agent[T] over a plain routine and `retrieve()` waits for its value. An Agent
+# with a deadline (`.waitfor(d)`) that nothing started runs on an OS thread of its own (`start_apart()`),
+# and `try …retrieve()` gives Maybe[T] (None when the deadline passes).
 
 routine compute(x: S64, y: S64) -> S64
     return x * y + 1
@@ -23,12 +23,12 @@ routine excessive_compute(a: S64) -> S64
     return a
 
 routine start()
-    # 1. spawn, hold the handle, then join.
+    # 1. make the Agent, hold the handle, then retrieve (starts it with start_now()).
     var t = agent compute(x: 6, y: 7)
     var r = t.retrieve()
     show(f"compute => {r}")
 
-    # 2. fused spawn + join.
+    # 2. make and retrieve in one expression.
     var r2 = (agent compute(x: 2, y: 5)).retrieve()
     show(f"fused => {r2}")
 
@@ -36,7 +36,7 @@ routine start()
     var p = (agent make_point(a: 3, b: 4)).retrieve()
     show(f"point => x={p.x} y={p.y}")
 
-    # 4. bounded join via the graceful form — `retrieve!` throws on timeout, whereas
+    # 4. bounded wait via the recovering form — `retrieve()` throws on timeout, whereas
     #    `try …retrieve()` yields Maybe[T] (None on timeout). Generous window -> the value.
     var r3 = try (agent compute(x: 3, y: 4)).waitfor(5s).retrieve()
     when r3

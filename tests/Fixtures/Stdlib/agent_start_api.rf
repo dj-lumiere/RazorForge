@@ -29,6 +29,18 @@ routine checked!(n: S64) -> S64
         throw VerificationFailedError()
     return n
 
+routine relay(n: S64) -> S64
+    return checked(n: n)
+
+routine slow(n: S64) -> S64
+    var i = 0
+    while i < 2000
+        if cancellation_requested()
+            return -1
+        waitfor(1ms)
+        i += 1
+    return n
+
 routine start()
     var now = agent add(a: 1, b: 2)
     now.start_now()
@@ -85,5 +97,33 @@ routine start()
         is AgentStartError => show("deadline on a fiber: refused")
         else => show("deadline on a fiber: ran")
     drop fiber.retrieve()
+
+    # A failure inside the work stays in its Agent: it surfaces where the Agent is retrieved, and the others go on.
+    var bad = agent relay(n: -1)
+    var good = agent relay(n: 3)
+    bad.start_now()
+    good.start_now()
+    show(f"good: {good.retrieve()}")
+    when check bad.retrieve()
+        is S64 as v => show(f"bad: {v}")
+        is Crashables as e => show(f"bad failed: {e.crash_message()}")
+
+    # cancel(): running work stops at its next wait, work nothing started never runs, and retrieving either is
+    # CancelRequested.
+    var running = agent slow(n: 1)
+    running.start_now()
+    running.cancel()
+    when check running.retrieve()
+        is CancelRequested => show("running: cancelled")
+        else => show("running: other")
+    var idle = agent slow(n: 2)
+    idle.cancel()
+    when check idle.retrieve()
+        is CancelRequested => show("waiting: cancelled")
+        else => show("waiting: other")
+    var set = [agent slow(n: 3), agent slow(n: 4)]
+    set[0].start_now()
+    set.cancel_all()
+    show("cancel_all: wound down")
     show("DONE")
     return

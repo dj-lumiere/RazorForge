@@ -7,13 +7,12 @@ module Core
 ### the cell's storage. The atomic intrinsics (`Core/LLVMIntrinsics.rf`) then drive
 ### sequentially-consistent `load`/`store`/`atomicrmw`/`cmpxchg` on that address.
 ###
-### **Sharing across threads.** Do not copy an `Atomic[T]` into a thread's argument
-### pack — that produces N independent cells. Share the *address* instead: a
-### `Hijacked[Atomic[T]]` is a plain `ptr` (a copyable value), so it marshals into a
-### `threaded routine` while still pointing every worker at the one cell. The cell
-### must outlive every worker — join them before its storage goes out of scope, or
-### put it behind a `Guarded[Atomic[T]]` (atomic-RC heap ownership) when no single
-### frame is guaranteed to outlive the workers.
+### **Sharing across agents.** An `Atomic[T]` parameter is always passed by reference:
+### a routine taking one works on the caller's cell, never on a copy. So
+### `agent bump(cell: counter)` points every worker at the one cell. The cell must
+### outlive every worker — collect them (`retrieve()`/`gather()`) before its storage
+### goes out of scope, or put it behind a `Guarded[Atomic[T]]` (atomic-RC heap
+### ownership) when no single frame is guaranteed to outlive the workers.
 ###
 ### **Valid `T`.** `T` must lower to a byte-or-larger hardware-atomic integer: the
 ### types `S8`..`S64` and `U8`..`U64`. `Bool` is **not** supported — it lowers to
