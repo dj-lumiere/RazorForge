@@ -2,7 +2,7 @@ module Tests/Stdlib/SendIfRoomApi
 
 # `send_if_room` puts an item into a channel only when it has room, never waiting, and `take_finished` takes the
 # finished Agents out of a list in place, leaving the rest. `next_finished` hands Agents over in the order they finish,
-# and `gather_all` keeps every result and failure.
+# and `gather_all` keeps every result and failure. A receiver that closes drops what is buffered and refuses later sends.
 
 import IO/Console
 routine double(n: S64) -> S64
@@ -56,5 +56,11 @@ routine start()
     tries.add_last(value: agent risky(n: 3))
     var outcomes = tries.gather_all()
     show(f"all: {outcomes.count()} first: {outcomes[0]} third: {outcomes[2]}")
+    var (tx, rx) = make_channel[Text](capacity: 4)
+    tx.send(item: "a")
+    tx.send(item: "b")
+    rx.close()
+    var sent = try tx.send(item: "c")
+    show(f"receiver closed: {rx.is_closed()} left: {rx.count()} sent after: {sent}")
     show("DONE")
     return

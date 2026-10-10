@@ -1050,6 +1050,8 @@ opening a `FileHandle` inside a job.
   (the item is destroyed), `ChannelClosedError` like `send`.
   `sender.duplicate()` clones a producer for fan-in; `sender.close()` / `is_closed()`.
 - `Receiver`/`SharedReceiver` are `Iterable[T]` — drain with `each x in rx` (ends when closed + empty).
+  `rx.close()` closes from the receiving side: buffered items are destroyed unreceived, a later `send` throws
+  `ChannelClosedError`, and a sender waiting for room wakes with it (an early stop travels up a pipeline).
 
 ```razorforge
 var (tx, rx) = make_channel[S64](capacity: 4)

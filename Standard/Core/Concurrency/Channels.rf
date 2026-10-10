@@ -136,6 +136,16 @@ dangerous routine Sender[T].destruct()
     C::rf_channel_drop_feeder(chan: me.chan)
     return
 
+### Destroys every item still buffered in a closed channel.
+secret routine destroy_buffered[T](chan: CPtr)
+    danger
+        var box = hijacked_from[T](C::rf_channel_next(chan: chan))
+        while not box.is_none()
+            var leftover = box.peek()
+            box.invalidate()
+            box = hijacked_from[T](C::rf_channel_next(chan: chan))
+    return
+
 ### Returns an iterator that draws items from the channel (receive == iterate).
 ### :returns: A `ChannelDrain[T]` over this channel.
 @readonly
@@ -167,6 +177,16 @@ routine Receiver[T].is_closed() -> Bool
 routine Receiver[T].capacity() -> U64
     danger
         return C::rf_channel_capacity(chan: me.chan)
+
+### Closes the channel from the receiving side, for a consumer that wants no more items. What is still buffered is
+### destroyed without being received, a later `send` throws {ChannelClosedError}, and a sender waiting for room wakes
+### with that error. The stage feeding this channel then ends on its failed `send`, so an early stop travels up a
+### pipeline. Closing twice does nothing.
+routine Receiver[T].close()
+    danger
+        C::rf_channel_close(chan: me.chan)
+    destroy_buffered[T](chan: me.chan)
+    return
 
 ### Drops this consumer reference; the channel frees once no producers and no consumers remain.
 @override
@@ -208,6 +228,16 @@ routine SharedReceiver[T].is_closed() -> Bool
 routine SharedReceiver[T].capacity() -> U64
     danger
         return C::rf_channel_capacity(chan: me.chan)
+
+### Closes the channel from the receiving side, for a consumer that wants no more items. What is still buffered is
+### destroyed without being received, a later `send` throws {ChannelClosedError}, and a sender waiting for room wakes
+### with that error. The stage feeding this channel then ends on its failed `send`, so an early stop travels up a
+### pipeline. Closing twice does nothing.
+routine SharedReceiver[T].close()
+    danger
+        C::rf_channel_close(chan: me.chan)
+    destroy_buffered[T](chan: me.chan)
+    return
 
 ### Drops this consumer reference; the channel frees once no producers and no consumers remain.
 @override
