@@ -89,6 +89,20 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "Range step zero error", actualString: stdout + stderr);
     }
 
+    /// <summary>A thread reading a channel whose sender its own scope still holds, with no other work running, crashes
+    /// with a deadlock report instead of hanging.</summary>
+    [Fact]
+    public void ChannelSelfWait_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "channel_self_wait.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "got 1", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "Deadlock error", actualString: stdout + stderr);
+    }
+
     /// <summary><c>steal</c> on a handle that another strong handle still shares crashes with status 82.</summary>
     [Fact]
     public void SharedHandleSteal_CrashesLoudly()
