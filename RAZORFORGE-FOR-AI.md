@@ -312,6 +312,8 @@ var byte = 0x41u8.to[Byte]()       # the same bits as a Byte
 var raw = status.to[S32]()         # a choice's value (also to[S64]()), perms.to[U64]() a flags bitmask
 var wide: U64 = count.to()         # T left out: the declared type gives it
 var fits: U8? = try count.to()     # none when it does not fit
+var low = count.to_wrap[U8]()      # the low 8 bits (300 -> 44), never fails
+var near = count.to_clamp[U8]()    # the nearest U8 (300 -> 255), never fails
 var why: Check[S64] = check line.to()
 ```
 
