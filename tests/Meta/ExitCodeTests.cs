@@ -89,6 +89,19 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "Range step zero error", actualString: stdout + stderr);
     }
 
+    /// <summary><c>steal</c> on a handle that another strong handle still shares crashes with status 82.</summary>
+    [Fact]
+    public void SharedHandleSteal_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "shared_handle_steal.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "before", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "2 handles share it", actualString: stdout + stderr);
+    }
+
     /// <summary>A caught error thrown again crashes with the trace it was first thrown with: the routines between
     /// the first throw and the catcher had returned by then, and the report still names them, the first throw's
     /// line, and where the error was thrown again.</summary>

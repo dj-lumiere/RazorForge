@@ -160,6 +160,18 @@ routine Guarded[T, TPolicy].diagnose() -> Text
         var addr = ctrl.raw_data().get_address()
         return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ")"
 
+### `steal handle`: the entity comes out of the handle, which ends. The builder calls this for `steal` on a
+### `Guarded`, for example to share a table under another policy once the threads that filled it are done. Weak
+### handles see the entity gone afterwards.
+### :returns: The entity.
+### :throws: {SharedHandleStealError} when another strong handle still shares the entity.
+dangerous routine Guarded[T, TPolicy].release_inner!() -> T
+    var ctrl = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
+    var holders = ctrl.strong_count()
+    if holders != 1_u64
+        throw SharedHandleStealError(holders: holders)
+    return ctrl.release_data().as_entity()
+
 ### Decrements the strong count, tearing down the entity at zero (and the controller when both counts
 ### reach zero). This IS the decrement — no separate `release` verb; `destruct` is the teardown.
 @override

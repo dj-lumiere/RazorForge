@@ -114,6 +114,16 @@ routine GuardManager[T, TPolicy].try_add_inspector() -> Bool
 routine GuardManager[T, TPolicy].try_add_claimer() -> Bool
     return me.lock.try_add_claimer()
 
+### Gives the managed entity up to the last strong handle, which is ending: the strong count drops to zero without
+### tearing the entity down, and the controller is freed unless weak handles remain (they now see it gone).
+### :returns: The managed entity's pointer, now owned by the caller.
+dangerous routine GuardManager[T, TPolicy].release_data() -> Hijacked[T]
+    drop LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
+    var data = me.data
+    if me.weak_count() == 0_u64
+        me.destruct()
+    return data
+
 ### Destroys the managed entity. Call only when the strong count reaches zero.
 ### Runs the entity's own `destruct` (the sole free under unified teardown); does not also
 ### `invalidate`, which would double-free a self-freeing entity.

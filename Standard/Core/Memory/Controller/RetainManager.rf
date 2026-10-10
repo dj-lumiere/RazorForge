@@ -72,6 +72,16 @@ routine RetainManager[T].should_deallocate_controller() -> Bool
 routine RetainManager[T].raw_data() -> Hijacked[T]
     return me.data
 
+### Gives the managed entity up to the last strong handle, which is ending: the strong count drops to zero without
+### tearing the entity down, and the controller is freed unless weak handles remain (they now see it gone).
+### :returns: The managed entity's pointer, now owned by the caller.
+dangerous routine RetainManager[T].release_data() -> Hijacked[T]
+    me.strong_count = 0
+    var data = me.data
+    if me.should_deallocate_controller()
+        me.destruct()
+    return data
+
 ### Destroys the managed entity. Call only when strong count reaches zero.
 ### Runs the entity's own `destruct`, which IS the sole free under the unified-teardown model
 ### (a synthesized entity `destruct` self-invalidates its allocation; a user-written one owns its

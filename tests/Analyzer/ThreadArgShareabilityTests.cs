@@ -191,25 +191,37 @@ public class ThreadArgShareabilityTests
     }
 
     [Fact]
-    public void Analyze_StealRetained_Rejected()
+    public void Analyze_StealRetainedIntoAgent_HandsOverTheEntity()
     {
-        // A `Retained` is a reference-counted handle — SHARED ownership, not unique. `steal` (an
-        // exclusive-transfer marker) is a category error on it: moving one handle proves nothing
-        // about sibling handles racing the non-atomic count. So `steal r` is rejected at the steal
-        // itself (RF-S617), independent of the async boundary — the honest fix is `Guarded`/`Witnessed`.
+        // `steal r` on a Retained takes the entity out of the handle (it must be the last one), so the work gets the
+        // bare entity, moved, and never the single-thread handle.
         string source = Prelude + """
-                                  routine work(r: Retained[Node]) -> S64
-                                      return r.value
+                                  routine work(n: Node) -> S64
+                                      return n.value
 
                                   routine start()
                                       var r = Retained(from: Node(value: 1))
-                                      var t = agent work(r: steal r)
+                                      var t = agent work(n: steal r)
                                       drop t.retrieve()
                                       return
                                   """;
 
+        AssertAnalyzesSa(source: source);
+    }
+
+    [Fact]
+    public void Analyze_StealTracked_Rejected()
+    {
+        string source = Prelude + """
+                                  routine start()
+                                      var r = Retained(from: Node(value: 1))
+                                      var w = r.observe()
+                                      var n = steal w
+                                      return
+                                  """;
+
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "a reference-counted handle is shared ownership");
+            expectedErrorSubstring: "a weak handle doesn't keep the entity");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.StealSharedOwnership);
     }
