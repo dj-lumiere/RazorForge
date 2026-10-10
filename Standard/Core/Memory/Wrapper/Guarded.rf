@@ -2,7 +2,7 @@ module Core
 
 import BuilderQuery
 ### Multi-threaded strong reference to shared data under an access discipline `TPolicy`. Thin pointer to
-### {GuardController[T, TPolicy]}. The atomic-refcount twin of {Retained[T]} — equivalent to `Arc[T]` in Rust.
+### {GuardManager[T, TPolicy]}. The atomic-refcount twin of {Retained[T]} — equivalent to `Arc[T]` in Rust.
 ### Cloning bumps the strong count atomically (`.share()`); dropping decrements it. Safe across threads.
 ###
 ### The discipline `TPolicy` (a {LockPolicy}: {ReadOnly} / {Exclusive} / {MultiRead}) is part of the type, so
@@ -28,7 +28,7 @@ routine Guarded[T, TPolicy](from: T) -> Guarded[T, TPolicy]
 needs EntityType T
 needs TPolicy obeys LockPolicy
     danger
-        var ctrl = GuardController[T, TPolicy](data: from.hijack()).hijack()
+        var ctrl = GuardManager[T, TPolicy](data: from.hijack()).hijack()
         return Guarded[T, TPolicy](ctrl)
 
 # ============================================================================
@@ -41,7 +41,7 @@ needs TPolicy obeys LockPolicy
 @override
 secret routine Guarded[T, TPolicy].share() -> Guarded[T, TPolicy]
     danger
-        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
+        var ctrl = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
         ctrl.hold()
     return me
 
@@ -49,7 +49,7 @@ secret routine Guarded[T, TPolicy].share() -> Guarded[T, TPolicy]
 ### :returns: A new weak handle to the same entity's controller.
 routine Guarded[T, TPolicy].observe() -> Witnessed[T, TPolicy]
     danger
-        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
+        var ctrl = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
         ctrl.observe()
         return Witnessed[T, TPolicy](me)
 
@@ -106,14 +106,14 @@ needs TPolicy in [Exclusive, MultiRead]
 ### :returns: The number of live strong handles to this entity.
 routine Guarded[T, TPolicy].strong_count() -> U64
     danger
-        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
+        var ctrl = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
         return ctrl.strong_count()
 
 ### Returns the current weak reference count.
 ### :returns: The number of live weak handles to this entity's controller.
 routine Guarded[T, TPolicy].weak_count() -> U64
     danger
-        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
+        var ctrl = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
         return ctrl.weak_count()
 
 # ============================================================================
@@ -134,7 +134,7 @@ routine Guarded[T, TPolicy].represent() -> Text
 @override
 routine Guarded[T, TPolicy].diagnose() -> Text
     danger
-        var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
+        var ctrl = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
         var rc = ctrl.strong_count()
         var weak = ctrl.weak_count()
         var addr = ctrl.raw_data().get_address()
@@ -144,8 +144,8 @@ routine Guarded[T, TPolicy].diagnose() -> Text
 ### reach zero). This IS the decrement — no separate `release` verb; `destruct` is the teardown.
 @override
 dangerous routine Guarded[T, TPolicy].destruct()
-    if Hijacked[GuardController[T, TPolicy]](me).get_address() == 0_addr
+    if Hijacked[GuardManager[T, TPolicy]](me).get_address() == 0_addr
         return
-    var ctrl = Hijacked[GuardController[T, TPolicy]](me).as_entity()
+    var ctrl = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
     ctrl.unhold()
     return

@@ -1,9 +1,9 @@
 module Core
 
-### Single-threaded reference counting controller.
+### Single-threaded reference counting manager.
 ### Owns the managed entity; shared between {Retained[T]} (strong) and {Tracked[T]} (weak).
 ### :typeparam T: The exclusively owned entity type.
-entity RetainController[T]
+entity RetainManager[T]
 needs EntityType T
     ### Stores the strong count.
     secret strong_count: U32
@@ -14,17 +14,17 @@ needs EntityType T
 
 ### Creates a new controller with one strong reference.
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
-### :returns: The resulting `RetainController[T]` value.
-dangerous routine RetainController[T](data: Hijacked[T]) -> RetainController[T]
-    return RetainController[T](strong_count: 1, weak_count: 0, data: data)
+### :returns: The resulting `RetainManager[T]` value.
+dangerous routine RetainManager[T](data: Hijacked[T]) -> RetainManager[T]
+    return RetainManager[T](strong_count: 1, weak_count: 0, data: data)
 
 ### Increments the strong reference count when a new `Retained` handle is cloned.
-routine RetainController[T].hold()
+routine RetainManager[T].hold()
     me.strong_count = me.strong_count + 1
     return
 
 ### Decrements the strong reference count when a `Retained` handle is dropped.
-routine RetainController[T].unhold()
+routine RetainManager[T].unhold()
     me.strong_count = me.strong_count - 1
     if me.should_deallocate_data()
         danger
@@ -35,12 +35,12 @@ routine RetainController[T].unhold()
     return
 
 ### Increments the weak reference count when a new `Tracked` handle is cloned.
-routine RetainController[T].observe()
+routine RetainManager[T].observe()
     me.weak_count = me.weak_count + 1
     return
 
 ### Decrements the weak reference count when a `Tracked` handle is dropped.
-routine RetainController[T].unobserve()
+routine RetainManager[T].unobserve()
     me.weak_count = me.weak_count - 1
     if me.should_deallocate_controller()
         danger
@@ -49,39 +49,39 @@ routine RetainController[T].unobserve()
 
 ### Returns the current number of live strong (`Retained`) handles.
 ### :returns: The strong reference count.
-routine RetainController[T].strong_count() -> U32
+routine RetainManager[T].strong_count() -> U32
     return me.strong_count
 
 ### Returns the current number of live weak (`Tracked`) handles.
 ### :returns: The weak reference count.
-routine RetainController[T].weak_count() -> U32
+routine RetainManager[T].weak_count() -> U32
     return me.weak_count
 
 ### Returns `true` when the strong count has reached zero and the managed entity should be destroyed.
 ### :returns: `true` if `strong_count` is zero.
-routine RetainController[T].should_deallocate_data() -> Bool
+routine RetainManager[T].should_deallocate_data() -> Bool
     return me.strong_count == 0
 
 ### Returns `true` when both the strong and weak counts are zero and the controller itself can be freed.
 ### :returns: `true` if both `strong_count` and `weak_count` are zero.
-routine RetainController[T].should_deallocate_controller() -> Bool
+routine RetainManager[T].should_deallocate_controller() -> Bool
     return me.strong_count == 0 and me.weak_count == 0
 
 ### Returns a non-owning pointer to the managed data.
 ### :returns: The resulting `Hijacked[T]` value.
-routine RetainController[T].raw_data() -> Hijacked[T]
+routine RetainManager[T].raw_data() -> Hijacked[T]
     return me.data
 
 ### Destroys the managed entity. Call only when strong count reaches zero.
 ### Runs the entity's own `destruct`, which IS the sole free under the unified-teardown model
 ### (a synthesized entity `destruct` self-invalidates its allocation; a user-written one owns its
 ### own free). Do not also `invalidate` here — that would double-free self-freeing entities.
-dangerous routine RetainController[T].drop_data()
+dangerous routine RetainManager[T].drop_data()
     me.data.as_entity().destruct()
     return
 
 @override
-dangerous routine RetainController[T].destruct()
+dangerous routine RetainManager[T].destruct()
     if me.should_deallocate_controller()
         me.strong_count.destruct()
         me.weak_count.destruct()

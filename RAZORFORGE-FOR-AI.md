@@ -297,6 +297,25 @@ declare their own `i`.
   compares whether two references are the SAME object (entities / access-token /
   RC-wrapper operands only — RF-S440 on value types). See §7.
 
+**Precedence**, tightest first:
+
+1. indexing, member access, calls
+2. `**` (right-associative, the exponent may carry a sign: `2 ** -1`)
+3. unary `-`, `not`, `~` (`-x ** 2` is `-(x ** 2)`)
+4. `* / // %` (and their `%`/`^`/`!` variants)
+5. `+ -` (and their variants)
+6. bitwise `<< >> >>> & ^ |`, ONE level: different bitwise operators side by side
+   need parentheses (`(a & b) | c`, `(a >>> 58) << 2`), a chain of one does not
+   (`a | b | c`). Shifts are looser than arithmetic: `1 << n + 1` shifts by `n + 1`.
+7. ranges `to` / `til` / `by` (`0 to n - 1`, `0 to 10 have x` read as written)
+8. comparisons `== != < <= > >= <=>` (chained), `have` `lack` `is` `isnot` `obeys`
+   (`x & 1 == 0` is `(x & 1) == 0`)
+9. `and` / `or`, ONE level: mixing them needs parentheses (`a or (b and c)`), a
+   chain of one does not
+10. `??`
+
+Mixing `and` with `or`, or two different bitwise operators, without parentheses is RF-G216.
+
 ## 5. Control flow
 
 ```razorforge
@@ -640,12 +659,16 @@ that differ from other languages:
   from, so it is used in the statement that makes it (`each`, a terminal call such
   as `.List()`, or an argument). Keeping one in a variable or field, or returning
   it, is RF-S644. A range (`var r = 0 til 10`) points at nothing and can be kept.
-- Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive; direction
-  is inferred from the endpoints (`10 to 1` counts down — there is no `step -1`).
-  `by N` sets a positive step magnitude (`1 to 10 by 2`); direction stays driven
-  by the endpoints. A literal step that is zero or negative (`by -3`, `by 0`) is
-  RF-S516. A step held in a variable crashes with `RangeStepNotPositiveError`
-  when the range is iterated if it is not positive.
+- Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive. Without
+  `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`
+  yields nothing, `2 to 1 have 1` is false). `by N` sets the step
+  (`1 to 10 by 2`), and a negative step counts down: `10 to 1 by -1`,
+  `10 to 0 by -2`, also on unsigned types (`3u64 to 0u64 by -1` yields 3 2 1 0).
+  A step held in a variable decides the direction by its sign. A literal
+  `by 0` is RF-S516; a zero step held in a variable crashes with
+  `RangeStepZeroError` when the range is iterated. `have`/`contains` follow the
+  same rule (`10 to 0 by -2 have 4` is true). Slicing with a counting-down range
+  reverses: `text[4 to 0 by -1]`.
 - `List`, `Set`, `Dict` live in **`Core`** (always available — never suggest
   `using Collections`). Only these three canonical collections have literal
   syntax of their own (`[1, 2]`, `{1, 2}`, `{1: 10}`); a specialized container
@@ -788,6 +811,8 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-S632      | `agent` argument unsafe to hand over  | `steal` the entity, or pass `Atomic`/`Guarded`/…   |
 | RF-S642      | `agent` before a non-call, or over generic-parameter-typed values | put it before a call with concrete types |
+| RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
+| RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 
 ## 13. A complete worked example

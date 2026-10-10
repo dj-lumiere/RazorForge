@@ -1,7 +1,7 @@
 module Core
 
 import BuilderQuery
-### Single-threaded strong reference. Thin pointer to {RetainController[T]}.
+### Single-threaded strong reference. Thin pointer to {RetainManager[T]}.
 ### Equivalent to `Rc[T]` in Rust. Copying bumps the strong count; dropping decrements it.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
@@ -19,7 +19,7 @@ needs EntityType T
 routine Retained[T](from: T) -> Retained[T]
 needs EntityType T
     danger
-        var ctrl = RetainController[T](data: from.hijack()).hijack()
+        var ctrl = RetainManager[T](data: from.hijack()).hijack()
         return Retained[T](ctrl)
 
 # ============================================================================
@@ -32,7 +32,7 @@ needs EntityType T
 @override
 secret routine Retained[T].share() -> Retained[T]
     danger
-        var ctrl = Hijacked[RetainController[T]](me).as_entity()
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
         ctrl.hold()
     return me
 
@@ -49,7 +49,7 @@ needs T obeys Copyable
 ### :returns: A new weak handle to the same entity's controller.
 routine Retained[T].observe() -> Tracked[T]
     danger
-        var ctrl = Hijacked[RetainController[T]](me).as_entity()
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
         ctrl.observe()
         return Tracked[T](me)
 
@@ -61,14 +61,14 @@ routine Retained[T].observe() -> Tracked[T]
 ### :returns: The number of live strong handles to this entity.
 routine Retained[T].strong_count() -> U32
     danger
-        var ctrl = Hijacked[RetainController[T]](me).as_entity()
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
         return ctrl.strong_count()
 
 ### Returns the current weak reference count.
 ### :returns: The number of live weak handles to this entity's controller.
 routine Retained[T].weak_count() -> U32
     danger
-        var ctrl = Hijacked[RetainController[T]](me).as_entity()
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
         return ctrl.weak_count()
 
 # ============================================================================
@@ -82,7 +82,7 @@ routine Retained[T].weak_count() -> U32
 @inline
 routine Retained[T].access() -> T
     danger
-        var ctrl = Hijacked[RetainController[T]](me).as_entity()
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
         return ctrl.raw_data().as_entity()
 
 ### Yields the inner entity as an in-flight `T` reference for read/write access.
@@ -91,7 +91,7 @@ routine Retained[T].access() -> T
 @inline
 routine Retained[T].control() -> T
     danger
-        var ctrl = Hijacked[RetainController[T]](me).as_entity()
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
         return ctrl.raw_data().as_entity()
 
 # ============================================================================
@@ -104,7 +104,7 @@ routine Retained[T].control() -> T
 @override
 routine Retained[T].represent() -> Text
     danger
-        var ctrl = Hijacked[RetainController[T]](me).as_entity()
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
         return ctrl
             .raw_data()
             .as_entity()
@@ -116,7 +116,7 @@ routine Retained[T].represent() -> Text
 @override
 routine Retained[T].diagnose() -> Text
     danger
-        var ctrl = Hijacked[RetainController[T]](me).as_entity()
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
         var rc = ctrl.strong_count()
         var weak = ctrl.weak_count()
         var addr = ctrl.raw_data().get_address()
@@ -129,8 +129,8 @@ routine Retained[T].diagnose() -> Text
 ### reach zero). This IS the decrement — there is no separate `release` verb; `destruct` is the teardown.
 @override
 dangerous routine Retained[T].destruct()
-    if Hijacked[RetainController[T]](me).get_address() == 0_addr
+    if Hijacked[RetainManager[T]](me).get_address() == 0_addr
         return
-    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    var ctrl = Hijacked[RetainManager[T]](me).as_entity()
     ctrl.unhold()
     return
