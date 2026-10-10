@@ -617,8 +617,8 @@ that differ from other languages:
   removal is failable (empty/out-of-range throws); `try list.remove_first()`
   returns `Maybe`.
 - `set.add(value: v)` returns Bool — `drop` it if unused.
-- `dict.add(key: k, value: v)` returns Bool; indexing is failable under the
-  hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Maybe[TValue]`.
+- `dict[k] = v` puts a value: it replaces the value of a key that is there and adds the key otherwise (there is
+  no `dict.add`). Reading `dict[k]` is failable under the hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Maybe[TValue]`.
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
   is `coll[^1]` (last element).
 - **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a

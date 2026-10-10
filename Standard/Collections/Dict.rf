@@ -72,10 +72,10 @@ common routine Dict[TKey, TValue].from_literal(pairs...: DictEntry[TKey, TValue]
 needs TKey obeys Hashable, Equatable
     var result = Dict[TKey, TValue]()
     var i = 0u64
-    # Each pair is read in place: `add` makes the dictionary's holders, and the caller releases the
+    # Each pair is read in place: `put` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
     while i < pairs.count()
-        drop result.add(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
+        drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
         i = i +% 1u64
     return result
 
@@ -365,7 +365,7 @@ routine Dict[TKey, TValue].clear()
 routine Dict[TKey, TValue].contains(key: TKey) -> Bool
     return me.find_slot(key) < me.capacity
 
-routine Dict[TKey, TValue].add(key: TKey, value: TValue) -> Bool
+secret routine Dict[TKey, TValue].put(key: TKey, value: TValue) -> Bool
     if me.should_rehash()
         me.rehash()
     var slot = me.find_slot(key)
@@ -445,23 +445,11 @@ needs RecordType TValue
         absent
     return me.read_val_at(me.read_index(slot)).share()
 
-### `getitem!` for a single-owner entity: the container keeps its value, so
-### the caller gets an independent duplicate, which needs the entity to declare it can be copied.
-@readonly
-@override
-routine Dict[TKey, TValue].getitem!(key: Accessing[TKey]) -> TValue
-needs EntityType TValue
-needs TValue obeys Copyable
-    var slot = me.find_slot(key)
-    if slot >= me.capacity
-        absent
-    return me.read_val_at(me.read_index(slot)).duplicate()
-
-routine Dict[TKey, TValue].setitem!(key: Accessing[TKey], value: TValue)
-    if me lack key
-        absent
-    var slot = me.find_slot(key)
-    me.write_val_at(ei: me.read_index(slot), val: value)
+### Puts `value` at `key` (`d[k] = v`): replaces the value of a key that is there, and adds the key otherwise.
+### :param key: The key.
+### :param value: The value.
+routine Dict[TKey, TValue].setitem(key: TKey, value: TValue)
+    drop me.put(key: key, value: value)
     return
 
 ### Returns a write token on the entity stored at `key`, so one call through it changes the value in place:
@@ -579,7 +567,7 @@ needs RecordType TKey
 needs RecordType TValue
     var result = Dict[TKey, TValue]()
     each entry in me
-        drop result.add(key: entry.key, value: entry.value)
+        result[entry.key] = entry.value
     return steal result
 
 # ============================================================================
@@ -646,5 +634,5 @@ needs TValue obeys Equatable
 routine Dict[TKey, TValue].serialize() -> SerialValue
     var __sv = Dict[Text, SerialValue]()
     each __e in me
-        drop __sv.add(key: __e.key.represent(), value: __e.value.serialize())
+        __sv[__e.key.represent()] = __e.value.serialize()
     return SerialValue(steal __sv)

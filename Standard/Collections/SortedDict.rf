@@ -483,7 +483,7 @@ needs TKey obeys Comparable
     # Each pair is read in place: `add` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
     while i < pairs.count()
-        drop result.add(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
+        drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
         i = i +% 1u64
     return result
 
@@ -574,19 +574,6 @@ needs RecordType TValue
         var root_ref = me.root!!.as_entity()
         return me.get_from_node(node: root_ref, key: key).share()
 
-### `getitem!` for a single-owner entity: the container keeps its value, so
-### the caller gets an independent duplicate, which needs the entity to declare it can be copied.
-@readonly
-@override
-routine SortedDict[TKey, TValue].getitem!(key: Accessing[TKey]) -> TValue
-needs EntityType TValue
-needs TValue obeys Copyable
-    if me.root is None
-        throw KeyNotFoundError(key: key.represent())
-    danger
-        var root_ref = me.root!!.as_entity()
-        return me.get_from_node(node: root_ref, key: key).duplicate()
-
 ### Descends `node` to retrieve the value for `key`, throwing if not found.
 ### :param node: The subtree root to search.
 ### :param key: The key to look up.
@@ -602,14 +589,11 @@ routine SortedDict[TKey, TValue].get_from_node!(node: Accessing[BTreeDictNode[TK
             throw KeyNotFoundError(key: key.represent())
         return me.get_from_node(node: node.children_get(i).as_entity(), key: key)
 
-### Updates the value associated with `key`.
-### :param key: The key to update.
-### :param value: The replacement value.
-### :absent: The key is not present in the dictionary.
-routine SortedDict[TKey, TValue].setitem!(key: Accessing[TKey], value: TValue)
-    if me lack key
-        absent
-    drop me.add(key: key, value: value)
+### Puts `value` at `key` (`d[k] = v`): replaces the value of a key that is there, and adds the key otherwise.
+### :param key: The key.
+### :param value: The value.
+routine SortedDict[TKey, TValue].setitem(key: TKey, value: TValue)
+    drop me.put(key: key, value: value)
     return
 
 ### Find-or-insert returning a raw handle to the VALUE slot for `key` — the ordered analog of
@@ -623,7 +607,7 @@ routine SortedDict[TKey, TValue].setitem!(key: Accessing[TKey], value: TValue)
 ### :returns: A {Hijacked[TValue]} addressing the value cell for `key`.
 routine SortedDict[TKey, TValue].slot(key: TKey, seed: TValue) -> Hijacked[TValue]
     if not me.contains(key: key)
-        drop me.add(key: key, value: seed)
+        drop me.put(key: key, value: seed)
     danger
         var root_ref = me.root!!.as_entity()
         return me.value_slot_in(node: root_ref, key: key)
@@ -652,7 +636,7 @@ routine SortedDict[TKey, TValue].value_slot_in(node: Accessing[BTreeDictNode[TKe
 ### :param key: The key to insert or update.
 ### :param value: The value to associate with `key`.
 ### :returns: `true` if a new key was inserted; `false` if an existing key was updated.
-routine SortedDict[TKey, TValue].add(key: TKey, value: TValue) -> Bool
+secret routine SortedDict[TKey, TValue].put(key: TKey, value: TValue) -> Bool
     if me.root is None
         danger
             me.root = BTreeDictNode[TKey, TValue](is_leaf: true).hijack()
@@ -1329,5 +1313,5 @@ routine SortedDict[TKey, TValue].diagnose() -> Text
 routine SortedDict[TKey, TValue].serialize() -> SerialValue
     var __sv = Dict[Text, SerialValue]()
     each __e in me
-        drop __sv.add(key: __e.key.represent(), value: __e.value.serialize())
+        __sv[__e.key.represent()] = __e.value.serialize()
     return SerialValue(steal __sv)
