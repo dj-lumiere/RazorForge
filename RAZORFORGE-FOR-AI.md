@@ -141,6 +141,8 @@ When unsure, consult ground truth in the repo/package:
 
 RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
 
+- No kind or scope prefixes on names (`m_pos`, `_count`, `p_node`, `bDone`, `IComparable`): `lint` hints them.
+
 - function → **routine**; method → **member routine** (`Type.name()`).
 - struct/class → **record** (value) or **entity** (heap reference). Never
   "class"/"struct".
