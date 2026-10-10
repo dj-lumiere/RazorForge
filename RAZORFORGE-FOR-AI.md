@@ -912,7 +912,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
-| RF-S632      | `agent` argument unsafe to hand over  | `steal` the entity, or pass `Atomic`/`Guarded`/…   |
+| RF-S632      | `agent` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
 | RF-S642      | `agent` before a non-call, or over generic-parameter-typed values | put it before a call with concrete types |
 | RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
 | RF-S646      | no conversion between the two types (or to its own type) | convert to a type that has one, or drop the `.to` |

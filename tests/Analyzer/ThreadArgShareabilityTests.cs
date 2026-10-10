@@ -140,7 +140,7 @@ public class ThreadArgShareabilityTests
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "owns `Retained`");
+            expectedErrorSubstring: "which holds a `Retained` at `node`");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
     }
@@ -249,8 +249,57 @@ public class ThreadArgShareabilityTests
 
         AnalysisResult result = AssertHasErrorSa(source: source,
             expectedErrorSubstring:
-            "to an agent, but");
+            "Start it with 'start_here()' first");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
+    }
+
+    /// <summary>An Agent holding a token runs on this thread with start_here(), and is retrieved here.</summary>
+    [Fact]
+    public void Analyze_TokenArgStartedHere_Ok()
+    {
+        AssertAnalyzesSa(source: Prelude + """
+                                           routine bump(n: Modifying[Node]) -> S64
+                                               n.value += 1
+                                               return n.value
+
+                                           routine start()
+                                               var node = Node(value: 1)
+                                               var job = agent bump(n: node.modify())
+                                               job.start_here()
+                                               var got = job.retrieve()
+                                               return
+                                           """);
+    }
+
+    [Fact]
+    public void Analyze_TokenArgStartedOnAnotherThread_Errors()
+    {
+        AssertHasErrorSa(source: Prelude + """
+                                           routine bump(n: Modifying[Node]) -> S64
+                                               return n.value
+
+                                           routine start()
+                                               var node = Node(value: 1)
+                                               var job = agent bump(n: node.modify())
+                                               job.start_now()
+                                               var got = job.retrieve()
+                                               return
+                                           """,
+            expectedErrorSubstring: "not 'start_now()'");
+    }
+
+    [Fact]
+    public void Analyze_TokenArgAgentLeavingTheRoutine_Errors()
+    {
+        AssertHasErrorSa(source: Prelude + """
+                                           routine bump(n: Modifying[Node]) -> S64
+                                               return n.value
+
+                                           routine make(node: Node) -> Agent[S64]
+                                               var job = agent bump(n: node.modify())
+                                               return job
+                                           """,
+            expectedErrorSubstring: "stays in the routine that made it");
     }
 }
