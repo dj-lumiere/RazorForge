@@ -30,6 +30,30 @@ routine Byte(from: Byte) -> Byte
 routine Byte(from: U8) -> Byte
     return LLVM::reinterpret_bits[U8, Byte](value: from)
 
+### Reads this byte's bits as a `U8`: `b.to[U8]()`.
+### :param from: The byte to read.
+### :returns: The same bits as a `U8`.
+secret routine U8(from: Byte) -> U8
+    return LLVM::reinterpret_bits[Byte, U8](value: from)
+
+### Widens this byte to a `U32`: `b.to[U32]()`.
+### :param from: The byte to widen.
+### :returns: The byte's value as a `U32`.
+secret routine U32(from: Byte) -> U32
+    return LLVM::zero_extend[U8, U32](LLVM::reinterpret_bits[Byte, U8](value: from))
+
+### Widens this byte to a `U16`: `b.to[U16]()`.
+### :param from: The byte to widen.
+### :returns: The byte's value as a `U16`.
+secret routine U16(from: Byte) -> U16
+    return LLVM::zero_extend[U8, U16](LLVM::reinterpret_bits[Byte, U8](value: from))
+
+### Widens this byte to a `U64`: `b.to[U64]()`.
+### :param from: The byte to widen.
+### :returns: The byte's value as a `U64`.
+secret routine U64(from: Byte) -> U64
+    return LLVM::zero_extend[U8, U64](LLVM::reinterpret_bits[Byte, U8](value: from))
+
 # ============================================================================
 # Comparison operations
 # ============================================================================
@@ -40,27 +64,27 @@ routine Byte(from: U8) -> Byte
 ### :returns: The resulting `U8` value.
 @readonly
 routine Char.byte_value() -> U8
-    return U8(U32(me))
+    return me.to[U32]().to[U8]()
 
 ### Returns this byte as an unsigned numeric code value.
 ### :returns: The resulting `U32` value.
 @readonly
 routine Byte.codepoint() -> U32
-    return U32(U8(me))
+    return me.to[U8]().to[U32]()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.eq(you: Byte) -> Bool
-    return U8(me) == U8(you)
+    return me.to[U8]() == you.to[U8]()
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Byte.cmp(you: Byte) -> ComparisonSign
-    return U8(me) <=> U8(you)
+    return me.to[U8]() <=> you.to[U8]()
 
 # ============================================================================
 # Range check
@@ -73,7 +97,7 @@ routine Byte.cmp(you: Byte) -> ComparisonSign
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.in_range(low: U8, high: U8) -> Bool
-    return low <= U8(me) <= high
+    return low <= me.to[U8]() <= high
 
 # ============================================================================
 # Parsing helpers (useful for binary protocols)
@@ -83,13 +107,13 @@ routine Byte.in_range(low: U8, high: U8) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.is_ascii() -> Bool
-    return U8(me) <= 0x7Fu8
+    return me.to[U8]() <= 0x7Fu8
 
 ### Returns `true` when this byte is the ASCII encoding of `0` through `9`.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.is_digit() -> Bool
-    return 0x30u8 <= U8(me) <= 0x39u8  # ASCII 0-9
+    return 0x30u8 <= me.to[U8]() <= 0x39u8  # ASCII 0-9
 
 ### Returns the numeric value of an ASCII digit byte.
 ### :returns: The resulting `U8` value.
@@ -98,14 +122,14 @@ routine Byte.is_digit() -> Bool
 routine Byte.digit_value!() -> U8
     if not me.is_digit()
         throw InvalidDigitError()
-    return U8(me) - 0x30u8
+    return me.to[U8]() - 0x30u8
 
 ### Returns `true` when this byte is an ASCII hexadecimal digit.
 ### Accepted digits are `0-9`, `A-F`, and `a-f`.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.is_hex_digit() -> Bool
-    var v = U8(me)
+    var v = me.to[U8]()
     var is_digit = 0x30u8 <= v <= 0x39u8
     var is_upper_hex = 0x41u8 <= v <= 0x46u8
     var is_lower_hex = 0x61u8 <= v <= 0x66u8
@@ -116,7 +140,7 @@ routine Byte.is_hex_digit() -> Bool
 ### :throws: May throw {InvalidHexDigitError}.
 @readonly
 routine Byte.hex_value!() -> U8
-    var v = U8(me)
+    var v = me.to[U8]()
     when
         0x30u8 <= v <= 0x39u8 => return v - 0x30u8  # 0-9
         0x41u8 <= v <= 0x46u8 => return v - 0x37u8  # A-F (10-15)
@@ -137,7 +161,7 @@ routine Byte.represent() -> Text
     var digits = List[Char]()
     digits.add_last(Char(0x005Cu32))  # \
     digits.add_last(Char(0x0078u32))  # x
-    var v = U32(U8(me))
+    var v = me.to[U8]().to[U32]()
     var high = (v >> 4u32) & 0x0Fu32
     var low = v & 0x0Fu32
     if high < 10u32
@@ -157,7 +181,7 @@ routine Byte.represent() -> Text
 @readonly
 @override
 routine Byte.diagnose() -> Text
-    return "Byte(" + U8(me).represent() + ", " + me.represent() + ")"
+    return "Byte(" + me.to[U8]().represent() + ", " + me.represent() + ")"
 
 # ============================================================================
 # Hashing

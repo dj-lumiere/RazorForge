@@ -259,7 +259,7 @@ routine Hijacked[T].cmp(you: Hijacked[T]) -> ComparisonSign
 ### :param k1: The second 64-bit key word.
 ### :returns: A SipHash-2-4 keyed hash of this pointer's address.
 routine Hijacked[T].hash(k0: U64, k1: U64) -> U64
-    return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
+    return __secure_hash_u64(v: me.address().to[U64](), k0: k0, k1: k1)
 
 # NOTE: All operations on Hijacked[T] are inherently unsafe
 # Undefined behavior can occur if:
@@ -305,19 +305,19 @@ routine Hijacked[T].diagnose() -> Text
 ### reads raw memory in `[from, limit)`; the caller guarantees that range is mapped.
 dangerous routine scan_to_byte(buf: Hijacked[Byte], target: Byte, from: U64, limit: U64) -> U64
     var i = from
-    var bcast = U64(from: U8(from: target)) *% 0x0101010101010101_u64
+    var bcast = target.to[U8]().to[U64]() *% 0x0101010101010101_u64
     var ones = 0x0101010101010101_u64
     var high = 0x8080808080808080_u64
     var all_ones = U64_MAX
     while i +% 8u64 <= limit
-        var word = buf.stride(count: S64(i)).peek_unaligned_as[U64]()
+        var word = buf.stride(count: i.to[S64]()).peek_unaligned_as[U64]()
         var x = word ^ bcast
         var mask = x -% ones & (x ^ all_ones) & high
         if mask != 0u64
             return i +% (LLVM::trailing_zeros(value: mask) >> 3)
         i = i +% 8u64
     while i < limit
-        if buf.stride(count: S64(i)).peek() == target
+        if buf.stride(count: i.to[S64]()).peek() == target
             return i
         i = i +% 1u64
     return limit

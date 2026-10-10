@@ -90,7 +90,7 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                            var result = "42".S32()
+                            var result = "42".to[S32]()
                             return
                         """;
 
@@ -790,7 +790,7 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                            var x = value.S64()
+                            var x = value.to[S64]()
                             return
                         """;
 
@@ -804,7 +804,7 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                            var x = 42.B64()
+                            var x = 42.to[B64]()
                             return
                         """;
 

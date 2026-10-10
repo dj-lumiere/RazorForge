@@ -118,7 +118,7 @@ routine Text(from_list: List[Char]) -> Text
         loop
             if i >= n
                 break
-            result.data.stride(count: S64(i)).poke(value: from_list[i])
+            result.data.stride(count: i.to[S64]()).poke(value: from_list[i])
             i += 1u64
     return result
 
@@ -203,7 +203,7 @@ routine Text(from: CStr) -> Text
         loop
             if i >= len
                 break
-            var b0 = U32(from[i])
+            var b0 = from[i].to[U32]()
             # A malformed sequence leaves the replacement character and consumes only its lead byte.
             var codepoint = 0xFFFDu32
             var width = 1u64
@@ -211,14 +211,14 @@ routine Text(from: CStr) -> Text
             if b0 <= 0x7Fu32
                 codepoint = b0
             elseif (b0 & 0xE0u32) == 0xC0u32 and i + 1u64 < len
-                var b1 = U32(from[i + 1u64])
+                var b1 = from[i + 1u64].to[U32]()
                 # C0 and C1 leads can only spell an overlong ASCII character.
                 if (b1 & 0xC0u32) == 0x80u32 and b0 >= 0xC2u32
                     codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
                     width = 2u64
             elseif (b0 & 0xF0u32) == 0xE0u32 and i + 2u64 < len
-                var b1 = U32(from[i + 1u64])
-                var b2 = U32(from[i + 2u64])
+                var b1 = from[i + 1u64].to[U32]()
+                var b2 = from[i + 2u64].to[U32]()
                 if (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32
                     var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
                     # Below U+0800 is overlong, and U+D800..U+DFFF are surrogates, never characters.
@@ -226,9 +226,9 @@ routine Text(from: CStr) -> Text
                         codepoint = candidate
                         width = 3u64
             elseif (b0 & 0xF8u32) == 0xF0u32 and i + 3u64 < len
-                var b1 = U32(from[i + 1u64])
-                var b2 = U32(from[i + 2u64])
-                var b3 = U32(from[i + 3u64])
+                var b1 = from[i + 1u64].to[U32]()
+                var b2 = from[i + 2u64].to[U32]()
+                var b3 = from[i + 3u64].to[U32]()
                 if (b1 & 0xC0u32) == 0x80u32
                     and (b2 & 0xC0u32) == 0x80u32
                     and (b3 & 0xC0u32) == 0x80u32
@@ -306,7 +306,7 @@ routine Text.getitem!(index: U64) -> Char
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
     danger
-        return me.data.stride(count: S64(index)).peek()
+        return me.data.stride(count: index.to[S64]()).peek()
 
 ### Returns the sub-text spanning an index range — the slice form of indexing (`text[a til b]`).
 ### A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields `[a, b]`; a range that
@@ -321,7 +321,7 @@ routine Text.getitem(range: Range[U64]) -> Text
     danger
         each i in range
             if i < me.count
-                result.add_last(me.data.stride(count: S64(i)).peek())
+                result.add_last(me.data.stride(count: i.to[S64]()).peek())
     return Text(from_list: steal result)
 
 # String operations
@@ -346,7 +346,7 @@ routine Text.concat(other: Text) -> Text
         var other_count = other.count()
         if other_count > 0u64
             rf_copy_bytes_at(
-                dest: result.data.stride(count: S64(me.count)).address(),
+                dest: result.data.stride(count: me.count.to[S64]()).address(),
                 src: other.data.address(),
                 size: Char.data_size() * other_count,
             )
@@ -367,7 +367,7 @@ routine Text.add(other: Text) -> Text
 @readonly
 routine Text.mul[TCount](count: TCount) -> Text
 needs TCount obeys Integral
-    var times = U64(count)
+    var times = count.to[U64]()
     if times == 0u64 or me.count == 0u64
         return Text()
     var n = me.count * times
@@ -377,7 +377,7 @@ needs TCount obeys Integral
         loop
             if t >= times
                 break
-            var dest = result.data.stride(count: S64(t * me.count))
+            var dest = result.data.stride(count: (t * me.count).to[S64]())
             rf_copy_bytes_at(
                 dest: dest.address(),
                 src: me.data.address(),
@@ -436,7 +436,7 @@ routine Text.cmp(you: Text) -> ComparisonSign
 routine Text.hash(k0: U64, k1: U64) -> U64
     var h = __hash_leaf(v: me.count)
     each i in 0u64 til me.count
-        h = __hash_round(acc: h, h: __secure_hash_u64(v: U64(me[i].codepoint()), k0: k0, k1: k1))
+        h = __hash_round(acc: h, h: __secure_hash_u64(v: me[i].codepoint().to[U64](), k0: k0, k1: k1))
     return __hash_finalize(h)
 
 # Search

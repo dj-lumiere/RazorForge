@@ -22,6 +22,12 @@ obeys Comparable, ConstCompatible, WrappingAddable, WrappingSubtractable, Offset
 routine Address(from: Address) -> Address
     return from
 
+### Reads this address as a `U64`: `a.to[U64]()`.
+### :param from: The address to read.
+### :returns: The address as a number.
+secret routine U64(from: Address) -> U64
+    return LLVM::reinterpret_bits[Address, U64](value: from)
+
 # ============================================================================
 # Wrapping Arithmetic Operations (+%, -%)
 # These explicitly wrap on overflow - the only arithmetic allowed on Address
@@ -115,7 +121,7 @@ routine Address.add(offset: ByteSize) -> Address
 ### :returns: The resulting `ByteSize` value.
 @readonly
 routine Address.sub(you: Address) -> ByteSize
-    return ByteSize(U64(LLVM::sub(me, you)))
+    return ByteSize((LLVM::sub(me, you)).to[U64]())
 
 ### Returns the result of stepping this address back by a byte size.
 ### :param offset: The byte count to subtract.
@@ -144,7 +150,7 @@ routine Address.represent() -> Text
         if i > 0u32 and i % 4u32 == 0u32
             digits.add_last(Char(0x005Fu32))
         var shift = (15u32 - i) * 4u32
-        var nibble = U32((U64(me) >> shift) & 0x0Fu64)
+        var nibble = ((me.to[U64]() >> shift) & 0x0Fu64).to[U32]()
         if nibble < 10u32
             digits.add_last(Char(0x0030u32 + nibble))
         else
@@ -183,11 +189,11 @@ routine Address!(from_text: Text) -> Address
     while i < from_text.count()
         var cp = from_text[i].codepoint()
         if 0x0030u32 <= cp <= 0x0039u32
-            result = (result << 4_u32) + U64(cp - 0x0030u32)
+            result = (result << 4_u32) + (cp - 0x0030u32).to[U64]()
         elseif 0x0041u32 <= cp <= 0x0046u32
-            result = (result << 4_u32) + U64(cp - 0x0041u32 + 10u32)
+            result = (result << 4_u32) + (cp - 0x0041u32 + 10u32).to[U64]()
         elseif 0x0061u32 <= cp <= 0x0066u32
-            result = (result << 4_u32) + U64(cp - 0x0061u32 + 10u32)
+            result = (result << 4_u32) + (cp - 0x0061u32 + 10u32).to[U64]()
         elseif cp == 0x005Fu32
             pass
         else

@@ -29,6 +29,24 @@ obeys ConstCompatible, Comparable, Copyable
 routine Char(from: Char) -> Char
     return from
 
+### Reads a byte value (0 to 255) as the character with that codepoint: `65u8.to[Char]()` is `'A'`.
+### :param from: The codepoint.
+### :returns: The character.
+routine Char(from: U8) -> Char
+    return LLVM::reinterpret_bits[U32, Char](value: LLVM::zero_extend[U8, U32](from))
+
+### Reads this character's codepoint as a `U32`: `c.to[U32]()`.
+### :param from: The character to read.
+### :returns: The codepoint.
+secret routine U32(from: Char) -> U32
+    return LLVM::reinterpret_bits[Char, U32](value: from)
+
+### Widens this character's codepoint to a `U64`: `c.to[U64]()`.
+### :param from: The character to read.
+### :returns: The codepoint as a `U64`.
+secret routine U64(from: Char) -> U64
+    return LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[Char, U32](value: from))
+
 ### Reinterprets a Unicode code point value as `Char`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Char` value.
@@ -43,14 +61,14 @@ routine Char(from: U32) -> Char
 ### :returns: The resulting `U32` value.
 @readonly
 routine Char.codepoint() -> U32
-    return U32(me)
+    return me.to[U32]()
 
 ### Returns `true` when this value is a valid Unicode scalar value.
 ### Surrogate code points are treated as invalid standalone characters.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_valid() -> Bool
-    var cp = U32(me)
+    var cp = me.to[U32]()
     # Valid if within Unicode range and not a surrogate
     return cp <= 0x10FFFFu32 and not (CHARACTER_SURROGATE_START <= cp <= CHARACTER_SURROGATE_END)
 
@@ -58,14 +76,14 @@ routine Char.is_valid() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_ascii() -> Bool
-    return U32(me) <= 0x007Fu32
+    return me.to[U32]() <= 0x007Fu32
 
 ### Returns `true` when this character falls in the supported alphabetic ranges.
 ### This implementation currently focuses on ASCII and common Latin blocks.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_alphabetic() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     var is_ascii_upper = 0x0041u32 <= v <= 0x005Au32
     var is_ascii_lower = 0x0061u32 <= v <= 0x007Au32
     var is_latin_ext = 0x00C0u32 <= v <= 0x00FFu32
@@ -77,7 +95,7 @@ routine Char.is_alphabetic() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_numeric() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     return 0x0030u32 <= v <= 0x0039u32  # 0-9
 
 ### Returns `true` when this character is alphabetic or numeric.
@@ -90,14 +108,14 @@ routine Char.is_alphanumeric() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_uppercase() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     return 0x0041u32 <= v <= 0x005Au32  # A-Z (ASCII only)
 
 ### Returns `true` when this character is an ASCII lowercase letter.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_lowercase() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     return 0x0061u32 <= v <= 0x007Au32  # a-z (ASCII only)
 
 ### Returns `true` when this character is one of the supported whitespace code
@@ -105,7 +123,7 @@ routine Char.is_lowercase() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_whitespace() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     var is_space = v == 0x0020u32
     var is_tab = v == 0x0009u32
     var is_lf = v == 0x000Au32
@@ -131,7 +149,7 @@ routine Char.is_whitespace() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_control() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     return v <= 0x001Fu32 or 0x007Fu32 <= v <= 0x009Fu32
 
 ### Converts this value to uppercase when the implementation has a matching
@@ -140,7 +158,7 @@ routine Char.is_control() -> Bool
 @readonly
 routine Char.to_uppercase() -> Char
     if me.is_lowercase()
-        return Char(U32(me) - 32u32)
+        return Char(me.to[U32]() - 32u32)
     return me
 
 ### Converts this value to lowercase when the implementation has a matching
@@ -149,7 +167,7 @@ routine Char.to_uppercase() -> Char
 @readonly
 routine Char.to_lowercase() -> Char
     if me.is_uppercase()
-        return Char(U32(me) + 32u32)
+        return Char(me.to[U32]() + 32u32)
     return me
 
 # ============================================================================
@@ -161,14 +179,14 @@ routine Char.to_lowercase() -> Char
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.eq(you: Char) -> Bool
-    return U32(me) == U32(you)
+    return me.to[U32]() == you.to[U32]()
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Char.cmp(you: Char) -> ComparisonSign
-    return U32(me) <=> U32(you)
+    return me.to[U32]() <=> you.to[U32]()
 
 # ============================================================================
 # Type conversions
@@ -181,7 +199,7 @@ routine Char.cmp(you: Char) -> ComparisonSign
 @readonly
 routine Char.to_byte() -> Byte
     # Only valid for ASCII range - truncates
-    return Byte(U8(U32(me) & 0x7Fu32))
+    return Byte((me.to[U32]() & 0x7Fu32).to[U8]())
 
 # ============================================================================
 # Display — shows the character itself
@@ -204,7 +222,7 @@ routine Char.represent() -> Text
 @readonly
 @override
 routine Char.diagnose() -> Text
-    return "Char(" + me.represent() + ", " + U32(me).represent() + ")"
+    return "Char(" + me.represent() + ", " + me.to[U32]().represent() + ")"
 
 # ============================================================================
 # Utility methods
@@ -223,7 +241,7 @@ routine Char.is_digit() -> Bool
 @readonly
 routine Char.digit_value() -> S32
     if me.is_numeric()
-        return S32(U32(me) - 0x0030u32)
+        return (me.to[U32]() - 0x0030u32).to[S32]()
     return -1s32
 
 ### Returns `true` when this character is valid and not a control code.
@@ -237,8 +255,8 @@ routine Char.is_printable() -> Bool
 @readonly
 routine Char.is_bmp() -> Bool
     # Basic Multilingual Plane: U+0000 to U+FFFF (excluding surrogates)
-    return U32(me) <= 0xFFFFu32
-        and not (CHARACTER_SURROGATE_START <= U32(me) <= CHARACTER_SURROGATE_END)
+    return me.to[U32]() <= 0xFFFFu32
+        and not (CHARACTER_SURROGATE_START <= me.to[U32]() <= CHARACTER_SURROGATE_END)
 
 ### Returns `true` when this character is in one of the Unicode supplementary
 ### planes.
@@ -246,13 +264,13 @@ routine Char.is_bmp() -> Bool
 @readonly
 routine Char.is_supplementary() -> Bool
     # Supplementary planes: U+10000 to U+10FFFF
-    return 0x10000u32 <= U32(me) <= 0x10FFFFu32
+    return 0x10000u32 <= me.to[U32]() <= 0x10FFFFu32
 
 ### Returns `true` when this character falls in the supported CJK ranges.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_cjk() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     var is_unified = 0x4E00u32 <= v <= 0x9FFFu32
     var is_ext_a = 0x3400u32 <= v <= 0x4DBFu32
     var is_ext_b = 0x20000u32 <= v <= 0x2A6DFu32
@@ -263,7 +281,7 @@ routine Char.is_cjk() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_latin() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     var is_basic = 0x0000u32 <= v <= 0x007Fu32
     var is_supplement = 0x0080u32 <= v <= 0x00FFu32
     var is_ext_a = 0x0100u32 <= v <= 0x017Fu32
@@ -275,7 +293,7 @@ routine Char.is_latin() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_emoji() -> Bool
-    var v = U32(me)
+    var v = me.to[U32]()
     var is_emoticons = 0x1F600u32 <= v <= 0x1F64Fu32
     var is_misc = 0x1F300u32 <= v <= 0x1F5FFu32
     var is_transport = 0x1F680u32 <= v <= 0x1F6FFu32
@@ -293,5 +311,5 @@ routine Char.is_emoji() -> Bool
 ### :returns: The resulting `Char` value.
 @readonly
 routine Char.offset!(delta: S64) -> Char
-    var new_value = S64(U32(me)) + delta
-    return Char(U32(new_value))
+    var new_value = me.to[U32]().to[S64]() + delta
+    return Char(new_value.to[U32]())

@@ -308,7 +308,7 @@ public class StabilizationPlanTests
                             raw: S64
 
                         routine Value.$create(from: S32) -> Value
-                            return Value(raw: from.S64())
+                            return Value(raw: from.to[S64]())
 
                         routine Value.$create(from: Bool) -> Value
                             return Value(raw: 1s64)

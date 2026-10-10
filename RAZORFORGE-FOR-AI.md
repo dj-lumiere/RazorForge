@@ -57,8 +57,8 @@ When unsure, consult ground truth in the repo/package:
    `try f()` also recovers a division by zero inside a plain helper `f` calls); a
    checked operator (`try a + b` recovers the overflow, `check a // b` the
    divide-by-zero, `-x` of the minimum, `x += d`); a subscript out of range or a
-   missing key (`try xs[9]`); a failing conversion (`S8(from: 300)`,
-   `Integer(text: "x")`). Each becomes the carrier's failure (`try`: absent;
+   missing key (`try xs[9]`), a failing conversion (`300_s64.to[S8]()`,
+   `"x".to[S64]()`). Each becomes the carrier's failure (`try`: absent,
    `check`: the error), and evaluation stops at the first one. A bare call (no keyword)
    still crashes loudly. Lambdas and routine values are covered the same way: a
    failure inside a lambda handed to another routine
@@ -111,7 +111,8 @@ When unsure, consult ground truth in the repo/package:
    wins. A crash keeps 82 whatever was set.
 8. **Bare integer literals adapt to context; variables do not.**
    `h << 5` and `x.clamp(0, 100)` are fine (literals conform), but mixing a
-   `U64` variable with an `S64` variable needs explicit conversion.
+   `U64` variable with an `S64` variable needs an explicit conversion
+   (`n.to[S64]()`, §4).
    Out-of-range literals are build errors (RF-S010): `-1` never fits an
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
 9. **A result you mean to throw away takes `drop`**: `drop seen.add(value: v)` (RF-W007 otherwise).
@@ -229,8 +230,8 @@ binding RazorForge has.
 - Signed ints: `S8 S16 S32 S64 S128 S256` · unsigned: `U8 U16 U32 U64 U128 U256`
 - Binary floats: `B16 B32 B64 B128` (literal suffixes `b16`/`b32`/`b64`/`b128`) · decimals: `D32 D64 D128`
 - `BF16` (bfloat16) is a STORAGE type (ML weights/tensors): bit patterns (`from_bits`/`to_bits`/bytes),
-  `B32(from:)`/`B64(from:)` widen exactly, `BF16(from: B32/B64)` narrows with ONE round-to-nearest-even
-  (from `B64` directly, never through `B32`), `represent`/`BF16(from_text:)`, `==`/`<`. No arithmetic and
+  `b.to[B32]()`/`b.to[B64]()` widen exactly, `x.to[BF16]()` (from `B32`/`B64`) narrows with ONE
+  round-to-nearest-even (from `B64` directly, never through `B32`), `represent`/`t.to[BF16]()`, `==`/`<`. No arithmetic and
   no literal suffix: widen to compute, narrow the result back.
 - Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `0x1p-23_b32`,
   `0x1.fffffep+127_b32`. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
@@ -296,6 +297,41 @@ declare their own `i`.
 - Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
   compares whether two references are the SAME object (entities / access-token /
   RC-wrapper operands only — RF-S440 on value types). See §7.
+
+**Conversions: `x.to[T]()`, the one way to convert.**
+
+```razorforge
+import Numerics.Integer            # Integer is not in Core
+
+var small = count.to[U8]()        # number to number
+var big = count.to[Integer]()      # Integer/Decimal convert on to B32/B64 (nearest value)
+var n = "42".to[S64]()             # text parsing (also Integer, Decimal, B64, ...)
+var code = c.to[U32]()             # a Char's codepoint (b.to[U8]() for a Byte, a.to[U64]() for an Address)
+var letter = 65u8.to[Char]()       # 'A', and 'x'.to[Text]() makes one-character text
+var raw = status.to[S32]()         # a choice's value (also to[S64]()), perms.to[U64]() a flags bitmask
+var wide: U64 = count.to()         # T left out: the declared type gives it
+var fits: U8? = try count.to()     # none when it does not fit
+var why: Check[S64] = check line.to()
+```
+
+- Widening never fails. A value that does not fit `T`, or text that does not read as a `T`, crashes
+  loudly (`IntegerOverflowError`, `InvalidValueError`, ...). Recover with `try` (→ `T?`) or `check`
+  (→ `Check[T]`, holding the error).
+- `[T]` may be left out where the surrounding code says the type: a declared variable type, the
+  routine's return type (`return count.to()`), a parameter (`takes(n: x.to())`), and through
+  `try`/`check`. Where nothing gives it (`var n = count.to()`, mid-chain `count.to().add(1)`) it is
+  RF-S645: write `.to[S64]()`.
+- A pair with no conversion is RF-S150 at the call ("There is no conversion from 'Text' to 'Bool'.").
+- Building a number type from one value (`S64(from: x)`, `S64(x)`, `S64(from: status)`) is RF-S403
+  ("You built a 'S64' from a value. To convert a value, write 'value.to[S64]()'"). The member form
+  (`x.S32()`, `f.Celsius()`, `'x'.Text()`) is RF-S646 ("A conversion is written '.to[S32]()'").
+  Taking a variant's arm out (`sv.Dict()`) is not a conversion and stays. Constructors build a value
+  from its parts (`Point(x: 1, y: 2)`). Building a `Char`/`Byte`/`Address` from a number stays a
+  creator too: `Char(0x41u32)`, `Byte(from: n)`.
+- `to` is an ordinary Core routine: `routine N.to![T]() -> T` with `needs T obeys ConvertibleFrom[N]`.
+  `protocol ConvertibleFrom[S]` requires one creator, `routine Me!(from: S) -> Me`. A user type gets
+  `to` by declaring one: with `routine Celsius(from: Fahrenheit) -> Celsius`, `f.to[Celsius]()` and
+  `var c: Celsius = f.to()` work.
 
 **Precedence**, tightest first:
 
@@ -390,7 +426,7 @@ routine add(a: S64, b: S64) -> S64
     return a + b
 
 routine Point.magnitude() -> B64        # method: Type.name, receiver is `me`
-    return B64(me.x * me.x + me.y * me.y).sqrt()
+    return (me.x * me.x + me.y * me.y).to[B64]().sqrt()
 
 routine get_text!(n: S64) -> Text      # `!` = failable
     when n
@@ -412,8 +448,8 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
 - Failure inside a failable routine: `throw SomeError(...)`. A routine with no
   value to give throws `AbsentValueError()`.
 - The `!` goes on the DECLARATION only (`routine S64.from_digit_bytes_at!(...)`,
-  `routine S32!(from_text: Text)`). Calls never write it:
-  `S64.from_digit_bytes_at(bytes: bs)`, `x.divmod(other: m)`, `S32(from_text: t)`.
+  `routine Celsius!(from: Text)`). Calls never write it:
+  `S64.from_digit_bytes_at(bytes: bs)`, `x.divmod(other: m)`, `t.to[Celsius]()`.
   `foo!(...)`, `x.foo!(...)` and `T![..](...)` are RF-G211; `foo(args)!` is a parse
   error too. A constructor is declared `routine T(...)` / `routine T!(...)`
   (`routine T.create(...)` is an ordinary member routine named `create`), and
@@ -606,7 +642,7 @@ inside the braces:
   (`2.675.fixed(2)` is `2.67`). `to_text(sig_digits:)` on
   `B16`/`B32`/`B64` is the significant-digit (`%g`) form. A binary float's plain text (`show(x)`,
   `f"{x}"`, `represent()`) is the SHORTEST decimal that reads back as the same value, so
-  `B64(from_text: x.represent())` returns `x` bit for bit on `B16`..`B128` (`0.1 + 0.2` shows
+  `x.represent().to[B64]()` returns `x` bit for bit on `B16`..`B128` (`0.1 + 0.2` shows
   `0.30000000000000004`, `0.1` shows `0.1`). Scientific form starts below `1e-04` and at `1e+04` /
   `1e+07` / `1e+16` / `1e+34` for `B16` / `B32` / `B64` / `B128`; a whole value drops the `.0`.
 - **Text**: `pad_start(width)` / `pad_end(width)` / `center(width)` (fill defaults to a space) and

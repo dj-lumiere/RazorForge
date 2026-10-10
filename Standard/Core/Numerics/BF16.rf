@@ -66,7 +66,7 @@ routine BF16.to_bytes_be() -> Array[Byte, 2]
 ### finite `BF16` becomes infinity, and a NaN stays a NaN, made quiet).
 ### :param from: The `B32` value to convert.
 ### :returns: The nearest `BF16` value.
-routine BF16(from: B32) -> BF16
+secret routine BF16(from: B32) -> BF16
     var u = from.to_bits()
     if (u & 0x7FFFFFFF_u32) > 0x7F800000_u32
         # a NaN keeps its sign and top payload bits, with the quiet bit set
@@ -82,7 +82,7 @@ routine BF16(from: B32) -> BF16
 ### stays a NaN, made quiet.
 ### :param from: The `B64` value to convert.
 ### :returns: The nearest `BF16` value.
-routine BF16(from: B64) -> BF16
+secret routine BF16(from: B64) -> BF16
     var u = from.to_bits()
     var sign = LLVM::int_truncate[U64, U16](u >>> 48_u32) & 0x8000_u16
     var ef = LLVM::reinterpret_bits[U64, S64]((u >>> 52_u32) & 0x7FF_u64)
@@ -159,14 +159,14 @@ routine BF16.signbit() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine BF16.eq(you: BF16) -> Bool
-    return B32(from: me) == B32(from: you)
+    return me.to[B32]() == you.to[B32]()
 
 ### Compares this value with the other value (a NaN on either side compares as `SAME`).
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine BF16.cmp(you: BF16) -> ComparisonSign
-    return B32(from: me).cmp(you: B32(from: you))
+    return me.to[B32]().cmp(you: you.to[B32]())
 
 # ============================================================================
 # Text Representation and Parsing
@@ -195,13 +195,13 @@ routine BF16.diagnose() -> Text
 
 ### Parses decimal text into the nearest `BF16` (one rounding from the exact decimal value, ties to even).
 ### Accepts the forms `B32(from_text:)` accepts, including `nan` and `inf`.
-### :param from_text: The decimal literal.
+### :param from: The decimal literal.
 ### :returns: The nearest `BF16` value.
 ### :throws: {InvalidValueError} on malformed input.
-routine BF16!(from_text: Text) -> BF16
-    var pc = parse_float_components(from_text: from_text, target: "BF16")
+secret routine BF16!(from: Text) -> BF16
+    var pc = parse_float_components(from_text: from, target: "BF16")
     if pc.kind == 3_s32
-        throw InvalidValueError(input: from_text, target: "BF16")
+        throw InvalidValueError(input: from, target: "BF16")
     if pc.kind == 1_s32
         return BF16.from_bits(bits: 0x7FC0_u16)
     if pc.kind == 2_s32

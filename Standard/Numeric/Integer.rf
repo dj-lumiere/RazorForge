@@ -251,13 +251,13 @@ secret routine integer_shift(a: Integer, bits: U64, left: Bool) -> Integer
             return integer_zero()
         if not left
             var capped = if bits > 64u64 then 64u64 else bits
-            var k = U32(from: capped)
+            var k = capped.to[U32]()
             # floor(m / 2^k), and for a negative value floor(-m / 2^k) = -(((m - 1) >> k) + 1).
             if not a.neg
                 return integer_small(neg: false, mag: m >>> k)
             return integer_small(neg: true, mag: ((m -% 1u64) >>> k) +% 1u64)
-        if bits < 64u64 and m >>> U32(from: 64u64 -% bits) == 0u64
-            return integer_small(neg: a.neg, mag: m << U32(from: bits))
+        if bits < 64u64 and m >>> (64u64 -% bits).to[U32]() == 0u64
+            return integer_small(neg: a.neg, mag: m << bits.to[U32]())
     danger
         var av = limb_view(v: a)
         var cap = 0u64
@@ -296,7 +296,7 @@ secret routine integer_product(a: Integer, b: Integer) -> Integer
     var sa = integer_small_part(v: a)
     var sb = integer_small_part(v: b)
     if sa.item0 and sb.item0
-        var p = U128(from: sa.item1) *% U128(from: sb.item1)
+        var p = sa.item1.to[U128]() *% sb.item1.to[U128]()
         return integer_two_limbs(
             neg: a.neg != b.neg,
             lo: LLVM::int_truncate[U128, U64](p),
@@ -392,7 +392,7 @@ secret routine integer_power(a: Integer, e: U64) -> Integer
     danger
         var bits = a.bit_length()
         var av = limb_view(v: a)
-        var cap = U64(from: (U128(from: bits) *% U128(from: e)) // 64u128) +% 2u64
+        var cap = ((bits.to[U128]() *% e.to[U128]()) // 64u128).to[U64]() +% 2u64
         var room = C::ingrid_integer_pow_scratch_size(a_len: av.len, a_bits: bits, e: e)
         loop
             var out = limb_buffer(n: cap)
@@ -588,7 +588,7 @@ routine Integer() -> Integer
 ### so the result is no longer limited by `S64` range after construction.
 ### :param from: The initial signed value.
 ### :returns: The resulting `Integer` value.
-routine Integer(from: S64) -> Integer
+secret routine Integer(from: S64) -> Integer
     return integer_of_s64(v: from)
 
 ### Creates an `Integer` from an unsigned 64-bit source value.
@@ -596,7 +596,7 @@ routine Integer(from: S64) -> Integer
 ### unsigned integer data.
 ### :param from: The initial unsigned value.
 ### :returns: The resulting `Integer` value.
-routine Integer(from: U64) -> Integer
+secret routine Integer(from: U64) -> Integer
     return integer_of_u64(v: from)
 
 # ============================================================================
@@ -619,51 +619,51 @@ routine integer_of_u64(v: U64) -> Integer
 ### base builders; wider widths compose them with shift+add.
 ### :param from: The signed source value.
 ### :returns: The equal `Integer` value.
-routine Integer(from: S8) -> Integer
+secret routine Integer(from: S8) -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S8, S64](from))
 
-routine Integer(from: S16) -> Integer
+secret routine Integer(from: S16) -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S16, S64](from))
 
-routine Integer(from: S32) -> Integer
+secret routine Integer(from: S32) -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S32, S64](from))
 
-routine Integer(from: S128) -> Integer
+secret routine Integer(from: S128) -> Integer
     var neg = LLVM::signed_lt[S128](a: from, b: 0_s128)
     var mag = if neg then LLVM::reinterpret_bits[S128, U128](
         LLVM::sub[S128](a: 0_s128, b: from),
     ) else LLVM::reinterpret_bits[S128, U128](from)
-    var r = Integer(from: mag)
+    var r = mag.to[Integer]()
     return if neg then r.neg() else r
-routine Integer(from: S256) -> Integer
+secret routine Integer(from: S256) -> Integer
     var neg = LLVM::signed_lt[S256](a: from, b: 0_s256)
     var mag = if neg then LLVM::reinterpret_bits[S256, U256](
         LLVM::sub[S256](a: 0_s256, b: from),
     ) else LLVM::reinterpret_bits[S256, U256](from)
-    var r = Integer(from: mag)
+    var r = mag.to[Integer]()
     return if neg then r.neg() else r
 ### Widens an unsigned fixed-width integer into an `Integer` (exact).
 ### :param from: The unsigned source value.
 ### :returns: The equal `Integer` value.
-routine Integer(from: U8) -> Integer
+secret routine Integer(from: U8) -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U8, U64](from))
 
-routine Integer(from: U16) -> Integer
+secret routine Integer(from: U16) -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U16, U64](from))
 
-routine Integer(from: U32) -> Integer
+secret routine Integer(from: U32) -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U32, U64](from))
 
-routine Integer(from: U128) -> Integer
+secret routine Integer(from: U128) -> Integer
     # value = hi * 2^64 + lo, from the two 64-bit limbs.
     var hi = integer_of_u64(v: LLVM::int_truncate[U128, U64](from >>> 64u32))
     var lo = integer_of_u64(v: LLVM::int_truncate[U128, U64](from))
     return hi.shl(bits: 64_s32).add(other: lo)
 
-routine Integer(from: U256) -> Integer
+secret routine Integer(from: U256) -> Integer
     # value = hi * 2^128 + lo, reusing the U128 widening for each 128-bit half.
-    var hi = Integer(from: LLVM::int_truncate[U256, U128](from >>> 128u32))
-    var lo = Integer(from: LLVM::int_truncate[U256, U128](from))
+    var hi = (LLVM::int_truncate[U256, U128](from >>> 128u32)).to[Integer]()
+    var lo = (LLVM::int_truncate[U256, U128](from)).to[Integer]()
     return hi.shl(bits: 128_s32).add(other: lo)
 
 # Parses `text` in `radix`, or returns (_, false): an optional leading '-', then digits up to the first
@@ -674,7 +674,7 @@ secret routine integer_parse(text: Text, radix: S32) -> (Integer, Bool)
         var chars = Hijacked[Char](from: C::rf_allocate_dynamic_uninit(size: 4u64 *% count +% 4u64))
         var i = 0u64
         while i < count
-            chars.stride(count: S64(from: i)).poke(value: text[i])
+            chars.stride(count: i.to[S64]()).poke(value: text[i])
             i = i +% 1u64
         var cap = count *% 6u64 // 64u64 +% 2u64
         var room = cap
@@ -684,7 +684,7 @@ secret routine integer_parse(text: Text, radix: S32) -> (Integer, Bool)
             var w = C::ingrid_integer_parse(
                 chars: chars,
                 count: count,
-                radix: U64(from: S64(from: radix)),
+                radix: radix.to[S64]().to[U64](),
                 out: out,
                 out_cap: cap,
                 scratch: scratch,
@@ -862,22 +862,22 @@ routine Integer.bitxor(other: Integer) -> Integer
 @readonly
 routine Integer.shl(bits: S32) -> Integer
     if bits < 0_s32
-        return integer_shift(a: me, bits: U64(from: 0s64 -% S64(from: bits)), left: false)
-    return integer_shift(a: me, bits: U64(from: S64(from: bits)), left: true)
+        return integer_shift(a: me, bits: (0s64 -% bits.to[S64]()).to[U64](), left: false)
+    return integer_shift(a: me, bits: bits.to[S64]().to[U64](), left: true)
 
 ### Shifts this value left by `bits` positions (`me << bits`): `me * 2^bits`.
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.ashl(bits: U32) -> Integer
-    return integer_shift(a: me, bits: U64(from: bits), left: true)
+    return integer_shift(a: me, bits: bits.to[U64](), left: true)
 
 ### Shifts this value right by `bits` positions (`me >> bits`): `floor(me / 2^bits)`, so `-5 >> 1` is `-3`.
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.ashr(bits: U32) -> Integer
-    return integer_shift(a: me, bits: U64(from: bits), left: false)
+    return integer_shift(a: me, bits: bits.to[U64](), left: false)
 
 ### Shifts this value right by `bits` positions filling with zeros (`me >>> bits`). An `Integer` has no fixed
 ### width, so a negative value has no zero-filled form: this is `>>` for a value that is not negative.
@@ -888,7 +888,7 @@ routine Integer.ashr(bits: U32) -> Integer
 routine Integer.lshr!(bits: U32) -> Integer
     if me.neg
         throw NumericDomainError(description: ">>> on a negative Integer: it has no width to fill with zeros")
-    return integer_shift(a: me, bits: U64(from: bits), left: false)
+    return integer_shift(a: me, bits: bits.to[U64](), left: false)
 
 ### Shifts this value right by `bits` positions: `floor(me / 2^bits)`, the arithmetic shift of the
 ### two's-complement form (so `-5 >> 1` is `-3`). A negative count shifts left.
@@ -897,8 +897,8 @@ routine Integer.lshr!(bits: U32) -> Integer
 @readonly
 routine Integer.shr(bits: S32) -> Integer
     if bits < 0_s32
-        return integer_shift(a: me, bits: U64(from: 0s64 -% S64(from: bits)), left: true)
-    return integer_shift(a: me, bits: U64(from: S64(from: bits)), left: false)
+        return integer_shift(a: me, bits: (0s64 -% bits.to[S64]()).to[U64](), left: true)
+    return integer_shift(a: me, bits: bits.to[S64]().to[U64](), left: false)
 
 # ============================================================================
 # Math Operations
@@ -915,7 +915,7 @@ routine Integer.abs() -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.pow(exp: U32) -> Integer
-    return integer_power(a: me, e: U64(from: exp))
+    return integer_power(a: me, e: exp.to[U64]())
 
 ### Returns the integer square root of this value.
 ### The result is the greatest integer whose square does not exceed the input.
@@ -1018,7 +1018,7 @@ routine Integer.bit_length() -> U64
             return 64u64 -% LLVM::leading_zeros(small)
         is IntegerLimbs as big =>
             danger
-                var top = big.tab.stride(count: S64(from: big.len -% 1u64)).peek()
+                var top = big.tab.stride(count: (big.len -% 1u64).to[S64]()).peek()
                 return big.len *% 64u64 -% LLVM::leading_zeros(top)
 
 ### Returns the smaller of this value and `other`.
@@ -1092,7 +1092,7 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
 ### :param from: The source value to convert.
 ### :returns: The resulting `S64` value.
 ### :throws: {IntegerOverflowError} if `from` is outside `S64_MIN..S64_MAX`.
-routine S64!(from: Integer) -> S64
+secret routine S64!(from: Integer) -> S64
     var s = integer_small_part(v: from)
     if not s.item0
         throw IntegerOverflowError()
@@ -1107,21 +1107,129 @@ routine S64!(from: Integer) -> S64
 ### :param from: The source value to convert.
 ### :returns: The resulting `U64` value.
 ### :throws: {IntegerOverflowError} if `from` is negative or exceeds `U64_MAX`.
-routine U64!(from: Integer) -> U64
+secret routine U64!(from: Integer) -> U64
     var s = integer_small_part(v: from)
     if from.is_negative() or not s.item0
         throw IntegerOverflowError()
     return s.item1
 
+### Converts an arbitrary-precision integer to `S8`.
+### :param from: The source value to convert.
+### :returns: The resulting `S8` value.
+### :throws: {IntegerOverflowError} if `from` is outside the `S8` range.
+secret routine S8!(from: Integer) -> S8
+    return from.to[S64]().to[S8]()
+
+### Converts an arbitrary-precision integer to `S16`.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
+### :throws: {IntegerOverflowError} if `from` is outside the `S16` range.
+secret routine S16!(from: Integer) -> S16
+    return from.to[S64]().to[S16]()
+
+### Converts an arbitrary-precision integer to `S32`.
+### :param from: The source value to convert.
+### :returns: The resulting `S32` value.
+### :throws: {IntegerOverflowError} if `from` is outside the `S32` range.
+secret routine S32!(from: Integer) -> S32
+    return from.to[S64]().to[S32]()
+
+### Converts an arbitrary-precision integer to `U8`.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: {IntegerOverflowError} if `from` is outside the `U8` range.
+secret routine U8!(from: Integer) -> U8
+    return from.to[U64]().to[U8]()
+
+### Converts an arbitrary-precision integer to `U16`.
+### :param from: The source value to convert.
+### :returns: The resulting `U16` value.
+### :throws: {IntegerOverflowError} if `from` is outside the `U16` range.
+secret routine U16!(from: Integer) -> U16
+    return from.to[U64]().to[U16]()
+
+### Converts an arbitrary-precision integer to `U32`.
+### :param from: The source value to convert.
+### :returns: The resulting `U32` value.
+### :throws: {IntegerOverflowError} if `from` is outside the `U32` range.
+secret routine U32!(from: Integer) -> U32
+    return from.to[U64]().to[U32]()
+
+### Converts an arbitrary-precision integer to `U128`.
+### :param from: The source value to convert.
+### :returns: The resulting `U128` value.
+### :throws: {IntegerOverflowError} if `from` is negative or exceeds `U128_MAX`.
+secret routine U128!(from: Integer) -> U128
+    if from.is_negative()
+        throw IntegerOverflowError()
+    # value = hi * 2^64 + lo: `hi` fits 64 bits exactly when the value fits 128.
+    var hi = from.shr(bits: 64_s32)
+    var lo = from.sub(other: hi.shl(bits: 64_s32))
+    return (hi.to[U64]().to[U128]() << 64u32) | lo.to[U64]().to[U128]()
+
+### Converts an arbitrary-precision integer to `U256`.
+### :param from: The source value to convert.
+### :returns: The resulting `U256` value.
+### :throws: {IntegerOverflowError} if `from` is negative or exceeds `U256_MAX`.
+secret routine U256!(from: Integer) -> U256
+    if from.is_negative()
+        throw IntegerOverflowError()
+    # value = hi * 2^128 + lo, each half through the U128 conversion.
+    var hi = from.shr(bits: 128_s32)
+    var lo = from.sub(other: hi.shl(bits: 128_s32))
+    return (hi.to[U128]().to[U256]() << 128u32) | lo.to[U128]().to[U256]()
+
+### Converts an arbitrary-precision integer to `S128`.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
+### :throws: {IntegerOverflowError} if `from` is outside `S128_MIN..S128_MAX`.
+secret routine S128!(from: Integer) -> S128
+    var magnitude = from.abs().to[U128]()
+    # A negative value may reach 2^127 (S128_MIN), a positive one stops one short.
+    var limit = if from.is_negative() then 1u128 << 127u32 else (1u128 << 127u32) -% 1u128
+    if magnitude > limit
+        throw IntegerOverflowError()
+    var bits = if from.is_negative() then 0u128 -% magnitude else magnitude
+    return LLVM::reinterpret_bits[U128, S128](bits)
+
+### Converts an arbitrary-precision integer to `S256`.
+### :param from: The source value to convert.
+### :returns: The resulting `S256` value.
+### :throws: {IntegerOverflowError} if `from` is outside `S256_MIN..S256_MAX`.
+secret routine S256!(from: Integer) -> S256
+    var magnitude = from.abs().to[U256]()
+    # A negative value may reach 2^255 (S256_MIN), a positive one stops one short.
+    var limit = if from.is_negative() then 1u256 << 255u32 else (1u256 << 255u32) -% 1u256
+    if magnitude > limit
+        throw IntegerOverflowError()
+    var bits = if from.is_negative() then 0u256 -% magnitude else magnitude
+    return LLVM::reinterpret_bits[U256, S256](bits)
+
+### Converts an arbitrary-precision integer to the nearest `B32`.
+### :param from: The source value to convert.
+### :returns: The `B32` closest to `from`.
+### :throws: {NumericOverflowError} if `from` is beyond the range of `B32`.
+secret routine B32!(from: Integer) -> B32
+    # The exact decimal text read back as a float rounds once, to the nearest `B32`.
+    return from.represent().to[B32]()
+
+### Converts an arbitrary-precision integer to the nearest `B64`.
+### :param from: The source value to convert.
+### :returns: The `B64` closest to `from`.
+### :throws: {NumericOverflowError} if `from` is beyond the range of `B64`.
+secret routine B64!(from: Integer) -> B64
+    # The exact decimal text read back as a float rounds once, to the nearest `B64`.
+    return from.represent().to[B64]()
+
 ### Converts an arbitrary-precision integer to `Decimal`, rounding half-even to its 34 significant digits.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Decimal` value.
 ### :throws: {NumericOverflowError} if `from` is beyond the range of `Decimal` (about `1e6144`).
-routine Decimal!(from: Integer) -> Decimal
-    var d = D128(from_text: from.represent())
+secret routine Decimal!(from: Integer) -> Decimal
+    var d = from.represent().to[D128]()
     if not d.is_finite()
         throw NumericOverflowError(description: "overflow: the integer is too large for Decimal")
-    return Decimal(from: d)
+    return d.to[Decimal]()
 
 ### Formats this value as base-10 text. Standard `represent` shape (no args)
 ### so the f-string machinery can dispatch without supplying a radix.
@@ -1142,8 +1250,8 @@ routine Integer.serialize() -> SerialValue
 ### :param from: The serialized value.
 ### :returns: The parsed value.
 ### :throws: {SerialShapeError} when the value is not text, or a parse error when the text is not an integer.
-routine Integer!(from: SerialValue) -> Integer
-    return Integer(text: serial_text(value: from))
+secret routine Integer!(from: SerialValue) -> Integer
+    return serial_text(value: from).to[Integer]()
 
 ### Formats this value as text in the requested radix (2 to 64; digits past 9 are uppercase
 ### letters up to base 36). An out-of-range radix renders an empty text.
@@ -1153,7 +1261,7 @@ routine Integer!(from: SerialValue) -> Integer
 routine Integer.represent_radix(radix: S32) -> Text
     if radix < 2_s32 or radix > 64_s32
         return ""
-    return integer_text(v: me, radix: U64(from: S64(from: radix)))
+    return integer_text(v: me, radix: radix.to[S64]().to[U64]())
 
 ### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
 ### when negative. Crashes on any other radix (unlike `represent_radix`, which renders an empty text).
@@ -1188,13 +1296,13 @@ routine Integer.hash(k0: U64, k1: U64) -> U64
 ### Parses a base-10 integer from text.
 ### This is the canonical text-to-`Integer` conversion used by generic parsing
 ### surfaces.
-### :param text: The text to parse.
+### :param from: The text to parse.
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
-routine Integer!(text: Text) -> Integer
-    var parsed = integer_parse(text: text, radix: 10_s32)
+secret routine Integer!(from: Text) -> Integer
+    var parsed = integer_parse(text: from, radix: 10_s32)
     if not parsed.item1
-        throw InvalidValueError(input: text, target: "Integer")
+        throw InvalidValueError(input: from, target: "Integer")
     return parsed.item0
 
 ### Parses a base-2 integer from text.
@@ -1223,13 +1331,13 @@ common routine Integer.from_hex!(text: Text) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 common routine Integer.zero() -> Integer
-    return Integer(0_s64)
+    return 0_s64.to[Integer]()
 
 ### Returns the multiplicative identity for `Integer`.
 ### :returns: The resulting `Integer` value.
 @readonly
 common routine Integer.one() -> Integer
-    return Integer(1_s64)
+    return 1_s64.to[Integer]()
 
 # ============================================================================
 # Examples
@@ -1244,7 +1352,7 @@ routine factorial(n: Integer) -> Integer
         return Integer.one()
 
     var result = Integer.one()
-    var i = Integer(2_s64)
+    var i = 2_s64.to[Integer]()
 
     while i <= n
         result = result * i
@@ -1258,7 +1366,7 @@ routine factorial(n: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 routine fibonacci_big(n: S64) -> Integer
     if n <= 1
-        return Integer(n)
+        return n.to[Integer]()
 
     var a = Integer.zero()
     var b = Integer.one()

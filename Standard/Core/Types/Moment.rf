@@ -36,7 +36,7 @@ routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
         s = s -% borrow
         ns = ns + borrow *% NS_PER_SECOND
 
-    return Moment(seconds: s, nanoseconds: U32(ns))
+    return Moment(seconds: s, nanoseconds: ns.to[U32]())
 
 # ============================================================================
 # Civil calendar helpers (proleptic Gregorian)
@@ -237,14 +237,14 @@ routine Moment.second() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.millisecond() -> S64
-    return LLVM::signed_div(S64(me.nanoseconds), NS_PER_MILLISECOND)
+    return LLVM::signed_div(me.nanoseconds.to[S64](), NS_PER_MILLISECOND)
 
 ### Returns the microsecond component within the current millisecond.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.microsecond() -> S64
     return LLVM::signed_div(
-        LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MILLISECOND),
+        LLVM::signed_rem(me.nanoseconds.to[S64](), NS_PER_MILLISECOND),
         NS_PER_MICROSECOND,
     )
 
@@ -252,7 +252,7 @@ routine Moment.microsecond() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.nanosecond() -> S64
-    return LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MICROSECOND)
+    return LLVM::signed_rem(me.nanoseconds.to[S64](), NS_PER_MICROSECOND)
 
 # ============================================================================
 # Conversion
@@ -268,7 +268,7 @@ routine Moment.timestamp() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.timestamp_ms() -> S64
-    return me.seconds *% 1_000_s64 +% LLVM::signed_div(S64(me.nanoseconds), NS_PER_MILLISECOND)
+    return me.seconds *% 1_000_s64 +% LLVM::signed_div(me.nanoseconds.to[S64](), NS_PER_MILLISECOND)
 
 # ============================================================================
 # Arithmetic with Duration
@@ -281,7 +281,7 @@ routine Moment.timestamp_ms() -> S64
 routine Moment.add_duration(duration: Duration) -> Moment
     return normalize_moment(
         seconds: me.seconds +% duration.total_seconds(),
-        nanoseconds: S64(me.nanoseconds) +% S64(duration.subsec_nanoseconds()),
+        nanoseconds: me.nanoseconds.to[S64]() +% duration.subsec_nanoseconds().to[S64](),
     )
 
 ### Returns this moment shifted backward by `duration`.
@@ -299,7 +299,7 @@ routine Moment.subtract_duration(duration: Duration) -> Moment
 routine Moment.elapsed_since(earlier: Moment) -> Duration
     return normalize_duration(
         seconds: me.seconds -% earlier.seconds,
-        nanoseconds: S64(me.nanoseconds) -% S64(earlier.nanoseconds),
+        nanoseconds: me.nanoseconds.to[S64]() -% earlier.nanoseconds.to[S64](),
     )
 
 ### Returns the moment reached by advancing this one by `you`.

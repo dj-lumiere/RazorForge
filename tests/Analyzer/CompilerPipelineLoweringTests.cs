@@ -1023,7 +1023,7 @@ public class CompilerPipelineLoweringTests
                             return value
 
                         routine test(text: Text) -> S32
-                            return helper(text.count().S32())
+                            return helper(text.count().to[S32]())
 
                         routine start()
                             drop test(text: "")
@@ -1123,7 +1123,7 @@ public class CompilerPipelineLoweringTests
                             return value
 
                         routine test!(text: Text) -> S32
-                            return helper(text.count().S32())
+                            return helper(text.count().to[S32]())
                         """;
 
         Program program = Parse(source: source);

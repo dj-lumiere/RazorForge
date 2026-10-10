@@ -440,7 +440,7 @@ routine Agent[T].retrieve!() -> T
                 # blocking. Park on a deadline timer that is also externally wakeable; siblings run.
                 # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — destroy
                 # joins the still-running worker before freeing (the timeout does not stop it).
-                var outcome = C::rf_task_await_coro_deadline(task: me.task(), timeout_ns: U64(total))
+                var outcome = C::rf_task_await_coro_deadline(task: me.task(), timeout_ns: total.to[U64]())
                 if outcome == 0_u32
                     # Deadline won; give up. Reap hands the free to the still-running worker, which frees its own
                     # block as its final act (non-blocking; destroy is a no-op).
@@ -448,7 +448,7 @@ routine Agent[T].retrieve!() -> T
                     throw TaskTimeoutError()
             else
                 var secs = total // 1000000000
-                var nanos = U32(total - secs * 1000000000)
+                var nanos = (total - secs * 1000000000).to[U32]()
                 var kind = C::rf_task_wait_within(task: me.task(), secs: secs, ns: nanos)
                 if kind != 1
                     # Deadline won on a plain thread; give up. Reap lets the still-running worker free its own
@@ -561,7 +561,7 @@ routine List[Agent[T]].race!() -> T
         # box their produced value into a task block referenced by `agent`, so extraction is uniform.
         var winner = C::rf_race_wait(race: race)
         C::rf_race_end(race: race)
-        var w = U64(winner)
+        var w = winner.to[U64]()
         # race! is the sole consumer of this set: the losers are never retrieved. Reap every loser exactly once
         # here (a still-running loser's worker frees its own block on exit, non-blocking), then settle the
         # winner, which reaps it. The List's own teardown (Agent.destruct) is a no-op, so nothing double-frees.
@@ -630,10 +630,10 @@ routine waitfor(duration: Duration)
     danger
         var total = duration.total_nanoseconds()
         if C::rf_in_coroutine() != 0_u32
-            C::rf_sched_park_timer(delay_ns: U64(total))
+            C::rf_sched_park_timer(delay_ns: total.to[U64]())
         else
             var secs = total // 1000000000
-            var nanos = U32(total - secs * 1000000000)
+            var nanos = (total - secs * 1000000000).to[U32]()
             C::rf_waitfor_duration(secs: secs, ns: nanos)
     return
 

@@ -89,14 +89,14 @@ public sealed class CFfiPlatformWidthTests
         string widen, string expectedUnixDecimal)
     {
         // Token-substitution template (a non-interpolated raw string) so the RF f-string braces need no
-        // C# escaping. Emits e.g. `show(f"v={S64(from: CLong(from: 2147483648s64))}")`.
+        // C# escaping. Emits e.g. `show(f"v={CLong(from: 2147483648s64).to[S64]()}")`.
         const string template = """
                                 module Playground
 
                                 import IO/Console
 
                                 routine start()
-                                    show(f"v={WIDEN(from: CTOR(from: VALUE))}")
+                                    show(f"v={CTOR(from: VALUE).to[WIDEN]()}")
                                     return
                                 """;
         string source = template.Replace(oldValue: "WIDEN", newValue: widen)

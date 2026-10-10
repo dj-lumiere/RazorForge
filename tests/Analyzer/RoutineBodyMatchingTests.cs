@@ -25,7 +25,7 @@ public class RoutineBodyMatchingTests
                             value: B64
 
                         routine Measurement.$create(from: S32) -> Measurement
-                            return Measurement(value: from.B64())
+                            return Measurement(value: from.to[B64]())
 
                         routine Measurement.$create(from: B64) -> Measurement
                             return Measurement(value: from)
