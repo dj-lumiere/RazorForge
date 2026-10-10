@@ -4,16 +4,14 @@ import BuilderQuery
 ### Represents an immutable byte sequence with value semantics.
 ###
 ### Layout:
-###   data:  Hijacked[Byte]                          — shared immutable byte buffer
-###   count: U64                                     — number of bytes in buffer
-###   ctrl:  Hijacked[FrozenController]     — atomic strong-count cell (or null)
+###   data:  Hijacked[Byte]                 — the owner list's buffer, read directly
+###   count: U64                            — number of bytes
+###   owner: Guarded[List[Byte], ReadOnly]  — the list holding the bytes (null for an empty or literal sequence)
 ###
-### `Bytes` is a record (value semantics from the user's view) backed by an
-### atomic-refcounted handle to an immutable byte buffer. Copying a `Bytes`
-### bumps the underlying refcount via SeqCst atomic; the last drop frees the
-### buffer + controller. When `ctrl` is null (`hijacked_none[...]()`), the
-### value represents an empty or static-literal sequence and `store`/`destruct`
-### are no-ops.
+### `Bytes` is a record (value semantics from the user's view) over a shared, read-only list of bytes. Copying a
+### `Bytes` shares the list (its `Guarded` owner counts one more holder) and copies the `data`/`count` cache, so a
+### read never goes through the owner. The last copy to go ends the list. An empty sequence and a bytes literal have
+### no owner: nothing is counted or freed.
 record Bytes
 relates BytesEmittable as Iter
 obeys Copyable, Iterable[Byte], Comparable, Hashable
@@ -21,8 +19,8 @@ obeys Copyable, Iterable[Byte], Comparable, Hashable
     secret data: Hijacked[Byte]
     ### Number of bytes in the buffer.
     secret count: U64
-    ### Atomic strong-count controller (null for empty / static-literal values).
-    secret ctrl: Hijacked[FrozenController]
+    ### The list holding the bytes, shared read-only by every copy (null for an empty or literal sequence).
+    secret owner: Guarded[List[Byte], ReadOnly]
 
 # Iteration
 
@@ -71,67 +69,37 @@ entity BytesUtf8LossyEmittable
     ### Stores the index.
     index: U64
 
-### Returns a copy of this value with the underlying refcount bumped.
-### The buffer is shared; no byte data is copied. For values with a null
-### controller (empty or static literals) the copy is a bitwise duplicate
-### with no atomic op.
-### :returns: The resulting `Bytes` value.
-@readonly
-@inline
-@override
-secret routine Bytes.share() -> Bytes
-    danger
-        if not me.ctrl.is_none()
-            me.ctrl.as_entity().hold()
-    return Bytes(data: me.data, count: me.count, ctrl: me.ctrl)
-
-### Copy (Copyable): for a managed Bytes this is the same reference-share as `assign` (the buffer is a
-### co-owned managed resource behind a ptr, so a co-owning ref-bump is the copy). Defined explicitly —
-### Bytes is a managed leaf (its logical value is the buffer behind a Hijacked ptr, not a field tuple), so
-### the field-walk auto-derive does not apply (its Hijacked fields don't obey Copyable); it declares
-### `obeys Copyable` and implements `copy` here, mirroring Text.copy.
+### Copy (Copyable): a `Bytes` is immutable, so a copy shares the same bytes.
 @readonly
 @inline
 routine Bytes.duplicate() -> Bytes
-    return me.share()
+    return me
 
-### Releases this value's reference. Frees the buffer + controller when this
-### was the last live ref. No-op when `ctrl` is null (empty / static literal).
-@override
-dangerous routine Bytes.destruct()
-    if me.ctrl.is_none()
-        return
-    var prev = me.ctrl.as_entity().unhold()
-    if prev <= 1_u64
-        me.data.invalidate()
-        me.ctrl.invalidate()
-    return
+### Makes a `Bytes` over `count` bytes at `data`, a buffer the caller allocated and filled: a list over that buffer
+### becomes the owner (one strong holder, not yet shared). `count` MUST be > 0.
+### :param data: The bytes, a buffer of exactly `count` bytes the new value takes over.
+### :param count: The number of bytes.
+### :returns: The resulting `Bytes` value.
+secret routine bytes_over(data: Hijacked[Byte], count: U64) -> Bytes
+    danger
+        var bytes = List[Byte](over: data, count: count)
+        return Bytes(data: data, count: count, owner: Guarded[List[Byte], ReadOnly](from: steal bytes))
 
 ### Creates an empty byte sequence.
 ### :returns: The resulting `Bytes` value.
 routine Bytes() -> Bytes
-    return Bytes(data: hijacked_none[Byte](), count: 0u64, ctrl: hijacked_none[FrozenController]())
+    return Bytes(data: hijacked_none[Byte](), count: 0u64, owner: guarded_none[List[Byte], ReadOnly]())
 
-### Creates a byte sequence by copying the contents of `from_list`.
-### :param from_list: The source list of bytes to copy.
+### Creates a byte sequence from a list of bytes. The list itself becomes the sequence's bytes, nothing is copied, so
+### this is O(1): hand it over with `steal` (`Bytes(from_list: steal bytes)`).
+### :param from_list: The bytes, taken over by the new value.
 ### :returns: The resulting `Bytes` value.
 routine Bytes(from_list: List[Byte]) -> Bytes
     var n = from_list.count()
     if n == 0u64
-        return Bytes(
-            data: hijacked_none[Byte](),
-            count: 0u64,
-            ctrl: hijacked_none[FrozenController](),
-        )
-    danger
-        var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
-        var i: U64 = 0u64
-        loop
-            if i >= n
-                break
-            buf.stride(count: i.to[S64]()).poke(value: from_list[i])
-            i += 1u64
-        return Bytes(data: buf, count: n, ctrl: FrozenController().hijack())
+        return Bytes()
+    var data = from_list.data
+    return Bytes(data: data, count: n, owner: Guarded[List[Byte], ReadOnly](from: steal from_list))
 
 ### Creates a one-byte sequence from `from_byte`.
 ### :param from_byte: The single byte to store.
@@ -140,7 +108,7 @@ routine Bytes(from_byte: Byte) -> Bytes
     danger
         var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size()))
         buf.poke(value: from_byte)
-        return Bytes(data: buf, count: 1u64, ctrl: FrozenController().hijack())
+        return bytes_over(data: buf, count: 1u64)
 
 ### Creates a byte sequence by copying a null-terminated byte buffer.
 ### Copying stops at the first null byte.
@@ -157,7 +125,7 @@ routine Bytes(ptr: Hijacked[Byte]) -> Bytes
             return Bytes()
         var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * len))
         rf_copy_bytes_at(dest: buf.address(), src: ptr.address(), size: Byte.data_size() * len)
-        return Bytes(data: buf, count: len, ctrl: FrozenController().hijack())
+        return bytes_over(data: buf, count: len)
 
 ### Creates a byte sequence by copying a null-terminated C string as raw bytes.
 ### No text decoding is performed.
@@ -174,7 +142,7 @@ routine Bytes(ptr: CStr) -> Bytes
             src: ptr.ptr().address(),
             size: Byte.data_size() * len,
         )
-        return Bytes(data: buf, count: len, ctrl: FrozenController().hijack())
+        return bytes_over(data: buf, count: len)
 
 ### Creates a byte sequence by copying `count` bytes from an address.
 ### :param ptr: The source address.
@@ -186,7 +154,7 @@ routine Bytes(ptr: Address, count: U64) -> Bytes
     danger
         var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
         rf_copy_bytes_at(dest: buf.address(), src: ptr, size: Byte.data_size() * count)
-        return Bytes(data: buf, count: count, ctrl: FrozenController().hijack())
+        return bytes_over(data: buf, count: count)
 
 ### Creates a byte sequence by copying `count` bytes from a hijacked pointer.
 ### :param ptr: The source pointer.
@@ -198,7 +166,7 @@ routine Bytes(ptr: Hijacked[Byte], count: U64) -> Bytes
     danger
         var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
         rf_copy_bytes_at(dest: buf.address(), src: ptr.address(), size: Byte.data_size() * count)
-        return Bytes(data: buf, count: count, ctrl: FrozenController().hijack())
+        return bytes_over(data: buf, count: count)
 
 # Core operations
 
@@ -292,7 +260,7 @@ routine Bytes.concat(other: Bytes) -> Bytes
                 src: other.data.address(),
                 size: Byte.data_size() * other.count,
             )
-        return Bytes(data: buf, count: n, ctrl: FrozenController().hijack())
+        return bytes_over(data: buf, count: n)
 
 ### Returns the sum of this value and the other value.
 ### This is the operator form of `concat`.
@@ -531,7 +499,7 @@ routine Bytes.repeat(times: U64) -> Bytes
                 size: Byte.data_size() * me.count,
             )
             t += 1u64
-        return Bytes(data: buf, count: n, ctrl: FrozenController().hijack())
+        return bytes_over(data: buf, count: n)
 
 # Hex encoding
 

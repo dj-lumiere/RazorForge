@@ -5,34 +5,26 @@ module Numerics
 ### It preserves exact integer semantics across arithmetic, parsing, and formatting operations.
 ###
 ### `Integer` is a record (value semantics from the user's view). A magnitude below 2^64 is held in the value
-### itself, so small numbers need no heap and are computed without calling the engine. A bigger magnitude lives in
-### a heap buffer of 64-bit limbs shared by copies under an atomic refcount: copying bumps the refcount (no number
-### data is copied), and the last drop frees the buffer + controller. Division is Euclidean: `a // b` and `a % b`
+### itself (`small`), so small numbers need no heap and are computed without calling the engine. A bigger magnitude
+### is a read-only list of 64-bit limbs shared by copies (`owner`, with `data`/`count` caching its buffer): copying
+### shares the list (no number data is copied), and the last copy to go ends it. A literal's limbs are constant data
+### with no owner. Division is Euclidean: `a // b` and `a % b`
 ### satisfy `a == b * (a // b) + a % b` with `0 <= a % b < |b|`. The bitwise operators act on the two's-complement
 ### form. There is no `/`: an integer quotient is `//`, and a fractional one is computed in `Decimal`.
 ### :see: {Decimal}, {Numeric-Types}
 record Integer
 obeys Copyable, Integral, Negatable, Comparable, Hashable
+    ### The list holding the limbs of a magnitude of at least 2^64, shared read-only by copies (null when the
+    ### magnitude is below 2^64, and for a literal's constant limbs).
+    secret owner: Guarded[List[U64], ReadOnly]
+    ### The magnitude when it is below 2^64 (`count` is 0), else 0.
+    secret small: U64
+    ### The limbs, little-endian with a nonzero top limb, when `count` is not 0.
+    secret data: Hijacked[U64]
+    ### The number of limbs: 0 for a magnitude below 2^64, else at least 2.
+    secret count: U64
     ### True when the value is negative (never true for zero).
     secret neg: Bool
-    ### The magnitude: in the value itself below 2^64, else in limbs.
-    secret magnitude: IntegerMagnitude
-
-### The magnitude of an `Integer`. A magnitude below 2^64 is always the `U64` arm (zero included), so two equal
-### values always have the same arm.
-variant IntegerMagnitude
-    U64
-    IntegerLimbs
-
-### A magnitude of at least 2^64, as little-endian 64-bit limbs.
-record IntegerLimbs
-    ### The number of limbs (at least 2).
-    secret len: U64
-    ### The limbs, with a nonzero top limb.
-    secret tab: Hijacked[U64]
-    ### Atomic strong-count cell governing the limb buffer's lifetime (none for a literal, whose limbs are read-only
-    ### static data that is never counted or freed).
-    secret ctrl: Hijacked[FrozenController]
 
 ### The limbs one engine call reads for a value: its own limbs, or a one-limb buffer made for the call that `temp`
 ### says to free afterward.
@@ -50,19 +42,26 @@ record IntegerLimbView
 
 # The zero `Integer`.
 secret routine integer_zero() -> Integer
-    return Integer(neg: false, magnitude: IntegerMagnitude(0u64))
+    return integer_small(neg: false, mag: 0u64)
 
 # The `Integer` with magnitude `mag` below 2^64, negative when `neg` (zero stays non-negative).
 secret routine integer_small(neg: Bool, mag: U64) -> Integer
-    return Integer(neg: neg and mag != 0u64, magnitude: IntegerMagnitude(mag))
+    return Integer(
+        owner: guarded_none[List[U64], ReadOnly](),
+        small: mag,
+        data: hijacked_none[U64](),
+        count: 0u64,
+        neg: neg and mag != 0u64,
+    )
+
+# The `Integer` over `len` limbs (at least 2) in `tab`, a buffer from `limb_buffer` it takes over, negative when `neg`.
+secret dangerous routine integer_over_limbs(neg: Bool, tab: Hijacked[U64], len: U64) -> Integer
+    var limbs = List[U64](over: tab, count: len)
+    return Integer(owner: Guarded[List[U64], ReadOnly](from: steal limbs), small: 0u64, data: tab, count: len, neg: neg)
 
 # The magnitude when it is below 2^64, and whether it is.
 secret routine integer_small_part(v: Integer) -> (Bool, U64)
-    when v.magnitude
-        is U64 as small =>
-            return (true, small)
-        is IntegerLimbs =>
-            return (false, 0u64)
+    return (v.count == 0u64, v.small)
 
 # The `Integer` with magnitude `hi * 2^64 + lo`, negative when `neg`.
 secret routine integer_two_limbs(neg: Bool, lo: U64, hi: U64) -> Integer
@@ -72,22 +71,17 @@ secret routine integer_two_limbs(neg: Bool, lo: U64, hi: U64) -> Integer
         var tab = limb_buffer(n: 2u64)
         tab.poke(value: lo)
         tab.stride(count: 1s64).poke(value: hi)
-        return Integer(
-            neg: neg,
-            magnitude: IntegerMagnitude(IntegerLimbs(len: 2u64, tab: tab, ctrl: fresh_frozen_controller())),
-        )
+        return integer_over_limbs(neg: neg, tab: tab, len: 2u64)
 
 # The limbs an engine call reads for `v`. Free them with `limb_view_free`.
 secret dangerous routine limb_view(v: Integer) -> IntegerLimbView
-    when v.magnitude
-        is U64 as small =>
-            if small == 0u64
-                return IntegerLimbView(len: 0u64, tab: hijacked_none[U64](), temp: false)
-            var tab = limb_buffer(n: 1u64)
-            tab.poke(value: small)
-            return IntegerLimbView(len: 1u64, tab: tab, temp: true)
-        is IntegerLimbs as big =>
-            return IntegerLimbView(len: big.len, tab: big.tab, temp: false)
+    if v.count != 0u64
+        return IntegerLimbView(len: v.count, tab: v.data, temp: false)
+    if v.small == 0u64
+        return IntegerLimbView(len: 0u64, tab: hijacked_none[U64](), temp: false)
+    var tab = limb_buffer(n: 1u64)
+    tab.poke(value: v.small)
+    return IntegerLimbView(len: 1u64, tab: tab, temp: true)
 
 # Frees what `limb_view` made for a call.
 secret dangerous routine limb_view_free(view: IntegerLimbView)
@@ -135,18 +129,13 @@ secret dangerous routine integer_adopt(out: Hijacked[U64], len: U64, neg: Bool) 
         var small = out.peek()
         limb_free(p: out)
         return integer_small(neg: neg, mag: small)
-    return Integer(neg: neg, magnitude: IntegerMagnitude(IntegerLimbs(len: len, tab: out, ctrl: fresh_frozen_controller())))
+    return integer_over_limbs(neg: neg, tab: out, len: len)
 
 # `v` with its sign `neg` (zero stays non-negative), sharing its limbs.
 secret routine integer_with_sign(v: Integer, neg: Bool) -> Integer
-    when v.magnitude
-        is U64 as small =>
-            return integer_small(neg: neg, mag: small)
-        is IntegerLimbs as big =>
-            danger
-                if not big.ctrl.is_none()
-                    big.ctrl.as_entity().hold()
-            return Integer(neg: neg, magnitude: IntegerMagnitude(IntegerLimbs(len: big.len, tab: big.tab, ctrl: big.ctrl)))
+    if v.count == 0u64
+        return integer_small(neg: neg, mag: v.small)
+    return Integer(owner: v.owner, small: 0u64, data: v.data, count: v.count, neg: neg)
 
 # a + b, or a - b when `negate_b`. Addition needs no scratch: the sum goes straight into its own buffer.
 secret routine integer_sum(a: Integer, b: Integer, negate_b: Bool) -> Integer
@@ -182,12 +171,10 @@ secret routine integer_sum(a: Integer, b: Integer, negate_b: Bool) -> Integer
 
 # The low 64 bits of the magnitude.
 secret routine integer_low_word(v: Integer) -> U64
-    when v.magnitude
-        is U64 as small =>
-            return small
-        is IntegerLimbs as big =>
-            danger
-                return big.tab.peek()
+    if v.count == 0u64
+        return v.small
+    danger
+        return v.data.peek()
 
 # One two's-complement bitwise operation (0 AND, 1 OR, 2 XOR). It needs no scratch.
 secret routine integer_bitop(a: Integer, b: Integer, op: U32) -> Integer
@@ -719,38 +706,6 @@ routine Integer!(text: Text, radix: S32 = 10) -> Integer
 common routine Integer.from_literal(text: Text) -> Integer
     return integer_parse(text: text, radix: 10_s32).item0
 
-### Returns a copy of this value. A value below 2^64 is copied as it is. A bigger one shares its limb buffer
-### with the copy and bumps its refcount: no big-integer data is copied.
-### :returns: The resulting `Integer` value.
-@readonly
-@inline
-@override
-secret routine Integer.share() -> Integer
-    when me.magnitude
-        is U64 as small =>
-            return Integer(neg: me.neg, magnitude: IntegerMagnitude(small))
-        is IntegerLimbs as big =>
-            danger
-                if not big.ctrl.is_none()
-                    big.ctrl.as_entity().hold()
-            return Integer(neg: me.neg, magnitude: IntegerMagnitude(IntegerLimbs(len: big.len, tab: big.tab, ctrl: big.ctrl)))
-
-### Releases this value's reference. Frees the limb buffer + controller when this was the last live ref. Nothing
-### to do for a value below 2^64, or for a literal's static limbs.
-@override
-dangerous routine Integer.destruct()
-    when me.magnitude
-        is U64 =>
-            return
-        is IntegerLimbs as big =>
-            if big.ctrl.is_none()
-                return
-            var prev = big.ctrl.as_entity().unhold()
-            if prev <= 1_u64
-                big.tab.invalidate()
-                big.ctrl.invalidate()
-    return
-
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
@@ -1009,13 +964,11 @@ routine Integer.bitnot() -> Integer
 ### :returns: The resulting `U64` value.
 @readonly
 routine Integer.bit_length() -> U64
-    when me.magnitude
-        is U64 as small =>
-            return 64u64 -% LLVM::leading_zeros(small)
-        is IntegerLimbs as big =>
-            danger
-                var top = big.tab.stride(count: (big.len -% 1u64).to[S64]()).peek()
-                return big.len *% 64u64 -% LLVM::leading_zeros(top)
+    if me.count == 0u64
+        return 64u64 -% LLVM::leading_zeros(me.small)
+    danger
+        var top = me.data.stride(count: (me.count -% 1u64).to[S64]()).peek()
+        return me.count *% 64u64 -% LLVM::leading_zeros(top)
 
 ### Returns the smaller of this value and `other`.
 ### :param other: The value to compare against.

@@ -4,26 +4,24 @@ import BuilderQuery
 ### Represents immutable UTF-32 text with constant-time character indexing.
 ###
 ### Layout:
-###   data:  Hijacked[Char]                    — shared immutable UTF-32 buffer
-###   count: U64                                    — number of code points in buffer
-###   ctrl:  Hijacked[FrozenController]    — atomic strong-count cell (or null)
+###   data:  Hijacked[Char]                 — the list's buffer, read directly
+###   count: U64                            — number of code points
+###   owner: Guarded[List[Char], ReadOnly]  — the list holding the characters (null for an empty or literal text)
 ###
-### `Text` is a record (value semantics from the user's view) backed by an
-### atomic-refcounted handle to an immutable character buffer. Copying a
-### `Text` bumps the underlying refcount via SeqCst atomic; the last drop
-### frees the buffer + controller. When `ctrl` is null (`hijacked_none[...]()`),
-### the value represents an empty or static-literal string and `store`/`destruct`
-### are no-ops.
+### `Text` is a record (value semantics from the user's view) over a shared, read-only list of characters. Copying a
+### `Text` shares the list (its `Guarded` owner counts one more holder) and copies the `data`/`count` cache, so a read
+### never goes through the owner. The last copy to go ends the list. An empty text and a text literal have no owner:
+### `data` points at constant data (or nowhere) and nothing is counted or freed.
 record Text
 relates TextEmittable as Iter
 obeys Copyable, Addable, Comparable, Hashable, TextRepeatable, Iterable[Char],
     Container
-    ### Stores the character buffer.
+    ### The characters: the owner list's buffer, or constant data for a literal.
     secret data: Hijacked[Char]
-    ### Stores the number of characters in the buffer.
+    ### Stores the number of characters.
     secret count: U64
-    ### Atomic strong-count controller (null for empty / static-literal values).
-    secret ctrl: Hijacked[FrozenController]
+    ### The list holding the characters, shared read-only by every copy (null for an empty or literal text).
+    secret owner: Guarded[List[Char], ReadOnly]
 
 ### Represents the iterator used to traverse a `Text` value.
 ### The iterator reads the text sequentially from the first character to the
@@ -34,42 +32,11 @@ entity TextEmittable
     ### Stores the current character index.
     index: U64
 
-### Returns a copy of this value with the underlying refcount bumped.
-### The buffer is shared; no character data is copied. For values with a null
-### controller (empty or static literals) the copy is a bitwise duplicate with
-### no atomic op.
-### :returns: The resulting `Text` value.
-@readonly
-@inline
-@override
-secret routine Text.share() -> Text
-    danger
-        if not me.ctrl.is_none()
-            me.ctrl.as_entity().hold()
-    return Text(data: me.data, count: me.count, ctrl: me.ctrl)
-
-### Copy (Copyable): for an IMMUTABLE Text this is the same reference-share as `assign` (the buffer is
-### never mutated, so a deep byte-copy would be wasteful). Defined explicitly — Text is a managed leaf
-### (its logical value is the buffer behind a ptr, not a field tuple), so the field-walk auto-derive does
-### not apply; it declares `obeys Copyable` and implements `copy` here.
+### Copy (Copyable): a `Text` is immutable, so a copy shares the same characters.
 @readonly
 @inline
 routine Text.duplicate() -> Text
-    return me.share()
-
-### Releases this value's reference. Frees the buffer + controller when this
-### was the last live ref. No-op when `ctrl` is null (empty / static literal).
-@override
-dangerous routine Text.destruct()
-    if me.ctrl.is_none()
-        return
-    var prev = me.ctrl.as_entity().unhold()
-    if prev <= 1_u64
-        # data lives INSIDE the controller's block (see `text_alloc` co-allocation), so the single
-        # `ctrl.invalidate()` frees both the refcount header and the Char buffer — do NOT free
-        # `data` separately (it points mid-block).
-        me.ctrl.invalidate()
-    return
+    return me
 
 # Creators
 
@@ -80,47 +47,29 @@ routine Text() -> Text
     return Text(
         data: hijacked_none[Char](),
         count: 0u64,
-        ctrl: hijacked_none[FrozenController](),
+        owner: guarded_none[List[Char], ReadOnly](),
     )
 
-### Allocates ONE block — a `FrozenController` (strong count = 1) header immediately followed by `count`
-### Characters — and returns a `Text` owning it, with `data` pointing just past the header. This is the
-### SOLE Text-buffer allocator: co-locating the refcount cell with the payload means one
-### `rf_allocate_dynamic` (and one `invalidate` in `destruct`) instead of two separate allocations. The
-### `FrozenController` is a single `U64 strong_count` at offset 0, so the block head IS the refcount cell;
-### `hold`/`unhold` drive atomics on it exactly as for a standalone controller. Callers fill the returned
-### `result.data` buffer (refcount is 1 and not yet shared) and return it. `count` MUST be > 0 — callers
-### special-case empty to `Text()`.
-### :param count: The number of Characters the buffer holds.
-### :returns: A `Text` owning a fresh co-allocated buffer of `count` Characters.
+### Makes a `Text` of `count` characters for the caller to fill through `result.data`: a fresh list of that length
+### becomes the owner (one strong holder, not yet shared). `count` MUST be > 0, callers special-case empty to `Text()`.
+### :param count: The number of Characters the text holds.
+### :returns: A `Text` owning a fresh list of `count` Characters.
 routine text_alloc(count: U64) -> Text
-    danger
-        var header = FrozenController.data_size()
-        var ctrl = Hijacked[FrozenController](rf_allocate_dynamic(size: header + Char.data_size() * count))
-        ctrl.recast_as[U64]().poke(value: 1_u64)
-        return Text(
-            data: ctrl.recast_as[Char]().offset(bytes: header),
-            count: count,
-            ctrl: ctrl,
-        )
+    var chars = List[Char](capacity: count)
+    chars.count = count
+    var data = chars.data
+    return Text(data: data, count: count, owner: Guarded[List[Char], ReadOnly](from: steal chars))
 
-### Creates text from a list of characters.
-### The input characters are copied into a newly allocated immutable buffer.
-### :param from_list: The characters to copy into the new text value.
+### Creates text from a list of characters. The list itself becomes the text's characters, nothing is copied, so
+### this is O(1): hand it over with `steal` (`Text(from_list: steal chars)`).
+### :param from_list: The characters, taken over by the new text value.
 ### :returns: The resulting `Text` value.
 routine Text(from_list: List[Char]) -> Text
     var n = from_list.count()
     if n == 0u64
         return Text()
-    var result = text_alloc(count: n)
-    danger
-        var i: U64 = 0u64
-        loop
-            if i >= n
-                break
-            result.data.stride(count: i.to[S64]()).poke(value: from_list[i])
-            i += 1u64
-    return result
+    var data = from_list.data
+    return Text(data: data, count: n, owner: Guarded[List[Char], ReadOnly](from: steal from_list))
 
 ### Makes one-character text: `'x'.to[Text]()`.
 ### :returns: The resulting `Text` value.
