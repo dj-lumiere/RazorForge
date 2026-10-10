@@ -424,7 +424,15 @@ when n
 when v
     is Crashables as e => show("failed")
     is S64 as x       => show(f"ok: {x}")     # type pattern with binding
+
+when cell                                     # record patterns, written like construction
+    is Chest(item: is Weapon as w) => equip(w)
+    is Monster(hp: 0) as m => remove(m)       # a value it must equal, a name for the whole
+    is Monster(hp: < 5, name) => flee(from: name)   # `name` alone = `name: as name`
+    is Monster => pass                        # an arm testing a member variable doesn't cover the type
 ```
+
+The same record pattern works after `if`: `if cell is Monster(hp: 0) as m`.
 
 In a `when` statement an arm may be a block: break the line after `=>` and indent
 the statements one level, as in an `if` body. Keep a one-statement arm on one line.
