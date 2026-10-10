@@ -1,0 +1,33 @@
+module Tests/Stdlib/SendIfRoomApi
+
+# `send_if_room` puts an item into a channel only when it has room, never waiting, and `take_finished` takes the
+# finished Agents out of a list in place, leaving the rest.
+
+import IO/Console
+routine double(n: S64) -> S64
+    return n * 2
+
+routine start()
+    var (feeder, hop) = make_channel[S64](capacity: 2)
+    var first = feeder.send_if_room(item: 1)
+    var second = feeder.send_if_room(item: 2)
+    var third = feeder.send_if_room(item: 3)
+    show(f"room: {first} {second} {third} count={hop.count()}")
+    feeder.close()
+    var late = try feeder.send_if_room(item: 4)
+    show(f"after close: {late is None}")
+    var total = 0_s64
+    each v in hop
+        total = total + v
+    show(f"drained: {total}")
+
+    var jobs = List[Agent[S64]]()
+    jobs.add_last(value: agent double(n: 1))
+    jobs.add_last(value: agent double(n: 2))
+    jobs.add_last(value: agent double(n: 3))
+    var two = jobs[1].retrieve()
+    var done = jobs.take_finished()
+    show(f"taken: {done.count()} left: {jobs.count()} value: {two}")
+    show(f"rest: {jobs.gather()}")
+    show("DONE")
+    return

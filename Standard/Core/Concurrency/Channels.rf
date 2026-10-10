@@ -89,6 +89,26 @@ routine Sender[T].send!(item: T)
             throw ChannelClosedError()
     return
 
+### Sends one item only when the channel has room for it now, never waiting: the step a broadcast takes per
+### subscriber, where waiting on one full subscriber would hold up the rest. On a rendezvous channel there is room
+### while no item waits in it, and the sender does not wait for the taker.
+### :param item: The value to send (ownership transfers in when it is sent, and it is destroyed when it is not).
+### :returns: `true` when the item went in, `false` when the channel was full.
+### :throws: {ChannelClosedError} if the channel is already closed or has no consumers left.
+routine Sender[T].send_if_room!(item: T) -> Bool
+    danger
+        var box = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size()))
+        box.poke(value: item)
+        var outcome = C::rf_channel_offer(chan: me.chan, payload: box.address())
+        if outcome == 1_u32
+            return true
+        # Undelivered: reclaim the item, then the box.
+        var orphan = box.peek()
+        box.invalidate()
+        if outcome == 0_u32
+            throw ChannelClosedError()
+        return false
+
 ### Produces another sending handle on the same channel (fan-in: more producers).
 ### :returns: A new `Sender[T]` on the same channel.
 routine Sender[T].duplicate() -> Sender[T]
