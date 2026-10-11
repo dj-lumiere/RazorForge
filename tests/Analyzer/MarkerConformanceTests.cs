@@ -282,7 +282,7 @@ public class MarkerConformanceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "does not implement protocol 'RecordType'",
+            filter: e => e.Message.Contains(value: "does not obey 'RecordType'",
                 comparisonType: StringComparison.Ordinal));
     }
 }

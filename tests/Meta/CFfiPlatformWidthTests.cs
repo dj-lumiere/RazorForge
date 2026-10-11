@@ -89,7 +89,7 @@ public sealed class CFfiPlatformWidthTests
         string widen, string expectedUnixDecimal)
     {
         // Token-substitution template (a non-interpolated raw string) so the RF f-string braces need no
-        // C# escaping. Emits e.g. `show(f"v={CLong(from: 2147483648s64).to[S64]()}")`.
+        // C# escaping. Emits e.g. `show(f"v={2147483648s64.to[CLong]().to[S64]()}")`.
         const string template = """
                                 module Playground
 
@@ -150,8 +150,8 @@ public sealed class CFfiPlatformWidthTests
                                       var elem = CWChar.data_size().byte_size()
                                       var raw = Hijacked[Byte](from: C::rf_allocate_dynamic(2u64 * elem))
                                       var buf = raw.recast_as[CWChar]()
-                                      buf.stride(count: 0s64).poke(value: CWChar(from: 65536u32))
-                                      buf.stride(count: 1s64).poke(value: CWChar(from: 0u32))
+                                      buf.stride(count: 0s64).poke(value: 65536u32.to[CWChar]())
+                                      buf.stride(count: 1s64).poke(value: 0u32.to[CWChar]())
                                       var s = CWStr(from_ptr: buf)
                                       show(f"cp={s.getitem(index: 0u64).codepoint()} count={s.count()}")
                                   return

@@ -69,6 +69,6 @@ public class ArrayZeroFillTests
                                                var sl = SplitList[List[S64]]()
                                                return
                                            """,
-            expectedErrorSubstring: "does not implement protocol 'Splittable'");
+            expectedErrorSubstring: "does not obey 'Splittable'");
     }
 }
