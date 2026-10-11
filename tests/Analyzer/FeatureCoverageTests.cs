@@ -219,9 +219,9 @@ public class FeatureCoverageTests
 
                               routine start()
                                   var src: List[S64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-                                  var evens = src.where(predicate: x => x % 2 == 0).List()
-                                  var doubled = src.select(transform: x => x * 2).List()
-                                  var first3 = src.take(count: 3_u64).List()
+                                  var evens = src.where(predicate: x => x % 2 == 0).to[List]()
+                                  var doubled = src.select(transform: x => x * 2).to[List]()
+                                  var first3 = src.take(count: 3_u64).to[List]()
                                   show(f"{evens} {doubled} {first3}")
                                   return
                               """;

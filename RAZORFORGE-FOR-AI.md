@@ -64,7 +64,7 @@ When unsure, consult ground truth in the repo/package:
    `check`: the error), and evaluation stops at the first one. A bare call (no keyword)
    still crashes loudly. Lambdas and routine values are covered the same way: a
    failure inside a lambda handed to another routine
-   (`try xs.select(transform: x => 10 // x).List()`, `check xs.sort_by(compare: f)`,
+   (`try xs.select(transform: x => 10 // x).to[List]()`, `check xs.sort_by(compare: f)`,
    a user routine that calls the value it was given, a routine value passed down
    several levels or kept in a field) is recovered by the keyword above the call
    that reaches it, at any depth. A routine value called with no keyword above
@@ -359,8 +359,10 @@ var why: Check[S64] = check line.to()
 - Constructor or conversion, by one checkable rule: a constructor's arguments become parts of the new value as
   they are (`Point(x: 1, y: 2)`, `Retained(from: steal e)`, `SerialValue(from: 25_s64)` putting 25 in an arm);
   a value computed from one value of another type is a conversion, `x.to[T]()` (`"hi".to[CStr]()`,
-  `local.to[Moment]()`, `3.0_b32.to[Q128]()`). So `S64(from: x)` is not a routine. Taking a variant's arm out
-  (`sv.Dict()`) is not a conversion and stays.
+  `local.to[Moment]()`, `3.0_b32.to[Q128]()`). So `S64(from: x)` is not a routine. A variant's arm comes out
+  the same way: `sv.to[S64]()` / `sv.to[Dict]()` is failable (another arm is active → crash, `try` gives
+  `None`). The old spellings `sv.S64()`, `S64(from: sv)`, `Dict[Text, SerialValue](from: sv)` are gone (RF-S458 /
+  RF-S646 point at `.to[...]()`).
 - Each conversion is its own routine, a specialization written with the target type in the bracket:
 
   ```razorforge
@@ -772,7 +774,7 @@ that differ from other languages:
   `chain`, `distinct`, `select_many`, `min_by`, … — lazily evaluated, chainable,
   lambdas like `x => x % 2 == 0`. An adapter points at the collection it was made
   from, so it is used in the statement that makes it (`each`, a terminal call such
-  as `.List()`, or an argument). Keeping one in a variable or field, or returning
+  as `.to[List]()`, or an argument). Keeping one in a variable or field, or returning
   it, is RF-S644. A range (`var r = 0 til 10`) points at nothing and can be kept.
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive. Without
   `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`

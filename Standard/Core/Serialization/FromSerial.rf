@@ -2,7 +2,7 @@ module Core
 
 import BuilderExpansion
 import Collections
-### Raised when a `SerialValue` does not have the shape a `T(from: SerialValue)` constructor expects: a
+### Raised when a `SerialValue` does not have the shape `sv.to[T]()` expects: a
 ### missing member variable, a text where a number was expected, an unknown choice case, and so on.
 crashable SerialShapeError
     ### What was expected and what was found.
@@ -39,14 +39,23 @@ routine serial_text!(value: SerialValue) -> Text
         is Text as t => return t
         else => throw SerialShapeError(detail: "expected text")
 
-### Builds a `T` from its serialized form: the generic entry point the builder-synthesized
-### `T(from: SerialValue)` constructors call for their member variables and arms. Not failable itself:
-### the `T(from:)` it calls is, so a value that does not fit crashes loudly with a `SerialShapeError`.
+### Builds a `T` from its serialized form: the generic entry point the builder-synthesized `from_serial`
+### routines call for their member variables and arms. Not failable itself: the `from_serial` it calls is, so a
+### value that does not fit crashes loudly with a `SerialShapeError`.
 ### :typeparam T: The type to build.
 ### :param value: The serialized value.
 ### :returns: The rebuilt value.
 routine serial_decode[T](value: SerialValue) -> T
-    return T(from: value)
+    return T.from_serial(value: value)
+
+### Rebuilds a value from its serialized form, the reverse of `serialize`: `sv.to[Point]()`,
+### `try sv.to[List[S64]]()`. Each type rebuilds itself in `common routine T.from_serial!(value: SerialValue)`: the
+### builder writes it for records, entities, choices, flags and variants, and a type may write its own.
+### :returns: The rebuilt value.
+### :throws: {SerialShapeError} when the value does not have the shape `T` needs.
+routine SerialValue.to![T]() -> T
+needs AnyType T
+    return T.from_serial(value: me)
 
 ### Builds a choice value from its serialized case name.
 ### :typeparam T: The choice type.
@@ -85,7 +94,7 @@ needs FlagsType T
     return LLVM::reinterpret_bits[U64, T](mask)
 
 ### Builds a variant value from its serialized `{arm: payload}` table. (A variant with a `None` arm
-### handles a serialized `None` in its builder-synthesized `T(from: SerialValue)` before calling this.)
+### handles a serialized `None` in its builder-synthesized `from_serial` before calling this.)
 ### :typeparam T: The variant type.
 ### :param value: The serialized variant.
 ### :returns: The variant holding the rebuilt payload in the named arm.
@@ -106,91 +115,173 @@ needs VariantType T
             throw SerialShapeError(detail: "expected a variant arm table")
 
 # ============================================================================
-# Leaf types: one hand-written `T(from: SerialValue)` per type. A type that is itself a SerialValue
-# arm (Bool, S8..U64, B32, B64, Moment, Bytes, Text) needs none: its variant-arm extractor
-# `S64!(from: SerialValue)` already is that constructor (a routine's identity is its name and parameter
-# types, so the two would be the same routine).
+# Leaf types: one hand-written `from_serial` per type. A type that is itself a SerialValue arm takes its
+# arm out, as `value.to[S64]()` does.
 # ============================================================================
 
 ### A `SerialValue` is already its own serialized form.
-### :param from: The serialized value.
+### :param value: The serialized value.
 ### :returns: The same value.
-routine SerialValue(from: SerialValue) -> SerialValue
-    return from
+common routine SerialValue.from_serial(value: SerialValue) -> SerialValue
+    return value
+
+### Takes the `Bool` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine Bool.from_serial!(value: SerialValue) -> Bool
+    when value
+        is Bool as v => return v
+        else => throw SerialShapeError(detail: "expected Bool")
+
+### Takes the `S8` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine S8.from_serial!(value: SerialValue) -> S8
+    when value
+        is S8 as v => return v
+        else => throw SerialShapeError(detail: "expected S8")
+
+### Takes the `S16` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine S16.from_serial!(value: SerialValue) -> S16
+    when value
+        is S16 as v => return v
+        else => throw SerialShapeError(detail: "expected S16")
+
+### Takes the `S32` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine S32.from_serial!(value: SerialValue) -> S32
+    when value
+        is S32 as v => return v
+        else => throw SerialShapeError(detail: "expected S32")
+
+### Takes the `S64` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine S64.from_serial!(value: SerialValue) -> S64
+    when value
+        is S64 as v => return v
+        else => throw SerialShapeError(detail: "expected S64")
+
+### Takes the `U8` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine U8.from_serial!(value: SerialValue) -> U8
+    when value
+        is U8 as v => return v
+        else => throw SerialShapeError(detail: "expected U8")
+
+### Takes the `U16` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine U16.from_serial!(value: SerialValue) -> U16
+    when value
+        is U16 as v => return v
+        else => throw SerialShapeError(detail: "expected U16")
+
+### Takes the `U32` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine U32.from_serial!(value: SerialValue) -> U32
+    when value
+        is U32 as v => return v
+        else => throw SerialShapeError(detail: "expected U32")
+
+### Takes the `U64` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine U64.from_serial!(value: SerialValue) -> U64
+    when value
+        is U64 as v => return v
+        else => throw SerialShapeError(detail: "expected U64")
+
+### Takes the `B32` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine B32.from_serial!(value: SerialValue) -> B32
+    when value
+        is B32 as v => return v
+        else => throw SerialShapeError(detail: "expected B32")
+
+### Takes the `B64` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine B64.from_serial!(value: SerialValue) -> B64
+    when value
+        is B64 as v => return v
+        else => throw SerialShapeError(detail: "expected B64")
+
+### Takes the `Moment` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine Moment.from_serial!(value: SerialValue) -> Moment
+    when value
+        is Moment as v => return v
+        else => throw SerialShapeError(detail: "expected Moment")
+
+### Takes the `Bytes` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine Bytes.from_serial!(value: SerialValue) -> Bytes
+    when value
+        is Bytes as v => return v
+        else => throw SerialShapeError(detail: "expected Bytes")
+
+### Takes the `Text` out of its serialized form. :throws: {SerialShapeError} on any other arm.
+common routine Text.from_serial!(value: SerialValue) -> Text
+    when value
+        is Text as v => return v
+        else => throw SerialShapeError(detail: "expected Text")
 
 ### Builds a `Byte` from its serialized form (a `U8`). :throws: {SerialShapeError} on any other arm.
-routine Byte!(from: SerialValue) -> Byte
-    when from
+common routine Byte.from_serial!(value: SerialValue) -> Byte
+    when value
         is U8 as v => return v.to[Byte]()
         else => throw SerialShapeError(detail: "expected a byte")
 
 ### Builds a `Char` from its serialized form (a one-character `Text`).
 ### :throws: {SerialShapeError} when the value is not a one-character text.
-routine Char!(from: SerialValue) -> Char
-    var t = serial_text(value: from)
+common routine Char.from_serial!(value: SerialValue) -> Char
+    var t = serial_text(value: value)
     if t.count() != 1u64
         throw SerialShapeError(detail: "expected exactly one character")
     return t[0u64]
 
 ### Builds an `S128` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine S128!(from: SerialValue) -> S128
-    return serial_text(value: from).to[S128]()
+common routine S128.from_serial!(value: SerialValue) -> S128
+    return serial_text(value: value).to[S128]()
 
 ### Builds a `U128` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine U128!(from: SerialValue) -> U128
-    return serial_text(value: from).to[U128]()
+common routine U128.from_serial!(value: SerialValue) -> U128
+    return serial_text(value: value).to[U128]()
 
 ### Builds an `S256` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine S256!(from: SerialValue) -> S256
-    return serial_text(value: from).to[S256]()
+common routine S256.from_serial!(value: SerialValue) -> S256
+    return serial_text(value: value).to[S256]()
 
 ### Builds a `U256` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine U256!(from: SerialValue) -> U256
-    return serial_text(value: from).to[U256]()
+common routine U256.from_serial!(value: SerialValue) -> U256
+    return serial_text(value: value).to[U256]()
 
 ### Builds a `B16` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine B16!(from: SerialValue) -> B16
-    return serial_text(value: from).to[B16]()
+common routine B16.from_serial!(value: SerialValue) -> B16
+    return serial_text(value: value).to[B16]()
 
 ### Builds a `BF16` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine BF16!(from: SerialValue) -> BF16
-    return serial_text(value: from).to[BF16]()
+common routine BF16.from_serial!(value: SerialValue) -> BF16
+    return serial_text(value: value).to[BF16]()
 
 ### Builds a `B128` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine B128!(from: SerialValue) -> B128
-    return serial_text(value: from).to[B128]()
+common routine B128.from_serial!(value: SerialValue) -> B128
+    return serial_text(value: value).to[B128]()
 
 ### Builds a `D32` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine D32!(from: SerialValue) -> D32
-    return serial_text(value: from).to[D32]()
+common routine D32.from_serial!(value: SerialValue) -> D32
+    return serial_text(value: value).to[D32]()
 
 ### Builds a `D64` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine D64!(from: SerialValue) -> D64
-    return serial_text(value: from).to[D64]()
+common routine D64.from_serial!(value: SerialValue) -> D64
+    return serial_text(value: value).to[D64]()
 
 ### Builds a `D128` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine D128!(from: SerialValue) -> D128
-    return serial_text(value: from).to[D128]()
+common routine D128.from_serial!(value: SerialValue) -> D128
+    return serial_text(value: value).to[D128]()
 
 ### Builds a `Decimal` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine Decimal!(from: SerialValue) -> Decimal
-    return serial_text(value: from).to[Decimal]()
+common routine Decimal.from_serial!(value: SerialValue) -> Decimal
+    return serial_text(value: value).to[Decimal]()
 
 ### Builds a `C64` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine C64!(from: SerialValue) -> C64
-    return serial_text(value: from).to[C64]()
+common routine C64.from_serial!(value: SerialValue) -> C64
+    return serial_text(value: value).to[C64]()
 
 ### Builds a `C128` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine C128!(from: SerialValue) -> C128
-    return serial_text(value: from).to[C128]()
+common routine C128.from_serial!(value: SerialValue) -> C128
+    return serial_text(value: value).to[C128]()
 
 ### Builds a `C256` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine C256!(from: SerialValue) -> C256
-    return serial_text(value: from).to[C256]()
+common routine C256.from_serial!(value: SerialValue) -> C256
+    return serial_text(value: value).to[C256]()
 
 ### Builds an `Address` from its serialized text. :throws: {SerialShapeError} or a parse error.
-routine Address!(from: SerialValue) -> Address
-    return serial_text(value: from).to[Address]()
+common routine Address.from_serial!(value: SerialValue) -> Address
+    return serial_text(value: value).to[Address]()
 
 # ============================================================================
 # Collections
@@ -198,9 +289,9 @@ routine Address!(from: SerialValue) -> Address
 
 ### Builds a `List[T]` from its serialized element list.
 ### :throws: {SerialShapeError} when the value is not a list or an element does not fit `T`.
-routine List[T]!(from: SerialValue) -> List[T]
+common routine List[T].from_serial!(value: SerialValue) -> List[T]
     var result = List[T]()
-    when from
+    when value
         is List[SerialValue] as items =>
             each item in items
                 result.add_last(value: serial_decode[T](value: item))
