@@ -528,9 +528,13 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
 ```
 
 - Containment is ownership: one owner at a time; `steal` marks every transfer.
-- A written `destruct` tears down what the entity owns (its member variables, buffers it holds) and nothing
-  else: the builder gives back the entity's own box before each of its returns, so one `destruct` call still
-  ends the entity. Do not write `me.hijack().invalidate()` in it.
+- A written `destruct` (a plain `routine T.destruct()`, never `dangerous`: RF-S807) tears down what the entity
+  owns (its member variables, buffers it holds) and nothing else: the builder gives back the entity's own box
+  before each of its returns, so one `destruct` call still ends the entity. Do not write
+  `me.hijack().invalidate()` in it. A step that handles raw memory sits in a `danger` block inside the body.
+- `destruct` is the builder's to call: at the scope's end, or where you write `drop x`. A program's own
+  `x.destruct()` is RF-S812 (write `drop x`). Only a type's `destruct` body calls its member variables'
+  `destruct` by name.
 - Taking a value out of a member variable or an element is a statement:
   `steal slot.item as old inject Item(name: "b")` puts the new value in and binds the
   old one to `old` in one step (`fresh` is computed first, so the place is never
