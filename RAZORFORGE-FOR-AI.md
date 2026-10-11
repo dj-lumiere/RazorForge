@@ -419,6 +419,24 @@ loop                      # infinite loop, exit with break
 
 `until c` loops while `c` is false (`while not (c)`). A `while`, `until` or `each` may end
 with a `then` block, run when the loop ends by itself and never after its own `break`.
+A loop may carry values from one round to the next: `while n > 1 with n: U64 = start, steps: U64 = 0`
+(`each x in xs with sum: S64 = 0` too). Each carried value is bound anew every round, from what the round's
+`continue with n: after, steps: steps + 1` passes (every carried name once, in any order, all computed before
+any is stored, so `continue with x: y, y: x % y` swaps). The names are visible in the condition, the body and
+the `then` block, and nowhere after the loop. A body that carries values must not run off its end: every path
+ends in `continue with`, `break` or a `return` (RF-G217), a bare `continue` in such a loop is RF-G218, as is
+`continue with` in a loop without `with`. `break` takes no values. The idiom replaces a `var` that only the
+loop changes:
+
+```razorforge
+routine collatz_steps(start: U64) -> U64
+    while n > 1 with n: U64 = start, steps: U64 = 0
+        var after = if n % 2 == 0 then n // 2 else 3 * n + 1
+        continue with n: after, steps: steps + 1
+    then
+        return steps
+    return 0
+```
 A `while` or `each` may end with an `else`, which runs only when the body ran
 zero times: the condition was false at the very first check, or the source was
 empty. Once the body has run, the `else` never runs, however the loop ended
@@ -1218,7 +1236,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Visibility / receiver**: `secret` `posted` `common`
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
-- **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop`
+- **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop` `with`
   `while` `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes` `until`
 - **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
