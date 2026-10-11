@@ -356,8 +356,11 @@ var why: Check[S64] = check line.to()
   Converting a value to its own type is RF-S646 too (use the value as it is), and so is `.to[...]()` on a
   value of a type parameter: conversions are written per concrete type, so take the parameter as the
   target type or convert where the type is known.
-- There are no conversion creators: `S64(from: x)` is not a routine. Constructors build a value from its
-  parts (`Point(x: 1, y: 2)`). Taking a variant's arm out (`sv.Dict()`) is not a conversion and stays.
+- Constructor or conversion, by one checkable rule: a constructor's arguments become parts of the new value as
+  they are (`Point(x: 1, y: 2)`, `Retained(from: steal e)`, `SerialValue(from: 25_s64)` putting 25 in an arm);
+  a value computed from one value of another type is a conversion, `x.to[T]()` (`"hi".to[CStr]()`,
+  `local.to[Moment]()`, `3.0_b32.to[Q128]()`). So `S64(from: x)` is not a routine. Taking a variant's arm out
+  (`sv.Dict()`) is not a conversion and stays.
 - Each conversion is its own routine, a specialization written with the target type in the bracket:
 
   ```razorforge
