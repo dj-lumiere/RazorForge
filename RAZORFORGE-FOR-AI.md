@@ -128,7 +128,8 @@ When unsure, consult ground truth in the repo/package:
    the name like `steal x` (RF-S615 after, RF-S616 on some paths only, tokens from it end, RF-S643); a member
    variable, a token, `me` or a global is RF-S421.
 10. **Indentation is 4 spaces and blocks are indentation-delimited.** No braces.
-11. **Chained comparisons are one expression**: `0 <= x <= 10` works. Every
+11. **Chained comparisons are one expression**: `0 <= x <= 10` works. A chain goes one way: `<`, `<=`, `==`
+    together or `>`, `>=`, `==` together (`a < b > c`, `!=` and `<=>` in a chain are errors). Every
     operand is evaluated once, eagerly, left to right, before any comparison:
     `a < b < f()` calls `f` even when `a < b` is false. Only the comparisons stop
     at the first false link. A failure in any operand is a failure like any
