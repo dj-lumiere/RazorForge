@@ -17,6 +17,8 @@ internal static class GlobalInitPass
     internal static bool Run(List<(SyntaxTree.Program Program, string FilePath)> orderedFiles,
         Action<SemanticDiagnosticCode, string, SourceLocation> report)
     {
+        MakeConstructedPresetsGlobal(orderedFiles: orderedFiles);
+
         if (!ModuleGlobalOrder.TryOrder(orderedFiles: orderedFiles, report: report,
                 out List<(string Name, TypeExpression Type, Expression Init, SourceLocation Loc)> globals,
                 out List<HashSet<int>> _, out List<int> order))
@@ -43,5 +45,34 @@ internal static class GlobalInitPass
                          .ToList();
         startBlock.Statements.InsertRange(index: 0, collection: inits);
         return true;
+    }
+
+    /// <summary>
+    /// A preset made by a construction (<c>preset BOX: Box = Box(n: 5)</c>, or the construction a computed preset came
+    /// to) is one value, made once: it becomes a read-only global, so every use is the same object (an entity has one
+    /// identity, <c>BOX === BOX</c>) instead of a new one built where it is used.
+    /// </summary>
+    private static void MakeConstructedPresetsGlobal(List<(SyntaxTree.Program Program, string FilePath)> orderedFiles)
+    {
+        foreach ((SyntaxTree.Program program, string _) in orderedFiles)
+        {
+            for (int i = 0; i < program.Declarations.Count; i++)
+            {
+                if (program.Declarations[index: i] is PresetDeclaration
+                    {
+                        Value: CallExpression { Callee: IdentifierExpression { Name: [var first, ..] } }
+                    } preset && char.IsUpper(c: first))
+                {
+                    program.Declarations[index: i] = new VariableDeclaration(Name: preset.Name,
+                        Type: preset.Type,
+                        Initializer: preset.Value,
+                        Visibility: preset.IsSecret
+                            ? VisibilityModifier.Secret
+                            : VisibilityModifier.Open,
+                        Location: preset.Location,
+                        IsGlobal: true);
+                }
+            }
+        }
     }
 }

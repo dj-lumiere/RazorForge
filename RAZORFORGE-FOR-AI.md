@@ -134,7 +134,9 @@ When unsure, consult ground truth in the repo/package:
     at the first false link. A failure in any operand is a failure like any
     other (`try 1 < 5 < 10 // n` recovers the division by zero).
 12. **Printing is `show(...)`** (after `import IO/Console`), not print/println. Reading a line as a value is `ask[T]()`
-    (`var n: S64 = ask()`), failing like `line.to[T]()`.
+    (`var n: S64 = ask()`), failing like `line.to[T]()`. A tuple reads the line's words, one item each:
+    `var (y, m, d): (S64, S64, S64) = ask()`, `"2024 4 1".to[(S64, S64, S64)]()` (a `Text` item is the word itself;
+    the word count must match, InvalidValueError otherwise).
 13. **The entry point is `routine start()`**, not `main`.
 14. **Infix routines**: a member routine with one parameter, marked `@infix`, is written between its
     operands (`a dot b` = `a.dot(b)`), left to right, looser than ranges and tighter than comparisons
@@ -299,7 +301,10 @@ preset MAX_RETRIES: S32 = 5   # named constant: UPPER_CASE, explicit type requir
 ```
 
 There is **no `let` and no `const`** — `var` for bindings, `preset` for
-constants. (`lateinit var x: T` defers initialization: storage is allocated at
+constants. A preset is computed when the program is built: one that calls a routine, does arithmetic or fills in
+a text runs once during the build and becomes the value it came to (number, Bool, Text, Char, or a record/tuple/
+choice of those; RF-S258 if it fails or has no such value). A preset made by a construction is one read-only value
+everywhere (an entity preset has one identity). (`lateinit var x: T` defers initialization: storage is allocated at
 the declaration — entities get a real zeroed block, the constructor not run — so the
 binding is immediately valid and borrowable; assign before reading.)
 
