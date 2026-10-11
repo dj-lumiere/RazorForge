@@ -38,8 +38,10 @@ public class EnterableConformanceTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>Failability is not part of a protocol's contract: a failable implementation satisfies a requirement
+    /// written without `!` (its failure crashes loudly unless the caller recovers).</summary>
     [Fact]
-    public void Analyze_FailableImpl_ForNonFailableRequirement_Errors()
+    public void Analyze_FailableImpl_ForNonFailableRequirement_Passes()
     {
         string source = """
                         protocol Plain
@@ -52,9 +54,8 @@ public class EnterableConformanceTests
                             throw AbsentValueError()
                         """;
 
-        AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "should be non-failable to match protocol 'Plain'");
-        Assert.Contains(collection: result.Errors,
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch);
     }
 

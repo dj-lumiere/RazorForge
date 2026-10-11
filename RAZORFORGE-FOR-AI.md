@@ -380,7 +380,9 @@ var why: Check[S64] = check line.to()
    need parentheses (`(a & b) | c`, `(a >>> 58) << 2`), a chain of one does not
    (`a | b | c`). Shifts are looser than arithmetic: `1 << n + 1` shifts by `n + 1`.
 7. ranges `to` / `til` / `by` (`0 to n - 1`, `0 to 10 have x` read as written)
-8. comparisons `== != < <= > >= <=>` (chained), `have` `lack` `is` `isnot` `obeys`
+8. comparisons `== != < <= > >= <=>` (chained), `have` `lack` `is` `isnot` `obeys` (`xs have v` is `xs.has(v)`,
+   `lack` is `lacks`, and on a map `d have k` is `d.has_key(k)` / `lacks_key`: the routine names are
+   `has`/`lacks` and `has_key`/`lacks_key`, there is no `contains`)
    (`x & 1 == 0` is `(x & 1) == 0`)
 9. `and` / `or`, ONE level: mixing them needs parentheses (`a or (b and c)`), a
    chain of one does not
@@ -776,7 +778,7 @@ that differ from other languages:
   `10 to 0 by -2`, also on unsigned types (`3u64 to 0u64 by -1` yields 3 2 1 0).
   A step held in a variable decides the direction by its sign. A literal
   `by 0` is RF-S516; a zero step held in a variable crashes with
-  `RangeStepZeroError` when the range is iterated. `have`/`contains` follow the
+  `RangeStepZeroError` when the range is iterated. `have`/`has` follow the
   same rule (`10 to 0 by -2 have 4` is true). Slicing with a counting-down range
   reverses: `text[4 to 0 by -1]`.
 - `List`, `Set`, `Dict` live in **`Core`** (always available — never suggest

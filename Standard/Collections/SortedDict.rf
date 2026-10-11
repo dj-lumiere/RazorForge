@@ -48,7 +48,7 @@ needs TKey obeys Comparable
 ### :see: {SortedList[T]} for a sorted sequence that allows duplicates.
 entity SortedDict[TKey, TValue]
 relates SortedDictEmittable[TKey, TValue] as Iter, TKey as Key, TValue as Value
-obeys Iterable[DictEntry[TKey, TValue]], KeyFindable, DictLiteral[TKey, TValue]
+obeys Iterable[DictEntry[TKey, TValue]], KeyFindable, KeyContainer, DictLiteral[TKey, TValue]
 needs TKey obeys Comparable
     secret root: Hijacked[BTreeDictNode[TKey, TValue]]?
     secret count: U64
@@ -545,12 +545,19 @@ secret routine SortedDict[TKey, TValue].lower_bound(node: Viewing[BTreeDictNode[
 ### :param key: The key to look up.
 ### :returns: `true` if the key is present.
 @readonly
-routine SortedDict[TKey, TValue].contains(key: TKey) -> Bool
+routine SortedDict[TKey, TValue].has_key(key: TKey) -> Bool
     if me.root is None
         return false
     danger
         var root_ref = me.root!!.as_entity()
         return me.search_node(node: root_ref, key: key)
+
+### Returns whether `key` has no entry (`d lack k`).
+### :param key: The key to look for.
+### :returns: `true` if the key is absent.
+@readonly
+routine SortedDict[TKey, TValue].lacks_key(key: TKey) -> Bool
+    return not me.has_key(key: key)
 
 ### Descends the subtree rooted at `node` to find `key`.
 ### :param node: The subtree root to search.
@@ -613,7 +620,7 @@ routine SortedDict[TKey, TValue].setitem(key: TKey, value: TValue)
 ### :param seed: The value stored when `key` is absent.
 ### :returns: A {Hijacked[TValue]} addressing the value cell for `key`.
 routine SortedDict[TKey, TValue].slot(key: TKey, seed: TValue) -> Hijacked[TValue]
-    if not me.contains(key: key)
+    if not me.has_key(key: key)
         drop me.put(key: key, value: seed)
     danger
         var root_ref = me.root!!.as_entity()
