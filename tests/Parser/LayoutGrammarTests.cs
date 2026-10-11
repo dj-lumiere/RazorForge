@@ -90,24 +90,6 @@ public class LayoutGrammarTests
         Assert.Equal(expected: TokenType.Identifier, actual: tokens[index: dot - 1].Type);
     }
 
-    /// <summary>Verifies that a <c>when</c> statement takes <c>have</c> and <c>lack</c> arms.</summary>
-    [Fact]
-    public void Parse_FlagsArmsInWhenStatement()
-    {
-        Program program = AssertParses(source: """
-                                               routine inspect(p: Perm)
-                                                   when p
-                                                       have READ and WRITE => pass
-                                                       lack EXEC => pass
-                                                       else => pass
-                                                   return
-                                               """);
-        var when = (WhenStatement)((BlockStatement)GetDeclaration<RoutineDeclaration>(program: program).Body)
-           .Statements[index: 0];
-        Assert.IsType<FlagsPattern>(@object: when.Clauses[index: 0].Pattern);
-        Assert.True(condition: ((FlagsPattern)when.Clauses[index: 1].Pattern).IsNegated);
-    }
-
     /// <summary>Verifies that a misspelled arm-expansion source is a grammar error, not read as <c>branchof</c>.</summary>
     [Fact]
     public void Parse_UnknownArmExpansionSourceIsError()

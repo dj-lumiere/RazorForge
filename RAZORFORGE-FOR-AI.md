@@ -159,8 +159,9 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
 - tagged union / sum type → **variant**; plain enum → **choice**; bitfield →
   **flags**. `choice`/`flags` **variant names are SCREAMING_SNAKE_CASE**
   (`LIVE`, `READ`, `NEGATIVE_INF`); routine names and locals stay `snake_case`.
-  A flags value combines with `and`, tests with `have` / `lack` / `==`, and drops members with `without`
-  (`perms.without(WRITE)`: where a value of the flags type goes, its members are named bare).
+  A flags value combines with `and`, tests with `has` / `has_any` / `lacks` / `==` (`perms.has(READ and WRITE)`
+  is all of them, `perms.has_any(READ and WRITE)` at least one, `perms.lacks(READ and WRITE)` none), and drops
+  members with `without` (`perms.without(WRITE)`: where a value of the flags type goes, its members are named bare).
   A `choice` auto-provides `Equatable`/`Comparable`/`Hashable` — no `obeys` and no
   method bodies needed.
 - **`Me` (capital) = the receiver's TYPE (the Self type); `me` (lowercase) = the
@@ -384,11 +385,10 @@ var why: Check[S64] = check line.to()
 6. bitwise `<< >> >>> & ^ |`, ONE level: different bitwise operators side by side
    need parentheses (`(a & b) | c`, `(a >>> 58) << 2`), a chain of one does not
    (`a | b | c`). Shifts are looser than arithmetic: `1 << n + 1` shifts by `n + 1`.
-7. ranges `to` / `til` / `by` (`0 to n - 1`, `0 to 10 have x` read as written)
-8. comparisons `== != < <= > >= <=>` (chained), `have` `lack` `is` `isnot` `obeys` (`xs have v` is `xs.has(v)`,
-   `lack` is `lacks`, and on a map `d have k` is `d.has_key(k)` / `lacks_key`: the routine names are
-   `has`/`lacks` and `has_key`/`lacks_key`, there is no `contains`)
-   (`x & 1 == 0` is `(x & 1) == 0`)
+7. ranges `to` / `til` / `by` (`0 to n - 1` reads as written, a range test is a call: `(0 to 10).has(x)`)
+8. comparisons `== != < <= > >= <=>` (chained), `is` `isnot` `obeys` (`x & 1 == 0` is `(x & 1) == 0`).
+   Containment is not an operator but a call on the container: `xs.has(v)` / `xs.lacks(v)`, and on a map
+   `d.has_key(k)` / `d.lacks_key(k)` (there is no `contains`, and `x in xs` as a test is RF-G212)
 9. `and` / `or`, ONE level: mixing them needs parentheses (`a or (b and c)`), a
    chain of one does not
 10. `??`
@@ -800,13 +800,13 @@ that differ from other languages:
   it, is RF-S644. A range (`var r = 0 til 10`) points at nothing and can be kept.
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive. Without
   `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`
-  yields nothing, `2 to 1 have 1` is false). `by N` sets the step
+  yields nothing, `(2 to 1).has(1)` is false). `by N` sets the step
   (`1 to 10 by 2`), and a negative step counts down: `10 to 1 by -1`,
   `10 to 0 by -2`, also on unsigned types (`3u64 to 0u64 by -1` yields 3 2 1 0).
   A step held in a variable decides the direction by its sign. A literal
   `by 0` is RF-S516; a zero step held in a variable crashes with
-  `RangeStepZeroError` when the range is iterated. `have`/`has` follow the
-  same rule (`10 to 0 by -2 have 4` is true). Slicing with a counting-down range
+  `RangeStepZeroError` when the range is iterated. `has`/`lacks` follow the
+  same rule (`(10 to 0 by -2).has(4)` is true). Slicing with a counting-down range
   reverses: `text[4 to 0 by -1]`.
 - `List`, `Set`, `Dict` live in **`Core`** (always available — never suggest
   `using Collections`). Only these three canonical collections have literal
@@ -1238,7 +1238,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop` `with`
   `while` `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes` `until`
-- **Iteration / range / ownership**: `in` (loops only) `have` `lack` `to` `til` `by` `steal`†
+- **Iteration / range / ownership**: `in` (loops only) `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`
 - **Logical operators**: `and` `or` `not`
@@ -1247,8 +1247,8 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Danger**†: `danger` (block) `dangerous` (modifier)
 - **Buildtime reflection**†: `expand` (loop) — the ONLY reflection keyword.
 
-The word operators `to` `til` `by` `have` `lack` `is` `isnot` `in` `as` `and` `or` are keywords only where an
-operator stands, right after something that ends an expression (`0 to 10`, `xs have v`, `each x in xs`). Anywhere
+The word operators `to` `til` `by` `is` `isnot` `in` `as` `and` `or` are keywords only where an
+operator stands, right after something that ends an expression (`0 to 10`, `a and b`, `each x in xs`). Anywhere
 else they are names: `var to = 3`, `routine step(by: S64, to: S64)`, `by + to`. Two places keep them keywords: a
 `when` arm that starts with `is`/`isnot`, and `else as p`. `not` starts an expression, so it is always a keyword.
 `inject` is a keyword only after `steal … as …`.

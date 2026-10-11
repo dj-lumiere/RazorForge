@@ -20,7 +20,7 @@ public class MembershipNamesTests
                                      var d = Dict[S64, S64]()
                                      d[1] = 10
                                      show(f"{xs.has(value: 2)} {xs.lacks(value: 9)} {d.has_key(key: 1)} {d.lacks_key(key: 2)}")
-                                     show(f"{xs have 2} {d have 1} {d lack 3}")
+                                     show(f"{xs.has(2)} {d.has_key(1)} {d.lacks_key(3)}")
                                      return
                                  """);
     }

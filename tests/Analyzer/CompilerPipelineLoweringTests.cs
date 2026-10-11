@@ -1692,7 +1692,6 @@ public class CompilerPipelineLoweringTests
             DictEntryLiteralExpression dictEntry => ContainsLambda(expression: dictEntry.Key) ||
                                                     ContainsLambda(expression: dictEntry.Value),
             IsPatternExpression isPattern => ContainsLambda(expression: isPattern.Expression),
-            FlagsTestExpression flagsTest => ContainsLambda(expression: flagsTest.Subject),
             InsertedTextExpression inserted => inserted.Parts
                                                        .OfType<ExpressionPart>()
                                                        .Any(predicate: part =>

@@ -50,7 +50,7 @@ public class FlagsValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
@@ -73,7 +73,7 @@ public class FlagsValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
     /// <summary>
     /// Verifies that exact-flags equality via '==' produces no errors.
@@ -390,13 +390,13 @@ public class FlagsValidationTests
                             WRITE
 
                         routine test(perms: Permissions)
-                            var result = perms have READ or EXECUTE
+                            var result = perms.has_any(READ and EXECUTE)
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
     /// <summary>
     /// Verifies flags validation behavior for is test on non flags and reports the expected error.
@@ -478,7 +478,7 @@ public class FlagsValidationTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
 
     #endregion
@@ -506,7 +506,7 @@ public class FlagsValidationTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }

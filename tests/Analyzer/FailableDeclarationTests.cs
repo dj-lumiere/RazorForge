@@ -54,7 +54,7 @@ public class FailableDeclarationTests
         AssertAnalyzesSa(source: source);
     }
 
-    /// <summary><c>to</c> is inclusive for membership: <c>0 to 10 have 10</c> is a Bool test on the range.</summary>
+    /// <summary><c>to</c> is inclusive for membership: <c>(0 to 10).has(10)</c> is a Bool test on the range.</summary>
     [Fact]
     public void RangeHave_AppliesToWholeRange()
     {
@@ -62,9 +62,9 @@ public class FailableDeclarationTests
                         module L/Test
                         routine start()
                             var x = 10
-                            if 0 to 10 have x
+                            if (0 to 10).has(x)
                                 pass
-                            if 0 til 10 lack x
+                            if (0 til 10).lacks(x)
                                 pass
                             return
                         """;

@@ -262,7 +262,7 @@ public class FeatureCoverageTests
                                   var s: Set[T] = Set[T]()
                                   each x in items
                                       drop s.add(value: x)
-                                  return s have target
+                                  return s.has(target)
 
                               routine start()
                                   var nums: List[S64] = [10, 20, 30]
