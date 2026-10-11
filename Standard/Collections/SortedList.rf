@@ -160,20 +160,21 @@ secret routine BTreeListNode[T].children_add_last(value: Hijacked[BTreeListNode[
 ### stored key, then frees this node's own allocation. Children/keys are visited inline (never bound
 ### to a `var`) so scope-exit teardown doesn't double-free them.
 @override
-dangerous routine BTreeListNode[T].destruct()
-    if not me.is_leaf
-        var ci = 0u64
-        while ci < me.child_count
-            me
-                .children_get(ci)
-                .as_entity()
-                .destruct()
-            ci = ci + 1u64
-    var ki = 0u64
-    while ki < me.key_count
-        me.keys_get(ki).destruct()
-        ki = ki + 1u64
-    return
+routine BTreeListNode[T].destruct()
+    danger
+        if not me.is_leaf
+            var ci = 0u64
+            while ci < me.child_count
+                me
+                    .children_get(ci)
+                    .as_entity()
+                    .destruct()
+                ci = ci + 1u64
+        var ki = 0u64
+        while ki < me.key_count
+            me.keys_get(ki).destruct()
+            ki = ki + 1u64
+        return
 
 ### Cycle-collector TRACE: recurse into every child node, then report each stored key to the collector
 ### (a `Roamed` key reports its controller; a value key is a no-op). Overrides the universal member-walk
@@ -394,11 +395,12 @@ routine SortedList[T].clear()
 ### of scope. The root node is visited inline (never bound to a `var`) so scope-exit teardown
 ### doesn't double-free it.
 @override
-dangerous routine SortedList[T].destruct()
-    if me.root is None
+routine SortedList[T].destruct()
+    danger
+        if me.root is None
+            return
+        me.root!!.as_entity().destruct()
         return
-    me.root!!.as_entity().destruct()
-    return
 
 ### Cycle-collector TRACE: delegate to the root node's recursive trace (reports every key in the tree).
 @override

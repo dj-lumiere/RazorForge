@@ -196,21 +196,22 @@ dangerous routine BTreeDictNode[TKey, TValue].children_get(i: U64) -> Hijacked[B
 ### stored key and value, then frees this node's own allocation. Visited inline (never bound to a
 ### `var`) so scope-exit teardown doesn't double-free.
 @override
-dangerous routine BTreeDictNode[TKey, TValue].destruct()
-    if not me.is_leaf
-        var ci = 0u64
-        while ci < me.child_count
-            me
-                .children_get(ci)
-                .as_entity()
-                .destruct()
-            ci = ci + 1u64
-    var ki = 0u64
-    while ki < me.key_count
-        me.key_get(ki).destruct()
-        me.value_get(ki).destruct()
-        ki = ki + 1u64
-    return
+routine BTreeDictNode[TKey, TValue].destruct()
+    danger
+        if not me.is_leaf
+            var ci = 0u64
+            while ci < me.child_count
+                me
+                    .children_get(ci)
+                    .as_entity()
+                    .destruct()
+                ci = ci + 1u64
+        var ki = 0u64
+        while ki < me.key_count
+            me.key_get(ki).destruct()
+            me.value_get(ki).destruct()
+            ki = ki + 1u64
+        return
 
 ### Cycle-collector TRACE: recurse into every child node, then report each stored key AND value to the
 ### collector. Overrides the universal member-walk (keys/values live in fixed inline arrays the generic
@@ -248,11 +249,12 @@ dangerous routine BTreeDictNode[TKey, TValue].roam_free()
 
 ### Frees the entire backing B-tree — every node, key, and value — at scope exit.
 @override
-dangerous routine SortedDict[TKey, TValue].destruct()
-    if me.root is None
+routine SortedDict[TKey, TValue].destruct()
+    danger
+        if me.root is None
+            return
+        me.root!!.as_entity().destruct()
         return
-    me.root!!.as_entity().destruct()
-    return
 
 ### Cycle-collector TRACE: delegate to the root node's recursive trace (reports every key/value).
 @override

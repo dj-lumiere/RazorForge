@@ -149,27 +149,28 @@ routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TVal
 ### Frees the heap buffers owned by this dictionary. The element/key/value contents are
 ### not recursed into — only the backing arrays are released.
 @override
-dangerous routine Dict[TKey, TValue].destruct()
-    # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
-    # in DictEmittable.emit!). No-op for value types; frees owned entity keys/values.
-    var p = 0u64
-    while p < me.entries_used
-        if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
-            me.keys
-                .offset(TKey.data_size() * p)
-                .peek()
-                .destruct()
-            me.vals
-                .offset(TValue.data_size() * p)
-                .peek()
-                .destruct()
-        p = p + 1u64
-    me.ctrl.invalidate()
-    me.indices.invalidate()
-    me.keys.invalidate()
-    me.vals.invalidate()
-    me.entry_live.invalidate()
-    return
+routine Dict[TKey, TValue].destruct()
+    danger
+        # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
+        # in DictEmittable.emit!). No-op for value types; frees owned entity keys/values.
+        var p = 0u64
+        while p < me.entries_used
+            if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+                me.keys
+                    .offset(TKey.data_size() * p)
+                    .peek()
+                    .destruct()
+                me.vals
+                    .offset(TValue.data_size() * p)
+                    .peek()
+                    .destruct()
+            p = p + 1u64
+        me.ctrl.invalidate()
+        me.indices.invalidate()
+        me.keys.invalidate()
+        me.vals.invalidate()
+        me.entry_live.invalidate()
+        return
 
 ### Cycle-collector TRACE: report every live key and value to the collector. The entries buffers are
 ### SPARSE (open-addressing with tombstones), so `cyclic_trace_sparse_buffer` scans slots `0..used`,
