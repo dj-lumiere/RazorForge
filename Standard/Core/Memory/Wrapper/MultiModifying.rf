@@ -20,9 +20,9 @@ needs EntityType T
 ### :throws: {AliasedTokensError} when the two are the same entity.
 routine multimodify![T](first: Modifying[T], second: Modifying[T]) -> MultiModifying[T]
 needs EntityType T
-    if first === second
-        throw AliasedTokensError()
     danger
+        if Hijacked[T](first).get_address() == Hijacked[T](second).get_address()
+            throw AliasedTokensError()
         return MultiModifying[T](first: first, second: second)
 
 ### Called on entry to the `using` block: hands out the two tokens.
@@ -32,4 +32,38 @@ routine MultiModifying[T].enter() -> (Modifying[T], Modifying[T])
 
 ### Called on every exit from the `using` block: there is nothing to release.
 routine MultiModifying[T].exit()
+    return
+
+### Write access to one entity and read access to another, different one, at once: what a routine that reads one
+### container into another needs (`merge_set(into:, from:)`). Made by {multimodify} and opened with
+### `using ... as (a, b)`.
+### :typeparam T: The entity type.
+### :see: {MultiModifying[T]}
+record ModifyingAndViewing[T]
+obeys Enterable
+needs EntityType T
+    first: Modifying[T]
+    second: Viewing[T]
+
+### Opens write access to one entity and read access to another at once:
+### `using multimodify(first: into, second: from) as (a, b)`. The two were checked to be different entities, so the
+### builder lets `b` be walked while `a` grows.
+### :param first: The entity the first token modifies.
+### :param second: The entity the second token views.
+### :returns: A scoped `ModifyingAndViewing[T]` that binds the two tokens.
+### :throws: {AliasedTokensError} when the two are the same entity.
+routine multimodify![T](first: Modifying[T], second: Viewing[T]) -> ModifyingAndViewing[T]
+needs EntityType T
+    danger
+        if Hijacked[T](first).get_address() == Hijacked[T](second).get_address()
+            throw AliasedTokensError()
+        return ModifyingAndViewing[T](first: first, second: second)
+
+### Called on entry to the `using` block: hands out the two tokens.
+### :returns: The write token and the read token, in the order the entities were given.
+routine ModifyingAndViewing[T].enter() -> (Modifying[T], Viewing[T])
+    return (me.first, me.second)
+
+### Called on every exit from the `using` block: there is nothing to release.
+routine ModifyingAndViewing[T].exit()
     return

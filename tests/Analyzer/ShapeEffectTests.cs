@@ -315,4 +315,51 @@ public class ShapeEffectTests
                                      return
                                  """);
     }
+
+    [Fact]
+    public void Analyze_LoopOverReadTokenWhileWriteTokenGrows_Errors()
+    {
+        AssertHasErrorSa(source: """
+                                 routine merge_set(into: Modifying[Set[S64]], from: Viewing[Set[S64]])
+                                     each v in from
+                                         into.add(value: v + 1)
+                                     return
+
+                                 routine start()
+                                     return
+                                 """,
+            expectedErrorSubstring: "while an `each` loop is going through 'from'");
+    }
+
+    [Fact]
+    public void Analyze_LoopOverReadTokenFromMultimodify_Analyzes()
+    {
+        AssertAnalyzesSa(source: """
+                                 routine merge_set(into: Modifying[Set[S64]], from: Viewing[Set[S64]])
+                                     using multimodify(first: into, second: from) as (a, b)
+                                         each v in b
+                                             a.add(value: v + 1)
+                                     return
+
+                                 routine start()
+                                     return
+                                 """);
+    }
+
+    [Fact]
+    public void Analyze_SameContainerToWriteAndReadParameter_Errors()
+    {
+        AnalysisResult result = AssertHasErrorSa(source: """
+                                                         routine extend_list(into: Modifying[List[S64]], from: Viewing[List[S64]])
+                                                             return
+
+                                                         routine start()
+                                                             var xs = List[S64]()
+                                                             extend_list(into: xs, from: xs)
+                                                             return
+                                                         """,
+            expectedErrorSubstring: "they are the same container");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.SameContainerTwiceInCall);
+    }
 }

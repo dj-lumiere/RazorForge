@@ -615,7 +615,10 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     `var b = xs[0]` on an entity element, to the end of its block) while the other changes shape is RF-S640.
     `using multimodify(first: x, second: y) as (a, b)` hands out two write tokens it checked to be different
     entities (the same one twice is an `AliasedTokensError`), and inside it holding an element of `a` while `b`
-    grows is allowed. `multiamend` is the same for two `Guarded` handles.
+    grows is allowed. `multimodify(first: x, second: y)` with `y` a `Viewing` hands out a write token and a read
+    token (`each v in b { a.add(value: v) }` is then allowed). `multiamend` is the same for two `Guarded` handles.
+    Handing one container to two parameters of one call when one of them is written
+    (`extend(into: xs, from: xs)`) is RF-S623.
 - **RC wrappers** (opt-in shared ownership, reference-counted):
   - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, `=` makes one more holder);
     forwards direct access to the retained entity.
@@ -834,8 +837,11 @@ The ban also covers a mutation hidden behind a call
 (`each x in xs { grow(xs: xs.modify()) }`): the builder works out which
 parameters each routine can add to or remove from, following its calls, and
 rejects handing `xs` to one. Handing `xs` to a routine value, or changing another
-`Retained`/`Tracked` handle to the same kind of container, is rejected too,
-because the builder cannot tell whether it is the same container.
+token, `Retained` or `Tracked` handle to the same kind of container
+(`each v in from { into.add(value: v) }`), is rejected too, because the builder
+cannot tell whether it is the same container. Take both with
+`using multimodify(first: into, second: from) as (a, b)` to loop over `b` and change `a`.
+Every stdlib collection marks its adding/removing routines `@reshaping`.
 
 **Writes into an element land in the container.** A call, field write, or index
 write on an ENTITY element (`grid[0].add_last(value: 1)`, `boxes[0].n = 5`,
@@ -958,6 +964,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-W009      | a started Agent nothing collects      | `retrieve()` it, or `drop job` to stop it          |
 | RF-S632      | `agent` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
+| RF-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or take both with `using multimodify(first: x, second: y) as (a, b)` |
 | RF-S642      | `agent` before a non-call, or over generic-parameter-typed values | put it before a call with concrete types |
 | RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
