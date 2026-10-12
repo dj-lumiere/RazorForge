@@ -115,10 +115,10 @@ public sealed class CFfiPlatformWidthTests
                 $"Expected {valueLiteral}.to[{ctorType}]() to overflow Windows' narrower type, but it exited 0.\n{stdout}\n{stderr}");
             string combined = stdout + "\n" + stderr;
             Assert.True(
-                condition: combined.Contains(value: "IntegerOverflowError",
+                condition: combined.Contains(value: "Integer overflow error",
                     comparisonType: StringComparison.Ordinal),
                 userMessage:
-                $"Expected an IntegerOverflowError on Windows for {valueLiteral}.to[{ctorType}]().\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+                $"Expected an integer overflow crash on Windows for {valueLiteral}.to[{ctorType}]().\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         }
         else
         {
@@ -167,10 +167,10 @@ public sealed class CFfiPlatformWidthTests
                 userMessage:
                 $"Expected U+10000 to be unrepresentable in Windows' 16-bit wchar_t, but it exited 0.\n{stdout}\n{stderr}");
             Assert.True(
-                condition: (stdout + "\n" + stderr).Contains(value: "IntegerOverflowError",
+                condition: (stdout + "\n" + stderr).Contains(value: "Integer overflow error",
                     comparisonType: StringComparison.Ordinal),
                 userMessage:
-                $"Expected an IntegerOverflowError on Windows.\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+                $"Expected an integer overflow crash on Windows.\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         }
         else
         {

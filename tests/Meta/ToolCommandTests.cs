@@ -176,7 +176,13 @@ public sealed class ToolCommandTests : IDisposable
         (int exit, string stdout, string stderr) = Tool("run", program);
 
         Assert.Equal(expected: 82, actual: exit);
-        Assert.Contains(expectedSubstring: "Stack overflow error: the routine calls went", actualString: stdout + stderr);
+        // With a crash trace the sentence names the routine that called itself, without one it says the calls went
+        // too deep: either is the call-depth crash.
+        string output = stdout + stderr;
+        Assert.Contains(expectedSubstring: "Stack overflow error: ", actualString: output);
+        Assert.True(condition: output.Contains(value: "dive called itself too many times", comparisonType: StringComparison.Ordinal)
+                               || output.Contains(value: "the routine calls went too deep", comparisonType: StringComparison.Ordinal),
+            userMessage: $"Expected the call-depth sentence.\n{output}");
     }
 
     private string Write(string name, string source)
