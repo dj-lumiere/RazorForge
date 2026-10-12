@@ -9,7 +9,7 @@ public class RetiredSpellingTests
     [InlineData("discard f()", "'discard' is now 'drop'")]
     [InlineData("var r = grab f()", "'grab' is now 'check'")]
     [InlineData("var l = lookup f()", "'lookup' is gone")]
-    [InlineData("var b = 1 notin xs", "'xs lack x'")]
+    [InlineData("var b = 1 notin xs", "'xs.lacks(x)'")]
     [InlineData("unless true", "'if not (condition)'")]
     [InlineData("absent", "'absent' is gone")]
     public void Parse_RetiredWord_NamesTheFix(string statement, string fix)

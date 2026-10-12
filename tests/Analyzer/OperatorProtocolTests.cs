@@ -336,7 +336,7 @@ public class OperatorProtocolTests
                         entity Resource
                             handle: S32
 
-                        dangerous routine Resource.destruct()
+                        routine Resource.destruct()
                             pass
                             return
                         """;

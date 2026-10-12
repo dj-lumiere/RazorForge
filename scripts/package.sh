@@ -100,7 +100,7 @@ if [[ -n "$LLVM_ASSET" ]]; then
     TC="$OUT/toolchain"
     mkdir -p "$TC/bin" "$TC/lib/clang"
     # -L: follow symlinks so `clang` is the real binary, not a dangling link.
-    for tool in clang opt lld; do
+    for tool in clang opt llvm-link lld; do
         cp -L "$LLVM_ROOT/bin/$tool" "$TC/bin/"
     done
     # lld dispatches on argv[0]; clang looks for ld.lld (ELF) / ld64.lld (Mach-O)
@@ -143,7 +143,7 @@ if [[ -n "$LLVM_ASSET" ]]; then
                 done
         }
 
-        for tool in clang opt lld; do
+        for tool in clang opt llvm-link lld; do
             copy_linux_tool_deps "$LLVM_ROOT/bin/$tool"
         done
     fi

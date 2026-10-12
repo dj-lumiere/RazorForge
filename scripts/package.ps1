@@ -99,19 +99,22 @@ if (-not (Test-Path "$mingwRoot\bin\clang.exe")) {
     Rename-Item (Join-Path $CacheDir "llvm-mingw-$LlvmMingwTag-ucrt-x86_64") 'llvm-mingw-root'
 }
 
-# llvm-mingw ships no `opt`; cherry-pick it from the official LLVM release of the
-# same version (msvc build — statically linked, standalone binary).
+# llvm-mingw ships no `opt` or `llvm-link` (which merges Ingrid's Tessera library into each module): cherry-pick them
+# from the official LLVM release of the same version (msvc build — statically linked, standalone binaries).
 $optExe = Join-Path $CacheDir "opt-$LlvmVersion.exe"
-if (-not (Test-Path $optExe)) {
+$llvmLinkExe = Join-Path $CacheDir "llvm-link-$LlvmVersion.exe"
+if (-not (Test-Path $optExe) -or -not (Test-Path $llvmLinkExe)) {
     $llvmTar = Join-Path $CacheDir "clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc.tar.xz"
     if (-not (Test-Path $llvmTar)) {
         curl.exe -L -o $llvmTar "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LlvmVersion/clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc.tar.xz"
         if ($LASTEXITCODE -ne 0) { throw 'LLVM release download failed' }
     }
-    tar -xf $llvmTar -C $CacheDir "clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc/bin/opt.exe"
-    if ($LASTEXITCODE -ne 0) { throw 'opt.exe extract failed' }
-    Move-Item (Join-Path $CacheDir "clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc\bin\opt.exe") $optExe
-    Remove-Item -Recurse -Force (Join-Path $CacheDir "clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc")
+    $llvmDir = "clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc"
+    tar -xf $llvmTar -C $CacheDir "$llvmDir/bin/opt.exe" "$llvmDir/bin/llvm-link.exe"
+    if ($LASTEXITCODE -ne 0) { throw 'opt.exe / llvm-link.exe extract failed' }
+    Move-Item -Force (Join-Path $CacheDir "$llvmDir\bin\opt.exe") $optExe
+    Move-Item -Force (Join-Path $CacheDir "$llvmDir\bin\llvm-link.exe") $llvmLinkExe
+    Remove-Item -Recurse -Force (Join-Path $CacheDir $llvmDir)
 }
 
 # Prune to the subset buildandrun needs: clang (driver) + ld.lld (linker) + the
@@ -128,6 +131,7 @@ foreach ($f in 'clang.exe', 'clang-22.exe', 'ld.lld.exe', 'libLLVM-22.dll',
     Copy-Item "$mingwRoot\bin\$f" "$tc\bin\"
 }
 Copy-Item $optExe "$tc\bin\opt.exe"
+Copy-Item $llvmLinkExe "$tc\bin\llvm-link.exe"
 New-Item -ItemType Directory -Force "$tc\lib\clang\22\lib\windows" | Out-Null
 Copy-Item "$mingwRoot\lib\clang\22\lib\windows\libclang_rt.builtins-x86_64.a" "$tc\lib\clang\22\lib\windows\"
 Copy-Item -Recurse "$mingwRoot\x86_64-w64-mingw32" "$tc\x86_64-w64-mingw32"

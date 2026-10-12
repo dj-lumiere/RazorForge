@@ -67,7 +67,7 @@ public sealed class CFfiPlatformWidthTests
 
     // A value that fits the Unix (wider) type but overflows the Windows (narrower) one. On Unix the
     // checked narrowing succeeds and the widen round-trips the value; on Windows it throws
-    // IntegerOverflowError and the program aborts. `widen(from: T(from: value))` is the whole probe.
+    // IntegerOverflowError and the program aborts. `value.to[T]().to[Wide]()` is the whole probe.
     public static TheoryData<string, string, string, string> BoundaryCases()
     {
         return new TheoryData<string, string, string, string>
@@ -96,7 +96,7 @@ public sealed class CFfiPlatformWidthTests
                                 import IO/Console
 
                                 routine start()
-                                    show(f"v={CTOR(from: VALUE).to[WIDEN]()}")
+                                    show(f"v={VALUE.to[CTOR]().to[WIDEN]()}")
                                     return
                                 """;
         string source = template.Replace(oldValue: "WIDEN", newValue: widen)
@@ -109,22 +109,22 @@ public sealed class CFfiPlatformWidthTests
 
         if (IsWindows)
         {
-            // The narrowing constructor is failable on LLP64; the bare call propagates the crash.
+            // The narrowing conversion is failable on LLP64, and the bare call propagates the crash.
             Assert.True(condition: exitCode != 0,
                 userMessage:
-                $"Expected {ctorType}(from: {valueLiteral}) to overflow Windows' narrower type, but it exited 0.\n{stdout}\n{stderr}");
+                $"Expected {valueLiteral}.to[{ctorType}]() to overflow Windows' narrower type, but it exited 0.\n{stdout}\n{stderr}");
             string combined = stdout + "\n" + stderr;
             Assert.True(
                 condition: combined.Contains(value: "IntegerOverflowError",
                     comparisonType: StringComparison.Ordinal),
                 userMessage:
-                $"Expected an IntegerOverflowError on Windows for {ctorType}(from: {valueLiteral}).\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+                $"Expected an IntegerOverflowError on Windows for {valueLiteral}.to[{ctorType}]().\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         }
         else
         {
             Assert.True(condition: exitCode == 0,
                 userMessage:
-                $"Expected {ctorType}(from: {valueLiteral}) to fit Unix' wider type, but it exited {exitCode}.\n{stdout}\n{stderr}");
+                $"Expected {valueLiteral}.to[{ctorType}]() to fit Unix' wider type, but it exited {exitCode}.\n{stdout}\n{stderr}");
             Assert.Equal(expected: $"v={expectedUnixDecimal}",
                 actual: KeepPrefixed(stdout: stdout, "v="));
         }
