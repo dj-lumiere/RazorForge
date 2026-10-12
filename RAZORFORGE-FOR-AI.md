@@ -608,8 +608,14 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     `s.amend()`, always via a `using` block; `s.try_amend()` is the NON-BLOCKING
     acquire (a hand-written method returning the token, used with `using … fallback`
     — NOT a recovery variant, so no `try` keyword). Two handles at once:
-    `using multiamend(first: xs[i], second: xs[j]) as (a, b)` (address-ordered holds, one hold when the same
-    handle, never nested `amend()`s). `using r as (a, b)` names the items of the tuple `r` gives.
+    `using multiamend(first: xs[i], second: xs[j]) as (a, b)` (address-ordered holds, never nested `amend()`s;
+    the same entity twice is an `AliasedTokensError`). `using r as (a, b)` names the items of the tuple `r` gives.
+  - **Two tokens that may be the same entity.** Two token parameters (or shared handles) on the same kind of
+    container may be the same container, so holding an element of one (`var p = x.modify_at(index: 0)`,
+    `var b = xs[0]` on an entity element, to the end of its block) while the other changes shape is RF-S640.
+    `using multimodify(first: x, second: y) as (a, b)` hands out two write tokens it checked to be different
+    entities (the same one twice is an `AliasedTokensError`), and inside it holding an element of `a` while `b`
+    grows is allowed. `multiamend` is the same for two `Guarded` handles.
 - **RC wrappers** (opt-in shared ownership, reference-counted):
   - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, `=` makes one more holder);
     forwards direct access to the retained entity.
@@ -952,6 +958,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-W009      | a started Agent nothing collects      | `retrieve()` it, or `drop job` to stop it          |
 | RF-S632      | `agent` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
+| RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or take both with `using multimodify(first: x, second: y) as (a, b)` |
 | RF-S642      | `agent` before a non-call, or over generic-parameter-typed values | put it before a call with concrete types |
 | RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
 | RF-S646      | no conversion between the two types (or to its own type) | convert to a type that has one, or drop the `.to` |

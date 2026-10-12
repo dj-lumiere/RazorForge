@@ -1,8 +1,8 @@
 module Tests/Stdlib/MultiamendApi
 
 import IO/Console
-# `multiamend` takes two exclusive holds at once (address order, once for the same handle), and `using ... as (a, b)`
-# names the two tokens.
+# `multiamend` takes two exclusive holds at once (address order), and `using ... as (a, b)` names the two tokens. The
+# two handles must be different entities: the same one twice is an AliasedTokensError.
 
 entity Account
     total: S64
@@ -13,8 +13,9 @@ routine start()
     xs.add_last(value: Guarded[Account, Exclusive](from: Account(total: 32)))
     using multiamend(first: xs[0], second: xs[1]) as (a, b)
         a.total += b.total
-    using multiamend(first: xs[1], second: xs[1]) as (c, d)
-        c.total += d.total
+    when check multiamend(first: xs[1], second: xs[1])
+        is AliasedTokensError => show("the same handle twice: AliasedTokensError")
+        is MultiAmending[Account, Exclusive] => show("not reached")
     using xs[0].amend() as e
         show(f"{e.total}")
     using xs[1].amend() as f

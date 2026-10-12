@@ -1,10 +1,9 @@
 module Core
 
 import BuilderQuery
-### Exclusive access to two {Guarded[T, TPolicy]} handles at once, taken without deadlock: the two holds are taken
-### in address order, whatever order the threads name them in, and one hold serves both when they are the same
-### handle. Made by {multiamend} and opened with `using ... as (a, b)`, which binds one {Amending[T, TPolicy]} token
-### per handle.
+### Exclusive access to two different {Guarded[T, TPolicy]} handles at once, taken without deadlock: the two holds
+### are taken in address order, whatever order the threads name them in. Made by {multiamend} and opened with
+### `using ... as (a, b)`, which binds one {Amending[T, TPolicy]} token per handle.
 ### :typeparam T: The entity type being amended.
 ### :typeparam TPolicy: The access-discipline lock policy of the two handles.
 ### :see: {Amending[T, TPolicy]}, {Guarded[T, TPolicy]}
@@ -15,21 +14,25 @@ needs TPolicy obeys LockPolicy
     first: Amending[T, TPolicy]
     second: Amending[T, TPolicy]
 
-### Opens exclusive access to two guarded entities at once: `using multiamend(first: x[i], second: x[j]) as (a, b)`.
-### Taking them one `using` inside the other would take the same hold twice when they are the same handle, and two
-### threads naming them in opposite orders would wait on each other forever. `multiamend` takes the holds in address
-### order and once for the same handle (then `a` and `b` are tokens on the same entity).
+### Opens exclusive access to two different guarded entities at once:
+### `using multiamend(first: x[i], second: x[j]) as (a, b)`. Taking them one `using` inside the other would take the
+### same hold twice when they are the same handle, and two threads naming them in opposite orders would wait on each
+### other forever. `multiamend` takes the holds in address order. The two tokens are two different entities, so the
+### builder lets one be changed while an element of the other is held.
 ### :param first: The handle the first token amends.
 ### :param second: The handle the second token amends.
 ### :returns: A scoped `MultiAmending[T, TPolicy]` that binds the two tokens.
-routine multiamend[T, TPolicy](first: Guarded[T, TPolicy], second: Guarded[T, TPolicy]) -> MultiAmending[T, TPolicy]
+### :throws: {AliasedTokensError} when the two handles share the same entity.
+routine multiamend![T, TPolicy](first: Guarded[T, TPolicy], second: Guarded[T, TPolicy]) -> MultiAmending[T, TPolicy]
 needs EntityType T
 needs TPolicy in [Exclusive, MultiRead]
+    if first === second
+        throw AliasedTokensError()
     danger
         return MultiAmending[T, TPolicy](first: Amending[T, TPolicy](first), second: Amending[T, TPolicy](second))
 
-### Called on entry to the `using` block: takes both exclusive holds, the lower address first and once for the same
-### handle, and hands out the two tokens.
+### Called on entry to the `using` block: takes both exclusive holds, the lower address first, and hands out the two
+### tokens.
 ### :returns: The two tokens, in the order the handles were given.
 routine MultiAmending[T, TPolicy].enter() -> (Amending[T, TPolicy], Amending[T, TPolicy])
     danger
@@ -38,8 +41,7 @@ routine MultiAmending[T, TPolicy].enter() -> (Amending[T, TPolicy], Amending[T, 
         if high.get_address() < low.get_address()
             (low, high) = (high, low)
         low.as_entity().add_claimer()
-        if high.get_address() != low.get_address()
-            high.as_entity().add_claimer()
+        high.as_entity().add_claimer()
     return (me.first, me.second)
 
 ### Called on every exit from the `using` block: releases the holds `enter` took, the higher address first.
@@ -49,7 +51,6 @@ routine MultiAmending[T, TPolicy].exit()
         var high = Hijacked[GuardManager[T, TPolicy]](me.second)
         if high.get_address() < low.get_address()
             (low, high) = (high, low)
-        if high.get_address() != low.get_address()
-            high.as_entity().remove_claimer()
+        high.as_entity().remove_claimer()
         low.as_entity().remove_claimer()
     return

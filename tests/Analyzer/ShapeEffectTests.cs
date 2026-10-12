@@ -271,4 +271,48 @@ public class ShapeEffectTests
                                          """,
             expectedErrorSubstring: "while an `each` loop is going through 'me.commands'");
     }
+
+    [Fact]
+    public void Analyze_HeldElementWhileOtherTokenGrows_Errors()
+    {
+        AnalysisResult result = AssertHasErrorSa(source: """
+                                                         import IO/Console
+
+                                                         record Point
+                                                             x: S64
+
+                                                         routine grow_while_held(x: Modifying[List[Point]], y: Modifying[List[Point]])
+                                                             var p = x.modify_at(index: 0)
+                                                             y.add_last(value: Point(x: 1))
+                                                             p.x = 9
+                                                             return
+
+                                                         routine start()
+                                                             return
+                                                         """,
+            expectedErrorSubstring: "so they may be the same one");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.HeldElementOfAliasReshaped);
+    }
+
+    [Fact]
+    public void Analyze_HeldElementWhileMultimodifyTokenGrows_Analyzes()
+    {
+        AssertAnalyzesSa(source: """
+                                 import IO/Console
+
+                                 record Point
+                                     x: S64
+
+                                 routine grow_while_held(x: Modifying[List[Point]], y: Modifying[List[Point]])
+                                     using multimodify(first: x, second: y) as (a, b)
+                                         var p = a.modify_at(index: 0)
+                                         b.add_last(value: Point(x: 1))
+                                         p.x = 9
+                                     return
+
+                                 routine start()
+                                     return
+                                 """);
+    }
 }

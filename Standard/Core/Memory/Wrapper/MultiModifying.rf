@@ -1,0 +1,35 @@
+module Core
+
+import BuilderQuery
+### Write access to two different entities at once, so one can be changed while an element of the other is held.
+### Made by {multimodify} and opened with `using ... as (a, b)`, which binds one {Modifying[T]} token per entity.
+### :typeparam T: The entity type being modified.
+### :see: {Modifying[T]}, {MultiAmending[T, TPolicy]}
+record MultiModifying[T]
+obeys Enterable
+needs EntityType T
+    first: Modifying[T]
+    second: Modifying[T]
+
+### Opens write access to two different entities at once: `using multimodify(first: a, second: b) as (x, y)`. Two
+### tokens a routine takes may be the same entity, so the builder doesn't let one change shape while an element of
+### the other is held. The two tokens `multimodify` hands out were checked to be different, so it does.
+### :param first: The entity the first token modifies.
+### :param second: The entity the second token modifies.
+### :returns: A scoped `MultiModifying[T]` that binds the two tokens.
+### :throws: {AliasedTokensError} when the two are the same entity.
+routine multimodify![T](first: Modifying[T], second: Modifying[T]) -> MultiModifying[T]
+needs EntityType T
+    if first === second
+        throw AliasedTokensError()
+    danger
+        return MultiModifying[T](first: first, second: second)
+
+### Called on entry to the `using` block: hands out the two tokens.
+### :returns: The two tokens, in the order the entities were given.
+routine MultiModifying[T].enter() -> (Modifying[T], Modifying[T])
+    return (me.first, me.second)
+
+### Called on every exit from the `using` block: there is nothing to release.
+routine MultiModifying[T].exit()
+    return
