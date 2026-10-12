@@ -145,16 +145,23 @@ public sealed partial class StdlibApiTests
 
         if (mismatches.Count > 0)
         {
-            // Surface the first mismatch in full for a quick read.
+            // Every mismatch by name, then the first one in full for a quick read.
+            string list = $"{mismatches.Count} harness fixture(s) mismatched: {string.Join(separator: ", ", values: mismatches)}";
             string first = mismatches[index: 0];
-            AssertOutputEqual(fixtureName: first,
-                expected: NormalizeForCompare(s: File.ReadAllText(
-                    path: Path.Combine(path1: fixturesDir, path2: $"{first}.expected.txt"))),
-                actual: NormalizeForCompare(s: sections.GetValueOrDefault(key: first,
-                    defaultValue: "<no output section emitted>")));
-            throw new Xunit.Sdk.XunitException(
-                userMessage:
-                $"{mismatches.Count} harness fixture(s) mismatched: {string.Join(separator: ", ", values: mismatches)}");
+            try
+            {
+                AssertOutputEqual(fixtureName: first,
+                    expected: NormalizeForCompare(s: File.ReadAllText(
+                        path: Path.Combine(path1: fixturesDir, path2: $"{first}.expected.txt"))),
+                    actual: NormalizeForCompare(s: sections.GetValueOrDefault(key: first,
+                        defaultValue: "<no output section emitted>")));
+            }
+            catch (Xunit.Sdk.XunitException firstDiff)
+            {
+                throw new Xunit.Sdk.XunitException(userMessage: $"{list}\n{firstDiff.Message}");
+            }
+
+            throw new Xunit.Sdk.XunitException(userMessage: list);
         }
 
         return entries.Count;
