@@ -1548,9 +1548,11 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
         foreach ((string param, Expression arg) in BoundArguments(call: call, callee: callee))
         {
-            // A read-token parameter is checked inside the callee: a write through it is reported there.
+            // A read-token parameter is checked inside the callee: a write through it is reported there. A
+            // write-token parameter was reported when the argument was matched to it.
             if (callee.Parameters.FirstOrDefault(predicate: p => p.Name == param) is { } declared &&
-                IsReadToken(type: declared.Type))
+                (IsReadToken(type: declared.Type) ||
+                 declared.Type?.BareName is RuntimeContract.Modifying or RuntimeContract.Amending))
             {
                 continue;
             }

@@ -588,8 +588,10 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     `xs.view()` for `Viewing[T]` (a temporary works too), `grow(items: xs)` passes
     `xs.modify()` for `Modifying[T]`. A record value or a value of a type parameter
     is handed over as the address of the place it is in, and a handle or a wider
-    token over a `T` is narrowed the same way (`Retained[T]` or `Modifying[T]` to
-    `Viewing[T]`, `Retained[T]` to `Modifying[T]`).
+    token over a `T` is narrowed the same way: `Retained[T]`, `Roamed[T]`, `Amending[T]`,
+    `Consulting[T]` or `Modifying[T]` to `Viewing[T]`, and `Retained[T]`, `Roamed[T]` or
+    `Amending[T]` to `Modifying[T]`. Pass the handle as it is: writing `.view()`/`.modify()`
+    on it adds nothing.
   - A routine may return a token taken from `me` or from a parameter the caller
     keeps owning (a token parameter):
     `return me.inner.view()`, or `peek(h: Viewing[Holder])` returning
@@ -1119,7 +1121,7 @@ routine start()
 
 **What `agent` may hand to the work (RF-S632).** Each value `agent f(...)` computes now must be safe to
 hand to work that may run on another thread: a `steal`-moved bare entity, trivially copyable value data,
-or a thread-shareable wrapper (`Atomic`, `Guarded`, `Witnessed`, `Consulting`, `Claiming`). A `Roamed`
+or a thread-shareable wrapper (`Atomic`, `Guarded`, `Witnessed`, `Consulting`, `Amending`). A `Roamed`
 handle is promoted. Anything else (a bare entity by copy, a record owning `Retained`/`Tracked`/
 `Viewing`/`Modifying`) is rejected. An `Atomic[T]` parameter is always by reference, so a routine taking
 one works on the caller's cell, and sharing one counter across agents just works:
