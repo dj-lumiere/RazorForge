@@ -1,0 +1,52 @@
+module Tests/Stdlib/TokenIndexAssignApi
+
+import IO/Console
+# Assigning an element through a write token (`result[k] = v` on a `Modifying[Dict[K, V]]`, `xs[i] = v`
+# on a `Modifying[List[T]]`) calls the container's `setitem` through the token, as a read calls `getitem`.
+
+### Merges the smaller of `s[a]` and `s[b]` into the larger, keeping the larger value per key.
+### `s[a]` ends up with the result and `s[b]` empty.
+routine merge_set(s: Modifying[List[Dict[S32, S32]]], a: U64, b: U64)
+    if s.view_at(index: a).count() < s.view_at(index: b).count()
+        s.swap(first: a, second: b)
+    var adding = s.remove_at(index: b)
+    s.add_at(index: b, value: Dict[S32, S32]())
+    var result = s.modify_at(index: a)
+    each entry in adding
+        if result.lacks_key(entry.key) or result[entry.key] < entry.value
+            result[entry.key] = entry.value
+    return
+
+routine bump(xs: Modifying[List[S64]], d: Modifying[Dict[Text, S64]])
+    xs[0] = 7
+    xs[1] += 5
+    d["a"] = 1
+    d["a"] += 2
+    return
+
+routine start()
+    var sets = List[Dict[S32, S32]]()
+    var first = Dict[S32, S32]()
+    first[1] = 10
+    first[2] = 20
+    var second = Dict[S32, S32]()
+    second[2] = 25
+    second[3] = 30
+    second[4] = 40
+    sets.add_last(value: steal first)
+    sets.add_last(value: steal second)
+    merge_set(s: sets.modify(), a: 0, b: 1)
+    show(f"merged: {sets[0]}, emptied: {sets[1]}")
+    merge_set(s: sets.modify(), a: 0, b: 0)
+    show(f"same place: {sets[0]}")
+
+    var xs = List[S64]()
+    xs.add_last(value: 1)
+    xs.add_last(value: 2)
+    var d = Dict[Text, S64]()
+    bump(xs: xs.modify(), d: d.modify())
+    show(f"bumped: {xs} {d}")
+    var m = xs.modify()
+    m[1] = 9
+    show(f"through a local token: {xs}")
+    return

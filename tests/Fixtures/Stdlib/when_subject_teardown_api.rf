@@ -1,0 +1,64 @@
+module Tests/Stdlib/WhenSubjectTeardownApi
+
+import IO/Console
+# A `when` over a value it produced (`when try watcher.hold()`) holds that value until the `when` ends, on
+# every path out of it: falling through, an arm that returns, breaks, continues or throws. An arm that hands
+# the matched value out (`else as h => return h`) moves it, so it is not released there.
+
+entity Account
+    owner: Text
+    balance: D128
+
+routine probe(watcher: Tracked[Account]) -> Text
+    when try watcher.hold()
+        is None => return "gone"
+        else as h => return h.owner
+
+routine early(watcher: Tracked[Account]) -> Bool
+    when try watcher.hold()
+        is None => return false
+        else => show("present")
+    return true
+
+routine looped(watcher: Tracked[Account]) -> S64
+    var n = 0
+    each i in 0 til 5
+        when try watcher.hold()
+            is None => break
+            else as h =>
+                n += 1
+                if i == 1
+                    continue
+                if i == 3
+                    break
+    return n
+
+routine keep_it!(watcher: Tracked[Account]) -> Retained[Account]
+    when try watcher.hold()
+        is None => throw VerificationFailedError()
+        else as h => return h
+
+routine start()
+    var holder = Retained(from: Account(owner: "Lumi", balance: 10.00))
+    var watcher = holder.observe()
+    when try watcher.hold()
+        is None => show("gone")
+        else => show("held")
+    show(probe(watcher: watcher))
+    show(f"{early(watcher: watcher)}")
+    show(f"{looped(watcher: watcher)}")
+    var kept = keep_it(watcher: watcher)
+    show(kept.owner)
+    drop kept
+    show(f"{early(watcher: watcher)}")
+    drop holder
+    when try watcher.hold()
+        is None => show("gone")
+        else => show("held")
+    show(probe(watcher: watcher))
+    show(f"{early(watcher: watcher)}")
+    show(f"{looped(watcher: watcher)}")
+    when try keep_it(watcher: watcher)
+        is None => show("none kept")
+        else => show("kept")
+    return
