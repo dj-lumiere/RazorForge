@@ -29,7 +29,7 @@ public sealed class MultiFileModuleImportTests
         ("Shapes/Alpha.rf", """
                             module Shapes
                             record Alpha
-                                secret value: S32
+                                value: S32
 
                             routine Alpha.doubled() -> S32
                                 return me.value * 2
@@ -37,7 +37,7 @@ public sealed class MultiFileModuleImportTests
         ("Shapes/Beta.rf", """
                            module Shapes
                            record Beta
-                               secret value: S32
+                               value: S32
 
                            routine Beta.tripled() -> S32
                                return me.value * 3
@@ -299,6 +299,91 @@ public sealed class MultiFileModuleImportTests
 
         Assert.Contains(collection: errors,
             filter: e => e.Code == SemanticDiagnosticCode.ScriptStatementsOutsideEntryFile);
+    }
+
+    // A code and its body that must agree: only Http/Result may put them together, other modules use `ok`.
+    private static readonly (string RelPath, string Source)[] ClosedFieldFiles =
+    [
+        ("Http/Result.rf", """
+                           module Http/Result
+                           choice ResponseCode
+                               OK
+                               NOT_FOUND
+
+                           record HttpResult
+                               secret code: ResponseCode
+                               body: Text
+
+                           common routine HttpResult.ok(body: Text) -> HttpResult
+                               return HttpResult(code: OK, body: body)
+
+                           record Tally
+                               posted hits: S64
+                               label: Text
+                               secret note: Text = "none"
+                           """)
+    ];
+
+    /// <summary>
+    /// Giving a <c>secret</c> member variable a value in <c>T(field: value, ...)</c> outside the type's module is
+    /// RF-S403, and the message names the routine the module opens to build it.
+    /// </summary>
+    [Fact]
+    public void MemberwiseConstruction_SecretFieldOutsideModule_Reported()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             module ClosedProbe
+                                                             import Http/Result
+
+                                                             routine start()
+                                                                 var r = HttpResult(code: NOT_FOUND, body: "oops")
+                                                                 return
+                                                             """,
+            moduleFiles: ClosedFieldFiles);
+
+        Assert.Contains(collection: errors,
+            filter: e => e.Code == SemanticDiagnosticCode.SecretMemberAccess && e.Message.Contains(value: "HttpResult.ok"));
+    }
+
+    /// <summary>
+    /// A <c>posted</c> member variable is read anywhere but written only by its module, so giving it a value in a
+    /// construction outside the module is RF-S404.
+    /// </summary>
+    [Fact]
+    public void MemberwiseConstruction_PostedFieldOutsideModule_Reported()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             module ClosedProbe
+                                                             import Http/Result
+
+                                                             routine start()
+                                                                 var t = Tally(label: "x", hits: 3)
+                                                                 return
+                                                             """,
+            moduleFiles: ClosedFieldFiles);
+
+        Assert.Contains(collection: errors, filter: e => e.Code == SemanticDiagnosticCode.PostedMemberAccess);
+    }
+
+    /// <summary>
+    /// Building through the routine the module opens is fine, and so is the module building the value itself.
+    /// </summary>
+    [Fact]
+    public void MemberwiseConstruction_ThroughOpenedRoutine_NoErrors()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             module ClosedProbe
+                                                             import IO/Console
+                                                             import Http/Result
+
+                                                             routine start()
+                                                                 var r = HttpResult.ok(body: "hi")
+                                                                 show(r.body)
+                                                                 return
+                                                             """,
+            moduleFiles: ClosedFieldFiles);
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
     }
 
     /// <summary>

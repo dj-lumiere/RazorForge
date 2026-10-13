@@ -154,7 +154,9 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   "class"/"struct".
 - field → **member variable**, declared as a bare `name: Type` line — **no `var`,
   no `open`**. Only restricted visibility is written: `posted` (module-write) /
-  `secret` (type/module-private). `open` is the unwritten default. There is no
+  `secret` (type/module-private). `open` is the unwritten default. Giving a `secret` or `posted` member
+  variable a value in `T(field: value, ...)` is allowed only inside the type's module (RF-S403 / RF-S404):
+  outside, build it with a routine the module opens (`HttpResult.ok(body: b)`). There is no
   static `let`/`var` distinction for members. Locals inside routines still use
   `var` / `lateinit var`.
 - tagged union / sum type → **variant**; plain enum → **choice**; bitfield →
