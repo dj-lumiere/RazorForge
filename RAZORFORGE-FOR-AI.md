@@ -116,7 +116,8 @@ When unsure, consult ground truth in the repo/package:
    in Core) set last: one atomic value, so any thread may set it and the last call
    wins. A crash keeps 82 whatever was set.
 8. **Bare integer literals adapt to context; variables do not.**
-   `h << 5` and `x.clamp(0, 100)` are fine (literals conform), but mixing a
+   `h << 5` and `x.clamp(0, 100)` are fine (literals conform), and a whole number written in base 10 conforms to
+   a float or decimal type too (`var r: B64 = 3`, `price: 5` for a `D128` parameter; `0xFF` does not), but mixing a
    `U64` variable with an `S64` variable needs an explicit conversion
    (`n.to[S64]()`, §4).
    Out-of-range literals are build errors (RF-S010): `-1` never fits an
