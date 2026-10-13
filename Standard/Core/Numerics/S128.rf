@@ -1,10 +1,10 @@
 module Core
 
 # Constants for S128 limits
-preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728_s128
-preset S128_MAX: S128 = 170_141_183_460_469_231_731_687_303_715_884_105_727_s128
-preset S128_ZERO: S128 = 0_s128
-preset S128_ONE: S128 = 1_s128
+preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728
+preset S128_MAX: S128 = 170_141_183_460_469_231_731_687_303_715_884_105_727
+preset S128_ZERO: S128 = 0
+preset S128_ONE: S128 = 1
 
 ### A 128-bit signed integer in the range −170,141,183,460,469,231,731,687,303,715,884,105,728
 ### to 170,141,183,460,469,231,731,687,303,715,884,105,727.
@@ -70,7 +70,7 @@ routine U64.to[S128]() -> S128
 ### :returns: The same bit pattern interpreted as `S128`.
 ### :throws: {IntegerOverflowError} if `me > 170141183460469231731687303715884105727`.
 routine U128.to![S128]() -> S128
-    if me > 170141183460469231731687303715884105727_u128
+    if me > 170141183460469231731687303715884105727
         throw IntegerOverflowError()
     return LLVM::reinterpret_bits[U128, S128](me)
 
@@ -78,7 +78,7 @@ routine U128.to![S128]() -> S128
 ### :returns: The lower 128 bits reinterpreted as an `S128`.
 ### :throws: {IntegerOverflowError} if this value is outside the S128 range.
 routine S256.to![S128]() -> S128
-    if not (-170141183460469231731687303715884105728_s256 <= me <= 170141183460469231731687303715884105727_s256)
+    if not (-170141183460469231731687303715884105728 <= me <= 170141183460469231731687303715884105727)
         throw IntegerOverflowError()
     return LLVM::int_truncate[S256, S128](me)
 
@@ -86,7 +86,7 @@ routine S256.to![S128]() -> S128
 ### :returns: The lower 128 bits reinterpreted as an `S128`.
 ### :throws: {IntegerOverflowError} if `me > 170141183460469231731687303715884105727`.
 routine U256.to![S128]() -> S128
-    if me > 170141183460469231731687303715884105727_u256
+    if me > 170141183460469231731687303715884105727
         throw IntegerOverflowError()
     return LLVM::int_truncate[U256, S128](me)
 
@@ -101,8 +101,8 @@ routine B16.to![S128]() -> S128
 ### :throws: {IntegerOverflowError} if this value is NaN, infinite, or outside [-2^127, 2^127-1].
 routine B32.to![S128]() -> S128
     if me.is_nan()
-        or me < -170141183460469231731687303715884105728.0_b32
-        or me >= 170141183460469231731687303715884105728.0_b32
+        or me < -170141183460469231731687303715884105728.0
+        or me >= 170141183460469231731687303715884105728.0
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B32, S128](me)
 
@@ -111,8 +111,8 @@ routine B32.to![S128]() -> S128
 ### :throws: {IntegerOverflowError} if this value is NaN, infinite, or outside [-2^127, 2^127-1].
 routine B64.to![S128]() -> S128
     if me.is_nan()
-        or me < -170141183460469231731687303715884105728.0_b64
-        or me >= 170141183460469231731687303715884105728.0_b64
+        or me < -170141183460469231731687303715884105728.0
+        or me >= 170141183460469231731687303715884105728.0
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B64, S128](me)
 
@@ -121,38 +121,38 @@ routine B64.to![S128]() -> S128
 ### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
 routine B128.to![S128]() -> S128
     var bits = me.to_bits()
-    var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127_u128))
+    var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127))
     var biased = LLVM::int_truncate[U128, U64](
-        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128),
+        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112), b: 32767),
     )
     var frac = LLVM::bit_and(a: bits, b: b128_mant_mask())
-    if biased == 0x7FFF_u64
-        if LLVM::int_eq(a: frac, b: 0_u128)
+    if biased == 0x7FFF
+        if LLVM::int_eq(a: frac, b: 0)
             throw NumericOverflowError(description: "cannot convert infinite B128 to S128")
         throw NumericDomainError(description: "cannot convert NaN B128 to S128")
-    if biased < 16383_u64
-        return 0_s128
-    var actual_exp = LLVM::sub(a: biased, b: 16383_u64)
-    if actual_exp >= 128_u64
+    if biased < 16383
+        return 0
+    var actual_exp = LLVM::sub(a: biased, b: 16383)
+    if actual_exp >= 128
         throw NumericOverflowError(description: "B128 value out of range for S128")
-    if actual_exp == 127_u64
-        if sign == 0_u64 or LLVM::int_ne(a: frac, b: 0_u128)
+    if actual_exp == 127
+        if sign == 0 or LLVM::int_ne(a: frac, b: 0)
             throw NumericOverflowError(description: "B128 value out of range for S128")
-        return LLVM::reinterpret_bits[U128, S128](LLVM::shift_left(value: 1_u128, bits: 127_u128))
+        return LLVM::reinterpret_bits[U128, S128](LLVM::shift_left(value: 1, bits: 127))
     var sig = LLVM::bit_or(a: b128_implicit(), b: frac)
     lateinit var int_part: U128
-    if actual_exp <= 112_u64
+    if actual_exp <= 112
         int_part = LLVM::shift_right_unsigned(
             sig,
-            LLVM::zero_extend[U64, U128](LLVM::sub(a: 112_u64, b: actual_exp)),
+            LLVM::zero_extend[U64, U128](LLVM::sub(a: 112, b: actual_exp)),
         )
     else
         int_part = LLVM::shift_left(
             sig,
-            LLVM::zero_extend[U64, U128](LLVM::sub(a: actual_exp, b: 112_u64)),
+            LLVM::zero_extend[U64, U128](LLVM::sub(a: actual_exp, b: 112)),
         )
-    if sign == 1_u64
-        return LLVM::sub(a: 0_s128, b: LLVM::reinterpret_bits[U128, S128](int_part))
+    if sign == 1
+        return LLVM::sub(a: 0, b: LLVM::reinterpret_bits[U128, S128](int_part))
     return LLVM::reinterpret_bits[U128, S128](int_part)
 
 ### Converts a `D32` to `S128`, truncating toward zero.
@@ -229,9 +229,9 @@ routine S128.mul!(you: S128) -> S128
 ### `|x|` as a U128 magnitude. `S128_MIN` maps to exactly 2¹²⁷ (the wrapping
 ### negate reinterpreted as unsigned), so there is no overflow.
 routine s128_abs_u128(x: S128) -> U128
-    if LLVM::signed_ge(a: x, b: 0_s128)
+    if LLVM::signed_ge(a: x, b: 0)
         return LLVM::reinterpret_bits[S128, U128](x)
-    return LLVM::reinterpret_bits[S128, U128](LLVM::sub(a: 0_s128, b: x))
+    return LLVM::reinterpret_bits[S128, U128](LLVM::sub(a: 0, b: x))
 
 ### Euclidean floor division of `me` by `you`.
 ### :param you: The divisor.
@@ -240,23 +240,23 @@ routine s128_abs_u128(x: S128) -> U128
 routine S128.floordiv!(you: S128) -> S128
     if you == 0
         throw DivisionByZeroError()
-    if me == S128_MIN and you == -1_s128
+    if me == S128_MIN and you == -1
         throw IntegerOverflowError()
     var amag = s128_abs_u128(x: me)
     var bmag = s128_abs_u128(x: you)
     var uq = u128_floordiv(a: amag, b: bmag)
-    var aneg = LLVM::signed_lt(a: me, b: 0_s128)
-    var bneg = LLVM::signed_lt(a: you, b: 0_s128)
+    var aneg = LLVM::signed_lt(a: me, b: 0)
+    var bneg = LLVM::signed_lt(a: you, b: 0)
     # EUCLIDEAN division (remainder always >= 0), consistent with S8..S64. The remainder
     # is non-negative, so when the dividend is negative and the division is inexact the
     # quotient MAGNITUDE rounds up by one before the sign is applied. The quotient is
     # positive when the operands share a sign, negative otherwise.
-    if aneg and LLVM::int_ne(a: u128_mod(a: amag, b: bmag), b: 0_u128)
-        uq = LLVM::add(a: uq, b: 1_u128)
+    if aneg and LLVM::int_ne(a: u128_mod(a: amag, b: bmag), b: 0)
+        uq = LLVM::add(a: uq, b: 1)
     var q = LLVM::reinterpret_bits[U128, S128](uq)
     if aneg == bneg
         return q
-    return LLVM::sub(a: 0_s128, b: q)
+    return LLVM::sub(a: 0, b: q)
 
 ### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
 ### :param you: The divisor.
@@ -270,7 +270,7 @@ routine S128.mod!(you: S128) -> S128
     # dividend with a nonzero remainder, reflect it into [0, |you|) via |you| - r.
     var bmag = s128_abs_u128(x: you)
     var ur = u128_mod(a: s128_abs_u128(x: me), b: bmag)
-    if LLVM::signed_lt(a: me, b: 0_s128) and LLVM::int_ne(a: ur, b: 0_u128)
+    if LLVM::signed_lt(a: me, b: 0) and LLVM::int_ne(a: ur, b: 0)
         ur = LLVM::sub(a: bmag, b: ur)
     return LLVM::reinterpret_bits[U128, S128](ur)
 
@@ -284,22 +284,22 @@ routine S128.mod!(you: S128) -> S128
 routine S128.divmod!(you: S128) -> (S128, S128)
     if you == 0
         throw DivisionByZeroError()
-    if me == S128_MIN and you == -1_s128
+    if me == S128_MIN and you == -1
         throw IntegerOverflowError()
     var bmag = s128_abs_u128(x: you)
     var dr = u128_divmod(a: s128_abs_u128(x: me), b: bmag)
     var uq = dr.item0
     var ur = dr.item1
-    var aneg = LLVM::signed_lt(a: me, b: 0_s128)
-    var bneg = LLVM::signed_lt(a: you, b: 0_s128)
-    if aneg and LLVM::int_ne(a: ur, b: 0_u128)
-        uq = LLVM::add(a: uq, b: 1_u128)
+    var aneg = LLVM::signed_lt(a: me, b: 0)
+    var bneg = LLVM::signed_lt(a: you, b: 0)
+    if aneg and LLVM::int_ne(a: ur, b: 0)
+        uq = LLVM::add(a: uq, b: 1)
         ur = LLVM::sub(a: bmag, b: ur)
     var q = LLVM::reinterpret_bits[U128, S128](uq)
     var r = LLVM::reinterpret_bits[U128, S128](ur)
     if aneg == bneg
         return (q, r)
-    return (LLVM::sub(a: 0_s128, b: q), r)
+    return (LLVM::sub(a: 0, b: q), r)
 
 ### Returns `-me` (arithmetic negation), with wrapping behavior on `S128_MIN`.
 ### :returns: The negated value. `-S128_MIN` wraps to `S128_MIN`.
@@ -307,7 +307,7 @@ routine S128.divmod!(you: S128) -> (S128, S128)
 routine S128.neg!() -> S128
     if me == S128_MIN
         throw IntegerOverflowError()
-    return LLVM::sub(a: 0_s128, b: me)
+    return LLVM::sub(a: 0, b: me)
 
 # ============================================================================
 # Overflow-mode variants (neg / abs / div / mod)
@@ -316,22 +316,22 @@ routine S128.neg!() -> S128
 ### Returns `-me` in two's complement, wrapping `S128_MIN` to itself.
 ### :returns: The wrapped negation.
 routine S128.neg_wrap() -> S128
-    return LLVM::sub(a: 0_s128, b: me)
+    return LLVM::sub(a: 0, b: me)
 
 ### Returns `(-me, overflowed)`. Overflow occurs only for `S128_MIN`.
 ### :returns: A tuple of `(wrapped negation, overflow flag)`.
 routine S128.neg_with_overflow() -> (S128, Bool)
-    return (LLVM::sub(a: 0_s128, b: me), me == S128_MIN)
+    return (LLVM::sub(a: 0, b: me), me == S128_MIN)
 
 ### Returns `-me`, clamped to `S128_MAX` when `me == S128_MIN`.
 ### :returns: The saturating negation.
 routine S128.neg_clamp() -> S128
-    return if me == S128_MIN then S128_MAX else LLVM::sub(a: 0_s128, b: me)
+    return if me == S128_MIN then S128_MAX else LLVM::sub(a: 0, b: me)
 
 ### Returns |me| in two's complement, wrapping `|S128_MIN|` back to `S128_MIN`.
 ### :returns: The wrapped absolute value.
 routine S128.abs_wrap() -> S128
-    return if me < 0_s128 then LLVM::sub(a: 0_s128, b: me) else me
+    return if me < 0 then LLVM::sub(a: 0, b: me) else me
 
 ### Returns `(|me|, overflowed)`. Overflow occurs only for `S128_MIN`.
 ### :returns: A tuple of `(wrapped absolute value, overflow flag)`.
@@ -346,7 +346,7 @@ routine S128.abs_clamp() -> S128
 ### Returns |me| as an unsigned value; `|S128_MIN|` is represented exactly.
 ### :returns: The absolute value as `U128`.
 routine S128.unsigned_abs() -> U128
-    var w = if me < 0_s128 then LLVM::sub(a: 0_s128, b: me) else me
+    var w = if me < 0 then LLVM::sub(a: 0, b: me) else me
     return LLVM::reinterpret_bits[S128, U128](w)
 
 ### Returns euclidean `me // you`, wrapping the `S128_MIN // -1` overflow to `S128_MIN`.
@@ -354,7 +354,7 @@ routine S128.unsigned_abs() -> U128
 ### :returns: The wrapped euclidean quotient.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S128.floordiv_wrap(you: S128) -> S128
-    if me == S128_MIN and you == -1_s128
+    if me == S128_MIN and you == -1
         return S128_MIN
     return me.floordiv(you)
 
@@ -363,7 +363,7 @@ routine S128.floordiv_wrap(you: S128) -> S128
 ### :returns: A tuple of `(quotient, overflow flag)`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S128.floordiv_with_overflow(you: S128) -> (S128, Bool)
-    if me == S128_MIN and you == -1_s128
+    if me == S128_MIN and you == -1
         return (S128_MIN, true)
     return (me.floordiv(you), false)
 
@@ -372,8 +372,8 @@ routine S128.floordiv_with_overflow(you: S128) -> (S128, Bool)
 ### :returns: The wrapped euclidean remainder.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S128.mod_wrap(you: S128) -> S128
-    if me == S128_MIN and you == -1_s128
-        return 0_s128
+    if me == S128_MIN and you == -1
+        return 0
     return me.mod(you)
 
 ### Returns `(euclidean remainder, overflowed)`; overflow only for `S128_MIN % -1`.
@@ -381,8 +381,8 @@ routine S128.mod_wrap(you: S128) -> S128
 ### :returns: A tuple of `(remainder, overflow flag)`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S128.mod_with_overflow(you: S128) -> (S128, Bool)
-    if me == S128_MIN and you == -1_s128
-        return (0_s128, true)
+    if me == S128_MIN and you == -1
+        return (0, true)
     return (me.mod(you), false)
 
 # ============================================================================
@@ -440,14 +440,14 @@ dangerous routine S128.floordiv_unchecked(you: S128) -> S128
     var amag = s128_abs_u128(x: me)
     var bmag = s128_abs_u128(x: you)
     var uq = u128_floordiv(a: amag, b: bmag)
-    var aneg = LLVM::signed_lt(a: me, b: 0_s128)
-    var bneg = LLVM::signed_lt(a: you, b: 0_s128)
-    if aneg and LLVM::int_ne(a: u128_mod(a: amag, b: bmag), b: 0_u128)
-        uq = LLVM::add(a: uq, b: 1_u128)
+    var aneg = LLVM::signed_lt(a: me, b: 0)
+    var bneg = LLVM::signed_lt(a: you, b: 0)
+    if aneg and LLVM::int_ne(a: u128_mod(a: amag, b: bmag), b: 0)
+        uq = LLVM::add(a: uq, b: 1)
     var q = LLVM::reinterpret_bits[U128, S128](uq)
     if aneg == bneg
         return q
-    return LLVM::sub(a: 0_s128, b: q)
+    return LLVM::sub(a: 0, b: q)
 
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
@@ -457,7 +457,7 @@ dangerous routine S128.mod_unchecked(you: S128) -> S128
     # Mirror mod! (euclidean, custom Knuth magnitude kernel) minus the zero guard — not LLVM `srem` i128.
     var bmag = s128_abs_u128(x: you)
     var ur = u128_mod(a: s128_abs_u128(x: me), b: bmag)
-    if LLVM::signed_lt(a: me, b: 0_s128) and LLVM::int_ne(a: ur, b: 0_u128)
+    if LLVM::signed_lt(a: me, b: 0) and LLVM::int_ne(a: ur, b: 0)
         ur = LLVM::sub(a: bmag, b: ur)
     return LLVM::reinterpret_bits[U128, S128](ur)
 
@@ -487,12 +487,12 @@ routine S128.sub_clamp(you: S128) -> S128
 @readonly
 routine S128.mul_clamp(you: S128) -> S128
     # Can't widen to 256-bit, use division-based overflow check
-    if LLVM::int_eq(a: me, b: 0_s128) or LLVM::int_eq(a: you, b: 0_s128)
-        return 0_s128
+    if LLVM::int_eq(a: me, b: 0) or LLVM::int_eq(a: you, b: 0)
+        return 0
     var result = LLVM::mul(a: me, b: you)
     if LLVM::int_ne(LLVM::signed_div(a: result, b: me), you)
         # Overflow: clamp to MAX or MIN based on result sign
-        var same_sign = LLVM::int_eq(LLVM::signed_gt(me, 0_s128), LLVM::signed_gt(you, 0_s128))
+        var same_sign = LLVM::int_eq(LLVM::signed_gt(me, 0), LLVM::signed_gt(you, 0))
         if same_sign
             return S128_MAX
         return S128_MIN
@@ -511,7 +511,7 @@ routine S128.mul_clamp(you: S128) -> S128
 ### :param carry: The incoming carry bit from the lower word.
 ### :returns: A tuple of `(wrapped sum, signed-overflow flag)`.
 routine S128.carrying_add(you: S128, carry: Bool) -> (S128, Bool)
-    var carry_val: S128 = if carry then 1_s128 else 0_s128
+    var carry_val: S128 = if carry then 1 else 0
     var first = me.add_with_overflow(you)
     var second = first.item0.add_with_overflow(carry_val)
     return (second.item0, not first.item1.eq(second.item1))
@@ -523,7 +523,7 @@ routine S128.carrying_add(you: S128, carry: Bool) -> (S128, Bool)
 ### :param borrow: The incoming borrow bit from the lower word.
 ### :returns: A tuple of `(wrapped difference, signed-overflow flag)`.
 routine S128.borrowing_sub(you: S128, borrow: Bool) -> (S128, Bool)
-    var borrow_val: S128 = if borrow then 1_s128 else 0_s128
+    var borrow_val: S128 = if borrow then 1 else 0
     var first = me.sub_with_overflow(you)
     var second = first.item0.sub_with_overflow(borrow_val)
     return (second.item0, not first.item1.eq(second.item1))
@@ -548,7 +548,7 @@ routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
             var mul_result = result.mul_with_overflow(base)
             result = mul_result.item0
             overflow = overflow or mul_result.item1
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             var square_result = base.mul_with_overflow(base)
             base = square_result.item0
@@ -571,7 +571,7 @@ routine S128.pow!(exp: S128) -> S128
 ### :returns: The result modulo 2¹²⁸ (signed wrap).
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S128.pow_wrap!(exp: S128) -> S128
-    if exp < 0_s128
+    if exp < 0
         throw NumericDomainError(description: "negative exponent: no integer result")
     var result: S128 = 1
     var base: S128 = me
@@ -579,7 +579,7 @@ routine S128.pow_wrap!(exp: S128) -> S128
     while e > 0
         if (e & 1) == 1
             result = result.mul_wrap(base)
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             base = base.mul_wrap(base)
     return result
@@ -598,7 +598,7 @@ routine S128.pow_clamp!(exp: S128) -> S128
     while e > 0
         if (e & 1) == 1
             result = result.mul_clamp(base)
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             base = base.mul_clamp(base)
     return result
@@ -731,42 +731,42 @@ routine S128.isqrt() -> S128
 ### :returns: The tuple `(root, remainder)`.
 ### :throws: {NumericDomainError} if `me < 0`.
 routine S128.sqrtrem!() -> (S128, S128)
-    if me < 0_s128
+    if me < 0
         throw NumericDomainError(description: "square root of a negative value has no real result")
     var x = me
-    var result = 0_s128
-    var bit = 1_s128 << 126_u32
+    var result: S128 = 0
+    var bit: S128 = 1 << 126
     while bit > x
-        bit = bit.lshr(2_u32)
-    while bit != 0_s128
+        bit = bit.lshr(2)
+    while bit != 0
         var next = result.add_wrap(bit)
         if x >= next
             x = x.sub_wrap(next)
-            result = result.lshr(1_u32).add_wrap(bit)
+            result = result.lshr(1).add_wrap(bit)
         else
-            result = result.lshr(1_u32)
-        bit = bit.lshr(2_u32)
+            result = result.lshr(1)
+        bit = bit.lshr(2)
     return (result, x)
 
 ### Returns ⌊log₂ me⌋. Throws if `me <= 0`.
 ### :returns: The floor of the base-2 logarithm.
 ### :throws: {NumericDomainError} if `me <= 0`.
 routine S128.ilog2!() -> S128
-    if me <= 0_s128
+    if me <= 0
         throw NumericDomainError(description: "ilog2 domain: me must be > 0")
-    return 127_s128 - me.leading_zeros()
+    return 127 - me.leading_zeros()
 
 ### Returns ⌊log₁₀ me⌋. Throws if `me <= 0`.
 ### :returns: The floor of the base-10 logarithm.
 ### :throws: {NumericDomainError} if `me <= 0`.
 routine S128.ilog10!() -> S128
-    if me <= 0_s128
+    if me <= 0
         throw NumericDomainError(description: "ilog10 domain: me must be > 0")
     var n = me
-    var count = 0_s128
-    while n >= 10_s128
-        n = n // 10_s128
-        count = count + 1_s128
+    var count: S128 = 0
+    while n >= 10
+        n = n // 10
+        count = count + 1
     return count
 
 ### Returns ⌊log_base me⌋. Throws if `me <= 0` or `base < 2`.
@@ -774,13 +774,13 @@ routine S128.ilog10!() -> S128
 ### :returns: The floor of the base-`base` logarithm.
 ### :throws: {NumericDomainError} if `me <= 0` or `base < 2`.
 routine S128.ilog!(base: S128) -> S128
-    if me <= 0_s128 or base < 2_s128
+    if me <= 0 or base < 2
         throw NumericDomainError(description: "ilog domain: me must be > 0 and base >= 2")
     var n = me
-    var count = 0_s128
+    var count: S128 = 0
     while n >= base
         n = n // base
-        count = count + 1_s128
+        count = count + 1
     return count
 
 ### Returns the absolute difference |me - you| as an unsigned value (no overflow).
@@ -802,7 +802,7 @@ routine S128.count_ones() -> S128
 ### Returns the count of clear bits in this value's 128-bit representation.
 ### :returns: `128` minus the popcount; between 0 and 128.
 routine S128.count_zeros() -> S128
-    return 128_s128 -% me.count_ones()
+    return 128 -% me.count_ones()
 
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `128` if the value is zero.
@@ -865,23 +865,23 @@ common routine S128.from_bytes_be(bytes: Array[Byte, 16]) -> S128
 ### Returns `true` if this value is greater than zero.
 ### :returns: `true` if `me > 0`.
 routine S128.is_positive() -> Bool
-    return me > 0_s128
+    return me > 0
 
 ### Returns `true` if this value is less than zero.
 ### :returns: `true` if `me < 0`.
 routine S128.is_negative() -> Bool
-    return me < 0_s128
+    return me < 0
 
 ### Returns `true` if this value is zero.
 ### :returns: `true` if `me == 0`.
 routine S128.is_zero() -> Bool
-    return me == 0_s128
+    return me == 0
 
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine S128.is_even() -> Bool
-    var result = LLVM::bit_and(a: me, b: 1_s128)
-    return LLVM::int_eq(a: result, b: 0_s128)
+    var result = LLVM::bit_and(a: me, b: 1)
+    return LLVM::int_eq(a: result, b: 0)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -891,15 +891,15 @@ routine S128.is_odd() -> Bool
 ### Returns `true` if this value is an exact power of two.
 ### Negative values always return `false`.
 routine S128.is_power_of_two() -> Bool
-    return me > 0_s128 and (me & me -% 1_s128) == 0_s128
+    return me > 0 and (me & me -% 1) == 0
 
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
 routine S128.signum() -> S128
     return when
-        me > 0_s128 => 1_s128
-        me < 0_s128 => -1_s128
-        else => 0_s128
+        me > 0 => 1
+        me < 0 => -1
+        else => 0
 
 # ============================================================================
 # Text Representation and Parsing
@@ -910,14 +910,14 @@ routine S128.signum() -> S128
 @readonly
 @override
 routine S128.represent() -> Text
-    if me == 0s128
+    if me == 0
         return "0"
-    if me > 0s128
+    if me > 0
         return me.to[U128]().represent()
     # Use reinterpret_bits (not U128(me)) — U128(from: S128) throws on negative inputs,
     # and we need the raw bit pattern so the two's-complement negation `0u128 -% bits`
     # yields |me| (works correctly even for S128.MIN, whose absolute value overflows S128).
-    return "-" + (0u128 -% LLVM::reinterpret_bits[S128, U128](me)).represent()
+    return "-" + (0 -% LLVM::reinterpret_bits[S128, U128](me)).represent()
 
 ### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
 ### when negative (`255.to_text(radix: 16)` is `ff`).
@@ -926,9 +926,9 @@ routine S128.represent() -> Text
 @readonly
 routine S128.to_text(radix: S32) -> Text
     var raw = LLVM::reinterpret_bits[S128, U128](me)
-    if me < 0s128
+    if me < 0
         return wide_radix_text[U128](
-            mag: LLVM::zero_extend[U64, U128](0_u64) -% raw,
+            mag: LLVM::zero_extend[U64, U128](0) -% raw,
             negative: true,
             radix: radix,
         )
@@ -945,37 +945,37 @@ routine S128.diagnose() -> Text
 ### :throws: {InvalidValueError} if this value is empty, sign-only, or contains non-digit characters.
 ### :throws: {IntegerOverflowError} if the value does not fit in `S128`.
 routine Text.to![S128]() -> S128
-    if me.count() == 0u64
+    if me.count() == 0
         throw InvalidValueError(input: me, target: "S128")
-    var start = 0u64
+    var start: U64 = 0
     var negative = false
-    var first = me[0u64]
-    if first == Char(0x002Du32)
+    var first = me[0]
+    if first == '-'
         negative = true
-        start = 1u64
-    elseif first == Char(0x002Bu32)
-        start = 1u64
+        start = 1
+    elseif first == '+'
+        start = 1
     if start >= me.count()
         throw InvalidValueError(input: me, target: "S128")
-    var result = 0u128
-    var last_limit = 7u128
+    var result: U128 = 0
+    var last_limit: U128 = 7
     if negative
-        last_limit = 8u128
+        last_limit = 8
     var i = start
     while i < me.count()
         var ch = me[i]
         if ch.is_numeric()
             var digit = ch.digit_value().to[U128]()
             # Stop before `result * 10 + digit` passes the largest magnitude the sign allows.
-            if result > 17014118346046923173168730371588410572u128
-                or (result == 17014118346046923173168730371588410572u128 and digit > last_limit)
+            if result > 17014118346046923173168730371588410572
+                or (result == 17014118346046923173168730371588410572 and digit > last_limit)
                 throw IntegerOverflowError()
-            result = result * 10u128 + digit
+            result = result * 10 + digit
         else
             throw InvalidValueError(input: me, target: "S128")
-        i = i + 1u64
+        i = i + 1
     if negative
-        return LLVM::reinterpret_bits[U128, S128](0u128 -% result)
+        return LLVM::reinterpret_bits[U128, S128](0 -% result)
     return result.to[S128]()
 
 # ============================================================================

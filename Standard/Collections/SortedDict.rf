@@ -1,8 +1,8 @@
 module Collections
 
 import BuilderQuery
-secret preset B_DICT: U64 = 64u64
-secret preset MIN_KEYS_DICT: U64 = 31u64
+secret preset B_DICT: U64 = 64
+secret preset MIN_KEYS_DICT: U64 = 31
 
 ### Internal B-tree node for {SortedDict[TKey, TValue]}.
 ### Stores up to 63 ordered key-value pairs, up to 64 child pointers, and a cached subtree element count.
@@ -93,7 +93,7 @@ secret routine BTreeDictNode[TKey, TValue].values_base() -> Hijacked[TValue]
     return me
         .hijack()
         .recast_as[TKey]()
-        .stride(count: 63_s64)
+        .stride(count: 63)
         .recast_as[TValue]()
 
 ### Returns a raw pointer to the start of the children buffer, offset past the keys and values regions.
@@ -105,9 +105,9 @@ secret routine BTreeDictNode[TKey, TValue].children_base() -> Hijacked[Hijacked[
     return me
         .hijack()
         .recast_as[TKey]()
-        .stride(count: 63_s64)
+        .stride(count: 63)
         .recast_as[TValue]()
-        .stride(count: 63_s64)
+        .stride(count: 63)
         .recast_as[Hijacked[BTreeDictNode[TKey, TValue]]]()
 
 ### Returns the key at slot `i`.
@@ -199,18 +199,18 @@ dangerous routine BTreeDictNode[TKey, TValue].children_get(i: U64) -> Hijacked[B
 routine BTreeDictNode[TKey, TValue].destruct()
     danger
         if not me.is_leaf
-            var ci = 0u64
+            var ci: U64 = 0
             while ci < me.child_count
                 me
                     .children_get(ci)
                     .as_entity()
                     .destruct()
-                ci = ci + 1u64
-        var ki = 0u64
+                ci = ci + 1
+        var ki: U64 = 0
         while ki < me.key_count
             me.key_get(ki).destruct()
             me.value_get(ki).destruct()
-            ki = ki + 1u64
+            ki = ki + 1
         return
 
 ### Cycle-collector TRACE: recurse into every child node, then report each stored key AND value to the
@@ -219,18 +219,18 @@ routine BTreeDictNode[TKey, TValue].destruct()
 @override
 dangerous routine BTreeDictNode[TKey, TValue].roam_trace()
     if not me.is_leaf
-        var ci = 0u64
+        var ci: U64 = 0
         while ci < me.child_count
             me
                 .children_get(ci)
                 .as_entity()
                 .roam_trace()
-            ci = ci + 1u64
-    var ki = 0u64
+            ci = ci + 1
+    var ki: U64 = 0
     while ki < me.key_count
         me.key_get(ki).cyclic_visit()
         me.value_get(ki).cyclic_visit()
-        ki = ki + 1u64
+        ki = ki + 1
     return
 
 ### Cycle-collector FREE: recurse into every child node freeing the subtree, then free this node's own
@@ -238,13 +238,13 @@ dangerous routine BTreeDictNode[TKey, TValue].roam_trace()
 @override
 dangerous routine BTreeDictNode[TKey, TValue].roam_free()
     if not me.is_leaf
-        var ci = 0u64
+        var ci: U64 = 0
         while ci < me.child_count
             me
                 .children_get(ci)
                 .as_entity()
                 .roam_free()
-            ci = ci + 1u64
+            ci = ci + 1
     return
 
 ### Frees the entire backing B-tree — every node, key, and value — at scope exit.
@@ -297,7 +297,7 @@ secret routine BTreeDictNode[TKey, TValue].entries_add_last(k: TKey, v: TValue)
             .values_base()
             .stride(count: me.key_count.to[S64]())
             .poke(value: v)
-    me.key_count = me.key_count +% 1u64
+    me.key_count = me.key_count +% 1
     return
 
 ### Appends `value` after the last child pointer and increments the child count.
@@ -308,7 +308,7 @@ secret routine BTreeDictNode[TKey, TValue].children_add_last(value: Hijacked[BTr
             .children_base()
             .stride(count: me.child_count.to[S64]())
             .poke(value: value)
-    me.child_count = me.child_count +% 1u64
+    me.child_count = me.child_count +% 1
     return
 
 ### Inserts a key-value pair at position `i`, shifting later entries right by one.
@@ -324,14 +324,14 @@ secret routine BTreeDictNode[TKey, TValue].entries_add_at(i: U64, k: TKey, v: TV
             var v_elem_size = TValue.data_size()
             var shift_count = me.key_count -% i
             var ksrc_addr = kbase.stride(count: i.to[S64]()).get_address()
-            var kdst_addr = kbase.stride(count: (i +% 1u64).to[S64]()).get_address()
+            var kdst_addr = kbase.stride(count: (i +% 1).to[S64]()).get_address()
             var vsrc_addr = vbase.stride(count: i.to[S64]()).get_address()
-            var vdst_addr = vbase.stride(count: (i +% 1u64).to[S64]()).get_address()
+            var vdst_addr = vbase.stride(count: (i +% 1).to[S64]()).get_address()
             rf_copy_bytes_at(dest: kdst_addr, src: ksrc_addr, size: k_elem_size * shift_count)
             rf_copy_bytes_at(dest: vdst_addr, src: vsrc_addr, size: v_elem_size * shift_count)
         kbase.stride(count: i.to[S64]()).poke(value: k)
         vbase.stride(count: i.to[S64]()).poke(value: v)
-    me.key_count = me.key_count +% 1u64
+    me.key_count = me.key_count +% 1
     return
 
 ### Inserts `value` at position `i` in the children buffer, shifting later pointers right by one.
@@ -344,53 +344,53 @@ secret routine BTreeDictNode[TKey, TValue].children_add_at(i: U64, value: Hijack
             var elem_size = Address.data_size()
             var shift_count = me.child_count -% i
             var src_addr = base.stride(count: i.to[S64]()).get_address()
-            var dst_addr = base.stride(count: (i +% 1u64).to[S64]()).get_address()
+            var dst_addr = base.stride(count: (i +% 1).to[S64]()).get_address()
             rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * shift_count)
         base.stride(count: i.to[S64]()).poke(value: value)
-    me.child_count = me.child_count +% 1u64
+    me.child_count = me.child_count +% 1
     return
 
 ### Removes the entry at position `i`, shifting later entries left by one.
 ### :param i: Zero-based index of the entry to remove.
 secret routine BTreeDictNode[TKey, TValue].entries_remove_at(i: U64)
     danger
-        if i +% 1u64 < me.key_count
+        if i +% 1 < me.key_count
             var kbase = me.keys_base()
             var vbase = me.values_base()
             var k_elem_size = TKey.data_size()
             var v_elem_size = TValue.data_size()
-            var shift_count = me.key_count -% i -% 1u64
-            var ksrc_addr = kbase.stride(count: (i +% 1u64).to[S64]()).get_address()
+            var shift_count = me.key_count -% i -% 1
+            var ksrc_addr = kbase.stride(count: (i +% 1).to[S64]()).get_address()
             var kdst_addr = kbase.stride(count: i.to[S64]()).get_address()
-            var vsrc_addr = vbase.stride(count: (i +% 1u64).to[S64]()).get_address()
+            var vsrc_addr = vbase.stride(count: (i +% 1).to[S64]()).get_address()
             var vdst_addr = vbase.stride(count: i.to[S64]()).get_address()
             rf_copy_bytes_at(dest: kdst_addr, src: ksrc_addr, size: k_elem_size * shift_count)
             rf_copy_bytes_at(dest: vdst_addr, src: vsrc_addr, size: v_elem_size * shift_count)
-    me.key_count = me.key_count -% 1u64
+    me.key_count = me.key_count -% 1
     return
 
 ### Removes the child pointer at position `i`, shifting later pointers left by one.
 ### :param i: Zero-based index of the child to remove.
 secret routine BTreeDictNode[TKey, TValue].children_remove_at(i: U64)
     danger
-        if i +% 1u64 < me.child_count
+        if i +% 1 < me.child_count
             var base = me.children_base()
             var elem_size = Address.data_size()
-            var shift_count = me.child_count -% i -% 1u64
-            var src_addr = base.stride(count: (i +% 1u64).to[S64]()).get_address()
+            var shift_count = me.child_count -% i -% 1
+            var src_addr = base.stride(count: (i +% 1).to[S64]()).get_address()
             var dst_addr = base.stride(count: i.to[S64]()).get_address()
             rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * shift_count)
-    me.child_count = me.child_count -% 1u64
+    me.child_count = me.child_count -% 1
     return
 
 ### Decrements the entry count, logically removing the last entry without zeroing memory.
 secret routine BTreeDictNode[TKey, TValue].entries_remove_last()
-    me.key_count = me.key_count -% 1u64
+    me.key_count = me.key_count -% 1
     return
 
 ### Decrements the child count, logically removing the last child pointer without zeroing memory.
 secret routine BTreeDictNode[TKey, TValue].children_remove_last()
-    me.child_count = me.child_count -% 1u64
+    me.child_count = me.child_count -% 1
     return
 
 ### Sets the entry count to `n`, discarding all entries at or after index `n`.
@@ -414,7 +414,7 @@ secret routine BTreeDictNode[TKey, TValue].entries_add_range_from(
     start: U64,
     count: U64,
 )
-    if count > 0u64
+    if count > 0
         danger
             var k_elem_size = TKey.data_size()
             var v_elem_size = TValue.data_size()
@@ -448,7 +448,7 @@ secret routine BTreeDictNode[TKey, TValue].children_add_range_from(
     start: U64,
     count: U64,
 )
-    if count > 0u64
+    if count > 0
         danger
             var elem_size = Address.data_size()
             var src_addr = other
@@ -472,14 +472,14 @@ secret routine BTreeDictNode[TKey, TValue](is_leaf: Bool) -> BTreeDictNode[TKey,
         entry_keys: LLVM::zero_value[Array[TKey, 63]](),
         entry_values: LLVM::zero_value[Array[TValue, 63]](),
         children: LLVM::zero_value[Array[Hijacked[BTreeDictNode[TKey, TValue]], 64]](),
-        key_count: 0u64,
-        child_count: 0u64,
-        subtree_size: 0u64,
+        key_count: 0,
+        child_count: 0,
+        subtree_size: 0,
         is_leaf: is_leaf,
     )
 
 routine SortedDict[TKey, TValue]() -> SortedDict[TKey, TValue]
-    return SortedDict[TKey, TValue](root: none, count: 0u64)
+    return SortedDict[TKey, TValue](root: none, count: 0)
 
 ### Creates a sorted dict containing the given key-value `pairs` (stored in sorted key order). Variadic
 ### constructor behind the `{k: v, …}` dict-literal syntax (the `DictLiteral` opt-in).
@@ -488,12 +488,12 @@ routine SortedDict[TKey, TValue]() -> SortedDict[TKey, TValue]
 common routine SortedDict[TKey, TValue].from_literal(pairs...: DictEntry[TKey, TValue]) -> SortedDict[TKey, TValue]
 needs TKey obeys Comparable
     var result = SortedDict[TKey, TValue]()
-    var i = 0u64
+    var i: U64 = 0
     # Each pair is read in place: `add` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
     while i < pairs.count()
         drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
-        i = i +% 1u64
+        i = i +% 1
     return result
 
 # ============================================================================
@@ -510,13 +510,13 @@ routine SortedDict[TKey, TValue].count() -> U64
 ### :returns: `true` when `count()` is zero.
 @readonly
 routine SortedDict[TKey, TValue].is_empty() -> Bool
-    return me.count == 0u64
+    return me.count == 0
 
 ### Removes all entries, resetting the dictionary to an empty state.
 @reshaping
 routine SortedDict[TKey, TValue].clear()
     me.root = none
-    me.count = 0u64
+    me.count = 0
     return
 
 # ============================================================================
@@ -530,12 +530,12 @@ routine SortedDict[TKey, TValue].clear()
 @readonly
 @inline
 secret routine SortedDict[TKey, TValue].lower_bound(node: Viewing[BTreeDictNode[TKey, TValue]], key: TKey) -> U64
-    var lo = 0u64
+    var lo: U64 = 0
     var hi = node.keys_count()
     while lo < hi
-        var mid = lo +% LLVM::unsigned_div(hi -% lo, 2u64)
+        var mid = lo +% LLVM::unsigned_div(hi -% lo, 2)
         if node.key_get(mid) < key
-            lo = mid +% 1u64
+            lo = mid +% 1
         else
             hi = mid
     return lo
@@ -659,31 +659,31 @@ secret routine SortedDict[TKey, TValue].put(key: TKey, value: TValue) -> Bool
         danger
             me.root = BTreeDictNode[TKey, TValue](is_leaf: true).hijack()
             me.root!!.as_entity().entries_add_last(k: key, v: value)
-            me.root!!.as_entity().subtree_size = 1u64
-        me.count = 1u64
+            me.root!!.as_entity().subtree_size = 1
+        me.count = 1
         return true
 
     var root_full = false
     danger
-        root_full = me.root!!.as_entity().keys_count() >= B_DICT -% 1u64
+        root_full = me.root!!.as_entity().keys_count() >= B_DICT -% 1
     if root_full
         danger
             var old_root = me.root!!
             me.root = BTreeDictNode[TKey, TValue](is_leaf: false).hijack()
             var new_root = me.root!!.as_entity()
             new_root.children_add_last(value: old_root)
-            me.split_child(parent_node: new_root, child_idx: 0u64)
-            new_root.subtree_size = new_root.children_get(0u64).as_entity().subtree_size +% new_root
-                .children_get(1u64)
+            me.split_child(parent_node: new_root, child_idx: 0)
+            new_root.subtree_size = new_root.children_get(0).as_entity().subtree_size +% new_root
+                .children_get(1)
                 .as_entity()
-                .subtree_size +% 1u64
+                .subtree_size +% 1
 
     var inserted = false
     danger
         var root_ref = me.root!!.as_entity()
         inserted = me.insert_non_full(node: root_ref, key: key, value: value)
     if inserted
-        me.count = me.count +% 1u64
+        me.count = me.count +% 1
     return inserted
 
 ### Inserts or updates `key` in `node`, which must have at least one free entry slot.
@@ -706,19 +706,19 @@ secret routine SortedDict[TKey, TValue].insert_non_full(
 
         if node.is_leaf
             node.entries_add_at(i: i, k: key, v: value)
-            node.subtree_size = node.subtree_size +% 1u64
+            node.subtree_size = node.subtree_size +% 1
             return true
         else
             if node
                 .children_get(i)
                 .as_entity()
-                .keys_count() >= B_DICT -% 1u64
+                .keys_count() >= B_DICT -% 1
                 me.split_child(parent_node: node, child_idx: i)
                 if key == node.key_get(i)
                     node.value_replace(i: i, value: value)
                     return false
                 if key > node.key_get(i)
-                    i = i +% 1u64
+                    i = i +% 1
 
             var inserted = me.insert_non_full(
                 node: node.children_get(i).as_entity(),
@@ -726,7 +726,7 @@ secret routine SortedDict[TKey, TValue].insert_non_full(
                 value: value,
             )
             if inserted
-                node.subtree_size = node.subtree_size +% 1u64
+                node.subtree_size = node.subtree_size +% 1
             return inserted
 
 ### Splits the full child at index `child_idx`, promoting its median entry up to `parent_node`.
@@ -736,21 +736,21 @@ secret routine SortedDict[TKey, TValue].insert_non_full(
 secret routine SortedDict[TKey, TValue].split_child(parent_node: Modifying[BTreeDictNode[TKey, TValue]], child_idx: U64)
     danger
         var child = parent_node.children_get(child_idx).as_entity()
-        var mid = LLVM::unsigned_div(B_DICT -% 1u64, 2u64)
+        var mid = LLVM::unsigned_div(B_DICT -% 1, 2)
 
         var new_node_ptr = BTreeDictNode[TKey, TValue](is_leaf: child.is_leaf).hijack()
         var new_node = new_node_ptr.as_entity()
         new_node.entries_add_range_from(
             other: child,
-            start: mid +% 1u64,
-            count: child.keys_count() -% mid -% 1u64,
+            start: mid +% 1,
+            count: child.keys_count() -% mid -% 1,
         )
 
         if not child.is_leaf
             new_node.children_add_range_from(
                 other: child,
-                start: mid +% 1u64,
-                count: child.children_count() -% mid -% 1u64,
+                start: mid +% 1,
+                count: child.children_count() -% mid -% 1,
             )
 
         var mid_key = child.key_get(mid)
@@ -758,27 +758,27 @@ secret routine SortedDict[TKey, TValue].split_child(parent_node: Modifying[BTree
 
         child.entries_truncate(mid)
         if not child.is_leaf
-            child.children_truncate(mid +% 1u64)
+            child.children_truncate(mid +% 1)
 
         if child.is_leaf
             child.subtree_size = child.keys_count()
             new_node.subtree_size = new_node.keys_count()
         else
             var left_size = child.keys_count()
-            var i = 0u64
+            var i: U64 = 0
             while i < child.children_count()
                 left_size = left_size +% child.children_get(i).as_entity().subtree_size
-                i = i +% 1u64
+                i = i +% 1
             child.subtree_size = left_size
             var right_size = new_node.keys_count()
-            i = 0u64
+            i = 0
             while i < new_node.children_count()
                 right_size = right_size +% new_node.children_get(i).as_entity().subtree_size
-                i = i +% 1u64
+                i = i +% 1
             new_node.subtree_size = right_size
 
         parent_node.entries_add_at(i: child_idx, k: mid_key, v: mid_value)
-        parent_node.children_add_at(i: child_idx +% 1u64, value: new_node_ptr)
+        parent_node.children_add_at(i: child_idx +% 1, value: new_node_ptr)
         return
 
 # ============================================================================
@@ -799,11 +799,11 @@ routine SortedDict[TKey, TValue].remove(key: TKey) -> Bool
         var root_ref = me.root!!.as_entity()
         removed = me.remove_from_node(node: root_ref, key: key)
     if removed
-        me.count = me.count -% 1u64
+        me.count = me.count -% 1
         danger
-            if me.root!!.as_entity().keys_count() == 0u64 and not me.root!!.as_entity().is_leaf
-                me.root = me.root!!.as_entity().children_get(0u64)
-            if me.root!!.as_entity().keys_count() == 0u64
+            if me.root!!.as_entity().keys_count() == 0 and not me.root!!.as_entity().is_leaf
+                me.root = me.root!!.as_entity().children_get(0)
+            if me.root!!.as_entity().keys_count() == 0
                 me.root = none
     return removed
 
@@ -819,24 +819,24 @@ secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDi
         if i < node.keys_count() and key == node.key_get(i)
             if node.is_leaf
                 node.entries_remove_at(i)
-                node.subtree_size = node.subtree_size -% 1u64
+                node.subtree_size = node.subtree_size -% 1
                 return true
             else
                 var left = node.children_get(i).as_entity()
-                var right = node.children_get(i +% 1u64).as_entity()
+                var right = node.children_get(i +% 1).as_entity()
                 if left.keys_count() > MIN_KEYS_DICT
                     var pred = me.get_predecessor(node: node, idx: i)
                     node.key_set(i: i, value: pred.key)
                     node.value_set(i: i, value: pred.value)
                     drop me.remove_from_node(node: left, key: pred.key)
-                    node.subtree_size = node.subtree_size -% 1u64
+                    node.subtree_size = node.subtree_size -% 1
                     return true
                 elseif right.keys_count() > MIN_KEYS_DICT
                     var succ = me.get_successor(node: node, idx: i)
                     node.key_set(i: i, value: succ.key)
                     node.value_set(i: i, value: succ.value)
                     drop me.remove_from_node(node: right, key: succ.key)
-                    node.subtree_size = node.subtree_size -% 1u64
+                    node.subtree_size = node.subtree_size -% 1
                     return true
                 else
                     me.merge_children_at(node: node, i: i)
@@ -845,7 +845,7 @@ secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDi
                         key: key,
                     )
                     if removed
-                        node.subtree_size = node.subtree_size -% 1u64
+                        node.subtree_size = node.subtree_size -% 1
                     return removed
         else
             if node.is_leaf
@@ -853,7 +853,7 @@ secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDi
             i = me.fix_child(node: node, i: i)
             var removed = me.remove_from_node(node: node.children_get(i).as_entity(), key: key)
             if removed
-                node.subtree_size = node.subtree_size -% 1u64
+                node.subtree_size = node.subtree_size -% 1
             return removed
 
 ### Returns the largest entry in the left subtree of `node.children[idx]`.
@@ -868,8 +868,8 @@ secret routine SortedDict[TKey, TValue].get_predecessor(
     danger
         var current = node.children_get(idx).as_entity()
         while not current.is_leaf
-            current = current.children_get(current.children_count() -% 1u64).as_entity()
-        var last = current.keys_count() -% 1u64
+            current = current.children_get(current.children_count() -% 1).as_entity()
+        var last = current.keys_count() -% 1
         return current.entry_get(last)
 
 ### Returns the smallest entry in the right subtree of `node.children[idx + 1]`.
@@ -882,10 +882,10 @@ secret routine SortedDict[TKey, TValue].get_successor(
     idx: U64,
 ) -> DictEntry[TKey, TValue]
     danger
-        var current = node.children_get(idx +% 1u64).as_entity()
+        var current = node.children_get(idx +% 1).as_entity()
         while not current.is_leaf
-            current = current.children_get(0u64).as_entity()
-        return current.entry_get(0u64)
+            current = current.children_get(0).as_entity()
+        return current.entry_get(0)
 
 ### Merges `node.children[i + 1]` into `node.children[i]`, pulling down the separator entry at `node.keys[i]`.
 ### :param node: The parent node whose two adjacent children are merged.
@@ -894,18 +894,18 @@ secret routine SortedDict[TKey, TValue].get_successor(
 secret routine SortedDict[TKey, TValue].merge_children_at(node: Modifying[BTreeDictNode[TKey, TValue]], i: U64)
     danger
         var left = node.children_get(i).as_entity()
-        var right = node.children_get(i +% 1u64).as_entity()
+        var right = node.children_get(i +% 1).as_entity()
 
         left.entries_add_last(k: node.key_get(i), v: node.value_get(i))
-        left.entries_add_range_from(other: right, start: 0u64, count: right.keys_count())
+        left.entries_add_range_from(other: right, start: 0, count: right.keys_count())
 
         if not right.is_leaf
-            left.children_add_range_from(other: right, start: 0u64, count: right.children_count())
+            left.children_add_range_from(other: right, start: 0, count: right.children_count())
 
-        left.subtree_size = left.subtree_size +% right.subtree_size +% 1u64
+        left.subtree_size = left.subtree_size +% right.subtree_size +% 1
 
         node.entries_remove_at(i)
-        node.children_remove_at(i +% 1u64)
+        node.children_remove_at(i +% 1)
         return
 
 ### Ensures `node.children[i]` has enough keys for safe descent; rotates or merges siblings as needed.
@@ -920,23 +920,23 @@ secret routine SortedDict[TKey, TValue].fix_child(node: Modifying[BTreeDictNode[
             .as_entity()
             .keys_count() > MIN_KEYS_DICT
             return i
-        if i > 0u64
+        if i > 0
             and node
-                .children_get(i -% 1u64)
+                .children_get(i -% 1)
                 .as_entity()
                 .keys_count() > MIN_KEYS_DICT
             me.rotate_right_at(node: node, i: i)
             return i
-        if i +% 1u64 < node.children_count()
+        if i +% 1 < node.children_count()
             and node
-                .children_get(i +% 1u64)
+                .children_get(i +% 1)
                 .as_entity()
                 .keys_count() > MIN_KEYS_DICT
             me.rotate_left_at(node: node, i: i)
             return i
-        if i > 0u64
-            me.merge_children_at(node: node, i: i -% 1u64)
-            return i -% 1u64
+        if i > 0
+            me.merge_children_at(node: node, i: i -% 1)
+            return i -% 1
         me.merge_children_at(node: node, i: i)
         return i
 
@@ -946,24 +946,24 @@ secret routine SortedDict[TKey, TValue].fix_child(node: Modifying[BTreeDictNode[
 @inline
 secret routine SortedDict[TKey, TValue].rotate_right_at(node: Modifying[BTreeDictNode[TKey, TValue]], i: U64)
     danger
-        var left = node.children_get(i -% 1u64).as_entity()
+        var left = node.children_get(i -% 1).as_entity()
         var child = node.children_get(i).as_entity()
 
-        child.entries_add_at(i: 0u64, k: node.key_get(i -% 1u64), v: node.value_get(i -% 1u64))
+        child.entries_add_at(i: 0, k: node.key_get(i -% 1), v: node.value_get(i -% 1))
 
         if not child.is_leaf
             child.children_add_at(
-                i: 0u64,
+                i: 0,
                 value: left
-                    .children_get(left.children_count() -% 1u64)
+                    .children_get(left.children_count() -% 1)
                     .as_entity()
                     .hijack(),
             )
             left.children_remove_last()
 
-        var last = left.keys_count() -% 1u64
-        node.key_set(i: i -% 1u64, value: left.key_get(last))
-        node.value_set(i: i -% 1u64, value: left.value_get(last))
+        var last = left.keys_count() -% 1
+        node.key_set(i: i -% 1, value: left.key_get(last))
+        node.value_set(i: i -% 1, value: left.value_get(last))
         left.entries_remove_last()
 
         me.update_subtree_size(left)
@@ -976,7 +976,7 @@ secret routine SortedDict[TKey, TValue].rotate_right_at(node: Modifying[BTreeDic
 @inline
 secret routine SortedDict[TKey, TValue].rotate_left_at(node: Modifying[BTreeDictNode[TKey, TValue]], i: U64)
     danger
-        var right = node.children_get(i +% 1u64).as_entity()
+        var right = node.children_get(i +% 1).as_entity()
         var child = node.children_get(i).as_entity()
 
         child.entries_add_last(k: node.key_get(i), v: node.value_get(i))
@@ -984,15 +984,15 @@ secret routine SortedDict[TKey, TValue].rotate_left_at(node: Modifying[BTreeDict
         if not child.is_leaf
             child.children_add_last(
                 right
-                    .children_get(0u64)
+                    .children_get(0)
                     .as_entity()
                     .hijack(),
             )
-            right.children_remove_at(0u64)
+            right.children_remove_at(0)
 
-        node.key_set(i: i, value: right.key_get(0u64))
-        node.value_set(i: i, value: right.value_get(0u64))
-        right.entries_remove_at(0u64)
+        node.key_set(i: i, value: right.key_get(0))
+        node.value_set(i: i, value: right.value_get(0))
+        right.entries_remove_at(0)
 
         me.update_subtree_size(right)
         me.update_subtree_size(child)
@@ -1007,10 +1007,10 @@ secret routine SortedDict[TKey, TValue].update_subtree_size(node: Modifying[BTre
             node.subtree_size = node.keys_count()
         else
             var size = node.keys_count()
-            var i = 0u64
+            var i: U64 = 0
             while i < node.children_count()
                 size = size +% node.children_get(i).as_entity().subtree_size
-                i = i +% 1u64
+                i = i +% 1
             node.subtree_size = size
         return
 
@@ -1045,18 +1045,18 @@ secret routine SortedDict[TKey, TValue].get_by_rank_node(
             return node.entry_get(rank)
 
         var remaining = rank
-        var i = 0u64
+        var i: U64 = 0
         while i < node.children_count()
             var child_size = node.children_get(i).as_entity().subtree_size
             if remaining < child_size
                 return me.get_by_rank_node(node: node.children_get(i).as_entity(), rank: remaining)
             remaining = remaining -% child_size
             if i < node.keys_count()
-                if remaining == 0u64
+                if remaining == 0
                     return node.entry_get(i)
-                remaining = remaining -% 1u64
-            i = i +% 1u64
-        return node.entry_get(0u64)
+                remaining = remaining -% 1
+            i = i +% 1
+        return node.entry_get(0)
 
 ### Returns the value for `key`, or `default` if the key is not present.
 ### :param key: The key to look up.
@@ -1107,8 +1107,8 @@ routine SortedDict[TKey, TValue].min!() -> DictEntry[TKey, TValue]
     danger
         var node = me.root!!.as_entity()
         while not node.is_leaf
-            node = node.children_get(0u64).as_entity()
-        return node.entry_get(0u64)
+            node = node.children_get(0).as_entity()
+        return node.entry_get(0)
 
 ### Returns the entry with the largest key.
 ### :returns: A {DictEntry[TKey, TValue]} with the maximum key and its associated value.
@@ -1120,8 +1120,8 @@ routine SortedDict[TKey, TValue].max!() -> DictEntry[TKey, TValue]
     danger
         var node = me.root!!.as_entity()
         while not node.is_leaf
-            node = node.children_get(node.children_count() -% 1u64).as_entity()
-        var last = node.keys_count() -% 1u64
+            node = node.children_get(node.children_count() -% 1).as_entity()
+        var last = node.keys_count() -% 1
         return node.entry_get(last)
 
 ### Returns the entry with the smallest key. Alias for {SortedDict[TKey, TValue].min()}.
@@ -1164,15 +1164,15 @@ secret routine SortedDict[TKey, TValue].collect_keys(
     result: Modifying[List[TKey]],
 )
     danger
-        var i = 0u64
+        var i: U64 = 0
         while i < node.keys_count()
             if not node.is_leaf
                 me.collect_keys(node: node.children_get(i).as_entity(), result: result)
             result.add_last(node.key_get(i))
-            i = i +% 1u64
+            i = i +% 1
         if not node.is_leaf
             me.collect_keys(
-                node: node.children_get(node.children_count() -% 1u64).as_entity(),
+                node: node.children_get(node.children_count() -% 1).as_entity(),
                 result: result,
             )
         return
@@ -1199,15 +1199,15 @@ secret routine SortedDict[TKey, TValue].collect_values(
     result: Modifying[List[TValue]],
 )
     danger
-        var i = 0u64
+        var i: U64 = 0
         while i < node.keys_count()
             if not node.is_leaf
                 me.collect_values(node: node.children_get(i).as_entity(), result: result)
             result.add_last(node.value_get(i))
-            i = i +% 1u64
+            i = i +% 1
         if not node.is_leaf
             me.collect_values(
-                node: node.children_get(node.children_count() -% 1u64).as_entity(),
+                node: node.children_get(node.children_count() -% 1).as_entity(),
                 result: result,
             )
         return
@@ -1230,18 +1230,18 @@ secret routine SortedDict[TKey, TValue].get_by_rank(
             return node.entry_get(rank)
 
         var remaining = rank
-        var i = 0u64
+        var i: U64 = 0
         while i < node.children_count()
             var child_size = node.children_get(i).as_entity().subtree_size
             if remaining < child_size
                 return me.get_by_rank(node: node.children_get(i).as_entity(), rank: remaining)
             remaining = remaining -% child_size
             if i < node.keys_count()
-                if remaining == 0u64
+                if remaining == 0
                     return node.entry_get(i)
-                remaining = remaining -% 1u64
-            i = i +% 1u64
-        return node.entry_get(0u64)
+                remaining = remaining -% 1
+            i = i +% 1
+        return node.entry_get(0)
 
 # ============================================================================
 # Iteration
@@ -1250,7 +1250,7 @@ secret routine SortedDict[TKey, TValue].get_by_rank(
 @readonly
 routine SortedDict[TKey, TValue].iter() -> SortedDictEmittable[TKey, TValue]
     danger
-        return SortedDictEmittable[TKey, TValue](dict: me.hijack(), index: 0u64)
+        return SortedDictEmittable[TKey, TValue](dict: me.hijack(), index: 0)
 
 ### Creates a {List[DictEntry[TKey, TValue]]} from all entries of `from` in ascending key order.
 ### :returns: A new list of all entries in key-ascending order.
@@ -1273,15 +1273,15 @@ secret routine SortedDict[TKey, TValue].collect_inorder(
     result: Modifying[List[DictEntry[TKey, TValue]]],
 )
     danger
-        var i = 0u64
+        var i: U64 = 0
         while i < node.keys_count()
             if not node.is_leaf
                 me.collect_inorder(node: node.children_get(i).as_entity(), result: result)
             result.add_last(node.entry_get(i))
-            i = i +% 1u64
+            i = i +% 1
         if not node.is_leaf
             me.collect_inorder(
-                node: node.children_get(node.children_count() -% 1u64).as_entity(),
+                node: node.children_get(node.children_count() -% 1).as_entity(),
                 result: result,
             )
         return
@@ -1292,7 +1292,7 @@ routine SortedDictEmittable[TKey, TValue].emit!() -> DictEntry[TKey, TValue]
             throw AbsentValueError()
         var root_ref = me.dict.as_entity().root!!.as_entity()
         var entry = me.dict.as_entity().get_by_rank(node: root_ref, rank: me.index)
-        me.index = me.index + 1u64
+        me.index = me.index + 1
         return entry
 
 # ============================================================================
@@ -1303,12 +1303,12 @@ routine SortedDictEmittable[TKey, TValue].emit!() -> DictEntry[TKey, TValue]
 @override
 routine SortedDict[TKey, TValue].represent() -> Text
     var result = me.type_name() + "({"
-    var i = 0u64
+    var i: U64 = 0
     each entry in me
-        if i > 0u64
+        if i > 0
             result = result + ", "
         result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
-        i = i +% 1u64
+        i = i +% 1
     result = result + "})"
     return steal result
 
@@ -1316,12 +1316,12 @@ routine SortedDict[TKey, TValue].represent() -> Text
 @override
 routine SortedDict[TKey, TValue].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
-    var i = 0u64
+    var i: U64 = 0
     each entry in me
-        if i > 0u64
+        if i > 0
             result = result + ", "
         result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
-        i = i +% 1u64
+        i = i +% 1
     result = result + "})"
     return steal result
 

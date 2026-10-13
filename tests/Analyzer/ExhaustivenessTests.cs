@@ -128,8 +128,8 @@ public class ExhaustivenessTests
                             WEST
                         routine test(d: Direction) -> S32
                             return when d
-                                == Direction.NORTH => 1_s32
-                                else => 0_s32
+                                == Direction.NORTH => 1
+                                else => 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -650,10 +650,10 @@ public class ExhaustivenessTests
                             WEST
                         routine test(d: Direction) -> S32
                             return when d
-                                is NORTH => 1_s32
-                                == Direction.SOUTH => 2_s32
-                                is EAST => 3_s32
-                                is WEST => 4_s32
+                                is NORTH => 1
+                                == Direction.SOUTH => 2
+                                is EAST => 3
+                                is WEST => 4
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -700,8 +700,8 @@ public class ExhaustivenessTests
                             WEST
                         routine test(d: Direction) -> S32
                             return when d
-                                is NORTH as n => 1_s32
-                                else => 0_s32
+                                is NORTH as n => 1
+                                else => 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -68,7 +68,7 @@ public class ReferringIterableTests
                         module L/Test
                         import IO/Console
                         routine sum_it(xs: Viewing[Iterable[S64]]) -> S64
-                            var total = 0_s64
+                            var total = 0
                             each x in xs
                                 total = total + x
                             return total
@@ -89,9 +89,9 @@ public class ReferringIterableTests
                         module L/Test
                         import IO/Console
                         routine count_it(xs: Iterable[S64]) -> S64
-                            var n = 0_s64
+                            var n = 0
                             each x in xs
-                                n = n + 1_s64
+                                n = n + 1
                             return n
                         """;
 

@@ -114,8 +114,8 @@ public sealed class ToolCommandTests : IDisposable
     public void BlockingForeignCall_ParksItsCoroutineInsteadOfItsWorker()
     {
         string sleep = OperatingSystem.IsWindows()
-            ? "@link(\"kernel32\")\n@blocking\nroutine C::Sleep(ms: U32)\n\nroutine pause()\n    C::Sleep(ms: 300_u32)\n    return\n"
-            : "@blocking\nroutine C::usleep(us: U32) -> S32\n\nroutine pause()\n    drop C::usleep(us: 300000_u32)\n    return\n";
+            ? "@link(\"kernel32\")\n@blocking\nroutine C::Sleep(ms: U32)\n\nroutine pause()\n    C::Sleep(ms: 300)\n    return\n"
+            : "@blocking\nroutine C::usleep(us: U32) -> S32\n\nroutine pause()\n    drop C::usleep(us: 300000)\n    return\n";
         string program = Write(name: "blocking.rf", source: "module ToolBlocking\nimport IO/Console\n\n" + sleep + """
 
             @blocking
@@ -127,7 +127,7 @@ public sealed class ToolCommandTests : IDisposable
 
             routine start()
                 show(f"labs {C::labs(n: -42)}")
-                var t0 = 0_u64
+                var t0: U64 = 0
                 danger
                     t0 = C::rf_monotonic_now_ns()
                 var agents = List[Agent[S64]]()
@@ -136,7 +136,7 @@ public sealed class ToolCommandTests : IDisposable
                     agents.add_last(value: agent nap(id: i))
                     i += 1
                 show(f"results {agents.gather()}")
-                var t1 = 0_u64
+                var t1: U64 = 0
                 danger
                     t1 = C::rf_monotonic_now_ns()
                 show(f"together {(t1 - t0) // 1000000 < 900}")

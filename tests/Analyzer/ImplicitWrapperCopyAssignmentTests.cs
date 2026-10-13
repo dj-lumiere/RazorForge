@@ -83,8 +83,8 @@ public class ImplicitWrapperCopyAssignmentTests
     {
         string source = """
                         routine start()
-                            var a = 1_s64
-                            var b = 2_s64
+                            var a = 1
+                            var b = 2
                             b = a
                             return
                         """;

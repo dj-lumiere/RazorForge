@@ -374,39 +374,39 @@ routine D128.is_negative() -> Bool
 ### True if me is strictly positive (not signed, not zero).
 routine D128.is_positive() -> Bool
     var p = me.decode()
-    return not p.sign and p.special == 0_u64 and p.coeff != 0_u128
+    return not p.sign and p.special == 0 and p.coeff != 0
 
 ### True if me is a finite, nonzero value at the minimum exponent (-6176) with fewer than 34 digits.
 routine D128.is_subnormal() -> Bool
     var p = me.decode()
-    if p.special != 0_u64 or p.coeff == 0_u128
+    if p.special != 0 or p.coeff == 0
         return false
-    return p.exp == -6176_s64 and p.coeff < 1000000000000000000000000000000000_u128
+    return p.exp == -6176 and p.coeff < 1000000000000000000000000000000000
 
 ### Splits into integer and fractional parts (C modf), both carrying me's sign.
 routine D128.modf() -> (D128, D128)
     if me.is_nan()
         return (me, me)
     if me.is_infinite()
-        return (me, D128.from_components(sign: me.decode().sign, coeff: 0_u128, exp: 0_s64))
+        return (me, D128.from_components(sign: me.decode().sign, coeff: 0, exp: 0))
     var ip = me.trunc()
     return (ip, me - ip)
 
 ### True if me is finite and nonzero (this includes the subnormals).
 routine D128.is_normal() -> Bool
     var p = me.decode()
-    return p.special == 0_u64 and p.coeff != 0_u128
+    return p.special == 0 and p.coeff != 0
 
 ### C99 fpclassify: SIGNALING_NAN, NAN, INFINITE, ZERO, SUBNORMAL, or NORMAL.
 routine D128.fpclassify() -> FpClass
     var p = me.decode()
-    if p.special == 3_u64
+    if p.special == 3
         return SIGNALING_NAN
-    if p.special == 2_u64
+    if p.special == 2
         return NAN
-    if p.special == 1_u64
+    if p.special == 1
         return INFINITE
-    if p.coeff == 0_u128
+    if p.coeff == 0
         return ZERO
     if me.is_subnormal()
         return SUBNORMAL
@@ -421,16 +421,16 @@ routine D128.abs() -> D128
 ### plain `<=` ranks cross-class operands per IEEE 754 totalOrder:
 ### -qNaN < -sNaN < -inf < -finite < +finite < +inf < +sNaN < +qNaN.
 routine decimal_order_band(sign: Bool, special: U64) -> S64
-    var rank = 0_s64
-    if special == 1_u64
-        rank = 1_s64
-    elseif special == 3_u64
-        rank = 2_s64
-    elseif special == 2_u64
-        rank = 3_s64
+    var rank = 0
+    if special == 1
+        rank = 1
+    elseif special == 3
+        rank = 2
+    elseif special == 2
+        rank = 3
     if sign
-        return 0_s64 -% (1_s64 +% rank)
-    return 1_s64 +% rank
+        return 0 -% (1 +% rank)
+    return 1 +% rank
 
 ### IEEE 754 totalOrder for decimals: a total order over all values including signed zeros, cohorts
 ### (equal value with differing exponents), and NaNs. For finite operands of equal value the smaller-exponent
@@ -440,7 +440,7 @@ routine decimal_order_band(sign: Bool, special: U64) -> S64
 routine D128.total_order(you: D128) -> Bool
     var pa = me.decode()
     var pb = you.decode()
-    if pa.special >= 2_u64 or pb.special >= 2_u64
+    if pa.special >= 2 or pb.special >= 2
         return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(
             sign: pb.sign,
             special: pb.special,
@@ -477,8 +477,8 @@ routine D128.signum() -> D128
     if me.is_nan()
         return D128.quiet_nan()
     if me.is_zero()
-        return D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
-    return D128.from_components(sign: me.decode().sign, coeff: 1_u128, exp: 0_s64)
+        return D128.from_components(sign: false, coeff: 0, exp: 0)
+    return D128.from_components(sign: me.decode().sign, coeff: 1, exp: 0)
 
 ### Throws when `me` is non-finite (inf or NaN).
 @crash_only
@@ -529,7 +529,7 @@ routine D128.fdim(you: D128) -> D128
         return D128.quiet_nan()
     var d = me - you
     if d.decode().sign
-        return D128.from_components(sign: false, coeff: 0_u128, exp: 0_s64)
+        return D128.from_components(sign: false, coeff: 0, exp: 0)
     return d
 
 ### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
@@ -614,10 +614,10 @@ routine D128.round_ties_away() -> D128
 routine D128.same_quantum(you: D128) -> Bool
     var pa = me.decode()
     var pb = you.decode()
-    if pa.special >= 2_u64 or pb.special >= 2_u64
-        return pa.special >= 2_u64 and pb.special >= 2_u64
-    if pa.special == 1_u64 or pb.special == 1_u64
-        return pa.special == 1_u64 and pb.special == 1_u64
+    if pa.special >= 2 or pb.special >= 2
+        return pa.special >= 2 and pb.special >= 2
+    if pa.special == 1 or pb.special == 1
+        return pa.special == 1 and pb.special == 1
     return pa.exp == pb.exp
 
 ### IEEE 754 quantize: `me`'s value with the exponent of `you`, rounded half to even when digits are dropped.
@@ -661,28 +661,28 @@ routine d128_round_int(x: D128, mode: S64) -> D128
 
 ### Truncates toward zero to an integral value. Specials pass through. Never crashes.
 routine D128.trunc() -> D128
-    return d128_round_int(x: me, mode: 0_s64)
+    return d128_round_int(x: me, mode: 0)
 
 ### Rounds down toward -inf to an integral value. Specials pass through. Never crashes.
 routine D128.floor() -> D128
-    return d128_round_int(x: me, mode: 1_s64)
+    return d128_round_int(x: me, mode: 1)
 
 ### Rounds up toward +inf to an integral value. Specials pass through. Never crashes.
 routine D128.ceil() -> D128
-    return d128_round_int(x: me, mode: 2_s64)
+    return d128_round_int(x: me, mode: 2)
 
 ### Rounds to the nearest integral value, ties away from zero. Specials pass through. Never crashes.
 routine D128.round() -> D128
-    return d128_round_int(x: me, mode: 3_s64)
+    return d128_round_int(x: me, mode: 3)
 
 ### Rounds to the nearest integral value, ties to even (IEEE roundTiesToEven). Never crashes.
 routine D128.rint() -> D128
-    return d128_round_int(x: me, mode: 4_s64)
+    return d128_round_int(x: me, mode: 4)
 
 ### Fractional part me - trunc(me), with me's sign. A NaN propagates, ±inf gives ±0. Never crashes.
 routine D128.frac() -> D128
     if me.is_nan()
         return me
     if me.is_infinite()
-        return D128.from_components(sign: me.decode().sign, coeff: 0_u128, exp: 0_s64)
+        return D128.from_components(sign: me.decode().sign, coeff: 0, exp: 0)
     return me - me.trunc()

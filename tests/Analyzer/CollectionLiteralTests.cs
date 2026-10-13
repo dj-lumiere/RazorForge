@@ -369,7 +369,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                            var items = List[S64](capacity: 8u64)
+                            var items = List[S64](capacity: 8)
                             return
                         """;
 

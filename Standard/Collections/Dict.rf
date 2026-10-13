@@ -2,13 +2,13 @@ module Core
 
 import BuilderQuery
 import Core.SecureHashKey
-secret preset DICT_INITIAL_CAPACITY: U64 = 16u64
-secret preset DICT_INITIAL_ENTRIES: U64 = 16u64
-secret preset CTRL_EMPTY: U8 = 128_u8
-secret preset CTRL_TOMBSTONED: U8 = 254_u8
-secret preset CTRL_H2_MASK: U8 = 127_u8
-secret preset ENTRY_DEAD: U8 = 0_u8
-secret preset ENTRY_LIVE: U8 = 1_u8
+secret preset DICT_INITIAL_CAPACITY: U64 = 16
+secret preset DICT_INITIAL_ENTRIES: U64 = 16
+secret preset CTRL_EMPTY: U8 = 128
+secret preset CTRL_TOMBSTONED: U8 = 254
+secret preset CTRL_H2_MASK: U8 = 127
+secret preset ENTRY_DEAD: U8 = 0
+secret preset ENTRY_LIVE: U8 = 1
 
 ### A hash-flooding-resistant insertion-ordered key-value dictionary.
 ###
@@ -71,12 +71,12 @@ obeys Emittable[DictEntry[TKey, TValue]]
 common routine Dict[TKey, TValue].from_literal(pairs...: DictEntry[TKey, TValue]) -> Dict[TKey, TValue]
 needs TKey obeys Hashable, Equatable
     var result = Dict[TKey, TValue]()
-    var i = 0u64
+    var i: U64 = 0
     # Each pair is read in place: `put` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
     while i < pairs.count()
         drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
-        i = i +% 1u64
+        i = i +% 1
     return result
 
 routine Dict[TKey, TValue]() -> Dict[TKey, TValue]
@@ -91,9 +91,9 @@ routine Dict[TKey, TValue](key: SecureHashKey) -> Dict[TKey, TValue]
         keys: hijacked_none[TKey](),
         vals: hijacked_none[TValue](),
         entry_live: hijacked_none[U8](),
-        count: 0u64,
-        deleted: 0u64,
-        entries_used: 0u64,
+        count: 0,
+        deleted: 0,
+        entries_used: 0,
         capacity: cap,
         entries_cap: ecap,
         k0: key.k0,
@@ -115,19 +115,19 @@ routine Dict[TKey, TValue](key: SecureHashKey) -> Dict[TKey, TValue]
 routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TValue]
     var cap = DICT_INITIAL_CAPACITY
     while cap < capacity
-        cap = cap *% 2u64
+        cap = cap *% 2
     var ecap = DICT_INITIAL_ENTRIES
     while ecap < capacity
-        ecap = ecap *% 2u64
+        ecap = ecap *% 2
     var dict = Dict[TKey, TValue](
         ctrl: hijacked_none[U8](),
         indices: hijacked_none[U64](),
         keys: hijacked_none[TKey](),
         vals: hijacked_none[TValue](),
         entry_live: hijacked_none[U8](),
-        count: 0u64,
-        deleted: 0u64,
-        entries_used: 0u64,
+        count: 0,
+        deleted: 0,
+        entries_used: 0,
         capacity: cap,
         entries_cap: ecap,
         k0: key.k0,
@@ -153,7 +153,7 @@ routine Dict[TKey, TValue].destruct()
     danger
         # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
         # in DictEmittable.emit!). No-op for value types; frees owned entity keys/values.
-        var p = 0u64
+        var p: U64 = 0
         while p < me.entries_used
             if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
                 me.keys
@@ -164,7 +164,7 @@ routine Dict[TKey, TValue].destruct()
                     .offset(TValue.data_size() * p)
                     .peek()
                     .destruct()
-            p = p + 1u64
+            p = p + 1
         me.ctrl.invalidate()
         me.indices.invalidate()
         me.keys.invalidate()
@@ -203,7 +203,7 @@ routine Dict[TKey, TValue].h2(hash: U64) -> U8
 
 @readonly
 routine Dict[TKey, TValue].h1(hash: U64) -> U64
-    return hash >> 7u32
+    return hash >> 7
 
 @readonly
 routine Dict[TKey, TValue].read_index(slot: U64) -> U64
@@ -229,7 +229,7 @@ routine Dict[TKey, TValue].write_val_at(ei: U64, val: TValue)
 routine Dict[TKey, TValue].find_slot(key: TKey) -> U64
     var h = key.hash(k0: me.k0, k1: me.k1)
     var target = me.h2(h)
-    var mask = me.capacity -% 1u64
+    var mask = me.capacity -% 1
     var i = me.h1(h) & mask
     danger
         loop
@@ -240,13 +240,13 @@ routine Dict[TKey, TValue].find_slot(key: TKey) -> U64
                 var ei = me.indices.offset(U64.data_size() * i).peek()
                 if me.keys.offset(TKey.data_size() * ei).peek() == key
                     return i
-            i = i +% 1u64 & mask
+            i = i +% 1 & mask
     return me.capacity
 
 @reshaping
 routine Dict[TKey, TValue].insert_index_raw(h: U64, entry_index: U64)
     var h2_val = me.h2(h)
-    var mask = me.capacity -% 1u64
+    var mask = me.capacity -% 1
     var i = me.h1(h) & mask
     danger
         loop
@@ -258,14 +258,14 @@ routine Dict[TKey, TValue].insert_index_raw(h: U64, entry_index: U64)
             if c == CTRL_TOMBSTONED
                 me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
                 me.indices.offset(U64.data_size() * i).poke(entry_index)
-                me.deleted = me.deleted -% 1u64
+                me.deleted = me.deleted -% 1
                 return
-            i = i +% 1u64 & mask
+            i = i +% 1 & mask
     return
 
 @readonly
 routine Dict[TKey, TValue].should_rehash() -> Bool
-    if (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
+    if (me.count +% me.deleted) *% 8 >= me.capacity *% 7
         return true
     if me.entries_used >= me.entries_cap
         return true
@@ -282,14 +282,14 @@ routine Dict[TKey, TValue].rehash()
     var old_entry_live = me.entry_live
     var old_entries_used = me.entries_used
 
-    var table_pressured = (me.count +% me.deleted) *% 8u64 >= old_cap *% 7u64
+    var table_pressured = (me.count +% me.deleted) *% 8 >= old_cap *% 7
     var new_cap = old_cap
     if table_pressured
-        new_cap = old_cap *% 2u64
+        new_cap = old_cap *% 2
 
     var new_ecap = old_ecap
-    if me.count *% 2u64 >= old_ecap
-        new_ecap = old_ecap *% 2u64
+    if me.count *% 2 >= old_ecap
+        new_ecap = old_ecap *% 2
 
     danger
         me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
@@ -304,11 +304,11 @@ routine Dict[TKey, TValue].rehash()
         me.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_ecap))
     me.capacity = new_cap
     me.entries_cap = new_ecap
-    me.count = 0u64
-    me.deleted = 0u64
-    me.entries_used = 0u64
+    me.count = 0
+    me.deleted = 0
+    me.entries_used = 0
 
-    var i = 0u64
+    var i: U64 = 0
     while i < old_entries_used
         danger
             var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
@@ -319,10 +319,10 @@ routine Dict[TKey, TValue].rehash()
                 me.keys.offset(TKey.data_size() * new_ei).poke(k)
                 me.vals.offset(TValue.data_size() * new_ei).poke(v)
                 me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
-                me.entries_used = me.entries_used +% 1u64
+                me.entries_used = me.entries_used +% 1
                 me.insert_index_raw(h: k.hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
-                me.count = me.count +% 1u64
-        i = i +% 1u64
+                me.count = me.count +% 1
+        i = i +% 1
 
     danger
         if not old_ctrl.is_none()
@@ -347,7 +347,7 @@ routine Dict[TKey, TValue].count() -> U64
 
 @readonly
 routine Dict[TKey, TValue].is_empty() -> Bool
-    return me.count == 0u64
+    return me.count == 0
 
 @reshaping
 routine Dict[TKey, TValue].clear()
@@ -357,9 +357,9 @@ routine Dict[TKey, TValue].clear()
             value: CTRL_EMPTY,
             size: me.capacity,
         )
-    me.count = 0u64
-    me.deleted = 0u64
-    me.entries_used = 0u64
+    me.count = 0
+    me.deleted = 0
+    me.entries_used = 0
     return
 
 @readonly
@@ -388,9 +388,9 @@ secret routine Dict[TKey, TValue].put(key: TKey, value: TValue) -> Bool
         me.keys.offset(TKey.data_size() * ei).poke(key)
         me.vals.offset(TValue.data_size() * ei).poke(value)
         me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
-    me.entries_used = me.entries_used +% 1u64
+    me.entries_used = me.entries_used +% 1
     me.insert_index_raw(h: key.hash(k0: me.k0, k1: me.k1), entry_index: ei)
-    me.count = me.count +% 1u64
+    me.count = me.count +% 1
     return true
 
 ### Single-probe find-or-insert returning a raw handle to the VALUE slot for `key` — the general
@@ -408,7 +408,7 @@ routine Dict[TKey, TValue].slot(key: TKey, seed: TValue) -> Hijacked[TValue]
     if me.should_rehash()
         me.rehash()
     var s = me.find_slot(key)
-    var ei = 0u64
+    var ei: U64 = 0
     if s < me.capacity
         ei = me.read_index(s)
     else
@@ -417,9 +417,9 @@ routine Dict[TKey, TValue].slot(key: TKey, seed: TValue) -> Hijacked[TValue]
             me.keys.offset(TKey.data_size() * ei).poke(key)
             me.vals.offset(TValue.data_size() * ei).poke(seed)
             me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
-        me.entries_used = me.entries_used +% 1u64
+        me.entries_used = me.entries_used +% 1
         me.insert_index_raw(h: key.hash(k0: me.k0, k1: me.k1), entry_index: ei)
-        me.count = me.count +% 1u64
+        me.count = me.count +% 1
     danger
         return me.vals.offset(TValue.data_size() * ei)
 
@@ -433,8 +433,8 @@ routine Dict[TKey, TValue].remove(key: TKey) -> Bool
     danger
         me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
         me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
-    me.count = me.count -% 1u64
-    me.deleted = me.deleted +% 1u64
+    me.count = me.count -% 1
+    me.deleted = me.deleted +% 1
     return true
 
 @readonly
@@ -518,12 +518,12 @@ needs EntityType TValue
 @readonly
 routine Dict[TKey, TValue].keys() -> List[TKey]
     var result = List[TKey](me.count)
-    var i = 0u64
+    var i: U64 = 0
     while i < me.entries_used
         danger
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 result.add_last(me.keys.offset(TKey.data_size() * i).peek())
-        i = i +% 1u64
+        i = i +% 1
     return steal result
 
 ### Returns all live values in insertion order.
@@ -531,12 +531,12 @@ routine Dict[TKey, TValue].keys() -> List[TKey]
 @readonly
 routine Dict[TKey, TValue].values() -> List[TValue]
     var result = List[TValue](me.count)
-    var i = 0u64
+    var i: U64 = 0
     while i < me.entries_used
         danger
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 result.add_last(me.vals.offset(TValue.data_size() * i).peek())
-        i = i +% 1u64
+        i = i +% 1
     return steal result
 
 ### Returns every key and value as a pair, in insertion order: `each (k, v) in d.items()`.
@@ -545,13 +545,13 @@ routine Dict[TKey, TValue].values() -> List[TValue]
 routine Dict[TKey, TValue].items() -> List[(TKey, TValue)]
 needs RecordType TValue
     var result = List[Tuple[TKey, TValue]](capacity: me.count)
-    var i = 0u64
+    var i: U64 = 0
     while i < me.entries_used
         danger
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 result.add_last(value: (me.keys.offset(TKey.data_size() * i).peek(),
                     me.vals.offset(TValue.data_size() * i).peek()))
-        i = i +% 1u64
+        i = i +% 1
     return steal result
 
 # ============================================================================
@@ -566,14 +566,14 @@ routine Dict[TKey, TValue].iter() -> DictEmittable[TKey, TValue]
             vals: me.vals,
             entry_live: me.entry_live,
             entries_used: me.entries_used,
-            pos: 0u64,
+            pos: 0,
         )
 
 routine DictEmittable[TKey, TValue].emit!() -> DictEntry[TKey, TValue]
     danger
         while me.pos < me.entries_used
             var p = me.pos
-            me.pos = me.pos + 1u64
+            me.pos = me.pos + 1
             if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
                 var k = me.keys.offset(TKey.data_size() * p).peek()
                 var v = me.vals.offset(TValue.data_size() * p).peek()
@@ -638,7 +638,7 @@ routine Dict[TKey, TValue].eq(you: Viewing[Dict[TKey, TValue]]) -> Bool
 needs TValue obeys Equatable
     if me.count != you.count
         return false
-    var i = 0u64
+    var i: U64 = 0
     while i < me.entries_used
         danger
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
@@ -651,7 +651,7 @@ needs TValue obeys Equatable
                 var other_v = you.vals.offset(TValue.data_size() * other_ei).peek()
                 if v != other_v
                     return false
-        i = i +% 1u64
+        i = i +% 1
     return true
 
 ### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.

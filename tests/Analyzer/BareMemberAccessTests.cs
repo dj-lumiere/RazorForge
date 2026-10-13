@@ -26,9 +26,9 @@ public class BareMemberAccessTests
                             size: S32
                         @readonly
                         routine Widget.tag() -> S32
-                            return 7_s32
+                            return 7
                         routine test() -> S32
-                            var w = Widget(size: 1_s32)
+                            var w = Widget(size: 1)
                             return w.tag
                         """;
 
@@ -48,9 +48,9 @@ public class BareMemberAccessTests
                             size: S32
                         @readonly
                         routine Widget.tag() -> S32
-                            return 7_s32
+                            return 7
                         routine test() -> S32
-                            var w = Widget(size: 1_s32)
+                            var w = Widget(size: 1)
                             return w.tag()
                         """;
 
@@ -69,7 +69,7 @@ public class BareMemberAccessTests
                         record Widget
                             size: S32
                         routine test() -> S32
-                            var w = Widget(size: 1_s32)
+                            var w = Widget(size: 1)
                             return w.size
                         """;
 

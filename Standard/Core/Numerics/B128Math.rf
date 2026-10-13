@@ -204,11 +204,11 @@ routine B128.tan() -> B128
 ### its last bit.
 secret routine b128_int_parts(x: B128) -> (U128, S64)
     var bits = x.to_bits()
-    var be = LLVM::int_truncate[U128, S64]((bits >>> 112_u32) & 0x7FFF_u128)
-    var f = bits & (1_u128 << 112_u32) -% 1_u128
-    if be == 0_s64
-        return (f, -16494_s64)
-    return (f | (1_u128 << 112_u32), be -% 16495_s64)
+    var be = LLVM::int_truncate[U128, S64]((bits >>> 112) & 0x7FFF)
+    var f = bits & (1 << 112) -% 1
+    if be == 0
+        return (f, -16494)
+    return (f | (1 << 112), be -% 16495)
 
 ### a + b for exact values a * 2^ea and b * 2^eb (384-bit integers, signs neg_a / neg_b): the smaller is
 ### aligned below the larger one's top and its bits that fall out of the 384-bit window become a sticky bit
@@ -239,9 +239,9 @@ secret routine b128_exact_sum(
     var yt = wx_t(w: y)
     var ys = b128_trig_shr384(x: yt, shift: d)
     var sticky = false
-    if d >= 384_s64
+    if d >= 384
         sticky = true
-    elseif d > 0_s64
+    elseif d > 0
         var back = b128_trig_shl384(x: ys, shift: d)
         sticky = back.item0 != yt.item0 or back.item1 != yt.item1 or back.item2 != yt.item2
     var xt = wx_t(w: x)
@@ -250,18 +250,18 @@ secret routine b128_exact_sum(
     if x.neg == y.neg
         s = b128_trig_add384(a: xt, b: ys)
         if wx_t_gt(a: xt, b: s)
-            if (s.item0 & 1_u128) != 0_u128
+            if (s.item0 & 1) != 0
                 sticky = true
-            var h = b128_trig_shr384(x: s, shift: 1_s64)
-            s = (h.item0, h.item1, h.item2 | (1_u128 << 127_u32))
-            e = e +% 1_s64
+            var h = b128_trig_shr384(x: s, shift: 1)
+            s = (h.item0, h.item1, h.item2 | (1 << 127))
+            e = e +% 1
     else
         s = b128_trig_sub384(a: xt, b: ys)
         if sticky
-            s = b128_trig_sub384(a: s, b: (1_u128, 0_u128, 0_u128))
+            s = b128_trig_sub384(a: s, b: (1, 0, 0))
     var r = wx_make(neg: x.neg, t: s, e: e, rel: 0.0)
     if sticky
-        return B128Wx(neg: r.neg, m2: r.m2, m1: r.m1, m0: r.m0 | 1_u128, e: r.e, rel: 0.0)
+        return B128Wx(neg: r.neg, m2: r.m2, m1: r.m1, m0: r.m0 | 1, e: r.e, rel: 0.0)
     return r
 
 ### Returns the fused multiply-add `me*b + c` with a single rounding.
@@ -314,16 +314,16 @@ secret routine b128_add_square(sum: B128Wx, x: B128) -> B128Wx
         return sum
     var (m, e) = b128_int_parts(x: x)
     var p = b128_trig_wmul(x: m, y: m)
-    var sq = (0_u128, p.item1, p.item0)
+    var sq: (U128, U128, U128) = (0, p.item1, p.item0)
     if wx_is_zero(w: sum)
-        return wx_make(neg: false, t: sq, e: 2_s64 *% e -% 128_s64, rel: 0.0)
+        return wx_make(neg: false, t: sq, e: 2 *% e -% 128, rel: 0.0)
     return b128_exact_sum(
         neg_a: false,
         a: wx_t(w: sum),
         ea: sum.e,
         neg_b: false,
         b: sq,
-        eb: 2_s64 *% e -% 128_s64,
+        eb: 2 *% e -% 128,
     )
 
 ### `sqrt(x^2 + y^2 + z^2)`, correctly rounded, with raw IEEE (any inf -> +inf, any NaN -> qNaN). No crash.
@@ -334,7 +334,7 @@ secret routine b128_add_square(sum: B128Wx, x: B128) -> B128Wx
 ### :param z: Third leg.
 routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
     if x.is_infinite() or y.is_infinite() or z.is_infinite()
-        return B128.from_bits(bits: b128_inf(sign: 0_u64))
+        return B128.from_bits(bits: b128_inf(sign: 0))
     if x.is_nan() or y.is_nan() or z.is_nan()
         return B128.from_bits(bits: b128_qnan())
     var sum = b128_add_square(
@@ -342,25 +342,25 @@ routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
         x: z,
     )
     if wx_is_zero(w: sum)
-        return B128.from_bits(bits: 0_u128)
+        return B128.from_bits(bits: 0)
     # sum = n * 2^s + rest with n its top 230 or 229 bits and s even
-    var s = sum.e +% 154_s64
-    if (s & 1_s64) != 0_s64
-        s = s +% 1_s64
+    var s = sum.e +% 154
+    if (s & 1) != 0
+        s = s +% 1
     var sh = s -% sum.e
     var t = b128_trig_shr384(x: wx_t(w: sum), shift: sh)
     var back = b128_trig_shl384(x: t, shift: sh)
     var sticky = back.item0 != sum.m0 or back.item1 != sum.m1 or back.item2 != sum.m2
-    var n = (LLVM::zero_extend[U128, U256](t.item1) << 128_u32) | LLVM::zero_extend[U128, U256](t.item0)
+    var n = (LLVM::zero_extend[U128, U256](t.item1) << 128) | LLVM::zero_extend[U128, U256](t.item0)
     var root = b128_isqrt256(n: n)
     if root *% root != n
         sticky = true
     # the root's 115 bits, two zero bits below them, and the sticky bit below those
-    var rt = LLVM::int_truncate[U256, U128](root) << 2_u32
+    var rt = LLVM::int_truncate[U256, U128](root) << 2
     if sticky
-        rt = rt | 1_u128
+        rt = rt | 1
     return wx_b128(
-        w: wx_make(neg: false, t: (0_u128, 0_u128, rt), e: (s >> 1) -% 258_s64, rel: 0.0),
+        w: wx_make(neg: false, t: (0, 0, rt), e: (s >> 1) -% 258, rel: 0.0),
     )
 
 ### Returns `sin(pi*me)`: sin(pi*n) is ±0 with the sign of me.

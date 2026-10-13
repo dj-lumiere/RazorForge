@@ -55,7 +55,7 @@ public sealed class ReshapingIterationTests
     {
         string source = """
                         routine count_while_iterating(items: List[S32]) -> U64
-                            var n = 0u64
+                            var n: U64 = 0
                             each item in items
                                 n = items.count()
                             return n
@@ -72,9 +72,9 @@ public sealed class ReshapingIterationTests
     {
         string source = """
                         routine grow_after(items: List[S32])
-                            var n = 0u64
+                            var n: U64 = 0
                             each item in items
-                                n = n + 1u64
+                                n = n + 1
                             items.add_last(value: 0)
                             return
                         """;

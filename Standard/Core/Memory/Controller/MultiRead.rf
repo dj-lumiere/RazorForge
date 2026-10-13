@@ -19,9 +19,9 @@ obeys LockPolicy
 ### :returns: The resulting `MultiRead` value.
 routine MultiRead() -> MultiRead
     return MultiRead(
-        readers: Atomic[S32](initial: 0_s32),
-        writer: Atomic[U8](initial: 0_u8),
-        writer_owner: Atomic[U64](initial: 0_u64),
+        readers: Atomic[S32](initial: 0),
+        writer: Atomic[U8](initial: 0),
+        writer_owner: Atomic[U64](initial: 0),
     )
 
 ### Acquires a shared read lock; multiple readers may hold it simultaneously. Spins while a writer
@@ -30,19 +30,19 @@ routine MultiRead() -> MultiRead
 routine MultiRead.acquire_read()
     var tid = C::rf_current_thread_id()
     loop
-        if me.writer.load() == 0_u8
-            drop me.readers.fetch_add(delta: 1_s32)
-            if me.writer.load() == 0_u8
+        if me.writer.load() == 0
+            drop me.readers.fetch_add(delta: 1)
+            if me.writer.load() == 0
                 break
             # A writer slipped in between the check and the bump — back out and retry.
-            drop me.readers.fetch_sub(delta: 1_s32)
+            drop me.readers.fetch_sub(delta: 1)
         if me.writer_owner.load() == tid
             crash_reentrant_lock()
     return
 
 ### Releases a shared read lock.
 routine MultiRead.release_read()
-    drop me.readers.fetch_sub(delta: 1_s32)
+    drop me.readers.fetch_sub(delta: 1)
     return
 
 ### Acquires the exclusive write lock: claims the writer flag, then waits for all readers to drain.
@@ -51,20 +51,20 @@ routine MultiRead.release_read()
 routine MultiRead.acquire_write()
     var tid = C::rf_current_thread_id()
     loop
-        if me.writer.compare_exchange(expected: 0_u8, desired: 1_u8)
+        if me.writer.compare_exchange(expected: 0, desired: 1)
             me.writer_owner.store(desired: tid)
             break
         if me.writer_owner.load() == tid
             crash_reentrant_lock()
     loop
-        if me.readers.load() == 0_s32
+        if me.readers.load() == 0
             break
     return
 
 ### Releases the exclusive write lock. Clears the owner before the flag (mirrors {Exclusive}).
 routine MultiRead.release_write()
-    me.writer_owner.store(desired: 0_u64)
-    me.writer.store(desired: 0_u8)
+    me.writer_owner.store(desired: 0)
+    me.writer.store(desired: 0)
     return
 
 ### Returns the current active-reader count. Snapshot only.
@@ -77,7 +77,7 @@ routine MultiRead.reader_count() -> S32
 ### :returns: `true` if write-locked.
 @readonly
 routine MultiRead.is_write_locked() -> Bool
-    return me.writer.load() != 0_u8
+    return me.writer.load() != 0
 
 # ============================================================================
 # Uniform LockPolicy interface — inspector = reader lock, claimer = writer lock.
@@ -107,11 +107,11 @@ routine MultiRead.remove_claimer()
 ### bumped), `false` if a writer holds it. Backs out the bump if a writer slipped in mid-attempt.
 ### :returns: `true` if a read hold was taken.
 routine MultiRead.try_add_inspector() -> Bool
-    if me.writer.load() == 0_u8
-        drop me.readers.fetch_add(delta: 1_s32)
-        if me.writer.load() == 0_u8
+    if me.writer.load() == 0
+        drop me.readers.fetch_add(delta: 1)
+        if me.writer.load() == 0
             return true
-        drop me.readers.fetch_sub(delta: 1_s32)
+        drop me.readers.fetch_sub(delta: 1)
     return false
 
 ### Tries the exclusive write lock with one non-blocking attempt: claims the writer flag only if it
@@ -119,9 +119,9 @@ routine MultiRead.try_add_inspector() -> Bool
 ### but readers were present). An immediate try cannot wait for readers to drain.
 ### :returns: `true` if the exclusive hold was taken.
 routine MultiRead.try_add_claimer() -> Bool
-    if me.writer.compare_exchange(expected: 0_u8, desired: 1_u8)
-        if me.readers.load() == 0_s32
+    if me.writer.compare_exchange(expected: 0, desired: 1)
+        if me.readers.load() == 0
             me.writer_owner.store(desired: C::rf_current_thread_id())
             return true
-        me.writer.store(desired: 0_u8)
+        me.writer.store(desired: 0)
     return false

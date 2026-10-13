@@ -62,8 +62,8 @@ routine crash_report_rethrown(type_name: Text, message: Text, error: Crashables,
     danger
         var depth = error.thrown_trace_depth()
         var frames = error.thrown_trace_frames()
-        if depth > 0_s32
-            var first = frames.stride(count: LLVM::sign_extend[S32, S64](LLVM::bit_and(a: depth -% 1_s32, b: 31_s32))).peek()
+        if depth > 0
+            var first = frames.stride(count: LLVM::sign_extend[S32, S64](LLVM::bit_and(a: depth -% 1, b: 31))).peek()
             crash_write(text: "at ")
             crash_write_c_text(text: first.file)
             crash_write(text: ":")
@@ -73,7 +73,7 @@ routine crash_report_rethrown(type_name: Text, message: Text, error: Crashables,
             crash_write(text: "\n")
         crash_write_frames(depth: depth, frames: frames)
     crash_write(text: "Thrown again at ")
-    if line == 0_s32 and crash_write_library_caller(library: file)
+    if line == 0 and crash_write_library_caller(library: file)
         crash_write(text: "\n")
     else
         crash_write(text: file)
@@ -94,16 +94,16 @@ routine crash_report_rethrown(type_name: Text, message: Text, error: Crashables,
 @untraced
 routine crash_write_library_caller(library: Text) -> Bool
     var depth = LLVM::trace_depth()
-    if depth <= 0_s32
+    if depth <= 0
         return false
     var shown = depth
-    if shown > 32_s32
-        shown = 32_s32
+    if shown > 32
+        shown = 32
     danger
         var frames = LLVM::trace_frames()
-        var i = 0_s32
+        var i: S32 = 0
         while i < shown
-            var index = LLVM::bit_and(a: depth -% 1_s32 -% i, b: 31_s32)
+            var index = LLVM::bit_and(a: depth -% 1 -% i, b: 31)
             var frame = frames.stride(count: LLVM::sign_extend[S32, S64](index)).peek()
             if not c_text_starts_with(text: frame.file, prefix: library)
                 crash_write_c_text(text: frame.file)
@@ -112,7 +112,7 @@ routine crash_write_library_caller(library: Text) -> Bool
                 crash_write(text: ":")
                 crash_write_number(value: frame.column)
                 return true
-            i = i +% 1_s32
+            i = i +% 1
     return false
 
 ### Whether a NUL-terminated byte string starts with the UTF-8 bytes of a text.
@@ -121,16 +121,16 @@ routine crash_write_library_caller(library: Text) -> Bool
 ### :returns: `true` when it does.
 @untraced
 routine c_text_starts_with(text: Address, prefix: Text) -> Bool
-    var at = 0_u64
-    var i = 0_u64
+    var at: U64 = 0
+    var i: U64 = 0
     while i < prefix.count
         danger
             var code = prefix.data.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek().codepoint()
             var matched = c_text_code_point_at(text: text, at: at, code: code)
-            if matched == 0_u64
+            if matched == 0
                 return false
             at = at +% matched
-        i = i +% 1_u64
+        i = i +% 1
     return true
 
 ### Whether a NUL-terminated byte string holds the UTF-8 bytes of one code point at a byte offset.
@@ -140,27 +140,27 @@ routine c_text_starts_with(text: Address, prefix: Text) -> Bool
 ### :returns: how many bytes it took, or 0 when the bytes there differ.
 @untraced
 routine c_text_code_point_at(text: Address, at: U64, code: U32) -> U64
-    var count = 4_u64
-    var lead = 0xF0u32
-    if code <= 0x7Fu32
-        count = 1_u64
-        lead = 0x00u32
-    elseif code <= 0x7FFu32
-        count = 2_u64
-        lead = 0xC0u32
-    elseif code <= 0xFFFFu32
-        count = 3_u64
-        lead = 0xE0u32
-    var k = 0_u64
+    var count: U64 = 4
+    var lead: U32 = 0xF0
+    if code <= 0x7F
+        count = 1
+        lead = 0x00
+    elseif code <= 0x7FF
+        count = 2
+        lead = 0xC0
+    elseif code <= 0xFFFF
+        count = 3
+        lead = 0xE0
+    var k: U64 = 0
     while k < count
-        var expected = crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32 * LLVM::int_truncate[U64, U32](count -% 1_u64 -% k))
-        if k == 0_u64
-            expected = crash_utf8_byte(lead: lead, code: code, shift: 6u32 * LLVM::int_truncate[U64, U32](count -% 1_u64))
+        var expected = crash_utf8_byte(lead: 0x80, code: code, shift: 6 * LLVM::int_truncate[U64, U32](count -% 1 -% k))
+        if k == 0
+            expected = crash_utf8_byte(lead: lead, code: code, shift: 6 * LLVM::int_truncate[U64, U32](count -% 1))
         danger
             var actual = Hijacked[Byte](text).stride(count: LLVM::reinterpret_bits[U64, S64](at +% k)).peek()
             if LLVM::reinterpret_bits[Byte, U8](actual) != expected
-                return 0_u64
-        k = k +% 1_u64
+                return 0
+        k = k +% 1
     return count
 
 ### Writes the calling thread's crash trace, most recent frame first. Writes nothing when the build keeps no
@@ -176,16 +176,16 @@ routine crash_write_trace()
 ### :param frames: The first of the 32 frames, a ring the depth indexes modulo 32.
 @untraced
 routine crash_write_frames(depth: S32, frames: Hijacked[TraceFrame])
-    if depth <= 0_s32
+    if depth <= 0
         return
     crash_write(text: "Stack trace:\n")
     var shown = depth
-    if shown > 32_s32
-        shown = 32_s32
-    var i = 0_s32
+    if shown > 32
+        shown = 32
+    var i: S32 = 0
     while i < shown
         # The frames are a ring of 32: the most recent is at (depth - 1) mod 32.
-        var index = LLVM::bit_and(a: depth -% 1_s32 -% i, b: 31_s32)
+        var index = LLVM::bit_and(a: depth -% 1 -% i, b: 31)
         danger
             var frame = frames.stride(count: LLVM::sign_extend[S32, S64](index)).peek()
             crash_write(text: "  ")
@@ -199,8 +199,8 @@ routine crash_write_frames(depth: S32, frames: Hijacked[TraceFrame])
             crash_write(text: ":")
             crash_write_number(value: frame.column)
             crash_write(text: ")\n")
-        i = i +% 1_s32
-    if depth > 32_s32
+        i = i +% 1
+    if depth > 32
         crash_write(text: "  ... (")
         crash_write_number(value: depth)
         crash_write(text: " frames total)\n")
@@ -210,12 +210,12 @@ routine crash_write_frames(depth: S32, frames: Hijacked[TraceFrame])
 ### :param text: The text to write.
 @untraced
 routine crash_write(text: Text)
-    var i = 0_u64
+    var i: U64 = 0
     while i < text.count
         danger
             var letter = text.data.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek()
             crash_write_code_point(code: letter.codepoint())
-        i = i +% 1_u64
+        i = i +% 1
     return
 
 ### Writes one Unicode code point to the error stream as its one to four UTF-8 bytes.
@@ -223,64 +223,64 @@ routine crash_write(text: Text)
 @untraced
 routine crash_write_code_point(code: U32)
     var bytes = Array[Byte, 4]()
-    var count = 1_u64
-    if code <= 0x7Fu32
+    var count: U64 = 1
+    if code <= 0x7F
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 0_u64,
+            index: 0,
             value: LLVM::int_truncate[U32, U8](code),
         )
-    elseif code <= 0x7FFu32
+    elseif code <= 0x7FF
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 0_u64,
-            value: crash_utf8_byte(lead: 0xC0u32, code: code, shift: 6u32),
+            index: 0,
+            value: crash_utf8_byte(lead: 0xC0, code: code, shift: 6),
         )
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 1_u64,
-            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32),
+            index: 1,
+            value: crash_utf8_byte(lead: 0x80, code: code, shift: 0),
         )
-        count = 2_u64
-    elseif code <= 0xFFFFu32
+        count = 2
+    elseif code <= 0xFFFF
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 0_u64,
-            value: crash_utf8_byte(lead: 0xE0u32, code: code, shift: 12u32),
-        )
-        bytes = LLVM::set_byte_at(
-            array: bytes,
-            index: 1_u64,
-            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32),
+            index: 0,
+            value: crash_utf8_byte(lead: 0xE0, code: code, shift: 12),
         )
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 2_u64,
-            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32),
+            index: 1,
+            value: crash_utf8_byte(lead: 0x80, code: code, shift: 6),
         )
-        count = 3_u64
+        bytes = LLVM::set_byte_at(
+            array: bytes,
+            index: 2,
+            value: crash_utf8_byte(lead: 0x80, code: code, shift: 0),
+        )
+        count = 3
     else
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 0_u64,
-            value: crash_utf8_byte(lead: 0xF0u32, code: code, shift: 18u32),
+            index: 0,
+            value: crash_utf8_byte(lead: 0xF0, code: code, shift: 18),
         )
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 1_u64,
-            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 12u32),
+            index: 1,
+            value: crash_utf8_byte(lead: 0x80, code: code, shift: 12),
         )
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 2_u64,
-            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 6u32),
+            index: 2,
+            value: crash_utf8_byte(lead: 0x80, code: code, shift: 6),
         )
         bytes = LLVM::set_byte_at(
             array: bytes,
-            index: 3_u64,
-            value: crash_utf8_byte(lead: 0x80u32, code: code, shift: 0u32),
+            index: 3,
+            value: crash_utf8_byte(lead: 0x80, code: code, shift: 0),
         )
-        count = 4_u64
+        count = 4
     danger
         C::rf_console_error(ptr: bytes.hijack().recast_as[Byte](), len: count)
     return
@@ -294,8 +294,8 @@ routine crash_write_code_point(code: U32)
 @untraced
 routine crash_utf8_byte(lead: U32, code: U32, shift: U32) -> U8
     var bits = LLVM::shift_right_unsigned(code, shift)
-    if lead == 0x80u32
-        bits = LLVM::bit_and(a: bits, b: 0x3Fu32)
+    if lead == 0x80
+        bits = LLVM::bit_and(a: bits, b: 0x3F)
     return LLVM::int_truncate[U32, U8](LLVM::bit_or(a: lead, b: bits))
 
 ### Writes a number in decimal to the error stream, with a minus sign when it is negative.
@@ -303,28 +303,28 @@ routine crash_utf8_byte(lead: U32, code: U32, shift: U32) -> U8
 @untraced
 routine crash_write_number(value: S32)
     var magnitude = LLVM::reinterpret_bits[S32, U32](value)
-    if value < 0_s32
+    if value < 0
         crash_write(text: "-")
-        magnitude = 0_u32 -% magnitude
+        magnitude = 0 -% magnitude
     var digits = Array[Byte, 10]()
-    var position = 10_u64
+    var position: U64 = 10
     loop
-        position = position -% 1_u64
-        var digit = LLVM::unsigned_rem(a: magnitude, b: 10_u32)
+        position = position -% 1
+        var digit = LLVM::unsigned_rem(a: magnitude, b: 10)
         digits = LLVM::set_byte_at(
             array: digits,
             index: position,
-            value: LLVM::int_truncate[U32, U8](48_u32 +% digit),
+            value: LLVM::int_truncate[U32, U8](48 +% digit),
         )
-        magnitude = LLVM::unsigned_div(a: magnitude, b: 10_u32)
-        if magnitude == 0_u32
+        magnitude = LLVM::unsigned_div(a: magnitude, b: 10)
+        if magnitude == 0
             break
     danger
         var first = digits
             .hijack()
             .recast_as[Byte]()
             .stride(count: LLVM::reinterpret_bits[U64, S64](position))
-        C::rf_console_error(ptr: first, len: 10_u64 -% position)
+        C::rf_console_error(ptr: first, len: 10 -% position)
     return
 
 ### Writes a NUL-terminated C string (a trace frame's routine name or file) to the error stream.
@@ -333,10 +333,10 @@ routine crash_write_number(value: S32)
 routine crash_write_c_text(text: Address)
     danger
         var first = Hijacked[Byte](text)
-        var length = 0_u64
+        var length: U64 = 0
         while LLVM::reinterpret_bits[Byte, U8](
             first.stride(count: LLVM::reinterpret_bits[U64, S64](length)).peek(),
-        ) != 0_u8
-            length = length +% 1_u64
+        ) != 0
+            length = length +% 1
         C::rf_console_error(ptr: first, len: length)
     return

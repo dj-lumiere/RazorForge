@@ -21,7 +21,7 @@ public class TupleTests
         // All tuples are inline structs regardless of element types
         string source = """
                         routine test()
-                            var tuple = (1_s32, 2_s32, 3_s32)
+                            var tuple = (1, 2, 3)
                             return
                         """;
 
@@ -94,7 +94,7 @@ public class TupleTests
         // This test verifies tuple analysis succeeds without errors
         string source = """
                         routine test()
-                            var tuple = (1s32, 2s32)
+                            var tuple = (1, 2)
                             return
                         """;
 
@@ -114,7 +114,7 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                            var mixed = (1_s32, 2.5b64, true)
+                            var mixed = (1, 2.5, true)
                             return
                         """;
 
@@ -132,7 +132,7 @@ public class TupleTests
                             id: S32
 
                         routine test()
-                            var user = User(id: 42s32)
+                            var user = User(id: 42)
                             var tuple = (1, steal user)
                             return
                         """;

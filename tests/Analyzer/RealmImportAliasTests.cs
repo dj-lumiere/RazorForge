@@ -43,8 +43,8 @@ public class RealmImportAliasTests
                                import Core.LLVM::add
 
                                routine start()
-                                   var x = 20_s32
-                                   var y = 22_s32
+                                   var x: S32 = 20
+                                   var y: S32 = 22
                                    var z = add[S32](a: x, b: y)
                                    return
                                """);
@@ -59,7 +59,7 @@ public class RealmImportAliasTests
                                import Core.C::rf_runtime_init
 
                                routine start()
-                                   var z = add[S32](a: 1_s32, b: 2_s32)
+                                   var z = add[S32](a: 1, b: 2)
                                    return
                                """,
             expectedErrorSubstring: "lives in the LLVM realm");

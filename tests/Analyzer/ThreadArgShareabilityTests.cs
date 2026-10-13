@@ -67,11 +67,11 @@ public class ThreadArgShareabilityTests
         // Atomic carries its own synchronization — shared by reference across the boundary.
         string source = Prelude + """
                                   routine work(cell: Atomic[S64]) -> S64
-                                      drop cell.fetch_add(delta: 1_s64)
-                                      return 0_s64
+                                      drop cell.fetch_add(delta: 1)
+                                      return 0
 
                                   routine start()
-                                      var counter = Atomic[S64](initial: 0_s64)
+                                      var counter = Atomic[S64](initial: 0)
                                       var t = agent work(cell: counter)
                                       drop t.retrieve()
                                       return
@@ -86,7 +86,7 @@ public class ThreadArgShareabilityTests
         // Guarded is an atomic Arc — explicitly shareable across threads.
         string source = Prelude + """
                                   routine work(s: Guarded[Node, ReadOnly]) -> S64
-                                      return 0_s64
+                                      return 0
 
                                   routine start()
                                       var s = Guarded[Node, ReadOnly](from: Node(value: 1))
@@ -130,7 +130,7 @@ public class ThreadArgShareabilityTests
                                       posted node: Retained[Node]
 
                                   routine work(h: Holder) -> S64
-                                      return 0_s64
+                                      return 0
 
                                   routine start()
                                       var h = Holder(node: Retained(from: Node(value: 1)))
@@ -158,7 +158,7 @@ public class ThreadArgShareabilityTests
                                       posted node: Guarded[Node, ReadOnly]
 
                                   routine work(h: Holder) -> S64
-                                      return 0_s64
+                                      return 0
 
                                   routine start()
                                       var h = Holder(node: Guarded[Node, ReadOnly](from: Node(value: 1)))
@@ -238,7 +238,7 @@ public class ThreadArgShareabilityTests
                                       posted node: Retained[Node]
 
                                   routine work(h: Holder) -> S64
-                                      return 0_s64
+                                      return 0
 
                                   routine start()
                                       var h = Holder(node: Retained(from: Node(value: 1)))

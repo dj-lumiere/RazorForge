@@ -1,10 +1,10 @@
 module Core
 
 # Constants for S256 limits
-preset S256_MIN: S256 = -57896044618658097711785492504343953926634992332820282019728792003956564819968_s256
-preset S256_MAX: S256 = 57896044618658097711785492504343953926634992332820282019728792003956564819967_s256
-preset S256_ZERO: S256 = 0_s256
-preset S256_ONE: S256 = 1_s256
+preset S256_MIN: S256 = -57896044618658097711785492504343953926634992332820282019728792003956564819968
+preset S256_MAX: S256 = 57896044618658097711785492504343953926634992332820282019728792003956564819967
+preset S256_ZERO: S256 = 0
+preset S256_ONE: S256 = 1
 
 ### A 256-bit signed integer in the range −2²⁵⁵ to 2²⁵⁵−1.
 ###
@@ -80,7 +80,7 @@ routine U128.to[S256]() -> S256
 ### :returns: The same bit pattern interpreted as `S256`.
 ### :throws: {IntegerOverflowError} if `me > S256_MAX`.
 routine U256.to![S256]() -> S256
-    if me > 57896044618658097711785492504343953926634992332820282019728792003956564819967_u256
+    if me > 57896044618658097711785492504343953926634992332820282019728792003956564819967
         throw IntegerOverflowError()
     return LLVM::reinterpret_bits[U256, S256](me)
 
@@ -103,8 +103,8 @@ routine B32.to![S256]() -> S256
 ### :throws: {IntegerOverflowError} if this value is NaN, infinite, or outside [-2^255, 2^255-1].
 routine B64.to![S256]() -> S256
     if me.is_nan()
-        or me < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0_b64
-        or me >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0_b64
+        or me < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0
+        or me >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B64, S256](me)
 
@@ -113,38 +113,38 @@ routine B64.to![S256]() -> S256
 ### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
 routine B128.to![S256]() -> S256
     var bits = me.to_bits()
-    var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127_u128))
+    var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127))
     var biased = LLVM::int_truncate[U128, U64](
-        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128),
+        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112), b: 32767),
     )
     var frac = LLVM::bit_and(a: bits, b: b128_mant_mask())
-    if biased == 0x7FFF_u64
-        if LLVM::int_eq(a: frac, b: 0_u128)
+    if biased == 0x7FFF
+        if LLVM::int_eq(a: frac, b: 0)
             throw NumericOverflowError(description: "cannot convert infinite B128 to S256")
         throw NumericDomainError(description: "cannot convert NaN B128 to S256")
-    if biased < 16383_u64
-        return 0_s256
-    var actual_exp = LLVM::sub(a: biased, b: 16383_u64)
-    if actual_exp >= 256_u64
+    if biased < 16383
+        return 0
+    var actual_exp = LLVM::sub(a: biased, b: 16383)
+    if actual_exp >= 256
         throw NumericOverflowError(description: "B128 value out of range for S256")
-    if actual_exp == 255_u64
-        if sign == 0_u64 or LLVM::int_ne(a: frac, b: 0_u128)
+    if actual_exp == 255
+        if sign == 0 or LLVM::int_ne(a: frac, b: 0)
             throw NumericOverflowError(description: "B128 value out of range for S256")
-        return LLVM::reinterpret_bits[U256, S256](LLVM::shift_left(value: 1_u256, bits: 255_u256))
+        return LLVM::reinterpret_bits[U256, S256](LLVM::shift_left(value: 1, bits: 255))
     var sig = LLVM::zero_extend[U128, U256](LLVM::bit_or(a: b128_implicit(), b: frac))
     lateinit var int_part: U256
-    if actual_exp <= 112_u64
+    if actual_exp <= 112
         int_part = LLVM::shift_right_unsigned(
             sig,
-            LLVM::zero_extend[U64, U256](LLVM::sub(a: 112_u64, b: actual_exp)),
+            LLVM::zero_extend[U64, U256](LLVM::sub(a: 112, b: actual_exp)),
         )
     else
         int_part = LLVM::shift_left(
             sig,
-            LLVM::zero_extend[U64, U256](LLVM::sub(a: actual_exp, b: 112_u64)),
+            LLVM::zero_extend[U64, U256](LLVM::sub(a: actual_exp, b: 112)),
         )
-    if sign == 1_u64
-        return LLVM::sub(a: 0_s256, b: LLVM::reinterpret_bits[U256, S256](int_part))
+    if sign == 1
+        return LLVM::sub(a: 0, b: LLVM::reinterpret_bits[U256, S256](int_part))
     return LLVM::reinterpret_bits[U256, S256](int_part)
 
 ### Converts a `D32` to `S256`, truncating toward zero.
@@ -214,9 +214,9 @@ routine S256.mul!(you: S256) -> S256
 ### `|x|` as a U256 magnitude. `S256_MIN` maps to exactly 2²⁵⁵ (the wrapping
 ### negate reinterpreted as unsigned), so there is no overflow.
 routine s256_abs_u256(x: S256) -> U256
-    if LLVM::signed_ge(a: x, b: 0_s256)
+    if LLVM::signed_ge(a: x, b: 0)
         return LLVM::reinterpret_bits[S256, U256](x)
-    return LLVM::reinterpret_bits[S256, U256](LLVM::sub(a: 0_s256, b: x))
+    return LLVM::reinterpret_bits[S256, U256](LLVM::sub(a: 0, b: x))
 
 ### Returns `me // you` (euclidean division), throwing on errors.
 ### Euclidean division: the remainder is always in `[0, |you|)`, consistent with `mod!`.
@@ -228,24 +228,24 @@ routine s256_abs_u256(x: S256) -> U256
 routine S256.floordiv!(you: S256) -> S256
     if you == 0
         throw DivisionByZeroError()
-    if me == S256_MIN and you == -1_s256
+    if me == S256_MIN and you == -1
         throw IntegerOverflowError()
     var amag = s256_abs_u256(x: me)
     var bmag = s256_abs_u256(x: you)
     # ONE Knuth divide yields both magnitude quotient and remainder.
     var dr = udivrem256(num: amag, den: bmag)
     var uq = dr.q
-    var aneg = LLVM::signed_lt(a: me, b: 0_s256)
-    var bneg = LLVM::signed_lt(a: you, b: 0_s256)
+    var aneg = LLVM::signed_lt(a: me, b: 0)
+    var bneg = LLVM::signed_lt(a: you, b: 0)
     # EUCLIDEAN division (remainder always >= 0), consistent with S8..S128. When the
     # dividend is negative and the division is inexact the quotient MAGNITUDE rounds up
     # by one; the quotient is positive iff the operands share a sign.
-    if aneg and LLVM::int_ne(a: dr.r, b: 0_u256)
-        uq = LLVM::add(a: uq, b: 1_u256)
+    if aneg and LLVM::int_ne(a: dr.r, b: 0)
+        uq = LLVM::add(a: uq, b: 1)
     var q = LLVM::reinterpret_bits[U256, S256](uq)
     if aneg == bneg
         return q
-    return LLVM::sub(a: 0_s256, b: q)
+    return LLVM::sub(a: 0, b: q)
 
 ### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
 ### :param you: The divisor.
@@ -258,7 +258,7 @@ routine S256.mod!(you: S256) -> S256
     # dividend with a nonzero remainder, reflect the magnitude remainder into [0, |you|).
     var bmag = s256_abs_u256(x: you)
     var ur = s256_abs_u256(x: me).mod(bmag)
-    if LLVM::signed_lt(a: me, b: 0_s256) and LLVM::int_ne(a: ur, b: 0_u256)
+    if LLVM::signed_lt(a: me, b: 0) and LLVM::int_ne(a: ur, b: 0)
         ur = LLVM::sub(a: bmag, b: ur)
     return LLVM::reinterpret_bits[U256, S256](ur)
 
@@ -271,24 +271,24 @@ routine S256.mod!(you: S256) -> S256
 routine S256.divmod!(you: S256) -> (S256, S256)
     if you == 0
         throw DivisionByZeroError()
-    if me == S256_MIN and you == -1_s256
+    if me == S256_MIN and you == -1
         throw IntegerOverflowError()
     var bmag = s256_abs_u256(x: you)
     var dr = udivrem256(num: s256_abs_u256(x: me), den: bmag)
     var uq = dr.q
     var ur = dr.r
-    var aneg = LLVM::signed_lt(a: me, b: 0_s256)
-    var bneg = LLVM::signed_lt(a: you, b: 0_s256)
+    var aneg = LLVM::signed_lt(a: me, b: 0)
+    var bneg = LLVM::signed_lt(a: you, b: 0)
     # euclidean: a negative dividend with a nonzero remainder bumps the quotient magnitude and
     # reflects the remainder into [0, |you|) — both under the same condition, from the one division.
-    if aneg and LLVM::int_ne(a: ur, b: 0_u256)
-        uq = LLVM::add(a: uq, b: 1_u256)
+    if aneg and LLVM::int_ne(a: ur, b: 0)
+        uq = LLVM::add(a: uq, b: 1)
         ur = LLVM::sub(a: bmag, b: ur)
     var q = LLVM::reinterpret_bits[U256, S256](uq)
     var r = LLVM::reinterpret_bits[U256, S256](ur)
     if aneg == bneg
         return (q, r)
-    return (LLVM::sub(a: 0_s256, b: q), r)
+    return (LLVM::sub(a: 0, b: q), r)
 
 ### Returns `-me` (arithmetic negation), throwing on `S256_MIN`.
 ### :returns: The negated value.
@@ -297,7 +297,7 @@ routine S256.divmod!(you: S256) -> (S256, S256)
 routine S256.neg!() -> S256
     if me == S256_MIN
         throw IntegerOverflowError()
-    return LLVM::sub(a: 0_s256, b: me)
+    return LLVM::sub(a: 0, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -351,14 +351,14 @@ dangerous routine S256.floordiv_unchecked(you: S256) -> S256
     # Knuth divide on magnitudes (one call → quotient + remainder), euclidean adjust.
     var dr = udivrem256(num: s256_abs_u256(x: me), den: s256_abs_u256(x: you))
     var uq = dr.q
-    var aneg = LLVM::signed_lt(a: me, b: 0_s256)
-    var bneg = LLVM::signed_lt(a: you, b: 0_s256)
-    if aneg and LLVM::int_ne(a: dr.r, b: 0_u256)
-        uq = LLVM::add(a: uq, b: 1_u256)
+    var aneg = LLVM::signed_lt(a: me, b: 0)
+    var bneg = LLVM::signed_lt(a: you, b: 0)
+    if aneg and LLVM::int_ne(a: dr.r, b: 0)
+        uq = LLVM::add(a: uq, b: 1)
     var q = LLVM::reinterpret_bits[U256, S256](uq)
     if aneg == bneg
         return q
-    return LLVM::sub(a: 0_s256, b: q)
+    return LLVM::sub(a: 0, b: q)
 
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
@@ -368,7 +368,7 @@ dangerous routine S256.mod_unchecked(you: S256) -> S256
     # Knuth divide on magnitudes; reflect a negative dividend's remainder into [0, |you|).
     var bmag = s256_abs_u256(x: you)
     var ur = udivrem256(num: s256_abs_u256(x: me), den: bmag).r
-    if LLVM::signed_lt(a: me, b: 0_s256) and LLVM::int_ne(a: ur, b: 0_u256)
+    if LLVM::signed_lt(a: me, b: 0) and LLVM::int_ne(a: ur, b: 0)
         ur = LLVM::sub(a: bmag, b: ur)
     return LLVM::reinterpret_bits[U256, S256](ur)
 
@@ -397,16 +397,16 @@ routine S256.sub_clamp(you: S256) -> S256
 ### :returns: The product, or `S256_MAX` / `S256_MIN` if it would overflow.
 @readonly
 routine S256.mul_clamp(you: S256) -> S256
-    if LLVM::int_eq(a: me, b: 0_s256) or LLVM::int_eq(a: you, b: 0_s256)
-        return 0_s256
+    if LLVM::int_eq(a: me, b: 0) or LLVM::int_eq(a: you, b: 0)
+        return 0
     var result = LLVM::mul(a: me, b: you)
     # Signed divide-back via Knuth on magnitudes (me != 0): trunc(result / me).
     var qmag = udivrem256(num: s256_abs_u256(x: result), den: s256_abs_u256(x: me)).q
     var q = LLVM::reinterpret_bits[U256, S256](qmag)
-    if LLVM::int_ne(a: LLVM::signed_lt(a: result, b: 0_s256), b: LLVM::signed_lt(a: me, b: 0_s256))
-        q = LLVM::sub(a: 0_s256, b: q)
+    if LLVM::int_ne(a: LLVM::signed_lt(a: result, b: 0), b: LLVM::signed_lt(a: me, b: 0))
+        q = LLVM::sub(a: 0, b: q)
     if LLVM::int_ne(a: q, b: you)
-        var same_sign = LLVM::int_eq(LLVM::signed_gt(me, 0_s256), LLVM::signed_gt(you, 0_s256))
+        var same_sign = LLVM::int_eq(LLVM::signed_gt(me, 0), LLVM::signed_gt(you, 0))
         if same_sign
             return S256_MAX
         return S256_MIN
@@ -432,7 +432,7 @@ routine S256.pow_with_overflow!(exp: S256) -> (S256, Bool)
             var mul_result = result.mul_with_overflow(base)
             result = mul_result.item0
             overflow = overflow or mul_result.item1
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             var square_result = base.mul_with_overflow(base)
             base = square_result.item0
@@ -455,7 +455,7 @@ routine S256.pow!(exp: S256) -> S256
 ### :returns: The result modulo 2²⁵⁶ (signed wrap).
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S256.pow_wrap!(exp: S256) -> S256
-    if exp < 0_s256
+    if exp < 0
         throw NumericDomainError(description: "negative exponent: no integer result")
     var result: S256 = 1
     var base: S256 = me
@@ -463,7 +463,7 @@ routine S256.pow_wrap!(exp: S256) -> S256
     while e > 0
         if (e & 1) == 1
             result = result.mul_wrap(base)
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             base = base.mul_wrap(base)
     return result
@@ -482,7 +482,7 @@ routine S256.pow_clamp!(exp: S256) -> S256
     while e > 0
         if (e & 1) == 1
             result = result.mul_clamp(base)
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             base = base.mul_clamp(base)
     return result
@@ -612,7 +612,7 @@ routine S256.count_ones() -> S256
 ### Returns the count of clear bits in this value's 256-bit representation.
 ### :returns: `256` minus the popcount; between 0 and 256.
 routine S256.count_zeros() -> S256
-    return 256_s256 -% me.count_ones()
+    return 256 -% me.count_ones()
 
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `256` if the value is zero.
@@ -675,23 +675,23 @@ common routine S256.from_bytes_be(bytes: Array[Byte, 32]) -> S256
 ### Returns `true` if this value is greater than zero.
 ### :returns: `true` if `me > 0`.
 routine S256.is_positive() -> Bool
-    return me > 0_s256
+    return me > 0
 
 ### Returns `true` if this value is less than zero.
 ### :returns: `true` if `me < 0`.
 routine S256.is_negative() -> Bool
-    return me < 0_s256
+    return me < 0
 
 ### Returns `true` if this value is zero.
 ### :returns: `true` if `me == 0`.
 routine S256.is_zero() -> Bool
-    return me == 0_s256
+    return me == 0
 
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine S256.is_even() -> Bool
-    var result = LLVM::bit_and(a: me, b: 1_s256)
-    return LLVM::int_eq(a: result, b: 0_s256)
+    var result = LLVM::bit_and(a: me, b: 1)
+    return LLVM::int_eq(a: result, b: 0)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -701,15 +701,15 @@ routine S256.is_odd() -> Bool
 ### Returns `true` if this value is an exact power of two.
 ### Negative values always return `false`.
 routine S256.is_power_of_two() -> Bool
-    return me > 0_s256 and (me & me -% 1_s256) == 0_s256
+    return me > 0 and (me & me -% 1) == 0
 
 ### Returns the sign of this value as −1, 0, or 1.
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
 routine S256.signum() -> S256
     return when
-        me > 0_s256 => 1_s256
-        me < 0_s256 => -1_s256
-        else => 0_s256
+        me > 0 => 1
+        me < 0 => -1
+        else => 0
 
 # ============================================================================
 # Text Representation and Parsing
@@ -719,14 +719,14 @@ routine S256.signum() -> S256
 ### :returns: The value rendered as `Text`.
 @override
 routine S256.represent() -> Text
-    if me == 0s256
+    if me == 0
         return "0"
-    if me > 0s256
+    if me > 0
         return me.to[U256]().represent()
     # Use reinterpret_bits (not U256(me)) — U256(from: S256) throws on negative inputs,
     # and we need the raw bit pattern so the two's-complement negation `0u256 -% bits`
     # yields |me| (works correctly even for S256.MIN, whose absolute value overflows S256).
-    return "-" + (0u256 -% LLVM::reinterpret_bits[S256, U256](me)).represent()
+    return "-" + (0 -% LLVM::reinterpret_bits[S256, U256](me)).represent()
 
 ### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
 ### when negative (`255.to_text(radix: 16)` is `ff`).
@@ -735,9 +735,9 @@ routine S256.represent() -> Text
 @readonly
 routine S256.to_text(radix: S32) -> Text
     var raw = LLVM::reinterpret_bits[S256, U256](me)
-    if me < 0_s256
+    if me < 0
         return wide_radix_text[U256](
-            mag: LLVM::zero_extend[U64, U256](0_u64) -% raw,
+            mag: LLVM::zero_extend[U64, U256](0) -% raw,
             negative: true,
             radix: radix,
         )
@@ -754,38 +754,38 @@ routine S256.diagnose() -> Text
 ### :throws: {InvalidValueError} if this value is empty, sign-only, or contains non-digit characters.
 ### :throws: {IntegerOverflowError} if the value does not fit in `S256`.
 routine Text.to![S256]() -> S256
-    if me.count() == 0u64
+    if me.count() == 0
         throw InvalidValueError(input: me, target: "S256")
-    var start = 0u64
+    var start: U64 = 0
     var negative = false
-    var first = me[0u64]
-    if first == Char(0x002Du32)
+    var first = me[0]
+    if first == '-'
         negative = true
-        start = 1u64
-    elseif first == Char(0x002Bu32)
-        start = 1u64
+        start = 1
+    elseif first == '+'
+        start = 1
     if start >= me.count()
         throw InvalidValueError(input: me, target: "S256")
-    var result = 0u256
-    var last_limit = 7u256
+    var result: U256 = 0
+    var last_limit: U256 = 7
     if negative
-        last_limit = 8u256
+        last_limit = 8
     var i = start
     while i < me.count()
         var ch = me[i]
         if ch.is_numeric()
             var digit = ch.digit_value().to[U256]()
             # Stop before `result * 10 + digit` passes the largest magnitude the sign allows.
-            if result > 5789604461865809771178549250434395392663499233282028201972879200395656481996u256
-                or (result == 5789604461865809771178549250434395392663499233282028201972879200395656481996u256
+            if result > 5789604461865809771178549250434395392663499233282028201972879200395656481996
+                or (result == 5789604461865809771178549250434395392663499233282028201972879200395656481996
                     and digit > last_limit)
                 throw IntegerOverflowError()
-            result = result * 10u256 + digit
+            result = result * 10 + digit
         else
             throw InvalidValueError(input: me, target: "S256")
-        i = i + 1u64
+        i = i + 1
     if negative
-        return LLVM::reinterpret_bits[U256, S256](0u256 -% result)
+        return LLVM::reinterpret_bits[U256, S256](0 -% result)
     return result.to[S256]()
 
 # ============================================================================
@@ -814,19 +814,19 @@ routine S256.isqrt() -> S256
 ### :returns: The tuple `(root, remainder)`.
 ### :throws: {NumericDomainError} if `me < 0`.
 routine S256.sqrtrem!() -> (S256, S256)
-    if me < 0_s256
+    if me < 0
         throw NumericDomainError(description: "square root of a negative value has no real result")
     var x = me
-    var result = 0_s256
-    var bit = 1_s256 << 254_u32
+    var result: S256 = 0
+    var bit: S256 = 1 << 254
     while bit > x
-        bit = bit.lshr(2_u32)
-    while bit != 0_s256
+        bit = bit.lshr(2)
+    while bit != 0
         var next = result.add_wrap(bit)
         if x >= next
             x = x.sub_wrap(next)
-            result = result.lshr(1_u32).add_wrap(bit)
+            result = result.lshr(1).add_wrap(bit)
         else
-            result = result.lshr(1_u32)
-        bit = bit.lshr(2_u32)
+            result = result.lshr(1)
+        bit = bit.lshr(2)
     return (result, x)

@@ -27,46 +27,46 @@ obeys Copyable
 
 secret routine bigint_zero() -> IntV
     danger
-        return IntV(neg: false, len: 0u64, tab: hijacked_none[U64]())
+        return IntV(neg: false, len: 0, tab: hijacked_none[U64]())
 
 # Wraps `len` limbs of `tab`, dropping high zero limbs (a zero result is non-negative).
 secret dangerous routine bigint_make(neg: Bool, tab: Hijacked[U64], len: U64) -> IntV
     var n = len
-    while n > 0u64 and limb(tab: tab, i: n -% 1u64) == 0u64
-        n = n -% 1u64
-    if n == 0u64
+    while n > 0 and limb(tab: tab, i: n -% 1) == 0
+        n = n -% 1
+    if n == 0
         return bigint_zero()
     return IntV(neg: neg, len: n, tab: tab)
 
 # `a` with its sign replaced (zero stays non-negative).
 secret routine bigint_with_sign(a: IntV, neg: Bool) -> IntV
-    if a.len == 0u64
+    if a.len == 0
         return a
     return IntV(neg: neg, len: a.len, tab: a.tab)
 
 secret routine bigint_from_u64(v: U64, neg: Bool) -> IntV
     danger
-        if v == 0u64 or not scratch_admit(limbs: 1u64)
+        if v == 0 or not scratch_admit(limbs: 1)
             return bigint_zero()
-        var tab = alloc_limbs(n: 1u64)
-        set_limb(tab: tab, i: 0u64, value: v)
-        return IntV(neg: neg, len: 1u64, tab: tab)
+        var tab = alloc_limbs(n: 1)
+        set_limb(tab: tab, i: 0, value: v)
+        return IntV(neg: neg, len: 1, tab: tab)
 
 # -1 / 0 / 1 comparing magnitudes.
 secret routine bigint_cmp_mag(a: IntV, b: IntV) -> S64
     danger
         if a.len != b.len
-            return if a.len < b.len then -1s64 else 1s64
-        if a.len == 0u64
-            return 0s64
+            return if a.len < b.len then -1 else 1
+        if a.len == 0
+            return 0
         return limbs_cmp(a: a.tab, b: b.tab, n: a.len)
 
 # -1 / 0 / 1 comparing values.
 secret routine bigint_cmp(a: IntV, b: IntV) -> S64
     if a.neg != b.neg
-        return if a.neg then -1s64 else 1s64
+        return if a.neg then -1 else 1
     var c = bigint_cmp_mag(a: a, b: b)
-    return if a.neg then 0s64 -% c else c
+    return if a.neg then 0 -% c else c
 # |a| + |b| written into `r` (at least max(a.len, b.len) + 1 limbs), carrying the sign `neg`.
 secret dangerous routine bigint_add_mag_into(a: IntV, b: IntV, neg: Bool, r: Hijacked[U64]) -> IntV
     var x = a
@@ -74,43 +74,43 @@ secret dangerous routine bigint_add_mag_into(a: IntV, b: IntV, neg: Bool, r: Hij
     if x.len < y.len
         x = b
         y = a
-    var carry = 0u64
-    if y.len > 0u64
-        carry = limbs_add(res: r, op1: x.tab, op2: y.tab, n: y.len, carry: 0u64)
+    var carry: U64 = 0
+    if y.len > 0
+        carry = limbs_add(res: r, op1: x.tab, op2: y.tab, n: y.len, carry: 0)
     var i = y.len
     while i < x.len
         var v = limb(tab: x.tab, i: i) +% carry
-        carry = if v < carry then 1u64 else 0u64
+        carry = if v < carry then 1 else 0
         set_limb(tab: r, i: i, value: v)
-        i = i +% 1u64
+        i = i +% 1
     set_limb(tab: r, i: x.len, value: carry)
-    return bigint_make(neg: neg, tab: r, len: x.len +% 1u64)
+    return bigint_make(neg: neg, tab: r, len: x.len +% 1)
 
 # |a| - |b| written into `r` (at least a.len limbs), carrying the sign `neg`. Requires |a| >= |b|.
 secret dangerous routine bigint_sub_mag_into(a: IntV, b: IntV, neg: Bool, r: Hijacked[U64]) -> IntV
-    if a.len == 0u64
+    if a.len == 0
         return bigint_zero()
-    var borrow = 0u64
-    if b.len > 0u64
-        borrow = limbs_sub(res: r, op1: a.tab, op2: b.tab, n: b.len, borrow_in: 0u64)
+    var borrow: U64 = 0
+    if b.len > 0
+        borrow = limbs_sub(res: r, op1: a.tab, op2: b.tab, n: b.len, borrow_in: 0)
     var i = b.len
     while i < a.len
         var v = limb(tab: a.tab, i: i)
         set_limb(tab: r, i: i, value: v -% borrow)
-        borrow = if v < borrow then 1u64 else 0u64
-        i = i +% 1u64
+        borrow = if v < borrow then 1 else 0
+        i = i +% 1
     return bigint_make(neg: neg, tab: r, len: a.len)
 
 # The limbs `a + b` needs as an output buffer for `bigint_add_into`.
 secret routine bigint_add_capacity(a: IntV, b: IntV) -> U64
-    return (if a.len > b.len then a.len else b.len) +% 1u64
+    return (if a.len > b.len then a.len else b.len) +% 1
 
 # a + b written into `r` (at least `bigint_add_capacity(a, b)` limbs). The result's limbs are `r`
 # unless it is zero.
 secret dangerous routine bigint_add_into(a: IntV, b: IntV, r: Hijacked[U64]) -> IntV
     if a.neg == b.neg
         return bigint_add_mag_into(a: a, b: b, neg: a.neg, r: r)
-    if bigint_cmp_mag(a: a, b: b) >= 0s64
+    if bigint_cmp_mag(a: a, b: b) >= 0
         return bigint_sub_mag_into(a: a, b: b, neg: a.neg, r: r)
     return bigint_sub_mag_into(a: b, b: a, neg: b.neg, r: r)
 
@@ -148,7 +148,7 @@ secret routine bigint_sub(a: IntV, b: IntV) -> IntV
 # a * b (schoolbook below 100 limbs of the smaller factor, NTT above).
 secret routine bigint_mul(a: IntV, b: IntV) -> IntV
     danger
-        if a.len == 0u64 or b.len == 0u64
+        if a.len == 0 or b.len == 0
             return bigint_zero()
         var n = a.len +% b.len
         if not scratch_admit(limbs: n +% limbs_mul_scratch(op1_size: a.len, op2_size: b.len))
@@ -160,9 +160,9 @@ secret routine bigint_mul(a: IntV, b: IntV) -> IntV
 # (|a| / |b|, |a| mod |b|) as non-negative values. `b` is nonzero.
 secret routine bigint_divmod_mag(a: IntV, b: IntV) -> (IntV, IntV)
     danger
-        if bigint_cmp_mag(a: a, b: b) < 0s64
+        if bigint_cmp_mag(a: a, b: b) < 0
             return (bigint_zero(), bigint_abs(a: a))
-        var nq = a.len -% b.len +% 1u64
+        var nq = a.len -% b.len +% 1
         if not scratch_admit(limbs: nq +% b.len +% limbs_divmod_scratch(na: a.len, nb: b.len))
             return (bigint_zero(), bigint_zero())
         var q = alloc_limbs(n: nq)
@@ -179,27 +179,27 @@ secret routine bigint_divmod(a: IntV, b: IntV) -> (IntV, IntV)
     var qr = bigint_divmod_mag(a: a, b: b)
     var q = qr.item0
     var r = qr.item1
-    if a.neg and r.len != 0u64
-        q = bigint_add_mag(a: q, b: bigint_from_u64(v: 1u64, neg: false), neg: false)
+    if a.neg and r.len != 0
+        q = bigint_add_mag(a: q, b: bigint_from_u64(v: 1, neg: false), neg: false)
         r = bigint_sub_mag(a: bigint_abs(a: b), b: r, neg: false)
     return (bigint_with_sign(a: q, neg: a.neg != b.neg), r)
 
 # The limbs `a << bits` needs as an output buffer for `bigint_shl_into`.
 secret routine bigint_shl_capacity(a: IntV, bits: U64) -> U64
-    return a.len +% bits // 64u64 +% 1u64
+    return a.len +% bits // 64 +% 1
 
 # a * 2^bits written into `r` (at least `bigint_shl_capacity(a, bits)` limbs).
 secret dangerous routine bigint_shl_into(a: IntV, bits: U64, r: Hijacked[U64]) -> IntV
-    if a.len == 0u64
+    if a.len == 0
         return a
-    var limb_shift = bits // 64u64
-    var n = a.len +% limb_shift +% 1u64
+    var limb_shift = bits // 64
+    var n = a.len +% limb_shift +% 1
     zero_limbs(tab: r, n: limb_shift)
     var carry = limbs_shl(
         dst: r.stride(count: limb_shift.to[S64]()),
         src: a.tab,
         n: a.len,
-        shift: bits % 64u64,
+        shift: bits % 64,
     )
     set_limb(tab: r, i: limb_shift +% a.len, value: carry)
     return bigint_make(neg: a.neg, tab: r, len: n)
@@ -207,7 +207,7 @@ secret dangerous routine bigint_shl_into(a: IntV, bits: U64, r: Hijacked[U64]) -
 # a * 2^bits.
 secret routine bigint_shl(a: IntV, bits: U64) -> IntV
     danger
-        if a.len == 0u64 or bits == 0u64
+        if a.len == 0 or bits == 0
             return a
         var n = bigint_shl_capacity(a: a, bits: bits)
         if not scratch_admit(limbs: n)
@@ -217,10 +217,10 @@ secret routine bigint_shl(a: IntV, bits: U64) -> IntV
 # The limbs `a >> bits` needs as an output buffer for `bigint_shr_into` (one more than the shifted
 # magnitude, for the carry when a negative value rounds its magnitude up).
 secret routine bigint_shr_capacity(a: IntV, bits: U64) -> U64
-    var limb_shift = bits // 64u64
+    var limb_shift = bits // 64
     if limb_shift >= a.len
-        return 1u64
-    return a.len -% limb_shift +% 1u64
+        return 1
+    return a.len -% limb_shift +% 1
 
 # floor(a / 2^bits), the arithmetic right shift of the two's-complement form (so -5 >> 1 is -3), written
 # into `r` (at least `bigint_shr_capacity(a, bits)` limbs).
@@ -229,35 +229,35 @@ secret dangerous routine bigint_shr_into(a: IntV, bits: U64, r: Hijacked[U64]) -
     if a.neg and limbs_ctz(tab: a.tab, n: a.len) < bits
         # a negative value lost nonzero bits: round its magnitude up
         var n = q.len
-        if n == 0u64
-            set_limb(tab: r, i: 0u64, value: 1u64)
-            return IntV(neg: true, len: 1u64, tab: r)
-        set_limb(tab: r, i: n, value: limbs_add_word(tab: r, b: 1u64, n: n))
-        return bigint_make(neg: true, tab: r, len: n +% 1u64)
+        if n == 0
+            set_limb(tab: r, i: 0, value: 1)
+            return IntV(neg: true, len: 1, tab: r)
+        set_limb(tab: r, i: n, value: limbs_add_word(tab: r, b: 1, n: n))
+        return bigint_make(neg: true, tab: r, len: n +% 1)
     return q
 
 # The magnitude shifted right by `bits`, keeping the sign (truncates toward zero), written into `r` (at
 # least a.len - bits / 64 limbs when that is positive).
 secret dangerous routine bigint_shr_mag_into(a: IntV, bits: U64, r: Hijacked[U64]) -> IntV
-    var limb_shift = bits // 64u64
+    var limb_shift = bits // 64
     if limb_shift >= a.len
         return bigint_zero()
     var n = a.len -% limb_shift
     var src = a.tab.stride(count: limb_shift.to[S64]())
-    var bit_shift = bits % 64u64
-    if bit_shift == 0u64
-        var i = 0u64
+    var bit_shift = bits % 64
+    if bit_shift == 0
+        var i: U64 = 0
         while i < n
             set_limb(tab: r, i: i, value: limb(tab: src, i: i))
-            i = i +% 1u64
+            i = i +% 1
     else
-        drop limbs_shr(tab_r: r, tab: src, n: n, shift: bit_shift.to[U32](), high: 0u64)
+        drop limbs_shr(tab_r: r, tab: src, n: n, shift: bit_shift.to[U32](), high: 0)
     return bigint_make(neg: a.neg, tab: r, len: n)
 
 # The magnitude shifted right by `bits`, keeping the sign (truncates toward zero).
 secret routine bigint_shr_mag(a: IntV, bits: U64) -> IntV
     danger
-        var limb_shift = bits // 64u64
+        var limb_shift = bits // 64
         if limb_shift >= a.len
             return bigint_zero()
         if not scratch_admit(limbs: a.len -% limb_shift)
@@ -266,56 +266,56 @@ secret routine bigint_shr_mag(a: IntV, bits: U64) -> IntV
 
 # The limbs a bitwise operation of `a` and `b` needs as an output buffer for `bigint_bitop_into`.
 secret routine bigint_bitop_capacity(a: IntV, b: IntV) -> U64
-    return (if a.len > b.len then a.len else b.len) +% 1u64
+    return (if a.len > b.len then a.len else b.len) +% 1
 
 # Bitwise AND (op 0), OR (op 1) or XOR (op 2) over the infinite two's-complement forms, written into `r`
 # (at least `bigint_bitop_capacity(a, b)` limbs).
 secret dangerous routine bigint_bitop_into(a: IntV, b: IntV, op: U32, r: Hijacked[U64]) -> IntV
     var w = bigint_bitop_capacity(a: a, b: b)
     var neg_r = false
-    if op == 0u32
+    if op == 0
         neg_r = a.neg and b.neg
-    elseif op == 1u32
+    elseif op == 1
         neg_r = a.neg or b.neg
     else
         neg_r = a.neg != b.neg
-    var ac = 1u64
-    var bc = 1u64
-    var cc = 1u64
-    var i = 0u64
+    var ac: U64 = 1
+    var bc: U64 = 1
+    var cc: U64 = 1
+    var i: U64 = 0
     while i < w
-        var x = if i < a.len then limb(tab: a.tab, i: i) else 0u64
+        var x = if i < a.len then limb(tab: a.tab, i: i) else 0
         if a.neg
-            x = (x ^ 0xFFFFFFFFFFFFFFFFu64) +% ac
-            ac = if x < ac then 1u64 else 0u64
-        var y = if i < b.len then limb(tab: b.tab, i: i) else 0u64
+            x = (x ^ 0xFFFFFFFFFFFFFFFF) +% ac
+            ac = if x < ac then 1 else 0
+        var y = if i < b.len then limb(tab: b.tab, i: i) else 0
         if b.neg
-            y = (y ^ 0xFFFFFFFFFFFFFFFFu64) +% bc
-            bc = if y < bc then 1u64 else 0u64
-        var c = 0u64
-        if op == 0u32
+            y = (y ^ 0xFFFFFFFFFFFFFFFF) +% bc
+            bc = if y < bc then 1 else 0
+        var c: U64 = 0
+        if op == 0
             c = x & y
-        elseif op == 1u32
+        elseif op == 1
             c = x | y
         else
             c = x ^ y
         if neg_r
-            c = (c ^ 0xFFFFFFFFFFFFFFFFu64) +% cc
-            cc = if c < cc then 1u64 else 0u64
+            c = (c ^ 0xFFFFFFFFFFFFFFFF) +% cc
+            cc = if c < cc then 1 else 0
         set_limb(tab: r, i: i, value: c)
-        i = i +% 1u64
+        i = i +% 1
     return bigint_make(neg: neg_r, tab: r, len: w)
 
 # a^e by square and multiply (0^0 = 1).
 secret routine bigint_pow(a: IntV, e: U64) -> IntV
-    var result = bigint_from_u64(v: 1u64, neg: false)
+    var result = bigint_from_u64(v: 1, neg: false)
     var base = a
     var ee = e
-    while ee > 0u64
-        if (ee & 1u64) != 0u64
+    while ee > 0
+        if (ee & 1) != 0
             result = bigint_mul(a: result, b: base)
-        ee = ee >> 1u32
-        if ee > 0u64
+        ee = ee >> 1
+        if ee > 0
             base = bigint_mul(a: base, b: base)
     return result
 
@@ -324,28 +324,28 @@ secret routine bigint_pow(a: IntV, e: U64) -> IntV
 # root back by half.
 secret routine bigint_isqrt(a: IntV) -> IntV
     danger
-        if a.neg or a.len == 0u64
+        if a.neg or a.len == 0
             return bigint_zero()
-        var n = (a.len +% 1u64) // 2u64
-        if not scratch_admit(limbs: 4u64 *% n +% limbs_sqrt_rem_scratch(n: n))
+        var n = (a.len +% 1) // 2
+        if not scratch_admit(limbs: 4 *% n +% limbs_sqrt_rem_scratch(n: n))
             return bigint_zero()
         var lz = LLVM::leading_zeros(
-            limb(tab: a.tab, i: a.len -% 1u64),
-        ) +% (2u64 *% n -% a.len) *% 64u64
-        var sh = lz -% lz % 2u64
-        var buf = alloc_limbs(n: 2u64 *% n)
-        var limb_shift = sh // 64u64
+            limb(tab: a.tab, i: a.len -% 1),
+        ) +% (2 *% n -% a.len) *% 64
+        var sh = lz -% lz % 2
+        var buf = alloc_limbs(n: 2 *% n)
+        var limb_shift = sh // 64
         var carry = limbs_shl(
             dst: buf.stride(count: limb_shift.to[S64]()),
             src: a.tab,
             n: a.len,
-            shift: sh % 64u64,
+            shift: sh % 64,
         )
-        if limb_shift +% a.len < 2u64 *% n
+        if limb_shift +% a.len < 2 *% n
             set_limb(tab: buf, i: limb_shift +% a.len, value: carry)
         var s = alloc_limbs(n: n)
         drop limbs_sqrt_rem(tabs: s, taba: buf, n: n)
-        return bigint_shr_mag(a: bigint_make(neg: false, tab: s, len: n), bits: sh // 2u64)
+        return bigint_shr_mag(a: bigint_make(neg: false, tab: s, len: n), bits: sh // 2)
 
 # gcd(|a|, |b|), with gcd(0, 0) = 0. Euclid remainder steps while one operand is much longer than the
 # other, then the binary GCD on balanced sizes.
@@ -353,14 +353,14 @@ secret routine bigint_gcd(a: IntV, b: IntV) -> IntV
     var x = bigint_abs(a: a)
     var y = bigint_abs(a: b)
     # Euclid steps while one side is much longer, so the binary loop starts on balanced sizes
-    while x.len != 0u64 and y.len != 0u64 and (x.len > y.len +% 1u64 or y.len > x.len +% 1u64)
+    while x.len != 0 and y.len != 0 and (x.len > y.len +% 1 or y.len > x.len +% 1)
         if x.len > y.len
             x = bigint_divmod_mag(a: x, b: y).item1
         else
             y = bigint_divmod_mag(a: y, b: x).item1
-    if x.len == 0u64
+    if x.len == 0
         return y
-    if y.len == 0u64
+    if y.len == 0
         return x
     return bigint_gcd_binary(x: x, y: y)
 
@@ -371,7 +371,7 @@ secret routine bigint_gcd_binary(x: IntV, y: IntV) -> IntV
         var vl = y.len
         var longer = if ul > vl then ul else vl
         # the copies, then the result shifted back by the common power of two (below 64 * longer bits)
-        if not scratch_admit(limbs: ul +% vl +% 2u64 *% longer +% 1u64)
+        if not scratch_admit(limbs: ul +% vl +% 2 *% longer +% 1)
             return bigint_zero()
         var u = alloc_limbs(n: ul)
         var v = alloc_limbs(n: vl)
@@ -385,15 +385,15 @@ secret routine bigint_gcd_binary(x: IntV, y: IntV) -> IntV
         var going = true
         while going
             # u and v are odd here: keep u <= v, then v = v - u (even), then strip v's trailing zeros
-            if ul == 1u64 and vl == 1u64
+            if ul == 1 and vl == 1
                 set_limb(
                     tab: u,
-                    i: 0u64,
-                    value: gcd_u64(a: limb(tab: u, i: 0u64), b: limb(tab: v, i: 0u64)),
+                    i: 0,
+                    value: gcd_u64(a: limb(tab: u, i: 0), b: limb(tab: v, i: 0)),
                 )
                 going = false
             else
-                if ul > vl or (ul == vl and limbs_cmp(a: u, b: v, n: ul) > 0s64)
+                if ul > vl or (ul == vl and limbs_cmp(a: u, b: v, n: ul) > 0)
                     var t = u
                     u = v
                     v = t
@@ -401,7 +401,7 @@ secret routine bigint_gcd_binary(x: IntV, y: IntV) -> IntV
                     ul = vl
                     vl = tl
                 vl = limbs_sub_in_place(a: v, na: vl, b: u, nb: ul)
-                if vl == 0u64
+                if vl == 0
                     going = false
                 else
                     vl = limbs_shr_in_place(tab: v, n: vl, bits: limbs_ctz(tab: v, n: vl))
@@ -409,14 +409,14 @@ secret routine bigint_gcd_binary(x: IntV, y: IntV) -> IntV
 
 # gcd of two words by the binary method (gcd(0, b) = b).
 secret routine gcd_u64(a: U64, b: U64) -> U64
-    if a == 0u64
+    if a == 0
         return b
-    if b == 0u64
+    if b == 0
         return a
     var k = LLVM::trailing_zeros(value: a | b)
     var x = a >> (LLVM::trailing_zeros(value: a)).to[U32]()
     var y = b
-    while y != 0u64
+    while y != 0
         y = y >> (LLVM::trailing_zeros(value: y)).to[U32]()
         if x > y
             var t = x
@@ -427,38 +427,38 @@ secret routine gcd_u64(a: U64, b: U64) -> U64
 
 # dst[0..n) = src[0..n).
 secret dangerous routine limbs_copy(dst: Hijacked[U64], src: Hijacked[U64], n: U64)
-    var i = 0u64
+    var i: U64 = 0
     while i < n
         set_limb(tab: dst, i: i, value: limb(tab: src, i: i))
-        i = i +% 1u64
+        i = i +% 1
     return
 
 # Trailing zero bits of a nonzero n-limb number.
 secret dangerous routine limbs_ctz(tab: Hijacked[U64], n: U64) -> U64
-    var i = 0u64
+    var i: U64 = 0
     while i < n
         var v = limb(tab: tab, i: i)
-        if v != 0u64
-            return i *% 64u64 +% LLVM::trailing_zeros(value: v)
-        i = i +% 1u64
-    return n *% 64u64
+        if v != 0
+            return i *% 64 +% LLVM::trailing_zeros(value: v)
+        i = i +% 1
+    return n *% 64
 
 # tab[0..n) >>= bits in place. Returns the trimmed length.
 secret dangerous routine limbs_shr_in_place(tab: Hijacked[U64], n: U64, bits: U64) -> U64
-    var limb_shift = bits // 64u64
+    var limb_shift = bits // 64
     if limb_shift >= n
-        return 0u64
+        return 0
     var m = n -% limb_shift
-    if limb_shift > 0u64
-        var i = 0u64
+    if limb_shift > 0
+        var i: U64 = 0
         while i < m
             set_limb(tab: tab, i: i, value: limb(tab: tab, i: i +% limb_shift))
-            i = i +% 1u64
-    var bit_shift = bits % 64u64
-    if bit_shift != 0u64
-        drop limbs_shr(tab_r: tab, tab: tab, n: m, shift: bit_shift.to[U32](), high: 0u64)
-    while m > 0u64 and limb(tab: tab, i: m -% 1u64) == 0u64
-        m = m -% 1u64
+            i = i +% 1
+    var bit_shift = bits % 64
+    if bit_shift != 0
+        drop limbs_shr(tab_r: tab, tab: tab, n: m, shift: bit_shift.to[U32](), high: 0)
+    while m > 0 and limb(tab: tab, i: m -% 1) == 0
+        m = m -% 1
     return m
 
 # a[0..na) -= b[0..nb) in place, for a >= b. Returns the trimmed length.
@@ -468,24 +468,24 @@ secret dangerous routine limbs_sub_in_place(
     b: Hijacked[U64],
     nb: U64,
 ) -> U64
-    var borrow = limbs_sub(res: a, op1: a, op2: b, n: nb, borrow_in: 0u64)
+    var borrow = limbs_sub(res: a, op1: a, op2: b, n: nb, borrow_in: 0)
     var i = nb
-    while borrow != 0u64 and i < na
+    while borrow != 0 and i < na
         var v = limb(tab: a, i: i)
         set_limb(tab: a, i: i, value: v -% borrow)
-        borrow = if v < borrow then 1u64 else 0u64
-        i = i +% 1u64
+        borrow = if v < borrow then 1 else 0
+        i = i +% 1
     var m = na
-    while m > 0u64 and limb(tab: a, i: m -% 1u64) == 0u64
-        m = m -% 1u64
+    while m > 0 and limb(tab: a, i: m -% 1) == 0
+        m = m -% 1
     return m
 
 # lcm(|a|, |b|), 0 when either is 0.
 secret routine bigint_lcm(a: IntV, b: IntV) -> IntV
-    if a.len == 0u64 or b.len == 0u64
+    if a.len == 0 or b.len == 0
         return bigint_zero()
     var g = bigint_gcd(a: a, b: b)
-    if g.len == 0u64
+    if g.len == 0
         # an exhausted call: the gcd of two nonzero values is never zero
         return bigint_zero()
     return bigint_mul(a: bigint_divmod_mag(a: bigint_abs(a: a), b: g).item0, b: bigint_abs(a: b))
@@ -499,12 +499,12 @@ secret dangerous routine limbs_divmod_word_any(
     n: U64,
     b: U64,
 ) -> U64
-    var r = 0u64
+    var r: U64 = 0
     var bb = b.to[U128]()
     var i = n
-    while i > 0u64
-        i = i -% 1u64
-        var cur = (r.to[U128]() << 64u32) | limb(tab: taba, i: i).to[U128]()
+    while i > 0
+        i = i -% 1
+        var cur = (r.to[U128]() << 64) | limb(tab: taba, i: i).to[U128]()
         var q = cur // bb
         r = u128_lo(t: cur -% q *% bb)
         set_limb(tab: tabr, i: i, value: u128_lo(t: q))
@@ -512,113 +512,113 @@ secret dangerous routine limbs_divmod_word_any(
 
 # The digit map for radices up to 64: 0-9, A-Z, a-z, '+', '/'.
 secret routine bigint_digit_char(d: U64) -> Char
-    var cp = 0u32
-    if d < 10u64
-        cp = 48u32 +% d.to[U32]()
-    elseif d < 36u64
-        cp = 55u32 +% d.to[U32]()
-    elseif d < 62u64
-        cp = 61u32 +% d.to[U32]()
-    elseif d == 62u64
-        cp = 43u32
+    var cp: U32 = 0
+    if d < 10
+        cp = 48 +% d.to[U32]()
+    elseif d < 36
+        cp = 55 +% d.to[U32]()
+    elseif d < 62
+        cp = 61 +% d.to[U32]()
+    elseif d == 62
+        cp = 43
     else
-        cp = 47u32
+        cp = 47
     return cp.to[Char]()
 
 # The digit value of a codepoint in `radix` under the digit map (letters case-insensitive up to
 # radix 36), or 255 when it is not a digit of the map.
 secret routine bigint_digit_value(cp: U32, radix: U64) -> U64
     var c = cp
-    if radix <= 36u64 and c >= 97u32 and c <= 122u32
-        c = c -% 32u32
-    if c >= 48u32 and c <= 57u32
-        return (c -% 48u32).to[U64]()
-    if c >= 65u32 and c <= 90u32
-        return (c -% 55u32).to[U64]()
-    if c >= 97u32 and c <= 122u32
-        return (c -% 61u32).to[U64]()
-    if c == 43u32
-        return 62u64
-    if c == 47u32
-        return 63u64
-    return 255u64
+    if radix <= 36 and c >= 97 and c <= 122
+        c = c -% 32
+    if c >= 48 and c <= 57
+        return (c -% 48).to[U64]()
+    if c >= 65 and c <= 90
+        return (c -% 55).to[U64]()
+    if c >= 97 and c <= 122
+        return (c -% 61).to[U64]()
+    if c == 43
+        return 62
+    if c == 47
+        return 63
+    return 255
 
 # The most characters `bigint_to_text_into` writes for an `len`-limb value in `radix` (2 to 64): the
 # digits of len * 64 bits at floor(log2(radix)) bits each, and a sign.
 secret routine bigint_text_capacity(len: U64, radix: U64) -> U64
-    var bits_per_digit = 63u64 -% LLVM::leading_zeros(radix)
-    if len == 0u64
-        return 1u64
-    return (len *% 64u64 +% bits_per_digit -% 1u64) // bits_per_digit +% 1u64
+    var bits_per_digit = 63 -% LLVM::leading_zeros(radix)
+    if len == 0
+        return 1
+    return (len *% 64 +% bits_per_digit -% 1) // bits_per_digit +% 1
 
 # `a` in `radix` (2 to 64), written into `out` (at least `bigint_text_capacity(a.len, radix)`
 # characters): an optional '-' then the digits, "0" for zero. Returns the character count, or 0 when the
 # call is exhausted.
 secret dangerous routine bigint_to_text_into(a: IntV, radix: U64, out: Hijacked[Char]) -> U64
-    if a.len == 0u64
-        out.poke(value: 48u32.to[Char]())
-        return 1u64
+    if a.len == 0
+        out.poke(value: '0')
+        return 1
     if not scratch_admit(limbs: a.len)
-        return 0u64
+        return 0
     # chunk = radix^k, the largest power of the radix that fits a word
     var chunk = radix
-    var k = 1u64
-    while chunk <= 0xFFFFFFFFFFFFFFFFu64 // radix
+    var k: U64 = 1
+    while chunk <= 0xFFFFFFFFFFFFFFFF // radix
         chunk = chunk *% radix
-        k = k +% 1u64
+        k = k +% 1
     var buf = alloc_limbs(n: a.len)
     limbs_copy(dst: buf, src: a.tab, n: a.len)
-    var first = if a.neg then 1u64 else 0u64
+    var first: U64 = if a.neg then 1 else 0
     if a.neg
-        out.poke(value: 45u32.to[Char]())
+        out.poke(value: '-')
     # the digits, least significant first, then reversed in place
     var count = first
     var n = a.len
-    while n > 0u64
+    while n > 0
         var rem = limbs_divmod_word_any(tabr: buf, taba: buf, n: n, b: chunk)
-        while n > 0u64 and limb(tab: buf, i: n -% 1u64) == 0u64
-            n = n -% 1u64
-        var c = 0u64
-        while c < k and (n > 0u64 or rem != 0u64)
+        while n > 0 and limb(tab: buf, i: n -% 1) == 0
+            n = n -% 1
+        var c: U64 = 0
+        while c < k and (n > 0 or rem != 0)
             out.stride(count: count.to[S64]()).poke(value: bigint_digit_char(d: rem % radix))
-            count = count +% 1u64
+            count = count +% 1
             rem = rem // radix
-            c = c +% 1u64
+            c = c +% 1
     var lo = first
     var hi = count
-    while hi > lo +% 1u64
-        hi = hi -% 1u64
+    while hi > lo +% 1
+        hi = hi -% 1
         var t = out.stride(count: lo.to[S64]()).peek()
         out.stride(count: lo.to[S64]()).poke(value: out.stride(count: hi.to[S64]()).peek())
         out.stride(count: hi.to[S64]()).poke(value: t)
-        lo = lo +% 1u64
+        lo = lo +% 1
     return count
 
 # Parse `count` characters at `chars` in `radix` (2 to 64): an optional leading '-', then digits up to
 # the first character outside the radix. The text must end there, or at a '\r' / '\n'. Empty digits
 # read as 0. Returns (value, ok).
 secret dangerous routine bigint_parse(chars: Hijacked[Char], count: U64, radix: U64) -> (IntV, Bool)
-    if radix < 2u64 or radix > 64u64
+    if radix < 2 or radix > 64
         return (bigint_zero(), false)
     var n = count
-    var i = 0u64
+    var i: U64 = 0
     var neg = false
-    if n > 0u64 and chars.peek().codepoint() == 45u32
+    if n > 0 and chars.peek().codepoint() == 45
         neg = true
-        i = 1u64
+        i = 1
     # digits per chunk: the largest k with radix^k < 2^64
-    var chunk_pow_max = 1u64
-    var k_max = 0u64
-    while chunk_pow_max <= 0xFFFFFFFFFFFFFFFFu64 // radix
+    var chunk_pow_max: U64 = 1
+    var k_max: U64 = 0
+    while chunk_pow_max <= 0xFFFFFFFFFFFFFFFF // radix
         chunk_pow_max = chunk_pow_max *% radix
-        k_max = k_max +% 1u64
-    if not scratch_admit(limbs: n *% 6u64 // 64u64 +% 2u64)
+        k_max = k_max +% 1
+    if not scratch_admit(limbs: n *% 6 // 64 +% 2)
         return (bigint_zero(), true)
-    var mant = alloc_limbs(n: n *% 6u64 // 64u64 +% 2u64)
-    var mlen = 0u64
-    var cur = 0u64
-    var cur_pow = 1u64
-    var cnt = 0u64
+    var mant = alloc_limbs(n: n *% 6 // 64 +% 2)
+    var mlen: U64 = 0
+    var cur: U64 = 0
+    var cur_pow: U64 = 1
+    var cnt: U64 = 0
     var parsing = true
     while parsing and i < n
         var d = bigint_digit_value(cp: chars.stride(count: i.to[S64]()).peek().codepoint(), radix: radix)
@@ -627,24 +627,24 @@ secret dangerous routine bigint_parse(chars: Hijacked[Char], count: U64, radix: 
         else
             cur = cur *% radix +% d
             cur_pow = cur_pow *% radix
-            cnt = cnt +% 1u64
+            cnt = cnt +% 1
             if cnt == k_max
                 var carry = limbs_mul_word(tabr: mant, taba: mant, n: mlen, b: cur_pow, l: cur)
-                if carry != 0u64
+                if carry != 0
                     set_limb(tab: mant, i: mlen, value: carry)
-                    mlen = mlen +% 1u64
-                cur = 0u64
-                cur_pow = 1u64
-                cnt = 0u64
-            i = i +% 1u64
-    if cnt > 0u64
+                    mlen = mlen +% 1
+                cur = 0
+                cur_pow = 1
+                cnt = 0
+            i = i +% 1
+    if cnt > 0
         var carry = limbs_mul_word(tabr: mant, taba: mant, n: mlen, b: cur_pow, l: cur)
-        if carry != 0u64
+        if carry != 0
             set_limb(tab: mant, i: mlen, value: carry)
-            mlen = mlen +% 1u64
+            mlen = mlen +% 1
     if i < n
         var stop = chars.stride(count: i.to[S64]()).peek().codepoint()
-        if stop != 13u32 and stop != 10u32
+        if stop != 13 and stop != 10
             return (bigint_zero(), false)
     return (bigint_make(neg: neg, tab: mant, len: mlen), true)
 
@@ -658,34 +658,34 @@ secret routine bigint_mul_scratch(a_len: U64, b_len: U64) -> U64
 # magnitudes' division and the step away from zero.
 secret routine bigint_divmod_scratch(a_len: U64, b_len: U64) -> U64
     if a_len < b_len
-        return 2u64 *% b_len +% 4u64
-    var nq = a_len -% b_len +% 1u64
-    return nq +% b_len +% limbs_divmod_scratch(na: a_len, nb: b_len) +% nq +% b_len +% 4u64
+        return 2 *% b_len +% 4
+    var nq = a_len -% b_len +% 1
+    return nq +% b_len +% limbs_divmod_scratch(na: a_len, nb: b_len) +% nq +% b_len +% 4
 
 # A scratch size for `a^e` with `a` of `a_len` limbs and `bits` significant bits: every square and
 # product along the way (each at most the final size).
 secret routine bigint_pow_scratch(a_len: U64, bits: U64, e: U64) -> U64
-    if a_len == 0u64 or e == 0u64
-        return 1u64
+    if a_len == 0 or e == 0
+        return 1
     var total_bits = bits.to[U128]() *% e.to[U128]()
-    if total_bits > (1u64 << 40u32).to[U128]()
+    if total_bits > (1 << 40)
         # beyond any memory: ask for it anyway, the allocation reports it
-        return 0xFFFFFFFFFFFFFFFFu64 // 16u64
-    var final = u128_lo(t: total_bits) // 64u64 +% 2u64
-    var steps = 2u64 *% (64u64 -% LLVM::leading_zeros(e)) +% 1u64
+        return 0xFFFFFFFFFFFFFFFF // 16
+    var final = u128_lo(t: total_bits) // 64 +% 2
+    var steps = 2 *% (64 -% LLVM::leading_zeros(e)) +% 1
     return steps *% bigint_mul_scratch(a_len: final, b_len: final)
 
 # A scratch size for the integer square root of an `a_len`-limb value.
 secret routine bigint_isqrt_scratch(a_len: U64) -> U64
-    var n = (a_len +% 1u64) // 2u64
-    return 5u64 *% n +% limbs_sqrt_rem_scratch(n: n) +% bigint_mul_scratch(a_len: n, b_len: n) +% a_len +% 4u64
+    var n = (a_len +% 1) // 2
+    return 5 *% n +% limbs_sqrt_rem_scratch(n: n) +% bigint_mul_scratch(a_len: n, b_len: n) +% a_len +% 4
 
 # A scratch size for gcd(a, b) of `a_len` and `b_len` limbs: the Euclid steps (each a division of the
 # operands at most) and the binary GCD.
 secret routine bigint_gcd_scratch(a_len: U64, b_len: U64) -> U64
     var longer = if a_len > b_len then a_len else b_len
     var shorter = if a_len > b_len then b_len else a_len
-    var steps = 1u64
-    if longer > shorter +% 1u64
-        steps = 4u64
-    return steps *% bigint_divmod_scratch(a_len: longer, b_len: shorter) +% 4u64 *% longer +% 2u64
+    var steps: U64 = 1
+    if longer > shorter +% 1
+        steps = 4
+    return steps *% bigint_divmod_scratch(a_len: longer, b_len: shorter) +% 4 *% longer +% 2

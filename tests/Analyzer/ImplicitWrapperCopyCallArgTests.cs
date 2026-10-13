@@ -69,7 +69,7 @@ public class ImplicitWrapperCopyCallArgTests
                             return
 
                         routine start()
-                            var a = 42_s64
+                            var a = 42
                             consume(x: a)
                             return
                         """;

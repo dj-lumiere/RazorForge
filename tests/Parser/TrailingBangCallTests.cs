@@ -22,7 +22,7 @@ public class TrailingBangCallTests
                         routine f!() -> S64
                             return g()!
                         routine g!() -> S64
-                            return 0_s64
+                            return 0
                         """;
         AssertParseError(source: source);
     }
@@ -125,7 +125,7 @@ public class TrailingBangCallTests
                         routine f!() -> S64
                             return g()
                         routine g!() -> S64
-                            return 0_s64
+                            return 0
                         """;
         Program result = Parse(source: source);
         Assert.NotNull(@object: result);

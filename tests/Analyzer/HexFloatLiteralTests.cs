@@ -53,9 +53,8 @@ public class HexFloatLiteralTests
 
     /// <summary>Verifies a hex float on a decimal float type is RF-S017.</summary>
     [Theory]
-    [InlineData("var x = 0x1p3_d64")]
     [InlineData("var x: D64 = 0x1p3")]
-    [InlineData("var x = 0x1p3dn")]
+    [InlineData("var x: Decimal = 0x1p3")]
     public void DecimalTarget_IsRejected(string statement)
     {
         AnalysisResult result = AnalyzeSa(source: $"""
@@ -69,7 +68,7 @@ public class HexFloatLiteralTests
 
     /// <summary>Verifies a hex float that does not fit its binary float exactly is RF-S018.</summary>
     [Theory]
-    [InlineData("var x = 0x1.000001p0_b32")]
+    [InlineData("var x: B32 = 0x1.000001p0")]
     [InlineData("var x: B32 = 0x1p-150")]
     public void InexactValue_IsRejected(string statement)
     {
@@ -90,8 +89,8 @@ public class HexFloatLiteralTests
                                                   routine probe()
                                                       var a = 0x1.8p3
                                                       var b: B32 = 0x1p-149
-                                                      var c = 0x1.ffcp15_b16
-                                                      var d = 0x1.0000000000000000000000000001p0_b128
+                                                      var c: B16 = 0x1.ffcp15
+                                                      var d: B128 = 0x1.0000000000000000000000000001p0
                                                       return
                                                   """);
         Assert.DoesNotContain(collection: result.Errors,

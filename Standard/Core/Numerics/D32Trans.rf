@@ -335,39 +335,39 @@ routine D32.is_negative() -> Bool
 ### True if me is strictly positive (not signed, not zero).
 routine D32.is_positive() -> Bool
     var p = me.decode()
-    return not p.sign and p.special == 0_u64 and p.coeff != 0_u64
+    return not p.sign and p.special == 0 and p.coeff != 0
 
 ### True if me is a finite, nonzero value at the minimum exponent (-101) with fewer than 7 digits.
 routine D32.is_subnormal() -> Bool
     var p = me.decode()
-    if p.special != 0_u64 or p.coeff == 0_u64
+    if p.special != 0 or p.coeff == 0
         return false
-    return p.exp == -101_s64 and p.coeff < 1000000_u64
+    return p.exp == -101 and p.coeff < 1000000
 
 ### Splits into integer and fractional parts (C modf), both carrying me's sign.
 routine D32.modf() -> (D32, D32)
     if me.is_nan()
         return (me, me)
     if me.is_infinite()
-        return (me, D32.from_components(sign: me.decode().sign, coeff: 0_u64, exp: 0_s64))
+        return (me, D32.from_components(sign: me.decode().sign, coeff: 0, exp: 0))
     var ip = me.trunc()
     return (ip, me - ip)
 
 ### True if me is finite and nonzero (this includes the subnormals).
 routine D32.is_normal() -> Bool
     var p = me.decode()
-    return p.special == 0_u64 and p.coeff != 0_u64
+    return p.special == 0 and p.coeff != 0
 
 ### C99 fpclassify: SIGNALING_NAN, NAN, INFINITE, ZERO, SUBNORMAL, or NORMAL.
 routine D32.fpclassify() -> FpClass
     var p = me.decode()
-    if p.special == 3_u64
+    if p.special == 3
         return SIGNALING_NAN
-    if p.special == 2_u64
+    if p.special == 2
         return NAN
-    if p.special == 1_u64
+    if p.special == 1
         return INFINITE
-    if p.coeff == 0_u64
+    if p.coeff == 0
         return ZERO
     if me.is_subnormal()
         return SUBNORMAL
@@ -386,7 +386,7 @@ routine D32.abs() -> D32
 routine D32.total_order(you: D32) -> Bool
     var pa = me.decode()
     var pb = you.decode()
-    if pa.special >= 2_u64 or pb.special >= 2_u64
+    if pa.special >= 2 or pb.special >= 2
         return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(
             sign: pb.sign,
             special: pb.special,
@@ -423,8 +423,8 @@ routine D32.signum() -> D32
     if me.is_nan()
         return D32.quiet_nan()
     if me.is_zero()
-        return D32.from_components(sign: false, coeff: 0_u64, exp: 0_s64)
-    return D32.from_components(sign: me.decode().sign, coeff: 1_u64, exp: 0_s64)
+        return D32.from_components(sign: false, coeff: 0, exp: 0)
+    return D32.from_components(sign: me.decode().sign, coeff: 1, exp: 0)
 
 ### Throws when `me` is non-finite (inf or NaN).
 @crash_only
@@ -468,7 +468,7 @@ routine D32.fdim(you: D32) -> D32
         return D32.quiet_nan()
     var d = me - you
     if d.decode().sign
-        return D32.from_components(sign: false, coeff: 0_u64, exp: 0_s64)
+        return D32.from_components(sign: false, coeff: 0, exp: 0)
     return d
 
 ### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
@@ -553,10 +553,10 @@ routine D32.round_ties_away() -> D32
 routine D32.same_quantum(you: D32) -> Bool
     var pa = me.decode()
     var pb = you.decode()
-    if pa.special >= 2_u64 or pb.special >= 2_u64
-        return pa.special >= 2_u64 and pb.special >= 2_u64
-    if pa.special == 1_u64 or pb.special == 1_u64
-        return pa.special == 1_u64 and pb.special == 1_u64
+    if pa.special >= 2 or pb.special >= 2
+        return pa.special >= 2 and pb.special >= 2
+    if pa.special == 1 or pb.special == 1
+        return pa.special == 1 and pb.special == 1
     return pa.exp == pb.exp
 
 ### IEEE 754 quantize: `me`'s value with the exponent of `you`, rounded half to even when digits are dropped.
@@ -586,28 +586,28 @@ routine d32_round_int(x: D32, mode: S64) -> D32
 
 ### Truncates toward zero to an integral value. Specials pass through. Never crashes.
 routine D32.trunc() -> D32
-    return d32_round_int(x: me, mode: 0_s64)
+    return d32_round_int(x: me, mode: 0)
 
 ### Rounds down toward -inf to an integral value. Specials pass through. Never crashes.
 routine D32.floor() -> D32
-    return d32_round_int(x: me, mode: 1_s64)
+    return d32_round_int(x: me, mode: 1)
 
 ### Rounds up toward +inf to an integral value. Specials pass through. Never crashes.
 routine D32.ceil() -> D32
-    return d32_round_int(x: me, mode: 2_s64)
+    return d32_round_int(x: me, mode: 2)
 
 ### Rounds to the nearest integral value, ties away from zero. Specials pass through. Never crashes.
 routine D32.round() -> D32
-    return d32_round_int(x: me, mode: 3_s64)
+    return d32_round_int(x: me, mode: 3)
 
 ### Rounds to the nearest integral value, ties to even (IEEE roundTiesToEven). Never crashes.
 routine D32.rint() -> D32
-    return d32_round_int(x: me, mode: 4_s64)
+    return d32_round_int(x: me, mode: 4)
 
 ### Fractional part me - trunc(me), with me's sign. A NaN propagates, ±inf gives ±0. Never crashes.
 routine D32.frac() -> D32
     if me.is_nan()
         return me
     if me.is_infinite()
-        return D32.from_components(sign: me.decode().sign, coeff: 0_u64, exp: 0_s64)
+        return D32.from_components(sign: me.decode().sign, coeff: 0, exp: 0)
     return me - me.trunc()

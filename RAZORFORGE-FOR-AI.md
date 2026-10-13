@@ -59,7 +59,7 @@ When unsure, consult ground truth in the repo/package:
    `try f()` also recovers a division by zero inside a plain helper `f` calls); a
    checked operator (`try a + b` recovers the overflow, `check a // b` the
    divide-by-zero, `-x` of the minimum, `x += d`); a subscript out of range or a
-   missing key (`try xs[9]`), a failing conversion (`300_s64.to[S8]()`,
+   missing key (`try xs[9]`), a failing conversion (`big.to[S8]()` with `big` at 300,
    `"x".to[S64]()`). Each becomes the carrier's failure (`try`: absent,
    `check`: the error), and evaluation stops at the first one. A bare call (no keyword)
    still crashes loudly. Lambdas and routine values are covered the same way: a
@@ -115,9 +115,13 @@ When unsure, consult ground truth in the repo/package:
    `start` normally exits with 0, or with the status `set_exit_code(code)` (an `S32`,
    in Core) set last: one atomic value, so any thread may set it and the last call
    wins. A crash keeps 82 whatever was set.
-8. **Bare integer literals adapt to context; variables do not.**
-   `h << 5` and `x.clamp(0, 100)` are fine (literals conform), and a whole number written in base 10 conforms to
-   a float or decimal type too (`var r: B64 = 3`, `price: 5` for a `D128` parameter; `0xFF` does not), but mixing a
+8. **A number takes its type from where it goes; variables do not adapt.**
+   A number carries no type of its own: there are no type suffixes (`5_u8`, `10n`, `2.5dn` are RF-G010). It
+   conforms to the place it goes (an argument, an assignment, the other side of an operator): `h << 5` and
+   `x.clamp(0, 100)` are fine, and a whole number written in base 10 conforms to a float or decimal type too
+   (`var r: B64 = 3`, `price: 5` for a `D128` parameter; `0xFF` does not). Where nothing gives it a type, the
+   declaration states it (`var x: U8 = 5`), and otherwise it is `S64` (`B64` with a fraction point). A
+   variable's type is never inferred from its later uses. `migrate --step suffix` rewrites old code. Mixing a
    `U64` variable with an `S64` variable needs an explicit conversion
    (`n.to[S64]()`, §4).
    Out-of-range literals are build errors (RF-S010): `-1` never fits an
@@ -253,17 +257,17 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
 ## 3. Types
 
 - Signed ints: `S8 S16 S32 S64 S128 S256` · unsigned: `U8 U16 U32 U64 U128 U256`
-- Binary floats: `B16 B32 B64 B128` (literal suffixes `b16`/`b32`/`b64`/`b128`) · decimals: `D32 D64 D128`
+- Binary floats: `B16 B32 B64 B128` · decimals: `D32 D64 D128`
 - `BF16` (bfloat16) is a STORAGE type (ML weights/tensors): bit patterns (`from_bits`/`to_bits`/bytes),
   `b.to[B32]()`/`b.to[B64]()` widen exactly, `x.to[BF16]()` (from `B32`/`B64`) narrows with ONE
   round-to-nearest-even (from `B64` directly, never through `B32`), `represent`/`t.to[BF16]()`, `==`/`<`. No arithmetic and
-  no literal suffix: widen to compute, narrow the result back.
-- Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `0x1p-23_b32`,
-  `0x1.fffffep+127_b32`. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
+  no literals of its own: widen to compute, narrow the result back.
+- Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `var eps: B32 = 0x1p-23`,
+  `0x1.fffffep+127` where a `B32` goes. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
   EXACTLY: too many significant bits or a bit below the smallest subnormal is RF-S018, not a rounding. On a
-  `D32`/`D64`/`D128`/`Decimal` type it is RF-S017. Unsuffixed it takes a binary float context, else `B64`
+  `D32`/`D64`/`D128`/`Decimal` type it is RF-S017. It takes a binary float context, else `B64`
   (in Suflae too).
-- Arbitrary precision: `Integer` (literal suffix `n`), `Decimal` (`dn`). No arbitrary-precision binary float or
+- Arbitrary precision: `Integer`, `Decimal` (a number takes them from context, `var big: Integer = 10`). No arbitrary-precision binary float or
   complex: `B128` and `C256` are the widest.
 - Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
@@ -277,7 +281,8 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
 - Carriers: `Maybe[T]`, `Check[T]` (builder-synthesized only —
   user routines cannot declare them as return types; you obtain one by wrapping a
   failable call with the `try`/`check` keyword).
-- Typed literal suffixes exist: `7s32`, `0_s64`, `1.5f32` (underscore optional)
+- A number never names its type (no `7s32`, `0_u64`, `10n`: RF-G010). Unit suffixes stay: durations
+  (`50ms 5s 2m 1h 1d 1w us ns`), sizes (`4kb 4kib 2mb ...`), and the imaginary `i`.
 
 **Optionals and `none`:**
 - **`T?` (postfix `?`)** = `Maybe[T]` optional shorthand — the ONLY `?`-on-a-type
@@ -299,7 +304,8 @@ variant goes where a larger one is expected; `define Circle | Square as Shape` n
 ## 4. Variables and operators
 
 ```razorforge
-var count = 0_s64        # variable binding (the everyday declaration)
+var count = 0            # variable binding (the everyday declaration), S64
+var flags: U8 = 0        # the declaration states the type a number takes
 count = count + 1        # bare literal 1 conforms to S64
 
 preset MAX_RETRIES: S32 = 5   # named constant: UPPER_CASE, explicit type required
@@ -340,8 +346,8 @@ var small = count.to[U8]()        # number to number
 var big = count.to[Integer]()      # Integer/Decimal convert on to B32/B64 (nearest value)
 var n = "42".to[S64]()             # text parsing (also Integer, Decimal, B64, ...)
 var code = c.to[U32]()             # a Char's codepoint (b.to[U8]() for a Byte, a.to[U64]() for an Address)
-var letter = 65u8.to[Char]()       # 'A' (also 0x41u32.to[Char]()), and 'x'.to[Text]() makes one-character text
-var byte = 0x41u8.to[Byte]()       # the same bits as a Byte
+var letter = code.to[Char]()       # 'A' when code is a U32 of 65, and 'x'.to[Text]() makes one-character text
+var byte = bits.to[Byte]()         # the same bits as a Byte, from a U8
 var raw = status.to[S32]()         # a choice's value (also to[S64]()), perms.to[U64]() a flags bitmask
 var wide: U64 = count.to()         # T left out: the declared type gives it
 var fits: U8? = try count.to()     # none when it does not fit
@@ -362,9 +368,9 @@ var why: Check[S64] = check line.to()
   value of a type parameter: conversions are written per concrete type, so take the parameter as the
   target type or convert where the type is known.
 - Constructor or conversion, by one checkable rule: a constructor's arguments become parts of the new value as
-  they are (`Point(x: 1, y: 2)`, `Retained(from: steal e)`, `SerialValue(from: 25_s64)` putting 25 in an arm);
+  they are (`Point(x: 1, y: 2)`, `Retained(from: steal e)`, `SerialValue(from: hp)` putting an `S64` in an arm);
   a value computed from one value of another type is a conversion, `x.to[T]()` (`"hi".to[CStr]()`,
-  `local.to[Moment]()`, `3.0_b32.to[Q128]()`). So `S64(from: x)` is not a routine. A variant's arm comes out
+  `local.to[Moment]()`, `ratio.to[Q128]()` from a `B32`). So `S64(from: x)` is not a routine. A variant's arm comes out
   the same way: `sv.to[S64]()` / `sv.to[Dict]()` is failable (another arm is active → crash, `try` gives
   `None`). The old spellings `sv.S64()`, `S64(from: sv)`, `Dict[Text, SerialValue](from: sv)` are gone (RF-S458 /
   RF-S646 point at `.to[...]()`).
@@ -412,8 +418,8 @@ each x in 1 to 5          # range iteration
         break
     show(f"x={x}")
 
-while i < 10_s64
-    i = i + 1_s64
+while i < 10
+    i = i + 1
 
 loop                      # infinite loop, exit with break
     n = n + 1
@@ -544,7 +550,7 @@ var p = Point(x: 3, y: 4)
 entity Resource       # HEAP type: single owner, deterministic destruct
     tag: S64
 
-var b = Resource(tag: 7s32)
+var b = Resource(tag: 7)
 consume(r: steal b)   # ownership moves; using b afterwards = build error
 # destruct runs exactly once, at the owner's scope exit (anchored at `return`)
 ```
@@ -817,7 +823,7 @@ that differ from other languages:
   `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`
   yields nothing, `(2 to 1).has(1)` is false). `by N` sets the step
   (`1 to 10 by 2`), and a negative step counts down: `10 to 1 by -1`,
-  `10 to 0 by -2`, also on unsigned types (`3u64 to 0u64 by -1` yields 3 2 1 0).
+  `10 to 0 by -2`, also on unsigned types (`3 to 0 by -1` over `U64` yields 3 2 1 0).
   A step held in a variable decides the direction by its sign. A literal
   `by 0` is RF-S516; a zero step held in a variable crashes with
   `RangeStepZeroError` when the range is iterated. `has`/`lacks` follow the
@@ -965,6 +971,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
 | RF-S753      | failable call left unhandled          | recover with `try`/`check` + `when`                 |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
+| RF-G010      | a number names its type (`5_u8`)      | `var x: U8 = 5`, or let the place it goes type it  |
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-W009      | a started Agent nothing collects      | `retrieve()` it, or `drop job` to stop it          |

@@ -25,8 +25,8 @@ public class PatternOrderTests
                             BLUE
                         routine test(c: Color) -> S32
                             return when c
-                                else => 0_s32
-                                is Color.RED => 1_s32
+                                else => 0
+                                is Color.RED => 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -46,9 +46,9 @@ public class PatternOrderTests
                             BLUE
                         routine test(c: Color) -> S32
                             return when c
-                                is Color.RED => 1_s32
-                                is Color.GREEN => 2_s32
-                                else => 0_s32
+                                is Color.RED => 1
+                                is Color.GREEN => 2
+                                else => 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -69,8 +69,8 @@ public class PatternOrderTests
                             BLUE
                         routine test(c: Color) -> S32
                             return when c
-                                _ => 0_s32
-                                is Color.RED => 1_s32
+                                _ => 0
+                                is Color.RED => 1
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -91,9 +91,9 @@ public class PatternOrderTests
         string source = """
                         routine test(x: S32) -> S32
                             return when x
-                                == 1 => 10_s32
-                                == 2 => 20_s32
-                                _ => 0_s32
+                                == 1 => 10
+                                == 2 => 20
+                                _ => 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -110,9 +110,9 @@ public class PatternOrderTests
         string source = """
                         routine test(x: S32) -> S32
                             return when x
-                                == 1 => 10_s32
-                                _ => 0_s32
-                                _ => 99_s32
+                                == 1 => 10
+                                _ => 0
+                                _ => 99
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -128,9 +128,9 @@ public class PatternOrderTests
         string source = """
                         routine test(x: S32) -> S32
                             return when x
-                                == 1 => 10_s32
-                                else => 0_s32
-                                else => 99_s32
+                                == 1 => 10
+                                else => 0
+                                else => 99
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -150,9 +150,9 @@ public class PatternOrderTests
         string source = """
                         routine test(x: S32) -> S32
                             return when x
-                                42 => 1_s32
-                                42 => 2_s32
-                                else => 0_s32
+                                42 => 1
+                                42 => 2
+                                else => 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -172,9 +172,9 @@ public class PatternOrderTests
                             BLUE
                         routine test(c: Color) -> S32
                             return when c
-                                is Color.RED => 1_s32
-                                is Color.RED => 2_s32
-                                else => 0_s32
+                                is Color.RED => 1
+                                is Color.RED => 2
+                                else => 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -194,9 +194,9 @@ public class PatternOrderTests
                             BLUE
                         routine test(c: Color) -> S32
                             return when c
-                                is Color.RED => 1_s32
-                                is Color.GREEN => 2_s32
-                                is Color.BLUE => 3_s32
+                                is Color.RED => 1
+                                is Color.GREEN => 2
+                                is Color.BLUE => 3
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

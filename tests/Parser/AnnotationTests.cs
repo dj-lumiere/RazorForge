@@ -20,7 +20,7 @@ public class AttributeTests
         string source = """
                         @readonly
                         routine Point.distance() -> B32
-                            return 0.0_b32
+                            return 0.0
                         """;
 
         Program program = AssertParses(source: source);
@@ -74,7 +74,7 @@ public class AttributeTests
         string source = """
                         @static
                         routine Math.pi() -> B64
-                            return 3.14159265359_b64
+                            return 3.14159265359
                         """;
 
         AssertParses(source: source);
@@ -296,7 +296,7 @@ public class AttributeTests
         string source = """
                         @readonly
                         routine Point.distance() -> B32
-                            return 0.0_b32
+                            return 0.0
                         """;
 
         AssertParses(source: source);

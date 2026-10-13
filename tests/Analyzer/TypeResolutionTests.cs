@@ -182,7 +182,7 @@ public class TypeResolutionTests
 
                         @readonly
                         routine Point.distance() -> B32
-                            return 0.0_b32
+                            return 0.0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -809,7 +809,7 @@ public class TypeResolutionTests
     public void Analyze_ConstGeneric_PresetLiteral_NoError()
     {
         string source = """
-                        preset WIDTH: Address = 16addr
+                        preset WIDTH: Address = 16
 
                         entity Buffer[T, N]
                         needs N is Address
@@ -833,7 +833,7 @@ public class TypeResolutionTests
     public void Analyze_ConstGeneric_PresetAlias_NoError()
     {
         string source = """
-                        preset BASE_WIDTH: Address = 16addr
+                        preset BASE_WIDTH: Address = 16
                         preset WIDTH: Address = BASE_WIDTH
 
                         entity Buffer[T, N]

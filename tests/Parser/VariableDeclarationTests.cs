@@ -1,3 +1,4 @@
+using Builder.Diagnostics;
 using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
@@ -257,8 +258,8 @@ public class VariableDeclarationTests
                             var f: U16 = 6
                             var g: U32 = 7
                             var h: U64 = 8
-                            var i: B32 = 9.0_b32
-                            var j: B64 = 10.0_b64
+                            var i: B32 = 9.0
+                            var j: B64 = 10.0
                             var k: bool = true
                             return
                         """;
@@ -346,17 +347,64 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts typed numeric literals.
+    /// Verifies that the parser accepts numbers whose type the declaration states.
     /// </summary>
     [Fact]
-    public void Parse_TypedNumericLiterals()
+    public void Parse_DeclaredNumberTypes()
     {
         string source = """
                         routine test()
-                            var a = 42_s32
-                            var b = 100_u64
-                            var c = 3.14_b32
-                            var d = 2.718_b64
+                            var a: S32 = 42
+                            var b: U64 = 100
+                            var c: B32 = 3.14
+                            var d = 2.718
+                            return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    /// <summary>
+    /// A number no longer names its type with a suffix: each spelling (with or without the separator, hex,
+    /// binary, octal, float, <c>n</c>, <c>dn</c>) is RF-G010, with the caret on the suffix and the declaration to
+    /// write instead in the message. Unit suffixes and the imaginary <c>i</c> stay.
+    /// </summary>
+    [Theory]
+    [InlineData("5_u8", "U8", 14)]
+    [InlineData("7s32", "S32", 14)]
+    [InlineData("0xFF_u16", "U16", 17)]
+    [InlineData("0x1_b64", "B64", 16)]
+    [InlineData("0b1010_u8", "U8", 19)]
+    [InlineData("0o17_u32", "U32", 17)]
+    [InlineData("1.5_b32", "B32", 16)]
+    [InlineData("10n", "Integer", 15)]
+    [InlineData("2.5dn", "Decimal", 16)]
+    [InlineData("0_addr", "Address", 14)]
+    public void Tokenize_TypeNamingSuffix_IsAnError(string number, string typeName, int column)
+    {
+        string source = $"routine test()\n    var x = {number}\n    return\n";
+
+        GrammarException exception = Assert.Throws<GrammarException>(testCode: () => Tokenize(source: source));
+        Assert.Equal(expected: GrammarDiagnosticCode.TypeNamingSuffix, actual: exception.Code);
+        Assert.Equal(expected: 2, actual: exception.Line);
+        Assert.Equal(expected: column, actual: exception.Column);
+        Assert.Contains(expectedSubstring: $"var x: {typeName} =", actualString: exception.RawMessage);
+        Assert.Contains(expectedSubstring: "migrate --step suffix", actualString: exception.RawMessage);
+    }
+
+    /// <summary>
+    /// Unit suffixes (durations, sizes) and the imaginary <c>i</c> still read: they name a unit or a kind of
+    /// value, not a type.
+    /// </summary>
+    [Fact]
+    public void Tokenize_UnitAndImaginarySuffixes_StillRead()
+    {
+        string source = """
+                        routine test()
+                            var wait = 50ms
+                            var page = 4kib
+                            var z = 3 + 4i
+                            var w = 2_i
                             return
                         """;
 
@@ -567,7 +615,7 @@ public class VariableDeclarationTests
     }
     /// <summary>
     /// Verifies that the parser accepts a subjectless (condition-based) when expression
-    /// initializer with bare-identifier conditions. Regression test: `flag => 1_s64`
+    /// initializer with bare-identifier conditions. Regression test: `flag => 1`
     /// was previously consumed as a lambda expression instead of condition + arm arrow.
     /// </summary>
     [Fact]
@@ -577,8 +625,8 @@ public class VariableDeclarationTests
                         routine test()
                             var flag = true
                             var x = when
-                                flag => 1_s64
-                                else => 2_s64
+                                flag => 1
+                                else => 2
                             return
                         """;
 

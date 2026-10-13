@@ -59,14 +59,14 @@ routine CStr(from_ptr: Address) -> CStr
 routine Bytes.to[CStr]() -> CStr
     var len = me.count()
     danger
-        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
+        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1))
 
-        var i: U64 = 0u64
+        var i: U64 = 0
         loop
             if i >= len
                 break
             buffer.offset(ByteSize(bytes: i)).poke(me[i])
-            i = i + 1u64
+            i = i + 1
         buffer.offset(ByteSize(bytes: len)).poke(BYTE_NULL)
 
         return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
@@ -76,51 +76,52 @@ routine Bytes.to[CStr]() -> CStr
 routine Text.to[CStr]() -> CStr
     var len = me.count()
     danger
-        if len == 0u64
-            var empty_buffer = Hijacked[Byte](C::rf_allocate_dynamic(1u64))
+        if len == 0
+            var one_byte: U64 = 1
+            var empty_buffer = Hijacked[Byte](C::rf_allocate_dynamic(one_byte))
             empty_buffer.poke(BYTE_NULL)
             return LLVM::reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
 
-        var max_bytes = len * 4u64 + 1u64
+        var max_bytes = len * 4 + 1
         var buffer = Hijacked[Byte](C::rf_allocate_dynamic(max_bytes))
-        var write_pos: U64 = 0u64
-        var i: U64 = 0u64
+        var write_pos: U64 = 0
+        var i: U64 = 0
 
         while i < len
             var cp = me[i].codepoint()
 
-            if cp <= 0x7Fu32
+            if cp <= 0x7F
                 buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(cp.to[U8]()))
-                write_pos = write_pos + 1u64
-            elseif cp <= 0x7FFu32
-                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xC0u32 | (cp >> 6u32)).to[U8]()))
+                write_pos = write_pos + 1
+            elseif cp <= 0x7FF
+                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xC0 | (cp >> 6)).to[U8]()))
                 buffer
-                    .offset(ByteSize(bytes: write_pos + 1u64))
-                    .poke(Byte((0x80u32 | (cp & 0x3Fu32)).to[U8]()))
-                write_pos = write_pos + 2u64
-            elseif cp <= 0xFFFFu32
-                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xE0u32 | (cp >> 12u32)).to[U8]()))
+                    .offset(ByteSize(bytes: write_pos + 1))
+                    .poke(Byte((0x80 | (cp & 0x3F)).to[U8]()))
+                write_pos = write_pos + 2
+            elseif cp <= 0xFFFF
+                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xE0 | (cp >> 12)).to[U8]()))
                 buffer
-                    .offset(ByteSize(bytes: write_pos + 1u64))
-                    .poke(Byte((0x80u32 | ((cp >> 6u32) & 0x3Fu32)).to[U8]()))
+                    .offset(ByteSize(bytes: write_pos + 1))
+                    .poke(Byte((0x80 | ((cp >> 6) & 0x3F)).to[U8]()))
                 buffer
-                    .offset(ByteSize(bytes: write_pos + 2u64))
-                    .poke(Byte((0x80u32 | (cp & 0x3Fu32)).to[U8]()))
-                write_pos = write_pos + 3u64
+                    .offset(ByteSize(bytes: write_pos + 2))
+                    .poke(Byte((0x80 | (cp & 0x3F)).to[U8]()))
+                write_pos = write_pos + 3
             else
-                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xF0u32 | (cp >> 18u32)).to[U8]()))
+                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xF0 | (cp >> 18)).to[U8]()))
                 buffer
-                    .offset(ByteSize(bytes: write_pos + 1u64))
-                    .poke(Byte((0x80u32 | ((cp >> 12u32) & 0x3Fu32)).to[U8]()))
+                    .offset(ByteSize(bytes: write_pos + 1))
+                    .poke(Byte((0x80 | ((cp >> 12) & 0x3F)).to[U8]()))
                 buffer
-                    .offset(ByteSize(bytes: write_pos + 2u64))
-                    .poke(Byte((0x80u32 | ((cp >> 6u32) & 0x3Fu32)).to[U8]()))
+                    .offset(ByteSize(bytes: write_pos + 2))
+                    .poke(Byte((0x80 | ((cp >> 6) & 0x3F)).to[U8]()))
                 buffer
-                    .offset(ByteSize(bytes: write_pos + 3u64))
-                    .poke(Byte((0x80u32 | (cp & 0x3Fu32)).to[U8]()))
-                write_pos = write_pos + 4u64
+                    .offset(ByteSize(bytes: write_pos + 3))
+                    .poke(Byte((0x80 | (cp & 0x3F)).to[U8]()))
+                write_pos = write_pos + 4
 
-            i = i + 1u64
+            i = i + 1
 
         buffer.offset(ByteSize(bytes: write_pos)).poke(BYTE_NULL)
         return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
@@ -139,7 +140,7 @@ routine CStr.is_null() -> Bool
 ### Returns `true` when this C string is null or has zero length.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_empty() -> Bool
-    return me.is_null() or me.count() == 0u64
+    return me.is_null() or me.count() == 0
 
 ### Returns the byte at `index` in the referenced C string.
 ### This does not copy the string and assumes the caller stays within bounds.
@@ -156,7 +157,7 @@ dangerous routine CStr.getitem(index: U64) -> Byte
 ### :returns: The resulting `Bool` value.
 @readonly
 routine CStr.eq(you: CStr) -> Bool
-    return C::rf_cstr_compare(a: me, b: you) == 0s32
+    return C::rf_cstr_compare(a: me, b: you) == 0
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
@@ -164,9 +165,9 @@ routine CStr.eq(you: CStr) -> Bool
 @readonly
 routine CStr.cmp(you: CStr) -> ComparisonSign
     var cmp = C::rf_cstr_compare(a: me, b: you)
-    if cmp < 0s32
+    if cmp < 0
         return ME_SMALL
-    if cmp > 0s32
+    if cmp > 0
         return ME_LARGE
     return SAME
 
@@ -176,7 +177,7 @@ routine CStr.cmp(you: CStr) -> ComparisonSign
 routine CStr.duplicate() -> CStr
     var len = me.count()
     danger
-        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
+        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1))
         C::rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
         return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
 

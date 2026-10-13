@@ -240,7 +240,7 @@ public class OperatorProtocolTests
 
                         @readonly
                         routine Point.$eq(you: Point) -> S32
-                            return 0_s32
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

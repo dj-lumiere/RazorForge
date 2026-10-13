@@ -4,7 +4,8 @@ import BuilderExpansion
 import BuilderQuery
 
 ### Builder plumbing for presets computed at build time: the value written back as RazorForge source that reads
-### as the same value, a literal or a construction from literals (`Point(x: 3, y: 4)`). The build runs the
+### as the same value, a literal or a construction from literals (`Point(x: 3, y: 4)`). A number is written bare:
+### it takes its type from the preset's declared type, or from the member or parameter it fills. The build runs the
 ### program's presets once, reads this text back and puts it where each preset is used. A value with no such
 ### spelling (an `Integer`, a `List`, a non-finite float) gives `!` and its type name, which the build reports.
 ### :returns: The source text.
@@ -26,10 +27,10 @@ needs AnyType T
         is U128 => return me.represent()
         is B32 => return b32_literal(value: me)
         is B64 => return b64_literal(value: me)
-        is Decimal => return me.represent() + "dn"
+        is Decimal => return me.represent()
         is Text => return text_literal(text: me)
         is Char => return "'" + code_point_escape(code: me.to[U32]()) + "'"
-        is Byte => return f"{me.to[U8]()}u8.to[Byte]()"
+        is Byte => return "b'\\x" + hex_digits(value: me.to[U8]().to[U64](), count: 2) + "'"
         else =>
             var result = me.type_name() + "("
             var first = true
@@ -84,39 +85,39 @@ needs VariantType T
 secret routine signed_literal(text: Text, is_min: Bool, min: Text) -> Text
     return if is_min then min else text
 
-### A `B32` as a hexadecimal float literal of the same bits: `0x1.800000p+1_b32`.
+### A `B32` as a hexadecimal float literal of the same bits: `0x1.800000p+1`.
 ### :returns: The source text, or `!B32` for an infinity or a NaN.
 secret routine b32_literal(value: B32) -> Text
     var bits = value.to_bits()
     var sign = ""
-    if (bits >>> 31u32) != 0u32
+    if (bits >>> 31) != 0
         sign = "-"
-    var exponent = (bits >>> 23u32) & 0xFFu32
-    var fraction = (bits & 0x7FFFFFu32).to[U64]() << 1u32
-    if exponent == 0xFFu32
+    var exponent = (bits >>> 23) & 0xFF
+    var fraction = (bits & 0x7FFFFF).to[U64]() << 1
+    if exponent == 0xFF
         return "!B32"
-    if exponent == 0u32
-        if fraction == 0u64
-            return sign + "0x0" + "p+0_b32"
-        return f"{sign}0x0.{hex_digits(value: fraction, count: 6u64)}p-126_b32"
-    return f"{sign}0x1.{hex_digits(value: fraction, count: 6u64)}p{exponent_text(value: exponent.to[S64]() - 127)}_b32"
+    if exponent == 0
+        if fraction == 0
+            return sign + "0x0" + "p+0"
+        return f"{sign}0x0.{hex_digits(value: fraction, count: 6)}p-126"
+    return f"{sign}0x1.{hex_digits(value: fraction, count: 6)}p{exponent_text(value: exponent.to[S64]() - 127)}"
 
-### A `B64` as a hexadecimal float literal of the same bits: `0x1.8000000000000p+1_b64`.
+### A `B64` as a hexadecimal float literal of the same bits: `0x1.8000000000000p+1`.
 ### :returns: The source text, or `!B64` for an infinity or a NaN.
 secret routine b64_literal(value: B64) -> Text
     var bits = value.to_bits()
     var sign = ""
-    if (bits >>> 63u32) != 0u64
+    if (bits >>> 63) != 0
         sign = "-"
-    var exponent = (bits >>> 52u32) & 0x7FFu64
-    var fraction = bits & 0xFFFFFFFFFFFFFu64
-    if exponent == 0x7FFu64
+    var exponent = (bits >>> 52) & 0x7FF
+    var fraction = bits & 0xFFFFFFFFFFFFF
+    if exponent == 0x7FF
         return "!B64"
-    if exponent == 0u64
-        if fraction == 0u64
-            return sign + "0x0" + "p+0_b64"
-        return f"{sign}0x0.{hex_digits(value: fraction, count: 13u64)}p-1022_b64"
-    return f"{sign}0x1.{hex_digits(value: fraction, count: 13u64)}p{exponent_text(value: exponent.to[S64]() - 1023)}_b64"
+    if exponent == 0
+        if fraction == 0
+            return sign + "0x0" + "p+0"
+        return f"{sign}0x0.{hex_digits(value: fraction, count: 13)}p-1022"
+    return f"{sign}0x1.{hex_digits(value: fraction, count: 13)}p{exponent_text(value: exponent.to[S64]() - 1023)}"
 
 ### A binary exponent with its sign: `+1`, `-3`.
 ### :returns: The source text.
@@ -137,7 +138,7 @@ secret routine text_literal(text: Text) -> Text
     var result = "\""
     each letter in text
         var code = letter.to[U32]()
-        if 0x20u32 <= code <= 0x7Eu32 and code != 0x22u32 and code != 0x5Cu32
+        if 0x20 <= code <= 0x7E and code != 0x22 and code != 0x5C
             result = result + letter.to[Text]()
         else
             result = result + code_point_escape(code: code)
@@ -146,4 +147,4 @@ secret routine text_literal(text: Text) -> Text
 ### A code point as a `\u` escape of six hexadecimal digits.
 ### :returns: The escape.
 secret routine code_point_escape(code: U32) -> Text
-    return "\\u" + hex_digits(value: code.to[U64](), count: 6u64)
+    return "\\u" + hex_digits(value: code.to[U64](), count: 6)

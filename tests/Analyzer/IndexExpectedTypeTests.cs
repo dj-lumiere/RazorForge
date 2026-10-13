@@ -25,7 +25,7 @@ public class IndexExpectedTypeTests
                             size: S32
                         @readonly
                         routine Bin.$getitem(index: U64) -> S32
-                            return 0_s32
+                            return 0
                         routine probe(b: Bin) -> S32
                             return b[7]
                         """;
@@ -49,7 +49,7 @@ public class IndexExpectedTypeTests
                             size: S32
                         @readonly
                         routine Reg.$getitem(slot: U32) -> S32
-                            return 0_s32
+                            return 0
                         routine probe(r: Reg) -> S32
                             return r[5]
                         """;
@@ -73,7 +73,7 @@ public class IndexExpectedTypeTests
                             size: S32
                         @readonly
                         routine Tiny.$getitem(slot: U8) -> S32
-                            return 0_s32
+                            return 0
                         routine probe(t: Tiny) -> S32
                             return t[300]
                         """;
@@ -96,7 +96,7 @@ public class IndexExpectedTypeTests
                             size: S32
                         @readonly
                         routine Bin.$getitem(index: U64) -> S32
-                            return 0_s32
+                            return 0
                         routine probe(b: Bin) -> S32
                             return b[0]
                         """;

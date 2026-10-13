@@ -74,8 +74,8 @@ public class PortedFixtureTests
     {
         string source = """
                         routine start()
-                            var xs = [1_s64, 2_s64, 3_s64]
-                            xs[0_u64] += 10_s64
+                            var xs = [1, 2, 3]
+                            xs[0] += 10
                             return
                         """;
 

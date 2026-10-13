@@ -26,7 +26,7 @@ public class OperatorValidationTests
                             size: S32
                         @readonly
                         routine Grid.$getitem(index: S32) -> S32
-                            return 0_s32
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -49,7 +49,7 @@ public class OperatorValidationTests
                             y: S32
                         @readonly
                         routine Pair.$getitem(index: S32) -> S32
-                            return 0_s32
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -70,7 +70,7 @@ public class OperatorValidationTests
                             y: S32
                         @readonly
                         routine Pair.$getitem(index: S32) -> S32
-                            return 0_s32
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

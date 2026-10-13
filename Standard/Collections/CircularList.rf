@@ -83,10 +83,10 @@ obeys Emittable[T]
 ### :returns: A circular list of the given elements.
 common routine CircularList[T].from_literal(elements...: T) -> CircularList[T]
     var result = CircularList[T]()
-    var i = 0u64
+    var i: U64 = 0
     while i < elements.count()
         result.add_last(value: elements.get_raw(index: i))
-        i = i +% 1u64
+        i = i +% 1
     return result
 
 ### Creates an empty circular list with no allocated storage.
@@ -94,9 +94,9 @@ common routine CircularList[T].from_literal(elements...: T) -> CircularList[T]
 routine CircularList[T]() -> CircularList[T]
     return CircularList[T](
         data: hijacked_none[T](),
-        start: 0u64,
-        count: 0u64,
-        capacity: 0u64,
+        start: 0,
+        count: 0,
+        capacity: 0,
     )
 
 ### Creates an empty circular list with storage pre-allocated for at least `capacity` elements.
@@ -104,15 +104,15 @@ routine CircularList[T]() -> CircularList[T]
 ### can use a bitmask.
 ### :param capacity: The minimum number of elements to reserve space for.
 routine CircularList[T](capacity: U64) -> CircularList[T]
-    var actual = 1u64
+    var actual: U64 = 1
     while actual < capacity
-        actual = actual *% 2u64
+        actual = actual *% 2
     var byte_size = T.data_size() * actual
     danger
         return CircularList[T](
             data: hijacked_from[T](rf_allocate_dynamic_uninit(byte_size)),
-            start: 0u64,
-            count: 0u64,
+            start: 0,
+            count: 0,
             capacity: actual,
         )
 
@@ -126,7 +126,7 @@ routine CircularList[T](capacity: U64) -> CircularList[T]
 @readonly
 routine CircularList[T].wrap_index(index: U64) -> U64
     # Capacity is always a power of 2 — use bitmask instead of modulo.
-    return index & me.capacity -% 1u64
+    return index & me.capacity -% 1
 
 ### Converts a logical position (0 = front) to the physical slot in the ring buffer.
 ### :param logical_index: The zero-based distance from the logical front.
@@ -174,7 +174,7 @@ routine CircularList[T].capacity() -> U64
 ### :returns: `true` when `count()` is zero.
 @readonly
 routine CircularList[T].is_empty() -> Bool
-    return me.count == 0u64
+    return me.count == 0
 
 ### Appends `value` at the logical back of the circular list.
 ### The buffer is doubled automatically when the current capacity is exhausted.
@@ -186,7 +186,7 @@ routine CircularList[T].add_last(value: T)
         me.grow()
     var idx = me.physical_index(me.count)
     me.write_at(physical_idx: idx, value: value)
-    me.count = me.count +% 1u64
+    me.count = me.count +% 1
     return
 
 ### Prepends `value` at the logical front of the circular list.
@@ -199,9 +199,9 @@ routine CircularList[T].add_first(value: T)
     if me.count >= me.capacity
         me.grow()
     # Decrement start with wrap: (start + cap - 1) & (cap - 1) — branchless
-    me.start = me.wrap_index(me.start +% me.capacity -% 1u64)
+    me.start = me.wrap_index(me.start +% me.capacity -% 1)
     me.write_at(physical_idx: me.start, value: value)
-    me.count = me.count +% 1u64
+    me.count = me.count +% 1
     return
 
 ### Removes and returns the element at the logical back of the circular list.
@@ -212,7 +212,7 @@ routine CircularList[T].remove_last!() -> T
     # Remove and return back element - O(1)
     if me.is_empty()
         throw AbsentValueError()
-    me.count = me.count - 1u64
+    me.count = me.count - 1
     var idx = me.physical_index(me.count)
     return me.read_at(idx)
 
@@ -225,8 +225,8 @@ routine CircularList[T].remove_first!() -> T
     if me.is_empty()
         throw AbsentValueError()
     var value = me.read_at(me.start)
-    me.start = me.wrap_index(me.start + 1u64)
-    me.count = me.count - 1u64
+    me.start = me.wrap_index(me.start + 1)
+    me.count = me.count - 1
     return value
 
 ### Discards the oldest elements so at most the latest `n` remain, keeping the current
@@ -241,15 +241,15 @@ routine CircularList[T].keep_last(n: U64)
     if n >= me.count
         return
     var dropped = me.count -% n
-    var i = 0u64
+    var i: U64 = 0
     danger
         while i < dropped
             me.data
                 .offset(T.data_size() * me.start)
                 .peek()
                 .destruct()
-            me.start = me.wrap_index(me.start +% 1u64)
-            i = i +% 1u64
+            me.start = me.wrap_index(me.start +% 1)
+            i = i +% 1
     me.count = n
     return
 
@@ -272,7 +272,7 @@ routine CircularList[T].keep_first(n: U64)
                 .offset(T.data_size() * physical)
                 .peek()
                 .destruct()
-            i = i +% 1u64
+            i = i +% 1
     me.count = n
     return
 
@@ -318,14 +318,14 @@ routine CircularList[T].last!() -> T
     # Peek at back element without removing
     if me.is_empty()
         throw AbsentValueError()
-    var idx = me.physical_index(me.count - 1u64)
+    var idx = me.physical_index(me.count - 1)
     return me.read_at(idx)
 
 ### Removes every element while preserving the current circular-buffer allocation.
 @reshaping
 routine CircularList[T].clear()
-    me.start = 0u64
-    me.count = 0u64
+    me.start = 0
+    me.count = 0
     return
 
 # ============================================================================
@@ -340,7 +340,7 @@ routine CircularList[T].clear()
 ### straight back up to the next power of two — a no-op. Staying at 2x is intentional here.
 @reshaping
 routine CircularList[T].grow()
-    var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
+    var new_capacity = if me.capacity == 0 then 4 else me.capacity *% 2
     me.reserve(new_capacity)
     return
 
@@ -351,9 +351,9 @@ routine CircularList[T].grow()
 ### :param new_capacity: The minimum element count to accommodate.
 @reshaping
 routine CircularList[T].reserve(new_capacity: U64)
-    var actual = 1u64
+    var actual: U64 = 1
     while actual < new_capacity
-        actual = actual *% 2u64
+        actual = actual *% 2
     if actual <= me.capacity
         return
 
@@ -362,16 +362,16 @@ routine CircularList[T].reserve(new_capacity: U64)
         var _new_data = hijacked_from[T](rf_allocate_dynamic_uninit(new_byte_size))
 
         # Copy elements in logical order (unwrap the ring)
-        var i = 0u64
+        var i: U64 = 0
         while i < me.count
             var old_idx = me.physical_index(i)
             var value = me.read_at(old_idx)
             var new_byte_offset = T.data_size() * i
             _new_data.offset(new_byte_offset).poke(value)
-            i = i +% 1u64
+            i = i +% 1
 
         me.data = _new_data
-        me.start = 0u64
+        me.start = 0
         me.capacity = actual
         return
 
@@ -476,7 +476,7 @@ needs RecordType T
 routine CircularList[T].rotate_left(n: U64)
     # Rotate elements left by n positions
     # Front elements move to back
-    if me.count == 0u64
+    if me.count == 0
         return
     var shift = LLVM::unsigned_rem(n, me.count)
     if me.count == me.capacity
@@ -484,12 +484,12 @@ routine CircularList[T].rotate_left(n: U64)
         return
     # With free slots after the back, moving the front index alone would bring them into the list: each
     # front element moves into the free slot after the back instead.
-    var i = 0u64
+    var i: U64 = 0
     while i < shift
         var value = me.read_at(physical_idx: me.start)
-        me.start = me.wrap_index(me.start +% 1u64)
-        me.write_at(physical_idx: me.physical_index(me.count -% 1u64), value: value)
-        i = i +% 1u64
+        me.start = me.wrap_index(me.start +% 1)
+        me.write_at(physical_idx: me.physical_index(me.count -% 1), value: value)
+        i = i +% 1
     return
 
 ### Shifts the logical back toward the front by `n` positions.
@@ -499,17 +499,17 @@ routine CircularList[T].rotate_left(n: U64)
 routine CircularList[T].rotate_right(n: U64)
     # Rotate elements right by n positions
     # Back elements move to front
-    if me.count == 0u64
+    if me.count == 0
         return
     var shift = LLVM::unsigned_rem(n, me.count)
     if me.count != me.capacity
         # With free slots before the front, each back element moves into the free slot before the front.
-        var i = 0u64
+        var i: U64 = 0
         while i < shift
-            var value = me.read_at(physical_idx: me.physical_index(me.count -% 1u64))
-            me.start = me.wrap_index(me.start +% me.capacity -% 1u64)
+            var value = me.read_at(physical_idx: me.physical_index(me.count -% 1))
+            me.start = me.wrap_index(me.start +% me.capacity -% 1)
             me.write_at(physical_idx: me.start, value: value)
-            i = i +% 1u64
+            i = i +% 1
         return
     if shift > me.start
         me.start = me.capacity -% (shift -% me.start)
@@ -525,7 +525,7 @@ routine CircularList[T].iter() -> CircularListEmittable[T]
             start: me.start,
             count: me.count,
             capacity: me.capacity,
-            index: 0u64,
+            index: 0,
         )
 
 ### Returns the next element from the iterator in front-to-back order.
@@ -534,11 +534,11 @@ routine CircularList[T].iter() -> CircularListEmittable[T]
 routine CircularListEmittable[T].emit!() -> T
     if me.index >= me.count
         throw AbsentValueError()
-    var physical = me.start +% me.index & me.capacity -% 1u64
+    var physical = me.start +% me.index & me.capacity -% 1
     lateinit var _result: T
     danger
         _result = me.data.offset(T.data_size() * physical).peek()
-    me.index = me.index + 1u64
+    me.index = me.index + 1
     return _result
 
 # ============================================================================
@@ -570,11 +570,11 @@ routine CircularList[T].last_or_default(default_value: T) -> T
 @readonly
 routine CircularList[T].has(value: T) -> Bool
 needs T obeys Equatable
-    var i = 0u64
+    var i: U64 = 0
     while i < me.count
         if me[i] == value
             return true
-        i = i +% 1u64
+        i = i +% 1
     return false
 
 ### Returns whether `value` is not in this value: the opposite of `has`.
@@ -593,12 +593,12 @@ needs T obeys Equatable
 @override
 routine CircularList[T].represent() -> Text
     var result = me.type_name() + "(["
-    var i = 0u64
+    var i: U64 = 0
     each v in me
-        if i > 0u64
+        if i > 0
             result = result + ", "
         result = result + nested_repr(v)
-        i = i +% 1u64
+        i = i +% 1
     result = result + "])"
     return steal result
 
@@ -606,12 +606,12 @@ routine CircularList[T].represent() -> Text
 @override
 routine CircularList[T].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
-    var i = 0u64
+    var i: U64 = 0
     each v in me
-        if i > 0u64
+        if i > 0
             result = result + ", "
         result = result + nested_repr(v)
-        i = i +% 1u64
+        i = i +% 1
     result = result + "])"
     return steal result
 
@@ -623,11 +623,11 @@ routine CircularList[T].eq(you: Viewing[CircularList[T]]) -> Bool
 needs T obeys Equatable
     if me.count != you.count
         return false
-    var i = 0u64
+    var i: U64 = 0
     while i < me.count
         if me[i] != you[i]
             return false
-        i = i +% 1u64
+        i = i +% 1
     return true
 
 @override
@@ -635,14 +635,14 @@ routine CircularList[T].destruct()
     danger
         # Tear down each live element in logical front-to-back (ring) order before freeing the buffer
         # (mirrors CircularListEmittable.emit!). No-op for value types; frees owned entity elements.
-        var i = 0u64
+        var i: U64 = 0
         while i < me.count
-            var physical = me.start +% i & me.capacity -% 1u64
+            var physical = me.start +% i & me.capacity -% 1
             me.data
                 .offset(T.data_size() * physical)
                 .peek()
                 .destruct()
-            i = i + 1u64
+            i = i + 1
         me.data.invalidate()
         return
 
@@ -651,14 +651,14 @@ routine CircularList[T].destruct()
 ### physical-index walk in `destruct` but calls `cyclic_visit` instead of `destruct`).
 @override
 dangerous routine CircularList[T].roam_trace()
-    var i = 0u64
+    var i: U64 = 0
     while i < me.count
-        var physical = me.start +% i & me.capacity -% 1u64
+        var physical = me.start +% i & me.capacity -% 1
         me.data
             .offset(T.data_size() * physical)
             .peek()
             .cyclic_visit()
-        i = i + 1u64
+        i = i + 1
     return
 
 ### Cycle-collector FREE: free the backing buffer and this list's own box, but NOT the elements (the

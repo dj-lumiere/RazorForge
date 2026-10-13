@@ -146,7 +146,7 @@ routine File.is_file() -> Bool
 routine File.size!() -> S64
     var cstr = me.at.to[CStr]()
     var size = C::rf_fs_file_size(path: cstr, len: cstr.count().to[S32]())
-    if size == -1s64
+    if size == -1
         throw IOError(description: f"Cannot read file size: {me.at}")
     return size
 
@@ -408,7 +408,7 @@ dangerous routine File.expose![T]() -> Exposed[T]
     if buf.is_none()
         throw IOError(description: f"Cannot expose file: {me.at}")
     var byte_len = C::rf_get_result_len()
-    return Exposed[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0u64)
+    return Exposed[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0)
 
 ### Exposes a WINDOW of this file's bytes as a read-only sequence of `T`: `count` elements starting at
 ### element `start`, clamped to the file end. This is the windowing path for files larger than the
@@ -444,7 +444,7 @@ dangerous routine File.wield![T]() -> Wielded[T]
     if buf.is_none()
         throw IOError(description: f"Cannot wield file: {me.at}")
     var byte_len = C::rf_get_result_len()
-    return Wielded[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0u64)
+    return Wielded[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0)
 
 ### Wields a WINDOW of this file's bytes as a read/write sequence of `T` (SHARED: writes land in the
 ### file): `count` elements starting at element `start`, clamped to the file end. The write-side dual of
@@ -478,7 +478,7 @@ routine Exposed[T].enter!() -> Exposed[T]
 ### `exit`, so the view is released exactly once.
 routine Exposed[T].exit()
     danger
-        var base = me.buf.recast_as[Byte]().stride(count: 0s64 -% me.map_delta.to[S64]())
+        var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
         C::rf_file_unmap(base, me.byte_len +% me.map_delta)
     return
 
@@ -519,7 +519,7 @@ routine Wielded[T].enter!() -> Wielded[T]
 routine Wielded[T].exit()
     me.flush()
     danger
-        var base = me.buf.recast_as[Byte]().stride(count: 0s64 -% me.map_delta.to[S64]())
+        var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
         C::rf_file_unmap(base, me.byte_len +% me.map_delta)
     return
 
@@ -559,7 +559,7 @@ routine Wielded[T].poke!(index: U64, value: T)
 ### minus `map_delta`) for the full mapped length.
 routine Wielded[T].flush()
     danger
-        var base = me.buf.recast_as[Byte]().stride(count: 0s64 -% me.map_delta.to[S64]())
+        var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
         C::rf_file_map_flush(base, me.byte_len +% me.map_delta)
     return
 
@@ -902,7 +902,7 @@ routine Directory.list!() -> List[Text]
     var len = C::rf_get_result_len()
     if ptr.is_none()
         throw IOError(description: f"Cannot list directory: {me.at}")
-    if len == 0u64
+    if len == 0
         return List[Text]()
     var bytes = Bytes(ptr: ptr, count: len)
     var joined = bytes.decode_as_utf8_lossy()
@@ -923,19 +923,19 @@ routine Directory.entries!() -> List[DirEntry]
     if ptr.is_none()
         throw IOError(description: f"Cannot list directory: {me.at}")
     var result = List[DirEntry]()
-    if len == 0u64
+    if len == 0
         return result
     var bytes = Bytes(ptr: ptr, count: len)
     var joined = bytes.decode_as_utf8_lossy()
     each line in joined.split(separator: '\n')
         # Each line is `<kind><mtime> <name>`: 'd'/'f', then decimal Unix seconds, one
         # space, then the raw name (which may itself contain spaces).
-        var is_dir = line[0u64] == 'd'
+        var is_dir = line[0] == 'd'
         var space = line.find(letter: ' ')
         var mtime: S64 = 0
-        each k in 1u64 til space
-            mtime = mtime * 10_s64 + line[k].digit_value().to[S64]()
-        var name = line[space + 1u64 til ^0]
+        each k in 1 til space
+            mtime = mtime * 10 + line[k].digit_value().to[S64]()
+        var name = line[space + 1 til ^0]
         result.add_last(
             value: DirEntry(
                 name: name,

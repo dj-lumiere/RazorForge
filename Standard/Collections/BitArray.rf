@@ -85,7 +85,7 @@ routine BitArray[BITS].count() -> U64
 ### :returns: `true` if `BITS == 0`.
 @readonly
 routine BitArray[BITS].is_empty() -> Bool
-    return BITS == 0u64
+    return BITS == 0
 
 # ============================================================================
 # Indexing (read-only, value semantics)
@@ -100,13 +100,13 @@ routine BitArray[BITS].getitem!(index: U64) -> Bool
     if index >= BITS
         throw IndexOutOfBoundsError(index: index, count: BITS)
     # Access bit at index within packed bytes
-    var byte_idx = index // 8u64
-    var bit_off = (index % 8u64).to[U8]()
-    var byte_val = 0u8
+    var byte_idx = index // 8
+    var bit_off = (index % 8).to[U8]()
+    var byte_val: U8 = 0
     # Read the packed byte in place through the storage pointer — no whole-array copy.
     danger
         byte_val = LLVM::load_element_ref[BitArray[BITS], U8](me.hijack(), byte_idx)
-    return (byte_val & (1u8 << bit_off)) != 0u8
+    return (byte_val & (1 << bit_off)) != 0
 
 ### Writes `value` into the bit at `index`, mutating this `BitArray` in place.
 ### :param index: The zero-based bit position to update.
@@ -115,8 +115,8 @@ routine BitArray[BITS].getitem!(index: U64) -> Bool
 routine BitArray[BITS].setitem!(index: U64, value: Bool)
     if index >= BITS
         throw IndexOutOfBoundsError(index: index, count: BITS)
-    var byte_idx = LLVM::unsigned_div(index, 8u64)
-    var bit_off = (LLVM::unsigned_rem(index, 8u64)).to[U8]()
+    var byte_idx = LLVM::unsigned_div(index, 8)
+    var bit_off = (LLVM::unsigned_rem(index, 8)).to[U8]()
     # `me` is by reference (struct-record `setitem!`): read-modify-write the single packed byte in
     # place through `me.hijack()` so the bit change reaches the caller's storage — no whole-array copy.
     danger
@@ -125,13 +125,13 @@ routine BitArray[BITS].setitem!(index: U64, value: Bool)
             LLVM::store_element_ref[BitArray[BITS], U8](
                 me.hijack(),
                 byte_idx,
-                byte_val | (1u8 << bit_off),
+                byte_val | (1 << bit_off),
             )
         else
             LLVM::store_element_ref[BitArray[BITS], U8](
                 me.hijack(),
                 byte_idx,
-                byte_val & ~(1u8 << bit_off),
+                byte_val & ~(1 << bit_off),
             )
     return
 
@@ -152,13 +152,13 @@ routine BitArray[BITS].with_set(index: U64, value: Bool) -> BitArray[BITS]
         return me
     var result = me
     # Modify the bit in the copy
-    var byte_idx = LLVM::unsigned_div(index, 8u64)
-    var bit_off = (LLVM::unsigned_rem(index, 8u64)).to[U8]()
+    var byte_idx = LLVM::unsigned_div(index, 8)
+    var bit_off = (LLVM::unsigned_rem(index, 8)).to[U8]()
     var byte_val = LLVM::byte_at_bits[BITS](result, byte_idx)
     if value
-        result = LLVM::set_byte_at_bits[BITS](result, byte_idx, byte_val | (1u8 << bit_off))
+        result = LLVM::set_byte_at_bits[BITS](result, byte_idx, byte_val | (1 << bit_off))
     else
-        result = LLVM::set_byte_at_bits[BITS](result, byte_idx, byte_val & ~(1u8 << bit_off))
+        result = LLVM::set_byte_at_bits[BITS](result, byte_idx, byte_val & ~(1 << bit_off))
     return result
 
 ### Returns a new `BitArray` identical to this one but with the bit at `index` toggled.
@@ -181,12 +181,12 @@ routine BitArray[BITS].with_flipped(index: U64) -> BitArray[BITS]
 ### :returns: The count of one-bits in this array.
 @readonly
 routine BitArray[BITS].count_ones() -> U64
-    var count = 0u64
-    var i = 0u64
+    var count: U64 = 0
+    var i: U64 = 0
     while i < BITS
         if me[i]
-            count = count +% 1u64
-        i = i +% 1u64
+            count = count +% 1
+        i = i +% 1
     return count
 
 ### Returns the number of bits currently set to `false`.
@@ -199,11 +199,11 @@ routine BitArray[BITS].count_zeros() -> U64
 ### :returns: `true` if any bit is set; `false` if all bits are clear.
 @readonly
 routine BitArray[BITS].any() -> Bool
-    var i = 0u64
+    var i: U64 = 0
     while i < BITS
         if me[i]
             return true
-        i = i +% 1u64
+        i = i +% 1
     return false
 
 ### Returns true when every stored bit is `true`.
@@ -211,11 +211,11 @@ routine BitArray[BITS].any() -> Bool
 ### :returns: `true` if all bits are set; `false` if any bit is clear.
 @readonly
 routine BitArray[BITS].all() -> Bool
-    var i = 0u64
+    var i: U64 = 0
     while i < BITS
         if not me[i]
             return false
-        i = i +% 1u64
+        i = i +% 1
     return true
 
 ### Returns true when no stored bit is `true`.
@@ -249,12 +249,12 @@ routine BitArray[BITS].lacks(value: Bool) -> Bool
 @override
 routine BitArray[BITS].represent() -> Text
     var result = "BitArray(["
-    var i = 0u64
+    var i: U64 = 0
     while i < BITS
-        if i > 0u64
+        if i > 0
             result = result + ", "
         result = result + nested_repr(me[i])
-        i = i +% 1u64
+        i = i +% 1
     result = result + "])"
     return result
 
@@ -262,18 +262,18 @@ routine BitArray[BITS].represent() -> Text
 @override
 routine BitArray[BITS].diagnose() -> Text
     var result = me.full_type_name() + "(["
-    var i = 0u64
+    var i: U64 = 0
     while i < BITS
-        if i > 0u64
+        if i > 0
             result = result + ", "
         result = result + nested_repr(me[i])
-        i = i +% 1u64
+        i = i +% 1
     result = result + "])"
     return result
 
 @readonly
 routine BitArray[BITS].iter() -> BitArrayEmittable[BITS]
-    return BitArrayEmittable[BITS](bits: me, index: 0u64)
+    return BitArrayEmittable[BITS](bits: me, index: 0)
 
 ### Returns the next bit from the iterator in ascending index order.
 ### :returns: The bit at the current index.
@@ -282,7 +282,7 @@ routine BitArrayEmittable[BITS].emit!() -> Bool
     if me.index >= BITS
         throw AbsentValueError()
     var value = me.bits[me.index]
-    me.index = me.index + 1u64
+    me.index = me.index + 1
     return value
 
 # ============================================================================
@@ -296,7 +296,7 @@ routine BitArrayEmittable[BITS].emit!() -> Bool
 ###        last byte are unspecified — a raw `memcmp` would compare padding.
 @readonly
 routine BitArray[BITS].eq(you: BitArray[BITS]) -> Bool
-    each i in 0u64 til BITS
+    each i in 0 til BITS
         if me[i] != you[i]
             return false
     return true
@@ -307,7 +307,7 @@ routine BitArray[BITS].eq(you: BitArray[BITS]) -> Bool
 ### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
 @readonly
 routine BitArray[BITS].cmp(you: BitArray[BITS]) -> ComparisonSign
-    each i in 0u64 til BITS
+    each i in 0 til BITS
         var a = me[i]
         var b = you[i]
         if a != b

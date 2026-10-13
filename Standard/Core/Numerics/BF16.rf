@@ -30,18 +30,18 @@ common routine BF16.from_bits(bits: U16) -> BF16
 
 ### Returns a signaling NaN (interop/testing; never produced by a conversion).
 common routine BF16.signaling_nan() -> BF16
-    return BF16.from_bits(bits: 0x7F81_u16)
+    return BF16.from_bits(bits: 0x7F81)
 
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `Array[Byte, 2]` value.
 routine BF16.to_bytes_le() -> Array[Byte, 2]
     var raw = me.to_bits()
     var result = Array[Byte, 2]()
-    result = LLVM::set_byte_at(array: result, index: 0_u64, value: LLVM::int_truncate[U16, U8](raw))
+    result = LLVM::set_byte_at(array: result, index: 0, value: LLVM::int_truncate[U16, U8](raw))
     result = LLVM::set_byte_at(
         array: result,
-        index: 1_u64,
-        value: LLVM::int_truncate[U16, U8](raw >>> 8_u32),
+        index: 1,
+        value: LLVM::int_truncate[U16, U8](raw >>> 8),
     )
     return result
 
@@ -52,10 +52,10 @@ routine BF16.to_bytes_be() -> Array[Byte, 2]
     var result = Array[Byte, 2]()
     result = LLVM::set_byte_at(
         array: result,
-        index: 0_u64,
-        value: LLVM::int_truncate[U16, U8](raw >>> 8_u32),
+        index: 0,
+        value: LLVM::int_truncate[U16, U8](raw >>> 8),
     )
-    result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](raw))
+    result = LLVM::set_byte_at(array: result, index: 1, value: LLVM::int_truncate[U16, U8](raw))
     return result
 
 # ============================================================================
@@ -67,13 +67,13 @@ routine BF16.to_bytes_be() -> Array[Byte, 2]
 ### :returns: The nearest `BF16` value.
 routine B32.to[BF16]() -> BF16
     var u = me.to_bits()
-    if (u & 0x7FFFFFFF_u32) > 0x7F800000_u32
+    if (u & 0x7FFFFFFF) > 0x7F800000
         # a NaN keeps its sign and top payload bits, with the quiet bit set
-        return BF16.from_bits(bits: LLVM::int_truncate[U32, U16](u >>> 16_u32) | 0x0040_u16)
+        return BF16.from_bits(bits: LLVM::int_truncate[U32, U16](u >>> 16) | 0x0040)
     # add just under half of the dropped unit, plus one more when the kept part is odd (ties to even); a carry
     # into the exponent is the correct rounding up, to infinity past the largest finite value
-    var bias = 0x7FFF_u32 +% ((u >>> 16_u32) & 1_u32)
-    return BF16.from_bits(bits: LLVM::int_truncate[U32, U16](u +% bias >>> 16_u32))
+    var bias = 0x7FFF +% ((u >>> 16) & 1)
+    return BF16.from_bits(bits: LLVM::int_truncate[U32, U16](u +% bias >>> 16))
 
 ### Narrows a double-precision float to bfloat16 in one rounding, to the nearest value, ties to even (not
 ### through `B32`, whose own rounding could land on a bfloat16 midpoint). Values below half the smallest
@@ -82,42 +82,42 @@ routine B32.to[BF16]() -> BF16
 ### :returns: The nearest `BF16` value.
 routine B64.to[BF16]() -> BF16
     var u = me.to_bits()
-    var sign = LLVM::int_truncate[U64, U16](u >>> 48_u32) & 0x8000_u16
-    var ef = LLVM::reinterpret_bits[U64, S64]((u >>> 52_u32) & 0x7FF_u64)
-    var frac = u & 0x000FFFFFFFFFFFFF_u64
-    if ef == 0x7FF_s64
-        if frac != 0_u64
-            return BF16.from_bits(bits: sign | 0x7FC0_u16 | LLVM::int_truncate[U64, U16](frac >>> 45_u32))
-        return BF16.from_bits(bits: sign | 0x7F80_u16)
-    if ef == 0_s64
+    var sign = LLVM::int_truncate[U64, U16](u >>> 48) & 0x8000
+    var ef = LLVM::reinterpret_bits[U64, S64]((u >>> 52) & 0x7FF)
+    var frac = u & 0x000FFFFFFFFFFFFF
+    if ef == 0x7FF
+        if frac != 0
+            return BF16.from_bits(bits: sign | 0x7FC0 | LLVM::int_truncate[U64, U16](frac >>> 45))
+        return BF16.from_bits(bits: sign | 0x7F80)
+    if ef == 0
         # zero or a B64 subnormal, far below the smallest BF16 subnormal
         return BF16.from_bits(bits: sign)
     # |x| = m 2^(e - 52) with m the 53-bit significand; the result's last kept bit is at 2^lsb
-    var m = frac | 0x0010000000000000_u64
-    var e = ef -% 1023_s64
-    var lsb = e -% 7_s64
-    if lsb < -133_s64
-        lsb = -133_s64
-    var s = lsb -% (e -% 52_s64)
-    if s >= 54_s64
+    var m = frac | 0x0010000000000000
+    var e = ef -% 1023
+    var lsb = e -% 7
+    if lsb < -133
+        lsb = -133
+    var s = lsb -% (e -% 52)
+    if s >= 54
         # below half of 2^lsb: rounds to zero
         return BF16.from_bits(bits: sign)
     var q = m >>> LLVM::int_truncate[S64, U32](s)
-    var rest = m & (1_u64 << LLVM::int_truncate[S64, U32](s)) -% 1_u64
-    var half = 1_u64 << LLVM::int_truncate[S64, U32](s -% 1_s64)
-    if rest > half or (rest == half and (q & 1_u64) != 0_u64)
-        q = q +% 1_u64
-    if q >= 256_u64
+    var rest = m & (1 << LLVM::int_truncate[S64, U32](s)) -% 1
+    var half: U64 = 1 << LLVM::int_truncate[S64, U32](s -% 1)
+    if rest > half or (rest == half and (q & 1) != 0)
+        q = q +% 1
+    if q >= 256
         # the rounding carried into a new leading bit (q = 2^8 exactly)
-        q = q >>> 1_u32
-        lsb = lsb +% 1_s64
-    if q < 128_u64
+        q = q >>> 1
+        lsb = lsb +% 1
+    if q < 128
         # a subnormal (lsb = -133), or zero
         return BF16.from_bits(bits: sign | LLVM::int_truncate[U64, U16](q))
-    var ex = lsb +% 134_s64
-    if ex >= 255_s64
-        return BF16.from_bits(bits: sign | 0x7F80_u16)
-    var field = (LLVM::reinterpret_bits[S64, U64](ex) << 7_u32) | q -% 128_u64
+    var ex = lsb +% 134
+    if ex >= 255
+        return BF16.from_bits(bits: sign | 0x7F80)
+    var field = (LLVM::reinterpret_bits[S64, U64](ex) << 7) | q -% 128
     return BF16.from_bits(bits: sign | LLVM::int_truncate[U64, U16](field))
 
 # ============================================================================
@@ -126,27 +126,27 @@ routine B64.to[BF16]() -> BF16
 
 ### Returns `true` when this value encodes a NaN.
 routine BF16.is_nan() -> Bool
-    return (me.to_bits() & 0x7FFF_u16) > 0x7F80_u16
+    return (me.to_bits() & 0x7FFF) > 0x7F80
 
 ### True when this is a SIGNALING NaN (quiet bit clear).
 routine BF16.is_signaling() -> Bool
-    return me.is_nan() and (me.to_bits() & 0x0040_u16) == 0_u16
+    return me.is_nan() and (me.to_bits() & 0x0040) == 0
 
 ### Returns `true` when this value encodes positive or negative infinity.
 routine BF16.is_infinite() -> Bool
-    return (me.to_bits() & 0x7FFF_u16) == 0x7F80_u16
+    return (me.to_bits() & 0x7FFF) == 0x7F80
 
 ### Returns `true` when this value is neither NaN nor infinity.
 routine BF16.is_finite() -> Bool
-    return (me.to_bits() & 0x7F80_u16) != 0x7F80_u16
+    return (me.to_bits() & 0x7F80) != 0x7F80
 
 ### Returns `true` for positive or negative zero.
 routine BF16.is_zero() -> Bool
-    return (me.to_bits() & 0x7FFF_u16) == 0_u16
+    return (me.to_bits() & 0x7FFF) == 0
 
 ### Returns `true` when the sign bit is set (negative values, -0 and negative NaNs).
 routine BF16.signbit() -> Bool
-    return (me.to_bits() & 0x8000_u16) != 0_u16
+    return (me.to_bits() & 0x8000) != 0
 
 # ============================================================================
 # Comparison (IEEE: NaN is unordered, +0 equals -0)
@@ -177,7 +177,7 @@ routine BF16.cmp(you: BF16) -> ComparisonSign
 routine BF16.represent() -> Text
     if me.is_signaling()
         return "snan"
-    return format_binary_shortest(raw: LLVM::zero_extend[U16, U64](me.to_bits()), fmt: 3_s32)
+    return format_binary_shortest(raw: LLVM::zero_extend[U16, U64](me.to_bits()), fmt: 3)
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -187,7 +187,7 @@ routine BF16.diagnose() -> Text
         return "BF16(snan)"
     return format_binary_shortest_wrapped(
         raw: LLVM::zero_extend[U16, U64](me.to_bits()),
-        fmt: 3_s32,
+        fmt: 3,
         wrap: "BF16",
     )
 
@@ -197,12 +197,12 @@ routine BF16.diagnose() -> Text
 ### :throws: {InvalidValueError} on malformed input.
 routine Text.to![BF16]() -> BF16
     var pc = parse_float_components(from_text: me, target: "BF16")
-    if pc.kind == 3_s32
+    if pc.kind == 3
         throw InvalidValueError(input: me, target: "BF16")
-    if pc.kind == 1_s32
-        return BF16.from_bits(bits: 0x7FC0_u16)
-    if pc.kind == 2_s32
+    if pc.kind == 1
+        return BF16.from_bits(bits: 0x7FC0)
+    if pc.kind == 2
         if pc.is_neg
-            return BF16.from_bits(bits: 0xFF80_u16)
-        return BF16.from_bits(bits: 0x7F80_u16)
+            return BF16.from_bits(bits: 0xFF80)
+        return BF16.from_bits(bits: 0x7F80)
     return bf16_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)

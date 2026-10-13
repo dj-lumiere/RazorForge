@@ -58,7 +58,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> B32
-                            return 10.0_b32 / 3.0_b32
+                            return 10.0 / 3.0
                         """;
 
         AssertParses(source: source);
@@ -700,8 +700,8 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                            var x = 10.0_b32
-                            x /= 2.0_b32
+                            var x: B32 = 10.0
+                            x /= 2.0
                             return
                         """;
 

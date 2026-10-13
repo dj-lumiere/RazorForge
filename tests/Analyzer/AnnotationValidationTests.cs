@@ -21,7 +21,7 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine test(x: Bool) -> S32
-                            return if x then 1_s32 else 0_s32
+                            return if x then 1 else 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -36,7 +36,7 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine classify(x: S32) -> Text
-                            return if x > 0_s32 then "positive" else "non-positive"
+                            return if x > 0 then "positive" else "non-positive"
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -56,7 +56,7 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine test(x: Bool)
-                            var result = if x then 1_s32 else 0_s32
+                            var result: S32 = if x then 1 else 0
                             return
                         """;
 
@@ -73,8 +73,8 @@ public class AnnotationValidationTests
     {
         string source = """
                         routine test(a: Bool, b: Bool) -> S32
-                            var x = if a then 1_s32 else 0_s32
-                            var y = if b then 2_s32 else 0_s32
+                            var x: S32 = if a then 1 else 0
+                            var y: S32 = if b then 2 else 0
                             return x
                         """;
 

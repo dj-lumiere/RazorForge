@@ -230,7 +230,7 @@ public class MarkerConformanceTests
                             tag: S64
 
                         routine start()
-                            var h = Holder[Algebra[S64]](tag: 1_s64)
+                            var h = Holder[Algebra[S64]](tag: 1)
                             return
                         """;
 
@@ -253,7 +253,7 @@ public class MarkerConformanceTests
                             tag: S64
 
                         routine start()
-                            var k = Keeper[Resource](tag: 3_s64)
+                            var k = Keeper[Resource](tag: 3)
                             return
                         """;
 
@@ -276,7 +276,7 @@ public class MarkerConformanceTests
                             tag: S64
 
                         routine start()
-                            var h = Holder[Resource](tag: 2_s64)
+                            var h = Holder[Resource](tag: 2)
                             return
                         """;
 

@@ -85,7 +85,7 @@ public class AssignableProtocolTests
     {
         string source = """
                         routine start()
-                            var a = (1_s32, 2_s32, 3_s32)
+                            var a = (1, 2, 3)
                             var b = a
                             return
                         """;
@@ -179,7 +179,7 @@ public class AssignableProtocolTests
 
                         routine start()
                             var a = Node(value: 1)
-                            var t = (1_s32, Retained(from: steal a))
+                            var t = (1, Retained(from: steal a))
                             var u = t
                             return
                         """;
@@ -199,7 +199,7 @@ public class AssignableProtocolTests
         string source = """
                         routine start()
                             danger
-                                var a = Hijacked[U8](0_addr)
+                                var a = Hijacked[U8](0)
                                 var b = a
                             return
                         """;

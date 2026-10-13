@@ -1,10 +1,10 @@
 module Core
 
 # Constants for S32 limits
-preset S32_MIN: S32 = -2147483648_s32
-preset S32_MAX: S32 = 2147483647_s32
-preset S32_ZERO: S32 = 0_s32
-preset S32_ONE: S32 = 1_s32
+preset S32_MIN: S32 = -2147483648
+preset S32_MAX: S32 = 2147483647
+preset S32_ZERO: S32 = 0
+preset S32_ONE: S32 = 1
 
 ### A 32-bit signed integer in the range −2,147,483,648 to 2,147,483,647.
 ###
@@ -88,7 +88,7 @@ routine U128.to![S32]() -> S32
 ### :returns: The lower 32 bits reinterpreted as an `S32`.
 ### :throws: {IntegerOverflowError} if this value is outside −2147483648..2147483647.
 routine S256.to![S32]() -> S32
-    if not (-2147483648_s256 <= me <= 2147483647_s256)
+    if not (-2147483648 <= me <= 2147483647)
         throw IntegerOverflowError()
     return LLVM::int_truncate[S256, S32](me)
 
@@ -96,7 +96,7 @@ routine S256.to![S32]() -> S32
 ### :returns: The lower 32 bits reinterpreted as an `S32`.
 ### :throws: {IntegerOverflowError} if `me > 2147483647`.
 routine U256.to![S32]() -> S32
-    if me > 2147483647_u256
+    if me > 2147483647
         throw IntegerOverflowError()
     return LLVM::int_truncate[U256, S32](me)
 
@@ -110,7 +110,7 @@ routine B16.to![S32]() -> S32
 ### :returns: The integer part of this value as an `S32`.
 ### :throws: {IntegerOverflowError} if the value is outside the S32 range.
 routine B32.to![S32]() -> S32
-    if me.is_nan() or not (-2147483648.0_b32 <= me <= 2147483647.0_b32)
+    if me.is_nan() or not (-2147483648.0 <= me <= 2147483647.0)
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B32, S32](me)
 
@@ -118,7 +118,7 @@ routine B32.to![S32]() -> S32
 ### :returns: The integer part of this value as an `S32`.
 ### :throws: {IntegerOverflowError} if the value is outside the S32 range.
 routine B64.to![S32]() -> S32
-    if me.is_nan() or not (-2147483648.0_b64 <= me <= 2147483647.0_b64)
+    if me.is_nan() or not (-2147483648.0 <= me <= 2147483647.0)
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B64, S32](me)
 
@@ -208,14 +208,14 @@ routine S32.mul!(you: S32) -> S32
 routine S32.floordiv!(you: S32) -> S32
     if you == 0
         throw DivisionByZeroError()
-    if me == S32_MIN and you == -1_s32
+    if me == S32_MIN and you == -1
         throw IntegerOverflowError()
     var quotient = LLVM::signed_div(a: me, b: you)
     var remainder = LLVM::signed_rem(a: me, b: you)
-    if remainder < 0_s32
-        if you > 0_s32
-            return quotient - 1_s32
-        return quotient + 1_s32
+    if remainder < 0
+        if you > 0
+            return quotient - 1
+        return quotient + 1
     return quotient
 
 ### Returns `me % you` (euclidean modulo): the remainder is always in `[0, |you|)`.
@@ -227,11 +227,11 @@ routine S32.mod!(you: S32) -> S32
         throw DivisionByZeroError()
     # S32_MIN % -1 is mathematically 0, but signed_rem(S32_MIN, -1) is undefined at the
     # hardware level (same trap as S32_MIN / -1). Return the exact euclidean result directly.
-    if me == S32_MIN and you == -1_s32
-        return 0_s32
+    if me == S32_MIN and you == -1
+        return 0
     var remainder = LLVM::signed_rem(a: me, b: you)
-    if remainder < 0_s32
-        if you > 0_s32
+    if remainder < 0
+        if you > 0
             return remainder + you
         return remainder - you
     return remainder
@@ -240,9 +240,9 @@ routine S32.mod!(you: S32) -> S32
 ### :returns: The negated value. `-S32_MIN` wraps to `S32_MIN` (−2147483648).
 @readonly
 routine S32.neg!() -> S32
-    if me == -2147483648_s32
+    if me == -2147483648
         throw IntegerOverflowError()
-    return LLVM::sub(a: 0_s32, b: me)
+    return LLVM::sub(a: 0, b: me)
 
 # ============================================================================
 # Overflow-mode variants (neg / abs / div / mod)
@@ -251,22 +251,22 @@ routine S32.neg!() -> S32
 ### Returns `-me` in two's complement, wrapping `S32_MIN` to itself.
 ### :returns: The wrapped negation.
 routine S32.neg_wrap() -> S32
-    return LLVM::sub(a: 0_s32, b: me)
+    return LLVM::sub(a: 0, b: me)
 
 ### Returns `(-me, overflowed)`. Overflow occurs only for `S32_MIN`.
 ### :returns: A tuple of `(wrapped negation, overflow flag)`.
 routine S32.neg_with_overflow() -> (S32, Bool)
-    return (LLVM::sub(a: 0_s32, b: me), me == S32_MIN)
+    return (LLVM::sub(a: 0, b: me), me == S32_MIN)
 
 ### Returns `-me`, clamped to `S32_MAX` when `me == S32_MIN`.
 ### :returns: The saturating negation.
 routine S32.neg_clamp() -> S32
-    return if me == S32_MIN then S32_MAX else LLVM::sub(a: 0_s32, b: me)
+    return if me == S32_MIN then S32_MAX else LLVM::sub(a: 0, b: me)
 
 ### Returns |me| in two's complement, wrapping `|S32_MIN|` back to `S32_MIN`.
 ### :returns: The wrapped absolute value.
 routine S32.abs_wrap() -> S32
-    return if me < 0_s32 then LLVM::sub(a: 0_s32, b: me) else me
+    return if me < 0 then LLVM::sub(a: 0, b: me) else me
 
 ### Returns `(|me|, overflowed)`. Overflow occurs only for `S32_MIN`.
 ### :returns: A tuple of `(wrapped absolute value, overflow flag)`.
@@ -281,7 +281,7 @@ routine S32.abs_clamp() -> S32
 ### Returns |me| as an unsigned value; `|S32_MIN|` is represented exactly.
 ### :returns: The absolute value as `U32`.
 routine S32.unsigned_abs() -> U32
-    var w = if me < 0_s32 then LLVM::sub(a: 0_s32, b: me) else me
+    var w = if me < 0 then LLVM::sub(a: 0, b: me) else me
     return LLVM::reinterpret_bits[S32, U32](w)
 
 ### Returns euclidean `me // you`, wrapping the `S32_MIN // -1` overflow to `S32_MIN`.
@@ -289,7 +289,7 @@ routine S32.unsigned_abs() -> U32
 ### :returns: The wrapped euclidean quotient.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S32.floordiv_wrap(you: S32) -> S32
-    if me == S32_MIN and you == -1_s32
+    if me == S32_MIN and you == -1
         return S32_MIN
     return me.floordiv(you)
 
@@ -298,7 +298,7 @@ routine S32.floordiv_wrap(you: S32) -> S32
 ### :returns: A tuple of `(quotient, overflow flag)`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S32.floordiv_with_overflow(you: S32) -> (S32, Bool)
-    if me == S32_MIN and you == -1_s32
+    if me == S32_MIN and you == -1
         return (S32_MIN, true)
     return (me.floordiv(you), false)
 
@@ -307,8 +307,8 @@ routine S32.floordiv_with_overflow(you: S32) -> (S32, Bool)
 ### :returns: The wrapped euclidean remainder.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S32.mod_wrap(you: S32) -> S32
-    if me == S32_MIN and you == -1_s32
-        return 0_s32
+    if me == S32_MIN and you == -1
+        return 0
     return me.mod(you)
 
 ### Returns `(euclidean remainder, overflowed)`; overflow only for `S32_MIN % -1`.
@@ -316,8 +316,8 @@ routine S32.mod_wrap(you: S32) -> S32
 ### :returns: A tuple of `(remainder, overflow flag)`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 routine S32.mod_with_overflow(you: S32) -> (S32, Bool)
-    if me == S32_MIN and you == -1_s32
-        return (0_s32, true)
+    if me == S32_MIN and you == -1
+        return (0, true)
     return (me.mod(you), false)
 
 # ============================================================================
@@ -371,10 +371,10 @@ dangerous routine S32.mul_unchecked(you: S32) -> S32
 dangerous routine S32.floordiv_unchecked(you: S32) -> S32
     var quotient = LLVM::signed_div(a: me, b: you)
     var remainder = LLVM::signed_rem(a: me, b: you)
-    if remainder < 0_s32
-        if you > 0_s32
-            return quotient - 1_s32
-        return quotient + 1_s32
+    if remainder < 0
+        if you > 0
+            return quotient - 1
+        return quotient + 1
     return quotient
 
 ### Returns `me % you` (euclidean modulo) with undefined behavior if `you == 0`.
@@ -383,8 +383,8 @@ dangerous routine S32.floordiv_unchecked(you: S32) -> S32
 @readonly
 dangerous routine S32.mod_unchecked(you: S32) -> S32
     var remainder = LLVM::signed_rem(a: me, b: you)
-    if remainder < 0_s32
-        if you > 0_s32
+    if remainder < 0
+        if you > 0
             return remainder + you
         return remainder - you
     return remainder
@@ -413,9 +413,9 @@ routine S32.sub_clamp(you: S32) -> S32
 @readonly
 routine S32.mul_clamp(you: S32) -> S32
     var wide = LLVM::mul(LLVM::sign_extend[S32, S64](me), LLVM::sign_extend[S32, S64](you))
-    if LLVM::signed_gt(wide, 2147483647_s64)
+    if LLVM::signed_gt(wide, 2147483647)
         return S32_MAX
-    if LLVM::signed_lt(wide, -2147483648_s64)
+    if LLVM::signed_lt(wide, -2147483648)
         return S32_MIN
     return LLVM::int_truncate[S64, S32](wide)
 
@@ -432,7 +432,7 @@ routine S32.mul_clamp(you: S32) -> S32
 ### :param carry: The incoming carry bit from the lower word.
 ### :returns: A tuple of `(wrapped sum, signed-overflow flag)`.
 routine S32.carrying_add(you: S32, carry: Bool) -> (S32, Bool)
-    var carry_val: S32 = if carry then 1_s32 else 0_s32
+    var carry_val: S32 = if carry then 1 else 0
     var first = me.add_with_overflow(you)
     var second = first.item0.add_with_overflow(carry_val)
     return (second.item0, not first.item1.eq(second.item1))
@@ -444,7 +444,7 @@ routine S32.carrying_add(you: S32, carry: Bool) -> (S32, Bool)
 ### :param borrow: The incoming borrow bit from the lower word.
 ### :returns: A tuple of `(wrapped difference, signed-overflow flag)`.
 routine S32.borrowing_sub(you: S32, borrow: Bool) -> (S32, Bool)
-    var borrow_val: S32 = if borrow then 1_s32 else 0_s32
+    var borrow_val: S32 = if borrow then 1 else 0
     var first = me.sub_with_overflow(you)
     var second = first.item0.sub_with_overflow(borrow_val)
     return (second.item0, not first.item1.eq(second.item1))
@@ -469,7 +469,7 @@ routine S32.pow_with_overflow!(exp: S32) -> (S32, Bool)
             var mul_result = result.mul_with_overflow(base)
             result = mul_result.item0
             overflow = overflow or mul_result.item1
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             var square_result = base.mul_with_overflow(base)
             base = square_result.item0
@@ -492,7 +492,7 @@ routine S32.pow!(exp: S32) -> S32
 ### :returns: The result modulo 2³² (signed wrap).
 ### :throws: {NumericDomainError} if `exp < 0`.
 routine S32.pow_wrap!(exp: S32) -> S32
-    if exp < 0_s32
+    if exp < 0
         throw NumericDomainError(description: "negative exponent: no integer result")
     var result: S32 = 1
     var base: S32 = me
@@ -500,7 +500,7 @@ routine S32.pow_wrap!(exp: S32) -> S32
     while e > 0
         if (e & 1) == 1
             result = result.mul_wrap(base)
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             base = base.mul_wrap(base)
     return result
@@ -519,7 +519,7 @@ routine S32.pow_clamp!(exp: S32) -> S32
     while e > 0
         if (e & 1) == 1
             result = result.mul_clamp(base)
-        e = e >> 1_u32
+        e = e >> 1
         if e > 0
             base = base.mul_clamp(base)
     return result
@@ -615,7 +615,7 @@ routine S32.cmp(you: S32) -> ComparisonSign
 ### :returns: `-me` if `me < 0`; `me` if `me >= 0`.
 ### :throws: {IntegerOverflowError} when `me` is `S32_MIN` (its magnitude is not representable in S32).
 routine S32.abs!() -> S32
-    if me == -2147483648_s32
+    if me == -2147483648
         throw IntegerOverflowError()
     return LLVM::int_abs[S32](me)
 
@@ -652,42 +652,42 @@ routine S32.isqrt() -> S32
 ### :returns: The tuple `(root, remainder)`.
 ### :throws: {NumericDomainError} if `me < 0`.
 routine S32.sqrtrem!() -> (S32, S32)
-    if me < 0_s32
+    if me < 0
         throw NumericDomainError(description: "square root of a negative value has no real result")
     var x = me
-    var result = 0_s32
-    var bit = 1_s32 << 30_u32
+    var result: S32 = 0
+    var bit: S32 = 1 << 30
     while bit > x
-        bit = bit.lshr(2_u32)
-    while bit != 0_s32
+        bit = bit.lshr(2)
+    while bit != 0
         var next = result.add_wrap(bit)
         if x >= next
             x = x.sub_wrap(next)
-            result = result.lshr(1_u32).add_wrap(bit)
+            result = result.lshr(1).add_wrap(bit)
         else
-            result = result.lshr(1_u32)
-        bit = bit.lshr(2_u32)
+            result = result.lshr(1)
+        bit = bit.lshr(2)
     return (result, x)
 
 ### Returns ⌊log₂ me⌋. Throws if `me <= 0`.
 ### :returns: The floor of the base-2 logarithm.
 ### :throws: {NumericDomainError} if `me <= 0`.
 routine S32.ilog2!() -> S32
-    if me <= 0_s32
+    if me <= 0
         throw NumericDomainError(description: "ilog2 domain: me must be > 0")
-    return 31_s32 - me.leading_zeros()
+    return 31 - me.leading_zeros()
 
 ### Returns ⌊log₁₀ me⌋. Throws if `me <= 0`.
 ### :returns: The floor of the base-10 logarithm.
 ### :throws: {NumericDomainError} if `me <= 0`.
 routine S32.ilog10!() -> S32
-    if me <= 0_s32
+    if me <= 0
         throw NumericDomainError(description: "ilog10 domain: me must be > 0")
     var n = me
-    var count = 0_s32
-    while n >= 10_s32
-        n = n // 10_s32
-        count = count + 1_s32
+    var count: S32 = 0
+    while n >= 10
+        n = n // 10
+        count = count + 1
     return count
 
 ### Returns ⌊log_base me⌋. Throws if `me <= 0` or `base < 2`.
@@ -695,13 +695,13 @@ routine S32.ilog10!() -> S32
 ### :returns: The floor of the base-`base` logarithm.
 ### :throws: {NumericDomainError} if `me <= 0` or `base < 2`.
 routine S32.ilog!(base: S32) -> S32
-    if me <= 0_s32 or base < 2_s32
+    if me <= 0 or base < 2
         throw NumericDomainError(description: "ilog domain: me must be > 0 and base >= 2")
     var n = me
-    var count = 0_s32
+    var count: S32 = 0
     while n >= base
         n = n // base
-        count = count + 1_s32
+        count = count + 1
     return count
 
 ### Returns the absolute difference |me - you| as an unsigned value (no overflow).
@@ -723,7 +723,7 @@ routine S32.count_ones() -> S32
 ### Returns the count of clear bits in this value's 32-bit representation.
 ### :returns: `32` minus the popcount; between 0 and 32.
 routine S32.count_zeros() -> S32
-    return 32_s32 -% me.count_ones()
+    return 32 -% me.count_ones()
 
 ### Returns the number of leading zero bits, starting from the most-significant bit.
 ### :returns: The leading zero count; `32` if the value is zero.
@@ -786,23 +786,23 @@ common routine S32.from_bytes_be(bytes: Array[Byte, 4]) -> S32
 ### Returns `true` if this value is greater than zero.
 ### :returns: `true` if `me > 0`.
 routine S32.is_positive() -> Bool
-    return me > 0_s32
+    return me > 0
 
 ### Returns `true` if this value is less than zero.
 ### :returns: `true` if `me < 0`.
 routine S32.is_negative() -> Bool
-    return me < 0_s32
+    return me < 0
 
 ### Returns `true` if this value is zero.
 ### :returns: `true` if `me == 0`.
 routine S32.is_zero() -> Bool
-    return me == 0_s32
+    return me == 0
 
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine S32.is_even() -> Bool
-    var result = LLVM::bit_and(a: me, b: 1_s32)
-    return LLVM::int_eq(a: result, b: 0_s32)
+    var result = LLVM::bit_and(a: me, b: 1)
+    return LLVM::int_eq(a: result, b: 0)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -813,18 +813,18 @@ routine S32.is_odd() -> Bool
 ### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
 routine S32.signum() -> S32
     return when
-        me > 0_s32 => 1_s32
-        me < 0_s32 => -1_s32
-        else => 0_s32
+        me > 0 => 1
+        me < 0 => -1
+        else => 0
 
 ### Returns `true` if this value is an exact power of two.
 ### Negative values always return `false`.
 ### :returns: `true` if `me` is 1, 2, 4, ..., 1073741824; `false` otherwise (including zero and negatives).
 routine S32.is_power_of_two() -> Bool
-    var is_pos = LLVM::signed_gt(me, 0_s32)
-    var minus_one = LLVM::sub(a: me, b: 1_s32)
+    var is_pos = LLVM::signed_gt(me, 0)
+    var minus_one = LLVM::sub(a: me, b: 1)
     var anded = LLVM::bit_and(a: me, b: minus_one)
-    var is_zero = LLVM::int_eq(a: anded, b: 0_s32)
+    var is_zero = LLVM::int_eq(a: anded, b: 0)
     return is_pos and is_zero
 
 # ============================================================================
@@ -837,8 +837,8 @@ routine S32.is_power_of_two() -> Bool
 routine S32.represent() -> Text
     # reinterpret (not U32(me)) so the two's-complement magnitude `0 -% bits` is correct even for S32.MIN.
     var raw = LLVM::reinterpret_bits[S32, U32](me)
-    if me < 0s32
-        return int_to_text(mag: LLVM::zero_extend[U32, U64](0u32 -% raw), negative: true)
+    if me < 0
+        return int_to_text(mag: LLVM::zero_extend[U32, U64](0 -% raw), negative: true)
     return int_to_text(mag: LLVM::zero_extend[U32, U64](raw), negative: false)
 
 ### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
@@ -860,36 +860,36 @@ routine S32.diagnose() -> Text
 ### :throws: {InvalidValueError} if this value is empty, sign-only, or contains non-digit characters.
 ### :throws: {IntegerOverflowError} if the value does not fit in `S32`.
 routine Text.to![S32]() -> S32
-    if me.count() == 0u64
+    if me.count() == 0
         throw InvalidValueError(input: me, target: "S32")
-    var start = 0u64
+    var start: U64 = 0
     var negative = false
-    var first = me[0u64]
-    if first == Char(0x002Du32)
+    var first = me[0]
+    if first == '-'
         negative = true
-        start = 1u64
-    elseif first == Char(0x002Bu32)
-        start = 1u64
+        start = 1
+    elseif first == '+'
+        start = 1
     if start >= me.count()
         throw InvalidValueError(input: me, target: "S32")
-    var result = 0u32
-    var last_limit = 7u32
+    var result: U32 = 0
+    var last_limit: U32 = 7
     if negative
-        last_limit = 8u32
+        last_limit = 8
     var i = start
     while i < me.count()
         var ch = me[i]
         if ch.is_numeric()
             var digit = ch.digit_value().to[U32]()
             # Stop before `result * 10 + digit` passes the largest magnitude the sign allows.
-            if result > 214748364u32 or (result == 214748364u32 and digit > last_limit)
+            if result > 214748364 or (result == 214748364 and digit > last_limit)
                 throw IntegerOverflowError()
-            result = result * 10u32 + digit
+            result = result * 10 + digit
         else
             throw InvalidValueError(input: me, target: "S32")
-        i = i + 1u64
+        i = i + 1
     if negative
-        return LLVM::reinterpret_bits[U32, S32](0u32 -% result)
+        return LLVM::reinterpret_bits[U32, S32](0 -% result)
     return result.to[S32]()
 
 # ============================================================================

@@ -55,13 +55,14 @@ needs EntityType T
 routine roamed_none[T]() -> Roamed[T]
 needs EntityType T
     danger
-        return Roamed[T](Hijacked[RoamManager[T]](from: 0_addr))
+        var null_address: Address = 0
+        return Roamed[T](Hijacked[RoamManager[T]](from: null_address))
 
 ### Whether this is the absent handle (owns nothing). :returns: `true` if none.
 @readonly
 routine Roamed[T].is_none() -> Bool
     danger
-        return me.controller_address() == 0_addr
+        return me.controller_address() == 0
 
 ### Reinterprets a raw {RoamManager[T]} address as a `Roamed[T]` handle WITHOUT retaining — a
 ### low-level plumbing / test hatch (Stage-1 cyclic-graph construction). The caller is responsible for
@@ -79,7 +80,7 @@ needs EntityType T
 @override
 secret routine Roamed[T].share() -> Roamed[T]
     danger
-        if me.controller_address() != 0_addr
+        if me.controller_address() != 0
             var ctrl = Hijacked[RoamManager[T]](me).as_entity()
             ctrl.hold()
     return me
@@ -114,7 +115,7 @@ routine Roamed[T].is_escaped() -> Bool
 routine Roamed[T].require_shape_free!()
     danger
         var ctrl = Hijacked[RoamManager[T]](me).as_entity()
-        if ctrl.shape_users != 0_u64
+        if ctrl.shape_users != 0
             throw ReshapingWhileInUseError(container: T.type_name())
     return
 
@@ -134,13 +135,13 @@ dangerous routine Roamed[T].release_inner!() -> T
 ### calls this, paired with `end_shape_use` when that use ends.
 dangerous routine Roamed[T].begin_shape_use()
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
-    ctrl.shape_users = ctrl.shape_users +% 1_u64
+    ctrl.shape_users = ctrl.shape_users +% 1
     return
 
 ### Ends one use started by `begin_shape_use`.
 dangerous routine Roamed[T].end_shape_use()
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
-    ctrl.shape_users = ctrl.shape_users -% 1_u64
+    ctrl.shape_users = ctrl.shape_users -% 1
     return
 
 ### Enters the access lock: a no-op in LOCAL mode, a reentrant task-keyed acquire in ESCAPED mode.
@@ -172,8 +173,8 @@ routine Roamed[T].strong_count() -> U64
 ### :returns: A `Watched[T]` observing this entity's controller.
 routine Roamed[T].watch() -> Watched[T]
     danger
-        if me.controller_address() == 0_addr
-            return Watched[T](ctrl: 0_addr)
+        if me.controller_address() == 0
+            return Watched[T](ctrl: 0)
         var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         ctrl.observe()
         return Watched[T](ctrl: me.controller_address())
@@ -184,7 +185,7 @@ routine Roamed[T].watch() -> Watched[T]
 ### synthesized trace, so no `danger` here.
 @override
 dangerous routine Roamed[T].cyclic_visit()
-    if me.controller_address() != 0_addr
+    if me.controller_address() != 0
         C::ingrid_cyclic_visit_child(child: CPtr(from: me.controller_address()))
     return
 
@@ -273,7 +274,7 @@ routine Roamed[T].modify() -> Modifying[T]
 @override
 routine Roamed[T].destruct()
     danger
-        if me.controller_address() == 0_addr
+        if me.controller_address() == 0
             return
         var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         ctrl.unhold()

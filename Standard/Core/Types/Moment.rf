@@ -31,8 +31,8 @@ routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
     if ns >= NS_PER_SECOND
         s = s +% LLVM::signed_div(ns, NS_PER_SECOND)
         ns = LLVM::signed_rem(ns, NS_PER_SECOND)
-    elseif ns < 0_s64
-        var borrow = LLVM::signed_div(0_s64 -% ns -% 1_s64, NS_PER_SECOND) +% 1_s64
+    elseif ns < 0
+        var borrow = LLVM::signed_div(0 -% ns -% 1, NS_PER_SECOND) +% 1
         s = s -% borrow
         ns = ns + borrow *% NS_PER_SECOND
 
@@ -51,95 +51,95 @@ routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
     # Shift year so March is month 0
     var y = year
     var m = month
-    if m <= 2_s64
-        y = y -% 1_s64
+    if m <= 2
+        y = y -% 1
 
     # Era-based calculation for proleptic Gregorian
-    var era_year = y -% LLVM::signed_div(y, 400_s64) *% 400_s64
-    var era = LLVM::signed_div(y, 400_s64)
+    var era_year = y -% LLVM::signed_div(y, 400) *% 400
+    var era = LLVM::signed_div(y, 400)
 
     # Day of year within March-based year
-    if m > 2_s64
-        m = m -% 3_s64
+    if m > 2
+        m = m -% 3
     else
-        m = m +% 9_s64
-    var doy = LLVM::signed_div(153_s64 *% m +% 2_s64, 5_s64) +% day -% 1_s64
+        m = m +% 9
+    var doy = LLVM::signed_div(153 *% m +% 2, 5) +% day -% 1
 
     # Day of era
-    var doe = era_year *% 365_s64 +% LLVM::signed_div(era_year, 4_s64) -% LLVM::signed_div(
+    var doe = era_year *% 365 +% LLVM::signed_div(era_year, 4) -% LLVM::signed_div(
         era_year,
-        100_s64,
+        100,
     ) +% doy
 
     # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
-    return era *% 146097_s64 +% doe -% 719468_s64
+    return era *% 146097 +% doe -% 719468
 
 ### Converts an epoch-day count to its calendar year component.
 ### :param days_since_epoch: The day count relative to the Unix epoch.
 ### :returns: The resulting `S64` value.
 routine days_to_year(days_since_epoch: S64) -> S64
-    var z = days_since_epoch +% 719468_s64
-    var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
-    var doe = z -% era *% 146097_s64
+    var z = days_since_epoch +% 719468
+    var era = LLVM::signed_div(if z >= 0 then z else z -% 146096, 146097)
+    var doe = z -% era *% 146097
     var yoe = LLVM::signed_div(
-        doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460) +% LLVM::signed_div(
             doe,
-            36524_s64,
-        ) -% LLVM::signed_div(doe, 146096_s64),
-        365_s64,
+            36524,
+        ) -% LLVM::signed_div(doe, 146096),
+        365,
     )
-    var y = yoe +% era *% 400_s64
-    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(
+    var y = yoe +% era *% 400
+    var doy = doe -% (365 *% yoe +% LLVM::signed_div(yoe, 4) -% LLVM::signed_div(
         yoe,
-        100_s64,
+        100,
     ))
-    var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
-    var m = mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
-    if m <= 2_s64
-        return y +% 1_s64
+    var mp = LLVM::signed_div(5 *% doy +% 2, 153)
+    var m = mp +% (if mp < 10 then 3 else 0 -% 9)
+    if m <= 2
+        return y +% 1
     return y
 
 ### Converts an epoch-day count to its calendar month component.
 ### :param days_since_epoch: The day count relative to the Unix epoch.
 ### :returns: The resulting `S64` value.
 routine days_to_month(days_since_epoch: S64) -> S64
-    var z = days_since_epoch +% 719468_s64
-    var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
-    var doe = z -% era *% 146097_s64
+    var z = days_since_epoch +% 719468
+    var era = LLVM::signed_div(if z >= 0 then z else z -% 146096, 146097)
+    var doe = z -% era *% 146097
     var yoe = LLVM::signed_div(
-        doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460) +% LLVM::signed_div(
             doe,
-            36524_s64,
-        ) -% LLVM::signed_div(doe, 146096_s64),
-        365_s64,
+            36524,
+        ) -% LLVM::signed_div(doe, 146096),
+        365,
     )
-    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(
+    var doy = doe -% (365 *% yoe +% LLVM::signed_div(yoe, 4) -% LLVM::signed_div(
         yoe,
-        100_s64,
+        100,
     ))
-    var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
-    return mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
+    var mp = LLVM::signed_div(5 *% doy +% 2, 153)
+    return mp +% (if mp < 10 then 3 else 0 -% 9)
 
 ### Converts an epoch-day count to its day-of-month component.
 ### :param days_since_epoch: The day count relative to the Unix epoch.
 ### :returns: The resulting `S64` value.
 routine days_to_day(days_since_epoch: S64) -> S64
-    var z = days_since_epoch +% 719468_s64
-    var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
-    var doe = z -% era *% 146097_s64
+    var z = days_since_epoch +% 719468
+    var era = LLVM::signed_div(if z >= 0 then z else z -% 146096, 146097)
+    var doe = z -% era *% 146097
     var yoe = LLVM::signed_div(
-        doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460) +% LLVM::signed_div(
             doe,
-            36524_s64,
-        ) -% LLVM::signed_div(doe, 146096_s64),
-        365_s64,
+            36524,
+        ) -% LLVM::signed_div(doe, 146096),
+        365,
     )
-    var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(
+    var doy = doe -% (365 *% yoe +% LLVM::signed_div(yoe, 4) -% LLVM::signed_div(
         yoe,
-        100_s64,
+        100,
     ))
-    var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
-    return doy -% LLVM::signed_div(153_s64 *% mp +% 2_s64, 5_s64) +% 1_s64
+    var mp = LLVM::signed_div(5 *% doy +% 2, 153)
+    return doy -% LLVM::signed_div(153 *% mp +% 2, 5) +% 1
 
 # ============================================================================
 # Creators
@@ -157,19 +157,19 @@ routine days_to_day(days_since_epoch: S64) -> S64
 routine Moment(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
     var d = ymd_to_days(year: year, month: month, day: day)
     var s = d *% SECONDS_PER_DAY +% hour *% SECONDS_PER_HOUR +% minute *% SECONDS_PER_MINUTE +% second
-    return Moment(seconds: s, nanoseconds: 0_u32)
+    return Moment(seconds: s, nanoseconds: 0)
 
 ### Returns the Unix epoch.
 ### This is `1970-01-01 00:00:00 UTC`.
 ### :returns: The resulting `Moment` value.
 common routine Moment.epoch() -> Moment
-    return Moment(seconds: 0_s64, nanoseconds: 0_u32)
+    return Moment(seconds: 0, nanoseconds: 0)
 
 ### Creates a value from timestamp.
 ### :param seconds: The whole-second component.
 ### :returns: The resulting `Moment` value.
 common routine Moment.from_timestamp(seconds: S64) -> Moment
-    return Moment(seconds: seconds, nanoseconds: 0_u32)
+    return Moment(seconds: seconds, nanoseconds: 0)
 
 ### Returns the current UTC instant from the runtime clock.
 ### :returns: The resulting `Moment` value.
@@ -206,9 +206,9 @@ routine Moment.day() -> S64
 routine Moment.day_of_week() -> S64
     # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
     var days = LLVM::signed_div(me.seconds, SECONDS_PER_DAY)
-    var dow = LLVM::signed_rem(days +% 3_s64, 7_s64)
-    if dow < 0_s64
-        return dow +% 7_s64
+    var dow = LLVM::signed_rem(days +% 3, 7)
+    if dow < 0
+        return dow +% 7
     return dow
 
 # ============================================================================
@@ -268,7 +268,7 @@ routine Moment.timestamp() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.timestamp_ms() -> S64
-    return me.seconds *% 1_000_s64 +% LLVM::signed_div(me.nanoseconds.to[S64](), NS_PER_MILLISECOND)
+    return me.seconds *% 1_000 +% LLVM::signed_div(me.nanoseconds.to[S64](), NS_PER_MILLISECOND)
 
 # ============================================================================
 # Arithmetic with Duration
@@ -381,6 +381,6 @@ routine Moment.diagnose() -> Text
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine Moment.hash(k0: U64, k1: U64) -> U64
-    var acc = __hash_round(acc: 0u64, h: me.seconds.hash(k0: k0, k1: k1))
+    var acc = __hash_round(acc: 0, h: me.seconds.hash(k0: k0, k1: k1))
     acc = __hash_round(acc: acc, h: me.nanoseconds.hash(k0: k0, k1: k1))
     return __hash_finalize(h: acc)

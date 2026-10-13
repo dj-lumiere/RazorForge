@@ -29,33 +29,33 @@ record Ingrid
 # An engine integer from its parts as they cross the C ABI. A zero is never negative, whatever sign word a
 # caller passes with no limbs: the engine assumes a zero is positive.
 secret routine abi_intv(neg: U64, len: U64, tab: Hijacked[U64]) -> IntV
-    return IntV(neg: neg != 0u64 and len != 0u64, len: len, tab: tab)
+    return IntV(neg: neg != 0 and len != 0, len: len, tab: tab)
 
 # The words of a status other than done: 1 (scratch) or 2 (result buffer), with the room needed.
 secret routine words_need(status: U64, need: U64) -> IngridWords
-    return IngridWords(w0: status, w1: need, w2: 0u64, w3: 0u64)
+    return IngridWords(w0: status, w1: need, w2: 0, w3: 0)
 
 # 1 for true, 0 for false.
 secret routine bit_of(value: Bool) -> U64
-    return if value then 1u64 else 0u64
+    return if value then 1 else 0
 
 # Copies `len` limbs from `src` to `dst` (the same buffer is fine).
 secret dangerous routine copy_out(dst: Hijacked[U64], src: Hijacked[U64], len: U64)
-    var i = 0u64
+    var i: U64 = 0
     while i < len
         set_limb(tab: dst, i: i, value: limb(tab: src, i: i))
-        i = i +% 1u64
+        i = i +% 1
     return
 
 # Closes the call's scratch arena and hands back integer result `r` in `out`.
 secret dangerous routine integer_done(r: IntV, out: Hijacked[U64], out_cap: U64) -> IngridWords
     var need = C::ingrid_scratch_close()
-    if need != 0u64
-        return words_need(status: 1u64, need: need)
+    if need != 0
+        return words_need(status: 1, need: need)
     if r.len > out_cap
-        return words_need(status: 2u64, need: r.len)
+        return words_need(status: 2, need: r.len)
     copy_out(dst: out, src: r.tab, len: r.len)
-    return IngridWords(w0: 0u64, w1: r.len, w2: bit_of(value: r.neg), w3: 0u64)
+    return IngridWords(w0: 0, w1: r.len, w2: bit_of(value: r.neg), w3: 0)
 
 # ============================================================================
 # Integer
@@ -77,8 +77,8 @@ common routine Ingrid.integer_add(
         var b = abi_intv(neg: b_neg, len: b_len, tab: b_tab)
         var cap = bigint_add_capacity(a: a, b: b)
         if out_cap < cap
-            return words_need(status: 2u64, need: cap)
-        C::ingrid_scratch_open(base: out, limbs: 0u64)
+            return words_need(status: 2, need: cap)
+        C::ingrid_scratch_open(base: out, limbs: 0)
         return integer_done(r: bigint_add_into(a: a, b: b, r: out), out: out, out_cap: out_cap)
 
 ### a * b.
@@ -132,13 +132,13 @@ common routine Ingrid.integer_divmod(
         var q = qr.item0
         var r = qr.item1
         var need = C::ingrid_scratch_close()
-        if need != 0u64
-            return words_need(status: 1u64, need: need)
+        if need != 0
+            return words_need(status: 1, need: need)
         if q.len > q_cap or r.len > r_cap
-            return IngridWords(w0: 2u64, w1: q.len, w2: r.len, w3: 0u64)
+            return IngridWords(w0: 2, w1: q.len, w2: r.len, w3: 0)
         copy_out(dst: q_out, src: q.tab, len: q.len)
         copy_out(dst: r_out, src: r.tab, len: r.len)
-        return IngridWords(w0: 0u64, w1: q.len, w2: bit_of(value: q.neg), w3: r.len)
+        return IngridWords(w0: 0, w1: q.len, w2: bit_of(value: q.neg), w3: r.len)
 
 ### The scratch `integer_divmod` takes dividing a_len limbs by b_len.
 common routine Ingrid.integer_divmod_scratch_size(a_len: U64, b_len: U64) -> U64
@@ -157,8 +157,8 @@ common routine Ingrid.integer_shift_left(
         var a = abi_intv(neg: a_neg, len: a_len, tab: a_tab)
         var cap = bigint_shl_capacity(a: a, bits: bits)
         if out_cap < cap
-            return words_need(status: 2u64, need: cap)
-        C::ingrid_scratch_open(base: out, limbs: 0u64)
+            return words_need(status: 2, need: cap)
+        C::ingrid_scratch_open(base: out, limbs: 0)
         return integer_done(r: bigint_shl_into(a: a, bits: bits, r: out), out: out, out_cap: out_cap)
 
 ### floor(a / 2^bits), the arithmetic shift of the two's-complement form, into `out` (at least
@@ -175,16 +175,16 @@ common routine Ingrid.integer_shift_right(
         var a = abi_intv(neg: a_neg, len: a_len, tab: a_tab)
         var cap = bigint_shr_capacity(a: a, bits: bits)
         if out_cap < cap
-            return words_need(status: 2u64, need: cap)
-        C::ingrid_scratch_open(base: out, limbs: 0u64)
+            return words_need(status: 2, need: cap)
+        C::ingrid_scratch_open(base: out, limbs: 0)
         return integer_done(r: bigint_shr_into(a: a, bits: bits, r: out), out: out, out_cap: out_cap)
 
 # One two's-complement bitwise operation (0 AND, 1 OR, 2 XOR) into `out`.
 secret dangerous routine integer_bitop(a: IntV, b: IntV, op: U32, out: Hijacked[U64], out_cap: U64) -> IngridWords
     var cap = bigint_bitop_capacity(a: a, b: b)
     if out_cap < cap
-        return words_need(status: 2u64, need: cap)
-    C::ingrid_scratch_open(base: out, limbs: 0u64)
+        return words_need(status: 2, need: cap)
+    C::ingrid_scratch_open(base: out, limbs: 0)
     return integer_done(r: bigint_bitop_into(a: a, b: b, op: op, r: out), out: out, out_cap: out_cap)
 
 ### a AND b over the two's-complement forms, into `out` (at least max(a_len, b_len) + 1 limbs). Takes no
@@ -203,7 +203,7 @@ common routine Ingrid.integer_and(
         return integer_bitop(
             a: abi_intv(neg: a_neg, len: a_len, tab: a_tab),
             b: abi_intv(neg: b_neg, len: b_len, tab: b_tab),
-            op: 0u32,
+            op: 0,
             out: out,
             out_cap: out_cap,
         )
@@ -223,7 +223,7 @@ common routine Ingrid.integer_or(
         return integer_bitop(
             a: abi_intv(neg: a_neg, len: a_len, tab: a_tab),
             b: abi_intv(neg: b_neg, len: b_len, tab: b_tab),
-            op: 1u32,
+            op: 1,
             out: out,
             out_cap: out_cap,
         )
@@ -243,7 +243,7 @@ common routine Ingrid.integer_xor(
         return integer_bitop(
             a: abi_intv(neg: a_neg, len: a_len, tab: a_tab),
             b: abi_intv(neg: b_neg, len: b_len, tab: b_tab),
-            op: 2u32,
+            op: 2,
             out: out,
             out_cap: out_cap,
         )
@@ -279,7 +279,7 @@ common routine Ingrid.integer_sqrt(
 ) -> IngridWords
     danger
         C::ingrid_scratch_open(base: scratch, limbs: scratch_cap)
-        var r = bigint_isqrt(a: abi_intv(neg: 0u64, len: a_len, tab: a_tab))
+        var r = bigint_isqrt(a: abi_intv(neg: 0, len: a_len, tab: a_tab))
         return integer_done(r: r, out: out, out_cap: out_cap)
 
 ### s = floor(sqrt(a)) into `s_out` and a - s*s into `r_out`, for a non-negative a. Done: `w1` the root's
@@ -296,17 +296,17 @@ common routine Ingrid.integer_sqrtrem(
 ) -> IngridWords
     danger
         C::ingrid_scratch_open(base: scratch, limbs: scratch_cap)
-        var a = abi_intv(neg: 0u64, len: a_len, tab: a_tab)
+        var a = abi_intv(neg: 0, len: a_len, tab: a_tab)
         var s = bigint_isqrt(a: a)
         var r = bigint_sub(a: a, b: bigint_mul(a: s, b: s))
         var need = C::ingrid_scratch_close()
-        if need != 0u64
-            return words_need(status: 1u64, need: need)
+        if need != 0
+            return words_need(status: 1, need: need)
         if s.len > s_cap or r.len > r_cap
-            return IngridWords(w0: 2u64, w1: s.len, w2: r.len, w3: 0u64)
+            return IngridWords(w0: 2, w1: s.len, w2: r.len, w3: 0)
         copy_out(dst: s_out, src: s.tab, len: s.len)
         copy_out(dst: r_out, src: r.tab, len: r.len)
-        return IngridWords(w0: 0u64, w1: s.len, w2: 0u64, w3: r.len)
+        return IngridWords(w0: 0, w1: s.len, w2: 0, w3: r.len)
 
 ### The scratch `integer_sqrt` and `integer_sqrtrem` take for an a_len-limb value.
 common routine Ingrid.integer_sqrt_scratch_size(a_len: U64) -> U64
@@ -326,8 +326,8 @@ common routine Ingrid.integer_gcd(
     danger
         C::ingrid_scratch_open(base: scratch, limbs: scratch_cap)
         var r = bigint_gcd(
-            a: abi_intv(neg: 0u64, len: a_len, tab: a_tab),
-            b: abi_intv(neg: 0u64, len: b_len, tab: b_tab),
+            a: abi_intv(neg: 0, len: a_len, tab: a_tab),
+            b: abi_intv(neg: 0, len: b_len, tab: b_tab),
         )
         return integer_done(r: r, out: out, out_cap: out_cap)
 
@@ -345,8 +345,8 @@ common routine Ingrid.integer_lcm(
     danger
         C::ingrid_scratch_open(base: scratch, limbs: scratch_cap)
         var r = bigint_lcm(
-            a: abi_intv(neg: 0u64, len: a_len, tab: a_tab),
-            b: abi_intv(neg: 0u64, len: b_len, tab: b_tab),
+            a: abi_intv(neg: 0, len: a_len, tab: a_tab),
+            b: abi_intv(neg: 0, len: b_len, tab: b_tab),
         )
         return integer_done(r: r, out: out, out_cap: out_cap)
 
@@ -388,13 +388,13 @@ common routine Ingrid.integer_to_text(
     danger
         var cap = bigint_text_capacity(len: a_len, radix: radix)
         if out_cap < cap
-            return words_need(status: 2u64, need: cap)
+            return words_need(status: 2, need: cap)
         C::ingrid_scratch_open(base: scratch, limbs: scratch_cap)
         var count = bigint_to_text_into(a: abi_intv(neg: a_neg, len: a_len, tab: a_tab), radix: radix, out: out)
         var need = C::ingrid_scratch_close()
-        if need != 0u64
-            return words_need(status: 1u64, need: need)
-        return IngridWords(w0: 0u64, w1: count, w2: 0u64, w3: 0u64)
+        if need != 0
+            return words_need(status: 1, need: need)
+        return IngridWords(w0: 0, w1: count, w2: 0, w3: 0)
 
 ### Parses the `count` characters at `chars` in `radix` (2 to 64): an optional leading '-', then digits up to
 ### the first character outside the radix, where the text must end or hold a '\r' or '\n'. Empty digits read
@@ -413,6 +413,6 @@ common routine Ingrid.integer_parse(
         C::ingrid_scratch_open(base: scratch, limbs: scratch_cap)
         var parsed = bigint_parse(chars: chars, count: count, radix: radix)
         var w = integer_done(r: parsed.item0, out: out, out_cap: out_cap)
-        if w.w0 != 0u64
+        if w.w0 != 0
             return w
-        return IngridWords(w0: 0u64, w1: w.w1, w2: w.w2, w3: bit_of(value: parsed.item1))
+        return IngridWords(w0: 0, w1: w.w1, w2: w.w2, w3: bit_of(value: parsed.item1))

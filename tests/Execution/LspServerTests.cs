@@ -33,8 +33,8 @@ public sealed class LspServerTests
         "    return a + b\n" +
         "\n" +
         "routine start()\n" +
-        "    var total = add(a: 1_s32, b: 2_s32)\n" +
-        "    var p = Point(x: 3_s32, y: 4_s32)\n" +
+        "    var total = add(a: 1, b: 2)\n" +
+        "    var p = Point(x: 3, y: 4)\n" +
         "    var m = p.magnitude()\n" +
         "    show(f\"total={total} mag={m}\")\n" +
         "    return\n";

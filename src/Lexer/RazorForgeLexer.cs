@@ -55,20 +55,41 @@ public partial class RazorForgeLexer
     #region Suffix Mappings
 
     /// <summary>
-    /// Maps numeric type suffixes to their corresponding token types.
+    /// The width-less imaginary suffix (<c>4i</c>, also <c>4_i</c>). Width and radix come from the surrounding
+    /// context, and with no context the value is a C128.
     /// </summary>
-    private readonly Dictionary<string, TokenType> _numericSuffixToTokenType;
+    private const string ImaginarySuffix = "i";
 
     /// <summary>
-    /// The suffix for arbitrary-precision Integer literals (e.g. `42n`).
+    /// The suffixes that once named a number's type (<c>5_u8</c>, <c>10n</c>, <c>2.5dn</c>), each with the type it
+    /// named. A number takes its type from the place it goes, or from the declaration it starts, so each of these
+    /// is an error that shows the declaration to write instead.
     /// </summary>
-    private const string ArbitraryIntegerSuffix = "n";
-
-    /// <summary>
-    /// The suffix for arbitrary-precision Decimal literals (e.g. `3.14dn`).
-    /// Mirrors the fixed-width Decimal suffix family `d32`/`d64`/`d128`.
-    /// </summary>
-    private const string ArbitraryDecimalSuffix = "dn";
+    private static readonly Dictionary<string, string> TypeNamingSuffixes = new()
+    {
+        [key: "s8"] = "S8",
+        [key: "s16"] = "S16",
+        [key: "s32"] = "S32",
+        [key: "s64"] = "S64",
+        [key: "s128"] = "S128",
+        [key: "s256"] = "S256",
+        [key: "u8"] = "U8",
+        [key: "u16"] = "U16",
+        [key: "u32"] = "U32",
+        [key: "u64"] = "U64",
+        [key: "u128"] = "U128",
+        [key: "u256"] = "U256",
+        [key: "addr"] = "Address",
+        [key: "b16"] = "B16",
+        [key: "b32"] = "B32",
+        [key: "b64"] = "B64",
+        [key: "b128"] = "B128",
+        [key: "d32"] = "D32",
+        [key: "d64"] = "D64",
+        [key: "d128"] = "D128",
+        [key: "n"] = "Integer",
+        [key: "dn"] = "Decimal"
+    };
 
     /// <summary>
     /// Maps ByteSize suffixes to their corresponding token types.
@@ -252,42 +273,6 @@ public partial class RazorForgeLexer
         // tokenize as plain identifiers and are classified in SA (see ExpandSources / the
         // BuilderExpansion import gate), not here.
         _keywords[key: "expand"] = TokenType.Expand;
-
-        // Numeric suffix map - shared between both languages
-        _numericSuffixToTokenType = new Dictionary<string, TokenType>
-        {
-            // Signed integers
-            [key: "s8"] = TokenType.S8Literal,
-            [key: "s16"] = TokenType.S16Literal,
-            [key: "s32"] = TokenType.S32Literal,
-            [key: "s64"] = TokenType.S64Literal,
-            [key: "s128"] = TokenType.S128Literal,
-            [key: "s256"] = TokenType.S256Literal,
-            // Unsigned integers
-            [key: "u8"] = TokenType.U8Literal,
-            [key: "u16"] = TokenType.U16Literal,
-            [key: "u32"] = TokenType.U32Literal,
-            [key: "u64"] = TokenType.U64Literal,
-            [key: "u128"] = TokenType.U128Literal,
-            [key: "u256"] = TokenType.U256Literal,
-            [key: "addr"] = TokenType.AddressLiteral,
-
-            // Floating-point
-            [key: "b16"] = TokenType.B16Literal,
-            [key: "b32"] = TokenType.B32Literal,
-            [key: "b64"] = TokenType.B64Literal,
-            [key: "b128"] = TokenType.B128Literal,
-
-            // Decimal floating-point
-            [key: "d32"] = TokenType.D32Literal,
-            [key: "d64"] = TokenType.D64Literal,
-            [key: "d128"] = TokenType.D128Literal,
-
-            // Imaginary (for complex numbers) uses a single width-less i suffix, also spellable
-            // with a leading underscore separator. Width and radix come from surrounding context.
-            // With no context it defaults to C128. The old width-carrying j suffixes are gone.
-            [key: "i"] = TokenType.ImaginaryLiteral
-        };
     }
 
     /// <summary>

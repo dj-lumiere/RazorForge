@@ -26,7 +26,7 @@ routine wait_for_cast(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     var woken = true
     sig.lock()
     danger
-        while cell.peek() == 0_s64  # predicate, tested under the lock
+        while cell.peek() == 0  # predicate, tested under the lock
             woken = sig.wait_within(deadline: Duration.from_seconds(s: 10))
             if not woken
                 break  # deadline elapsed (does not happen here) -> report a timeout
@@ -36,7 +36,7 @@ routine wait_for_cast(sig: SignalCaster, cell: Hijacked[S64]) -> S64
 routine caster(sig: SignalCaster, cell: Hijacked[S64]) -> S64
     sig.lock()
     danger
-        cell.poke(value: 1_s64)  # make the predicate true under the lock...
+        cell.poke(value: 1)  # make the predicate true under the lock...
     sig.unlock()
     sig.cast_one()  # ...then wake the waiter
     return 0
@@ -48,7 +48,7 @@ routine start()
 
     # B: LAZY — launch the waiter + caster TOGETHER (`gather`, input order). Both complete before we read
     # the shared cell, so the frame-aliased slot stays valid. The shared predicate removes the ordering race.
-    var slot = 0_s64
+    var slot = 0
     var sig_b = SignalCaster()
     danger
         var cell = slot.hijack()  # raw pointer to `slot`, copyable -> both coroutines share it

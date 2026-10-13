@@ -51,7 +51,8 @@ routine start()
         is None => show("not a digit")
         else n  => show(f"digit {n}")
 
-    show(200u8 +^ 100u8)            # clamping add: 255
+    var level: U8 = 200
+    show(level +^ 100)              # clamping add: 255
     return
 ```
 

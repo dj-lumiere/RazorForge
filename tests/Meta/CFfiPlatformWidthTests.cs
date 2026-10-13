@@ -72,14 +72,14 @@ public sealed class CFfiPlatformWidthTests
     {
         return new TheoryData<string, string, string, string>
         {
-            // ctorType, value literal, widen routine, expected decimal on Unix
+            // ctorType, value, widen type (the value's own type too), expected decimal on Unix
             {
-                "CLong", "2147483648s64", "S64", "2147483648"
+                "CLong", "2147483648", "S64", "2147483648"
             }, // 2^31 — 1 past Windows 32-bit signed long
             {
-                "CULong", "4294967296u64", "U64", "4294967296"
+                "CULong", "4294967296", "U64", "4294967296"
             }, // 2^32 — 1 past Windows 32-bit unsigned long
-            { "CWChar", "65536u32", "U32", "65536" } // 2^16 — 1 past Windows 16-bit wchar_t
+            { "CWChar", "65536", "U32", "65536" } // 2^16 — 1 past Windows 16-bit wchar_t
         };
     }
 
@@ -89,14 +89,15 @@ public sealed class CFfiPlatformWidthTests
         string widen, string expectedUnixDecimal)
     {
         // Token-substitution template (a non-interpolated raw string) so the RF f-string braces need no
-        // C# escaping. Emits e.g. `show(f"v={2147483648s64.to[CLong]().to[S64]()}")`.
+        // C# escaping. Emits e.g. `var value: S64 = 2147483648` then `show(f"v={value.to[CLong]().to[S64]()}")`.
         const string template = """
                                 module Playground
 
                                 import IO/Console
 
                                 routine start()
-                                    show(f"v={VALUE.to[CTOR]().to[WIDEN]()}")
+                                    var value: WIDEN = VALUE
+                                    show(f"v={value.to[CTOR]().to[WIDEN]()}")
                                     return
                                 """;
         string source = template.Replace(oldValue: "WIDEN", newValue: widen)
@@ -148,12 +149,14 @@ public sealed class CFfiPlatformWidthTests
                               routine start()
                                   danger
                                       var elem = CWChar.data_size().byte_size()
-                                      var raw = Hijacked[Byte](from: C::rf_allocate_dynamic(2u64 * elem))
+                                      var raw = Hijacked[Byte](from: C::rf_allocate_dynamic(2 * elem))
                                       var buf = raw.recast_as[CWChar]()
-                                      buf.stride(count: 0s64).poke(value: 65536u32.to[CWChar]())
-                                      buf.stride(count: 1s64).poke(value: 0u32.to[CWChar]())
+                                      var supplementary: U32 = 65536
+                                      var terminator: U32 = 0
+                                      buf.stride(count: 0).poke(value: supplementary.to[CWChar]())
+                                      buf.stride(count: 1).poke(value: terminator.to[CWChar]())
                                       var s = CWStr(from_ptr: buf)
-                                      show(f"cp={s.getitem(index: 0u64).codepoint()} count={s.count()}")
+                                      show(f"cp={s.getitem(index: 0).codepoint()} count={s.count()}")
                                   return
                               """;
 

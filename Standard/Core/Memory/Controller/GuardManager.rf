@@ -27,37 +27,37 @@ needs TPolicy obeys LockPolicy
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `GuardManager[T, TPolicy]` value.
 dangerous routine GuardManager[T, TPolicy](data: Hijacked[T]) -> GuardManager[T, TPolicy]
-    return GuardManager[T, TPolicy](strong_count: 1_u64, weak_count: 0_u64, data: data, lock: TPolicy())
+    return GuardManager[T, TPolicy](strong_count: 1, weak_count: 0, data: data, lock: TPolicy())
 
 ### Atomically increments the strong count when a `Guarded` handle is cloned.
 routine GuardManager[T, TPolicy].hold()
     danger
-        drop LLVM::atomic_add[U64](ptr: me.strong_count.hijack(), value: 1_u64)
+        drop LLVM::atomic_add[U64](ptr: me.strong_count.hijack(), value: 1)
     return
 
 ### Atomically decrements the strong count. When it reaches zero the managed entity is dropped,
 ### and the controller itself is freed if no weak handles remain.
 routine GuardManager[T, TPolicy].unhold()
     danger
-        var previous = LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
-        if previous == 1_u64
+        var previous = LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1)
+        if previous == 1
             me.drop_data()
-            if me.weak_count() == 0_u64
+            if me.weak_count() == 0
                 me.destruct()
     return
 
 ### Atomically increments the weak count when a `Witnessed` handle is cloned.
 routine GuardManager[T, TPolicy].observe()
     danger
-        drop LLVM::atomic_add[U64](ptr: me.weak_count.hijack(), value: 1_u64)
+        drop LLVM::atomic_add[U64](ptr: me.weak_count.hijack(), value: 1)
     return
 
 ### Atomically decrements the weak count, freeing the controller when both counts reach zero.
 routine GuardManager[T, TPolicy].unobserve()
     danger
-        var previous = LLVM::atomic_sub[U64](ptr: me.weak_count.hijack(), value: 1_u64)
-        if previous == 1_u64
-            if me.strong_count() == 0_u64
+        var previous = LLVM::atomic_sub[U64](ptr: me.weak_count.hijack(), value: 1)
+        if previous == 1
+            if me.strong_count() == 0
                 me.destruct()
     return
 
@@ -118,9 +118,9 @@ routine GuardManager[T, TPolicy].try_add_claimer() -> Bool
 ### tearing the entity down, and the controller is freed unless weak handles remain (they now see it gone).
 ### :returns: The managed entity's pointer, now owned by the caller.
 dangerous routine GuardManager[T, TPolicy].release_data() -> Hijacked[T]
-    drop LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
+    drop LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1)
     var data = me.data
-    if me.weak_count() == 0_u64
+    if me.weak_count() == 0
         me.destruct()
     return data
 

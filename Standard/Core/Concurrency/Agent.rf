@@ -104,20 +104,20 @@ dangerous routine recipe_task(recipe: Address) -> Address
 ### Builds the Agent for an `agent` call: the recipe and the routine that runs it. Nothing runs until a verb.
 ### :returns: the Agent recipe.
 dangerous routine agent_recipe[T](entry: CPtr, recipe: Address) -> Agent[T]
-    return Agent[T](work: agent_work[T](entry: entry, recipe: recipe), deadline: Duration(seconds: 0, nanoseconds: 0_u32),
+    return Agent[T](work: agent_work[T](entry: entry, recipe: recipe), deadline: Duration(seconds: 0, nanoseconds: 0),
         has_deadline: false)
 
 ### Builds the work for an `agent` call, not started: a fresh state cell over the recipe and the routine that
 ### runs it.
 ### :returns: the work.
 dangerous routine agent_work[T](entry: CPtr, recipe: Address) -> AgentWork[T]
-    var cell = rf_allocate_dynamic(size: recipe_slot_size() * 5_u64)
+    var cell = rf_allocate_dynamic(size: recipe_slot_size() * 5)
     var words = Hijacked[Address](cell)
-    words.poke_at_offset(at: recipe_slot_size() * 0_u64, value: Address(0))
-    words.poke_at_offset(at: recipe_slot_size() * 1_u64, value: Address(0))
-    words.poke_at_offset(at: recipe_slot_size() * 2_u64, value: Address(0))
-    words.poke_at_offset(at: recipe_slot_size() * 3_u64, value: Address(0))
-    words.poke_at_offset(at: recipe_slot_size() * 4_u64, value: Address(1))
+    words.poke_at_offset(at: recipe_slot_size() * 0, value: Address(0))
+    words.poke_at_offset(at: recipe_slot_size() * 1, value: Address(0))
+    words.poke_at_offset(at: recipe_slot_size() * 2, value: Address(0))
+    words.poke_at_offset(at: recipe_slot_size() * 3, value: Address(0))
+    words.poke_at_offset(at: recipe_slot_size() * 4, value: Address(1))
     return AgentWork[T](cell: cell, entry: entry, recipe: recipe)
 
 ### Completes a recipe's task with what its work came to (the value, or the error it failed with) and frees the
@@ -131,7 +131,7 @@ dangerous routine agent_finish[T](recipe: Address, outcome: Hijacked[Check[T]])
     var size = Check[T].data_size()
     var cell = rf_allocate_dynamic(size: size)
     rf_copy_bytes_at(dest: cell, src: outcome.address(), size: size)
-    Hijacked[U64](outcome.address()).poke(value: 0_u64)
+    Hijacked[U64](outcome.address()).poke(value: 0)
     C::rf_task_complete_value(task: task, result: cell)
     return
 
@@ -149,7 +149,7 @@ dangerous routine AgentWork[T].set_cell_word(slot: U64, value: Address)
 ### :returns: the place.
 routine AgentWork[T].place() -> AgentPlace
     danger
-        var code = me.cell_word(slot: 0_u64)
+        var code = me.cell_word(slot: 0)
         if code == Address(1)
             return AgentPlace.NOW
         if code == Address(2)
@@ -171,20 +171,20 @@ dangerous routine AgentWork[T].set_place(place: AgentPlace)
         code = Address(3)
     elseif place == AgentPlace.DONE
         code = Address(4)
-    me.set_cell_word(slot: 0_u64, value: code)
+    me.set_cell_word(slot: 0, value: code)
     return
 
 ### The fiber handle (rf_coro*) for NOW and HERE, none before a verb starts the work.
 ### :returns: the fiber.
 routine AgentWork[T].coro() -> CPtr
     danger
-        return CPtr(from: me.cell_word(slot: 1_u64))
+        return CPtr(from: me.cell_word(slot: 1))
 
 ### The task control block that holds the produced value, zero before a verb starts the work.
 ### :returns: the task.
 routine AgentWork[T].task() -> Address
     danger
-        return me.cell_word(slot: 2_u64)
+        return me.cell_word(slot: 2)
 
 ### Starts the work at `place` if no verb started it yet: makes the task block (into recipe slot 0) and the fiber or
 ### thread that runs the recipe. Idempotent, so `retrieve`/`gather`/`race` call it on every Agent they drive.
@@ -194,23 +194,23 @@ dangerous routine AgentWork[T].start_at(place: AgentPlace) -> Bool
     if me.place() != AgentPlace.WAITING or me.cancelled()
         return true
     if place == AgentPlace.APART
-        me.set_cell_word(slot: 2_u64, value: C::rf_task_create(kind: 1_u32))
+        me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 1))
         Hijacked[Address](me.recipe).poke(value: me.task())
         me.set_place(place: AgentPlace.APART)
-        if me.cell_word(slot: 3_u64) != Address(0)
+        if me.cell_word(slot: 3) != Address(0)
             C::rf_task_request_cancel(task: me.task())
-        return C::rf_task_spawn_threaded(task: me.task(), entry: me.entry, userdata: me.recipe) != 0_s32
+        return C::rf_task_spawn_threaded(task: me.task(), entry: me.entry, userdata: me.recipe) != 0
     var here = cptr_none()
     if place == AgentPlace.HERE
         here = C::rf_sched_here()
         if here.is_none()
             return false
-    me.set_cell_word(slot: 2_u64, value: C::rf_task_create(kind: 0_u32))
+    me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 0))
     Hijacked[Address](me.recipe).poke(value: me.task())
     var coro = C::rf_coro_create(entry: me.entry, userdata: CPtr(from: me.recipe), stack_size: 0)
-    me.set_cell_word(slot: 1_u64, value: coro.get_address())
+    me.set_cell_word(slot: 1, value: coro.get_address())
     me.set_place(place: place)
-    if me.cell_word(slot: 3_u64) != Address(0)
+    if me.cell_word(slot: 3) != Address(0)
         C::rf_coro_request_cancel(coro: coro)
     if place == AgentPlace.HERE
         C::rf_sched_spawn(sched: here, coro: me.coro())
@@ -297,9 +297,9 @@ routine AgentWork[T].is_done() -> Bool
         if me.coro().is_none()
             return true
         danger
-            return C::rf_coro_status_get(coro: me.coro()) == 3_u32
+            return C::rf_coro_status_get(coro: me.coro()) == 3
     danger
-        return C::rf_task_status_get(task: me.task()) == 4_u32
+        return C::rf_task_status_get(task: me.task()) == 4
 
 ### Whether the work was started and has not yet finished. Racy snapshot (see `is_done`).
 ### :returns: `true` if still in flight.
@@ -314,7 +314,7 @@ routine AgentWork[T].is_running() -> Bool
 dangerous routine AgentWork[T].request_cancel()
     if me.place() == AgentPlace.DONE
         return
-    me.set_cell_word(slot: 3_u64, value: Address(1))
+    me.set_cell_word(slot: 3, value: Address(1))
     if me.place() == AgentPlace.WAITING
         return
     if me.place() != AgentPlace.APART
@@ -334,8 +334,8 @@ dangerous routine AgentWork[T].wind_down()
         return
     if me.place() != AgentPlace.APART
         C::rf_sched_run_until_default(coro: me.coro())
-    elseif C::rf_in_coroutine() != 0_u32
-        while C::rf_task_await_coro(task: me.task()) == 0_u32
+    elseif C::rf_in_coroutine() != 0
+        while C::rf_task_await_coro(task: me.task()) == 0
             C::rf_sched_park_external()
     else
         drop C::rf_task_wait(task: me.task())
@@ -373,7 +373,7 @@ routine AgentWork[T].settle!() -> T
 ### :returns: `true` once cancellation was requested.
 routine AgentWork[T].cancelled() -> Bool
     danger
-        return me.cell_word(slot: 3_u64) != Address(0)
+        return me.cell_word(slot: 3) != Address(0)
 
 ### Asks the work to stop. Work nothing started yet never runs. Running work sees the request at its next wait
 ### (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there. Retrieving a cancelled
@@ -428,13 +428,13 @@ routine AgentWork[T].retrieve!(deadline: Duration, has_deadline: Bool) -> T
     danger
         if has_deadline
             var total = deadline.total_nanoseconds()
-            if C::rf_in_coroutine() != 0_u32
+            if C::rf_in_coroutine() != 0
                 # Inside a scheduler-driven coroutine: race the worker against the deadline WITHOUT
                 # blocking. Park on a deadline timer that is also externally wakeable; siblings run.
                 # 0 => the deadline elapsed first (timeout); 1 => completed. Do NOT free here — destroy
                 # joins the still-running worker before freeing (the timeout does not stop it).
                 var outcome = C::rf_task_await_coro_deadline(task: me.task(), timeout_ns: total.to[U64]())
-                if outcome == 0_u32
+                if outcome == 0
                     # Deadline won; give up. Reap hands the free to the still-running worker, which frees its own
                     # block as its final act (non-blocking; destroy is a no-op).
                     me.reap()
@@ -449,11 +449,11 @@ routine AgentWork[T].retrieve!(deadline: Duration, has_deadline: Bool) -> T
                     me.reap()
                     throw TaskTimeoutError()
         else
-            if C::rf_in_coroutine() != 0_u32
+            if C::rf_in_coroutine() != 0
                 # Inside a scheduler-driven coroutine: park instead of blocking. Register as the task's
                 # awaiter and yield; the worker wakes us (cross-thread) on completion. The loop re-checks
                 # under the lock so no wake is lost, and tolerates spurious wakes.
-                while C::rf_task_await_coro(task: me.task()) == 0_u32
+                while C::rf_task_await_coro(task: me.task()) == 0
                     C::rf_sched_park_external()
             else
                 drop C::rf_task_wait(task: me.task())
@@ -482,44 +482,44 @@ dangerous routine AgentWork[T].reap()
             # M:N use-after-free (worker co_switch()es a freed stack → jump to NULL → SIGSEGV); deferring lets the
             # worker free it from its completion path instead. A plain `unschedule + free` cannot see the mid-pop
             # window and races that resume.
-            if status == 3_u32  # RF_CORO_COMPLETED
-                if C::rf_sched_dispose_default(coro: me.coro()) == 1_u32
+            if status == 3  # RF_CORO_COMPLETED
+                if C::rf_sched_dispose_default(coro: me.coro()) == 1
                     C::rf_coro_delete(coro: me.coro())
             else
                 # Not driven to completion (a race loser). If disposal succeeds now (parked / idle / removed) run
                 # its cancellation shadow stack + free (abandon); if deferred (still RUNNING) the coroutine runs to
                 # completion and the worker frees it — its own scope teardown replaces the abandon walk.
-                if C::rf_sched_dispose_default(coro: me.coro()) == 1_u32
+                if C::rf_sched_dispose_default(coro: me.coro()) == 1
                     C::rf_coro_abandon(coro: me.coro())
             C::rf_task_destroy(task: me.task())
         # The fiber and task are freed: the cell forgets them, so a query on this Agent after it was consumed
         # (`is_done()` / `is_running()`) reports "done" instead of reading freed memory.
-        me.set_cell_word(slot: 1_u64, value: Address(0))
-        me.set_cell_word(slot: 2_u64, value: Address(0))
-        me.set_cell_word(slot: 0_u64, value: Address(4))
+        me.set_cell_word(slot: 1, value: Address(0))
+        me.set_cell_word(slot: 2, value: Address(0))
+        me.set_cell_word(slot: 0, value: Address(4))
         return
 
     # Threaded: hand the free to the worker↔consumer rendezvous. A completed worker's block is freed here
     # or at the worker's exit (whichever is last); a still-running worker (deadline give-up / race loser)
     # frees its own block on exit — no join.
     C::rf_task_release(task: me.task())
-    me.set_cell_word(slot: 2_u64, value: Address(0))
-    me.set_cell_word(slot: 0_u64, value: Address(4))
+    me.set_cell_word(slot: 2, value: Address(0))
+    me.set_cell_word(slot: 0, value: Address(4))
     return
 
 ### Takes one more hold on the work, for one more Agent over it (Suflae's `waitfor` makes one).
 ### :returns: The same work.
 dangerous routine AgentWork[T].add_holder() -> AgentWork[T]
-    me.set_cell_word(slot: 4_u64, value: me.cell_word(slot: 4_u64).add_wrap(you: Address(1)))
+    me.set_cell_word(slot: 4, value: me.cell_word(slot: 4).add_wrap(you: Address(1)))
     return me
 
 ### Lets go of one hold on the work. The last holder ends it: work that still runs is cancelled and waited for
 ### (what it came to is dropped), work nothing started never runs, and the state cell is freed. Work a verb consumed
 ### only frees its cell. Each owning Agent's teardown calls it once.
 dangerous routine AgentWork[T].dispose()
-    var holders = me.cell_word(slot: 4_u64).sub_wrap(you: Address(1))
+    var holders = me.cell_word(slot: 4).sub_wrap(you: Address(1))
     if holders != Address(0)
-        me.set_cell_word(slot: 4_u64, value: holders)
+        me.set_cell_word(slot: 4, value: holders)
         return
     if me.place() != AgentPlace.DONE
         me.request_cancel()
@@ -624,11 +624,11 @@ routine Agent[T].destruct()
 routine List[Agent[T]].race!() -> T
     danger
         var n = me.count()
-        if n == 0_u64
+        if n == 0
             throw TaskSpawnError()
 
         var race = C::rf_race_begin()
-        var i = 0_u64
+        var i: U64 = 0
         while i < n
             # Launch each recipe so the whole set runs CONCURRENTLY, then race.
             if not me[i].work.launch()
@@ -647,7 +647,7 @@ routine List[Agent[T]].race!() -> T
         # race! is the sole consumer of this set: the losers are never retrieved. Reap every loser exactly once
         # here (a still-running loser's worker frees its own block on exit, non-blocking), then settle the
         # winner, which reaps it. The List's own teardown then only frees each Agent's cell.
-        var k = 0_u64
+        var k: U64 = 0
         while k < n
             if k != w
                 me[k].work.reap()
@@ -668,13 +668,13 @@ routine List[Agent[T]].gather!() -> List[T]
         # Launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
         # one-by-one would serialize the children into N× the wall-clock. Launching is idempotent, so
         # retrieve!'s own launch below is a no-op on these already-started recipes.
-        var i = 0_u64
+        var i: U64 = 0
         while i < n
             if not me[i].work.launch()
                 throw TaskSpawnError()
             i = i + 1
         var results = List[T]()
-        i = 0_u64
+        i = 0
         while i < n
             var value = me[i].retrieve()
             results.add_last(value: value)
@@ -688,11 +688,11 @@ routine List[Agent[T]].gather!() -> List[T]
 routine List[Agent[T]].cancel_all()
     danger
         var n = me.count()
-        var i = 0u64
+        var i: U64 = 0
         while i < n
             me[i].work.request_cancel()
             i = i + 1
-        i = 0u64
+        i = 0
         while i < n
             me[i].work.wind_down()
             i = i + 1
@@ -706,10 +706,10 @@ routine List[Agent[T]].cancel_all()
 routine List[Agent[T]].next_finished!() -> Agent[T]
     danger
         var n = me.count()
-        if n == 0_u64
+        if n == 0
             throw TaskSpawnError()
         var race = C::rf_race_begin()
-        var i = 0_u64
+        var i: U64 = 0
         while i < n
             if not me[i].work.launch()
                 throw TaskSpawnError()
@@ -728,7 +728,7 @@ routine List[Agent[T]].next_finished!() -> Agent[T]
 routine List[Agent[T]].gather_all() -> List[Check[T]]
     danger
         var n = me.count()
-        var i = 0_u64
+        var i: U64 = 0
         while i < n
             drop me[i].work.launch()
             i = i + 1
@@ -744,7 +744,7 @@ routine List[Agent[T]].gather_all() -> List[Check[T]]
 ### :returns: The finished Agents.
 routine List[Agent[T]].take_finished() -> List[Agent[T]]
     var finished = List[Agent[T]]()
-    var i = 0u64
+    var i: U64 = 0
     while i < me.count()
         if me[i].is_done()
             finished.add_last(value: me.remove_at(index: i))
@@ -761,11 +761,11 @@ routine waitfor(duration: Duration)
     # Interruptible: once cancellation has been requested for this agent, waitfor is a no-op so a
     # cooperative loop (`while ...: waitfor(...); if cancellation_requested(): return`) exits promptly
     # instead of sleeping out the full duration.
-    if C::rf_cancel_requested() != 0_u32
+    if C::rf_cancel_requested() != 0
         return
     danger
         var total = duration.total_nanoseconds()
-        if C::rf_in_coroutine() != 0_u32
+        if C::rf_in_coroutine() != 0
             C::rf_sched_park_timer(delay_ns: total.to[U64]())
         else
             var secs = total // 1000000000
@@ -782,7 +782,7 @@ routine waitfor(duration: Duration)
 ### is a no-op.
 routine yield_now()
     danger
-        if C::rf_in_coroutine() != 0_u32
+        if C::rf_in_coroutine() != 0
             C::rf_coro_yield()
     return
 
@@ -792,4 +792,4 @@ routine yield_now()
 ### A coroutine's `waitfor` also honors the request by returning early. Outside any agent it is always
 ### false. :returns: true if cancellation was requested for this agent.
 routine cancellation_requested() -> Bool
-    return C::rf_cancel_requested() != 0_u32
+    return C::rf_cancel_requested() != 0

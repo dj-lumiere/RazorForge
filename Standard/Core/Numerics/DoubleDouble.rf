@@ -14,10 +14,10 @@ record DD
     lo: B64
 
 routine dd_of(x: B64) -> DD
-    return DD(hi: x, lo: 0.0_b64)
+    return DD(hi: x, lo: 0.0)
 
 routine dd_int(n: S64) -> DD
-    return DD(hi: LLVM::signed_to_float[S64, B64](n), lo: 0.0_b64)
+    return DD(hi: LLVM::signed_to_float[S64, B64](n), lo: 0.0)
 
 routine DD.to_b64() -> B64
     return LLVM::float_add[B64](a: me.hi, b: me.lo)
@@ -41,7 +41,7 @@ routine DD.neg() -> DD
     return DD(hi: LLVM::float_neg[B64](me.hi), lo: LLVM::float_neg[B64](me.lo))
 
 routine DD.abs() -> DD
-    if LLVM::float_lt[B64](a: me.hi, b: 0.0_b64)
+    if LLVM::float_lt[B64](a: me.hi, b: 0.0)
         return me.neg()
     return me
 
@@ -75,39 +75,39 @@ routine DD.div(you: DD) -> DD
     return dd_of(x: q0).add(you: dd_of(x: q1)).add(you: dd_of(x: q2))
 
 routine DD.sqrt() -> DD
-    if LLVM::float_le[B64](a: me.hi, b: 0.0_b64)
-        return dd_of(x: 0.0_b64)
+    if LLVM::float_le[B64](a: me.hi, b: 0.0)
+        return dd_of(x: 0.0)
     var y = LLVM::sqrt[B64](value: me.hi)
     var yd = dd_of(x: y)
     var e = me.sub(you: yd.mul(you: yd))
     return yd.add(
-        you: dd_of(x: LLVM::float_mul[B64](a: e.hi, b: LLVM::float_div[B64](a: 0.5_b64, b: y))),
+        you: dd_of(x: LLVM::float_mul[B64](a: e.hi, b: LLVM::float_div[B64](a: 0.5, b: y))),
     )
 
 # ---- constants (hi + lo b64 pair) ----
 routine dd_ln2() -> DD
-    return DD(hi: 0.6931471805599453_b64, lo: B64.from_bits(bits: 0x3C7ABC9E3B39803F_u64))
+    return DD(hi: 0.6931471805599453, lo: B64.from_bits(bits: 0x3C7ABC9E3B39803F))
 
 routine dd_ln10() -> DD
-    return DD(hi: 2.302585092994046_b64, lo: B64.from_bits(bits: 0x3CA39EF8BCA02979_u64))
+    return DD(hi: 2.302585092994046, lo: B64.from_bits(bits: 0x3CA39EF8BCA02979))
 
 routine dd_inv_ln2() -> DD
-    return DD(hi: 1.4426950408889634_b64, lo: B64.from_bits(bits: 0x3C7777D0FFDA0D24_u64))
+    return DD(hi: 1.4426950408889634, lo: B64.from_bits(bits: 0x3C7777D0FFDA0D24))
 
 routine dd_inv_ln10() -> DD
-    return DD(hi: 0.4342944819032518_b64, lo: B64.from_bits(bits: 0x3C695355BAAAFAD3_u64))
+    return DD(hi: 0.4342944819032518, lo: B64.from_bits(bits: 0x3C695355BAAAFAD3))
 
 routine dd_pi() -> DD
-    return DD(hi: 3.141592653589793_b64, lo: B64.from_bits(bits: 0x3CA1A62633145C07_u64))
+    return DD(hi: 3.141592653589793, lo: B64.from_bits(bits: 0x3CA1A62633145C07))
 
 routine dd_pi2() -> DD
-    return DD(hi: 1.5707963267948966_b64, lo: B64.from_bits(bits: 0x3C91A62633145C07_u64))
+    return DD(hi: 1.5707963267948966, lo: B64.from_bits(bits: 0x3C91A62633145C07))
 
 routine b64_pow2(k: S64) -> B64
     return B64.from_bits(
         bits: LLVM::shift_left(
-            value: LLVM::reinterpret_bits[S64, U64](LLVM::add(a: k, b: 1023_s64)),
-            bits: 52_u64,
+            value: LLVM::reinterpret_bits[S64, U64](LLVM::add(a: k, b: 1023)),
+            bits: 52,
         ),
     )
 
@@ -121,39 +121,39 @@ routine DD.exp() -> DD
     var kf = LLVM::rint[B64](value: LLVM::float_div[B64](a: me.hi, b: ln2.hi))
     var k = LLVM::float_to_signed[B64, S64](kf)
     var r = me.sub(you: dd_of(x: kf).mul(you: ln2))
-    var s = dd_of(x: 1.0_b64)
-    var term = dd_of(x: 1.0_b64)
-    var m = 1_s64
-    while LLVM::signed_le(a: m, b: 18_s64)
+    var s = dd_of(x: 1.0)
+    var term = dd_of(x: 1.0)
+    var m = 1
+    while LLVM::signed_le(a: m, b: 18)
         term = term
             .mul(you: r)
             .mul(
                 you: dd_of(
-                    x: LLVM::float_div[B64](a: 1.0_b64, b: LLVM::signed_to_float[S64, B64](m)),
+                    x: LLVM::float_div[B64](a: 1.0, b: LLVM::signed_to_float[S64, B64](m)),
                 ),
             )
         s = s.add(you: term)
-        m = LLVM::add(a: m, b: 1_s64)
+        m = LLVM::add(a: m, b: 1)
     return s.ldexp(k: k)
 
 ### e^me - 1. Near 0 the plain exp(me)-1 loses all significance to cancellation, so use the
 ### Maclaurin series sum_{n>=1} me^n/n! (exact leading term = me) for |me| <= 1/2.
 routine DD.expm1() -> DD
-    if LLVM::float_gt[B64](a: me.abs().hi, b: 0.5_b64)
-        return me.exp().sub(you: dd_of(x: 1.0_b64))
+    if LLVM::float_gt[B64](a: me.abs().hi, b: 0.5)
+        return me.exp().sub(you: dd_of(x: 1.0))
     var term = me
     var s = me
-    var n = 2_s64
-    while LLVM::signed_le(a: n, b: 22_s64)
+    var n = 2
+    while LLVM::signed_le(a: n, b: 22)
         term = term
             .mul(you: me)
             .mul(
                 you: dd_of(
-                    x: LLVM::float_div[B64](a: 1.0_b64, b: LLVM::signed_to_float[S64, B64](n)),
+                    x: LLVM::float_div[B64](a: 1.0, b: LLVM::signed_to_float[S64, B64](n)),
                 ),
             )
         s = s.add(you: term)
-        n = LLVM::add(a: n, b: 1_s64)
+        n = LLVM::add(a: n, b: 1)
     return s
 
 routine DD.exp2() -> DD
@@ -165,23 +165,23 @@ routine DD.exp10() -> DD
 routine DD.log() -> DD
     var y0 = dd_of(x: LLVM::log[B64](value: me.hi))
     var t = me.mul(you: y0.neg().exp())
-    return y0.add(you: t.sub(you: dd_of(x: 1.0_b64)))
+    return y0.add(you: t.sub(you: dd_of(x: 1.0)))
 
 ### log(1+me). Near 0, log(1+me) rounds 1+me and loses precision, so use log1p(x) = 2*atanh(u)
 ### with u = me/(2+me) (|u| small, fast odd-power series) for |me| <= 1/2.
 routine DD.log1p() -> DD
-    if LLVM::float_gt[B64](a: me.abs().hi, b: 0.5_b64)
-        return me.add(you: dd_of(x: 1.0_b64)).log()
-    var u = me.div(you: me.add(you: dd_of(x: 2.0_b64)))
+    if LLVM::float_gt[B64](a: me.abs().hi, b: 0.5)
+        return me.add(you: dd_of(x: 1.0)).log()
+    var u = me.div(you: me.add(you: dd_of(x: 2.0)))
     var u2 = u.mul(you: u)
     var term = u
     var s = u
-    var k = 3_s64
-    while LLVM::signed_le(a: k, b: 41_s64)
+    var k = 3
+    while LLVM::signed_le(a: k, b: 41)
         term = term.mul(you: u2)
         s = s.add(you: term.div(you: dd_int(n: k)))
-        k = LLVM::add(a: k, b: 2_s64)
-    return s.ldexp(k: 1_s64)
+        k = LLVM::add(a: k, b: 2)
+    return s.ldexp(k: 1)
 
 routine DD.log2() -> DD
     return me.log().mul(you: dd_inv_ln2())
@@ -197,16 +197,16 @@ routine DD.pow(you: DD) -> DD
 ### and log/exp each add ~1 ULP). y <- y + (a - y^3)/(3 y^2); the tiny b64 correction supplies the
 ### low ~53 bits, reaching ~106-bit DD accuracy.
 routine DD.cbrt() -> DD
-    if LLVM::float_eq[B64](a: me.hi, b: 0.0_b64)
+    if LLVM::float_eq[B64](a: me.hi, b: 0.0)
         return me
-    var neg = LLVM::float_lt[B64](a: me.hi, b: 0.0_b64)
+    var neg = LLVM::float_lt[B64](a: me.hi, b: 0.0)
     var a = me.abs()
     var y = C::rf_b64_cbrt(value: a.hi)
     var yd = dd_of(x: y)
     var e = a.sub(you: yd.mul(you: yd).mul(you: yd))
     var corr = LLVM::float_div[B64](
         a: e.hi,
-        b: LLVM::float_mul[B64](a: 3.0_b64, b: LLVM::float_mul[B64](a: y, b: y)),
+        b: LLVM::float_mul[B64](a: 3.0, b: LLVM::float_mul[B64](a: y, b: y)),
     )
     var r = yd.add(you: dd_of(x: corr))
     if neg
@@ -228,18 +228,18 @@ routine DD.sin() -> DD
     var r2 = r.mul(you: r)
     var st = r
     var ss = r
-    var ct = dd_of(x: 1.0_b64)
-    var cc = dd_of(x: 1.0_b64)
-    var m = 2_s64
-    while LLVM::signed_le(a: m, b: 24_s64)
+    var ct = dd_of(x: 1.0)
+    var cc = dd_of(x: 1.0)
+    var m = 2
+    while LLVM::signed_le(a: m, b: 24)
         ct = ct
             .mul(you: r2)
             .mul(
                 you: dd_of(
                     x: LLVM::float_div[B64](
-                        a: 1.0_b64,
+                        a: 1.0,
                         b: LLVM::signed_to_float[S64, B64](
-                            LLVM::mul(a: m, b: LLVM::sub(a: m, b: 1_s64)),
+                            LLVM::mul(a: m, b: LLVM::sub(a: m, b: 1)),
                         ),
                     ),
                 ),
@@ -251,22 +251,22 @@ routine DD.sin() -> DD
             .mul(
                 you: dd_of(
                     x: LLVM::float_div[B64](
-                        a: 1.0_b64,
+                        a: 1.0,
                         b: LLVM::signed_to_float[S64, B64](
-                            LLVM::mul(a: m, b: LLVM::add(a: m, b: 1_s64)),
+                            LLVM::mul(a: m, b: LLVM::add(a: m, b: 1)),
                         ),
                     ),
                 ),
             )
             .neg()
         ss = ss.add(you: st)
-        m = LLVM::add(a: m, b: 2_s64)
-    var q = LLVM::signed_rem(a: LLVM::add(a: LLVM::signed_rem(a: k, b: 4_s64), b: 4_s64), b: 4_s64)
-    if LLVM::int_eq(a: q, b: 0_s64)
+        m = LLVM::add(a: m, b: 2)
+    var q = LLVM::signed_rem(a: LLVM::add(a: LLVM::signed_rem(a: k, b: 4), b: 4), b: 4)
+    if LLVM::int_eq(a: q, b: 0)
         return ss
-    if LLVM::int_eq(a: q, b: 1_s64)
+    if LLVM::int_eq(a: q, b: 1)
         return cc
-    if LLVM::int_eq(a: q, b: 2_s64)
+    if LLVM::int_eq(a: q, b: 2)
         return ss.neg()
     return cc.neg()
 
@@ -284,15 +284,15 @@ routine DD.atan() -> DD
     return yd.add(you: me.sub(you: t).mul(you: c.mul(you: c)))
 
 routine DD.asin() -> DD
-    return me.div(you: dd_of(x: 1.0_b64).sub(you: me.mul(you: me)).sqrt()).atan()
+    return me.div(you: dd_of(x: 1.0).sub(you: me.mul(you: me)).sqrt()).atan()
 
 routine DD.acos() -> DD
     return dd_pi2().sub(you: me.asin())
 
 routine DD.atan2(x: DD) -> DD
     var r = me.div(you: x).atan()
-    if LLVM::float_lt[B64](a: x.hi, b: 0.0_b64)
-        if LLVM::float_lt[B64](a: me.hi, b: 0.0_b64)
+    if LLVM::float_lt[B64](a: x.hi, b: 0.0)
+        if LLVM::float_lt[B64](a: me.hi, b: 0.0)
             return r.sub(you: dd_pi())
         return r.add(you: dd_pi())
     return r
@@ -300,22 +300,22 @@ routine DD.atan2(x: DD) -> DD
 # ---- hyperbolic ----
 routine DD.sinh() -> DD
     var e = me.exp()
-    return e.sub(you: dd_of(x: 1.0_b64).div(you: e)).ldexp(k: -1_s64)
+    return e.sub(you: dd_of(x: 1.0).div(you: e)).ldexp(k: -1)
 
 routine DD.cosh() -> DD
     var e = me.exp()
-    return e.add(you: dd_of(x: 1.0_b64).div(you: e)).ldexp(k: -1_s64)
+    return e.add(you: dd_of(x: 1.0).div(you: e)).ldexp(k: -1)
 
 routine DD.tanh() -> DD
-    var e = me.ldexp(k: 1_s64).exp()
-    return e.sub(you: dd_of(x: 1.0_b64)).div(you: e.add(you: dd_of(x: 1.0_b64)))
+    var e = me.ldexp(k: 1).exp()
+    return e.sub(you: dd_of(x: 1.0)).div(you: e.add(you: dd_of(x: 1.0)))
 
 routine DD.asinh() -> DD
     return me
         .add(
             you: me
                 .mul(you: me)
-                .add(you: dd_of(x: 1.0_b64))
+                .add(you: dd_of(x: 1.0))
                 .sqrt(),
         )
         .log()
@@ -325,17 +325,17 @@ routine DD.acosh() -> DD
         .add(
             you: me
                 .mul(you: me)
-                .sub(you: dd_of(x: 1.0_b64))
+                .sub(you: dd_of(x: 1.0))
                 .sqrt(),
         )
         .log()
 
 routine DD.atanh() -> DD
-    return dd_of(x: 1.0_b64)
+    return dd_of(x: 1.0)
         .add(you: me)
-        .div(you: dd_of(x: 1.0_b64).sub(you: me))
+        .div(you: dd_of(x: 1.0).sub(you: me))
         .log()
-        .ldexp(k: -1_s64)
+        .ldexp(k: -1)
 
 # ---- rounding / manipulation ----
 routine DD.floor() -> DD
@@ -351,12 +351,12 @@ routine DD.ceil() -> DD
     return dd_of(x: ch)
 
 routine DD.trunc() -> DD
-    if LLVM::float_lt[B64](a: me.hi, b: 0.0_b64)
+    if LLVM::float_lt[B64](a: me.hi, b: 0.0)
         return me.ceil()
     return me.floor()
 
 routine DD.round() -> DD
-    return me.add(you: dd_of(x: 0.5_b64)).floor()
+    return me.add(you: dd_of(x: 0.5)).floor()
 
 routine DD.rint() -> DD
     return dd_of(x: LLVM::rint[B64](value: me.to_b64()))
@@ -400,12 +400,12 @@ routine DD.fma(b: DD, c: DD) -> DD
 ### erfc(me) for me > 0 via the Lentz continued fraction erfc(x) = e^(-x²)/√π · 1/(x + (1/2)/(x +
 ### (2/2)/(x + (3/2)/(x + …)))), evaluated by backward recurrence. Converges fast for x >= ~2.
 routine DD.erfc_cf() -> DD
-    var f = dd_of(x: 0.0_b64)
-    var k = 64_s64
-    while LLVM::signed_ge(a: k, b: 1_s64)
-        f = dd_int(n: k).ldexp(k: -1_s64).div(you: me.add(you: f))
-        k = LLVM::sub(a: k, b: 1_s64)
-    f = dd_of(x: 1.0_b64).div(you: me.add(you: f))
+    var f = dd_of(x: 0.0)
+    var k = 64
+    while LLVM::signed_ge(a: k, b: 1)
+        f = dd_int(n: k).ldexp(k: -1).div(you: me.add(you: f))
+        k = LLVM::sub(a: k, b: 1)
+    f = dd_of(x: 1.0).div(you: me.add(you: f))
     return me
         .mul(you: me)
         .neg()
@@ -417,40 +417,40 @@ routine DD.erfc_cf() -> DD
 ### Σ 2ⁿ x^(2n+1)/(1·3·5···(2n+1)); |me| >= 2: erf = sign·(1 - erfc(|me|)) via the continued fraction.
 routine DD.erf() -> DD
     var ax = me.abs()
-    if LLVM::float_ge[B64](a: ax.hi, b: 2.0_b64)
-        return dd_of(x: 1.0_b64).sub(you: ax.erfc_cf()).copysign(you: me)
+    if LLVM::float_ge[B64](a: ax.hi, b: 2.0)
+        return dd_of(x: 1.0).sub(you: ax.erfc_cf()).copysign(you: me)
     var x2 = me.mul(you: me)
     var term = me
     var s = me
-    var n = 1_s64
-    while LLVM::signed_le(a: n, b: 45_s64)
+    var n = 1
+    while LLVM::signed_le(a: n, b: 45)
         term = term
             .mul(you: x2)
-            .ldexp(k: 1_s64)
-            .div(you: dd_int(n: LLVM::add(a: LLVM::mul(a: 2_s64, b: n), b: 1_s64)))
+            .ldexp(k: 1)
+            .div(you: dd_int(n: LLVM::add(a: LLVM::mul(a: 2, b: n), b: 1)))
         s = s.add(you: term)
-        n = LLVM::add(a: n, b: 1_s64)
+        n = LLVM::add(a: n, b: 1)
     return me
         .mul(you: me)
         .neg()
         .exp()
         .mul(you: s)
-        .mul(you: dd_of(x: 2.0_b64).div(you: dd_pi().sqrt()))
+        .mul(you: dd_of(x: 2.0).div(you: dd_pi().sqrt()))
 
 ### Complementary error function 1 - erf(me). Large me uses the CF directly (no 1 - (1-tiny)
 ### cancellation); |me| < 2 falls back to 1 - erf.
 routine DD.erfc() -> DD
-    if LLVM::float_ge[B64](a: me.hi, b: 2.0_b64)
+    if LLVM::float_ge[B64](a: me.hi, b: 2.0)
         return me.erfc_cf()
-    return dd_of(x: 1.0_b64).sub(you: me.erf())
+    return dd_of(x: 1.0).sub(you: me.erf())
 
 # tgamma via Lanczos (g=7, n=9) with b64 coefficients promoted to DD (functional ~1e-15).
 ### gamma(me) = exp(lgamma) with the sign supplied by Euler reflection for me < 1/2 (where gamma
 ### alternates sign). Reuses the accurate log-space lgamma, so no separate low-precision Lanczos and
 ### no overflow-then-log path; large me naturally overflows to +inf (the correct IEEE result).
 routine DD.tgamma() -> DD
-    if LLVM::float_lt[B64](a: me.hi, b: 0.5_b64)
-        var one = dd_of(x: 1.0_b64)
+    if LLVM::float_lt[B64](a: me.hi, b: 0.5)
+        var one = dd_of(x: 1.0)
         return dd_pi().div(
             you: dd_pi()
                 .mul(you: me)
@@ -463,8 +463,8 @@ routine DD.tgamma() -> DD
 ### me). Negative/small me by Euler reflection; recurrence raises the argument to >= 10, then the
 ### Stirling asymptotic series lgamma(x) = (x-1/2)ln x - x + (1/2)ln(2pi) + sum B_{2k}/(2k(2k-1)) x^{1-2k}.
 routine DD.lgamma() -> DD
-    if LLVM::float_lt[B64](a: me.hi, b: 0.5_b64)
-        var one = dd_of(x: 1.0_b64)
+    if LLVM::float_lt[B64](a: me.hi, b: 0.5)
+        var one = dd_of(x: 1.0)
         var spi = dd_pi()
             .mul(you: me)
             .sin()
@@ -474,26 +474,26 @@ routine DD.lgamma() -> DD
             .sub(you: spi.log())
             .sub(you: one.sub(you: me).lgamma())
     var x = me
-    var corr = dd_of(x: 0.0_b64)
-    while LLVM::float_lt[B64](a: x.hi, b: 16.0_b64)
+    var corr = dd_of(x: 0.0)
+    while LLVM::float_lt[B64](a: x.hi, b: 16.0)
         corr = corr.add(you: x.log())
-        x = x.add(you: dd_of(x: 1.0_b64))
+        x = x.add(you: dd_of(x: 1.0))
     var lx = x.log()
     var r = x
-        .sub(you: dd_of(x: 0.5_b64))
+        .sub(you: dd_of(x: 0.5))
         .mul(you: lx)
         .sub(you: x)
-    r = r.add(you: DD(hi: 0.9189385332046727_b64, lo: B64.from_bits(bits: 0x3C73DA0B21C1E2B0_u64)))
-    var xi = dd_of(x: 1.0_b64).div(you: x)
+    r = r.add(you: DD(hi: 0.9189385332046727, lo: B64.from_bits(bits: 0x3C73DA0B21C1E2B0)))
+    var xi = dd_of(x: 1.0).div(you: x)
     var xi2 = xi.mul(you: xi)
-    var poly = dd_of(x: LLVM::float_div[B64](a: 7.0_b64, b: 1092.0_b64))
+    var poly = dd_of(x: LLVM::float_div[B64](a: 7.0, b: 1092.0))
     poly = poly
         .mul(you: xi2)
-        .add(you: dd_of(x: LLVM::float_div[B64](a: -691.0_b64, b: 360360.0_b64)))
-    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: 1.0_b64, b: 1188.0_b64)))
-    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: -1.0_b64, b: 1680.0_b64)))
-    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: 1.0_b64, b: 1260.0_b64)))
-    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: -1.0_b64, b: 360.0_b64)))
-    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: 1.0_b64, b: 12.0_b64)))
+        .add(you: dd_of(x: LLVM::float_div[B64](a: -691.0, b: 360360.0)))
+    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: 1.0, b: 1188.0)))
+    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: -1.0, b: 1680.0)))
+    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: 1.0, b: 1260.0)))
+    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: -1.0, b: 360.0)))
+    poly = poly.mul(you: xi2).add(you: dd_of(x: LLVM::float_div[B64](a: 1.0, b: 12.0)))
     r = r.add(you: xi.mul(you: poly))
     return r.sub(you: corr)

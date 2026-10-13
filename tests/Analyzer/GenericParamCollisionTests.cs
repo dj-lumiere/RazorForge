@@ -27,8 +27,8 @@ public class GenericParamCollisionTests
 
                                routine start()
                                    var xs = List[S32]()
-                                   xs.add_last(10_s32)
-                                   var t = T(a: 1_s32)
+                                   xs.add_last(10)
+                                   var t = T(a: 1)
                                    return
                                """);
     }
@@ -53,12 +53,14 @@ public class GenericParamCollisionTests
 
                                routine start()
                                    var xs = List[S32]()
-                                   xs.add_last(10_s32)
-                                   var id = identity(7_s32)
-                                   var f = 3.0_b128.sqrt()
-                                   var t = T(a: 1_s32)
-                                   var n = N(a: 2_s32)
-                                   var m = M(a: 3_s32)
+                                   xs.add_last(10)
+                                   var seven: S32 = 7
+                                   var id = identity(seven)
+                                   var three: B128 = 3.0
+                                   var f = three.sqrt()
+                                   var t = T(a: 1)
+                                   var n = N(a: 2)
+                                   var m = M(a: 3)
                                    return
                                """);
     }
@@ -66,7 +68,7 @@ public class GenericParamCollisionTests
     /// <summary>
     /// A FREE generic routine's OWN parameter must shadow a user type of the same name: `record T`
     /// plus `routine identity[T](x: T) -> T` — the `T` in the routine is the parameter, not the record,
-    /// so `identity(7_s32)` infers `T = S32` rather than type-erroring against `record T`.
+    /// so `identity(seven)` (an `S32`) infers `T = S32` rather than type-erroring against `record T`.
     /// </summary>
     [Fact]
     public void FreeGenericRoutine_OwnParam_CoexistsWith_UserRecordOfSameName()
@@ -79,8 +81,9 @@ public class GenericParamCollisionTests
                                    return x
 
                                routine start()
-                                   var id = identity(7_s32)
-                                   var t = T(a: 1_s32)
+                                   var seven: S32 = 7
+                                   var id = identity(seven)
+                                   var t = T(a: 1)
                                    return
                                """);
     }
@@ -103,9 +106,9 @@ public class GenericParamCollisionTests
                                    x: S32
 
                                routine start()
-                                   var h = Holder[S32](value: 1_s32)
-                                   var r = h.mapped(7_s32)
-                                   var u = U(x: 2_s32)
+                                   var h = Holder[S32](value: 1)
+                                   var r = h.mapped(7)
+                                   var u = U(x: 2)
                                    return
                                """);
     }
@@ -125,8 +128,8 @@ public class GenericParamCollisionTests
                                    item: T
 
                                routine start()
-                                   var b = Box[S32](item: 5_s32)
-                                   var t = T(a: 1_s32)
+                                   var b = Box[S32](item: 5)
+                                   var t = T(a: 1)
                                    return
                                """);
     }
@@ -151,7 +154,7 @@ public class GenericParamCollisionTests
 
                                routine start()
                                    var xs = List[Box[S64]]()
-                                   xs.add_last(value: Box[S64](item: 4_s64))
+                                   xs.add_last(value: Box[S64](item: 4))
                                    var got = xs.items()
                                    var sum: S64 = got[0] + got[0]
                                    return

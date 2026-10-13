@@ -34,7 +34,7 @@ public sealed class ProgramCliTests : IDisposable
             "    return a + b\n" +
             "\n" +
             "routine start()\n" +
-            "    var total = sum_ints(a: 1_s32, b: 2_s32)\n" +
+            "    var total = sum_ints(a: 1, b: 2)\n" +
             "    show(f\"{total}\")\n" +
             "    return\n");
     }

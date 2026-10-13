@@ -125,7 +125,7 @@ public class RoutineDeclarationTests
 
                         @readonly
                         routine Point.area() -> S32
-                            return 0_s32
+                            return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

@@ -6,7 +6,7 @@ import BuilderQuery
 # ============================================================================
 
 ### The maximum run length sorted with insertion sort before the merge phase begins.
-secret preset SORT_MIN_RUN: U64 = 32u64
+secret preset SORT_MIN_RUN: U64 = 32
 
 ### A growable, contiguous sequence of elements with amortized O(1) append.
 ###
@@ -70,7 +70,7 @@ obeys Emittable[T]
 # Creators
 
 routine List[T]() -> List[T]
-    return List[T](data: hijacked_none[T](), count: 0u64, capacity: 0u64)
+    return List[T](data: hijacked_none[T](), count: 0, capacity: 0)
 
 ### Creates an empty list with storage reserved for at least `capacity` elements.
 ### No elements are initialized, but the backing allocation is made immediately to
@@ -90,7 +90,7 @@ routine List[T](capacity: U64) -> List[T]
         var ptr = rf_allocate_dynamic_uninit(byte_size)
         return List[T](
             data: hijacked_from[T](ptr),
-            count: 0u64,
+            count: 0,
             capacity: capacity,
         )
 
@@ -102,7 +102,7 @@ routine List[T](capacity: U64) -> List[T]
 ### :returns: A list containing `count` copies of `fill_value`.
 routine List[T](count: U64, fill_value: T) -> List[T]
 needs RecordType T
-    if count == 0u64
+    if count == 0
         return List[T]()
 
     var byte_size = T.data_size() * count
@@ -110,10 +110,10 @@ needs RecordType T
     danger
         var ptr = rf_allocate_dynamic_uninit(byte_size)
         var data = hijacked_from[T](ptr)
-        var i = 0u64
+        var i: U64 = 0
         while i < count
             data.offset(t_size * i).poke(fill_value)
-            i = i +% 1u64
+            i = i +% 1
         return List[T](data: data, count: count, capacity: count)
 
 ### Builds a list containing exactly the given `elements`, in order. This static routine is the mechanism
@@ -125,12 +125,12 @@ needs RecordType T
 ### :returns: A list of the given elements.
 common routine List[T].from_literal(elements...: T) -> List[T]
     var result = List[T]()
-    var i = 0u64
+    var i: U64 = 0
     # Each element moves into the list: `add_last` makes the list's holder, and the caller releases the
     # literal's own afterwards.
     while i < elements.count()
         result.add_last(elements.get_raw(index: i))
-        i = i +% 1u64
+        i = i +% 1
     return result
 
 # Core operations
@@ -151,7 +151,7 @@ routine List[T].capacity() -> U64
 ### :returns: `true` when `count()` is zero.
 @readonly
 routine List[T].is_empty() -> Bool
-    return me.count == 0u64
+    return me.count == 0
 
 ### Appends `value` at the back of the list.
 ### The buffer grows automatically when the current capacity is exhausted, following the
@@ -163,7 +163,7 @@ routine List[T].add_last(value: T)
         me.reserve(
             next_grow_capacity(
                 current: me.capacity,
-                min_needed: me.count +% 1u64,
+                min_needed: me.count +% 1,
                 element_size: T.data_size().byte_size(),
             ),
         )
@@ -171,7 +171,7 @@ routine List[T].add_last(value: T)
     var byte_offset = T.data_size() * me.count
     danger
         me.data.offset(byte_offset).poke(value)
-    me.count = me.count +% 1u64
+    me.count = me.count +% 1
     return
 
 ### Appends every element of `other` to the back of this list, in order.
@@ -206,7 +206,7 @@ routine List[T].remove_last!() -> T
     if me.is_empty()
         throw AbsentValueError()
 
-    me.count = me.count - 1u64
+    me.count = me.count - 1
     var byte_offset = T.data_size() * me.count
     danger
         return me.data.offset(byte_offset).peek()
@@ -216,7 +216,7 @@ routine List[T].remove_last!() -> T
 ### :param value: The value to insert.
 @reshaping
 routine List[T].add_first(value: T)
-    me.add_at(index: 0u64, value: value)
+    me.add_at(index: 0, value: value)
     return
 
 ### Inserts `value` at `index`, shifting later elements right by one position.
@@ -233,7 +233,7 @@ routine List[T].add_at!(index: U64, value: T)
         me.reserve(
             next_grow_capacity(
                 current: me.capacity,
-                min_needed: me.count +% 1u64,
+                min_needed: me.count +% 1,
                 element_size: T.data_size().byte_size(),
             ),
         )
@@ -243,7 +243,7 @@ routine List[T].add_at!(index: U64, value: T)
         danger
             var elem_size = T.data_size()
             var src_ptr: Hijacked[T] = me.data.offset(elem_size * index)
-            var dst_ptr: Hijacked[T] = me.data.offset(elem_size * (index + 1u64))
+            var dst_ptr: Hijacked[T] = me.data.offset(elem_size * (index + 1))
             rf_copy_bytes_at(
                 dest: dst_ptr.get_address(),
                 src: src_ptr.get_address(),
@@ -252,7 +252,7 @@ routine List[T].add_at!(index: U64, value: T)
 
     danger
         me.data.offset(T.data_size() * index).poke(value)
-    me.count = me.count + 1u64
+    me.count = me.count + 1
     return
 
 ### Removes and returns the first element, shifting the remaining elements left by one position.
@@ -262,7 +262,7 @@ routine List[T].add_at!(index: U64, value: T)
 routine List[T].remove_first!() -> T
     if me.is_empty()
         throw AbsentValueError()
-    return me.remove_at(0u64)
+    return me.remove_at(0)
 
 ### Removes and returns the element at `index`, shifting later elements left by one position.
 ### :param index: The zero-based position to remove.
@@ -278,17 +278,17 @@ routine List[T].remove_at!(index: U64) -> T
         var value = me.data.offset(byte_offset).peek()
 
         # Shift elements left via memmove
-        if index < me.count - 1u64
+        if index < me.count - 1
             var elem_size = T.data_size()
-            var src_ptr = me.data.offset(elem_size * (index + 1u64))
+            var src_ptr = me.data.offset(elem_size * (index + 1))
             var dst_ptr = me.data.offset(elem_size * index)
             rf_copy_bytes_at(
                 dest: dst_ptr.get_address(),
                 src: src_ptr.get_address(),
-                size: elem_size * (me.count - 1u64 - index),
+                size: elem_size * (me.count - 1 - index),
             )
 
-        me.count = me.count - 1u64
+        me.count = me.count - 1
         return value
 
 ### Returns the first element without removing it.
@@ -300,7 +300,7 @@ routine List[T].first!() -> T
 needs RecordType T
     if me.is_empty()
         throw AbsentValueError()
-    return me.get_raw(index: 0u64).share()
+    return me.get_raw(index: 0).share()
 
 ### Returns the last element without removing it.
 ### :returns: The current last element.
@@ -311,7 +311,7 @@ routine List[T].last!() -> T
 needs RecordType T
     if me.is_empty()
         throw AbsentValueError()
-    return me.get_raw(index: me.count - 1u64).share()
+    return me.get_raw(index: me.count - 1).share()
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -464,13 +464,13 @@ routine List[T].reserve(new_capacity: U64)
 ### Use this to reuse a list without paying reallocation costs.
 @reshaping
 routine List[T].clear()
-    me.count = 0u64
+    me.count = 0
     return
 
 @readonly
 routine List[T].iter() -> ListEmittable[T]
     danger
-        return ListEmittable[T](data: me.data, count: me.count(), index: 0u64)
+        return ListEmittable[T](data: me.data, count: me.count(), index: 0)
 
 ### Returns a write token on the next element: the address of its slot.
 ### :returns: The token.
@@ -482,7 +482,7 @@ needs AnyType T
         throw AbsentValueError()
     danger
         var slot = me.data.offset(T.data_size() * me.index)
-        me.index = me.index + 1u64
+        me.index = me.index + 1
         return Modifying[T](slot)
 
 ### `emit` for a single-owner entity: the slot holds the entity's address, which is the token.
@@ -495,7 +495,7 @@ needs EntityType T
         throw AbsentValueError()
     danger
         var address = me.data.offset(T.data_size() * me.index).peek_as[Hijacked[T]]()
-        me.index = me.index + 1u64
+        me.index = me.index + 1
         return Modifying[T](address)
 
 ### Returns true if both lists contain the same elements in the same order.
@@ -506,11 +506,11 @@ routine List[T].eq(you: Viewing[List[T]]) -> Bool
 needs T obeys Equatable
     if me.count() != you.count()
         return false
-    var i = 0u64
+    var i: U64 = 0
     while i < me.count()
         if me[i] != you[i]
             return false
-        i = i +% 1u64
+        i = i +% 1
     return true
 
 ### Returns true if any element in the list equals `value`.
@@ -520,11 +520,11 @@ needs T obeys Equatable
 @readonly
 routine List[T].has(value: Viewing[T]) -> Bool
 needs T obeys Equatable
-    var i = 0u64
+    var i: U64 = 0
     while i < me.count()
         if me[i] == value
             return true
-        i = i +% 1u64
+        i = i +% 1
     return false
 
 ### Returns whether `value` is not in this value: the opposite of `has`.
@@ -539,12 +539,12 @@ needs T obeys Equatable
 @override
 routine List[T].represent() -> Text
     var result = "["
-    var i = 0u64
+    var i: U64 = 0
     each v in me
-        if i > 0u64
+        if i > 0
             result = result + ", "
         result = result + nested_repr(v)
-        i = i +% 1u64
+        i = i +% 1
     result = result + "]"
     return result
 
@@ -552,12 +552,12 @@ routine List[T].represent() -> Text
 @override
 routine List[T].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
-    var i = 0u64
+    var i: U64 = 0
     each v in me
-        if i > 0u64
+        if i > 0
             result = result + ", "
         result = result + nested_repr(v)
-        i = i +% 1u64
+        i = i +% 1
     result = result + "])"
     return result
 
@@ -570,7 +570,7 @@ routine List[T].diagnose() -> Text
 @reshaping
 routine List[T].add_range!(source: Viewing[List[T]], from: U64, count: U64)
 needs RecordType T
-    if count == 0u64
+    if count == 0
         return
     if from + count > source.count()
         throw IndexOutOfBoundsError(index: from + count, count: source.count())
@@ -588,10 +588,10 @@ needs RecordType T
     # Clone each element through the read-only borrow. `clone` is elided for trivially-copyable T
     # (no symbol) and delegates to the retain-aware `store` for RC records like Text, so appended
     # elements are owned independently. The prior bitwise copy aliased buffer pointers (double-free).
-    var i = 0u64
+    var i: U64 = 0
     while i < count
         me.add_last(value: source[from + i])
-        i = i + 1u64
+        i = i + 1
     return
 
 ### Returns a deep, independent copy of this list. Each element is copied through `copy`,
@@ -602,10 +602,10 @@ needs RecordType T
 routine List[T].duplicate() -> List[T]
 needs RecordType T
     var result = List[T](capacity: me.count)
-    var i = 0u64
+    var i: U64 = 0
     while i < me.count
         result.add_last(value: me[i])
-        i = i +% 1u64
+        i = i +% 1
     return steal result
 
 ### Serializes this list to a `SerialValue.List`, serializing each element in order. Overrides the
@@ -616,10 +616,10 @@ needs RecordType T
 @override
 routine List[T].serialize() -> SerialValue
     var result = List[SerialValue]()
-    var i = 0u64
+    var i: U64 = 0
     while i < me.count
         result.add_last(value: me[i].serialize())
-        i = i +% 1u64
+        i = i +% 1
     return SerialValue(steal result)
 
 ### Shortens the list to `new_count` elements by discarding elements past the new boundary.
@@ -638,16 +638,16 @@ routine List[T].truncate!(new_count: U64)
 ### Equal elements preserve their relative order.
 routine List[T].sort()
 needs T obeys Comparable
-    if me.count <= 1u64
+    if me.count <= 1
         return
 
     # Insertion sort small lists directly
     if me.count <= SORT_MIN_RUN
-        me.insertion_sort(start: 0u64, end: me.count)
+        me.insertion_sort(start: 0, end: me.count)
         return
 
     # Phase 1: insertion sort each chunk of SORT_MIN_RUN
-    var i = 0u64
+    var i: U64 = 0
     loop
         if i >= me.count
             break
@@ -666,7 +666,7 @@ needs T obeys Comparable
         if width >= me.count
             break
 
-        var left = 0u64
+        var left: U64 = 0
         loop
             if left >= me.count
                 break
@@ -674,16 +674,16 @@ needs T obeys Comparable
             var mid = left + width
             if mid > me.count
                 mid = me.count
-            var right = left + width *% 2u64
+            var right = left + width *% 2
             if right > me.count
                 right = me.count
 
             if mid < right
                 me.merge_into(left: left, mid: mid, right: right, buffer: buffer)
 
-            left = left + width *% 2u64
+            left = left + width *% 2
 
-        width = width *% 2u64
+        width = width *% 2
     return
 
 ### Sorts the list in place using a caller-supplied comparator.
@@ -691,14 +691,14 @@ needs T obeys Comparable
 ### Uses the same stable, iterative merge sort as `sort()`.
 ### :param compare: A two-argument routine that returns `true` when its first argument precedes its second.
 routine List[T].sort_by(compare: Callable[(T, T), Bool])
-    if me.count <= 1u64
+    if me.count <= 1
         return
 
     if me.count <= SORT_MIN_RUN
-        me.insertion_sort_by(start: 0u64, end: me.count, compare: compare)
+        me.insertion_sort_by(start: 0, end: me.count, compare: compare)
         return
 
-    var i = 0u64
+    var i: U64 = 0
     loop
         if i >= me.count
             break
@@ -716,7 +716,7 @@ routine List[T].sort_by(compare: Callable[(T, T), Bool])
         if width >= me.count
             break
 
-        var left = 0u64
+        var left: U64 = 0
         loop
             if left >= me.count
                 break
@@ -724,7 +724,7 @@ routine List[T].sort_by(compare: Callable[(T, T), Bool])
             var mid = left + width
             if mid > me.count
                 mid = me.count
-            var right = left + width *% 2u64
+            var right = left + width *% 2
             if right > me.count
                 right = me.count
 
@@ -737,9 +737,9 @@ routine List[T].sort_by(compare: Callable[(T, T), Bool])
                     compare: compare,
                 )
 
-            left = left + width *% 2u64
+            left = left + width *% 2
 
-        width = width *% 2u64
+        width = width *% 2
     return
 
 ### Returns a new list with the same elements sorted in ascending order.
@@ -749,7 +749,7 @@ routine List[T].sort_by(compare: Callable[(T, T), Bool])
 routine List[T].sorted() -> List[T]
 needs T obeys Comparable
     var copy = List[T](capacity: me.count)
-    copy.add_range(source: me, from: 0u64, count: me.count)
+    copy.add_range(source: me, from: 0, count: me.count)
     copy.sort()
     return steal copy
 
@@ -760,7 +760,7 @@ needs T obeys Comparable
 @readonly
 routine List[T].sorted_by(compare: Callable[(T, T), Bool]) -> List[T]
     var copy = List[T](capacity: me.count)
-    copy.add_range(source: me, from: 0u64, count: me.count)
+    copy.add_range(source: me, from: 0, count: me.count)
     copy.sort_by(compare)
     return steal copy
 
@@ -785,19 +785,19 @@ routine List[T].swap!(first: U64, second: U64)
 ### Reverses the order of all elements in place.
 ### The first element becomes last, the last becomes first, and element count is unchanged.
 routine List[T].reverse_in_place()
-    if me.count <= 1u64
+    if me.count <= 1
         return
 
-    var lo = 0u64
-    var hi = me.count - 1u64
+    var lo: U64 = 0
+    var hi = me.count - 1
     loop
         if lo >= hi
             break
         var temp = me.get_raw(lo)
         me.set_raw(index: lo, value: me.get_raw(hi))
         me.set_raw(index: hi, value: temp)
-        lo = lo + 1u64
-        hi = hi - 1u64
+        lo = lo + 1
+        hi = hi - 1
     return
 
 # ============================================================================
@@ -810,7 +810,7 @@ routine List[T].reverse_in_place()
 ### :param end: The exclusive ending index of the range.
 routine List[T].insertion_sort(start: U64, end: U64)
 needs T obeys Comparable
-    var i = start + 1u64
+    var i = start + 1
     loop
         if i >= end
             break
@@ -819,13 +819,13 @@ needs T obeys Comparable
         loop
             if j <= start
                 break
-            var prev = me.get_raw(j - 1u64)
+            var prev = me.get_raw(j - 1)
             if not (key < prev)
                 break
             me.set_raw(index: j, value: prev)
-            j = j - 1u64
+            j = j - 1
         me.set_raw(index: j, value: key)
-        i = i + 1u64
+        i = i + 1
     return
 
 ### Sorts the sub-range [start, end) in place using insertion sort with a custom comparator.
@@ -833,7 +833,7 @@ needs T obeys Comparable
 ### :param end: The exclusive ending index of the range.
 ### :param compare: A routine that returns `true` when its first argument should precede its second.
 routine List[T].insertion_sort_by(start: U64, end: U64, compare: Callable[(T, T), Bool])
-    var i = start + 1u64
+    var i = start + 1
     loop
         if i >= end
             break
@@ -842,13 +842,13 @@ routine List[T].insertion_sort_by(start: U64, end: U64, compare: Callable[(T, T)
         loop
             if j <= start
                 break
-            var prev = me.get_raw(j - 1u64)
+            var prev = me.get_raw(j - 1)
             if not compare(key, prev)
                 break
             me.set_raw(index: j, value: prev)
-            j = j - 1u64
+            j = j - 1
         me.set_raw(index: j, value: key)
-        i = i + 1u64
+        i = i + 1
     return
 
 ### Merges two adjacent sorted runs `[left, mid)` and `[mid, right)` in place.
@@ -866,7 +866,7 @@ needs T obeys Comparable
         if i >= right
             break
         buffer.set_raw(index: i, value: me.get_raw(i))
-        i = i + 1u64
+        i = i + 1
 
     var a = left
     var b = mid
@@ -879,27 +879,27 @@ needs T obeys Comparable
         var vb = buffer.get_raw(b)
         if vb < va
             me.set_raw(index: out, value: vb)
-            b = b + 1u64
+            b = b + 1
         else
             me.set_raw(index: out, value: va)
-            a = a + 1u64
-        out = out + 1u64
+            a = a + 1
+        out = out + 1
 
     # Copy remaining elements from left run
     loop
         if a >= mid
             break
         me.set_raw(index: out, value: buffer.get_raw(a))
-        a = a + 1u64
-        out = out + 1u64
+        a = a + 1
+        out = out + 1
 
     # Copy remaining elements from right run
     loop
         if b >= right
             break
         me.set_raw(index: out, value: buffer.get_raw(b))
-        b = b + 1u64
-        out = out + 1u64
+        b = b + 1
+        out = out + 1
     return
 
 ### Merges two adjacent sorted runs `[left, mid)` and `[mid, right)` using a custom comparator.
@@ -921,7 +921,7 @@ routine List[T].merge_into_by(
         if i >= right
             break
         buffer.set_raw(index: i, value: me.get_raw(i))
-        i = i + 1u64
+        i = i + 1
 
     var a = left
     var b = mid
@@ -934,25 +934,25 @@ routine List[T].merge_into_by(
         var vb = buffer.get_raw(b)
         if compare(vb, va)
             me.set_raw(index: out, value: vb)
-            b = b + 1u64
+            b = b + 1
         else
             me.set_raw(index: out, value: va)
-            a = a + 1u64
-        out = out + 1u64
+            a = a + 1
+        out = out + 1
 
     loop
         if a >= mid
             break
         me.set_raw(index: out, value: buffer.get_raw(a))
-        a = a + 1u64
-        out = out + 1u64
+        a = a + 1
+        out = out + 1
 
     loop
         if b >= right
             break
         me.set_raw(index: out, value: buffer.get_raw(b))
-        b = b + 1u64
-        out = out + 1u64
+        b = b + 1
+        out = out + 1
     return
 
 ### Destroys each live element (no-op for value-typed `T`), then frees the backing buffer.

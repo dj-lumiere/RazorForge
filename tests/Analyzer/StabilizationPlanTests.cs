@@ -311,10 +311,10 @@ public class StabilizationPlanTests
                             return Value(raw: from.to[S64]())
 
                         routine Value.$create(from: Bool) -> Value
-                            return Value(raw: 1s64)
+                            return Value(raw: 1)
 
                         routine Value.$create(from: Text) -> Value
-                            return Value(raw: 0s64)
+                            return Value(raw: 0)
 
                         routine test()
                             var a = Value(from: 42)
@@ -491,7 +491,7 @@ public class StabilizationPlanTests
 
                         @readonly
                         routine Node[T].hash() -> U64
-                            return 0u64
+                            return 0
 
                         bundle Holder[T]
                         needs RecordType T
@@ -499,7 +499,7 @@ public class StabilizationPlanTests
 
                         @readonly
                         routine Holder[T].hash() -> U64
-                            return 0u64
+                            return 0
 
                         routine Holder[T].fetch() -> Node[T]
                             return me.node

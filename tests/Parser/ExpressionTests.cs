@@ -1332,9 +1332,9 @@ public class ExpressionTests
         string source = """
                         routine test()
                             var result = BitList(
-                                data: 0u64,
-                                count: 0u64,
-                                capacity: 0u64
+                                data: 0,
+                                count: 0,
+                                capacity: 0
                             )
                             return
                         """;
@@ -1404,9 +1404,9 @@ public class ExpressionTests
         string source = """
                         routine create() -> S32
                             return BitList(
-                                data: 0u64,
-                                count: 0u64,
-                                capacity: 0u64
+                                data: 0,
+                                count: 0,
+                                capacity: 0
                             )
                         """;
 

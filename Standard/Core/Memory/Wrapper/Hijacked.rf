@@ -167,10 +167,10 @@ dangerous routine Hijacked[T].poke_at_offset(at: ByteSize, value: T)
 ### branching — a buffer of values visits nothing, a buffer of `Roamed` handles reports each one.
 ### :param count: The number of live elements in the buffer.
 dangerous routine Hijacked[T].cyclic_trace_buffer(count: U64)
-    var i = 0u64
+    var i: U64 = 0
     while i < count
         me.peek_at_offset(offset: T.data_size() * i).cyclic_visit()
-        i = i +% 1u64
+        i = i +% 1
     return
 
 ### Cycle-collector hook for a SPARSE (open-addressing) container's dense entries buffer, whose slots
@@ -182,11 +182,11 @@ dangerous routine Hijacked[T].cyclic_trace_buffer(count: U64)
 ### :param live: The parallel `entry_live` bitmap — one `U8` per entry, `1` = live, `0` = tombstone/unused.
 ### :param used: The high-water mark of the entries buffer; slots `0..used` are scanned.
 dangerous routine Hijacked[T].cyclic_trace_sparse_buffer(live: Hijacked[U8], used: U64)
-    var i = 0u64
+    var i: U64 = 0
     while i < used
-        if live.peek_at_offset(offset: U8.data_size() * i) == 1u8
+        if live.peek_at_offset(offset: U8.data_size() * i) == 1
             me.peek_at_offset(offset: T.data_size() * i).cyclic_visit()
-        i = i +% 1u64
+        i = i +% 1
     return
 
 ### Deallocates the memory at this pointer's address.
@@ -211,13 +211,14 @@ dangerous routine Hijacked[T].roam_free()
 
 ### Zeroes out the pointed-to memory without deallocating it.
 dangerous routine Hijacked[T].detonate()
-    rf_set_bytes_at(dest: me.address(), value: 0_u8, size: T.data_size())
+    rf_set_bytes_at(dest: me.address(), value: 0, size: T.data_size())
     return
 
 ### Returns a null `Hijacked[T]` pointer (address zero).
 ### :returns: A null pointer of type `Hijacked[T]`.
 routine hijacked_none[T]() -> Hijacked[T]
-    return Hijacked[T](0_addr)
+    var null_address: Address = 0
+    return Hijacked[T](null_address)
 
 ### Constructs a {Hijacked[T]} from a raw address. Use this instead of
 ### `Hijacked[T](addr)` directly when T is a parent-scope generic param,
@@ -305,19 +306,19 @@ routine Hijacked[T].diagnose() -> Text
 ### reads raw memory in `[from, limit)`; the caller guarantees that range is mapped.
 dangerous routine scan_to_byte(buf: Hijacked[Byte], target: Byte, from: U64, limit: U64) -> U64
     var i = from
-    var bcast = target.to[U8]().to[U64]() *% 0x0101010101010101_u64
-    var ones = 0x0101010101010101_u64
-    var high = 0x8080808080808080_u64
+    var bcast = target.to[U8]().to[U64]() *% 0x0101010101010101
+    var ones: U64 = 0x0101010101010101
+    var high: U64 = 0x8080808080808080
     var all_ones = U64_MAX
-    while i +% 8u64 <= limit
+    while i +% 8 <= limit
         var word = buf.stride(count: i.to[S64]()).peek_unaligned_as[U64]()
         var x = word ^ bcast
         var mask = x -% ones & (x ^ all_ones) & high
-        if mask != 0u64
+        if mask != 0
             return i +% (LLVM::trailing_zeros(value: mask) >> 3)
-        i = i +% 8u64
+        i = i +% 8
     while i < limit
         if buf.stride(count: i.to[S64]()).peek() == target
             return i
-        i = i +% 1u64
+        i = i +% 1
     return limit

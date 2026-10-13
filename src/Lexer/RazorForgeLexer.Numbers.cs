@@ -8,16 +8,15 @@ namespace RazorForge.Lexer;
 /// Partial class containing numeric literal scanning memberRoutines for the RazorForge lexer.
 /// </summary>
 /// <remarks>
-/// Key language-conditional: unsuffixed defaults differ between RF and SF.
-/// RF: integer -> S64Literal, float -> B64Literal
-/// SF: integer -> Integer, float -> Decimal
+/// A number carries no type of its own: it is an undecided integer or decimal token, typed later by the place it
+/// goes or by the declaration it starts. Only unit suffixes (durations, sizes) and the imaginary <c>i</c> remain.
 /// </remarks>
 public partial class RazorForgeLexer
 {
     #region Decimal Numbers
 
     /// <summary>
-    /// Scans a decimal numeric literal, handling integers, floats, and suffixed numbers.
+    /// Scans a decimal numeric literal, handling integers, floats, and unit-suffixed numbers.
     /// </summary>
     private void ScanNumber()
     {
@@ -33,13 +32,13 @@ public partial class RazorForgeLexer
             isFloat = true;
         }
 
-        // Skip underscore before suffix after scientific notation (e.g., 3.4e10_b64)
+        // Skip underscore before suffix after scientific notation (e.g., 3.4e10_i)
         if (Peek() == '_' && char.IsLetter(c: Peek(offset: 1)))
         {
             Advance();
         }
 
-        // Check for type suffix
+        // Check for a suffix
         if (char.IsLetter(c: Peek()))
         {
             EmitDecimalSuffixedToken(isFloat: isFloat);
@@ -99,13 +98,14 @@ public partial class RazorForgeLexer
     }
 
     /// <summary>
-    /// Consumes a decimal-number type suffix and emits the matching token, dispatching over
-    /// arbitrary-precision, numeric, memory-size, and duration suffix tables. Throws on an
-    /// unknown suffix. Assumes the caller has confirmed a letter begins the suffix.
+    /// Consumes a decimal-number suffix and emits the matching token, dispatching over the imaginary, memory-size
+    /// and duration suffixes. Throws on a suffix that names a type and on an unknown one. Assumes the caller has
+    /// confirmed a letter begins the suffix.
     /// </summary>
     private void EmitDecimalSuffixedToken(bool isFloat)
     {
         int suffixStart = _position;
+        int suffixColumn = _column;
         while (char.IsLetterOrDigit(c: Peek()))
         {
             Advance();
@@ -114,21 +114,14 @@ public partial class RazorForgeLexer
         string suffix =
             _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-        // Arbitrary precision: `n` → Integer (integer syntax only — `1.5n`
-        // names no integer), `dn` → Decimal (both syntaxes: `1dn` and
-        // `0.5dn` are equally unambiguous, like every other typed suffix).
-        if (!isFloat && suffix == ArbitraryIntegerSuffix)
+        if (TypeNamingSuffixes.TryGetValue(key: suffix, value: out string? typeName))
         {
-            AddToken(type: TokenType.IntegerLiteral);
+            throw TypeNamingSuffixError(typeName: typeName, suffixStart: suffixStart, suffixColumn: suffixColumn);
         }
-        else if (suffix == ArbitraryDecimalSuffix)
+
+        if (suffix == ImaginarySuffix)
         {
-            AddToken(type: TokenType.DecimalLiteral);
-        }
-        else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
-                     value: out TokenType numericType))
-        {
-            AddToken(type: numericType);
+            AddToken(type: TokenType.ImaginaryLiteral);
         }
         else if (_byteSizeSuffixToTokenType.TryGetValue(key: suffix,
                      value: out TokenType memoryType))
@@ -149,6 +142,31 @@ public partial class RazorForgeLexer
                 column: _column,
                 language: _language);
         }
+    }
+
+    /// <summary>
+    /// The error for a suffix that names the number's type (<c>5_u8</c>). The caret sits on the suffix, with its
+    /// <c>_</c> separator when there is one, and the message shows the declaration that states the type instead.
+    /// </summary>
+    private GrammarException TypeNamingSuffixError(string typeName, int suffixStart, int suffixColumn)
+    {
+        bool separated = suffixStart > _tokenStart && _source[index: suffixStart - 1] == '_';
+        int digitsEnd = separated
+            ? suffixStart - 1
+            : suffixStart;
+        string written = _source.Substring(startIndex: _tokenStart, length: _position - _tokenStart);
+        string digits = _source.Substring(startIndex: _tokenStart, length: digitsEnd - _tokenStart);
+        return new GrammarException(code: GrammarDiagnosticCode.TypeNamingSuffix,
+            message: $"`{written}` names its type with a suffix, and a number no longer carries its type. " +
+                     $"Write the type where the value is declared (`var x: {typeName} = {digits}`), or let the " +
+                     "place the number goes decide it (an argument, an assignment, the other side of an " +
+                     "operator). `migrate --step suffix` rewrites old code.",
+            fileName: _fileName,
+            line: _line,
+            column: separated
+                ? suffixColumn - 1
+                : suffixColumn,
+            language: _language);
     }
 
     #endregion
@@ -176,16 +194,16 @@ public partial class RazorForgeLexer
             }
         }
 
-        // Skip underscore before suffix (e.g., 0x1.0p5_b64)
+        // Skip underscore before suffix (e.g., 0x1_i)
         if (Peek() == '_' && char.IsLetter(c: Peek(offset: 1)))
         {
             Advance();
         }
 
-        // Check for type suffix
+        // Check for a suffix
         if (char.IsLetter(c: Peek()))
         {
-            EmitPrefixedSuffixedToken(isHex: isHex, isHexFloat: isHexFloat);
+            EmitPrefixedSuffixedToken(isHex: isHex);
         }
         else
         {
@@ -312,7 +330,7 @@ public partial class RazorForgeLexer
 
     /// <summary>
     /// Peeks whether the underscore at the current position introduces a known type suffix
-    /// (e.g., <c>_addr</c>) rather than serving as a hex digit separator (e.g., <c>_ABCD</c>).
+    /// (e.g., <c>_i</c>, or a type-naming one such as <c>_b64</c>, which is an error) rather than serving as a hex digit separator (e.g., <c>_ABCD</c>).
     /// </summary>
     private bool UnderscoreIntroducesSuffix()
     {
@@ -325,8 +343,7 @@ public partial class RazorForgeLexer
         if (lookAhead > 1)
         {
             string candidate = _source.Substring(startIndex: _position + 1, length: lookAhead - 1);
-            if (_numericSuffixToTokenType.ContainsKey(key: candidate) ||
-                candidate == ArbitraryIntegerSuffix || candidate == ArbitraryDecimalSuffix)
+            if (candidate == ImaginarySuffix || TypeNamingSuffixes.ContainsKey(key: candidate))
             {
                 return true;
             }
@@ -336,12 +353,13 @@ public partial class RazorForgeLexer
     }
 
     /// <summary>
-    /// Consumes a prefixed-number (hex/binary) type suffix and emits the matching token. Throws on
-    /// an unknown suffix. Assumes the caller has confirmed a letter begins the suffix.
+    /// Consumes a prefixed-number (hex/binary) suffix and emits the matching token. Throws on a suffix that names a
+    /// type and on an unknown one. Assumes the caller has confirmed a letter begins the suffix.
     /// </summary>
-    private void EmitPrefixedSuffixedToken(bool isHex, bool isHexFloat)
+    private void EmitPrefixedSuffixedToken(bool isHex)
     {
         int suffixStart = _position;
+        int suffixColumn = _column;
         while (char.IsLetterOrDigit(c: Peek()))
         {
             Advance();
@@ -350,21 +368,14 @@ public partial class RazorForgeLexer
         string suffix =
             _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-        // Arbitrary precision: `n` for hex integers, `dn` for Decimal (the
-        // integer form is only reachable via the explicit `_dn` spelling —
-        // a bare `d` is a hex digit and gets consumed by the mantissa).
-        if (!isHexFloat && suffix == ArbitraryIntegerSuffix)
+        if (TypeNamingSuffixes.TryGetValue(key: suffix, value: out string? typeName))
         {
-            AddToken(type: TokenType.IntegerLiteral);
+            throw TypeNamingSuffixError(typeName: typeName, suffixStart: suffixStart, suffixColumn: suffixColumn);
         }
-        else if (suffix == ArbitraryDecimalSuffix)
+
+        if (suffix == ImaginarySuffix)
         {
-            AddToken(type: TokenType.DecimalLiteral);
-        }
-        else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
-                     value: out TokenType tokenType))
-        {
-            AddToken(type: tokenType);
+            AddToken(type: TokenType.ImaginaryLiteral);
         }
         else
         {
@@ -391,10 +402,11 @@ public partial class RazorForgeLexer
             Advance();
         }
 
-        // Check for type suffix
+        // Check for a suffix
         if (char.IsLetter(c: Peek()))
         {
             int suffixStart = _position;
+            int suffixColumn = _column;
             while (char.IsLetterOrDigit(c: Peek()))
             {
                 Advance();
@@ -403,15 +415,14 @@ public partial class RazorForgeLexer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            // Handle arbitrary precision suffix (n) - always Integer for octal
-            if (suffix == ArbitraryIntegerSuffix)
+            if (TypeNamingSuffixes.TryGetValue(key: suffix, value: out string? typeName))
             {
-                AddToken(type: TokenType.IntegerLiteral);
+                throw TypeNamingSuffixError(typeName: typeName, suffixStart: suffixStart, suffixColumn: suffixColumn);
             }
-            else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
-                         value: out TokenType tokenType))
+
+            if (suffix == ImaginarySuffix)
             {
-                AddToken(type: tokenType);
+                AddToken(type: TokenType.ImaginaryLiteral);
             }
             else
             {

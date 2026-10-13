@@ -28,7 +28,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                            var pair = (1_s32, 2_s32)
+                            var pair = (1, 2)
                             return
                         """;
 
@@ -51,7 +51,7 @@ public class CompilerPipelineLoweringTests
                             return value
 
                         routine test() -> S32
-                            return helper(1_s32)
+                            return helper(1)
                         """;
 
         Program program = Parse(source: source);
@@ -75,7 +75,7 @@ public class CompilerPipelineLoweringTests
                             return value
 
                         routine test() -> S32
-                            return helper(1_s32)
+                            return helper(1)
                         """;
 
         Program program = Parse(source: source);
@@ -121,7 +121,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                            var maybe = Maybe[S32](present: true, value: 1_s32)
+                            var maybe = Maybe[S32](present: true, value: 1)
                             return
                         """;
 
@@ -179,7 +179,7 @@ public class CompilerPipelineLoweringTests
                             return me.value
 
                         routine start() -> S32
-                            var box = Box[S32](value: 7_s32)
+                            var box = Box[S32](value: 7)
                             return box.fetch()
                         """;
 
@@ -216,7 +216,7 @@ public class CompilerPipelineLoweringTests
                             return Box[T](value: me.value)
 
                         routine start() -> Box[S32]
-                            var box = Box[S32](value: 7_s32)
+                            var box = Box[S32](value: 7)
                             return box.none_ptr()
                         """;
 
@@ -257,7 +257,7 @@ public class CompilerPipelineLoweringTests
                             return me.peek()
 
                         routine start() -> S32
-                            var box = Box[S32](value: 7_s32)
+                            var box = Box[S32](value: 7)
                             return box.copy_value()
                         """;
 
@@ -285,8 +285,8 @@ public class CompilerPipelineLoweringTests
         // back-infer a lambda parameter's type from its body (RF-S638). Annotate `x`.
         string source = """
                         routine test() -> S32
-                            var double_it = (x: S32) => x * 2_s32
-                            return 0_s32
+                            var double_it = (x: S32) => x * 2
+                            return 0
                         """;
 
         Program program = Parse(source: source);
@@ -305,7 +305,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                            var pair = (1_s32, 2_s32)
+                            var pair = (1, 2)
                             return
                         """;
 
@@ -368,7 +368,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                            var items = [[1_s64, 2_s64, 3_s64], [4_s64, 5_s64], [6_s64], []]
+                            var items = [[1, 2, 3], [4, 5], [6], []]
                             return
 
                         routine start()
@@ -428,8 +428,9 @@ public class CompilerPipelineLoweringTests
                             a: S32
 
                         routine start()
-                            var s = T(a: 9_s32).represent()
-                            var e = (1.0_d128).erf()
+                            var s = T(a: 9).represent()
+                            var one: D128 = 1.0
+                            var e = one.erf()
                             return
                         """;
 
@@ -466,7 +467,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine start()
-                            var value = try 7_s32.floordiv(2_s32)
+                            var seven: S32 = 7
+                            var value = try seven.floordiv(2)
                             return
                         """;
 
@@ -513,9 +515,9 @@ public class CompilerPipelineLoweringTests
         // param with a `given` capture must be parenthesized.
         string source = """
                         routine test() -> S32
-                            var factor = 100_s32
+                            var factor: S32 = 100
                             var scale = (x: S32) given factor => x * factor
-                            return 0_s32
+                            return 0
                         """;
 
         Program program = Parse(source: source);
@@ -628,7 +630,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> S64
-                            return 1_s64 +% 2_s64
+                            return 1 +% 2
 
                         routine start()
                             drop test()
@@ -665,7 +667,8 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> Array[Byte, 8]
-                            return 1_u64.to_bytes_le()
+                            var one: U64 = 1
+                            return one.to_bytes_le()
 
                         routine start()
                             drop test()
@@ -754,7 +757,7 @@ public class CompilerPipelineLoweringTests
 
                         routine trigger(bits: BitList) -> U8
                             drop try bits.to_u8()
-                            return 0u8
+                            return 0
 
                         routine start()
                             var bits = BitList()
@@ -906,7 +909,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         dangerous routine start() -> Hijacked[S64]
-                            return hijacked_from[S64](0_addr)
+                            return hijacked_from[S64](0)
                         """;
 
         Program program = Parse(source: source);
@@ -948,7 +951,7 @@ public class CompilerPipelineLoweringTests
                             return me.value
 
                         routine make_box() -> Box[S32]
-                            return Box[S32](value: 7_s32)
+                            return Box[S32](value: 7)
 
                         routine test() -> S32
                             return make_box().peek()
@@ -1171,7 +1174,7 @@ public class CompilerPipelineLoweringTests
     public void BackendEntryValidator_RejectsResidualPresetIdentifier()
     {
         string source = """
-                        preset LIMIT: S64 = 10_s64
+                        preset LIMIT: S64 = 10
 
                         routine test() -> S64
                             return LIMIT
@@ -1204,7 +1207,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> Char
-                            return Char(65_u32)
+                            return Char(65)
                         """;
 
         Program program = Parse(source: source);
@@ -1219,7 +1222,7 @@ public class CompilerPipelineLoweringTests
             Callee: new IdentifierExpression(Name: "Char", Location: program.Location),
             Arguments:
             [
-                new LiteralExpression(Value: "65_u32",
+                new LiteralExpression(Value: "65",
                     LiteralType: Builder.Tokenizer.TokenType.U32Literal,
                     Location: program.Location)
             ],
@@ -1251,7 +1254,7 @@ public class CompilerPipelineLoweringTests
 
         var leakedIndex = new IndexExpression(
             Object: new IdentifierExpression(Name: "items", Location: program.Location),
-            Index: new LiteralExpression(Value: "0_s64",
+            Index: new LiteralExpression(Value: "0",
                 LiteralType: Builder.Tokenizer.TokenType.S64Literal,
                 Location: program.Location),
             Location: program.Location) { ResolvedType = new GenericParameterTypeSymbol(name: "T") };
@@ -1308,7 +1311,7 @@ public class CompilerPipelineLoweringTests
                             return value
 
                         routine test() -> S32
-                            return helper(1_s32)
+                            return helper(1)
                         """;
 
         Program program = Parse(source: source);
@@ -1321,7 +1324,7 @@ public class CompilerPipelineLoweringTests
             Callee: new IdentifierExpression(Name: "helper", Location: program.Location),
             Arguments:
             [
-                new LiteralExpression(Value: "1_s32",
+                new LiteralExpression(Value: "1",
                     LiteralType: Builder.Tokenizer.TokenType.S32Literal,
                     Location: program.Location)
             ],
@@ -1341,7 +1344,7 @@ public class CompilerPipelineLoweringTests
     public void LlvmEmitter_ConstGenericPresetTypeArgument_UsesResolvedTypeExpressionMetadata()
     {
         string source = """
-                        preset WIDTH: Address = 16addr
+                        preset WIDTH: Address = 16
 
                         entity Buffer[T, N]
                         needs RecordType T
@@ -1355,7 +1358,7 @@ public class CompilerPipelineLoweringTests
                             return buf.first()
 
                         routine start()
-                            var buf = Buffer[U8, WIDTH](data: 1u8)
+                            var buf = Buffer[U8, WIDTH](data: 1)
                             test(steal buf)
                             return
                         """;
@@ -1443,7 +1446,7 @@ public class CompilerPipelineLoweringTests
                             return hijacked_from[T](addr)
 
                         dangerous routine start() -> Hijacked[S64]
-                            return wrap_addr[S64](0_addr)
+                            return wrap_addr[S64](0)
                         """;
 
         Program program = Parse(source: source);

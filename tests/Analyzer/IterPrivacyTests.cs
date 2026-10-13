@@ -19,7 +19,7 @@ public class IterPrivacyTests
     {
         string source = """
                         routine start()
-                            var xs = [1_s64, 2_s64, 3_s64]
+                            var xs = [1, 2, 3]
                             var it = xs.iter()
                             return
                         """;
@@ -34,7 +34,7 @@ public class IterPrivacyTests
     {
         string source = """
                         routine start()
-                            var xs = [1_s64, 2_s64, 3_s64]
+                            var xs = [1, 2, 3]
                             each x in xs
                                 return
                             return
@@ -91,7 +91,7 @@ public class IterPrivacyTests
                             n: S64
 
                         routine echo(b: Viewing[Box]) -> S64
-                            return 0_s64
+                            return 0
 
                         routine start()
                             var b = Box(n: 1)

@@ -5,13 +5,13 @@ import Collections
 # Constants
 # ============================================================================
 
-preset D32_ZERO: D32 = 0.0_d32
-preset D32_ONE: D32 = 1.0_d32
+preset D32_ZERO: D32 = 0.0
+preset D32_ONE: D32 = 1.0
 # IEEE 754 decimal32: 7 significant digits, emax = 96.
-preset D32_MAX: D32 = 9.999999e96_d32
-preset D32_MIN: D32 = -9.999999e96_d32
-preset D32_MIN_POSITIVE: D32 = 1e-95_d32
-preset D32_EPSILON: D32 = 1e-6_d32
+preset D32_MAX: D32 = 9.999999e96
+preset D32_MIN: D32 = -9.999999e96
+preset D32_MIN_POSITIVE: D32 = 1e-95
+preset D32_EPSILON: D32 = 1e-6
 
 # ============================================================================
 # D32 — IEEE 754-2008 decimal32 in BID storage. The arithmetic, rounding, conversions, DPD and math are
@@ -65,48 +65,48 @@ routine D32.decode() -> D32Parts
     var bits = me.to_bits()
     # sign = bit 31
     var sign = LLVM::int_ne(
-        a: LLVM::bit_and(a: bits, b: LLVM::shift_left(value: 1_u32, bits: 31_u32)),
-        b: 0_u32,
+        a: LLVM::bit_and(a: bits, b: LLVM::shift_left(value: 1, bits: 31)),
+        b: 0,
     )
     # top5 = 5-bit combination prefix (bits 30:26) that selects form/special
     var top5 = LLVM::zero_extend[U32, U64](
-        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 26_u32), b: 0x1F_u32),
+        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 26), b: 0x1F),
     )
     # 11110 -> infinity (special 1)
-    if LLVM::int_eq(a: top5, b: 0x1E_u64)
-        return D32Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
+    if LLVM::int_eq(a: top5, b: 0x1E)
+        return D32Parts(sign: sign, special: 1, exp: 0, coeff: 0)
     # 11111 -> NaN; bit 25 distinguishes signaling (special 3) from quiet (special 2)
-    if LLVM::int_eq(a: top5, b: 0x1F_u64)
-        var sp = 2_u64
+    if LLVM::int_eq(a: top5, b: 0x1F)
+        var sp: U64 = 2
         if LLVM::int_ne(
-            a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 25_u32), b: 1_u32),
-            b: 0_u32,
+            a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 25), b: 1),
+            b: 0,
         )
-            sp = 3_u64
-        return D32Parts(sign: sign, special: sp, exp: 0_s64, coeff: 0_u64)
-    var biased = 0_u64
-    var c32 = 0_u32
+            sp = 3
+        return D32Parts(sign: sign, special: sp, exp: 0, coeff: 0)
+    var biased: U64 = 0
+    var c32: U32 = 0
     # top5 >> 3 == 3 means combo prefix starts with 11 -> Form 2, else Form 1
-    if LLVM::int_eq(a: LLVM::shift_right_unsigned(top5, 3_u64), b: 3_u64)
+    if LLVM::int_eq(a: LLVM::shift_right_unsigned(top5, 3), b: 3)
         # Form 2: exp bits 28:21, coeff = (bits 20:0) | 2^23
         biased = LLVM::zero_extend[U32, U64](
-            LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 21_u32), b: 0xFF_u32),
+            LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 21), b: 0xFF),
         )
         c32 = LLVM::bit_or(
-            a: LLVM::bit_and(a: bits, b: 0x1FFFFF_u32),
-            b: LLVM::shift_left(value: 1_u32, bits: 23_u32),
+            a: LLVM::bit_and(a: bits, b: 0x1FFFFF),
+            b: LLVM::shift_left(value: 1, bits: 23),
         )
     else
         # Form 1: exp bits 30:23, coeff bits 22:0
         biased = LLVM::zero_extend[U32, U64](
-            LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 23_u32), b: 0xFF_u32),
+            LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 23), b: 0xFF),
         )
-        c32 = LLVM::bit_and(a: bits, b: 0x7FFFFF_u32)
+        c32 = LLVM::bit_and(a: bits, b: 0x7FFFFF)
     # unbias: stored exponent q = biased - 101 (bias=101)
     return D32Parts(
         sign: sign,
-        special: 0_u64,
-        exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](biased), b: 101_s64),
+        special: 0,
+        exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](biased), b: 101),
         coeff: LLVM::zero_extend[U32, U64](c32),
     )
 
@@ -114,97 +114,97 @@ routine D32.decode() -> D32Parts
 ### rounded to <= 7 digits and in the decimal32 exponent range (decfin32 guarantees this).
 routine d32_of_parts(p: D32Parts) -> D32
     # sign into bit 31
-    var sbit = LLVM::shift_left(value: if p.sign then 1_u32 else 0_u32, bits: 31_u32)
-    if LLVM::int_ne(a: p.special, b: 0_u64)
+    var sbit: U32 = LLVM::shift_left[U32](value: if p.sign then 1 else 0, bits: 31)
+    if LLVM::int_ne(a: p.special, b: 0)
         # special: combo prefix 11110 (inf) or 11111 (NaN) into bits 30:26
-        var top5 = if LLVM::int_eq(a: p.special, b: 1_u64) then 0x1E_u32 else 0x1F_u32
-        var bb = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: top5, bits: 26_u32))
+        var top5: U32 = if LLVM::int_eq(a: p.special, b: 1) then 0x1E else 0x1F
+        var bb: U32 = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: top5, bits: 26))
         # signaling NaN sets bit 25
-        if LLVM::int_eq(a: p.special, b: 3_u64)
-            bb = LLVM::bit_or(a: bb, b: LLVM::shift_left(value: 1_u32, bits: 25_u32))
+        if LLVM::int_eq(a: p.special, b: 3)
+            bb = LLVM::bit_or(a: bb, b: LLVM::shift_left[U32](value: 1, bits: 25))
         return D32.from_bits(bits: bb)
     # rebias: 8-bit biased exponent = (q + 101) masked to 8 bits
     var ebits8 = LLVM::int_truncate[U64, U32](
         LLVM::bit_and(
-            a: LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 101_u64),
-            b: 0xFF_u64,
+            a: LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 101),
+            b: 0xFF,
         ),
     )
     var c32 = LLVM::int_truncate[U64, U32](p.coeff)
     # coeff < 2^23 -> Form 1, else Form 2 (implicit leading 2^23)
-    if LLVM::unsigned_lt(a: c32, b: 0x800000_u32)
+    if LLVM::unsigned_lt(a: c32, b: 0x800000)
         # Form 1: exp bits 30:23, coeff bits 22:0
         return D32.from_bits(
             bits: LLVM::bit_or(
-                a: LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: ebits8, bits: 23_u32)),
+                a: LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: ebits8, bits: 23)),
                 b: c32,
             ),
         )
     # Form 2: bits 30:29 = 11, exp bits 28:21, coeff low 21 bits (implicit 2^23)
-    var g2 = LLVM::shift_left(value: 0x3_u32, bits: 29_u32)  # the 11 prefix
-    var ebits = LLVM::shift_left(value: ebits8, bits: 21_u32)
-    var clow = LLVM::bit_and(a: c32, b: 0x1FFFFF_u32)  # low 21 coeff bits
+    var g2: U32 = LLVM::shift_left(value: 0x3, bits: 29)  # the 11 prefix
+    var ebits = LLVM::shift_left(value: ebits8, bits: 21)
+    var clow = LLVM::bit_and(a: c32, b: 0x1FFFFF)  # low 21 coeff bits
     return D32.from_bits(
         bits: LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: g2), b: LLVM::bit_or(a: ebits, b: clow)),
     )
 
 ### Infinity / quiet NaN.
 common routine D32.infinity(sign: Bool) -> D32
-    return d32_of_parts(p: D32Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64))
+    return d32_of_parts(p: D32Parts(sign: sign, special: 1, exp: 0, coeff: 0))
 
 ### Returns a quiet NaN.
 common routine D32.quiet_nan() -> D32
-    return d32_of_parts(p: D32Parts(sign: false, special: 2_u64, exp: 0_s64, coeff: 0_u64))
+    return d32_of_parts(p: D32Parts(sign: false, special: 2, exp: 0, coeff: 0))
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
 common routine D32.signaling_nan() -> D32
-    return d32_of_parts(p: D32Parts(sign: false, special: 3_u64, exp: 0_s64, coeff: 0_u64))
+    return d32_of_parts(p: D32Parts(sign: false, special: 3, exp: 0, coeff: 0))
 
 ### True when this is a finite value (special field == 0).
 routine D32.is_finite() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 0_u64)
+    return LLVM::int_eq(a: me.decode().special, b: 0)
 
 ### True when this is ±infinity (special field == 1).
 routine D32.is_infinite() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 1_u64)
+    return LLVM::int_eq(a: me.decode().special, b: 1)
 
 ### True when this is a NaN (special field >= 2: 2 quiet, 3 signaling).
 routine D32.is_nan() -> Bool
-    return LLVM::unsigned_ge(a: me.decode().special, b: 2_u64)
+    return LLVM::unsigned_ge(a: me.decode().special, b: 2)
 
 ### True when this is a SIGNALING NaN (special field == 3).
 routine D32.is_signaling() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 3_u64)
+    return LLVM::int_eq(a: me.decode().special, b: 3)
 
 ### True when this is a finite zero (±0).
 @readonly
 routine D32.is_zero() -> Bool
     var p = me.decode()
-    return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_eq(a: p.coeff, b: 0_u64)
+    return LLVM::int_eq(a: p.special, b: 0) and LLVM::int_eq(a: p.coeff, b: 0)
 
 ### Builds a finite D32 from a sign, a coefficient and a base-10 exponent: value = (-1)^sign * coeff *
 ### 10^exp, rounded half to even to 7 digits and brought into the exponent range.
 common routine D32.from_components(sign: Bool, coeff: U64, exp: S64) -> D32
-    var neg = 0_u32
+    var neg: U32 = 0
     if sign
-        neg = 1_u32
-    return D32.from_bits(bits: C::ingrid_d32_from_parts(neg: neg, c_low: coeff, c_high: 0_u64, exp: exp))
+        neg = 1
+    return D32.from_bits(bits: C::ingrid_d32_from_parts(neg: neg, c_low: coeff, c_high: 0, exp: exp))
 
 ### Builds a D32 from a 64-bit signed integer (exponent 0).
 common routine D32.from_int64(value: S64) -> D32
-    var neg = LLVM::signed_lt(a: value, b: 0_s64)
-    var mag = if neg then LLVM::sub(a: 0_s64, b: value) else value
-    return D32.from_components(sign: neg, coeff: LLVM::reinterpret_bits[S64, U64](mag), exp: 0_s64)
+    var neg = LLVM::signed_lt(a: value, b: 0)
+    var mag = if neg then LLVM::sub(a: 0, b: value) else value
+    return D32.from_components(sign: neg, coeff: LLVM::reinterpret_bits[S64, U64](mag), exp: 0)
 
 ### An integer (sign and 256-bit magnitude) as a D32, rounded half to even to 7 digits.
 routine d32_of_integer(neg: Bool, m: U256) -> D32
-    var n = 0_u32
+    var n: U32 = 0
     if neg
-        n = 1_u32
+        n = 1
     var m0 = LLVM::int_truncate[U256, U64](m)
-    var m1 = LLVM::int_truncate[U256, U64](m >>> 64_u32)
-    var m2 = LLVM::int_truncate[U256, U64](m >>> 128_u32)
-    var m3 = LLVM::int_truncate[U256, U64](m >>> 192_u32)
+    var m1 = LLVM::int_truncate[U256, U64](m >>> 64)
+    var m2 = LLVM::int_truncate[U256, U64](m >>> 128)
+    var m3 = LLVM::int_truncate[U256, U64](m >>> 192)
     return D32.from_bits(bits: C::ingrid_d32_from_integer(neg: n, m0: m0, m1: m1, m2: m2, m3: m3))
 
 ### The bits of the binary float nearest to x, `which` bits wide (16, 32, 64, or 128). An infinity keeps its sign,
@@ -288,16 +288,16 @@ routine D32.truediv_unchecked(you: D32) -> D32
 ### finite values compare by value, so different cohorts of the same number are equal).
 @readonly
 routine D32.eq(you: D32) -> Bool
-    return C::ingrid_d32_order(a: me.to_bits(), b: you.to_bits()) == 0_s64
+    return C::ingrid_d32_order(a: me.to_bits(), b: you.to_bits()) == 0
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
 @readonly
 routine D32.cmp(you: D32) -> ComparisonSign
     var o = C::ingrid_d32_order(a: me.to_bits(), b: you.to_bits())
-    if o == -1_s64
+    if o == -1
         return ME_SMALL
-    if o == 1_s64
+    if o == 1
         return ME_LARGE
     return SAME
 
@@ -357,21 +357,21 @@ routine D32.recip() -> D32
 ### :param n: The integer exponent.
 ### :returns: `me ** n`.
 routine D32.powi(n: S32) -> D32
-    var base = if n < 0_s32 then D32_ONE.truediv_unchecked(me) else me
+    var base = if n < 0 then D32_ONE.truediv_unchecked(me) else me
     var count = n.unsigned_abs()
     var result = D32_ONE
-    while count > 0_u32
-        if count.bitand(1_u32) == 1_u32
+    while count > 0
+        if count.bitand(1) == 1
             result = result.mul_unchecked(base)
         base = base.mul_unchecked(base)
-        count = count.lshr(1_u32)
+        count = count.lshr(1)
     return result
 
 ### Returns `(me + you) / 2`.
 ### :param you: The other value.
 ### :returns: The arithmetic midpoint of `me` and `you`.
 routine D32.midpoint(you: D32) -> D32
-    return me.add_unchecked(you).truediv_unchecked(2.0_d32)
+    return me.add_unchecked(you).truediv_unchecked(2.0)
 
 # ============================================================================
 # Creators — integers (exact, then rounded half to even to 7 digits)
@@ -396,36 +396,36 @@ routine S64.to[D32]() -> D32
 ### Converts an S128 into decimal32 (exponent 0, rounded half to even when it has more than 7 digits).
 routine S128.to[D32]() -> D32
     var v = LLVM::sign_extend[S128, S256](me)
-    var neg = v < 0_s256
+    var neg = v < 0
     var mag = LLVM::reinterpret_bits[S256, U256](v)
     if neg
-        mag = 0_u256 -% mag
+        mag = 0 -% mag
     return d32_of_integer(neg: neg, m: mag)
 
 ### Converts an S256 into decimal32 (exponent 0, rounded half to even when it has more than 7 digits).
 routine S256.to[D32]() -> D32
     var v = me
-    var neg = v < 0_s256
+    var neg = v < 0
     var mag = LLVM::reinterpret_bits[S256, U256](v)
     if neg
-        mag = 0_u256 -% mag
+        mag = 0 -% mag
     return d32_of_integer(neg: neg, m: mag)
 
 ### Converts a U8 into decimal32 (exponent 0).
 routine U8.to[D32]() -> D32
-    return D32.from_components(sign: false, coeff: me.to[U64](), exp: 0_s64)
+    return D32.from_components(sign: false, coeff: me.to[U64](), exp: 0)
 
 ### Converts a U16 into decimal32 (exponent 0).
 routine U16.to[D32]() -> D32
-    return D32.from_components(sign: false, coeff: me.to[U64](), exp: 0_s64)
+    return D32.from_components(sign: false, coeff: me.to[U64](), exp: 0)
 
 ### Converts a U32 into decimal32 (exponent 0).
 routine U32.to[D32]() -> D32
-    return D32.from_components(sign: false, coeff: me.to[U64](), exp: 0_s64)
+    return D32.from_components(sign: false, coeff: me.to[U64](), exp: 0)
 
 ### Converts a U64 into decimal32 (exponent 0).
 routine U64.to[D32]() -> D32
-    return D32.from_components(sign: false, coeff: me, exp: 0_s64)
+    return D32.from_components(sign: false, coeff: me, exp: 0)
 
 ### Converts a U128 into decimal32 (exponent 0, rounded half to even when it has more than 7 digits).
 routine U128.to[D32]() -> D32
@@ -457,7 +457,7 @@ routine B64.to[D32]() -> D32
 
 ### The D32 value as a B64, correctly rounded.
 routine D32.to[B64]() -> B64
-    return B64.from_bits(bits: LLVM::int_truncate[U128, U64](d32_to_binary(x: me, which: 64_u32)))
+    return B64.from_bits(bits: LLVM::int_truncate[U128, U64](d32_to_binary(x: me, which: 64)))
 
 # ============================================================================
 # Creators — decimal <-> decimal
@@ -483,13 +483,13 @@ routine D128.to[D32]() -> D32
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 routine Text.to![D32]() -> D32
     var p = scan_decimal_parts(from_text: me)
-    if p.special == 1_u64
+    if p.special == 1
         return D32.infinity(sign: p.sign)
-    if p.special >= 2_u64
+    if p.special >= 2
         return D32.quiet_nan()
-    var neg = 0_u32
+    var neg: U32 = 0
     if p.sign
-        neg = 1_u32
+        neg = 1
     var low = LLVM::int_truncate[U128, U64](p.coeff)
     var high = LLVM::int_truncate[U128, U64](p.coeff >>> 64)
     return D32.from_bits(bits: C::ingrid_d32_from_parts(neg: neg, c_low: low, c_high: high, exp: p.exp))
@@ -502,30 +502,30 @@ routine Text.to![D32]() -> D32
 routine D32.to_bytes_le() -> Array[Byte, 4]
     var raw = me.to_bits()
     var result = Array[Byte, 4]()
-    var i = 0_u64
-    while LLVM::unsigned_lt(a: i, b: 4_u64)
+    var i: U64 = 0
+    while LLVM::unsigned_lt(a: i, b: 4)
         var b = LLVM::int_truncate[U32, U8](
             LLVM::shift_right_unsigned(
                 raw,
-                LLVM::int_truncate[U64, U32](LLVM::mul(a: i, b: 8_u64)),
+                LLVM::int_truncate[U64, U32](LLVM::mul(a: i, b: 8)),
             ),
         )
         result = LLVM::set_byte_at(array: result, index: i, value: b)
-        i = LLVM::add(a: i, b: 1_u64)
+        i = LLVM::add(a: i, b: 1)
     return result
 
 ### Returns the raw bytes of this value in big-endian order.
 routine D32.to_bytes_be() -> Array[Byte, 4]
     var raw = me.to_bits()
     var result = Array[Byte, 4]()
-    var i = 0_u64
-    while LLVM::unsigned_lt(a: i, b: 4_u64)
+    var i: U64 = 0
+    while LLVM::unsigned_lt(a: i, b: 4)
         var b = LLVM::int_truncate[U32, U8](
             LLVM::shift_right_unsigned(
                 raw,
-                LLVM::int_truncate[U64, U32](LLVM::mul(a: LLVM::sub(a: 3_u64, b: i), b: 8_u64)),
+                LLVM::int_truncate[U64, U32](LLVM::mul(a: LLVM::sub(a: 3, b: i), b: 8)),
             ),
         )
         result = LLVM::set_byte_at(array: result, index: i, value: b)
-        i = LLVM::add(a: i, b: 1_u64)
+        i = LLVM::add(a: i, b: 1)
     return result

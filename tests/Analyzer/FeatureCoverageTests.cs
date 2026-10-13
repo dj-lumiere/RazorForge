@@ -99,7 +99,7 @@ public class FeatureCoverageTests
                                       else                     => return "none"
 
                               routine start()
-                                  var a: Shape = 7_s32
+                                  var a: Shape = 7
                                   var b: Shape = "hello"
                                   show(classify(s: a))
                                   show(classify(s: b))
@@ -151,7 +151,7 @@ public class FeatureCoverageTests
                                   return "none"
 
                               routine start()
-                                  var a: Shape = 7_s32
+                                  var a: Shape = 7
                                   show(describe(s: a))
                                   return
                               """;
@@ -166,7 +166,7 @@ public class FeatureCoverageTests
                               import IO/Console
 
                               routine start()
-                                  var m: Maybe[S64] = 42_s64
+                                  var m: Maybe[S64] = 42
                                   when m
                                       is None => show("none")
                                       else as v  => show(f"bound:{v}")
@@ -189,7 +189,7 @@ public class FeatureCoverageTests
 
                               routine start()
                                   var add5 = make_adder(n: 5)
-                                  show(f"{add5(10_s64)}")
+                                  show(f"{add5(10)}")
                                   return
                               """;
         _ = GenerateIr(source: source);
@@ -201,8 +201,8 @@ public class FeatureCoverageTests
         const string source = """
                               module Test/Feat/LambdaAnnot
                               routine test() -> S32
-                                  var double_it = (x: S32) => x * 2_s32
-                                  return double_it(21_s32)
+                                  var double_it = (x: S32) => x * 2
+                                  return double_it(21)
                               """;
         _ = GenerateIr(source: source);
     }
@@ -221,7 +221,7 @@ public class FeatureCoverageTests
                                   var src: List[S64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
                                   var evens = src.where(predicate: x => x % 2 == 0).to[List]()
                                   var doubled = src.select(transform: x => x * 2).to[List]()
-                                  var first3 = src.take(count: 3_u64).to[List]()
+                                  var first3 = src.take(count: 3).to[List]()
                                   show(f"{evens} {doubled} {first3}")
                                   return
                               """;
@@ -236,7 +236,7 @@ public class FeatureCoverageTests
                               import IO/Console
 
                               routine start()
-                                  var total = 0_s64
+                                  var total = 0
                                   each x in 1 to 5
                                       total = total + x
                                   var xs: List[S64] = [10, 20, 30]
@@ -267,7 +267,7 @@ public class FeatureCoverageTests
                               routine start()
                                   var nums: List[S64] = [10, 20, 30]
                                   using nums.view() as g
-                                      show(f"{in_set(items: g, target: 20_s64)}")
+                                      show(f"{in_set(items: g, target: 20)}")
                                   var words: List[Text] = ["a", "b"]
                                   using words.view() as g
                                       show(f"{in_set(items: g, target: "b")}")
@@ -288,7 +288,7 @@ public class FeatureCoverageTests
                                   second: B
 
                               routine start()
-                                  var p = Pair[S64, Text](first: 1_s64, second: "one")
+                                  var p = Pair[S64, Text](first: 1, second: "one")
                                   show(f"{p.first} {p.second}")
                                   return
                               """;
@@ -355,11 +355,11 @@ public class FeatureCoverageTests
                               import IO/Console
 
                               routine start()
-                                  var a = 200_u8
-                                  var wrapped = a +% 100_u8
-                                  var clamped = a +^ 100_u8
-                                  var shifted = 1_u32 << 4_u32
-                                  var logical = 255_u8 >>> 1_u32
+                                  var a: U8 = 200
+                                  var wrapped = a +% 100
+                                  var clamped = a +^ 100
+                                  var shifted: U32 = 1 << 4
+                                  var logical: U8 = 255 >>> 1
                                   show(f"{wrapped} {clamped} {shifted} {logical}")
                                   return
                               """;
@@ -418,8 +418,8 @@ public class FeatureCoverageTests
                                   y: S64
 
                               routine start()
-                                  var a = Point(x: 1_s64, y: 2_s64)
-                                  var b = Point(x: 1_s64, y: 2_s64)
+                                  var a = Point(x: 1, y: 2)
+                                  var b = Point(x: 1, y: 2)
                                   show(f"{a == b}")
                                   var s = Set[Point]()
                                   drop s.add(value: a)
@@ -451,7 +451,7 @@ public class FeatureCoverageTests
                                       is None   => return "none"
 
                               routine start()
-                                  var a: Number = 42_s64
+                                  var a: Number = 42
                                   show(f"{describe(n: a)}")
                                   show(f"{a}")
                                   show(f"{a:?}")
@@ -528,7 +528,7 @@ public class FeatureCoverageTests
                                       if x > 5
                                           break
                                       show(f"{x}")
-                                  var n = 0_s64
+                                  var n = 0
                                   loop
                                       n = n + 1
                                       if n >= 3
@@ -551,7 +551,7 @@ public class FeatureCoverageTests
                                   return (a // b, a % b)
 
                               routine start()
-                                  var (q, r) = divmod_pair(17_s64, 5_s64)
+                                  var (q, r) = divmod_pair(17, 5)
                                   show(f"{q} {r}")
                                   return
                               """;

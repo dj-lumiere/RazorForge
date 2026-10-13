@@ -73,8 +73,8 @@ public sealed class WarmLeakDiagTests
                             module Bench
                             import IO/Console
                             routine start()
-                                var total: U64 = 0u64
-                                each i in 0u64 til 5u64
+                                var total: U64 = 0
+                                each i in 0 til 5
                                     total = total + i
                                 show(f"{total}")
                                 return

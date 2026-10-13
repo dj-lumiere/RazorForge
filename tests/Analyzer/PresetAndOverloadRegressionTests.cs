@@ -112,10 +112,10 @@ public class PresetAndOverloadRegressionTests
     {
         AssertHasError(source: """
                                routine probe[C](p: C) -> U64
-                                   return 0_u64
+                                   return 0
 
                                routine start()
-                                   var r = probe[Text](p: 5_s64)
+                                   var r = probe[Text](p: 5)
                                    return
                                """,
             expectedErrorSubstring: "cannot convert 'S64' to 'Text'");
@@ -125,11 +125,11 @@ public class PresetAndOverloadRegressionTests
     public void LoadElementRef_OnAPresetValue_IsReported()
     {
         AssertHasError(source: """
-                               preset TAB: Array[U64, 2] = [1_u64, 2_u64]
+                               preset TAB: Array[U64, 2] = [1, 2]
 
                                routine start()
                                    danger
-                                       var r = LLVM::load_element_ref[Array[U64, 2], U64](TAB, 0_u64)
+                                       var r = LLVM::load_element_ref[Array[U64, 2], U64](TAB, 0)
                                    return
                                """,
             expectedErrorSubstring: "cannot convert 'Array[Core.U64, 2]' to 'Hijacked[Core.Array[Core.U64, 2]]'");
@@ -145,9 +145,9 @@ public class PresetAndOverloadRegressionTests
     {
         AssertAnalyzes(source: """
                                routine start()
-                                   var x = 3.0_b128
+                                   var x: B128 = 3.0
                                    var h = x.hash()
-                                   var k = x.hash(k0: 1_u64, k1: 2_u64)
+                                   var k = x.hash(k0: 1, k1: 2)
                                    return
                                """);
     }
