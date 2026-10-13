@@ -136,13 +136,19 @@ public partial class RazorForgeLexer
             return;
         }
 
-        // Check for special float/decimal literals: inf_fNN, nan_fNN, inf_dNN, nan_dNN
-        if (TryMatchSpecialFloatLiteral(text: text,
-                type: out TokenType specialType,
-                body: out string specialBody))
+        // `inf` and `nan` are numbers: like a bare number they take their type from where they go. A width written
+        // onto them (`inf_b64`) names the type, which a number no longer does.
+        if (text is "inf" or "nan")
         {
-            AddToken(type: specialType, text: specialBody);
+            AddToken(type: TokenType.UndecidedDecimal, text: text);
             return;
+        }
+
+        if (text.Length > 4 && text[..4] is "inf_" or "nan_" &&
+            TypeNamingSuffixes.TryGetValue(key: text[4..], value: out string? specialType))
+        {
+            throw TypeNamingSuffixError(typeName: specialType, suffixStart: _tokenStart + 4,
+                suffixColumn: _tokenStartColumn + 4);
         }
 
         // Check if it's a keyword
@@ -204,40 +210,6 @@ public partial class RazorForgeLexer
         {
             _hasDefinitions = true;
         }
-    }
-
-    private static readonly Dictionary<string, TokenType> _specialFloatLiterals = new()
-    {
-        [key: "inf_b16"] = TokenType.B16Literal,
-        [key: "nan_b16"] = TokenType.B16Literal,
-        [key: "inf_b32"] = TokenType.B32Literal,
-        [key: "nan_b32"] = TokenType.B32Literal,
-        [key: "inf_b64"] = TokenType.B64Literal,
-        [key: "nan_b64"] = TokenType.B64Literal,
-        [key: "inf_b128"] = TokenType.B128Literal,
-        [key: "nan_b128"] = TokenType.B128Literal,
-        [key: "inf_d32"] = TokenType.D32Literal,
-        [key: "nan_d32"] = TokenType.D32Literal,
-        [key: "inf_d64"] = TokenType.D64Literal,
-        [key: "nan_d64"] = TokenType.D64Literal,
-        [key: "inf_d128"] = TokenType.D128Literal,
-        [key: "nan_d128"] = TokenType.D128Literal
-    };
-
-    private static bool TryMatchSpecialFloatLiteral(string text, out TokenType type,
-        out string body)
-    {
-        if (_specialFloatLiterals.TryGetValue(key: text, value: out type))
-        {
-            body = text.StartsWith(value: "inf")
-                ? "inf"
-                : "nan";
-            return true;
-        }
-
-        type = default;
-        body = string.Empty;
-        return false;
     }
 
     #endregion

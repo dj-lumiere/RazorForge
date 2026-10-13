@@ -7,7 +7,7 @@ import BuilderQuery
 ### as the same value, a literal or a construction from literals (`Point(x: 3, y: 4)`). A number is written bare:
 ### it takes its type from the preset's declared type, or from the member or parameter it fills. The build runs the
 ### program's presets once, reads this text back and puts it where each preset is used. A value with no such
-### spelling (an `Integer`, a `List`, a non-finite float) gives `!` and its type name, which the build reports.
+### spelling (a `List`, a `Bytes`) gives `!` and its type name, which the build reports.
 ### :returns: The source text.
 @readonly
 @overridable
@@ -86,7 +86,7 @@ secret routine signed_literal(text: Text, is_min: Bool, min: Text) -> Text
     return if is_min then min else text
 
 ### A `B32` as a hexadecimal float literal of the same bits: `0x1.800000p+1`.
-### :returns: The source text, or `!B32` for an infinity or a NaN.
+### :returns: The source text: `inf`, `-inf` or `nan` for an infinity or a NaN.
 secret routine b32_literal(value: B32) -> Text
     var bits = value.to_bits()
     var sign = ""
@@ -95,7 +95,7 @@ secret routine b32_literal(value: B32) -> Text
     var exponent = (bits >>> 23) & 0xFF
     var fraction = (bits & 0x7FFFFF).to[U64]() << 1
     if exponent == 0xFF
-        return "!B32"
+        return if fraction == 0 then sign + "inf" else "nan"
     if exponent == 0
         if fraction == 0
             return sign + "0x0" + "p+0"
@@ -103,7 +103,7 @@ secret routine b32_literal(value: B32) -> Text
     return f"{sign}0x1.{hex_digits(value: fraction, count: 6)}p{exponent_text(value: exponent.to[S64]() - 127)}"
 
 ### A `B64` as a hexadecimal float literal of the same bits: `0x1.8000000000000p+1`.
-### :returns: The source text, or `!B64` for an infinity or a NaN.
+### :returns: The source text: `inf`, `-inf` or `nan` for an infinity or a NaN.
 secret routine b64_literal(value: B64) -> Text
     var bits = value.to_bits()
     var sign = ""
@@ -112,7 +112,7 @@ secret routine b64_literal(value: B64) -> Text
     var exponent = (bits >>> 52) & 0x7FF
     var fraction = bits & 0xFFFFFFFFFFFFF
     if exponent == 0x7FF
-        return "!B64"
+        return if fraction == 0 then sign + "inf" else "nan"
     if exponent == 0
         if fraction == 0
             return sign + "0x0" + "p+0"

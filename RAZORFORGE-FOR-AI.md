@@ -283,6 +283,11 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   failable call with the `try`/`check` keyword).
 - A number never names its type (no `7s32`, `0_u64`, `10n`: RF-G010). Unit suffixes stay: durations
   (`50ms 5s 2m 1h 1d 1w us ns`), sizes (`4kb 4kib 2mb ...`), and the imaginary `i`.
+- `inf` and `nan` are number literals (reserved words) that take their type from where they go: `var x: B64 = inf`,
+  `limit: B32 = -inf` (negative infinity is `-` on `inf`), `return nan`, `x < inf`. Every binary float (B16 B32 B64
+  B128) and the decimal floats D32 D64 D128 take them. With nothing giving a type (`var x = inf`) it is RF-S019,
+  and where a `Decimal`, `Integer` or integer type goes it is RF-S020. There are no infinity/NaN presets and no
+  `inf_b64` spelling (RF-G010).
 
 **Optionals and `none`:**
 - **`T?` (postfix `?`)** = `Maybe[T]` optional shorthand — the ONLY `?`-on-a-type
