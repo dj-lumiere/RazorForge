@@ -73,12 +73,13 @@ And for RazorForge, the feeling of finishing something the way you meant it, and
 
 ## What it is like
 
-**Single ownership, no borrow checker.** Containment is ownership. An entity has one owner, every
-transfer is marked with `steal`, and cleanup runs deterministically at scope exit. To use an entity
-you don't own, you take a scope-bound access token (`view()` / `modify()`), which needs no lifetime
-syntax and cannot outlive the call or `using` block it appears in. When you want sharing, you opt
-into reference counting with `Retained[T]`, `Guarded[T, P]`, or the weak `Tracked[T]` /
-`Witnessed[T]`.
+**Copy or share, and say how you share.** `=` copies a record. An entity is something a copy would get
+wrong, because two copies leave you unsure which one is legitimate, or because copying costs too much, so you
+share it instead, and RazorForge asks how. Not at all: the entity manages itself and moves with `steal`. For a
+moment: a scope-bound permission (`view()` / `modify()`) that cannot outlive its call or `using` block. For
+longer: a manager such as `Retained[T]` or `Guarded[T, P]` (or the watching `Tracked[T]` / `Witnessed[T]`)
+holds the entity while each part keeps a handle. Cleanup follows from that choice and runs deterministically at
+scope exit. There is no borrow checker and no lifetime syntax.
 
 **Failure is loud by default, and recovery takes one keyword.** A routine that can `throw` carries
 `!` on its declaration, never at its call sites. A bare call that fails crashes the
@@ -92,7 +93,7 @@ next to the binary floats `B16`–`B128` sit decimal floats `D32`/`D64`/`D128` a
 `Integer` and `Decimal`. The float math library is correctly rounded, and a float prints as
 the shortest text that reads back as the same value.
 
-**Markers go where a danger is silent.** Ownership transfers are marked (`steal`), overflow behavior
+**Markers go where a danger is silent.** Moves are marked (`steal`), overflow behavior
 is chosen per operator, and the few operations that can actually break memory safety live in
 `danger` blocks. Everything else stays quiet: no lifetime annotations, no `unsafe` around ordinary
 code.
@@ -207,9 +208,9 @@ so `cd` into a project and run `razorforge buildandrun`.
   analysis, type-aware lowering, monomorphization, LLVM IR, and a native executable. Only code
   reachable from `start()` is built. Diagnostics read `error[RF-S###]: file:line:col: message` with a
   source excerpt.
-- **Memory model:** single-ownership entities with deterministic `destruct`, `steal` transfers,
-  scope-bound access tokens, the `Retained` / `Guarded` / `Tracked` / `Witnessed` reference-counted
-  wrappers, and `danger` blocks.
+- **Memory model:** copy or share. Records are copied, entities are shared: unshared entities with
+  deterministic `destruct` and `steal` moves, scope-bound permissions, the `Retained` / `Guarded` /
+  `Tracked` / `Witnessed` sharing managers, and `danger` blocks.
 - **Error handling:** failable routines (`throw`), the `try` / `check` recovery keywords, and `when`
   pattern matching with exhaustiveness checks.
 - **Numerics:** `S8`–`S256`, `U8`–`U256`, `B16`–`B128` (plus `BF16` for storage), `D32` / `D64` /
@@ -248,11 +249,11 @@ including low-end Pentium, Celeron, and Atom parts, cannot run the output.
 ## RazorForge and Suflae
 
 [Suflae](https://github.com/dj-lumiere/Suflae) (`.sf`) is RazorForge's sibling. It shares the
-grammar, the standard library, and the loud failures, and hides the ownership machinery: its
+grammar, the standard library, and the loud failures, and shares every entity for you: its
 entities are shared reference-counted handles with a cycle collector, bare numbers are exact
 `Integer` and `Decimal`, and it has thread-safe module `global`s. A `.sf` file can import `.rf`
-modules, so one program can mix the two. Pick RazorForge when you want control over ownership and
-widths, Suflae when you would rather not think about either.
+modules, so one program can mix the two. Pick RazorForge when you want to choose how each thing is
+shared and how wide each number is, Suflae when you would rather not think about either.
 
 ## Documentation
 

@@ -14,8 +14,8 @@ When unsure, consult ground truth in the repo/package:
 
 ## 1. The rules most likely to break your assumptions
 
-1. **Multi-parameter calls REQUIRE named arguments.**
-   `gcd(252, 105)` ✗ → `gcd(a: 252, b: 105)` ✓
+1. **Calls with three or more parameters REQUIRE named arguments (RF-S510).** Two parameters may be positional
+   (no warning), naming them is still clearer: `gcd(a: 252, b: 105)`.
    Single-argument calls may be positional. A few stdlib routines annotated
    `@positional` (e.g. `x.clamp(0, 100)`) accept all-positional; mixing named
    and positional in one call is always an error (RF-S512). A variable named
