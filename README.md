@@ -196,12 +196,12 @@ name = "my-app"
 
 [target]
 executable = "MainModule"          # entry module (by module path, not file path)
-library = ["../shared-utils"]      # directories whose modules join the import search space
+projects = ["../shared-utils"]     # other projects in the solution, whose modules imports also search
 mode = "debug"                     # debug -O0 | release -O2 | release-time -O3 | release-space -Os
 ```
 
 With no entry file, the command looks for `config.toml` in the current directory and its parents,
-so `cd` into a project and run `razorforge buildandrun`.
+so `cd` into a solution and run `razorforge buildandrun`.
 
 ## What works today
 
