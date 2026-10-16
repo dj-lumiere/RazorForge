@@ -75,9 +75,9 @@ And for RazorForge, the feeling of finishing something the way you meant it, and
 
 **Copy or share, and say how you share.** `=` copies a record. An entity is something a copy would get
 wrong, because two copies leave you unsure which one is legitimate, or because copying costs too much, so you
-share it instead, and RazorForge asks how. Not at all: the entity manages itself and moves with `steal`. For a
-moment: a scope-bound permission (`view()` / `modify()`) that cannot outlive its call or `using` block. For
-longer: a manager such as `Retained[T]` or `Guarded[T, P]` (or the watching `Tracked[T]` / `Witnessed[T]`)
+share it instead, and RazorForge asks for how long. For a moment: the entity lives in one place, you give a
+routine or a block permission (`view()` / `modify()`), and the builder checks that the permission ends with its
+call or `using` block. Moving it to another place is written `steal`. For longer: a manager such as `Retained[T]` or `Guarded[T, P]` (or the watching `Tracked[T]` / `Witnessed[T]`)
 holds the entity while each part keeps a handle. Cleanup follows from that choice and runs deterministically at
 scope exit, with no lifetime syntax to write.
 
@@ -209,9 +209,10 @@ so `cd` into a project and run `razorforge buildandrun`.
   analysis, type-aware lowering, monomorphization, LLVM IR, and a native executable. Only code
   reachable from `start()` is built. Diagnostics read `error[RF-S###]: file:line:col: message` with a
   source excerpt.
-- **Memory model:** copy or share. Records are copied, entities are shared: unshared entities with
-  deterministic `destruct` and `steal` moves, scope-bound permissions (`view()` / `modify()`), the
-  `Retained` / `Guarded` / `Tracked` / `Witnessed` sharing managers, and `danger` blocks.
+- **Memory model:** copy or share. Records are copied, entities are shared: for a moment through
+  scope-bound permissions (`view()` / `modify()`), for longer through the
+  `Retained` / `Guarded` / `Tracked` / `Witnessed` sharing managers. Entities move with `steal` and end
+  deterministically (`destruct`), and `danger` blocks mark memory-unsafe code.
 - **Error handling:** `failable` routines (`throw`), the `try` / `check` recovery keywords, and `when`
   pattern matching with exhaustiveness checks. A variant shows the value it holds (`40`, or `none` when
   empty), and choices compare with `==` and by their order (`<`, `>=`).
