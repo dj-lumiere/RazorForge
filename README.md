@@ -196,7 +196,7 @@ name = "my-app"
 
 [target]
 executable = "MainModule"          # entry module (by module path, not file path)
-projects = ["../shared-utils"]     # other projects in the solution, whose modules imports also search
+module_paths = ["../shared-utils"] # folders whose modules join the solution, which imports also search
 mode = "debug"                     # debug -O0 | release -O2 | release-time -O3 | release-space -Os
 ```
 
