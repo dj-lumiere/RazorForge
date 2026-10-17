@@ -1,0 +1,54 @@
+module Tests/Stdlib/AgentsSharedEntityApi
+
+# Two agents changing the same Roamed entity at once. A compound assignment on a member variable keeps every update,
+# and an argument that reads another entity's member variable doesn't hold that entity while the routine runs, so
+# two agents never wait for each other forever.
+
+import IO/Console
+
+entity Board
+    score: S64
+    total: D64
+
+routine add_points(board: Roamed[Board], times: S64)
+    each i in 0 til times
+        board.score += 1
+        board.total += 0.5
+    return
+
+entity Account
+    member: Text
+    balance: S64
+
+routine note(account: Roamed[Account], amount: S64, other: Text, count: Roamed[Board])
+    account.balance += amount
+    count.score += 1
+    return
+
+routine pay(payer: Roamed[Account], payee: Roamed[Account], count: Roamed[Board], times: S64)
+    each i in 0 til times
+        note(account: payer, amount: -1, other: payee.member, count: count)
+        note(account: payee, amount: 1, other: payer.member, count: count)
+    return
+
+routine start()
+    var board = Roamed(from: Board(score: 0, total: 0))
+    var left = agent add_points(board: board, times: 2000)
+    var right = agent add_points(board: board, times: 2000)
+    left.start_now()
+    right.start_now()
+    left.retrieve()
+    right.retrieve()
+    show(f"{board.score} {board.total}")
+
+    var count = Roamed(from: Board(score: 0, total: 0))
+    var mina = Roamed(from: Account(member: "mina", balance: 0))
+    var joon = Roamed(from: Account(member: "joon", balance: 0))
+    var there = agent pay(payer: mina, payee: joon, count: count, times: 500)
+    var back = agent pay(payer: joon, payee: mina, count: count, times: 300)
+    there.start_now()
+    back.start_now()
+    there.retrieve()
+    back.retrieve()
+    show(f"{count.score} {mina.balance} {joon.balance}")
+    return
