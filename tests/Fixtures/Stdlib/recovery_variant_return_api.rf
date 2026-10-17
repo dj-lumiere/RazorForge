@@ -3,7 +3,8 @@ module Tests/Stdlib/RecoveryVariantReturnApi
 import IO/Console
 # A failable routine that returns a variant and gives back one of its types directly (`return Deposit(...)`)
 # is wrapped into the variant on every path: a direct call, `check`, `try`, and a recovered value kept in a
-# `var` all match the right arm.
+# `var` all match the right arm. An arm may also name one of the variant's own types (`is Deposit`) on the
+# recovered value, or on a variant that holds the variant.
 record Deposit
     amount: S64
 record Withdraw
@@ -25,6 +26,37 @@ routine describe(c: Command) -> Text
             return f"deposit {d.amount}"
         is Withdraw as w =>
             return f"withdraw {w.amount}"
+
+variant Event
+    Command
+    Text
+
+routine run(word: Text)
+    when check parse(word: word)
+        is Deposit as d =>
+            show(f"check deposit {d.amount}")
+        is Withdraw as w =>
+            show(f"check withdraw {w.amount}")
+        is Crashables as e =>
+            show("check bad")
+    when try parse(word: word)
+        is Withdraw as w =>
+            show(f"try withdraw {w.amount}")
+        is Deposit =>
+            show("try deposit")
+        is None =>
+            show("try none")
+    return
+
+routine show_event(e: Event)
+    when e
+        is Deposit as d =>
+            show(f"event deposit {d.amount}")
+        is Withdraw =>
+            show("event withdraw")
+        is Text as t =>
+            show(f"event text {t}")
+    return
 
 routine start()
     var a = parse(word: "d")
@@ -50,4 +82,10 @@ routine start()
             show(describe(c: c))
         is None =>
             show("none")
+    run(word: "d")
+    run(word: "w")
+    run(word: "x")
+    var event: Command = Withdraw(amount: 1)
+    show_event(e: event)
+    show_event(e: "hello")
     return
