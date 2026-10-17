@@ -76,7 +76,7 @@ public class TokenSourceFreezeTests
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "moves it out in the same call");
+            expectedErrorSubstring: "hands it over in the same call");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UseAfterSteal);
     }

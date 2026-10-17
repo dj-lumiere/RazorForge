@@ -26,7 +26,7 @@ public class UseAfterStealMessageTests
                                                              return
                                                          """,
             expectedErrorSubstring:
-            "You use 'mine' here, but 'steal' on line 6 moved what it held into 'held'. " +
+            "You use 'mine' here, but 'steal' on line 6 handed what it held over to 'held'. " +
             "Use 'held', or use 'mine' before line 6.");
         Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.UseAfterSteal);
     }
@@ -48,7 +48,7 @@ public class UseAfterStealMessageTests
                                                              return
                                                          """,
             expectedErrorSubstring:
-            "You use 'mine' here, but 'steal' on line 9 moved what it held into the call to 'keep'. " +
+            "You use 'mine' here, but 'steal' on line 9 handed what it held over to the call to 'keep'. " +
             "Use 'mine' before line 9, or give 'mine' a new value first.");
         Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.UseAfterSteal);
     }
@@ -67,6 +67,6 @@ public class UseAfterStealMessageTests
                                      var v = mine.value
                                      return
                                  """,
-            expectedErrorSubstring: "'steal' on line 7 moved what it held into 'slot'. Use 'slot'");
+            expectedErrorSubstring: "'steal' on line 7 handed what it held over to 'slot'. Use 'slot'");
     }
 }
