@@ -1,0 +1,34 @@
+module Tests/Stdlib/CancelWaitforApi
+
+# A cancel ends a waitfor in progress: on a fiber (start_now) and on a thread of its own (start_apart) the
+# work stops well before its 3s wait would end.
+
+import IO/Console
+
+routine nap() -> S64
+    waitfor(3s)
+    return 1
+
+routine start()
+    var job = nap.to[Agent]()
+    job.start_now()
+    waitfor(50ms)
+    var before = Moment.now()
+    job.cancel()
+    when check job.retrieve()
+        is S64 as n => show(f"finished {n}")
+        is CancelRequested => show("cancelled")
+        is Crashables as e => show(e.crash_message())
+    var took = Moment.now() - before
+    show(took < 1s)
+    var apart = nap.to[Agent]()
+    apart.start_apart()
+    waitfor(50ms)
+    var before2 = Moment.now()
+    apart.cancel()
+    when check apart.retrieve()
+        is S64 as n => show(f"finished {n}")
+        is CancelRequested => show("cancelled")
+        is Crashables as e => show(e.crash_message())
+    show(Moment.now() - before2 < 1s)
+    return
