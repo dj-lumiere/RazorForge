@@ -276,7 +276,11 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
   defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
 - `Bool`, `Text` (UTF-32 string), `Char`, `Byte`, `Bytes`
-- `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals
+- `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals. Duration `//` and `%` follow the
+  integer rule (the remainder is never negative: `-10s // 3s` is `-4`), and overflow or `// 0s` crashes.
+  `Moment(year:, …)` crashes with `InvalidMomentError` on a part out of range (month 13, February 30, hour 25).
+- `Char.to_uppercase`/`to_lowercase`/`is_uppercase`/`is_lowercase` follow Unicode (simple one-to-one mapping,
+  `ß` stays `ß`). `lines()` and `ask_lines()` start no new line after a final line ending.
 - Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `CircularList[T]`, `BitList`,
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
   fixed-size `Array[T, COUNT]`, `BitArray[BITS]`
