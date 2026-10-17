@@ -539,10 +539,16 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   overload resolution picks the failable or plain one for you.
 - **Annotations are a fixed set.** `@readonly`, `@writable`, `@reshaping`, `@discardable`, `@positional`,
   `@infix`, `@inline`, `@no_optimize`, `@crash_only`, `@untraced`, `@blocking`, `@layout(...)`, `@link(...)`,
-  `@target(...)`, `@test`/`@case`/`@time_limit`/`@memory_limit`/`@skip`/`@bench` (test runner, not run yet) and the
+  `@target(...)`, `@test`/`@case`/`@skip`/`@time_limit` (routine tests, below) and the
   library's own (`@llvm`, `@llvm_ir`, `@rf`, `@innate`, `@generated`, `@override`, `@overridable`,
   `@self_locking`). Any other name is RF-G221 (a misspelling names the close one). There is no
-  `@deprecated` and no `@initonly`.
+  `@deprecated`, no `@initonly` and no `@bench` yet. `@memory_limit` is accepted, but a test with it fails (not
+  measured yet).
+- **Routine tests.** `razorforge test` builds a file once per `@test` routine, with a `start()` that calls it in
+  place of the program's own: once per `@case(input: (a, b), output: r)` (arguments in parameter order, the result
+  compared with `==`), or once with no arguments when there is no case. `@skip("reason")` reports it skipped,
+  `@time_limit(1s)` stops it. Lines read `ok    file::routine`. The program itself is still tested when the file
+  has a `start()` or `.expected`/`.exit`/`.error`/`.input` files.
 - Bare routine names are first-class values: `select(transform: double)`
   (free routines only).
 
