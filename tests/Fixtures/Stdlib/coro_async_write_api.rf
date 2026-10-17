@@ -1,6 +1,6 @@
 module Tests/Stdlib/CoroAsyncWriteApi
 
-# Async I/O parking, write side. `write_text` writes a whole file on the runtime's I/O threads.
+# Async I/O parking, write side. `FileManager.write_text` writes a whole file on the runtime's I/O threads.
 # Called inside an Agent's fiber, the fiber PARKS while the worker writes (the read side does the
 # same). Proven here by a round trip: write the file in one Agent, then read it back in another and
 # confirm the contents. The output path uses the gitignored `.out`
@@ -8,14 +8,16 @@ module Tests/Stdlib/CoroAsyncWriteApi
 
 import IO/Console
 import IO/File
-routine do_write(path: Text, content: Text) -> S64
-    return write_text(path: path, content: content)
+routine do_write(path: Text, content: Text) -> U64
+    FileManager.write_text(at: File(at: path), content: content)
+    return FileManager.metadata(at: File(at: path)).size.to[U64]()
 
 routine do_read(path: Text) -> Text
-    return read_text(path: path)
+    return FileManager.read_text(at: File(at: path))
 
 routine start()
     var p = "tests/Fixtures/Stdlib/coro_async_write.out"
+    drop FileManager.make_file(at: File(at: p), replacing: true)
     var n = do_write.to[Agent](path: p, content: "written by coroutine").retrieve()
     show(f"wrote => {n}")
     var back = do_read.to[Agent](path: p).retrieve()

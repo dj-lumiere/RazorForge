@@ -1,19 +1,23 @@
 module IO/File
 
 import IO/Errors
-import IO/FileSystem
 import IO/Stream
+
+# Everything that touches the disk goes through `FileManager`: making, reading, writing, opening, mapping,
+# deleting, moving, copying, asking about and listing files and directories. A `File` or a `Directory` only says
+# where, so building one touches nothing.
+
 # ============================================================================
 # File — named, persistent, format-blind byte content
 # ============================================================================
 
 ### A `File` names persistent byte content in the filesystem — the data-at-rest itself, NOT an open
-### handle. It is a cheap value (just the path); constructing one opens nothing. From a `File` you open
-### one of four sessions over its content:
-###   * `expose[T]()` / `wield[T]()` — a SPATIAL, random-access view ({Exposed} / {Wielded}), indexed
-###     with `peek`/`poke`, no cursor;
-###   * `open_read()` — a sequential {Source} (consume forward with `load`);
-###   * `open_write()` / `open_append()` — a sequential {Sink} (emit forward with `store`).
+### handle. It is a cheap value (just the path); constructing one opens nothing. {FileManager} opens one of
+### four sessions over its content:
+###   * `FileManager.expose[T](at:)` / `wield[T](at:)` — a SPATIAL, random-access view ({Exposed} / {Wielded}),
+###     indexed with `peek`/`poke`, no cursor;
+###   * `FileManager.open_read(at:)` — a sequential {Source} (consume forward with `load`);
+###   * `FileManager.open_write(at:)` / `open_append(at:)` — a sequential {Sink} (emit forward with `store`).
 ### The content outlives every session (closing a session leaves the file intact — criterion: a file
 ### persists beyond the program). Things that are NOT files — a socket, pipe, or console — have no such
 ### content layer: they are born as {Source}/{Sink} with nothing addressable underneath, so they can
@@ -22,10 +26,10 @@ record File
     ### The path naming this file's content.
     at: Text
 
-# To PRODUCE output through a mapping (mmap cannot grow a file), size the file first, then wield it:
-#   var f = File(at: out)
-#   f.set_size(bytes: count *% T.data_size().byte_size())
-#   using f.wield[T]() as w
+# To PRODUCE output through a mapping (mmap cannot grow a file), make and size the file first, then wield it:
+#   var f = FileManager.make_file(at: File(at: out), replacing: true)
+#   FileManager.set_size(at: f, bytes: count *% T.data_size().byte_size())
+#   using FileManager.wield[T](at: f) as w
 #     ...
 # For output larger than the address space, size the file, then wield one window at a time with
 # `wield_range[T](start:, count:)` — the write-side dual of `expose_range`.
@@ -39,11 +43,11 @@ record File
 
 ### A read-only, element-addressable view of a file's bytes reinterpreted as a sequence of `T` —
 ### RazorForge-only. Zero-copy: the bytes are NOT read into a heap buffer but faulted in on access
-### (demand paging), so `File.expose` is near-instant with no large allocation. `using`-required (obeys
+### (demand paging), so `FileManager.expose` is near-instant with no large allocation. `using`-required (obeys
 ### {Enterable}) so the view's lifetime is lexically bound and released at scope exit. Read elements
 ### with `peek(i)` (bounds-checked) or, for hot bounds-check-free scanning, the `dangerous`
 ### `raw_buffer()`. Unlike a {Source}, an `Exposed[T]` has NO cursor — it is a live window onto the
-### bytes, indexed directly. Suflae never sees this: `File.expose`/`raw_buffer` are `dangerous`, and
+### bytes, indexed directly. Suflae never sees this: `FileManager.expose`/`raw_buffer` are `dangerous`, and
 ### Suflae has no `danger` block.
 entity Exposed[T]
 obeys Enterable
@@ -66,7 +70,7 @@ obeys Enterable
 ### `poke!` is bounds-checked to `count()`, so it overwrites but never appends. `using`-required (obeys
 ### {Enterable}); `exit` flushes dirty pages back to the file and releases the view. Unlike a {Sink}, a
 ### `Wielded[T]` has NO cursor — it is a live, shared, mutable window, indexed directly. Suflae never
-### sees this: `File.wield`/`raw_buffer` are `dangerous`, and Suflae has no `danger` block.
+### sees this: `FileManager.wield`/`raw_buffer` are `dangerous`, and Suflae has no `danger` block.
 entity Wielded[T]
 obeys Enterable
     ### The wielded read/write buffer, typed as `T`, at the caller-facing element 0 (non-owning; the OS
@@ -114,78 +118,103 @@ obeys Sink, Enterable
 
 ### A `Directory` names a directory in the filesystem — a container of entries, NOT byte content (that
 ### is what {File} is). Like `File` it is a cheap value (just the path); constructing one creates
-### nothing. From a `Directory` you inspect and mutate the directory itself (`create!`/`delete_all!`),
-### enumerate its entries (`list!`/`entries!`/`walk!`), and build the paths of the things inside it
-### (`file(name:)` → a {File}, `subdir(name:)` → a nested `Directory`).
+### nothing. It builds the paths of the things inside it (`file(name:)` → a {File}, `subdir(name:)` → a
+### nested `Directory`). {FileManager} makes, lists and removes it.
 record Directory
     ### The path naming this directory.
     at: Text
 
+### One directory entry: its bare name, kind, and last-modification time.
+record DirEntry
+    name: Text  # The final path component
+    is_directory: Bool  # Whether the entry is a directory
+    modified: Moment  # Last-modification time (from the directory read)
+
+### Filesystem metadata for a path, captured in a single stat.
+record FileMetadata
+    size: S64  # Size in bytes
+    modified: Moment  # Last-modification time
+    created: Moment  # Creation time (inode-change time on POSIX, best-effort)
+    is_directory: Bool  # Whether the path is a directory
+    readonly: Bool  # Whether the path is marked readonly
+
+### The one place that does file system work. Its routines are called on the type (`FileManager.read_text(at:)`),
+### and every one that touches the disk is here.
+record FileManager
+    pass
+
 # ============================================================================
-# File identity & metadata — criterion: named in an enumerable namespace
+# Paths — pure, no OS calls
 # ============================================================================
 
-### Whether this file exists. Non-throwing; suitable for preflight logic.
-### :returns: `true` when the path exists.
-@readonly
-routine File.exists() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_exists(path: cstr, len: cstr.count().to[S32]())
+### A runtime byte buffer of `len` bytes as text.
+### :param ptr: The buffer.
+### :param len: Its length.
+### :returns: The text.
+secret routine path_text(ptr: Hijacked[Byte], len: U64) -> Text
+    return Bytes(ptr: ptr, count: len).decode_as_utf8_lossy()
 
-### Whether this names a regular file. Missing paths return `false`.
-### :returns: `true` when the path is a regular file.
-@readonly
-routine File.is_file() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_is_file(path: cstr, len: cstr.count().to[S32]())
+### Two path segments joined with the platform separator.
+### :param a: The left segment.
+### :param b: The right segment.
+### :returns: The joined path.
+secret routine join_path(a: Text, b: Text) -> Text
+    var a_cstr = a.to[CStr]()
+    var b_cstr = b.to[CStr]()
+    var ptr = C::rf_fs_join_path(a_cstr, a_cstr.count().to[S32](), b_cstr, b_cstr.count().to[S32]())
+    return path_text(ptr: ptr, len: C::rf_get_result_len())
 
-### The size of this file in bytes.
-### :returns: The size in bytes.
-### :throws: {IOError} when the file cannot be inspected.
-@readonly
-routine File.size!() -> S64
-    var cstr = me.at.to[CStr]()
-    var size = C::rf_fs_file_size(path: cstr, len: cstr.count().to[S32]())
-    if size == -1
-        throw IOError(description: f"Cannot read file size: {me.at}")
-    return size
+### The parent of a path, empty when it has none.
+### :param path: The path.
+### :returns: The parent path.
+secret routine parent_path(path: Text) -> Text
+    var cstr = path.to[CStr]()
+    var ptr = C::rf_fs_parent_path(path: cstr, len: cstr.count().to[S32]())
+    return path_text(ptr: ptr, len: C::rf_get_result_len())
 
-### Filesystem metadata for this file, captured in a single stat.
-### :returns: The resulting {FileMetadata}.
-### :throws: {IOError} when the file cannot be inspected.
-@readonly
-routine File.metadata!() -> FileMetadata
-    var cstr = me.at.to[CStr]()
-    var status = C::rf_fs_metadata(path: cstr, len: cstr.count().to[S32]())
-    if status == -1
-        throw IOError(description: f"Cannot read metadata: {me.at}")
-    return FileMetadata(
-        size: C::rf_fs_meta_size(),
-        modified: Moment.from_timestamp(seconds: C::rf_fs_meta_modified()),
-        created: Moment.from_timestamp(seconds: C::rf_fs_meta_created()),
-        is_directory: C::rf_fs_meta_is_directory(),
-        readonly: C::rf_fs_meta_readonly(),
-    )
+### The final component of a path.
+### :param path: The path.
+### :returns: The final component.
+secret routine last_component(path: Text) -> Text
+    var cstr = path.to[CStr]()
+    var ptr = C::rf_fs_file_name(path: cstr, len: cstr.count().to[S32]())
+    return path_text(ptr: ptr, len: C::rf_get_result_len())
+
+### The final component of a path without its extension.
+### :param path: The path.
+### :returns: The stem.
+secret routine path_stem(path: Text) -> Text
+    var cstr = path.to[CStr]()
+    var ptr = C::rf_fs_file_stem(path: cstr, len: cstr.count().to[S32]())
+    return path_text(ptr: ptr, len: C::rf_get_result_len())
+
+### The extension of a path, without the leading dot, empty when it has none.
+### :param path: The path.
+### :returns: The extension.
+secret routine path_extension(path: Text) -> Text
+    var cstr = path.to[CStr]()
+    var ptr = C::rf_fs_extension(path: cstr, len: cstr.count().to[S32]())
+    return path_text(ptr: ptr, len: C::rf_get_result_len())
 
 ### This file's extension, without the leading dot (empty when absent).
 ### :returns: The extension `Text`.
 @readonly
 routine File.extension() -> Text
-    return extension(path: me.at)
+    return path_extension(path: me.at)
 
 ### This file's final path component.
 ### :returns: The name `Text`.
 @readonly
 routine File.name() -> Text
-    return file_name(path: me.at)
+    return last_component(path: me.at)
 
 ### This file's final component without its extension.
 ### :returns: The stem `Text`.
 @readonly
 routine File.stem() -> Text
-    return file_stem(path: me.at)
+    return path_stem(path: me.at)
 
-### The parent directory of this file.
+### The directory this file is in.
 ### :returns: The parent `Directory`.
 @readonly
 routine File.parent() -> Directory
@@ -196,279 +225,671 @@ routine File.parent() -> Directory
 ### :returns: A new `File` naming the rebuilt path.
 @readonly
 routine File.with_extension(ext: Text) -> File
-    return File(at: with_extension(path: me.at, ext: ext))
+    var stem = path_stem(path: me.at)
+    var base = if ext.is_empty() then stem else f"{stem}.{ext}"
+    var dir = parent_path(path: me.at)
+    return File(at: if dir.is_empty() then base else join_path(a: dir, b: base))
 
-### This file's absolute path (preserving symlinks and other non-canonical components).
-### :returns: A new `File` naming the absolute path.
-### :throws: {IOError} when the path cannot be resolved.
+### This file with its final component replaced, in the same directory.
+### :param name: The new final component.
+### :returns: A new `File` naming the rebuilt path.
 @readonly
-routine File.absolute!() -> File
-    var cstr = me.at.to[CStr]()
+routine File.with_name(name: Text) -> File
+    var dir = parent_path(path: me.at)
+    return File(at: if dir.is_empty() then name else join_path(a: dir, b: name))
+
+### This directory's final path component.
+### :returns: The name `Text`.
+@readonly
+routine Directory.name() -> Text
+    return last_component(path: me.at)
+
+### The directory this directory is in.
+### :returns: The parent `Directory`.
+@readonly
+routine Directory.parent() -> Directory
+    return Directory(at: parent_path(path: me.at))
+
+### The {File} named `name` directly inside this directory.
+### :param name: The child file's final component.
+### :returns: A `File` at `<this>/<name>`.
+@readonly
+routine Directory.file(name: Text) -> File
+    return File(at: join_path(a: me.at, b: name))
+
+### The sub-directory named `name` directly inside this directory.
+### :param name: The child directory's final component.
+### :returns: A `Directory` at `<this>/<name>`.
+@readonly
+routine Directory.subdir(name: Text) -> Directory
+    return Directory(at: join_path(a: me.at, b: name))
+
+# ============================================================================
+# FileManager — asking about a path
+# ============================================================================
+
+### Whether something exists at this file's path.
+### :param at: The file.
+### :returns: `true` when the path exists.
+common routine FileManager.exists(at: File) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_exists(path: cstr, len: cstr.count().to[S32]())
+
+### Whether something exists at this directory's path.
+### :param at: The directory.
+### :returns: `true` when the path exists.
+common routine FileManager.exists(at: Directory) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_exists(path: cstr, len: cstr.count().to[S32]())
+
+### Whether the path names a regular file. A missing path gives `false`.
+### :param at: The file.
+### :returns: `true` when the path is a regular file.
+common routine FileManager.is_file(at: File) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_is_file(path: cstr, len: cstr.count().to[S32]())
+
+### Whether the path names a directory. A missing path gives `false`.
+### :param at: The directory.
+### :returns: `true` when the path is a directory.
+common routine FileManager.is_directory(at: Directory) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_is_directory(path: cstr, len: cstr.count().to[S32]())
+
+### The size of a file in bytes.
+### :param at: The file.
+### :returns: The size in bytes.
+### :throws: {IOError} when the file cannot be inspected.
+common routine FileManager.size!(at: File) -> S64
+    var cstr = at.at.to[CStr]()
+    var size = C::rf_fs_file_size(path: cstr, len: cstr.count().to[S32]())
+    if size == -1
+        throw IOError(description: f"Cannot read the size of '{at.at}'")
+    return size
+
+### The metadata of the path, captured in a single stat.
+### :param path: The path.
+### :returns: The resulting {FileMetadata}.
+### :throws: {IOError} when the path cannot be inspected.
+secret routine metadata_of!(path: Text) -> FileMetadata
+    var cstr = path.to[CStr]()
+    var status = C::rf_fs_metadata(path: cstr, len: cstr.count().to[S32]())
+    if status == -1
+        throw IOError(description: f"Cannot read the metadata of '{path}'")
+    return FileMetadata(
+        size: C::rf_fs_meta_size(),
+        modified: Moment.from_timestamp(seconds: C::rf_fs_meta_modified()),
+        created: Moment.from_timestamp(seconds: C::rf_fs_meta_created()),
+        is_directory: C::rf_fs_meta_is_directory(),
+        readonly: C::rf_fs_meta_readonly(),
+    )
+
+### A file's metadata, captured in a single stat.
+### :param at: The file.
+### :returns: The resulting {FileMetadata}.
+### :throws: {IOError} when the file cannot be inspected.
+common routine FileManager.metadata!(at: File) -> FileMetadata
+    return metadata_of(path: at.at)
+
+### A directory's metadata, captured in a single stat.
+### :param at: The directory.
+### :returns: The resulting {FileMetadata}.
+### :throws: {IOError} when the directory cannot be inspected.
+common routine FileManager.metadata!(at: Directory) -> FileMetadata
+    return metadata_of(path: at.at)
+
+### Whether this process can read the path.
+### :param at: The file.
+### :returns: The resulting `Bool` value.
+common routine FileManager.can_read(at: File) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_can_read(path: cstr, len: cstr.count().to[S32]())
+
+### Whether this process can read the directory.
+### :param at: The directory.
+### :returns: The resulting `Bool` value.
+common routine FileManager.can_read(at: Directory) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_can_read(path: cstr, len: cstr.count().to[S32]())
+
+### Whether this process can write to the path.
+### :param at: The file.
+### :returns: The resulting `Bool` value.
+common routine FileManager.can_write(at: File) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_can_write(path: cstr, len: cstr.count().to[S32]())
+
+### Whether this process can write to the directory.
+### :param at: The directory.
+### :returns: The resulting `Bool` value.
+common routine FileManager.can_write(at: Directory) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_can_write(path: cstr, len: cstr.count().to[S32]())
+
+### Whether this process can execute the file.
+### :param at: The file.
+### :returns: The resulting `Bool` value.
+common routine FileManager.can_execute(at: File) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_can_execute(path: cstr, len: cstr.count().to[S32]())
+
+### Whether this process can enter the directory.
+### :param at: The directory.
+### :returns: The resulting `Bool` value.
+common routine FileManager.can_execute(at: Directory) -> Bool
+    var cstr = at.at.to[CStr]()
+    return C::rf_fs_can_execute(path: cstr, len: cstr.count().to[S32]())
+
+### The absolute path of the text `path` (symlinks and other non-canonical components kept).
+### :param path: The path.
+### :returns: The absolute path.
+### :throws: {IOError} when the path cannot be resolved.
+secret routine absolute_path!(path: Text) -> Text
+    var cstr = path.to[CStr]()
     var ptr = C::rf_fs_absolute_path(path: cstr, len: cstr.count().to[S32]())
     var len = C::rf_get_result_len()
     if ptr.is_none()
-        throw IOError(description: f"Cannot resolve absolute path: {me.at}")
-    var bytes = Bytes(ptr: ptr, count: len)
-    return File(at: bytes.decode_as_utf8_lossy())
+        throw IOError(description: f"Cannot resolve the absolute path of '{path}'")
+    return path_text(ptr: ptr, len: len)
 
-### This file's canonical filesystem location (normalized casing, links and relative segments resolved).
-### :returns: A new `File` naming the canonical path.
+### The canonical path of the text `path` (casing normalized, links and relative segments resolved).
+### :param path: The path.
+### :returns: The canonical path.
 ### :throws: {IOError} when the path cannot be resolved.
-@readonly
-routine File.canonical!() -> File
-    var cstr = me.at.to[CStr]()
+secret routine canonical_path!(path: Text) -> Text
+    var cstr = path.to[CStr]()
     var ptr = C::rf_fs_canonical_path(path: cstr, len: cstr.count().to[S32]())
     var len = C::rf_get_result_len()
     if ptr.is_none()
-        throw IOError(description: f"Cannot resolve canonical path: {me.at}")
-    var bytes = Bytes(ptr: ptr, count: len)
-    return File(at: bytes.decode_as_utf8_lossy())
+        throw IOError(description: f"Cannot resolve the canonical path of '{path}'")
+    return path_text(ptr: ptr, len: len)
 
-### Reads this whole file as text (UTF-8, lossy). UNCOLORED, like `waitfor`: inside work an
-### Agent runs as a fiber (`start_now()`/`start_here()`) the fiber PARKS while a worker thread does the
-### blocking read (its siblings keep progressing), anywhere else it reads inline. This is the way to read
-### a whole file from such work — prefer it to opening a {Source} and looping `load` there.
-### :returns: The file contents as `Text`.
-@readonly
-routine File.read_text() -> Text
-    return read_text(path: me.at)
+### The file at its absolute path (symlinks and other non-canonical components kept).
+### :param at: The file.
+### :returns: A new `File` naming the absolute path.
+### :throws: {IOError} when the path cannot be resolved.
+common routine FileManager.absolute!(at: File) -> File
+    return File(at: absolute_path(path: at.at))
 
-### Writes `content` to this file, truncating any existing contents. UNCOLORED, like `waitfor`: inside work an
-### Agent runs as a fiber (`start_now()`/`start_here()`) the fiber PARKS while a worker thread does the
-### blocking write (its siblings keep progressing), anywhere else it writes inline. This is the way to
-### write a whole file from such work. The text is encoded as UTF-8.
-### :param content: The text to write.
-### :returns: The number of bytes written, or a negative value on error.
-@discardable
-routine File.write_text(content: Text) -> S64
-    return write_text(path: me.at, content: content)
+### The directory at its absolute path (symlinks and other non-canonical components kept).
+### :param at: The directory.
+### :returns: A new `Directory` naming the absolute path.
+### :throws: {IOError} when the path cannot be resolved.
+common routine FileManager.absolute!(at: Directory) -> Directory
+    return Directory(at: absolute_path(path: at.at))
 
-### Sets this file's size to exactly `bytes`, creating it if missing (extending with zero bytes or
-### truncating). Size a file before `wield`ing it to produce output through a mapping.
-### :param bytes: The exact size in bytes.
-### :throws: {IOError} when the size cannot be set.
-routine File.set_size!(bytes: U64)
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_set_size(path: cstr, len: cstr.count().to[S32](), size: bytes)
-    if result == -1
-        throw IOError(description: f"Cannot set size of: {me.at}")
-    return
+### The file at its canonical location (casing normalized, links and relative segments resolved).
+### :param at: The file.
+### :returns: A new `File` naming the canonical path.
+### :throws: {IOError} when the path cannot be resolved.
+common routine FileManager.canonical!(at: File) -> File
+    return File(at: canonical_path(path: at.at))
+
+### The directory at its canonical location (casing normalized, links and relative segments resolved).
+### :param at: The directory.
+### :returns: A new `Directory` naming the canonical path.
+### :throws: {IOError} when the path cannot be resolved.
+common routine FileManager.canonical!(at: Directory) -> Directory
+    return Directory(at: canonical_path(path: at.at))
 
 # ============================================================================
-# Permissions
+# FileManager — making, removing, moving, copying
 # ============================================================================
 
-### Whether the current process can read this path. Non-throwing capability probe.
-### :returns: The resulting `Bool` value.
-@readonly
-routine File.can_read() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_can_read(path: cstr, len: cstr.count().to[S32]())
-
-### Whether the current process can write to this path. Non-throwing capability probe.
-### :returns: The resulting `Bool` value.
-@readonly
-routine File.can_write() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_can_write(path: cstr, len: cstr.count().to[S32]())
-
-### Whether the current process can execute this path. Non-throwing capability probe.
-### :returns: The resulting `Bool` value.
-@readonly
-routine File.can_execute() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_can_execute(path: cstr, len: cstr.count().to[S32]())
-
-### Enables or disables the readonly attribute for this path (filesystem metadata, not an in-memory flag).
-### :param readonly: `true` to enable readonly mode; `false` to disable it.
-### :throws: {IOError} when the attribute cannot be set.
-routine File.set_readonly!(readonly: Bool = true)
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_set_readonly(cstr, cstr.count().to[S32](), readonly)
+### Makes the file. Its directory must exist. An existing file is an error, unless `replacing` is true: then it
+### is emptied.
+### :param at: The file to make.
+### :param replacing: Whether an existing file is emptied instead of being an error.
+### :returns: The file, made.
+### :throws: {IOError} when it already exists (and `replacing` is false) or cannot be made.
+common routine FileManager.make_file!(at: File, replacing: Bool = false) -> File
+    var cstr = at.at.to[CStr]()
+    var result = C::rf_fs_make_file(path: cstr, len: cstr.count().to[S32](), replacing: replacing)
+    if result == 1
+        throw IOError(description: f"Cannot make '{at.at}': it already exists. Pass 'replacing: true' to empty it")
     if result == -1
-        throw IOError(description: f"Cannot set readonly on: {me.at}")
-    return
+        throw IOError(description: f"Cannot make '{at.at}'")
+    return at
 
-# ============================================================================
-# File mutation (failable)
-# ============================================================================
-
-### Copies this file to `destination`. Existing-destination handling follows the runtime's native copy
-### semantics. Named `copy_to!` (not `copy`) because a bare `copy` collides with the structural `copy`
-### derive verb. To copy a directory tree, use {Directory}'s `copy_to!`.
-### :param destination: The destination `File`.
-### :throws: {IOError} when the copy fails.
-routine File.copy_to!(destination: File)
-    var src_cstr = me.at.to[CStr]()
-    var dst_cstr = destination.at.to[CStr]()
-    var result = C::rf_fs_copy(src_cstr, src_cstr.count().to[S32](), dst_cstr, dst_cstr.count().to[S32]())
+### Makes the directory. An existing directory is an error. With `parents`, missing directories above it are made
+### too, and one that already exists is kept.
+### :param at: The directory to make.
+### :param parents: Whether missing directories above it are made too.
+### :returns: The directory, made.
+### :throws: {IOError} when the directory cannot be made.
+common routine FileManager.make_directory!(at: Directory, parents: Bool = false) -> Directory
+    var cstr = at.at.to[CStr]()
+    var result: S32 = 0
+    if parents
+        result = C::rf_fs_create_dir_all(path: cstr, len: cstr.count().to[S32]())
+    else
+        result = C::rf_fs_create_dir(path: cstr, len: cstr.count().to[S32]())
     if result == -1
-        throw IOError(description: f"Cannot copy '{me.at}' to '{destination.at}'")
-    return
+        throw IOError(description: f"Cannot make the directory '{at.at}'")
+    return at
 
-### Moves or renames this file to `destination`. May behave as a rename within one filesystem or as a
-### move across locations.
-### :param destination: The destination `File`.
-### :throws: {IOError} when the move fails.
-routine File.move_to!(destination: File)
-    var src_cstr = me.at.to[CStr]()
-    var dst_cstr = destination.at.to[CStr]()
-    var result = C::rf_fs_move(src_cstr, src_cstr.count().to[S32](), dst_cstr, dst_cstr.count().to[S32]())
-    if result == -1
-        throw IOError(description: f"Cannot move '{me.at}' to '{destination.at}'")
-    return
-
-### Moves or renames this file WITHOUT overwriting an existing destination. Folds the "does the
-### destination exist?" check into the move itself (one syscall on Windows), so callers that skip on
-### collision need no separate `exists` probe.
-### :param destination: The destination `File`.
-### :returns: `true` when the move happened; `false` when the destination already existed.
-### :throws: {IOError} on any other failure.
-routine File.move_to_if_absent!(destination: File) -> Bool
-    var src_cstr = me.at.to[CStr]()
-    var dst_cstr = destination.at.to[CStr]()
-    var result = C::rf_fs_move_no_replace(
-        src_cstr,
-        src_cstr.count().to[S32](),
-        dst_cstr,
-        dst_cstr.count().to[S32](),
-    )
-    if result == -1
-        throw IOError(description: f"Cannot move '{me.at}' to '{destination.at}'")
-    return result == 0
-
-### Removes this file.
+### Removes the file.
+### :param at: The file.
 ### :throws: {IOError} when the file cannot be removed.
-routine File.delete!()
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_remove(path: cstr, len: cstr.count().to[S32]())
-    if result == -1
-        throw IOError(description: "Cannot remove path")
+common routine FileManager.delete!(at: File)
+    var cstr = at.at.to[CStr]()
+    if C::rf_fs_remove(path: cstr, len: cstr.count().to[S32]()) == -1
+        throw IOError(description: f"Cannot remove '{at.at}'")
     return
 
-### Creates this empty file, or updates its modification time when it already exists. Parent directories
-### must already exist.
-### :throws: {IOError} when the file cannot be created or updated.
-routine File.touch!()
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_touch(path: cstr, len: cstr.count().to[S32]())
+### Removes the directory, which must be empty. `delete_all` removes one with contents.
+### :param at: The directory.
+### :throws: {IOError} when the directory cannot be removed.
+common routine FileManager.delete!(at: Directory)
+    var cstr = at.at.to[CStr]()
+    if C::rf_fs_remove(path: cstr, len: cstr.count().to[S32]()) == -1
+        throw IOError(description: f"Cannot remove the directory '{at.at}'")
+    return
+
+### Removes the directory and everything in it.
+### :param at: The directory.
+### :throws: {IOError} when the tree cannot be removed.
+common routine FileManager.delete_all!(at: Directory)
+    var cstr = at.at.to[CStr]()
+    if C::rf_fs_remove_all(path: cstr, len: cstr.count().to[S32]()) == -1
+        throw IOError(description: f"Cannot remove the directory tree '{at.at}'")
+    return
+
+### Moves (renames) the path `from` to `to`, across file systems too.
+### :param from: The source path.
+### :param to: The destination path.
+### :param replacing: Whether an existing destination is replaced.
+### :throws: {IOError} when the destination exists (and `replacing` is false) or the move fails.
+secret routine move_path!(from: Text, to: Text, replacing: Bool)
+    var src = from.to[CStr]()
+    var dst = to.to[CStr]()
+    var result: S32 = 0
+    if replacing
+        result = C::rf_fs_move(src, src.count().to[S32](), dst, dst.count().to[S32]())
+    else
+        result = C::rf_fs_move_no_replace(src, src.count().to[S32](), dst, dst.count().to[S32]())
+    if result == 1
+        throw IOError(description: f"Cannot move '{from}' to '{to}': it already exists. Pass 'replacing: true' to replace it")
     if result == -1
-        throw IOError(description: f"Cannot touch: {me.at}")
+        throw IOError(description: f"Cannot move '{from}' to '{to}'")
+    return
+
+### Moves (renames) the file. An existing destination is an error unless `replacing` is true.
+### :param from: The file to move.
+### :param to: Where it goes.
+### :param replacing: Whether an existing destination is replaced.
+### :throws: {IOError} when the destination exists (and `replacing` is false) or the move fails.
+common routine FileManager.move!(from: File, to: File, replacing: Bool = false)
+    move_path(from: from.at, to: to.at, replacing: replacing)
+    return
+
+### Moves (renames) the directory. An existing destination is an error unless `replacing` is true.
+### :param from: The directory to move.
+### :param to: Where it goes.
+### :param replacing: Whether an existing destination is replaced.
+### :throws: {IOError} when the destination exists (and `replacing` is false) or the move fails.
+common routine FileManager.move!(from: Directory, to: Directory, replacing: Bool = false)
+    move_path(from: from.at, to: to.at, replacing: replacing)
+    return
+
+### Copies the file. An existing destination is an error unless `replacing` is true.
+### :param from: The file to copy.
+### :param to: Where the copy goes.
+### :param replacing: Whether an existing destination is replaced.
+### :throws: {IOError} when the destination exists (and `replacing` is false) or the copy fails.
+common routine FileManager.copy!(from: File, to: File, replacing: Bool = false)
+    var src = from.at.to[CStr]()
+    var dst = to.at.to[CStr]()
+    var result: S32 = 0
+    if replacing
+        result = C::rf_fs_copy(src, src.count().to[S32](), dst, dst.count().to[S32]())
+    else
+        result = C::rf_fs_copy_no_replace(src, src.count().to[S32](), dst, dst.count().to[S32]())
+    if result == 1
+        throw IOError(description: f"Cannot copy '{from.at}' to '{to.at}': it already exists. Pass 'replacing: true' to replace it")
+    if result == -1
+        throw IOError(description: f"Cannot copy '{from.at}' to '{to.at}'")
+    return
+
+### Copies the directory and everything in it. Symbolic links are not followed. An existing destination is an
+### error unless `replacing` is true: then the tree is copied into it, replacing files of the same names.
+### :param from: The directory to copy.
+### :param to: Where the copy goes.
+### :param replacing: Whether an existing destination is copied into.
+### :throws: {IOError} when the destination exists (and `replacing` is false) or any entry cannot be copied.
+common routine FileManager.copy!(from: Directory, to: Directory, replacing: Bool = false)
+    if FileManager.exists(at: to)
+        if not replacing
+            throw IOError(description: f"Cannot copy '{from.at}' to '{to.at}': it already exists. Pass 'replacing: true' to copy into it")
+    else
+        drop FileManager.make_directory(at: to, parents: true)
+    each entry in FileManager.entries(at: from)
+        if entry.is_directory
+            FileManager.copy(from: from.subdir(name: entry.name), to: to.subdir(name: entry.name), replacing: true)
+        else
+            FileManager.copy(from: from.file(name: entry.name), to: to.file(name: entry.name), replacing: true)
+    return
+
+### Sets the readonly attribute of the file (file system metadata).
+### :param at: The file.
+### :param readonly: `true` to make it readonly, `false` to clear it.
+### :throws: {IOError} when the attribute cannot be set.
+common routine FileManager.set_readonly!(at: File, readonly: Bool = true)
+    var cstr = at.at.to[CStr]()
+    if C::rf_fs_set_readonly(cstr, cstr.count().to[S32](), readonly) == -1
+        throw IOError(description: f"Cannot set readonly on '{at.at}'")
+    return
+
+### Sets the readonly attribute of the directory (file system metadata).
+### :param at: The directory.
+### :param readonly: `true` to make it readonly, `false` to clear it.
+### :throws: {IOError} when the attribute cannot be set.
+common routine FileManager.set_readonly!(at: Directory, readonly: Bool = true)
+    var cstr = at.at.to[CStr]()
+    if C::rf_fs_set_readonly(cstr, cstr.count().to[S32](), readonly) == -1
+        throw IOError(description: f"Cannot set readonly on '{at.at}'")
+    return
+
+### Sets an existing file's size to exactly `bytes` (extending with zero bytes or truncating). Size a file before
+### wielding it to produce output through a mapping.
+### :param at: The file.
+### :param bytes: The exact size in bytes.
+### :throws: {IOError} when the file doesn't exist or its size cannot be set.
+common routine FileManager.set_size!(at: File, bytes: U64)
+    var cstr = at.at.to[CStr]()
+    if C::rf_fs_set_size(path: cstr, len: cstr.count().to[S32](), size: bytes) == -1
+        throw IOError(description: f"Cannot set the size of '{at.at}'")
     return
 
 # ============================================================================
-# Opening sequential sessions (Source / Sink)
+# FileManager — whole-file reads and writes
 # ============================================================================
 
-### Opens this file for sequential reading, returning a {Source} you consume forward with `load`.
-### :returns: A {FileSource} over this file's content, to be bound by `using`.
-### :throws: {IOError} when the file cannot be opened for reading.
-routine File.open_read!() -> FileSource
-    var cstr = me.at.to[CStr]()
+### Reads a whole file as text (UTF-8, lossy). UNCOLORED, like `waitfor`: inside work an Agent runs as a fiber
+### (`start_now()`/`start_here()`) the fiber PARKS while a worker thread does the blocking read (its siblings keep
+### progressing), anywhere else it reads inline. This is the way to read a whole file from such work.
+### :param at: The file.
+### :returns: Its contents as `Text`.
+### :throws: {IOError} when the file doesn't exist or can't be read.
+common routine FileManager.read_text!(at: File) -> Text
+    return FileManager.read_bytes(at: at).decode_as_utf8_lossy()
+
+### Reads a whole file. UNCOLORED, like `read_text`.
+### :param at: The file.
+### :returns: Its contents.
+### :throws: {IOError} when the file doesn't exist or can't be read.
+common routine FileManager.read_bytes!(at: File) -> Bytes
+    var cstr = at.at.to[CStr]()
+    var ptr = C::rf_io_read_file_all(cstr, cstr.count().to[S32]())
+    if C::rf_io_last_failed()
+        throw IOError(description: f"Cannot read '{at.at}': it doesn't exist or can't be read")
+    return Bytes(ptr: ptr, count: C::rf_io_get_result_len())
+
+### Writes `content` to an existing file, replacing what it held. UNCOLORED, like `read_text`. The text is encoded as
+### UTF-8.
+### :param at: The file, which must exist (make it with `make_file`).
+### :param content: The text to write.
+### :throws: {IOError} when the file doesn't exist or can't be written.
+common routine FileManager.write_text!(at: File, content: Text)
+    var data = content.to[CStr]()
+    write_all(path: at.at, data: data.ptr(), count: data.count())
+    return
+
+### Writes `content` to an existing file, replacing what it held. UNCOLORED, like `read_text`.
+### :param at: The file, which must exist (make it with `make_file`).
+### :param content: The bytes to write.
+### :throws: {IOError} when the file doesn't exist or can't be written.
+common routine FileManager.write_bytes!(at: File, content: Bytes)
+    danger
+        write_all(path: at.at, data: content.raw_buffer(), count: content.count())
+    return
+
+### Writes `count` bytes at `data` to the existing file at `path`, replacing what it held.
+### :param path: The file's path.
+### :param data: The bytes.
+### :param count: How many.
+### :throws: {IOError} when the file doesn't exist or can't be written.
+secret routine write_all!(path: Text, data: Hijacked[Byte], count: U64)
+    var cstr = path.to[CStr]()
+    drop C::rf_io_write_file_all(
+        path: cstr,
+        path_len: cstr.count().to[S32](),
+        data: data,
+        data_len: count.to[S64](),
+    )
+    if C::rf_io_last_failed()
+        throw IOError(description: f"Cannot write '{path}': it doesn't exist or can't be written. Make it with 'FileManager.make_file'")
+    return
+
+### Adds `content` at the end of an existing file. The text is encoded as UTF-8.
+### :param at: The file, which must exist (make it with `make_file`).
+### :param content: The text to add.
+### :throws: {IOError} when the file doesn't exist or can't be written.
+common routine FileManager.append_text!(at: File, content: Text)
+    using FileManager.open_append(at: at) as sink
+        drop sink.store(data: content.encode_as_utf8())
+    return
+
+# ============================================================================
+# FileManager — sessions over a file's content
+# ============================================================================
+
+### Opens the file for sequential reading, giving a {Source} consumed forward with `load`.
+### :param at: The file.
+### :returns: A {FileSource} over the file's content, to be bound by `using`.
+### :throws: {IOError} when the file doesn't exist or can't be opened for reading.
+common routine FileManager.open_read!(at: File) -> FileSource
+    var cstr = at.at.to[CStr]()
     var fd = C::rf_file_open(cstr, cstr.count().to[S32](), 0)
     if fd == -1
-        throw IOError(description: f"Cannot open file for reading: {me.at}")
+        throw IOError(description: f"Cannot open '{at.at}' for reading")
     return FileSource(fd: fd, is_closed: false)
 
-### Opens this file for sequential writing, TRUNCATING any existing contents, returning a {Sink} you
-### emit into with `store`.
-### :returns: A {FileSink} over this file's content, to be bound by `using`.
-### :throws: {IOError} when the file cannot be opened for writing.
-routine File.open_write!() -> FileSink
-    var cstr = me.at.to[CStr]()
+### Opens an existing file for sequential writing, EMPTYING it first, giving a {Sink} filled with `store`.
+### :param at: The file, which must exist (make it with `make_file`).
+### :returns: A {FileSink} over the file's content, to be bound by `using`.
+### :throws: {IOError} when the file doesn't exist or can't be opened for writing.
+common routine FileManager.open_write!(at: File) -> FileSink
+    var cstr = at.at.to[CStr]()
     var fd = C::rf_file_open(cstr, cstr.count().to[S32](), 1)
     if fd == -1
-        throw IOError(description: f"Cannot open file for writing: {me.at}")
+        throw IOError(description: f"Cannot open '{at.at}' for writing: it doesn't exist or can't be written")
     return FileSink(fd: fd, is_closed: false)
 
-### Opens this file for sequential APPENDING (writes land after existing contents), returning a {Sink}.
-### :returns: A {FileSink} over this file's content, to be bound by `using`.
-### :throws: {IOError} when the file cannot be opened for appending.
-routine File.open_append!() -> FileSink
-    var cstr = me.at.to[CStr]()
+### Opens an existing file for sequential appending (writes land after its contents), giving a {Sink}.
+### :param at: The file, which must exist (make it with `make_file`).
+### :returns: A {FileSink} over the file's content, to be bound by `using`.
+### :throws: {IOError} when the file doesn't exist or can't be opened for appending.
+common routine FileManager.open_append!(at: File) -> FileSink
+    var cstr = at.at.to[CStr]()
     var fd = C::rf_file_open(cstr, cstr.count().to[S32](), 2)
     if fd == -1
-        throw IOError(description: f"Cannot open file for appending: {me.at}")
+        throw IOError(description: f"Cannot open '{at.at}' for appending: it doesn't exist or can't be written")
     return FileSink(fd: fd, is_closed: false)
 
-# ============================================================================
-# Opening spatial views (Exposed / Wielded) — RazorForge-only, zero-copy
-# ============================================================================
-
-### Exposes this file's bytes as a read-only sequence of `T` in the virtual address space. RazorForge-only
+### Exposes the file's bytes as a read-only sequence of `T` in the virtual address space. RazorForge-only
 ### (`dangerous`: it reinterprets raw file bytes as `T` — the builder cannot prove they form a valid `T`
 ### — and the caller must keep the view within its `using` scope; the pointer dangles after `exit`).
 ### `T` must be a plain-layout value (no entity/managed leaf, whose bytes are not valid handles).
+### :param at: The file.
 ### :returns: The resulting {Exposed} view, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be exposed (missing or non-regular; an empty file yields an
 ###   empty view, `count() == 0`, rather than throwing).
-dangerous routine File.expose![T]() -> Exposed[T]
-    var cstr = me.at.to[CStr]()
+common dangerous routine FileManager.expose![T](at: File) -> Exposed[T]
+    var cstr = at.at.to[CStr]()
     var buf = C::rf_file_map_path(cstr, cstr.count().to[S32]())
     if buf.is_none()
-        throw IOError(description: f"Cannot expose file: {me.at}")
+        throw IOError(description: f"Cannot expose '{at.at}'")
     var byte_len = C::rf_get_result_len()
     return Exposed[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0)
 
-### Exposes a WINDOW of this file's bytes as a read-only sequence of `T`: `count` elements starting at
+### Exposes a WINDOW of the file's bytes as a read-only sequence of `T`: `count` elements starting at
 ### element `start`, clamped to the file end. This is the windowing path for files larger than the
-### address space — map and scan one window at a time instead of the whole file. The window's own
-### `count()` may be smaller than `count` when it reaches EOF, and a `start` at/after EOF yields an empty
-### view. Named `expose_range` (not an `expose` overload) because two same-name method-generics currently
-### defeat generic lowering. RazorForge-only, `dangerous` (see `expose`).
+### address space. The window's own `count()` may be smaller than `count` when it reaches EOF, and a `start`
+### at/after EOF yields an empty view. RazorForge-only, `dangerous` (see `expose`).
+### :param at: The file.
 ### :param start: The starting element index.
 ### :param count: The number of `T` elements to map (clamped to the file end).
 ### :returns: The resulting {Exposed} window, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be mapped.
-dangerous routine File.expose_range![T](start: U64, count: U64) -> Exposed[T]
-    var cstr = me.at.to[CStr]()
+common dangerous routine FileManager.expose_range![T](at: File, start: U64, count: U64) -> Exposed[T]
+    var cstr = at.at.to[CStr]()
     var esize = T.data_size().byte_size()
     var buf = C::rf_file_map_path_range(cstr, cstr.count().to[S32](), start *% esize, count *% esize)
     if buf.is_none()
-        throw IOError(description: f"Cannot expose range of file: {me.at}")
+        throw IOError(description: f"Cannot expose a range of '{at.at}'")
     var user_len = C::rf_get_result_len()
     var delta = C::rf_file_map_delta()
     var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
     return Exposed[T](buf: user, byte_len: user_len, map_delta: delta)
 
-### Wields this file's bytes as a read/write sequence of `T` in the virtual address space (SHARED: writes
+### Wields the file's bytes as a read/write sequence of `T` in the virtual address space (SHARED: writes
 ### land in the file). RazorForge-only (`dangerous`: it reinterprets raw file bytes as `T`, and the
 ### caller must keep the view within its `using` scope; the pointer dangles after `exit`). `T` must be a
 ### plain-layout value (no entity/managed leaf).
+### :param at: The file.
 ### :returns: The resulting {Wielded} view, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be wielded (missing or non-regular; an empty file yields an
 ###   empty view rather than throwing).
-dangerous routine File.wield![T]() -> Wielded[T]
-    var cstr = me.at.to[CStr]()
+common dangerous routine FileManager.wield![T](at: File) -> Wielded[T]
+    var cstr = at.at.to[CStr]()
     var buf = C::rf_file_map_path_rw(cstr, cstr.count().to[S32]())
     if buf.is_none()
-        throw IOError(description: f"Cannot wield file: {me.at}")
+        throw IOError(description: f"Cannot wield '{at.at}'")
     var byte_len = C::rf_get_result_len()
     return Wielded[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0)
 
-### Wields a WINDOW of this file's bytes as a read/write sequence of `T` (SHARED: writes land in the
+### Wields a WINDOW of the file's bytes as a read/write sequence of `T` (SHARED: writes land in the
 ### file): `count` elements starting at element `start`, clamped to the file end. The write-side dual of
-### `expose_range` — the windowing path for PRODUCING output into a file larger than the address space:
-### size the file first (`set_size!`), then wield and fill one window at a time. The window's own
-### `count()` may be smaller than `count` at EOF, and a `start` at/after the file end yields an empty
-### view. The mapping CANNOT grow the file. Named `wield_range` (not a `wield` overload) because two
-### same-name method-generics currently defeat generic lowering. RazorForge-only, `dangerous` (see `wield`).
+### `expose_range`: size the file first (`set_size`), then wield and fill one window at a time. The mapping
+### CANNOT grow the file. RazorForge-only, `dangerous` (see `wield`).
+### :param at: The file.
 ### :param start: The starting element index.
 ### :param count: The number of `T` elements to map (clamped to the file end).
 ### :returns: The resulting {Wielded} window, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be mapped.
-dangerous routine File.wield_range![T](start: U64, count: U64) -> Wielded[T]
-    var cstr = me.at.to[CStr]()
+common dangerous routine FileManager.wield_range![T](at: File, start: U64, count: U64) -> Wielded[T]
+    var cstr = at.at.to[CStr]()
     var esize = T.data_size().byte_size()
     var buf = C::rf_file_map_path_range_rw(cstr, cstr.count().to[S32](), start *% esize, count *% esize)
     if buf.is_none()
-        throw IOError(description: f"Cannot wield range of file: {me.at}")
+        throw IOError(description: f"Cannot wield a range of '{at.at}'")
     var user_len = C::rf_get_result_len()
     var delta = C::rf_file_map_delta()
     var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
     return Wielded[T](buf: user, byte_len: user_len, map_delta: delta)
 
-### Pass-through entry: the view was already acquired by `File.expose`.
+# ============================================================================
+# FileManager — listing directories
+# ============================================================================
+
+### The direct entries of the directory as bare names (`.` and `..` left out), in the platform's order. Use
+### `Directory.file(name:)` / `subdir(name:)` to turn one into a path.
+### :param at: The directory.
+### :returns: The entry names.
+### :throws: {IOError} when the directory cannot be listed.
+common routine FileManager.list!(at: Directory) -> List[Text]
+    var cstr = at.at.to[CStr]()
+    var ptr = C::rf_fs_list_dir(path: cstr, len: cstr.count().to[S32]())
+    var len = C::rf_get_result_len()
+    if ptr.is_none()
+        throw IOError(description: f"Cannot list '{at.at}'")
+    if len == 0
+        return List[Text]()
+    return path_text(ptr: ptr, len: len).split(separator: '\n')
+
+### The direct entries of the directory WITH their kind and modification time, in one directory read.
+### Prefer this over `list` + `is_directory` + `metadata` when walking a tree: on Windows the kind and
+### mtime come from the directory enumeration, so no per-entry `stat` is needed (POSIX falls back to one
+### stat per entry for the mtime). `.` and `..` are left out.
+### :param at: The directory.
+### :returns: The entries.
+### :throws: {IOError} when the directory cannot be listed.
+common routine FileManager.entries!(at: Directory) -> List[DirEntry]
+    var cstr = at.at.to[CStr]()
+    var ptr = C::rf_fs_list_dir_typed(path: cstr, len: cstr.count().to[S32]())
+    var len = C::rf_get_result_len()
+    if ptr.is_none()
+        throw IOError(description: f"Cannot list '{at.at}'")
+    var result = List[DirEntry]()
+    if len == 0
+        return result
+    each line in path_text(ptr: ptr, len: len).split(separator: '\n')
+        # Each line is `<kind><mtime> <name>`: 'd'/'f', then decimal Unix seconds, one
+        # space, then the raw name (which may itself contain spaces).
+        var is_dir = line[0] == 'd'
+        var space = line.find(letter: ' ')
+        var mtime: S64 = 0
+        each k in 1 til space
+            mtime = mtime * 10 + line[k].digit_value().to[S64]()
+        var name = line[space + 1 til ^0]
+        result.add_last(
+            value: DirEntry(
+                name: name,
+                is_directory: is_dir,
+                modified: Moment.from_timestamp(seconds: mtime),
+            ),
+        )
+    return result
+
+### Every path under the directory, at any depth, a directory before its contents. Symbolic links are not
+### followed.
+### :param at: The directory.
+### :returns: The full paths.
+### :throws: {IOError} when any directory in the tree cannot be listed.
+common routine FileManager.walk!(at: Directory) -> List[Text]
+    var result = List[Text]()
+    each entry in FileManager.entries(at: at)
+        result.add_last(value: join_path(a: at.at, b: entry.name))
+        if entry.is_directory
+            each descendant in FileManager.walk(at: at.subdir(name: entry.name))
+                result.add_last(value: descendant)
+    return result
+
+# ============================================================================
+# FileManager — the process's directories
+# ============================================================================
+
+### The process's current working directory.
+### :returns: The resulting `Directory`.
+### :throws: {IOError} when the working directory cannot be read.
+common routine FileManager.current_directory!() -> Directory
+    var ptr = C::rf_fs_current_dir()
+    var len = C::rf_get_result_len()
+    if ptr.is_none()
+        throw IOError(description: "Cannot read the current working directory")
+    return Directory(at: path_text(ptr: ptr, len: len))
+
+### Changes the process's current working directory.
+### :param to: The directory to switch to.
+### :throws: {IOError} when the directory cannot be entered.
+common routine FileManager.set_current_directory!(to: Directory)
+    var cstr = to.at.to[CStr]()
+    if C::rf_fs_set_current_dir(path: cstr, len: cstr.count().to[S32]()) == -1
+        throw IOError(description: f"Cannot change the working directory to '{to.at}'")
+    return
+
+### The platform's temporary directory. Honors the usual environment variables, never fails.
+### :returns: The resulting `Directory`.
+common routine FileManager.temp_directory() -> Directory
+    var ptr = C::rf_fs_temp_dir()
+    return Directory(at: path_text(ptr: ptr, len: C::rf_get_result_len()))
+
+### The current user's home directory.
+### :returns: The resulting `Directory`.
+### :throws: {IOError} when the home directory cannot be determined.
+common routine FileManager.home_directory!() -> Directory
+    var ptr = C::rf_fs_home_dir()
+    var len = C::rf_get_result_len()
+    if ptr.is_none()
+        throw IOError(description: "Cannot determine the home directory")
+    return Directory(at: path_text(ptr: ptr, len: len))
+
+# ============================================================================
+# Sessions and views: their own routines
+# ============================================================================
+
+### Pass-through entry: the view was already acquired by `FileManager.expose`.
 ### :returns: This `Exposed[T]`.
 routine Exposed[T].enter!() -> Exposed[T]
     return me
@@ -508,7 +929,7 @@ routine Exposed[T].peek!(index: U64) -> T
 dangerous routine Exposed[T].raw_buffer() -> Hijacked[T]
     return me.buf
 
-### Pass-through entry: the view was already acquired by `File.wield`.
+### Pass-through entry: the view was already acquired by `FileManager.wield`.
 ### :returns: This `Wielded[T]`.
 routine Wielded[T].enter!() -> Wielded[T]
     return me
@@ -589,7 +1010,7 @@ routine FileSource.close()
     me.is_closed = true
     return
 
-### Pass-through entry: the descriptor was already acquired by `File.open_read`.
+### Pass-through entry: the descriptor was already acquired by `FileManager.open_read`.
 ### :returns: This `FileSource`.
 routine FileSource.enter!() -> FileSource
     return me
@@ -627,7 +1048,7 @@ routine FileSink.close()
     me.is_closed = true
     return
 
-### Pass-through entry: the descriptor was already acquired by `File.open_write`/`File.open_append`.
+### Pass-through entry: the descriptor was already acquired by `FileManager.open_write`/`open_append`.
 ### :returns: This `FileSink`.
 routine FileSink.enter!() -> FileSink
     return me
@@ -644,365 +1065,3 @@ routine FileSink.exit()
 routine FileSink.destruct()
     me.close()
     return
-
-# ============================================================================
-# Whole-file one-shot text helpers
-# ============================================================================
-
-### Reads an entire file as text given its path. UNCOLORED, like `waitfor`: inside work an
-### Agent runs as a fiber (`start_now()`/`start_here()`) the fiber PARKS while a worker thread does the
-### blocking read (its siblings keep progressing), anywhere else it reads inline. This is the way to read
-### a whole file from such work — prefer it to opening a `Source` and looping `load` there. Decoding uses
-### lossy UTF-8 conversion for invalid byte sequences.
-### :param path: The path to read.
-### :returns: The file contents as `Text`.
-routine read_text(path: Text) -> Text
-    var cstr = path.to[CStr]()
-    var ptr = C::rf_io_read_file_all(cstr, cstr.count().to[S32]())
-    var len = C::rf_io_get_result_len()
-    var bytes = Bytes(ptr: ptr, count: len)
-    return bytes.decode_as_utf8_lossy()
-
-### Writes text to a file given its path, truncating any existing contents. UNCOLORED, like `waitfor`: inside work an
-### Agent runs as a fiber (`start_now()`/`start_here()`) the fiber PARKS while a worker thread does the
-### blocking write (its siblings keep progressing), anywhere else it writes inline. This is the way to
-### write a whole file from such work. The text is encoded as UTF-8.
-### :param path: The path to write.
-### :param content: The text to write.
-### :returns: The number of bytes written, or a negative value on error.
-routine write_text(path: Text, content: Text) -> S64
-    var cstr = path.to[CStr]()
-    var data = content.to[CStr]()
-    return C::rf_io_write_file_all(
-        path: cstr,
-        path_len: cstr.count().to[S32](),
-        data: data.ptr(),
-        data_len: data.count().to[S64](),
-    )
-
-# ============================================================================
-# Directory identity & metadata
-# ============================================================================
-
-### Whether this directory exists. Non-throwing; suitable for preflight logic.
-### :returns: `true` when the path exists.
-@readonly
-routine Directory.exists() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_exists(path: cstr, len: cstr.count().to[S32]())
-
-### Whether this actually names a directory. Missing paths return `false`.
-### :returns: `true` when the path is a directory.
-@readonly
-routine Directory.is_directory() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_is_directory(path: cstr, len: cstr.count().to[S32]())
-
-### Filesystem metadata for this directory, captured in a single stat.
-### :returns: The resulting {FileMetadata}.
-### :throws: {IOError} when the directory cannot be inspected.
-@readonly
-routine Directory.metadata!() -> FileMetadata
-    var cstr = me.at.to[CStr]()
-    var status = C::rf_fs_metadata(path: cstr, len: cstr.count().to[S32]())
-    if status == -1
-        throw IOError(description: f"Cannot read metadata: {me.at}")
-    return FileMetadata(
-        size: C::rf_fs_meta_size(),
-        modified: Moment.from_timestamp(seconds: C::rf_fs_meta_modified()),
-        created: Moment.from_timestamp(seconds: C::rf_fs_meta_created()),
-        is_directory: C::rf_fs_meta_is_directory(),
-        readonly: C::rf_fs_meta_readonly(),
-    )
-
-### This directory's final path component.
-### :returns: The name `Text`.
-@readonly
-routine Directory.name() -> Text
-    return file_name(path: me.at)
-
-### The parent of this directory.
-### :returns: The parent `Directory`.
-@readonly
-routine Directory.parent() -> Directory
-    return Directory(at: parent_path(path: me.at))
-
-### The {File} named `name` directly inside this directory.
-### :param name: The child file's final component.
-### :returns: A `File` at `<this>/<name>`.
-@readonly
-routine Directory.file(name: Text) -> File
-    return File(at: join_path(a: me.at, b: name))
-
-### The sub-directory named `name` directly inside this directory.
-### :param name: The child directory's final component.
-### :returns: A `Directory` at `<this>/<name>`.
-@readonly
-routine Directory.subdir(name: Text) -> Directory
-    return Directory(at: join_path(a: me.at, b: name))
-
-### This directory's absolute path (preserving symlinks and other non-canonical components).
-### :returns: A new `Directory` naming the absolute path.
-### :throws: {IOError} when the path cannot be resolved.
-@readonly
-routine Directory.absolute!() -> Directory
-    var cstr = me.at.to[CStr]()
-    var ptr = C::rf_fs_absolute_path(path: cstr, len: cstr.count().to[S32]())
-    var len = C::rf_get_result_len()
-    if ptr.is_none()
-        throw IOError(description: f"Cannot resolve absolute path: {me.at}")
-    var bytes = Bytes(ptr: ptr, count: len)
-    return Directory(at: bytes.decode_as_utf8_lossy())
-
-### This directory's canonical filesystem location (normalized casing, links and relative segments
-### resolved).
-### :returns: A new `Directory` naming the canonical path.
-### :throws: {IOError} when the path cannot be resolved.
-@readonly
-routine Directory.canonical!() -> Directory
-    var cstr = me.at.to[CStr]()
-    var ptr = C::rf_fs_canonical_path(path: cstr, len: cstr.count().to[S32]())
-    var len = C::rf_get_result_len()
-    if ptr.is_none()
-        throw IOError(description: f"Cannot resolve canonical path: {me.at}")
-    var bytes = Bytes(ptr: ptr, count: len)
-    return Directory(at: bytes.decode_as_utf8_lossy())
-
-# ============================================================================
-# Directory permissions
-# ============================================================================
-
-### Whether the current process can read this directory. Non-throwing capability probe.
-### :returns: The resulting `Bool` value.
-@readonly
-routine Directory.can_read() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_can_read(path: cstr, len: cstr.count().to[S32]())
-
-### Whether the current process can write to this directory. Non-throwing capability probe.
-### :returns: The resulting `Bool` value.
-@readonly
-routine Directory.can_write() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_can_write(path: cstr, len: cstr.count().to[S32]())
-
-### Whether the current process can execute (enter) this directory. Non-throwing capability probe.
-### :returns: The resulting `Bool` value.
-@readonly
-routine Directory.can_execute() -> Bool
-    var cstr = me.at.to[CStr]()
-    return C::rf_fs_can_execute(path: cstr, len: cstr.count().to[S32]())
-
-### Enables or disables the readonly attribute for this directory (filesystem metadata).
-### :param readonly: `true` to enable readonly mode; `false` to disable it.
-### :throws: {IOError} when the attribute cannot be set.
-routine Directory.set_readonly!(readonly: Bool = true)
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_set_readonly(cstr, cstr.count().to[S32](), readonly)
-    if result == -1
-        throw IOError(description: f"Cannot set readonly on: {me.at}")
-    return
-
-# ============================================================================
-# Directory mutation (failable)
-# ============================================================================
-
-### Creates this directory. Parent directories must already exist.
-### :throws: {IOError} when the directory cannot be created.
-routine Directory.create!()
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_create_dir(path: cstr, len: cstr.count().to[S32]())
-    if result == -1
-        throw IOError(description: f"Cannot create directory: {me.at}")
-    return
-
-### Creates this directory and any missing parents (recursive creation).
-### :throws: {IOError} when the directories cannot be created.
-routine Directory.create_all!()
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_create_dir_all(path: cstr, len: cstr.count().to[S32]())
-    if result == -1
-        throw IOError(description: f"Cannot create directories: {me.at}")
-    return
-
-### Removes this directory, which must be empty. Use `delete_all!` for a non-empty tree.
-### :throws: {IOError} when the directory cannot be removed.
-routine Directory.delete!()
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_remove(path: cstr, len: cstr.count().to[S32]())
-    if result == -1
-        throw IOError(description: "Cannot remove path")
-    return
-
-### Removes this directory tree recursively (destructive removal for non-empty directories).
-### :throws: {IOError} when the tree cannot be removed.
-routine Directory.delete_all!()
-    var cstr = me.at.to[CStr]()
-    var result = C::rf_fs_remove_all(path: cstr, len: cstr.count().to[S32]())
-    if result == -1
-        throw IOError(description: "Cannot remove directory tree")
-    return
-
-### Moves or renames this directory to `destination`.
-### :param destination: The destination `Directory`.
-### :throws: {IOError} when the move fails.
-routine Directory.move_to!(destination: Directory)
-    var src_cstr = me.at.to[CStr]()
-    var dst_cstr = destination.at.to[CStr]()
-    var result = C::rf_fs_move(src_cstr, src_cstr.count().to[S32](), dst_cstr, dst_cstr.count().to[S32]())
-    if result == -1
-        throw IOError(description: f"Cannot move '{me.at}' to '{destination.at}'")
-    return
-
-### Moves or renames this directory WITHOUT overwriting an existing destination.
-### :param destination: The destination `Directory`.
-### :returns: `true` when the move happened; `false` when the destination already existed.
-### :throws: {IOError} on any other failure.
-routine Directory.move_to_if_absent!(destination: Directory) -> Bool
-    var src_cstr = me.at.to[CStr]()
-    var dst_cstr = destination.at.to[CStr]()
-    var result = C::rf_fs_move_no_replace(
-        src_cstr,
-        src_cstr.count().to[S32](),
-        dst_cstr,
-        dst_cstr.count().to[S32](),
-    )
-    if result == -1
-        throw IOError(description: f"Cannot move '{me.at}' to '{destination.at}'")
-    return result == 0
-
-### Recursively copies this directory tree to `destination`. The tree is recreated under `destination`
-### (created if missing), copying every descendant. Symlinks are NOT followed, so this cannot loop on
-### link cycles. Existing destination files are overwritten following `File.copy_to!`'s native semantics.
-### :param destination: The destination `Directory`.
-### :throws: {IOError} when any entry cannot be copied.
-routine Directory.copy_to!(destination: Directory)
-    destination.create_all()
-    each entry in me.entries()
-        if entry.is_directory
-            me.subdir(name: entry.name).copy_to(destination: destination.subdir(name: entry.name))
-        else
-            me.file(name: entry.name).copy_to(destination: destination.file(name: entry.name))
-    return
-
-# ============================================================================
-# Directory listing & traversal
-# ============================================================================
-
-### The direct entries of this directory as bare names. The final path component only is returned for
-### each entry; use `file(name:)` / `subdir(name:)` to turn one into a full path. Order follows the
-### platform directory-iteration order, and `.` / `..` are omitted. An empty directory yields an empty
-### list.
-### :returns: The resulting `List[Text]` of entry names.
-### :throws: {IOError} when the directory cannot be listed.
-@readonly
-routine Directory.list!() -> List[Text]
-    var cstr = me.at.to[CStr]()
-    var ptr = C::rf_fs_list_dir(path: cstr, len: cstr.count().to[S32]())
-    var len = C::rf_get_result_len()
-    if ptr.is_none()
-        throw IOError(description: f"Cannot list directory: {me.at}")
-    if len == 0
-        return List[Text]()
-    var bytes = Bytes(ptr: ptr, count: len)
-    var joined = bytes.decode_as_utf8_lossy()
-    return joined.split(separator: '\n')
-
-### The direct entries of this directory WITH their kind AND modification time, in one directory read.
-### Prefer this over `list!` + `is_directory` + `metadata!` when walking a tree: on Windows the kind and
-### mtime come for free from the OS directory enumeration, so NO per-entry `stat` is needed. (POSIX falls
-### back to one stat per entry to obtain the mtime.) `.` / `..` are omitted; an empty directory yields an
-### empty list.
-### :returns: The resulting `List[DirEntry]`.
-### :throws: {IOError} when the directory cannot be listed.
-@readonly
-routine Directory.entries!() -> List[DirEntry]
-    var cstr = me.at.to[CStr]()
-    var ptr = C::rf_fs_list_dir_typed(path: cstr, len: cstr.count().to[S32]())
-    var len = C::rf_get_result_len()
-    if ptr.is_none()
-        throw IOError(description: f"Cannot list directory: {me.at}")
-    var result = List[DirEntry]()
-    if len == 0
-        return result
-    var bytes = Bytes(ptr: ptr, count: len)
-    var joined = bytes.decode_as_utf8_lossy()
-    each line in joined.split(separator: '\n')
-        # Each line is `<kind><mtime> <name>`: 'd'/'f', then decimal Unix seconds, one
-        # space, then the raw name (which may itself contain spaces).
-        var is_dir = line[0] == 'd'
-        var space = line.find(letter: ' ')
-        var mtime: S64 = 0
-        each k in 1 til space
-            mtime = mtime * 10 + line[k].digit_value().to[S64]()
-        var name = line[space + 1 til ^0]
-        result.add_last(
-            value: DirEntry(
-                name: name,
-                is_directory: is_dir,
-                modified: Moment.from_timestamp(seconds: mtime),
-            ),
-        )
-    return result
-
-### Every descendant path under this directory, recursively. Each returned path is a full path built by
-### joining onto this directory; sub-directories are included alongside files, in the platform
-### directory-iteration order (a directory appears before its own contents). An empty directory yields an
-### empty list. Symlinks are NOT followed, so this cannot loop on link cycles.
-### :returns: The resulting `List[Text]` of descendant paths.
-### :throws: {IOError} when any directory in the tree cannot be listed.
-@readonly
-routine Directory.walk!() -> List[Text]
-    var result = List[Text]()
-    each entry in me.entries()
-        var full = join_path(a: me.at, b: entry.name)
-        result.add_last(value: full)
-        if entry.is_directory
-            each descendant in me.subdir(name: entry.name).walk()
-                result.add_last(value: descendant)
-    return result
-
-# ============================================================================
-# Working directory & standard directories (process/environment, OS calls)
-# ============================================================================
-
-### The current working directory of the process, as a `Directory`.
-### :returns: The resulting `Directory`.
-### :throws: {IOError} when the working directory cannot be read.
-routine current_dir!() -> Directory
-    var ptr = C::rf_fs_current_dir()
-    var len = C::rf_get_result_len()
-    if ptr.is_none()
-        throw IOError(description: "Cannot read current working directory")
-    var bytes = Bytes(ptr: ptr, count: len)
-    return Directory(at: bytes.decode_as_utf8_lossy())
-
-### Changes the current working directory of the process to `directory`.
-### :param directory: The directory to switch to.
-### :throws: {IOError} when the directory cannot be entered.
-routine set_current_dir!(directory: Directory)
-    var cstr = directory.at.to[CStr]()
-    var result = C::rf_fs_set_current_dir(path: cstr, len: cstr.count().to[S32]())
-    if result == -1
-        throw IOError(description: f"Cannot change directory to: {directory.at}")
-    return
-
-### The platform temporary directory, as a `Directory`. Honors the usual environment variables; never
-### fails.
-### :returns: The resulting `Directory`.
-routine temp_dir() -> Directory
-    var ptr = C::rf_fs_temp_dir()
-    var len = C::rf_get_result_len()
-    var bytes = Bytes(ptr: ptr, count: len)
-    return Directory(at: bytes.decode_as_utf8_lossy())
-
-### The current user's home directory, as a `Directory`.
-### :returns: The resulting `Directory`.
-### :throws: {IOError} when the home directory cannot be determined.
-routine home_dir!() -> Directory
-    var ptr = C::rf_fs_home_dir()
-    var len = C::rf_get_result_len()
-    if ptr.is_none()
-        throw IOError(description: "Cannot determine home directory")
-    var bytes = Bytes(ptr: ptr, count: len)
-    return Directory(at: bytes.decode_as_utf8_lossy())

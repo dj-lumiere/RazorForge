@@ -900,40 +900,37 @@ token, and passing an entity element to an owning parameter
 (`keep(c: cells[1])`) is still RF-S413 even when Copyable: write
 `keep(c: cells[1].duplicate())`.
 
-## 10b. Filesystem and paths (`IO/File`, `IO/FileSystem`)
+## 10b. Files and directories (`IO/File`, `FileManager`)
 
-Filesystem operations are **methods on two value types** in `import IO/File`:
-`File` (a named regular file — byte content) and `Directory` (a named directory —
-a container of entries). Both are cheap values wrapping a path (`at: Text`);
-constructing one touches nothing. The *pure, OS-free* path-string math lives
-separately in `import IO/FileSystem` as free routines (RF has no `Path` type;
-paths are plain `Text`). This is distinct from the *async* file-content sessions
-in §14 (also `IO/File`). Gotchas that differ from Python `os`/`pathlib`:
+**`FileManager` is the one place that touches the disk.** Its routines are `common routine`s called on the type
+(`FileManager.read_text(at: f)`). `File(at:)` and `Directory(at:)` (in `import IO/File`) only say where: cheap values
+wrapping a path (`at: Text`), constructing one touches nothing. There is no `IO/FileSystem` module and no free
+`read_text`/`temp_dir`/`join_path`.
 
-- **`File` (`File(at:)`):** `exists`/`is_file`, `size!`, `metadata!` (→
-  `FileMetadata`), `extension`/`name`/`stem`, `parent` (→ **`Directory`**),
-  `with_extension`, `absolute!`/`canonical!` (→ `File`), `read_text`/`write_text`,
-  `set_size!`, `can_read`/`can_write`/`can_execute`, `set_readonly!`, `copy_to!` /
-  `move_to!` / `move_to_if_absent!` (→ `Bool`, false if dest existed) / `delete!`
-  / `touch!` (all take/return `File`). **Copy is `copy_to!`, NOT `copy`** — a bare
-  `copy` collides with the structural `copy` derive verb.
-- **`Directory` (`Directory(at:)`):** `exists`/`is_directory`, `metadata!`,
-  `name`, `parent` (→ `Directory`), `file(name:)` (→ `File`) / `subdir(name:)` (→
-  `Directory`) to build child paths, `absolute!`/`canonical!` (→ `Directory`),
-  `can_*`/`set_readonly!`, `create!`/`create_all!`, `delete!` (empty) /
-  `delete_all!` (recursive tree), `move_to!` / `move_to_if_absent!`, `copy_to!`
-  (recursive tree copy, symlink-safe). Listing: `list!` (→ `List[Text]` bare
-  names), `entries!` (→ `List[DirEntry]` with `name`/`is_directory`/`modified` in
-  ONE read — prefer it when walking, no per-entry stat on Windows), `walk!` (→
-  full descendant paths, recursive, symlink-safe).
-- **Process/standard dirs (free routines in `IO/File`):** `current_dir!` /
-  `set_current_dir!(directory:)`, `home_dir!`, `temp_dir` (never fails) — all
-  return/take `Directory`.
-- **Path builders (pure, no OS call — `IO/FileSystem`):** `join_path(a:, b:)`,
-  `parent_path`, `file_name`, `file_stem`, `extension`, `split_extension` (→
-  `(stem, ext)` tuple), `with_extension(path:, ext:)`, `with_file_name`.
-  **`extension()` returns WITHOUT the leading dot** (`"txt"`, not `".txt"`), and
-  round-trips through `with_extension`.
+- **Path members (no disk):** `File`: `name`, `stem`, `extension` (WITHOUT the leading dot), `parent` (→ `Directory`),
+  `with_extension(ext:)`, `with_name(name:)`. `Directory`: `name`, `parent`, `file(name:)` (→ `File`),
+  `subdir(name:)` (→ `Directory`).
+- **A file must exist before it is read, written or opened.** `read_text!`/`read_bytes!`, `write_text!`/
+  `write_bytes!`/`append_text!`, `open_read!`/`open_write!`/`open_append!`, `set_size!` and the mappings fail with
+  `IOError` on a missing file. Nothing creates a file silently.
+- **Making:** `FileManager.make_file!(at: File, replacing: Bool = false) -> File`: an existing file is an `IOError`
+  ("already exists") unless `replacing: true`, which empties it (the "write a fresh file every run" case:
+  `FileManager.write_text(at: FileManager.make_file(at: f, replacing: true), content: x)`).
+  `make_directory!(at: Directory, parents: Bool = false) -> Directory`. There is no `touch`.
+- **Asking:** `exists(at:)` (File or Directory), `is_file`, `is_directory`, `size!`, `metadata!` (→ `FileMetadata`),
+  `can_read`/`can_write`/`can_execute`, `absolute!`/`canonical!` (→ the same kind).
+- **Changing:** `delete!(at:)` (a file, or an empty directory), `delete_all!(at: Directory)`,
+  `move!(from:, to:, replacing: false)`, `copy!(from:, to:, replacing: false)` (File→File or Directory→Directory,
+  directory copy is recursive and symlink-safe). An existing destination is an `IOError` unless `replacing: true`.
+  `set_readonly!(at:, readonly: true)`, `set_size!(at:, bytes:)`.
+- **Listing:** `list!(at:)` (→ `List[Text]` bare names), `entries!(at:)` (→ `List[DirEntry]` with
+  `name`/`is_directory`/`modified` in ONE read, no per-entry stat on Windows), `walk!(at:)` (→ full descendant paths,
+  recursive, symlink-safe).
+- **Process directories:** `current_directory!()`, `set_current_directory!(to:)`, `home_directory!()`,
+  `temp_directory()` (never fails).
+- **Sessions:** `open_read!` (→ `FileSource`, `load`), `open_write!`/`open_append!` (→ `FileSink`, `store`), bound by
+  `using`. `dangerous` mappings: `expose![T](at:)`, `expose_range![T](at:, start:, count:)`, `wield![T](at:)`,
+  `wield_range![T](...)` (→ `Exposed[T]`/`Wielded[T]`, `using`).
 
 Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
 `symlink!`/`hard_link!`) and `glob`.
@@ -1169,15 +1166,15 @@ routine start()
 ```
 
 Async file I/O (parks a job while waiting, blocks elsewhere), in `IO/File`:
-`read_text(path: Text) -> Text` and `write_text(path: Text, content: Text) -> S64`. Prefer these to
-opening a `FileHandle` inside a job.
+`FileManager.read_text!(at: File) -> Text` and `FileManager.write_text!(at: File, content: Text)`. Prefer these to
+opening a `FileSource`/`FileSink` inside a job.
 
 **Channels** (`Core`, no import) — typed producer/consumer queues:
 - `make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])` — single consumer. `capacity` 0 =
   rendezvous (send waits for a taker); N = bounded buffer (send blocks when full = backpressure).
 - `make_shared_channel[T](capacity: U64) -> (Sender[T], SharedReceiver[T])` — multiple consumers
   COMPETE for each item (fan-out, not broadcast).
-- `sender.send(item: x)` moves `x` in; FAILABLE (`ChannelClosedError` if closed / no consumers).
+- `sender.send(item: x)` hands `x` over; FAILABLE (`ChannelClosedError` if closed / no consumers).
   `sender.send_if_room(item: x) -> Bool` never waits: `true` when it went in, `false` when the channel was full
   (the item is destroyed), `ChannelClosedError` like `send`.
   `sender.duplicate()` clones a producer for fan-in; `sender.close()` / `is_closed()`.

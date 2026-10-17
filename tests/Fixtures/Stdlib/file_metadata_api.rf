@@ -1,25 +1,28 @@
 module Tests/Stdlib/FileMetadataApi
 
 import IO/Console
+import IO/Errors
 import IO/File
-# File.metadata() and Directory.entries() return records declared in IO/FileSystem, which IO/File
-# imports. Builds a known directory under the temp directory so the output is deterministic.
+# FileManager end to end on a known directory under the temp directory, so the output is deterministic:
+# making, writing, reading, metadata, listing, moving, copying, and the failures a missing or existing file gives.
 routine start()
-    var root = temp_dir().subdir(name: "rf_fixture_file_metadata_api")
-    if root.exists()
-        root.delete_all()
-    root.create_all()
+    var root = FileManager.temp_directory().subdir(name: "rf_fixture_file_metadata_api")
+    if FileManager.exists(at: root)
+        FileManager.delete_all(at: root)
+    drop FileManager.make_directory(at: root, parents: true)
 
-    var f = root.file(name: "hello.txt")
-    drop f.write_text(content: "hello")
-    root.subdir(name: "inner").create_all()
+    var f = FileManager.make_file(at: root.file(name: "hello.txt"))
+    FileManager.write_text(at: f, content: "hello")
+    FileManager.append_text(at: f, content: "!")
+    show(f"read: {FileManager.read_text(at: f)}")
+    drop FileManager.make_directory(at: root.subdir(name: "inner"))
 
-    var m = f.metadata()
+    var m = FileManager.metadata(at: f)
     show(f"size: {m.size}")
     show(f"file is_directory: {m.is_directory}")
-    show(f"dir is_directory: {root.metadata().is_directory}")
+    show(f"dir is_directory: {FileManager.metadata(at: root).is_directory}")
 
-    var entries = root.entries()
+    var entries = FileManager.entries(at: root)
     show(f"entries: {entries.count()}")
     var dirs: U64 = 0
     var hello_seen = false
@@ -31,6 +34,28 @@ routine start()
     show(f"directories: {dirs}")
     show(f"hello seen: {hello_seen}")
 
-    root.delete_all()
-    show(f"cleaned: {not root.exists()}")
+    # A missing file can't be read or written, and an existing one can't be made again.
+    var missing = root.file(name: "missing.txt")
+    show(f"read missing: {try FileManager.read_text(at: missing)}")
+    when check FileManager.write_text(at: missing, content: "x")
+        is None => show("write missing: written")
+        is IOError => show("write missing: IOError")
+    when check FileManager.make_file(at: f)
+        is File => show("make existing: made")
+        is IOError => show("make existing: IOError")
+    drop FileManager.make_file(at: f, replacing: true)
+    show(f"replaced size: {FileManager.size(at: f)}")
+
+    # Move and copy refuse an existing destination unless replacing.
+    var twin = root.file(name: "copy.txt")
+    FileManager.copy(from: f, to: twin)
+    when check FileManager.copy(from: f, to: twin)
+        is None => show("copy again: copied")
+        is IOError => show("copy again: IOError")
+    var moved = root.file(name: "moved.txt")
+    FileManager.move(from: twin, to: moved)
+    show(f"moved: {FileManager.exists(at: moved)} {FileManager.exists(at: twin)}")
+
+    FileManager.delete_all(at: root)
+    show(f"cleaned: {not FileManager.exists(at: root)}")
     return

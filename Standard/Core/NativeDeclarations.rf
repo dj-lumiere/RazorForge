@@ -1743,7 +1743,8 @@ routine C::rf_io_read_file_all(path: CStr, path_len: S32) -> Hijacked[Byte]
 ### :returns: The length of the current async result buffer in bytes.
 routine C::rf_io_get_result_len() -> U64
 
-### Writes a whole file asynchronously on the runtime's I/O threads, truncating any existing contents.
+### Writes a whole existing file asynchronously on the runtime's I/O threads, truncating its contents. A
+### missing file fails.
 ### Inside work an Agent runs as a fiber the fiber parks while the write runs (its siblings keep
 ### progressing), anywhere else it writes inline. The payload is copied, so the caller's buffer need not
 ### outlive the call.
@@ -2045,14 +2046,27 @@ routine C::rf_fs_temp_dir() -> Hijacked[Byte]
 ### :returns: A runtime-managed byte buffer containing the home directory path, or none when unset.
 routine C::rf_fs_home_dir() -> Hijacked[Byte]
 
-### Creates an empty file, or updates the modification time when it already exists.
-### :param path: The null-terminated file path to touch.
+### Makes a file. With `replacing`, an existing file is emptied, otherwise it is left alone.
+### :param path: The null-terminated file path.
 ### :param len: The path length in bytes.
-### :returns: `0` on success, or `-1` on error.
-routine C::rf_fs_touch(path: CStr, len: S32) -> S32
+### :param replacing: Whether an existing file is emptied.
+### :returns: `0` when made, `1` when it exists and `replacing` is false, or `-1` on any other error.
+routine C::rf_fs_make_file(path: CStr, len: S32, replacing: Bool) -> S32
 
-### Sets a file's size to exactly `size` bytes, creating it if missing (extending with zero bytes or
-### truncating as needed). Enables writable mappings that produce output — mmap cannot grow a file.
+### Copies a file unless the destination exists.
+### :param src: The source path.
+### :param src_len: Its length.
+### :param dst: The destination path.
+### :param dst_len: Its length.
+### :returns: `0` when copied, `1` when the destination exists (nothing copied), or `-1` on an error.
+routine C::rf_fs_copy_no_replace(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
+
+### Whether this thread's last `rf_io_read_file_all` or `rf_io_write_file_all` failed.
+### :returns: True when it failed.
+routine C::rf_io_last_failed() -> Bool
+
+### Sets an existing file's size to exactly `size` bytes (extending with zero bytes or truncating as
+### needed). Enables writable mappings that produce output — mmap cannot grow a file. A missing file fails.
 ### :param path: The null-terminated file path.
 ### :param len: The path length in bytes.
 ### :param size: The exact size in bytes.
