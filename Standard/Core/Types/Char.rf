@@ -98,19 +98,23 @@ routine Char.is_numeric() -> Bool
 routine Char.is_alphanumeric() -> Bool
     return me.is_alphabetic() or me.is_numeric()
 
-### Returns `true` when this character is an ASCII uppercase letter.
+### Returns `true` when this character is an uppercase letter (Unicode category Lu): `A`, `É`, `Σ`.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_uppercase() -> Bool
     var v = me.to[U32]()
-    return 0x0041 <= v <= 0x005A  # A-Z (ASCII only)
+    if v < 0x80
+        return 0x0041 <= v <= 0x005A
+    return unicode_is_uppercase(cp: v.to[S64]())
 
-### Returns `true` when this character is an ASCII lowercase letter.
+### Returns `true` when this character is a lowercase letter (Unicode category Ll): `a`, `é`, `σ`.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_lowercase() -> Bool
     var v = me.to[U32]()
-    return 0x0061 <= v <= 0x007A  # a-z (ASCII only)
+    if v < 0x80
+        return 0x0061 <= v <= 0x007A
+    return unicode_is_lowercase(cp: v.to[S64]())
 
 ### Returns `true` when this character is one of the supported whitespace code
 ### points.
@@ -146,23 +150,25 @@ routine Char.is_control() -> Bool
     var v = me.to[U32]()
     return v <= 0x001F or 0x007F <= v <= 0x009F
 
-### Converts this value to uppercase when the implementation has a matching
-### uppercase form.
+### Returns this character's uppercase form by the Unicode simple case mapping (`é` gives `É`, `σ` gives `Σ`), or
+### the character itself when it has none. Each character maps to one character, so `ß` stays `ß`.
 ### :returns: The resulting `Char` value.
 @readonly
 routine Char.to_uppercase() -> Char
-    if me.is_lowercase()
-        return Char(me.to[U32]() - 32)
-    return me
+    var v = me.to[U32]()
+    if v < 0x80
+        return if 0x0061 <= v <= 0x007A then Char(v - 32) else me
+    return Char(unicode_uppercase(cp: v.to[S64]()).to[U32]())
 
-### Converts this value to lowercase when the implementation has a matching
-### lowercase form.
+### Returns this character's lowercase form by the Unicode simple case mapping (`É` gives `é`, `Σ` gives `σ`), or
+### the character itself when it has none.
 ### :returns: The resulting `Char` value.
 @readonly
 routine Char.to_lowercase() -> Char
-    if me.is_uppercase()
-        return Char(me.to[U32]() + 32)
-    return me
+    var v = me.to[U32]()
+    if v < 0x80
+        return if 0x0041 <= v <= 0x005A then Char(v + 32) else me
+    return Char(unicode_lowercase(cp: v.to[S64]()).to[U32]())
 
 # ============================================================================
 # Comparison operations
