@@ -1640,14 +1640,10 @@ public class CompilerPipelineLoweringTests
                                ifs.ElseStatement != null &&
                                ContainsLambda(statement: ifs.ElseStatement),
             WhileStatement whileStmt => ContainsLambda(expression: whileStmt.Condition) ||
-                                        ContainsLambda(statement: whileStmt.Body) ||
-                                        whileStmt.ElseBranch != null &&
-                                        ContainsLambda(statement: whileStmt.ElseBranch),
+                                        ContainsLambda(statement: whileStmt.Body),
             LoopStatement loop => ContainsLambda(statement: loop.Body),
             EachStatement eachStmt => ContainsLambda(expression: eachStmt.Iterable) ||
-                                      ContainsLambda(statement: eachStmt.Body) ||
-                                      eachStmt.ElseBranch != null &&
-                                      ContainsLambda(statement: eachStmt.ElseBranch),
+                                      ContainsLambda(statement: eachStmt.Body),
             WhenStatement whenStmt => ContainsLambda(expression: whenStmt.Expression) ||
                                       whenStmt.Clauses.Any(predicate: clause =>
                                           ContainsLambda(statement: clause.Body)),
@@ -1971,27 +1967,11 @@ public class CompilerPipelineLoweringTests
                     yield return e;
                 }
 
-                if (whileStmt.ElseBranch != null)
-                {
-                    foreach (Expression e in EnumerateExpressions(statement: whileStmt.ElseBranch))
-                    {
-                        yield return e;
-                    }
-                }
-
                 yield break;
             case EachStatement eachStmt:
                 foreach (Expression e in EnumerateExpressions(statement: eachStmt.Body))
                 {
                     yield return e;
-                }
-
-                if (eachStmt.ElseBranch != null)
-                {
-                    foreach (Expression e in EnumerateExpressions(statement: eachStmt.ElseBranch))
-                    {
-                        yield return e;
-                    }
                 }
 
                 yield break;

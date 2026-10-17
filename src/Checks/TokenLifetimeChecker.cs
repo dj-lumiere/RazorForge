@@ -1073,11 +1073,6 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 }
                 case WhileStatement loop:
                     Loop(condition: loop.Condition, body: loop.Body);
-                    if (loop.ElseBranch is { } elseBranch)
-                    {
-                        Statement(stmt: elseBranch);
-                    }
-
                     return;
                 case LoopStatement loop:
                     Loop(condition: null, body: loop.Body);
