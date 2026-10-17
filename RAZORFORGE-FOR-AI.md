@@ -339,7 +339,7 @@ declare their own `i`.
   any integer type (`x << n` with `n: S64`); a negative amount crashes. Shifting by the
   width or more pushes every bit out: `<<` and `>>>` give 0, `>>` gives -1 for a negative
   value, else 0. A subscript index may be any integer type too (`xs[i]` with `i: S64` or
-  `U8`); a negative index crashes. The named routines (`x.ashl(bits:)`, `xs.getitem(index:)`)
+  `U8`); a negative index crashes with `NegativeIndexError`. The named routines (`x.ashl(bits:)`, `xs.getitem(index:)`)
   keep their parameter types.
 - `//` floor division, `/` true division, `%` remainder
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
