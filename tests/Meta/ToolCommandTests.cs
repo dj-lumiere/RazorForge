@@ -87,6 +87,68 @@ public sealed class ToolCommandTests : IDisposable
         Assert.Contains(expectedSubstring: "2 passed, 1 failed", actualString: stdout);
     }
 
+    /// <summary><c>test</c> runs each <c>@test</c> routine of a file on its own: a <c>@case</c> whose result differs
+    /// fails and names the case, a failing <c>verify</c> fails, <c>@skip</c> is reported as skipped, and a routine that
+    /// runs past its <c>@time_limit</c> fails.</summary>
+    [Fact]
+    public void Test_RunsEachTestRoutine()
+    {
+        string program = Write(name: "routines.rf", source: """
+            module ToolRoutines
+
+            routine add(a: S32, b: S32) -> S32
+                return a + b
+
+            @test
+            @case(input: (1, 2), output: 3)
+            @case(input: (-1, 5), output: 4)
+            routine sums(a: S32, b: S32) -> S32
+                return add(a: a, b: b)
+
+            @test
+            @case(input: (2, 2), output: 5)
+            routine wrong_sum(a: S32, b: S32) -> S32
+                return add(a: a, b: b)
+
+            @test
+            routine checks()
+                verify(add(a: 1, b: 1) == 2)
+                return
+
+            @test
+            routine fails_check()
+                verify(add(a: 1, b: 1) == 3)
+                return
+
+            @test
+            @skip("not ready")
+            routine later()
+                breach()
+                return
+
+            @test
+            @time_limit(200ms)
+            routine endless()
+                var n: S64 = 0
+                while true
+                    n +%= 1
+                return
+            """);
+
+        (int exit, string stdout, _) = Tool("test", program);
+
+        Assert.Equal(expected: 1, actual: exit);
+        Assert.Contains(expectedSubstring: "ok    routines::sums", actualString: stdout);
+        Assert.Contains(expectedSubstring: "FAIL  routines::wrong_sum: a case gave a different result", actualString: stdout);
+        Assert.Contains(expectedSubstring: "case 1 (2, 2): expected 5, got 4", actualString: stdout);
+        Assert.Contains(expectedSubstring: "ok    routines::checks", actualString: stdout);
+        Assert.Contains(expectedSubstring: "FAIL  routines::fails_check", actualString: stdout);
+        Assert.Contains(expectedSubstring: "skip  routines::later: not ready", actualString: stdout);
+        Assert.Contains(expectedSubstring: "FAIL  routines::endless: took longer than its @time_limit of 200ms",
+            actualString: stdout);
+        Assert.Contains(expectedSubstring: "2 passed, 3 failed, 1 skipped", actualString: stdout);
+    }
+
     /// <summary><c>lint</c> reports a file that is not in the canonical layout and passes one that is.</summary>
     [Fact]
     public void Lint_ReportsStyleErrors()

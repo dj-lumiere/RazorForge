@@ -375,10 +375,10 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts bench attribute.
+    /// Verifies that `@bench` is not accepted yet: nothing runs benchmarks, so it would be ignored.
     /// </summary>
     [Fact]
-    public void Parse_BenchAttribute()
+    public void Parse_BenchAttribute_IsRejectedForNow()
     {
         string source = """
                         @bench
@@ -388,7 +388,7 @@ public class AttributeTests
                             return
                         """;
 
-        AssertParses(source: source);
+        AssertParseError(source: source);
     }
 
     #endregion
