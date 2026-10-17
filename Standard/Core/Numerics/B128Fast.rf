@@ -528,7 +528,7 @@ secret routine b128fx_log1p_fixed(t: B128Fx) -> (Bool, Bool, U256, B64)
     # units, 2^-t.e <= 2^148)
     if t.e >= 0
         return (false, false, 0, 0.0)
-    var one: U256 = 1 << LLVM::zero_extend[U64, U256](LLVM::reinterpret_bits[S64, U64](0 -% t.e))
+    var one: U256 = 1 << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](0 -% t.e))
     var tm = LLVM::zero_extend[U128, U256](t.m)
     var sv = one +% tm
     if t.neg
@@ -547,12 +547,13 @@ secret routine b128fx_log_split(sv: U256, e: S64, tabs: B64) -> (Bool, Bool, U25
     var vm = slo
     var low: U256 = 0
     if k > 0
-        var ku = LLVM::zero_extend[U64, U256](LLVM::reinterpret_bits[S64, U64](k))
+        var ku = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](k))
+        var unit: U256 = 1
         vm = LLVM::int_truncate[U256, U128](sv >>> ku)
-        low = sv & (1 << ku) -% 1
+        low = sv & (unit << ku) -% 1
     elseif k < 0
         # a short S (1 + t for a t near -1): v is S itself, normalized
-        vm = slo << LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](0 -% k))
+        vm = slo << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](0 -% k))
     var vbiased = lead +% e +% 16383
     if vbiased < 1 or vbiased > 32766
         return (false, false, 0, 0.0)
