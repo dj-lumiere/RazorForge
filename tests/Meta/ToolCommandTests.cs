@@ -89,7 +89,8 @@ public sealed class ToolCommandTests : IDisposable
 
     /// <summary><c>test</c> runs each <c>@test</c> routine of a file on its own: a <c>@case</c> whose result differs
     /// fails and names the case, a failing <c>verify</c> fails, <c>@skip</c> is reported as skipped, and a routine that
-    /// runs past its <c>@time_limit</c> fails.</summary>
+    /// runs past its <c>@time_limit</c> or whose heap goes past its <c>@memory_limit</c>
+    /// fails.</summary>
     [Fact]
     public void Test_RunsEachTestRoutine()
     {
@@ -127,6 +128,24 @@ public sealed class ToolCommandTests : IDisposable
                 return
 
             @test
+            @memory_limit(64kib)
+            routine small_heap()
+                var xs = List[S64]()
+                each i in 0 til 100
+                    xs.add_last(i)
+                verify(xs.count() == 100)
+                return
+
+            @test
+            @memory_limit(64kib)
+            routine large_heap()
+                var xs = List[S64]()
+                each i in 0 til 100_000
+                    xs.add_last(i)
+                verify(xs.count() == 100_000)
+                return
+
+            @test
             @time_limit(200ms)
             routine endless()
                 var n: S64 = 0
@@ -146,7 +165,10 @@ public sealed class ToolCommandTests : IDisposable
         Assert.Contains(expectedSubstring: "skip  routines::later: not ready", actualString: stdout);
         Assert.Contains(expectedSubstring: "FAIL  routines::endless: took longer than its @time_limit of 200ms",
             actualString: stdout);
-        Assert.Contains(expectedSubstring: "2 passed, 3 failed, 1 skipped", actualString: stdout);
+        Assert.Contains(expectedSubstring: "ok    routines::small_heap", actualString: stdout);
+        Assert.Contains(expectedSubstring: "FAIL  routines::large_heap: used more memory than its @memory_limit",
+            actualString: stdout);
+        Assert.Contains(expectedSubstring: "3 passed, 4 failed, 1 skipped", actualString: stdout);
     }
 
     /// <summary><c>lint</c> reports a file that is not in the canonical layout and passes one that is.</summary>
