@@ -300,6 +300,6 @@ public class ThreadArgShareabilityTests
                                                var job = bump.to[Agent](n: node.modify())
                                                return job
                                            """,
-            expectedErrorSubstring: "stays in the routine that made it");
+            expectedErrorSubstring: "stays in the block that made it");
     }
 }
