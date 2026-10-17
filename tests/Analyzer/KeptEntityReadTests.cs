@@ -68,7 +68,7 @@ public class KeptEntityReadTests
                                         show(f"{a == boxes[0]}")
                                         return
                                     """,
-            expected: "'eq' takes ownership of its 'you'"));
+            expected: "'eq' keeps what its 'you' is given"));
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class KeptEntityReadTests
                                         drop take(b: boxes[0])
                                         return
                                     """,
-            expected: "'add_last' takes ownership of its 'value'"));
+            expected: "'add_last' keeps what its 'value' is given"));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class KeptEntityReadTests
                                         var p = Pair(a: boxes[0], b: Box(n: 2))
                                         return
                                     """,
-            expected: "'Pair' takes ownership of its 'a'"));
+            expected: "'Pair' keeps what its 'a' is given"));
     }
 
     [Fact]
