@@ -335,9 +335,12 @@ declare their own `i`.
 - Checked: `+ - *` (throw on overflow) · wrapping: `+% -% *%` · clamping: `+^ -^ *^`
   (floats: checked `+ - * / **` or raw IEEE `+! -! *! /! **!` with no `danger` needed)
 - Shifts: `<<` left, `>>` right filling with the sign bit, `>>>` right filling with
-  zeros (the same as `>>` on unsigned types). There is no `<<<`. Shift amounts are
-  `U32` (bare literal amounts fine). Shifting by the width or more pushes every bit
-  out: `<<` and `>>>` give 0, `>>` gives -1 for a negative value, else 0.
+  zeros (the same as `>>` on unsigned types). There is no `<<<`. A shift amount may be
+  any integer type (`x << n` with `n: S64`); a negative amount crashes. Shifting by the
+  width or more pushes every bit out: `<<` and `>>>` give 0, `>>` gives -1 for a negative
+  value, else 0. A subscript index may be any integer type too (`xs[i]` with `i: S64` or
+  `U8`); a negative index crashes. The named routines (`x.ashl(bits:)`, `xs.getitem(index:)`)
+  keep their parameter types.
 - `//` floor division, `/` true division, `%` remainder
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
   idiom is `try x.abs()!!`
