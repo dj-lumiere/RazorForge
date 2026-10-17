@@ -105,7 +105,7 @@ public class DropBindingTests
                                                                        drop other.retrieve()
                                                                        return
                                                                    """,
-            expectedErrorSubstring: "single-owner entity");
+            expectedErrorSubstring: "with no manager");
         Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
 

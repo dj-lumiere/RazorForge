@@ -81,7 +81,7 @@ public class KeptEntityReadTests
                                     routine start()
                                         return
                                     """,
-            expected: "You are returning a 'Box' that its container still owns"));
+            expected: "You are returning a 'Box' that its container still holds"));
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class KeptEntityReadTests
                                     routine start()
                                         return
                                     """,
-            expected: "You are returning a 'Box' that the value it belongs to still owns"));
+            expected: "You are returning a 'Box' that the value it belongs to still holds"));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class KeptEntityReadTests
                                         p.b = boxes[1]
                                         return
                                     """,
-            expected: "You are storing a 'Box' that its container still owns"));
+            expected: "You are storing a 'Box' that its container still holds"));
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class KeptEntityReadTests
                                         var t = (boxes[0], 1)
                                         return
                                     """,
-            expected: "You are putting into a tuple a 'Box' that its container still owns"));
+            expected: "You are putting into a tuple a 'Box' that its container still holds"));
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class KeptEntityReadTests
                                         var t = (z, 1)
                                         return
                                     """,
-            expected: "You are putting into a tuple a 'Box' that 'z' still owns"));
+            expected: "You are putting into a tuple a 'Box' that 'z' still holds"));
     }
 
     [Fact]

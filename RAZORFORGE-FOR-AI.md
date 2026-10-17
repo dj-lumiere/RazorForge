@@ -874,11 +874,11 @@ element. A VALUE element works the same way (`m[i][j] = v`, `pts[k].x = v`):
 the builder writes through a copy and stores it back.
 
 **An entity element or field cannot be taken by a plain read.** `boxes[0]` and
-`p.a` read an entity their container still owns, so putting one anywhere that
-owns what it holds (`x = boxes[0]`, `p.b = boxes[0]`,
+`p.a` read an entity their container still holds, so putting one anywhere that
+keeps what it holds (`x = boxes[0]`, `p.b = boxes[0]`,
 `take(b: boxes[0])`, `holder.add_last(value: boxes[0])`, `return boxes[0]`,
-`(boxes[0], 1)`) is RF-S413: it would make two owners of one entity (a tuple
-owns its items, so a variable goes in with `steal` too: `(steal z, 1)`). Take an
+`(boxes[0], 1)`) is RF-S413: it would share one entity between two places with no manager (a tuple
+keeps its items, so a variable goes in with `steal` too: `(steal z, 1)`). Take an
 element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
 explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
 where it sits. A new variable (`var x = boxes[0]`) is the exception: it holds a
