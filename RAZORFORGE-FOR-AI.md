@@ -105,7 +105,10 @@ When unsure, consult ground truth in the repo/package:
    Every crash report is headed by the error's crash title (`Division error: ...`, the type name in sentence
    case unless the crashable writes its own `crash_title`), runtime crashes too (`Integer overflow error: ...`).
    `is None` is a `Maybe` arm only (a `Check` has no absent state: "not found" in a
-   `Check` is the arm `is AbsentValueError`).
+   `Check` is the arm `is AbsentValueError`). When the value is itself a variant, an arm may name the types it holds instead of the
+   whole value (`when check parse(...)` with `is Deposit as d`, `is Withdraw as w`, `is Crashables as e`),
+   and those arms together must name every one of them. The same holds on a plain variant that holds another
+   variant (`is Deposit` on an `Event` holding `Command`).
    **A crash exits the process with status 82** (`0x52`, `'R'` for Runtime error —
    `RF_EXIT_CRASH`), for every runtime crash (unrecovered `throw`, checked-
    arithmetic failure, out of memory, stack overflow). If a run ended with 82, it
