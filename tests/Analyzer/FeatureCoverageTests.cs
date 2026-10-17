@@ -314,10 +314,10 @@ public class FeatureCoverageTests
                                   var err = check guard_div(a: 10, b: 0)
                                   when ok
                                       is DivisionByZeroError => show("caught")
-                                      else as v                 => show(f"ok:{v}")
+                                      is S64 as v               => show(f"ok:{v}")
                                   when err
                                       is DivisionByZeroError as e => show(f"caught:{e.crash_title()}")
-                                      else as v                   => show(f"ok:{v}")
+                                      is S64 as v                 => show(f"ok:{v}")
                                   return
                               """;
         _ = GenerateIr(source: source);

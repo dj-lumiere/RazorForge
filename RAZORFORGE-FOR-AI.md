@@ -466,7 +466,7 @@ routine collatz_steps(start: U64) -> U64
 ```razorforge
 when m
     is None => show("absent")
-    else as p  => show(f"present: x={p.x}")   # else with binding
+    else as p  => show(f"present: x={p.x}")   # else with binding: the one type left (here the value)
 
 when n
     == 0 => throw DivisionByZeroError()
@@ -485,6 +485,10 @@ when cell                                     # record patterns, written like co
 ```
 
 The same record pattern works after `if`: `if cell is Monster(hp: 0) as m`.
+
+`else as name` is allowed only when one type is left after the earlier arms, and `name` has that type: the value
+of a `Maybe` after `is None`, the last member type of a variant, or (on a `Check`) every error left, taken as one
+type. When more than one type is left it is `RF-S359`: write an arm for each.
 
 In a `when` statement an arm may be a block: break the line after `=>` and indent
 the statements one level, as in an `if` body. Keep a one-statement arm on one line.
