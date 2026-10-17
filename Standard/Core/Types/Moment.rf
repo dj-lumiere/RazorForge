@@ -24,19 +24,10 @@ obeys Comparable, DurationAddable, DurationSubtractable
 ### :param seconds: The whole-second component.
 ### :param nanoseconds: The nanosecond component within the current second.
 ### :returns: The resulting `Moment` value.
-routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
-    var s = seconds
-    var ns = nanoseconds
-
-    if ns >= NS_PER_SECOND
-        s = s +% LLVM::signed_div(ns, NS_PER_SECOND)
-        ns = LLVM::signed_rem(ns, NS_PER_SECOND)
-    elseif ns < 0
-        var borrow = LLVM::signed_div(0 -% ns -% 1, NS_PER_SECOND) +% 1
-        s = s -% borrow
-        ns = ns + borrow *% NS_PER_SECOND
-
-    return Moment(seconds: s, nanoseconds: ns.to[U32]())
+### :throws: {IntegerOverflowError} when the seconds don't fit in `S64`.
+routine normalize_moment!(seconds: S64, nanoseconds: S64) -> Moment
+    return Moment(seconds: seconds + nanoseconds // NS_PER_SECOND,
+        nanoseconds: (nanoseconds % NS_PER_SECOND).to[U32]())
 
 # ============================================================================
 # Civil calendar helpers (proleptic Gregorian)
@@ -154,10 +145,40 @@ routine days_to_day(days_since_epoch: S64) -> S64
 ### :param minute: The minute component.
 ### :param second: The second component.
 ### :returns: The resulting `Moment` value.
-routine Moment(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
+### :throws: {InvalidMomentError} when a part is out of its range: a month outside `1..12`, a day the month doesn't
+### have, an hour outside `0..23`, or a minute or second outside `0..59`.
+routine Moment!(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
+    require_moment_part(part: "month", value: month, lowest: 1, highest: 12)
+    require_moment_part(part: "day", value: day, lowest: 1, highest: days_in_month(year: year, month: month))
+    require_moment_part(part: "hour", value: hour, lowest: 0, highest: 23)
+    require_moment_part(part: "minute", value: minute, lowest: 0, highest: 59)
+    require_moment_part(part: "second", value: second, lowest: 0, highest: 59)
     var d = ymd_to_days(year: year, month: month, day: day)
-    var s = d *% SECONDS_PER_DAY +% hour *% SECONDS_PER_HOUR +% minute *% SECONDS_PER_MINUTE +% second
+    var s = d * SECONDS_PER_DAY + hour * SECONDS_PER_HOUR + minute * SECONDS_PER_MINUTE + second
     return Moment(seconds: s, nanoseconds: 0)
+
+### Crashes with {InvalidMomentError} when `value` is outside `lowest..highest`.
+### :param part: The name of the part.
+### :param value: The value given for it.
+### :param lowest: The smallest value it takes.
+### :param highest: The largest value it takes.
+### :throws: {InvalidMomentError} when `value` is out of range.
+secret routine require_moment_part!(part: Text, value: S64, lowest: S64, highest: S64)
+    if value < lowest or value > highest
+        throw InvalidMomentError(part: part, value: value, lowest: lowest, highest: highest)
+    return
+
+### Returns how many days a month of the proleptic Gregorian calendar has.
+### :param year: The year, which decides February.
+### :param month: The month, in `1..12`.
+### :returns: The number of days, from 28 to 31.
+secret routine days_in_month(year: S64, month: S64) -> S64
+    if month == 2
+        var leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+        return if leap then 29 else 28
+    if month == 4 or month == 6 or month == 9 or month == 11
+        return 30
+    return 31
 
 ### Returns the Unix epoch.
 ### This is `1970-01-01 00:00:00 UTC`.
@@ -278,17 +299,17 @@ routine Moment.timestamp_ms() -> S64
 ### :param duration: The `duration` value.
 ### :returns: The resulting `Moment` value.
 @readonly
-routine Moment.add_duration(duration: Duration) -> Moment
+routine Moment.add_duration!(duration: Duration) -> Moment
     return normalize_moment(
-        seconds: me.seconds +% duration.total_seconds(),
-        nanoseconds: me.nanoseconds.to[S64]() +% duration.subsec_nanoseconds().to[S64](),
+        seconds: me.seconds + duration.total_seconds(),
+        nanoseconds: me.nanoseconds.to[S64]() + duration.subsec_nanoseconds().to[S64](),
     )
 
 ### Returns this moment shifted backward by `duration`.
 ### :param duration: The time span to subtract.
 ### :returns: The resulting `Moment` value.
 @readonly
-routine Moment.subtract_duration(duration: Duration) -> Moment
+routine Moment.subtract_duration!(duration: Duration) -> Moment
     return me.add_duration(duration.neg())
 
 ### Returns the elapsed duration from `earlier` to this moment.
@@ -296,31 +317,31 @@ routine Moment.subtract_duration(duration: Duration) -> Moment
 ### :param earlier: The earlier comparison instant.
 ### :returns: The resulting `Duration` value.
 @readonly
-routine Moment.elapsed_since(earlier: Moment) -> Duration
+routine Moment.elapsed_since!(earlier: Moment) -> Duration
     return normalize_duration(
-        seconds: me.seconds -% earlier.seconds,
-        nanoseconds: me.nanoseconds.to[S64]() -% earlier.nanoseconds.to[S64](),
+        seconds: me.seconds - earlier.seconds,
+        nanoseconds: me.nanoseconds.to[S64]() - earlier.nanoseconds.to[S64](),
     )
 
 ### Returns the moment reached by advancing this one by `you`.
 ### :param you: The duration to advance by.
 ### :returns: The resulting `Moment`.
 @readonly
-routine Moment.add(you: Duration) -> Moment
+routine Moment.add!(you: Duration) -> Moment
     return me.add_duration(you)
 
 ### Returns the moment reached by retreating this one by `you`.
 ### :param you: The duration to subtract.
 ### :returns: The resulting `Moment`.
 @readonly
-routine Moment.sub(you: Duration) -> Moment
+routine Moment.sub!(you: Duration) -> Moment
     return me.subtract_duration(you)
 
 ### Returns the elapsed time from `you` to this moment.
 ### :param you: The earlier moment to measure from.
 ### :returns: The `Duration` between the two moments.
 @readonly
-routine Moment.sub(you: Moment) -> Duration
+routine Moment.sub!(you: Moment) -> Duration
     return me.elapsed_since(you)
 
 # ============================================================================
