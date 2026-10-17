@@ -537,6 +537,12 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   error too. A constructor is declared `routine T(...)` / `routine T!(...)`
   (`routine T.create(...)` is an ordinary member routine named `create`), and
   overload resolution picks the failable or plain one for you.
+- **Annotations are a fixed set.** `@readonly`, `@writable`, `@reshaping`, `@discardable`, `@positional`,
+  `@infix`, `@inline`, `@no_optimize`, `@crash_only`, `@untraced`, `@blocking`, `@layout(...)`, `@link(...)`,
+  `@target(...)`, `@test`/`@case`/`@time_limit`/`@memory_limit`/`@skip`/`@bench` (test runner, not run yet) and the
+  library's own (`@llvm`, `@llvm_ir`, `@rf`, `@innate`, `@generated`, `@override`, `@overridable`,
+  `@self_locking`). Any other name is RF-G221 (a misspelling names the close one). There is no
+  `@deprecated` and no `@initonly`.
 - Bare routine names are first-class values: `select(transform: double)`
   (free routines only).
 

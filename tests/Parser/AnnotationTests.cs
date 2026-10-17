@@ -48,10 +48,10 @@ public class AttributeTests
         Assert.Contains(expected: "crash_only", collection: routine.Annotations);
     }
     /// <summary>
-    /// Verifies that the parser accepts prelude attribute.
+    /// Verifies that an annotation the builder does not know is RF-G221, and the routine under it still parses.
     /// </summary>
     [Fact]
-    public void Parse_PreludeAttribute()
+    public void Parse_UnknownAnnotation_IsG221()
     {
         string source = """
                         @prelude
@@ -60,24 +60,25 @@ public class AttributeTests
                             return
                         """;
 
-        Program program = AssertParses(source: source);
+        (Program program, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
+        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RF-G221") && e.Contains(value: "@prelude"));
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Annotations);
-        Assert.Contains(expected: "prelude", collection: routine.Annotations);
+        Assert.DoesNotContain(expected: "prelude", collection: routine.Annotations);
     }
     /// <summary>
-    /// Verifies that the parser accepts static attribute.
+    /// Verifies that a misspelled annotation names the one it is close to.
     /// </summary>
     [Fact]
-    public void Parse_StaticAttribute()
+    public void Parse_MisspelledAnnotation_SuggestsKnownOne()
     {
         string source = """
-                        @static
-                        routine Math.pi() -> B64
-                            return 3.14159265359
+                        @readonyl
+                        routine Point.distance() -> B32
+                            return 0.0
                         """;
 
-        AssertParses(source: source);
+        (_, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
+        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RF-G221") && e.Contains(value: "@readonly"));
     }
     /// <summary>
     /// Verifies that the parser accepts inline attribute.
@@ -99,10 +100,10 @@ public class AttributeTests
     #region Parameterized Annotation Tests
 
     /// <summary>
-    /// Verifies that the parser accepts deprecated attribute with message.
+    /// Verifies that `@deprecated`, which the builder gives no effect, is rejected rather than ignored.
     /// </summary>
     [Fact]
-    public void Parse_DeprecatedAttributeWithMessage()
+    public void Parse_DeprecatedAttribute_IsRejected()
     {
         string source = """
                         @deprecated(message: "Use new_function instead")
@@ -111,7 +112,7 @@ public class AttributeTests
                             return
                         """;
 
-        AssertParses(source: source);
+        AssertParseError(source: source);
     }
 
     #endregion
@@ -141,7 +142,7 @@ public class AttributeTests
     public void Parse_CompoundAttributesMultiple()
     {
         string source = """
-                        @[inline, readonly, prelude]
+                        @[inline, readonly, positional]
                         routine identity(x: S32) -> S32
                             return x
                         """;
@@ -192,7 +193,7 @@ public class AttributeTests
     public void Parse_AttributeOnProtocol_HasNoEffect()
     {
         string source = """
-                        @prelude
+                        @readonly
                         protocol Displayable
                             routine Me.display() -> Text
                         """;
@@ -252,7 +253,7 @@ public class AttributeTests
         string source = """
                         @readonly
                         @inline
-                        @deprecated(message: "Use fast_compute_v2 instead")
+                        @discardable
                         routine fast_compute(x: S32) -> S32
                             return x * 2
                         """;
@@ -266,7 +267,7 @@ public class AttributeTests
     public void Parse_AttributesOnTypeAndMemberRoutines()
     {
         string source = """
-                        @deprecated(message: "Use NewCalculator")
+                        @layout("packed")
                         record Calculator
                             value: S32
 
@@ -322,7 +323,7 @@ public class AttributeTests
     public void Parse_InternalWithAttribute()
     {
         string source = """
-                        @deprecated(message: "Use PublicData")
+                        @layout("packed")
                         secret record InternalData
                             value: S32
                         """;
