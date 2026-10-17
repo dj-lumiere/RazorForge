@@ -845,7 +845,9 @@ that differ from other languages:
 **Mutating a collection while `each`-looping it is banned** (RF-S625): calling a
 `@reshaping` mutator (`add`/`remove`/…) on the variable being iterated is a
 build-time error — after a structural change the loop can no longer trust its
-next element. Finish the loop, then mutate.
+next element. Finish the loop, then mutate. A map's `d[k] = v` (and `d[k] += 1`) counts: it may add the key,
+so it is banned inside `each` over `d` even when the key is already there. A list's `xs[i] = v` only replaces
+an element and stays allowed.
 The ban also covers a mutation hidden behind a call
 (`each x in xs { grow(xs: xs.modify()) }`): the builder works out which
 parameters each routine can add to or remove from, following its calls, and
