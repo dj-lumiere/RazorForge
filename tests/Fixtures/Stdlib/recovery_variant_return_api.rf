@@ -1,0 +1,53 @@
+module Tests/Stdlib/RecoveryVariantReturnApi
+
+import IO/Console
+# A failable routine that returns a variant and gives back one of its types directly (`return Deposit(...)`)
+# is wrapped into the variant on every path: a direct call, `check`, `try`, and a recovered value kept in a
+# `var` all match the right arm.
+record Deposit
+    amount: S64
+record Withdraw
+    amount: S64
+variant Command
+    Deposit
+    Withdraw
+
+routine parse!(word: Text) -> Command
+    if word == "d"
+        return Deposit(amount: 5)
+    if word == "w"
+        return Withdraw(amount: 3)
+    throw InvalidValueError(input: word, target: "Command")
+
+routine describe(c: Command) -> Text
+    when c
+        is Deposit as d =>
+            return f"deposit {d.amount}"
+        is Withdraw as w =>
+            return f"withdraw {w.amount}"
+
+routine start()
+    var a = parse(word: "d")
+    show(describe(c: a))
+    when check parse(word: "w")
+        is Command as c =>
+            show(describe(c: c))
+        is Crashables as e =>
+            show("bad")
+    when try parse(word: "d")
+        is Command as c =>
+            show(describe(c: c))
+        is None =>
+            show("none")
+    var kept = check parse(word: "w")
+    when kept
+        is Command as c =>
+            show(describe(c: c))
+        is Crashables as e =>
+            show("bad")
+    when try parse(word: "x")
+        is Command as c =>
+            show(describe(c: c))
+        is None =>
+            show("none")
+    return
