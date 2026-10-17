@@ -473,7 +473,7 @@ public sealed class MultiFileModuleImportTests
                                                                  return
                                                              routine start()
                                                                  var jobs = List[Agent[None]]()
-                                                                 jobs.add_last(agent work())
+                                                                 jobs.add_last(work.to[Agent]())
                                                                  return
                                                              """,
             moduleFiles: []);

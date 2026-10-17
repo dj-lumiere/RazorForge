@@ -100,7 +100,7 @@ public class DropBindingTests
     {
         AnalysisResult result = AssertHasErrorSa(source: Prelude + """
                                                                    routine start()
-                                                                       var job = agent work()
+                                                                       var job = work.to[Agent]()
                                                                        var other = job
                                                                        drop other.retrieve()
                                                                        return
@@ -114,7 +114,7 @@ public class DropBindingTests
     {
         AnalysisResult result = AssertAnalyzesSa(source: Prelude + """
                                                                    routine start()
-                                                                       var job = agent work()
+                                                                       var job = work.to[Agent]()
                                                                        job.start_now()
                                                                        return
                                                                    """);
@@ -126,12 +126,12 @@ public class DropBindingTests
     {
         AnalysisResult result = AssertAnalyzesSa(source: Prelude + """
                                                                    routine start()
-                                                                       var kept = agent work()
+                                                                       var kept = work.to[Agent]()
                                                                        kept.start_now()
                                                                        when check kept.retrieve()
                                                                            is S64 as v => pass
                                                                            else => pass
-                                                                       var stopped = agent work()
+                                                                       var stopped = work.to[Agent]()
                                                                        stopped.start_now()
                                                                        drop stopped
                                                                        return

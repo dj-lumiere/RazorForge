@@ -42,48 +42,48 @@ routine slow(n: S64) -> S64
     return n
 
 routine start()
-    var now = agent add(a: 1, b: 2)
+    var now = add.to[Agent](a: 1, b: 2)
     now.start_now()
     show(f"now: {now.retrieve()}")
 
-    var here = agent add(a: 3, b: 4)
+    var here = add.to[Agent](a: 3, b: 4)
     here.start_here()
     show(f"here: {here.retrieve()}")
 
-    var apart = agent add(a: 5, b: 6)
+    var apart = add.to[Agent](a: 5, b: 6)
     apart.start_apart()
     show(f"apart: {apart.retrieve()}")
 
     # Nothing started it: retrieve() starts it with start_now().
-    var waiting = agent add(a: 7, b: 8)
+    var waiting = add.to[Agent](a: 7, b: 8)
     show(f"waiting: {waiting.retrieve()}")
 
     # The arguments are computed when the agent is made, not when it runs.
     var x = 40
-    var early = agent add(a: x, b: 2)
+    var early = add.to[Agent](a: x, b: 2)
     x = 0
     show(f"arguments now: {early.retrieve()}")
 
-    # A receiver that is a value is computed now too, and the rest of the chain is deferred.
+    # A receiver that is a value is computed now too: only the routine converted runs as the work.
     var p = Pair(a: 2, b: 3)
-    show(f"member: {(agent p.sum()).retrieve()}")
-    show(f"chain: {(agent p.twice().sum()).retrieve()}")
+    show(f"member: {p.sum.to[Agent]().retrieve()}")
+    show(f"chain: {p.twice().sum.to[Agent]().retrieve()}")
 
     # An Atomic is shared with the work, never copied.
     var counter = Atomic[S64](initial: 0)
-    var jobs = [agent bump(cell: counter, times: 1000), agent bump(cell: counter, times: 1000),
-        agent bump(cell: counter, times: 1000)]
+    var jobs = [bump.to[Agent](cell: counter, times: 1000), bump.to[Agent](cell: counter, times: 1000),
+        bump.to[Agent](cell: counter, times: 1000)]
     drop jobs.gather()
     show(f"atomic: {counter.load()}")
 
-    # `try agent` recovers inside the work: the Agent holds a Maybe.
-    var failing = try agent checked(n: -1)
-    show(f"try agent: {failing.retrieve()}")
-    var fine = try agent checked(n: 5)
-    show(f"try agent ok: {fine.retrieve()}")
+    # A failure stays in the work and is recovered where the Agent is collected.
+    var failing = checked.to[Agent](n: -1)
+    show(f"try retrieve: {try failing.retrieve()}")
+    var fine = checked.to[Agent](n: 5)
+    show(f"try retrieve ok: {try fine.retrieve()}")
 
     # An Agent starts once.
-    var twice = agent add(a: 1, b: 1)
+    var twice = add.to[Agent](a: 1, b: 1)
     twice.start_now()
     when check twice.start_here()
         is AgentStartError as e => show(f"second start: {e.crash_message()}")
@@ -91,7 +91,7 @@ routine start()
     drop twice.retrieve()
 
     # A deadline needs a thread of its own: a fiber cannot be given up on while it runs.
-    var fiber = agent add(a: 2, b: 2)
+    var fiber = add.to[Agent](a: 2, b: 2)
     fiber.start_now()
     when check fiber.waitfor(deadline: 5s).retrieve()
         is AgentStartError => show("deadline on a fiber: refused")
@@ -99,8 +99,8 @@ routine start()
     drop fiber.retrieve()
 
     # A failure inside the work stays in its Agent: it surfaces where the Agent is retrieved, and the others go on.
-    var bad = agent relay(n: -1)
-    var good = agent relay(n: 3)
+    var bad = relay.to[Agent](n: -1)
+    var good = relay.to[Agent](n: 3)
     bad.start_now()
     good.start_now()
     show(f"good: {good.retrieve()}")
@@ -110,18 +110,18 @@ routine start()
 
     # cancel(): running work stops at its next wait, work nothing started never runs, and retrieving either is
     # CancelRequested.
-    var running = agent slow(n: 1)
+    var running = slow.to[Agent](n: 1)
     running.start_now()
     running.cancel()
     when check running.retrieve()
         is CancelRequested => show("running: cancelled")
         else => show("running: other")
-    var idle = agent slow(n: 2)
+    var idle = slow.to[Agent](n: 2)
     idle.cancel()
     when check idle.retrieve()
         is CancelRequested => show("waiting: cancelled")
         else => show("waiting: other")
-    var set = [agent slow(n: 3), agent slow(n: 4)]
+    var set = [slow.to[Agent](n: 3), slow.to[Agent](n: 4)]
     set[0].start_now()
     set.cancel_all()
     show("cancel_all: wound down")

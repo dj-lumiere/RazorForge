@@ -979,10 +979,10 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-W009      | a started Agent nothing collects      | `retrieve()` it, or `drop job` to stop it          |
-| RF-S632      | `agent` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
+| RF-S632      | `to[Agent]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
 | RF-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or take both with `using multimodify(first: x, second: y) as (a, b)` |
-| RF-S642      | `agent` before a non-call, or over generic-parameter-typed values | put it before a call with concrete types |
+| RF-S642      | `to[Agent]` on something that is not a routine, or over generic-parameter-typed values | convert a routine, with concrete types |
 | RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
 | RF-S646      | no conversion between the two types (or to its own type) | convert to a type that has one, or drop the `.to` |
 | RF-S647      | `steal place as old` leaves a non-optional place empty | add `inject <new value>` |
@@ -1025,8 +1025,8 @@ routine start()
 ## 14. Concurrency
 
 Any routine can run concurrently, and a routine declares nothing about where it runs. The keyword
-**`agent`** before a call makes it concurrent work: `agent download(url: u)` computes the call's arguments NOW
-(and a receiver that is a value, as in `agent list.sum()`), defers the call into an `Agent[T]`, and starts
+**`f.to[Agent](args)`** makes a routine concurrent work: `download.to[Agent](url: u)` computes the arguments NOW
+(and a receiver that is a value, as in `p.total.to[Agent]()`), defers the call into an `Agent[T]`, and starts
 nothing. A verb on the Agent starts it and chooses where it runs. There is no `spawn`/`async` keyword.
 
 ```razorforge
@@ -1036,21 +1036,23 @@ routine add(a: S64, b: S64) -> S64
     return a + b
 
 routine start()
-    var job = agent add(a: 1, b: 2)    # Agent[S64]: arguments computed, nothing runs yet
+    var job = add.to[Agent](a: 1, b: 2)    # Agent[S64]: arguments computed, nothing runs yet
     job.start_now()                    # runs on the runtime's pool of threads
     # ... other work ...
     show(f"{job.retrieve()}")          # waits for the value
-    var jobs = [agent add(a: 1, b: 1), agent add(a: 2, b: 2)]
+    var jobs = [add.to[Agent](a: 1, b: 1), add.to[Agent](a: 2, b: 2)]
     show(f"{jobs.gather()}")           # starts both, waits for all, results in input order
     return
 ```
 
-- **`agent` takes the whole call chain after it**, like `try`: `agent f(x).retrieve()` defers `.retrieve()`
-  too. To start or collect at once, parenthesize: `(agent f(x)).retrieve()`, `(agent f(x)).start_now()`.
-- **Recovery comes first and works inside the work:** `try agent f()` is `Agent[Maybe[T]]`,
-  `check agent f()` is `Agent[Check[T]]`.
+- The routine is named, not called (like `f.to[Callable]()`), and the conversion takes the routine's own
+  arguments. Only that routine is the work: `f.to[Agent](x).retrieve()` makes the Agent and collects it at once,
+  and in `p.twice().total.to[Agent]()` the receiver `p.twice()` is computed now. `agent f(x)` is the old spelling
+  (RF-G220, `migrate --step agent`).
+- **Recovery is where the Agent is collected:** `try job.retrieve()` / `check job.retrieve()`. To recover inside
+  the work, write a routine that uses `try` and make an Agent of it.
 - An Agent of a routine that returns nothing is `Agent[None]`. The type can be inferred:
-  `var jobs = [agent work(), agent work()]` then `jobs.gather()`.
+  `var jobs = [work.to[Agent](), work.to[Agent]()]` then `jobs.gather()`.
 
 Verbs (methods on `Agent[T]`, all failable):
 
@@ -1065,8 +1067,8 @@ Verbs (methods on `Agent[T]`, all failable):
 - **A failure stays in its Agent.** A failure inside the work does not end the program where the work
   runs, and sibling Agents keep running. It surfaces where the Agent is retrieved: `job.retrieve()`
   rethrows it (bare, it crashes loudly there like any failure), `check job.retrieve()` /
-  `try job.retrieve()` recover it (or `try agent f()` up front). The crash report's trace ends with
-  `agent in start()` (the line of the `agent` call) and `Thrown again at` names the `retrieve()` line.
+  `try job.retrieve()` recover it. The crash report's trace ends with
+  `agent in start()` (the line that made the Agent) and `Thrown again at` names the `retrieve()` line.
 - `cancel()` — asks the work to stop. Work nothing started yet never runs. Running work sees the request at
   its next wait (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there
   (a thread of its own cannot be stopped from outside). Retrieving a cancelled Agent waits for it to stop,
@@ -1091,8 +1093,8 @@ Verbs (methods on `Agent[T]`, all failable):
   before a verb took its value (`drop job`, or the end of the scope or list that holds it), the work is cancelled
   and waited for. A started Agent nothing retrieves, drops or hands on is warning RF-W009.
 - There is no fire-and-forget verb: start with `start_now()` and collect later with `retrieve()` or
-  `gather()`. An Agent thrown away before anything starts it (`agent f()` as a statement, or
-  `drop agent f()`) never runs its work, and is warning RF-W008.
+  `gather()`. An Agent thrown away before anything starts it (`f.to[Agent]()` as a statement, or
+  `drop f.to[Agent]()`) never runs its work, and is warning RF-W008.
 - Free routines: `waitfor(d)` waits `d` (parks inside a job, sleeps elsewhere; `50ms`, `5s`, or
   `Duration.from_milliseconds(ms: n)`), `yield_now()` lets other jobs run, `cancellation_requested()`
   tells a long loop to stop early. Cancellation is cooperative: `waitfor` returns early once it is asked.
@@ -1116,15 +1118,15 @@ routine slow(n: S64) -> S64
     return n
 
 routine start()
-    var bad = agent relay(n: -1)
-    var good = agent relay(n: 3)
+    var bad = relay.to[Agent](n: -1)
+    var good = relay.to[Agent](n: 3)
     bad.start_now()
     good.start_now()
     show(f"good: {good.retrieve()}")   # 3, the failure beside it changes nothing here
     when check bad.retrieve()
         is S64 as v => show(f"bad: {v}")
         is Crashables as e => show(f"bad failed: {e.crash_message()}")
-    var running = agent slow(n: 1)
+    var running = slow.to[Agent](n: 1)
     running.start_now()
     running.cancel()
     when check running.retrieve()
@@ -1133,9 +1135,9 @@ routine start()
     return
 ```
 
-**What `agent` may hand to the work (RF-S632).** Each value `agent f(...)` computes now must be safe to
+**What `to[Agent]` may hand to the work (RF-S632).** Each value `f.to[Agent](...)` computes now must be safe to
 hand to work that may run on another thread: a `steal`-moved bare entity, trivially copyable value data,
-or a thread-shareable wrapper (`Atomic`, `Guarded`, `Witnessed`, `Consulting`, `Amending`). A `Roamed`
+or a shareable manager handle (`Atomic`, `Guarded`, `Witnessed`). A `Roamed`
 handle is promoted. Anything else (a bare entity by copy, a record owning `Retained`/`Tracked`/
 `Viewing`/`Modifying`) is rejected. An `Atomic[T]` parameter is always by reference, so a routine taking
 one works on the caller's cell, and sharing one counter across agents just works:
@@ -1148,7 +1150,7 @@ routine bump(cell: Atomic[S64], times: S64)
 
 routine start()
     var counter = Atomic[S64](initial: 0)
-    var jobs = [agent bump(cell: counter, times: 1000), agent bump(cell: counter, times: 1000)]
+    var jobs = [bump.to[Agent](cell: counter, times: 1000), bump.to[Agent](cell: counter, times: 1000)]
     drop jobs.gather()
     show(f"{counter.load()}")          # 2000
     return
@@ -1274,7 +1276,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`
 - **Logical operators**: `and` `or` `not`
 - **Literals**: `true` `false` `None` `none`
-- **Concurrency**: `agent`
+- **Concurrency**: `f.to[Agent](args)`
 - **Danger**†: `danger` (block) `dangerous` (modifier)
 - **Buildtime reflection**†: `expand` (loop) — the ONLY reflection keyword.
 

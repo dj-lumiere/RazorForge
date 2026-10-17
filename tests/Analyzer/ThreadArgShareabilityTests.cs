@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for the `agent` argument boundary (RF-S632). The work of an Agent may run on any thread in parallel with
-/// the code that made it, so each argument `agent f(...)` computes now must cross safely: `steal`-moved
+/// the code that made it, so each argument `f.to[Agent](...)` computes now must cross safely: `steal`-moved
 /// (exclusive transfer), trivially-copyable value data (passed BY VALUE), or a thread-shareable wrapper
 /// (Atomic/Guarded/Witnessed/Consulting/Amending, which carries its own synchronization). Anything else passed by
 /// copy (a bare entity, or a record/tuple that transitively owns a single-threaded RC wrapper (Retained/Tracked) or
@@ -35,7 +35,7 @@ public class ThreadArgShareabilityTests
                                       return n + 1
 
                                   routine start()
-                                      var t = agent work(n: 5)
+                                      var t = work.to[Agent](n: 5)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -53,7 +53,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var origin = Point(x: 1, y: 2)
-                                      var t = agent work(p: origin)
+                                      var t = work.to[Agent](p: origin)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -72,7 +72,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var counter = Atomic[S64](initial: 0)
-                                      var t = agent work(cell: counter)
+                                      var t = work.to[Agent](cell: counter)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -90,7 +90,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var s = Guarded[Node, ReadOnly](from: Node(value: 1))
-                                      var t = agent work(s: s)
+                                      var t = work.to[Agent](s: s)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -108,7 +108,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var n = Node(value: 1)
-                                      var t = agent work(node: n)
+                                      var t = work.to[Agent](node: n)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -134,7 +134,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var h = Holder(node: Retained(from: Node(value: 1)))
-                                      var t = agent work(h: h)
+                                      var t = work.to[Agent](h: h)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -162,7 +162,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var h = Holder(node: Guarded[Node, ReadOnly](from: Node(value: 1)))
-                                      var t = agent work(h: h)
+                                      var t = work.to[Agent](h: h)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -182,7 +182,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var n = Node(value: 1)
-                                      var t = agent work(node: steal n)
+                                      var t = work.to[Agent](node: steal n)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -201,7 +201,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var r = Retained(from: Node(value: 1))
-                                      var t = agent work(n: steal r)
+                                      var t = work.to[Agent](n: steal r)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -242,7 +242,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var h = Holder(node: Retained(from: Node(value: 1)))
-                                      var t = agent work(h: steal h)
+                                      var t = work.to[Agent](h: steal h)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -265,7 +265,7 @@ public class ThreadArgShareabilityTests
 
                                            routine start()
                                                var node = Node(value: 1)
-                                               var job = agent bump(n: node.modify())
+                                               var job = bump.to[Agent](n: node.modify())
                                                job.start_here()
                                                var got = job.retrieve()
                                                return
@@ -281,7 +281,7 @@ public class ThreadArgShareabilityTests
 
                                            routine start()
                                                var node = Node(value: 1)
-                                               var job = agent bump(n: node.modify())
+                                               var job = bump.to[Agent](n: node.modify())
                                                job.start_now()
                                                var got = job.retrieve()
                                                return
@@ -297,7 +297,7 @@ public class ThreadArgShareabilityTests
                                                return n.value
 
                                            routine make(node: Node) -> Agent[S64]
-                                               var job = agent bump(n: node.modify())
+                                               var job = bump.to[Agent](n: node.modify())
                                                return job
                                            """,
             expectedErrorSubstring: "stays in the routine that made it");

@@ -133,7 +133,7 @@ public sealed class ToolCommandTests : IDisposable
                 var agents = List[Agent[S64]]()
                 var i = 0
                 while i < 4
-                    agents.add_last(value: agent nap(id: i))
+                    agents.add_last(value: nap.to[Agent](id: i))
                     i += 1
                 show(f"results {agents.gather()}")
                 var t1: U64 = 0
