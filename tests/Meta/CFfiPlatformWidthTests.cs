@@ -6,7 +6,7 @@ namespace RazorForge.Tests.Meta;
 
 /// <summary>
 /// End-to-end proof that the <c>@target(os: …)</c>-gated C FFI scalar/string wrappers
-/// (<c>CLong</c>/<c>CULong</c>/<c>CWChar</c>/<c>CWStr</c>) actually take their platform width at runtime:
+/// (<c>CLong</c>/<c>CULong</c>/<c>CWChar</c>/<c>CWStrView</c>) actually take their platform width at runtime:
 /// LP64 on Linux/macOS (<c>long</c>/<c>unsigned long</c> = 64-bit, <c>wchar_t</c> = 32-bit) vs LLP64 on
 /// Windows (<c>long</c>/<c>unsigned long</c> = 32-bit, <c>wchar_t</c> = 16-bit).
 ///
@@ -18,7 +18,7 @@ namespace RazorForge.Tests.Meta;
 ///   • byte width of each wrapper (4/4/2 on Windows vs 8/8/4 on Unix);
 ///   • narrowing at the 32-/16-bit boundary — a value that fits Unix's wider type but overflows Windows'
 ///     narrower one loudly crashes on Windows and round-trips on Unix;
-///   • a supplementary (&gt; U+FFFF) code unit stored in a <c>CWStr</c> — representable in Unix's 32-bit
+///   • a supplementary (&gt; U+FFFF) code unit stored in a <c>CWStrView</c> — representable in Unix's 32-bit
 ///     <c>wchar_t</c>, unrepresentable in Windows' 16-bit one (the element is a platform-width
 ///     <c>CWChar</c>, NOT a fixed 32-bit code unit).
 /// On each CI runner it asserts that runner's data model; together the runners cover both.
@@ -132,7 +132,7 @@ public sealed class CFfiPlatformWidthTests
     }
 
     /// <summary>
-    /// A <c>CWStr</c> element is a platform-width <c>CWChar</c>, not a fixed 32-bit code unit: a
+    /// A <c>CWStrView</c> element is a platform-width <c>CWChar</c>, not a fixed 32-bit code unit: a
     /// supplementary code point (U+10000) fits Unix' 32-bit <c>wchar_t</c> and round-trips through
     /// <c>getitem</c>, but is unrepresentable in Windows' 16-bit <c>wchar_t</c>, so building the element
     /// overflows and the program aborts.
@@ -155,14 +155,14 @@ public sealed class CFfiPlatformWidthTests
                                       var terminator: U32 = 0
                                       buf.stride(count: 0).poke(value: supplementary.to[CWChar]())
                                       buf.stride(count: 1).poke(value: terminator.to[CWChar]())
-                                      var s = CWStr(from_ptr: buf)
+                                      var s = CWStrView(from_ptr: buf)
                                       show(f"cp={s.getitem(index: 0).codepoint()} count={s.count()}")
                                   return
                               """;
 
         (int exitCode, string stdout, string stderr, bool timedOut) = RunProgram(source: source);
         Assert.False(condition: timedOut,
-            userMessage: "buildandrun timed out for the CWStr supplementary probe.");
+            userMessage: "buildandrun timed out for the CWStrView supplementary probe.");
 
         if (IsWindows)
         {

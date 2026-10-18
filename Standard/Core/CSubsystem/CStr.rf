@@ -1,195 +1,52 @@
-# RazorForge C String Type (CStr)
-# Null-terminated char* wrapper for C FFI interop
-#
-# CStr is a value type that wraps a raw pointer (Hijacked[Byte]) to a
-# null-terminated sequence of bytes. It provides safe access to C strings
-# without copying unless explicitly requested.
-#
-# Key characteristics:
-# - Value semantics (no heap allocation for the wrapper itself)
-# - Wraps existing C string memory - does not own the memory by default
-# - Null-terminated (C convention)
-# - Encoding-agnostic (typically ASCII or UTF-8 in modern code)
-#
-# Memory ownership:
-# - CStr(from_ptr: Hijacked[Byte]) - wraps existing memory, does NOT take ownership
-# - CStr(from_text: Bytes) - allocates NEW memory, caller owns it
-# - CStr.duplicate() - allocates NEW memory, caller owns it
-
 module Core
 
-### Represents a null-terminated narrow C string.
-### `CStr` is the FFI wrapper for `char*` values that follow the C null-termination contract.
-### The wrapper itself is value-typed; ownership depends on how the pointer was obtained.
-### :see: {Bytes}, {C-Subsystem}
-@llvm("ptr")
+### A C string RazorForge made: UTF-8 bytes with a zero byte after them, torn down at the end of its scope like any
+### value. A `CStr` goes wherever a {CStrView} goes: C reads it through `view()`, which the builder inserts where a
+### `CStrView` parameter takes a `CStr`. Passed with `steal`, it goes through `leak()` instead, so C keeps memory that
+### is never torn down here.
+### :see: {CStrView}, {Bytes}
 record CStr
-    pass
+    ### The bytes and the zero byte after them.
+    secret bytes: Bytes
 
-### The null C string — a null `char*`. A `common routine` factory (not a `preset`): its value is a
-### `reinterpret_bits` of a `hijacked_none()` construction, not a buildtime scalar constant, so
-### inlining it at every use (what a `preset` does) leaves the call unresolved at codegen. (A future
-### null-pointer literal could make this a real `preset` again.)
-### :returns: The null `CStr` value.
-common routine CStr.null() -> CStr
-    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](hijacked_none[Byte]())
-
-### Returns the raw null-terminated byte pointer backing this C string.
-### :returns: The underlying `Hijacked[Byte]` pointer.
+### Copies these bytes into a new C string and puts a zero byte after them.
+### :returns: The C string.
 @readonly
-routine CStr.ptr() -> Hijacked[Byte]
-    return LLVM::reinterpret_bits[CStr, Hijacked[Byte]](me)
-
-### Wraps an existing null-terminated byte pointer as `CStr`.
-### No copy is performed and ownership is not changed.
-### :param from_ptr: The pointer to wrap.
-### :returns: The resulting `CStr` value.
-routine CStr(from_ptr: Hijacked[Byte]) -> CStr
-    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
-
-### Wraps an existing raw address as `CStr`.
-### No copy is performed and ownership is not changed.
-### :param from_ptr: The address to wrap.
-### :returns: The resulting `CStr` value.
-routine CStr(from_ptr: Address) -> CStr
-    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
-
-### Creates a null-terminated C string by copying raw bytes and appending a trailing null byte.
-### :returns: The resulting `CStr` value.
 routine Bytes.to[CStr]() -> CStr
-    var len = me.count()
+    var len = me.count
     danger
-        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1))
+        var buffer = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * (len + 1)))
+        if len > 0
+            rf_copy_bytes_at(dest: buffer.address(), src: me.data.address(), size: Byte.data_size() * len)
+        buffer.stride(count: len.to[S64]()).poke(value: BYTE_NULL)
+        return CStr(bytes: bytes_over(data: buffer, count: len + 1))
 
-        var i: U64 = 0
-        loop
-            if i >= len
-                break
-            buffer.offset(ByteSize(bytes: i)).poke(me[i])
-            i = i + 1
-        buffer.offset(ByteSize(bytes: len)).poke(BYTE_NULL)
-
-        return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
-
-### Creates a UTF-8 encoded null-terminated C string from `Text`.
-### :returns: The resulting `CStr` value.
+### Encodes this text as UTF-8 into a new C string with a zero byte at the end.
+### :returns: The C string.
+@readonly
 routine Text.to[CStr]() -> CStr
-    var len = me.count()
-    danger
-        if len == 0
-            var one_byte: U64 = 1
-            var empty_buffer = Hijacked[Byte](C::rf_allocate_dynamic(one_byte))
-            empty_buffer.poke(BYTE_NULL)
-            return LLVM::reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
+    return me.encode_as_utf8().to[CStr]()
 
-        var max_bytes = len * 4 + 1
-        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(max_bytes))
-        var write_pos: U64 = 0
-        var i: U64 = 0
+### The C string pointer for C to read. It stays valid while this `CStr` lives.
+### :returns: The pointer.
+@readonly
+routine CStr.view() -> CStrView
+    return CStrView(from_ptr: me.bytes.data)
 
-        while i < len
-            var cp = me[i].codepoint()
+### Hands this C string's memory to C for good: the pointer it returns is never freed by RazorForge. The builder
+### calls it for a `CStr` passed with `steal` where a `CStrView` goes.
+### :returns: The pointer.
+routine CStr.leak() -> CStrView
+    return CStrView(from_ptr: me.bytes.data)
 
-            if cp <= 0x7F
-                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte(cp.to[U8]()))
-                write_pos = write_pos + 1
-            elseif cp <= 0x7FF
-                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xC0 | (cp >> 6)).to[U8]()))
-                buffer
-                    .offset(ByteSize(bytes: write_pos + 1))
-                    .poke(Byte((0x80 | (cp & 0x3F)).to[U8]()))
-                write_pos = write_pos + 2
-            elseif cp <= 0xFFFF
-                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xE0 | (cp >> 12)).to[U8]()))
-                buffer
-                    .offset(ByteSize(bytes: write_pos + 1))
-                    .poke(Byte((0x80 | ((cp >> 6) & 0x3F)).to[U8]()))
-                buffer
-                    .offset(ByteSize(bytes: write_pos + 2))
-                    .poke(Byte((0x80 | (cp & 0x3F)).to[U8]()))
-                write_pos = write_pos + 3
-            else
-                buffer.offset(ByteSize(bytes: write_pos)).poke(Byte((0xF0 | (cp >> 18)).to[U8]()))
-                buffer
-                    .offset(ByteSize(bytes: write_pos + 1))
-                    .poke(Byte((0x80 | ((cp >> 12) & 0x3F)).to[U8]()))
-                buffer
-                    .offset(ByteSize(bytes: write_pos + 2))
-                    .poke(Byte((0x80 | ((cp >> 6) & 0x3F)).to[U8]()))
-                buffer
-                    .offset(ByteSize(bytes: write_pos + 3))
-                    .poke(Byte((0x80 | (cp & 0x3F)).to[U8]()))
-                write_pos = write_pos + 4
-
-            i = i + 1
-
-        buffer.offset(ByteSize(bytes: write_pos)).poke(BYTE_NULL)
-        return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
-
-### Returns the length of this C string in bytes, excluding the trailing null.
-### :returns: The byte count, not including the null terminator.
+### The length of this C string in bytes, without the zero byte.
+### :returns: The byte count.
+@readonly
 routine CStr.count() -> U64
-    return C::rf_cstr_count(me)
+    return me.bytes.count - 1
 
-### Returns `true` when this wrapper does not reference any C string.
-### :returns: The resulting `Bool` value.
-routine CStr.is_null() -> Bool
-    danger
-        return me.ptr().is_none()
-
-### Returns `true` when this C string is null or has zero length.
-### :returns: The resulting `Bool` value.
-routine CStr.is_empty() -> Bool
-    return me.is_null() or me.count() == 0
-
-### Returns the byte at `index` in the referenced C string.
-### This does not copy the string and assumes the caller stays within bounds.
-### :param index: The zero-based position to use.
-### :returns: The resulting `Byte` value.
-dangerous routine CStr.getitem(index: U64) -> Byte
-    return me
-        .ptr()
-        .offset(ByteSize(bytes: index))
-        .peek()
-
-### Returns whether both values are equal.
-### :param you: The other value to compare against.
-### :returns: The resulting `Bool` value.
+### Decodes this C string's UTF-8 bytes into text.
+### :returns: The text.
 @readonly
-routine CStr.eq(you: CStr) -> Bool
-    return C::rf_cstr_compare(a: me, b: you) == 0
-
-### Compares this value with the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `ComparisonSign` value.
-@readonly
-routine CStr.cmp(you: CStr) -> ComparisonSign
-    var cmp = C::rf_cstr_compare(a: me, b: you)
-    if cmp < 0
-        return ME_SMALL
-    if cmp > 0
-        return ME_LARGE
-    return SAME
-
-### Returns an owning copy of this C string.
-### The copied string receives a newly allocated null-terminated buffer.
-### :returns: The resulting `CStr` value.
-routine CStr.duplicate() -> CStr
-    var len = me.count()
-    danger
-        var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1))
-        C::rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
-        return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
-
-### Returns a new `CStr` view offset by `n` bytes into the same underlying
-### buffer.
-### :param n: The number of bytes to skip.
-### :returns: The resulting `CStr` value.
-dangerous routine CStr.offset(n: U64) -> CStr
-    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: n)))
-
-### Returns a `CStr` view starting at `start` bytes from the current pointer.
-### :param start: The inclusive starting position.
-### :returns: The resulting `CStr` value.
-dangerous routine CStr.from_index(start: U64) -> CStr
-    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: start)))
+routine CStr.to[Text]() -> Text
+    return me.view().to[Text]()

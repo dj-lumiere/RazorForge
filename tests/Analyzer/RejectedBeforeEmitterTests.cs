@@ -10,6 +10,32 @@ using static TestHelpers;
 public class RejectedBeforeEmitterTests
 {
     [Fact]
+    public void Analyze_CStrParameterOfCRoutine_IsRejected()
+    {
+        AssertHasErrorSa(source: """
+                         routine C::strlen(s: CStr) -> U64
+
+                         routine start()
+                             drop C::strlen("x".to[CStr]())
+                             return
+                         """,
+            expectedErrorSubstring: "but C reads a pointer there. Declare it as 'CStrView'");
+    }
+
+    [Fact]
+    public void Analyze_CWStrReturnOfCRoutine_IsRejected()
+    {
+        AssertHasErrorSa(source: """
+                         routine C::wide_name() -> CWStr
+
+                         routine start()
+                             var w = C::wide_name()
+                             return
+                         """,
+            expectedErrorSubstring: "Declare it as returning 'CWStrView'");
+    }
+
+    [Fact]
     public void Analyze_ConstructionLeavingOutAMember_IsRejected()
     {
         AssertHasErrorSa(source: """

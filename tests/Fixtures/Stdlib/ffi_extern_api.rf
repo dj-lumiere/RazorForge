@@ -8,11 +8,14 @@ choice FfiColor
 
 # Locks user-file `external` (C::) declarations carrying PARAMETERS. The user-file collection path
 # had dropped every param (RF-S501 "expects at most 0 arguments" on any call). Also exercises the FFI
-# surface: RF Text -> CStr (char*) -> C strlen, C char* -> RF Text round-trip, and a `choice` crossing
-# to C as int32_t (its i32 discriminant). strlen/abs are libc (link cross-platform); no stdout-writing
-# C call so the harness delimiters stay clean.
+# surface: RF Text -> CStr (char*, torn down at scope end) handed to a CStrView parameter -> C strlen, the
+# same with `steal` (memory handed to C for good), Text -> CWStr -> C wcslen, C char* -> RF Text round-trip,
+# and a `choice` crossing to C as int32_t (its i32 discriminant). strlen/wcslen/abs are libc (link
+# cross-platform), and no C call writes to stdout, so the harness delimiters stay clean.
 
-routine C::strlen(s: CStr) -> U64
+routine C::strlen(s: CStrView) -> U64
+
+routine C::wcslen(s: CWStrView) -> U64
 
 routine C::abs(x: FfiColor) -> S32
 
@@ -20,6 +23,10 @@ routine start()
     var c = "hello".to[CStr]()
     show(f"strlen={C::strlen(c)}")
     show(f"rt={c.to[Text]()}")
+    var kept = "kept by C".to[CStr]()
+    show(f"stolen strlen={C::strlen(steal kept)}")
+    var wide = "wide".to[CWStr]()
+    show(f"wcslen={C::wcslen(wide)} count={wide.count()}")
     show(f"RED={C::abs(FfiColor.RED)}")
     show(f"GREEN={C::abs(FfiColor.GREEN)}")
     show(f"BLUE={C::abs(FfiColor.BLUE)}")

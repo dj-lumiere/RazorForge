@@ -1288,6 +1288,12 @@ routine start()
   the runtime's I/O threads while the job parks, so its thread goes on with other jobs, and anywhere else it is
   an ordinary call. A variadic or failable foreign routine cannot be marked. To put your own long work on an
   OS thread, start it with `start_apart()`.
+- **C strings.** `CStrView` / `CWStrView` are C's `char*` / `wchar_t*`, never freed by RazorForge (a string C
+  returns, and the type of every C string parameter). `text.to[CStr]()` / `text.to[CWStr]()` copy a `Text` into
+  new memory with a zero at the end (UTF-8, and UTF-16 on Windows or code points elsewhere for the wide one), torn
+  down at the end of the scope. A `CStr` argument to a `CStrView` parameter is passed as `arg.view()` by the
+  builder, and `steal arg` as `arg.leak()`, so C keeps memory that is never torn down (for C functions that keep
+  the pointer, such as `putenv`). `Bytes(ptr: view)` / `view.to[Text]()` copy a C string back.
 - **`@link("SDL2")`** on a `C::` extern names the C library that resolves its
   symbols (Rust `#[link]` style); merged with `[target] c_libraries` in the
   manifest into clang `-l` flags. Library search paths (`-L`) live in the

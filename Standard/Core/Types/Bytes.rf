@@ -131,7 +131,7 @@ routine Bytes(ptr: Hijacked[Byte]) -> Bytes
 ### No text decoding is performed.
 ### :param ptr: The source C string.
 ### :returns: The resulting `Bytes` value.
-routine Bytes(ptr: CStr) -> Bytes
+routine Bytes(ptr: CStrView) -> Bytes
     var len = C::rf_cstr_count(ptr)
     if len == 0
         return Bytes()
@@ -1017,34 +1017,6 @@ routine BytesUtf8LossyEmittable.emit!() -> Char
                 me.index += 1
 
         return Char(codepoint)
-
-# ============================================================================
-# C-String Interop
-# ============================================================================
-
-### Copies this byte sequence into a newly allocated null-terminated C buffer.
-### :returns: The resulting {CStr} value.
-@readonly
-routine Bytes.to_cstr() -> CStr
-    var len = me.count
-    danger
-        var buffer = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * (len + 1)))
-        if len > 0
-            rf_copy_bytes_at(
-                dest: buffer.address(),
-                src: me.data.address(),
-                size: Byte.data_size() * len,
-            )
-        buffer.stride(count: len.to[S64]()).poke(value: BYTE_NULL)
-        return CStr(from_ptr: buffer.address())
-
-### Encodes this text as UTF-8 and returns a newly allocated null-terminated C
-### buffer.
-### :returns: The resulting {CStr} value.
-@readonly
-routine Text.to_cstr() -> CStr
-    var bytes = me.encode_as_utf8()
-    return bytes.to_cstr()
 
 # ============================================================================
 # UTF-16 Conversion (for Windows interop)

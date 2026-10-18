@@ -277,7 +277,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// The real-world shape (this is exactly what stdlib `CWStr.eq`/`cmp` look like): an infinite loop
+    /// The real-world shape (this is exactly what stdlib `CWStrView.eq`/`cmp` look like): an infinite loop
     /// exited only by conditional returns, with no trailing return after the loop.
     /// </summary>
     [Fact]
