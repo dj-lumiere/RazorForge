@@ -5,12 +5,12 @@ module Core
 ### A 16-bit "brain" floating-point value (bfloat16): the sign, the 8-bit exponent and the top 7 fraction
 ### bits of a `B32`, so it has `B32`'s range with about 2-3 significant decimal digits.
 ###
-### `BF16` is a storage and interchange type: it is how machine-learning weights and tensors are commonly
-### stored. It carries no arithmetic. Widen it to `B32` or `B64` (exactly) to compute, and narrow the result
-### back with `BF16(from:)`, which rounds once to the nearest value (ties to even).
+### `BF16` is how machine-learning weights and tensors are commonly stored. Its arithmetic works on the `B32`
+### values and rounds once back (correctly rounded for `+ - * /` and `sqrt`), and its library functions (`exp`,
+### `sin`, `pow`, ...) are correctly rounded.
 @llvm("i16")
 record BF16
-obeys Comparable, Copyable, Splittable
+obeys Numeric, Comparable, Copyable, Splittable
     pass
 
 # ============================================================================
@@ -19,6 +19,7 @@ obeys Comparable, Copyable, Splittable
 
 ### Returns the raw bfloat16 bit pattern of this value.
 ### :returns: The underlying `U16` encoding.
+@readonly
 routine BF16.to_bits() -> U16
     return LLVM::reinterpret_bits[BF16, U16](me)
 
@@ -206,3 +207,823 @@ routine Text.to![BF16]() -> BF16
             return BF16.from_bits(bits: 0xFF80)
         return BF16.from_bits(bits: 0x7F80)
     return bf16_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
+
+# ============================================================================
+# Arithmetic
+# ============================================================================
+
+# BF16 has no arithmetic of its own on most machines: each operation works on the B32 values (every BF16 is one
+# exactly) and rounds once back to BF16. For +, -, *, / and sqrt that is the correctly rounded BF16 result, since B32
+# keeps more than twice BF16's precision. The library functions call Tessera's correctly rounded BF16 routines.
+
+### Returns `me + you` with raw IEEE 754 results (overflow gives ±infinity), rounded once to BF16.
+### :param you: The other operand.
+### :returns: The result.
+@readonly
+routine BF16.add_unchecked(you: BF16) -> BF16
+    return me.to[B32]().add_unchecked(you.to[B32]()).to[BF16]()
+
+### Returns `me + you`. Checked: crashes when the result isn't finite. Use `add_unchecked` for raw IEEE 754 results.
+### :param you: The other operand.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+@readonly
+routine BF16.add!(you: BF16) -> BF16
+    var r = me.add_unchecked(you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me - you` with raw IEEE 754 results (overflow gives ±infinity), rounded once to BF16.
+### :param you: The other operand.
+### :returns: The result.
+@readonly
+routine BF16.sub_unchecked(you: BF16) -> BF16
+    return me.to[B32]().sub_unchecked(you.to[B32]()).to[BF16]()
+
+### Returns `me - you`. Checked: crashes when the result isn't finite. Use `sub_unchecked` for raw IEEE 754 results.
+### :param you: The other operand.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+@readonly
+routine BF16.sub!(you: BF16) -> BF16
+    var r = me.sub_unchecked(you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me * you` with raw IEEE 754 results (overflow gives ±infinity), rounded once to BF16.
+### :param you: The other operand.
+### :returns: The result.
+@readonly
+routine BF16.mul_unchecked(you: BF16) -> BF16
+    return me.to[B32]().mul_unchecked(you.to[B32]()).to[BF16]()
+
+### Returns `me * you`. Checked: crashes when the result isn't finite. Use `mul_unchecked` for raw IEEE 754 results.
+### :param you: The other operand.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+@readonly
+routine BF16.mul!(you: BF16) -> BF16
+    var r = me.mul_unchecked(you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me / you` with raw IEEE 754 results (overflow gives ±infinity), rounded once to BF16.
+### :param you: The other operand.
+### :returns: The result.
+@readonly
+routine BF16.truediv_unchecked(you: BF16) -> BF16
+    return me.to[B32]().truediv_unchecked(you.to[B32]()).to[BF16]()
+
+### Returns `me / you`. Checked: crashes when the result isn't finite. Use `truediv_unchecked` for raw IEEE 754 results.
+### :param you: The other operand.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+@readonly
+routine BF16.truediv!(you: BF16) -> BF16
+    var r = me.truediv_unchecked(you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the square root with raw IEEE 754 results (`sqrt` of a negative value is NaN), rounded once to BF16.
+### :returns: The square root.
+routine BF16.sqrt_unchecked() -> BF16
+    return me.to[B32]().sqrt_unchecked().to[BF16]()
+
+### Returns the square root. Checked: crashes when the result isn't finite. Use `sqrt_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.sqrt!() -> BF16
+    var r = me.sqrt_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns this value when it is finite. Checked: crashes on ±infinity or NaN.
+### :returns: This value.
+### :throws: {NumericDomainError} for NaN.
+### :throws: {NumericOverflowError} for ±infinity.
+routine BF16.finite!() -> BF16
+    if me.is_finite()
+        return me
+    if me.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the negation: the sign bit flipped (NaN keeps its payload).
+### :returns: `-me`.
+@readonly
+routine BF16.neg() -> BF16
+    return BF16.from_bits(bits: me.to_bits() ^ 0x8000)
+
+### Returns the absolute value: the sign bit cleared.
+### :returns: `|me|`.
+routine BF16.abs() -> BF16
+    return BF16.from_bits(bits: me.to_bits() & 0x7FFF)
+
+### Returns this value's magnitude with the sign of `sign`.
+### :param sign: The value whose sign is taken.
+### :returns: The value with that sign.
+routine BF16.copysign(sign: BF16) -> BF16
+    return BF16.from_bits(bits: (me.to_bits() & 0x7FFF) | (sign.to_bits() & 0x8000))
+
+### Rounds down to a whole number.
+### :returns: The result.
+routine BF16.floor() -> BF16
+    return me.to[B32]().floor().to[BF16]()
+
+### Rounds up to a whole number.
+### :returns: The result.
+routine BF16.ceil() -> BF16
+    return me.to[B32]().ceil().to[BF16]()
+
+### Rounds to the nearest whole number, halves away from zero.
+### :returns: The result.
+routine BF16.round() -> BF16
+    return me.to[B32]().round().to[BF16]()
+
+### Rounds to the nearest whole number, ties away from zero.
+### :returns: The result.
+routine BF16.round_ties_away() -> BF16
+    return me.to[B32]().round_ties_away().to[BF16]()
+
+### Rounds to a whole number in the current rounding mode (to nearest, ties to even).
+### :returns: The result.
+routine BF16.rint() -> BF16
+    return me.to[B32]().rint().to[BF16]()
+
+### Rounds toward zero to a whole number.
+### :returns: The result.
+routine BF16.trunc() -> BF16
+    return me.to[B32]().trunc().to[BF16]()
+
+### Rounds toward zero to a whole number.
+### :returns: The result.
+routine BF16.int_truncate() -> BF16
+    return me.to[B32]().int_truncate().to[BF16]()
+
+### Returns the fractional part, `me - me.trunc()`.
+### :returns: The result.
+routine BF16.frac() -> BF16
+    return me.to[B32]().frac().to[BF16]()
+
+### Returns `1 / me`, rounded once to BF16.
+### :returns: The result.
+routine BF16.recip() -> BF16
+    return me.to[B32]().recip().to[BF16]()
+
+### Converts radians to degrees.
+### :returns: The result.
+routine BF16.to_degrees() -> BF16
+    return me.to[B32]().to_degrees().to[BF16]()
+
+### Converts degrees to radians.
+### :returns: The result.
+routine BF16.to_radians() -> BF16
+    return me.to[B32]().to_radians().to[BF16]()
+
+### Returns 1 for a positive value, -1 for a negative one, the value itself for a zero or NaN.
+### :returns: The result.
+routine BF16.signum() -> BF16
+    return me.to[B32]().signum().to[BF16]()
+
+### Returns the exponent of this value as a float.
+### :returns: The result.
+routine BF16.logb() -> BF16
+    return me.to[B32]().logb().to[BF16]()
+
+### Returns the value halfway between `me` and `you`.
+### :param you: The other value.
+### :returns: The result.
+routine BF16.midpoint(you: BF16) -> BF16
+    return me.to[B32]().midpoint(you.to[B32]()).to[BF16]()
+
+### Returns the smaller value.
+### :param you: The other value.
+### :returns: The result.
+routine BF16.min(you: BF16) -> BF16
+    return me.to[B32]().min(you.to[B32]()).to[BF16]()
+
+### Returns the larger value.
+### :param you: The other value.
+### :returns: The result.
+routine BF16.max(you: BF16) -> BF16
+    return me.to[B32]().max(you.to[B32]()).to[BF16]()
+
+### Returns the smaller value, the other one when one is NaN.
+### :param you: The other value.
+### :returns: The result.
+routine BF16.min_num(you: BF16) -> BF16
+    return me.to[B32]().min_num(you.to[B32]()).to[BF16]()
+
+### Returns the larger value, the other one when one is NaN.
+### :param you: The other value.
+### :returns: The result.
+routine BF16.max_num(you: BF16) -> BF16
+    return me.to[B32]().max_num(you.to[B32]()).to[BF16]()
+
+### Returns the smaller value, NaN when either is NaN, and -0 below +0.
+### :param you: The other value.
+### :returns: The result.
+routine BF16.minimum(you: BF16) -> BF16
+    return me.to[B32]().minimum(you.to[B32]()).to[BF16]()
+
+### Returns the larger value, NaN when either is NaN, and +0 above -0.
+### :param you: The other value.
+### :returns: The result.
+routine BF16.maximum(you: BF16) -> BF16
+    return me.to[B32]().maximum(you.to[B32]()).to[BF16]()
+
+### Returns the larger value, the other one when one is NaN (C `fmax`).
+### :param you: The other value.
+### :returns: The result.
+routine BF16.fmax(you: BF16) -> BF16
+    return me.to[B32]().fmax(you.to[B32]()).to[BF16]()
+
+### Returns the smaller value, the other one when one is NaN (C `fmin`).
+### :param you: The other value.
+### :returns: The result.
+routine BF16.fmin(you: BF16) -> BF16
+    return me.to[B32]().fmin(you.to[B32]()).to[BF16]()
+
+### Returns `me - you` when it is positive, otherwise 0.
+### :param you: The other value.
+### :returns: The result.
+routine BF16.fdim(you: BF16) -> BF16
+    return me.to[B32]().fdim(you.to[B32]()).to[BF16]()
+
+### Returns the remainder of `me / you` truncated toward zero (C `fmod`).
+### :param you: The other value.
+### :returns: The result.
+routine BF16.fmod(you: BF16) -> BF16
+    return me.to[B32]().fmod(you.to[B32]()).to[BF16]()
+
+### Returns the remainder of `me / you` rounded to nearest (C `remainder`).
+### :param you: The other value.
+### :returns: The result.
+routine BF16.remainder(you: BF16) -> BF16
+    return me.to[B32]().remainder(you.to[B32]()).to[BF16]()
+
+### Returns `me * 2^n`, rounded once to BF16.
+### :param n: The power of two.
+### :returns: The result.
+routine BF16.scalbn(n: S64) -> BF16
+    return me.to[B32]().scalbn(n).to[BF16]()
+
+### Returns `me * 2^n`, rounded once to BF16.
+### :param n: The power of two.
+### :returns: The result.
+routine BF16.ldexp(n: S64) -> BF16
+    return me.to[B32]().ldexp(n).to[BF16]()
+
+### Returns `me * 2^n` with raw IEEE 754 results, rounded once to BF16.
+### :param n: The power of two.
+### :returns: The result.
+routine BF16.scaleb_unchecked(n: S64) -> BF16
+    return me.to[B32]().scaleb_unchecked(n).to[BF16]()
+
+### Returns `me * 2^n`. Checked: crashes when the result isn't finite. Use `scaleb_unchecked` for raw IEEE 754 results.
+### :param n: The power of two.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.scaleb!(n: S64) -> BF16
+    var r = me.scaleb_unchecked(n)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns this value limited to `[min_val, max_val]`.
+### :param min_val: The lower bound.
+### :param max_val: The upper bound.
+### :returns: The value, or the nearer bound.
+@positional
+routine BF16.clamp(min_val: BF16, max_val: BF16) -> BF16
+    return me.to[B32]().clamp(min_val.to[B32](), max_val.to[B32]()).to[BF16]()
+
+### Returns this value raised to an integer power, correctly rounded.
+### :param n: The power.
+### :returns: `me^n`.
+routine BF16.powi(n: S32) -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_powi(x: me.to_bits(), n: n))
+
+### Returns `me * b + c` with one rounding (fused multiply-add), raw IEEE 754 results.
+### :param b: The multiplier.
+### :param c: The addend.
+### :returns: The fused result.
+routine BF16.fma_unchecked(b: BF16, c: BF16) -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_fma(x: me.to_bits(), y: b.to_bits(), z: c.to_bits()))
+
+### Returns `me * b + c` with one rounding. Checked: crashes when the result isn't finite. Use `fma_unchecked` for raw IEEE 754 results.
+### :param b: The multiplier.
+### :param c: The addend.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.fma!(b: BF16, c: BF16) -> BF16
+    var r = me.fma_unchecked(b, c)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the whole part and the fractional part of this value, both with its sign.
+### :returns: `(whole, fractional)`.
+routine BF16.modf() -> (BF16, BF16)
+    var whole = me.trunc()
+    return (whole, me.sub_unchecked(whole))
+
+### Splits this value into a fraction in [0.5, 1) and a power of two.
+### :returns: `(fraction, exponent)` with `me = fraction * 2^exponent`.
+routine BF16.frexp() -> (BF16, S64)
+    var parts = me.to[B32]().frexp()
+    return (parts.item0.to[BF16](), parts.item1)
+
+### Whether this value is above zero.
+### :returns: True for a positive value, +infinity included.
+routine BF16.is_positive() -> Bool
+    return me.to[B32]().is_positive()
+
+### Whether this value is below zero.
+### :returns: True for a negative value, -infinity included.
+routine BF16.is_negative() -> Bool
+    return me.to[B32]().is_negative()
+
+### Whether this value is subnormal: nonzero and below the smallest normal BF16 (the same range as `B32`'s).
+### :returns: True for a subnormal value.
+routine BF16.is_subnormal() -> Bool
+    return me.to[B32]().is_subnormal()
+
+### Whether this value is normal: finite, nonzero, and not subnormal.
+### :returns: True for a normal value.
+routine BF16.is_normal() -> Bool
+    return me.to[B32]().is_normal()
+
+### The class of this value: NaN, infinite, zero, subnormal or normal.
+### :returns: The class.
+routine BF16.fpclassify() -> FpClass
+    return me.to[B32]().fpclassify()
+
+### The IEEE 754 total order: -NaN, -infinity, ..., -0, +0, ..., +infinity, +NaN.
+### :param you: The other value.
+### :returns: True when `me` comes no later than `you` in that order.
+routine BF16.total_order(you: BF16) -> Bool
+    return me.to[B32]().total_order(you.to[B32]())
+
+### The IEEE 754 total order of the magnitudes.
+### :param you: The other value.
+### :returns: True when `|me|` comes no later than `|you|` in that order.
+routine BF16.total_order_mag(you: BF16) -> Bool
+    return me.to[B32]().total_order_mag(you.to[B32]())
+
+### The smallest BF16 above this value (+infinity stays, NaN stays, -0 and +0 go to the smallest subnormal).
+### :returns: The next value up.
+routine BF16.next_up() -> BF16
+    var bits = me.to_bits()
+    if me.is_nan() or bits == 0x7F80
+        return me
+    if bits == 0x8000 or bits == 0
+        return BF16.from_bits(bits: 1)
+    if bits < 0x8000
+        return BF16.from_bits(bits: bits + 1)
+    return BF16.from_bits(bits: bits - 1)
+
+### The largest BF16 below this value.
+### :returns: The next value down.
+routine BF16.next_down() -> BF16
+    return me.neg().next_up().neg()
+
+### The next BF16 from this value toward `you`.
+### :param you: The direction.
+### :returns: The next value, `you` when the two are equal, NaN when either is.
+routine BF16.nextafter(you: BF16) -> BF16
+    if me.is_nan() or you.is_nan()
+        return me.to[B32]().add_unchecked(you.to[B32]()).to[BF16]()
+    if me.to[B32]() == you.to[B32]()
+        return you
+    if me.to[B32]() < you.to[B32]()
+        return me.next_up()
+    return me.next_down()
+
+### Formats this value with exactly `places` digits after the decimal point.
+### :param places: The number of digits after the point.
+### :returns: The text.
+@readonly
+routine BF16.fixed(places: U64) -> Text
+    return me.to[B32]().fixed(places: places)
+
+### A hash of this value: +0 and -0 hash alike, as they compare equal.
+### :param k0: The first key word.
+### :param k1: The second key word.
+### :returns: The hash.
+routine BF16.hash(k0: U64, k1: U64) -> U64
+    return me.to[B32]().hash(k0: k0, k1: k1)
+
+# ============================================================================
+# Library functions (correctly rounded)
+# ============================================================================
+
+### Returns e raised to this value with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.exp_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_exp(x: me.to_bits()))
+
+### Returns e raised to this value, correctly rounded. Checked: crashes when the result isn't finite. Use `exp_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.exp!() -> BF16
+    var r = me.exp_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns 2 raised to this value with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.exp2_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_exp2(x: me.to_bits()))
+
+### Returns 2 raised to this value, correctly rounded. Checked: crashes when the result isn't finite. Use `exp2_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.exp2!() -> BF16
+    var r = me.exp2_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns 10 raised to this value with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.exp10_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_exp10(x: me.to_bits()))
+
+### Returns 10 raised to this value, correctly rounded. Checked: crashes when the result isn't finite. Use `exp10_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.exp10!() -> BF16
+    var r = me.exp10_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns e raised to this value, minus 1 with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.expm1_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_expm1(x: me.to_bits()))
+
+### Returns e raised to this value, minus 1, correctly rounded. Checked: crashes when the result isn't finite. Use `expm1_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.expm1!() -> BF16
+    var r = me.expm1_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the natural logarithm with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.log_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_log(x: me.to_bits()))
+
+### Returns the natural logarithm, correctly rounded. Checked: crashes when the result isn't finite. Use `log_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.log!() -> BF16
+    var r = me.log_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the base-2 logarithm with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.log2_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_log2(x: me.to_bits()))
+
+### Returns the base-2 logarithm, correctly rounded. Checked: crashes when the result isn't finite. Use `log2_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.log2!() -> BF16
+    var r = me.log2_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the base-10 logarithm with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.log10_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_log10(x: me.to_bits()))
+
+### Returns the base-10 logarithm, correctly rounded. Checked: crashes when the result isn't finite. Use `log10_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.log10!() -> BF16
+    var r = me.log10_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the natural logarithm of 1 plus this value with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.log1p_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_log1p(x: me.to_bits()))
+
+### Returns the natural logarithm of 1 plus this value, correctly rounded. Checked: crashes when the result isn't finite. Use `log1p_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.log1p!() -> BF16
+    var r = me.log1p_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the sine (radians), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.sin() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_sin(x: me.to_bits()))
+
+### Returns the cosine (radians), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.cos() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_cos(x: me.to_bits()))
+
+### Returns the tangent (radians), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.tan() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_tan(x: me.to_bits()))
+
+### Returns the arc sine with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.asin_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_asin(x: me.to_bits()))
+
+### Returns the arc sine, correctly rounded. Checked: crashes when the result isn't finite. Use `asin_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.asin!() -> BF16
+    var r = me.asin_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the arc cosine with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.acos_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_acos(x: me.to_bits()))
+
+### Returns the arc cosine, correctly rounded. Checked: crashes when the result isn't finite. Use `acos_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.acos!() -> BF16
+    var r = me.acos_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the arc tangent, correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.atan() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_atan(x: me.to_bits()))
+
+### Returns the hyperbolic sine with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.sinh_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_sinh(x: me.to_bits()))
+
+### Returns the hyperbolic sine, correctly rounded. Checked: crashes when the result isn't finite. Use `sinh_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.sinh!() -> BF16
+    var r = me.sinh_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the hyperbolic cosine with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.cosh_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_cosh(x: me.to_bits()))
+
+### Returns the hyperbolic cosine, correctly rounded. Checked: crashes when the result isn't finite. Use `cosh_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.cosh!() -> BF16
+    var r = me.cosh_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the hyperbolic tangent, correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.tanh() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_tanh(x: me.to_bits()))
+
+### Returns the inverse hyperbolic sine, correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.asinh() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_asinh(x: me.to_bits()))
+
+### Returns the inverse hyperbolic cosine with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.acosh_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_acosh(x: me.to_bits()))
+
+### Returns the inverse hyperbolic cosine, correctly rounded. Checked: crashes when the result isn't finite. Use `acosh_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.acosh!() -> BF16
+    var r = me.acosh_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the inverse hyperbolic tangent with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.atanh_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_atanh(x: me.to_bits()))
+
+### Returns the inverse hyperbolic tangent, correctly rounded. Checked: crashes when the result isn't finite. Use `atanh_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.atanh!() -> BF16
+    var r = me.atanh_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the error function, correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.erf() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_erf(x: me.to_bits()))
+
+### Returns the complementary error function, correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.erfc() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_erfc(x: me.to_bits()))
+
+### Returns the gamma function with raw IEEE 754 results (a pole, overflow or a value outside the domain passes
+### through as ±infinity or NaN), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.tgamma_unchecked() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_tgamma(x: me.to_bits()))
+
+### Returns the gamma function, correctly rounded. Checked: crashes when the result isn't finite. Use `tgamma_unchecked` for raw IEEE 754 results.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine BF16.tgamma!() -> BF16
+    var r = me.tgamma_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns the natural logarithm of |gamma(x)|, correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.lgamma() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_lgamma(x: me.to_bits()))
+
+### Returns sin(pi * x), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.sinpi() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_sinpi(x: me.to_bits()))
+
+### Returns cos(pi * x), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.cospi() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_cospi(x: me.to_bits()))
+
+### Returns tan(pi * x), correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.tanpi() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_tanpi(x: me.to_bits()))
+
+### Returns the cube root, correctly rounded to BF16.
+### :returns: The correctly rounded result.
+routine BF16.cbrt() -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_cbrt(x: me.to_bits()))
+
+### Returns `me` raised to `exp` with raw IEEE 754 results, correctly rounded; the special cases follow C `pow`.
+### :param exp: The exponent.
+### :returns: The correctly rounded power.
+@readonly
+routine BF16.pow_unchecked(exp: BF16) -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_pow(x: me.to_bits(), y: exp.to_bits()))
+
+### Returns `me` raised to `exp`, correctly rounded. Checked: crashes when the result isn't finite. Use `pow_unchecked` for raw IEEE 754 results.
+### :param exp: The exponent.
+### :returns: The result.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+@readonly
+routine BF16.pow!(exp: BF16) -> BF16
+    var r = me.pow_unchecked(exp)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### The angle of the point (x, y) in [-pi, pi], correctly rounded (C `atan2`).
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+### :returns: The correctly rounded angle.
+routine atan2(y: BF16, x: BF16) -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_atan2(y: y.to_bits(), x: x.to_bits()))
+
+### The hypotenuse sqrt(x^2 + y^2) with raw IEEE 754 results, correctly rounded.
+### :param x: One leg.
+### :param y: The other leg.
+### :returns: The correctly rounded hypotenuse.
+routine hypot_unchecked(x: BF16, y: BF16) -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_hypot(x: x.to_bits(), y: y.to_bits()))
+
+### The hypotenuse sqrt(x^2 + y^2), correctly rounded. Checked: crashes when the result isn't finite.
+### :param x: One leg.
+### :param y: The other leg.
+### :returns: The correctly rounded hypotenuse.
+### :throws: {NumericDomainError} when there is no real result.
+### :throws: {NumericOverflowError} when the result is out of range.
+routine hypot!(x: BF16, y: BF16) -> BF16
+    var r = hypot_unchecked(x: x, y: y)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")

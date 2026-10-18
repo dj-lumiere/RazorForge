@@ -1,7 +1,8 @@
 module Tests/Stdlib/Bf16Api
 
 import IO/Console
-# BF16 (bfloat16) as a storage type: bit patterns, conversions to and from B32/B64, text, comparison, bytes.
+# BF16 (bfloat16): bit patterns, conversions to and from B32/B64, text, comparison, bytes, arithmetic (B32 then one
+# rounding) and the correctly rounded library functions.
 routine start()
     # bit patterns and exact widening
     var one = BF16.from_bits(bits: 0x3F80)
@@ -46,4 +47,20 @@ routine start()
     var le = pi.to_bytes_le()
     var be = pi.to_bytes_be()
     show(f"pi bytes le: {le[0]} {le[1]}  be: {be[0]} {be[1]}")
+
+    # arithmetic: worked on the B32 values and rounded once
+    var x = "1.5".to[BF16]()
+    var y = "0.1".to[BF16]()
+    var two = "2".to[BF16]()
+    show(f"x + y: {x + y}  x - y: {x - y}  x * y: {x * y}  x / y: {x / y}  sqrt(2): {two.sqrt_unchecked()}")
+    show(f"-x: {-x}  abs: {(-x).abs()}  floor(2.75): {"2.75".to[BF16]().floor()}  round(2.5): {"2.5".to[BF16]().round()}")
+    show(f"next_up(1): {one.next_up().to_bits()}  next_down(1): {one.next_down().to_bits()}  fma: {x.fma_unchecked(b: y, c: one)}")
+    var big = "3e38".to[BF16]()
+    when try big.add(big)
+        is None => show("3e38 + 3e38: overflow")
+        else as v => show(f"3e38 + 3e38: {v}")
+
+    # library functions, correctly rounded
+    show(f"exp(1): {one.exp_unchecked()}  ln(2): {two.log_unchecked()}  sin(1): {one.sin()}  cbrt(2): {two.cbrt()}")
+    show(f"2^10: {two.pow_unchecked("10".to[BF16]())}  atan2(1, 1): {atan2(y: one, x: one)}  hypot(1, 2): {hypot_unchecked(x: one, y: two)}")
     return

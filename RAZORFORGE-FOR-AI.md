@@ -270,10 +270,12 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
 
 - Signed ints: `S8 S16 S32 S64 S128 S256` · unsigned: `U8 U16 U32 U64 U128 U256`
 - Binary floats: `B16 B32 B64 B128` · decimals: `D32 D64 D128`
-- `BF16` (bfloat16) is a STORAGE type (ML weights/tensors): bit patterns (`from_bits`/`to_bits`/bytes),
-  `b.to[B32]()`/`b.to[B64]()` widen exactly, `x.to[BF16]()` (from `B32`/`B64`) narrows with ONE
-  round-to-nearest-even (from `B64` directly, never through `B32`), `represent`/`t.to[BF16]()`, `==`/`<`. No arithmetic and
-  no literals of its own: widen to compute, narrow the result back.
+- `BF16` (bfloat16, ML weights/tensors): bit patterns (`from_bits`/`to_bits`/bytes), `b.to[B32]()`/`b.to[B64]()`
+  widen exactly, `x.to[BF16]()` (from `B32`/`B64`) narrows with ONE round-to-nearest-even (from `B64` directly,
+  never through `B32`), `represent`/`t.to[BF16]()`, `==`/`<`. Arithmetic (`obeys Numeric`, the B16 surface:
+  `+ - * /`, `sqrt`, `floor`..., `fma`, `next_up`...) works on the B32 values and rounds once (correctly rounded for
+  `+ - * /`/`sqrt`), and the library functions (`exp`, `log`, `sin`, `pow`, `atan2`, `hypot`, `sinpi`...) call
+  Tessera's correctly rounded BF16 routines through Ingrid (`ingrid_bf16_*`, bits as `U16`). No literals of its own.
 - Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `var eps: B32 = 0x1p-23`,
   `0x1.fffffep+127` where a `B32` goes. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
   EXACTLY: too many significant bits or a bit below the smallest subnormal is RF-S018, not a rounding. On a
