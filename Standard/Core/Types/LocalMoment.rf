@@ -250,26 +250,18 @@ routine LocalMoment.cmp(you: LocalMoment) -> ComparisonSign
 ### :returns: The resulting `Text` value.
 @override
 routine LocalMoment.represent() -> Text
-    var local = me.local_moment()
-    var y = local.year()
-    var mo = local.month()
-    var d = local.day()
-    var h = local.hour()
-    var mi = local.minute()
-    var s = local.second()
-
+    var civil = civil_display(moment: me.local_moment())
     var off = me.utc_offset()
-    var off_hours = off.total_hours()
-    # Magnitude via wrapping negate (non-failable) — `abs!` is failable and its `try_abs` variant is
-    # not available to stdlib bodies; these offset components are small and never S64_MIN.
-    var off_minutes_raw = off.total_minutes() % 60
-    var off_minutes = if off_minutes_raw < 0 then 0 -% off_minutes_raw else off_minutes_raw
     if off.is_zero()
-        return f"{y}-{mo}-{d} {h}:{mi}:{s}Z"
+        return f"{civil}Z"
 
+    # The offset's size in minutes. Wrapping negate is safe here: an offset is small and never S64_MIN.
+    var signed_minutes = off.total_minutes()
+    var minutes = if signed_minutes < 0 then 0 -% signed_minutes else signed_minutes
     var sign = if off.is_negative() then "-" else "+"
-    var off_hours_abs = if off_hours < 0 then 0 -% off_hours else off_hours
-    return f"{y}-{mo}-{d} {h}:{mi}:{s}{sign}{off_hours_abs}:{off_minutes}"
+    var hh = (minutes // 60).represent().zero_pad(2)
+    var mm = (minutes % 60).represent().zero_pad(2)
+    return f"{civil}{sign}{hh}:{mm}"
 
 ### Returns the diagnostic form of this local moment.
 ### :returns: The resulting `Text` value.

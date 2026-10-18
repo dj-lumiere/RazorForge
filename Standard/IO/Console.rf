@@ -1,5 +1,6 @@
 module IO/Console
 
+import IO/Errors
 import IO/Stream
 # ============================================================================
 # Console streams — concrete Source / Sink over the process-global std streams
@@ -99,12 +100,14 @@ routine alert[T](value: T, end: Text = "\n")
 # ============================================================================
 
 ### Reads one line of text from standard input.
-### Line termination is not included in the returned text.
+### Line termination is not included in the returned text, and a blank line is `""`. Right after {ask_word}, the line
+### end that ended the word is not read as a blank line of its own.
 ### :returns: The resulting `Text` value.
-routine ask_line() -> Text
+### :throws: {EndOfInputError} when the input has ended.
+routine ask_line!() -> Text
     var ptr = C::rf_console_ask_line()
     if ptr.is_none()
-        return ""
+        throw EndOfInputError(reader: "ask_line")
     var bytes = Bytes(ptr: ptr)
     return bytes.decode_as_utf8_lossy()
 
@@ -112,16 +115,18 @@ routine ask_line() -> Text
 ### The line becomes the value the way `line.to[T]()` makes it, so a line that isn't one fails like that does.
 ### :typeparam T: The type the line becomes.
 ### :returns: The line as a `T`.
-### :throws: {InvalidValueError} or what else `to[T]()` throws when the line isn't a `T`.
+### :throws: {InvalidValueError} or what else `to[T]()` throws when the line isn't a `T`, {EndOfInputError} when the
+### input has ended.
 routine ask![T]() -> T
     return ask_line().to[T]()
 
 ### Reads one whitespace-delimited word from standard input.
 ### :returns: The resulting `Text` value.
-routine ask_word() -> Text
+### :throws: {EndOfInputError} when the input has ended before another word.
+routine ask_word!() -> Text
     var ptr = C::rf_console_ask_word()
     if ptr.is_none()
-        return ""
+        throw EndOfInputError(reader: "ask_word")
     var bytes = Bytes(ptr: ptr)
     return bytes.decode_as_utf8_lossy()
 

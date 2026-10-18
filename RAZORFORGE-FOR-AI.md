@@ -281,6 +281,10 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   `Moment(year:, …)` crashes with `InvalidMomentError` on a part out of range (month 13, February 30, hour 25).
 - `Char.to_uppercase`/`to_lowercase`/`is_uppercase`/`is_lowercase` follow Unicode (simple one-to-one mapping,
   `ß` stays `ß`). `lines()` and `ask_lines()` start no new line after a final line ending.
+- A `Moment` shows as `2026-03-05 09:00:00` (each part zero-padded), a `LocalMoment` adds `Z` or `+09:00`.
+- `ask_line()` gives a blank line as `""` and crashes with `EndOfInputError` (`IO/Errors`) at the end of the input, as
+  does `ask_word()`: read until the end with `when check ask_line()` + `is EndOfInputError => break`. An `ask_line()`
+  right after `ask_word()` skips the line end the word left.
 - Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `CircularList[T]`, `BitList`,
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
   fixed-size `Array[T, COUNT]`, `BitArray[BITS]`
