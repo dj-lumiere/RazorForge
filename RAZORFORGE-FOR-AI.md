@@ -281,6 +281,11 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   `Moment(year:, …)` crashes with `InvalidMomentError` on a part out of range (month 13, February 30, hour 25).
 - `Char.to_uppercase`/`to_lowercase`/`is_uppercase`/`is_lowercase` follow Unicode (simple one-to-one mapping,
   `ß` stays `ß`). `lines()` and `ask_lines()` start no new line after a final line ending.
+- Build errors where the emitter used to fail: a construction leaving out a member with no default (RF-S455, names
+  it), a slice of a `List` of entities, a protocol as a value or element type (`List[Named]`), a member write
+  through an element read from a `Viewing` token, a variant built from a non-member type. `Check[T]` has
+  `unwrap!()` (`check f() !!`), `strip_out()` works for entities, `br"..."` builds, a value assigned to a `T?`
+  variable becomes present (`port ??= 8080`).
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
   An empty flags value shows as `none`, a one-item tuple as `(1,)`. A global record's member can't be assigned
   (RF-S257, like the global itself). `try sv.to[List[S64]]()` recovers a bad element too.

@@ -61,7 +61,6 @@ public sealed class RazorForgeRules : LanguageRules
     public override bool ZeroIsEmptyPlace => false;
 
     public override bool RequiresLateinitForDeferredInit => true;
-    public override bool RequiresInferableLambdaParameters => true;
     public override bool RequiresEnterableForUsing => true;
     public override bool RewritesDisplayWrapperArguments => true;
 
