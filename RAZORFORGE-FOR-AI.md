@@ -286,6 +286,10 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   through an element read from a `Viewing` token, a variant built from a non-member type. `Check[T]` has
   `unwrap!()` (`check f() !!`), `strip_out()` works for entities, `br"..."` builds, a value assigned to a `T?`
   variable becomes present (`port ??= 8080`).
+- A field-by-field construction infers type arguments (`Pair(first: 1, second: "one")` is `Pair[S64, Text]`). A type
+  obeying `Iterable[T]` gets its `Iter` from what its `iter()` returns (no `relates` needed), so IterTools adapters
+  walk it. A bundle holding an entity moves with `steal` (no copy step). An element token from `each` converts like
+  its value (`w.to[S64]()`). `when_interrupted`/`when_terminated` link and run.
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
   An empty flags value shows as `none`, a one-item tuple as `(1,)`. A global record's member can't be assigned
   (RF-S257, like the global itself). `try sv.to[List[S64]]()` recovers a bad element too.

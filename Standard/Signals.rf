@@ -30,7 +30,7 @@ module Signals
 ### :param handler: A `() -> None` routine to run on interrupt.
 routine when_interrupted(handler: Callable[(), None])
     danger
-        C::rf_signal_register(0, handler)
+        C::rf_signal_register(0, handler_box(handler: handler))
     return
 
 ### Registers a handler to run when the process is terminated (SIGTERM / console-close).
@@ -40,7 +40,7 @@ routine when_interrupted(handler: Callable[(), None])
 ### :param handler: A `() -> None` routine to run on termination.
 routine when_terminated(handler: Callable[(), None])
     danger
-        C::rf_signal_register(1, handler)
+        C::rf_signal_register(1, handler_box(handler: handler))
     return
 
 # ============================================================================
@@ -63,7 +63,7 @@ needs TPolicy obeys LockPolicy
         Hijacked[GuardManager[T, TPolicy]](context).as_entity().hold()
         C::rf_signal_register_ctx(
             0,
-            Hijacked[Byte](handler).get_address(),
+            handler_box(handler: handler),
             Hijacked[GuardManager[T, TPolicy]](context).get_address(),
         )
     return
@@ -76,7 +76,7 @@ needs TPolicy obeys LockPolicy
         Hijacked[GuardManager[T, TPolicy]](context).as_entity().hold()
         C::rf_signal_register_ctx(
             1,
-            Hijacked[Byte](handler).get_address(),
+            handler_box(handler: handler),
             Hijacked[GuardManager[T, TPolicy]](context).get_address(),
         )
     return
@@ -90,7 +90,7 @@ needs EntityType T
         ctrl.hold()
         C::rf_signal_register_ctx(
             0,
-            Hijacked[Byte](handler).get_address(),
+            handler_box(handler: handler),
             Hijacked[RoamManager[T]](context).get_address(),
         )
     return
@@ -104,7 +104,17 @@ needs EntityType T
         ctrl.hold()
         C::rf_signal_register_ctx(
             1,
-            Hijacked[Byte](handler).get_address(),
+            handler_box(handler: handler),
             Hijacked[RoamManager[T]](context).get_address(),
         )
     return
+
+### A routine value copied into a heap cell of its own: its two words, the routine and what it captured (null for a
+### named routine), which the runtime reads to call it. Registration lasts the process's life, so the cell is never
+### freed.
+### :param handler: The routine value.
+### :returns: The cell's address.
+secret dangerous routine handler_box[T](handler: T) -> Address
+    var cell = Hijacked[T](rf_allocate_dynamic(size: T.data_size()))
+    cell.poke(handler)
+    return cell.address()
