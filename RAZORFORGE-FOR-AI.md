@@ -44,8 +44,10 @@ When unsure, consult ground truth in the repo/package:
 6. **Entities have a single owner.** Assigning or passing an entity requires
    explicit transfer: `consume(r: steal b)`. Plain `var s = obj.field_entity`
    is rejected (RF-S413).
-7. **Failable routines carry a `!` suffix on the DECLARATION** (`routine parse!(...)`);
-   call sites never write it (`parse(...)`, `try parse(...)`). A BARE call
+7. **A routine that can fail is declared `failable`** (`failable routine parse(...)`, and
+   `failable dangerous routine` / `failable common routine`: `failable` goes first, after a visibility).
+   `routine parse!(...)` is RF-G222 (fix and `migrate --step failable` write the keyword), and call sites never
+   write anything (`parse(...)`, `try parse(...)`). A BARE call
    crashes LOUDLY on failure. To RECOVER, prefix the whole expression with a
    keyword and match the carrier with `when`:
    `try EXPR` → `Maybe[T]` (present | absent, no error kept);
@@ -71,14 +73,14 @@ When unsure, consult ground truth in the repo/package:
    that call still crashes on failure. An `each` loop over an adapter holding a
    lambda ends only when its source ends: a failure inside the lambda is the
    loop's failure, recovered by a keyword above the loop or crashing without one.
-   Not covered: a crash inside a library routine declared without `!` (other
+   Not covered: a crash inside a library routine not declared `failable` (other
    than in a routine value you handed it) stays a crash, and native runtime
    fatal errors, out of memory and running out of stack are fatal everywhere.
    **`pierce`** is the failure that must NOT be recovered: `pierce NopeError()`
    crashes like an unrecovered `throw` (status 82), and it crashes the same way
    under `try`/`check` at any depth. Use it for a broken invariant (state
    the program can no longer trust), never for a condition a caller could handle.
-   It does not make a routine failable (no `!` needed for it).
+   It does not make a routine failable (no `failable` needed for it).
    **`todo`** is a statement for code not written yet (`routine parse(bytes: Bytes) -> Header` with the body
    `todo`): running it crashes with `NotImplementedError` naming the routine, like `pierce`. It does not make
    the routine failable and ends its path, so a body that is only `todo` needs no `return`. The build warns
@@ -437,7 +439,7 @@ var why: Check[S64] = check line.to()
   ```
 
   A call picks the one whose bracket matches (`f.to[Celsius]()`, or `var c: Celsius = f.to()`). A
-  conversion that can fail is declared `routine Text.to![S64]() -> S64`. A routine written for every
+  conversion that can fail is declared `failable routine Text.to[S64]() -> S64`. A routine written for every
   choice (`routine T.to[S32]() needs ChoiceType T`) reaches every choice type.
 
 **Precedence**, tightest first:
@@ -559,7 +561,7 @@ routine add(a: S64, b: S64) -> S64
 routine Point.magnitude() -> B64        # method: Type.name, receiver is `me`
     return (me.x * me.x + me.y * me.y).to[B64]().sqrt()
 
-routine get_text!(n: S64) -> Text      # `!` = failable
+failable routine get_text(n: S64) -> Text      # can throw
     when n
         == 0 => throw DivisionByZeroError()
         else => return "ok"
@@ -578,11 +580,11 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
 - Failure inside a failable routine: `throw SomeError(...)`. A routine with no
   value to give throws `AbsentValueError()`.
-- The `!` goes on the DECLARATION only (`routine S64.from_digit_bytes_at!(...)`,
-  `routine Celsius!(from: Text)`). Calls never write it:
+- Failability is on the DECLARATION only (`failable routine S64.from_digit_bytes_at(...)`,
+  `failable routine Celsius(from: Text)`). Calls never mark it:
   `S64.from_digit_bytes_at(bytes: bs)`, `x.divmod(other: m)`, `t.to[Celsius]()`.
   `foo!(...)`, `x.foo!(...)` and `T![..](...)` are RF-G211; `foo(args)!` is a parse
-  error too. A constructor is declared `routine T(...)` / `routine T!(...)`
+  error too. A constructor is declared `routine T(...)` / `failable routine T(...)`
   (`routine T.create(...)` is an ordinary member routine named `create`), and
   overload resolution picks the failable or plain one for you.
 - **Annotations are a fixed set.** `@readonly`, `@writable`, `@reshaping`, `@discardable`, `@positional`,
@@ -1061,7 +1063,7 @@ record Item
     name: Text
     qty: S64
 
-routine find_qty!(items: Viewing[List[Item]], name: Text) -> S64
+failable routine find_qty(items: Viewing[List[Item]], name: Text) -> S64
     each item in items
         if item.name == name
             return item.qty
@@ -1142,7 +1144,7 @@ Verbs (methods on `Agent[T]`, all failable):
 - `is_done()`, `is_running()` — racy snapshots for polling.
 - On a `List[Agent[T]]`: `gather() -> List[T]` (wait for all, input order, throws the first failure it
   meets in list order), `race() -> T` (the first finisher, throws the winner's failure), `cancel_all()`
-  (no `!`, returns nothing: cancels every Agent and waits until each has stopped, dropping what each came
+  (not failable, returns nothing: cancels every Agent and waits until each has stopped, dropping what each came
   to, work nothing started yet never runs), `next_finished!() -> Agent[T]` (waits for the first to finish, takes
   it out and returns it, loop it to handle results in finishing order), `gather_all() -> List[Check[T]]` (waits for
   all, each Agent's value or failure in input order), `take_finished() -> List[Agent[T]]` (takes the finished Agents
@@ -1159,7 +1161,7 @@ Verbs (methods on `Agent[T]`, all failable):
   tells a long loop to stop early. Cancellation is cooperative: `waitfor` returns early once it is asked.
 
 ```razorforge
-routine checked!(n: S64) -> S64
+failable routine checked(n: S64) -> S64
     if n < 0
         throw VerificationFailedError()
     return n
@@ -1359,9 +1361,8 @@ keywords** — they tokenize as ordinary identifiers and are recognized in SA on
 each reading a buildtime property off the active `expand` handle or a type. Without that
 import, using `expand` or any source/accessor is a build error (RF-S952).
 
-`$` (wired-routine marker / `${…}` buildtime splice) and `!` (failable marker) are
-**structural sigils on a name, not keywords** — the name stays bare (RoutineInfo
-carries the flags). See §1b.
+`$` (`${…}` buildtime splice) is a structural sigil, not a keyword. Failability is the `failable` keyword on the
+declaration, and the name stays bare (RoutineInfo carries `IsFailable`). See §1b.
 
 ---
 

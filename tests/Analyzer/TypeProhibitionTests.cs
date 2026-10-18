@@ -148,7 +148,7 @@ public class TypeProhibitionTests
     public void Analyze_TextNullable_NoError()
     {
         string source = """
-                        routine find!(text: Text?) -> Text
+                        failable routine find(text: Text?) -> Text
                             if text is None
                                 throw AbsentValueError()
                             return text

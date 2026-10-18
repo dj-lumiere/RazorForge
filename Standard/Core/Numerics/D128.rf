@@ -273,7 +273,7 @@ routine d128_of_b128(x: B128) -> D128
     return d128_of_words(w: C::ingrid_d128_from_binary(low: x.low_bits(), high: x.high_bits()))
 
 ### The truncated integer magnitude of a finite decimal coeff * 10^exp as a U256. Throws when it exceeds U256.
-routine d128_int_magnitude!(coeff: U128, exp: S64) -> U256
+failable routine d128_int_magnitude(coeff: U128, exp: S64) -> U256
     if coeff == 0
         return 0
     if exp < 0
@@ -298,7 +298,7 @@ routine d128_int_magnitude!(coeff: U128, exp: S64) -> U256
     return m
 
 ### The truncated integer magnitude of a finite decimal as a U128. Throws when it exceeds U128.
-routine d128_int_magnitude_u128!(coeff: U128, exp: S64) -> U128
+failable routine d128_int_magnitude_u128(coeff: U128, exp: S64) -> U128
     var m = d128_int_magnitude(coeff: coeff, exp: exp)
     if (m >>> 128) != 0
         throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
@@ -306,7 +306,7 @@ routine d128_int_magnitude_u128!(coeff: U128, exp: S64) -> U128
 
 ### Truncates toward zero to an unsigned 128-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U128.
-routine D128.to![U128]() -> U128
+failable routine D128.to[U128]() -> U128
     var p = me.decode()
     if p.special != 0
         throw NumericDomainError(description: "non-finite decimal is not an integer")
@@ -316,7 +316,7 @@ routine D128.to![U128]() -> U128
 
 ### Truncates toward zero to a signed 128-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^127, 2^127-1].
-routine D128.to![S128]() -> S128
+failable routine D128.to[S128]() -> S128
     var p = me.decode()
     if p.special != 0
         throw NumericDomainError(description: "non-finite decimal is not an integer")
@@ -334,7 +334,7 @@ routine D128.to![S128]() -> S128
 
 ### Truncates toward zero to an unsigned 256-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U256.
-routine D128.to![U256]() -> U256
+failable routine D128.to[U256]() -> U256
     var p = me.decode()
     if p.special != 0
         throw NumericDomainError(description: "non-finite decimal is not an integer")
@@ -344,7 +344,7 @@ routine D128.to![U256]() -> U256
 
 ### Truncates toward zero to a signed 256-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^255, 2^255-1].
-routine D128.to![S256]() -> S256
+failable routine D128.to[S256]() -> S256
     var p = me.decode()
     if p.special != 0
         throw NumericDomainError(description: "non-finite decimal is not an integer")
@@ -367,7 +367,7 @@ routine D128.to![S256]() -> S256
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
 @readonly
-routine D128.add!(you: D128) -> D128
+failable routine D128.add(you: D128) -> D128
     var r = d128_of_words(w: C::ingrid_d128_add(
         a_low: d128_low(v: me),
         a_high: d128_high(v: me),
@@ -383,7 +383,7 @@ routine D128.add!(you: D128) -> D128
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
 @readonly
-routine D128.sub!(you: D128) -> D128
+failable routine D128.sub(you: D128) -> D128
     var r = d128_of_words(w: C::ingrid_d128_sub(
         a_low: d128_low(v: me),
         a_high: d128_high(v: me),
@@ -399,7 +399,7 @@ routine D128.sub!(you: D128) -> D128
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
 @readonly
-routine D128.mul!(you: D128) -> D128
+failable routine D128.mul(you: D128) -> D128
     var r = d128_of_words(w: C::ingrid_d128_mul(
         a_low: d128_low(v: me),
         a_high: d128_high(v: me),
@@ -416,7 +416,7 @@ routine D128.mul!(you: D128) -> D128
 ### overflow.
 ### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
 @readonly
-routine D128.truediv!(you: D128) -> D128
+failable routine D128.truediv(you: D128) -> D128
     var r = d128_of_words(w: C::ingrid_d128_div(
         a_low: d128_low(v: me),
         a_high: d128_high(v: me),
@@ -510,7 +510,7 @@ routine D128.cmp(you: D128) -> ComparisonSign
 ### follows IEEE semantics (overflow/domain errors yield inf/NaN, never throw), so the
 ### wired `pow!` is crashable and satisfies `Exponentiable`.
 @readonly
-routine D128.pow!(you: D128) -> D128
+failable routine D128.pow(you: D128) -> D128
     var r = me.pow_unchecked(you: you)
     if r.is_finite()
         return r
@@ -799,7 +799,7 @@ routine D128.to[D128]() -> D128
 ### first 38 and folds the rest into a sticky last digit (every format rounds away at least 4 digits, so the
 ### rounding is still exact), and an exponent beyond ±10^9 saturates.
 ### :throws: {InvalidValueError} on malformed input.
-routine scan_decimal_parts!(from_text: Text) -> D128Parts
+failable routine scan_decimal_parts(from_text: Text) -> D128Parts
     var len = from_text.count()
     if len == 0
         throw InvalidValueError(input: from_text, target: "decimal number")
@@ -899,7 +899,7 @@ routine scan_decimal_parts!(from_text: Text) -> D128Parts
 
 ### Parses decimal text into a `D128` (the scanned value rounded half to even to 34 digits).
 ### :throws: {InvalidValueError} on malformed input.
-routine parse_decimal_d128!(from_text: Text) -> D128
+failable routine parse_decimal_d128(from_text: Text) -> D128
     var p = scan_decimal_parts(from_text: from_text)
     if p.special == 1
         return D128.infinity(sign: p.sign)
@@ -909,7 +909,7 @@ routine parse_decimal_d128!(from_text: Text) -> D128
 
 ### Parses a decimal literal into a `D128`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
-routine Text.to![D128]() -> D128
+failable routine Text.to[D128]() -> D128
     return parse_decimal_d128(from_text: me)
 
 # ============================================================================

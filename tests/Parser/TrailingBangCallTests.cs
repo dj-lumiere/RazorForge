@@ -19,9 +19,9 @@ public class TrailingBangCallTests
         // `memberRoutine(args)`; the `!` lives on the declaration.
         string source = """
                         module L/Test
-                        routine f!() -> S64
+                        failable routine f() -> S64
                             return g()!
-                        routine g!() -> S64
+                        failable routine g() -> S64
                             return 0
                         """;
         AssertParseError(source: source);
@@ -35,7 +35,7 @@ public class TrailingBangCallTests
         // the failable `$create!` automatically when the matching overload is `!`.
         string source = """
                         module L/Test
-                        routine narrow!(x: S128) -> S64
+                        failable routine narrow(x: S128) -> S64
                             return S64(from: x)!
                         """;
         AssertParseError(source: source);
@@ -49,7 +49,7 @@ public class TrailingBangCallTests
         // inside an inline if-then-else expression. Both branches are invalid.
         string source = """
                         module L/Test
-                        routine pick!(cond: Bool, a: U64, b: U64) -> S64
+                        failable routine pick(cond: Bool, a: U64, b: U64) -> S64
                             return if cond then S64(from: a)! else S64(from: b)!
                         """;
         AssertParseError(source: source);
@@ -82,9 +82,9 @@ public class TrailingBangCallTests
     {
         string source = """
                         module L/Test
-                        routine f!() -> S64
+                        failable routine f() -> S64
                             return g!()
-                        routine g!() -> S64
+                        failable routine g() -> S64
                             throw DivisionByZeroError()
                         """;
         AssertParseError(source: source);
@@ -122,9 +122,9 @@ public class TrailingBangCallTests
         // (Goes through `Parse`, not `AssertParseError`, so any throw fails the test.)
         string source = """
                         module L/Test
-                        routine f!() -> S64
+                        failable routine f() -> S64
                             return g()
-                        routine g!() -> S64
+                        failable routine g() -> S64
                             return 0
                         """;
         Program result = Parse(source: source);

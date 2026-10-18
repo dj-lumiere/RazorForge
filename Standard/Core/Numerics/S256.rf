@@ -79,7 +79,7 @@ routine U128.to[S256]() -> S256
 ### Reinterprets a `U256` as `S256` using two's complement, throwing if the value exceeds S256_MAX.
 ### :returns: The same bit pattern interpreted as `S256`.
 ### :throws: {IntegerOverflowError} if `me > S256_MAX`.
-routine U256.to![S256]() -> S256
+failable routine U256.to[S256]() -> S256
     if me > 57896044618658097711785492504343953926634992332820282019728792003956564819967
         throw IntegerOverflowError()
     return LLVM::reinterpret_bits[U256, S256](me)
@@ -87,13 +87,13 @@ routine U256.to![S256]() -> S256
 ### Converts an `B16` to `S256`, truncating toward zero.
 ### :returns: The integer part of this value as an `S256`.
 ### :throws: {IntegerOverflowError} if this value is NaN or infinite.
-routine B16.to![S256]() -> S256
+failable routine B16.to[S256]() -> S256
     return me.to[B32]().to[S256]()
 
 ### Converts an `B32` to `S256`, truncating toward zero.
 ### :returns: The integer part of this value as an `S256`.
 ### :throws: {IntegerOverflowError} if this value is NaN or infinite.
-routine B32.to![S256]() -> S256
+failable routine B32.to[S256]() -> S256
     if not me.is_finite()
         throw IntegerOverflowError()
     return LLVM::float_to_signed[B32, S256](me)
@@ -101,7 +101,7 @@ routine B32.to![S256]() -> S256
 ### Converts an `B64` to `S256`, truncating toward zero.
 ### :returns: The integer part of this value as an `S256`.
 ### :throws: {IntegerOverflowError} if this value is NaN, infinite, or outside [-2^255, 2^255-1].
-routine B64.to![S256]() -> S256
+failable routine B64.to[S256]() -> S256
     if me.is_nan()
         or me < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0
         or me >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0
@@ -111,7 +111,7 @@ routine B64.to![S256]() -> S256
 ### Converts an `B128` to `S256`, truncating toward zero.
 ### :returns: The integer part of this value as an `S256`.
 ### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
-routine B128.to![S256]() -> S256
+failable routine B128.to[S256]() -> S256
     var bits = me.to_bits()
     var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127))
     var biased = LLVM::int_truncate[U128, U64](
@@ -150,13 +150,13 @@ routine B128.to![S256]() -> S256
 ### Converts a `D32` to `S256`, truncating toward zero.
 ### :returns: The integer part of this value as an `S256`.
 ### :throws: {NumericOverflowError} if the integer part overflows S256.
-routine D32.to![S256]() -> S256
+failable routine D32.to[S256]() -> S256
     return me.to[D128]().to[S256]()
 
 ### Converts a `D64` to `S256`, truncating toward zero.
 ### :returns: The integer part of this value as an `S256`.
 ### :throws: {NumericOverflowError} if the integer part overflows S256.
-routine D64.to![S256]() -> S256
+failable routine D64.to[S256]() -> S256
     return me.to[D128]().to[S256]()
 
 # ============================================================================
@@ -185,7 +185,7 @@ routine S256.mul_with_overflow(you: S256) -> (S256, Bool)
 ### :param you: The right operand.
 ### :returns: The sum `me + you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
-routine S256.add!(you: S256) -> S256
+failable routine S256.add(you: S256) -> S256
     var result = me.add_with_overflow(you)
     if result.item1
         throw IntegerOverflowError()
@@ -195,7 +195,7 @@ routine S256.add!(you: S256) -> S256
 ### :param you: The value to subtract.
 ### :returns: The difference `me - you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
-routine S256.sub!(you: S256) -> S256
+failable routine S256.sub(you: S256) -> S256
     var result = me.sub_with_overflow(you)
     if result.item1
         throw IntegerOverflowError()
@@ -205,7 +205,7 @@ routine S256.sub!(you: S256) -> S256
 ### :param you: The right operand.
 ### :returns: The product `me * you`.
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
-routine S256.mul!(you: S256) -> S256
+failable routine S256.mul(you: S256) -> S256
     var result = me.mul_with_overflow(you)
     if result.item1
         throw IntegerOverflowError()
@@ -225,7 +225,7 @@ routine s256_abs_u256(x: S256) -> U256
 ### :returns: The euclidean quotient `me // you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
 ### :throws: {IntegerOverflowError} if `me == S256_MIN` and `you == -1`.
-routine S256.floordiv!(you: S256) -> S256
+failable routine S256.floordiv(you: S256) -> S256
     if you == 0
         throw DivisionByZeroError()
     if me == S256_MIN and you == -1
@@ -251,7 +251,7 @@ routine S256.floordiv!(you: S256) -> S256
 ### :param you: The divisor.
 ### :returns: The euclidean remainder — always non-negative.
 ### :throws: {DivisionByZeroError} if `you == 0`.
-routine S256.mod!(you: S256) -> S256
+failable routine S256.mod(you: S256) -> S256
     if you == 0
         throw DivisionByZeroError()
     # EUCLIDEAN remainder (always >= 0), consistent with S8..S128. For a negative
@@ -268,7 +268,7 @@ routine S256.mod!(you: S256) -> S256
 ### :returns: The euclidean tuple `(me // you, me % you)`.
 ### :throws: {DivisionByZeroError} if `you == 0`; {IntegerOverflowError} if `me == S256_MIN` and `you == -1`.
 @readonly
-routine S256.divmod!(you: S256) -> (S256, S256)
+failable routine S256.divmod(you: S256) -> (S256, S256)
     if you == 0
         throw DivisionByZeroError()
     if me == S256_MIN and you == -1
@@ -294,7 +294,7 @@ routine S256.divmod!(you: S256) -> (S256, S256)
 ### :returns: The negated value.
 ### :throws: {IntegerOverflowError} if `me == S256_MIN`.
 @readonly
-routine S256.neg!() -> S256
+failable routine S256.neg() -> S256
     if me == S256_MIN
         throw IntegerOverflowError()
     return LLVM::sub(a: 0, b: me)
@@ -420,7 +420,7 @@ routine S256.mul_clamp(you: S256) -> S256
 ### :param exp: The exponent (must be non-negative).
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S256.pow_with_overflow!(exp: S256) -> (S256, Bool)
+failable routine S256.pow_with_overflow(exp: S256) -> (S256, Bool)
     if exp < 0
         throw NumericDomainError(description: "negative exponent: no integer result")
     var result: S256 = 1
@@ -444,7 +444,7 @@ routine S256.pow_with_overflow!(exp: S256) -> (S256, Bool)
 ### :returns: The result of raising `me` to the power `exp`.
 ### :throws: {IntegerOverflowError} if the result is outside the S256 range.
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S256.pow!(exp: S256) -> S256
+failable routine S256.pow(exp: S256) -> S256
     var result = me.pow_with_overflow(exp)
     if result.item1
         throw IntegerOverflowError()
@@ -454,7 +454,7 @@ routine S256.pow!(exp: S256) -> S256
 ### :param exp: The exponent (must be non-negative).
 ### :returns: The result modulo 2²⁵⁶ (signed wrap).
 ### :throws: {NumericDomainError} if `exp < 0`.
-routine S256.pow_wrap!(exp: S256) -> S256
+failable routine S256.pow_wrap(exp: S256) -> S256
     if exp < 0
         throw NumericDomainError(description: "negative exponent: no integer result")
     var result: S256 = 1
@@ -473,7 +473,7 @@ routine S256.pow_wrap!(exp: S256) -> S256
 ### :returns: The result, or `S256_MAX` / `S256_MIN` if it would overflow.
 ### :throws: {NumericDomainError} if `exp < 0`.
 @readonly
-routine S256.pow_clamp!(exp: S256) -> S256
+failable routine S256.pow_clamp(exp: S256) -> S256
     if exp < 0
         throw NumericDomainError(description: "negative exponent: no integer result")
     var result: S256 = 1
@@ -577,7 +577,7 @@ routine S256.cmp(you: S256) -> ComparisonSign
 ### Returns the absolute value of this integer.
 ### :returns: `-me` if `me < 0`; `me` if `me >= 0`.
 ### :throws: {IntegerOverflowError} when `me` is `S256_MIN` (its magnitude is not representable in S256).
-routine S256.abs!() -> S256
+failable routine S256.abs() -> S256
     if me == S256_MIN
         throw IntegerOverflowError()
     return LLVM::int_abs[S256](me)
@@ -753,7 +753,7 @@ routine S256.diagnose() -> Text
 ### :returns: The parsed `S256` value.
 ### :throws: {InvalidValueError} if this value is empty, sign-only, or contains non-digit characters.
 ### :throws: {IntegerOverflowError} if the value does not fit in `S256`.
-routine Text.to![S256]() -> S256
+failable routine Text.to[S256]() -> S256
     if me.count() == 0
         throw InvalidValueError(input: me, target: "S256")
     var start: U64 = 0
@@ -813,7 +813,7 @@ routine S256.isqrt() -> S256
 ### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
 ### :returns: The tuple `(root, remainder)`.
 ### :throws: {NumericDomainError} if `me < 0`.
-routine S256.sqrtrem!() -> (S256, S256)
+failable routine S256.sqrtrem() -> (S256, S256)
     if me < 0
         throw NumericDomainError(description: "square root of a negative value has no real result")
     var x = me

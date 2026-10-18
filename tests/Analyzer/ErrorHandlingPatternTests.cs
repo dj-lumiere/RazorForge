@@ -71,7 +71,7 @@ public class ErrorHandlingPatternTests
                         routine NopeError.crash_message() -> Text
                             return "nope"
 
-                        routine fails!(n: S64) -> S64
+                        failable routine fails(n: S64) -> S64
                             if n > 0
                                 throw NopeError()
                             return n
@@ -98,12 +98,12 @@ public class ErrorHandlingPatternTests
                         routine NopeError.crash_message() -> Text
                             return "nope"
 
-                        routine fails!(n: S64) -> S64
+                        failable routine fails(n: S64) -> S64
                             if n > 0
                                 throw NopeError()
                             return n
 
-                        routine passes!(n: S64) -> S64
+                        failable routine passes(n: S64) -> S64
                             when check fails(n: n)
                                 is S64 as v => return v
                             return 0

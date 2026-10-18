@@ -198,7 +198,7 @@ public class TypeResolutionTests
     public void Analyze_FailableRoutine_RegistersAsFailable()
     {
         string source = """
-                        routine get_value!() -> S32
+                        failable routine get_value() -> S32
                             return 42
                         """;
 
@@ -657,7 +657,7 @@ public class TypeResolutionTests
     public void Analyze_FailableRoutine_NoErrorHandlingReturnTypeError()
     {
         string source = """
-                        routine get_value!() -> S32
+                        failable routine get_value() -> S32
                             return 42
                         """;
 

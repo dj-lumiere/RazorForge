@@ -18,7 +18,7 @@ public class ErrorHandlingTests
     public void Parse_FailableRoutine_WithBang()
     {
         string source = """
-                        routine get_value!() -> S32
+                        failable routine get_value() -> S32
                             return 42
                         """;
 
@@ -35,7 +35,7 @@ public class ErrorHandlingTests
     public void Parse_FailableRoutine_WithParameter()
     {
         string source = """
-                        routine parse_int!(text: Text) -> S32
+                        failable routine parse_int(text: Text) -> S32
                             return 42
                         """;
 
@@ -52,7 +52,7 @@ public class ErrorHandlingTests
     public void Parse_FailableMemberRoutine_WithBang()
     {
         string source = """
-                        routine User.validate!() -> bool
+                        failable routine User.validate() -> bool
                             return true
                         """;
 
@@ -95,7 +95,7 @@ public class ErrorHandlingTests
     public void Parse_ThrowStatement_Simple()
     {
         string source = """
-                        routine validate!(x: S32) -> S32
+                        failable routine validate(x: S32) -> S32
                             if x < 0
                                 throw ValidationError("negative value")
                             return x
@@ -124,7 +124,7 @@ public class ErrorHandlingTests
     public void Parse_ThrowStatement_WithExpression()
     {
         string source = """
-                        routine fail!() -> S32
+                        failable routine fail() -> S32
                             throw CustomError(code: 123, message: "failed")
                             return
                         """;
@@ -290,7 +290,7 @@ public class ErrorHandlingTests
     public void Parse_ThrowWithoutExpression_Throws()
     {
         string source = """
-                        routine fail!()
+                        failable routine fail()
                             throw
                             return
                         """;

@@ -19,7 +19,7 @@ public class FailableDeclarationTests
                                 throw DivisionByZeroError()
                             return n
                         """;
-        AssertHasErrorSa(source: source, expectedErrorSubstring: "its declaration needs '!'");
+        AssertHasErrorSa(source: source, expectedErrorSubstring: "so it is declared 'failable'");
     }
 
     /// <summary>A routine that goes absent declared without <c>!</c> is an error.</summary>
@@ -33,7 +33,7 @@ public class FailableDeclarationTests
                                 throw AbsentValueError()
                             return n
                         """;
-        AssertHasErrorSa(source: source, expectedErrorSubstring: "its declaration needs '!'");
+        AssertHasErrorSa(source: source, expectedErrorSubstring: "so it is declared 'failable'");
     }
 
     /// <summary>A throwing routine declared with <c>!</c>, called plainly and with <c>try</c>, is fine.</summary>
@@ -42,7 +42,7 @@ public class FailableDeclarationTests
     {
         string source = """
                         module L/Test
-                        routine risky!(n: S64) -> S64
+                        failable routine risky(n: S64) -> S64
                             if n == 0
                                 throw DivisionByZeroError()
                             return n

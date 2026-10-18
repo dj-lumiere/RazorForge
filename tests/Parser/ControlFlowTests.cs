@@ -174,7 +174,7 @@ public class ControlFlowTests
     public void Parse_UnlessGuardClause()
     {
         string source = """
-                        routine process!(data: Text)
+                        failable routine process(data: Text)
                             if not (data.length() > 0)
                                 throw AbsentValueError()
                             show(data)
@@ -588,7 +588,7 @@ public class ControlFlowTests
     public void Parse_StopWithMessage()
     {
         string source = """
-                        routine divide!(a: S32, b: S32) -> S32
+                        failable routine divide(a: S32, b: S32) -> S32
                             if b == 0
                                 stop("Division by zero")
                             return a // b
@@ -687,7 +687,7 @@ public class ControlFlowTests
     public void Parse_ControlFlowWithErrorHandling()
     {
         string source = """
-                        routine search!(items: List[S32], target: S32) -> S32
+                        failable routine search(items: List[S32], target: S32) -> S32
                             each (index, item) in items.enumerate()
                                 if item == target
                                     return index

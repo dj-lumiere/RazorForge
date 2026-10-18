@@ -304,7 +304,7 @@ public class FeatureCoverageTests
                               module Test/Feat/Errors
                               import IO/Console
 
-                              routine guard_div!(a: S64, b: S64) -> S64
+                              failable routine guard_div(a: S64, b: S64) -> S64
                                   if b == 0
                                       throw DivisionByZeroError()
                                   return a // b
@@ -330,7 +330,7 @@ public class FeatureCoverageTests
                               module Test/Feat/ErrorsTry
                               import IO/Console
 
-                              routine parse_pos!(n: S64) -> S64
+                              failable routine parse_pos(n: S64) -> S64
                                   if n < 0
                                       throw VerificationFailedError()
                                   return n

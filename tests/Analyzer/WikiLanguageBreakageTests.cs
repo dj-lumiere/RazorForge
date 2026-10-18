@@ -148,7 +148,7 @@ public class WikiLanguageBreakageTests
     public void Analyze_FailableRoutineWithoutThrowOrAbsent_ReportsError()
     {
         string source = """
-                        routine test!() -> S32
+                        failable routine test() -> S32
                             return 1
                         """;
 
@@ -365,7 +365,7 @@ public class WikiLanguageBreakageTests
     public void Analyze_RecoveryFormNamedRoutine_IsOrdinary(string routineName)
     {
         string source = $"""
-                         routine parse!(x: S32) -> S32
+                         failable routine parse(x: S32) -> S32
                              if x < 0
                                  throw AbsentValueError()
                              return x

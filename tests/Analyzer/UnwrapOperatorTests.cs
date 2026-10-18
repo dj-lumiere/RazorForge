@@ -23,7 +23,7 @@ public class UnwrapOperatorTests
     {
         // Verify that failable routines produce try_ variants with error handling return types
         string source = """
-                        routine get!(flag: Bool) -> S64
+                        failable routine get(flag: Bool) -> S64
                             if flag
                                 throw AbsentValueError()
                             return 42
@@ -49,11 +49,11 @@ public class UnwrapOperatorTests
         // !! on S64 should report TypeDoesNotSupportOperator since the call
         // already unwraps in failable context.
         string source = """
-                        routine get!(flag: Bool) -> S64
+                        failable routine get(flag: Bool) -> S64
                             if flag
                                 throw AbsentValueError()
                             return 42
-                        routine test!() -> S64
+                        failable routine test() -> S64
                             var x = get(flag: true)!!
                             return x
                         """;
@@ -73,11 +73,11 @@ public class UnwrapOperatorTests
         // get!() in a failable context returns S64, not Maybe[S64].
         // ?? on S64 should report TypeDoesNotSupportOperator.
         string source = """
-                        routine get!(flag: Bool) -> S64
+                        failable routine get(flag: Bool) -> S64
                             if flag
                                 throw AbsentValueError()
                             return 42
-                        routine test!() -> S64
+                        failable routine test() -> S64
                             var x = get(flag: true) ?? 0
                             return x
                         """;

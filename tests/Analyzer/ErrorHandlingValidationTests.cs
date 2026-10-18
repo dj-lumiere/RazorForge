@@ -25,7 +25,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine BadError.crash_message() -> Text
                             return "BadError"
-                        routine test!() -> S32
+                        failable routine test() -> S32
                             throw BadError(message: "oops")
                         """;
 
@@ -44,7 +44,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine MyError.crash_message() -> Text
                             return "MyError"
-                        routine test!() -> S32
+                        failable routine test() -> S32
                             throw MyError(message: "oops")
                         """;
 
@@ -64,7 +64,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_FailableWithoutThrow_ReportsWarning()
     {
         string source = """
-                        routine useless!() -> S32
+                        failable routine useless() -> S32
                             return 42
                         """;
 
@@ -83,7 +83,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine MyError.crash_message() -> Text
                             return "MyError"
-                        routine useful!() -> S32
+                        failable routine useful() -> S32
                             throw MyError(message: "bad")
                         """;
 
@@ -98,7 +98,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_FailableWithAbsent_NoError()
     {
         string source = """
-                        routine find!() -> S32
+                        failable routine find() -> S32
                             throw AbsentValueError()
                             return 0
                         """;
@@ -140,7 +140,7 @@ public class ErrorHandlingValidationTests
                         routine MyError.crash_message() -> Text
                             return "MyError"
                         @crash_only
-                        routine crash_routine!() -> S32
+                        failable routine crash_routine() -> S32
                             throw MyError(message: "fatal")
                         """;
 
@@ -160,7 +160,7 @@ public class ErrorHandlingValidationTests
                         routine MyError.crash_message() -> Text
                             return "MyError"
                         @crash_only
-                        routine crash_routine!() -> S32
+                        failable routine crash_routine() -> S32
                             throw MyError(message: "fatal")
                         """;
 
@@ -181,7 +181,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine MyError.crash_message() -> Text
                             return "MyError"
-                        routine normal_routine!() -> S32
+                        failable routine normal_routine() -> S32
                             throw MyError(message: "error")
 
                         routine trigger_variants() -> S32?
@@ -211,7 +211,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine ParseError.crash_message() -> Text
                             return "ParseError"
-                        routine parse!(data: S32) -> S32
+                        failable routine parse(data: S32) -> S32
                             throw ParseError(message: "bad")
                         routine caller() -> S32
                             parse(data: 1)
@@ -233,9 +233,9 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine ParseError.crash_message() -> Text
                             return "ParseError"
-                        routine parse!(data: S32) -> S32
+                        failable routine parse(data: S32) -> S32
                             throw ParseError(message: "bad")
-                        routine caller!() -> S32
+                        failable routine caller() -> S32
                             parse(data: 1)
                             return 0
                         """;
@@ -262,7 +262,7 @@ public class ErrorHandlingValidationTests
                         routine ParseError.crash_message() -> Text
                             return me.message
 
-                        routine validate!(value: S32) -> S32
+                        failable routine validate(value: S32) -> S32
                             if value < 0
                                 throw ParseError(message: "negative")
                             return value
@@ -289,7 +289,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_ThrowPrimitive_ReportsError()
     {
         string source = """
-                        routine test!() -> S32
+                        failable routine test() -> S32
                             throw 42
                         """;
 
@@ -313,7 +313,7 @@ public class ErrorHandlingValidationTests
                             code: S32
                         routine ErrB.crash_message() -> Text
                             return "ErrB"
-                        routine test!(flag: Bool) -> S32
+                        failable routine test(flag: Bool) -> S32
                             if flag
                                 throw ErrA(message: "a")
                             throw ErrB(code: 1)
@@ -337,11 +337,11 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine MyErr.crash_message() -> Text
                             return "MyErr"
-                        routine inner!(value: S32) -> S32
+                        failable routine inner(value: S32) -> S32
                             if value < 0
                                 throw MyErr(message: "bad")
                             return value
-                        routine outer!(value: S32) -> S32
+                        failable routine outer(value: S32) -> S32
                             return inner(value: value)
                         """;
 

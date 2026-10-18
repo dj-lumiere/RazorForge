@@ -23,7 +23,7 @@ public class ErrorVariantGenerationTests
         // Routine with 'absent' only generates:
         // - try_get() -> T?
         string source = """
-                        routine get!(id: U64) -> User
+                        failable routine get(id: U64) -> User
                             if not (has_user(id))
                                 throw AbsentValueError()
                             return fetch_user(id)
@@ -74,7 +74,7 @@ public class ErrorVariantGenerationTests
                             @readonly
                             routine Me.crash_message() -> Text
 
-                        routine validate!(value: S32) -> S32
+                        failable routine validate(value: S32) -> S32
                             if value < 0
                                 throw ValidationError(message: "negative")
                             return value
@@ -123,7 +123,7 @@ public class ErrorVariantGenerationTests
                         entity User
                             name: Text
 
-                        routine get_user!(id: U64) -> User
+                        failable routine get_user(id: U64) -> User
                             if id == 0
                                 throw DatabaseError(code: 1)
                             if not (user_exists(id))
@@ -166,7 +166,7 @@ public class ErrorVariantGenerationTests
                         entity Cache
                             data: Dict[Text, S32]
 
-                        routine Cache.get!(key: Text) -> S32
+                        failable routine Cache.get(key: Text) -> S32
                             if not (me.data.has(key))
                                 throw AbsentValueError()
                             return me.data.get(key)
@@ -211,7 +211,7 @@ public class ErrorVariantGenerationTests
     {
         // Failable routine that never throws or returns absent
         string source = """
-                        routine get_value!() -> S32
+                        failable routine get_value() -> S32
                             return 42
                         """;
 
@@ -265,7 +265,7 @@ public class ErrorVariantGenerationTests
                         record NotAnError
                             value: S32
 
-                        routine fail!()
+                        failable routine fail()
                             throw NotAnError(value: 42)
                         """;
 
@@ -298,7 +298,7 @@ public class ErrorVariantGenerationTests
                             @readonly
                             routine Me.crash_message() -> Text
 
-                        routine parse_number!(text: Text) -> S32
+                        failable routine parse_number(text: Text) -> S32
                             throw SomeError(msg: "parse failed")
 
                         routine trigger_variants(text: Text) -> S32?

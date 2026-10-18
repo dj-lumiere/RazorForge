@@ -33,7 +33,7 @@ public sealed class ToolCommandTests : IDisposable
                                 routine NopeError.crash_message() -> Text
                                     return f"nope: {me.what}"
 
-                                routine fails!(n: S64) -> S64
+                                failable routine fails(n: S64) -> S64
                                     if n > 0
                                         throw NopeError(what: f"too big {n}")
                                     return n

@@ -47,7 +47,7 @@ routine __is_ascii_ws(b: Byte) -> Bool
 ### :param bytes: The buffer to read from.
 ### :returns: The parsed `S64` value.
 ### :throws: {InvalidValueError} if no digits were found after the optional sign.
-common routine S64.from_digit_bytes!(bytes: Bytes) -> S64
+failable common routine S64.from_digit_bytes(bytes: Bytes) -> S64
     var pair = S64.from_digit_bytes_at(bytes: bytes, start: 0)
     return pair.item0
 
@@ -60,7 +60,7 @@ common routine S64.from_digit_bytes!(bytes: Bytes) -> S64
 ###               are treated as EOF and produce {InvalidValueError}.
 ### :returns: A tuple `(parsed_value, index_one_past_last_digit)`.
 ### :throws: {InvalidValueError} if no digits were found after the optional sign.
-common routine S64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S64, U64]
+failable common routine S64.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[S64, U64]
     var i = start
 
     # Skip leading whitespace
@@ -97,7 +97,7 @@ common routine S64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S64, 
 ### the failure path is unreachable in practice — but propagating via `!`
 ### avoids `danger` and lets callers recover with `try x.to_digit_bytes()` for free.
 ### :returns: A freshly allocated `Bytes` carrying the digit sequence.
-routine S64.to_digit_bytes!() -> Bytes
+failable routine S64.to_digit_bytes() -> Bytes
     if me == 0
         var buf: List[Byte] = []
         buf.add_last(value: b'0')  # '0'
@@ -134,12 +134,12 @@ routine S64.to_digit_bytes!() -> Bytes
 ### :param bytes: The buffer to read from.
 ### :returns: The parsed `U64` value.
 ### :throws: {InvalidValueError} if no digits were found or a `-` sign appeared.
-common routine U64.from_digit_bytes!(bytes: Bytes) -> U64
+failable common routine U64.from_digit_bytes(bytes: Bytes) -> U64
     var pair = U64.from_digit_bytes_at(bytes: bytes, start: 0)
     return pair.item0
 
 ### Streaming variant of `U64.from_digit_bytes!` — see that routine's doc.
-common routine U64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U64, U64]
+failable common routine U64.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[U64, U64]
     var i = start
 
     while i < bytes.count() and __is_ascii_ws(b: bytes[i])
@@ -167,7 +167,7 @@ common routine U64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U64, 
 ### Marked `!` for the same reason as `S64.to_digit_bytes!` — the per-iteration
 ### `U8(from: U64)` narrowing is failable in general but unreachable here.
 ### :returns: A freshly allocated `Bytes` carrying the digit sequence.
-routine U64.to_digit_bytes!() -> Bytes
+failable routine U64.to_digit_bytes() -> Bytes
     if me == 0
         var buf: List[Byte] = []
         buf.add_last(value: b'0')
@@ -190,79 +190,79 @@ routine U64.to_digit_bytes!() -> Bytes
 # explicit `T(from: S64)` narrowing additionally throws on out-of-range values.
 # ============================================================================
 
-common routine S8.from_digit_bytes!(bytes: Bytes) -> S8
+failable common routine S8.from_digit_bytes(bytes: Bytes) -> S8
     return S64.from_digit_bytes(bytes: bytes).to[S8]()
 
-common routine S8.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S8, U64]
+failable common routine S8.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[S8, U64]
     var pair = S64.from_digit_bytes_at(bytes: bytes, start: start)
     return (pair.item0.to[S8](), pair.item1)
 
-routine S8.to_digit_bytes!() -> Bytes
+failable routine S8.to_digit_bytes() -> Bytes
     return me.to[S64]().to_digit_bytes()
 
-common routine S16.from_digit_bytes!(bytes: Bytes) -> S16
+failable common routine S16.from_digit_bytes(bytes: Bytes) -> S16
     return S64.from_digit_bytes(bytes: bytes).to[S16]()
 
-common routine S16.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S16, U64]
+failable common routine S16.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[S16, U64]
     var pair = S64.from_digit_bytes_at(bytes: bytes, start: start)
     return (pair.item0.to[S16](), pair.item1)
 
-routine S16.to_digit_bytes!() -> Bytes
+failable routine S16.to_digit_bytes() -> Bytes
     return me.to[S64]().to_digit_bytes()
 
-common routine S32.from_digit_bytes!(bytes: Bytes) -> S32
+failable common routine S32.from_digit_bytes(bytes: Bytes) -> S32
     return S64.from_digit_bytes(bytes: bytes).to[S32]()
 
-common routine S32.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S32, U64]
+failable common routine S32.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[S32, U64]
     var pair = S64.from_digit_bytes_at(bytes: bytes, start: start)
     return (pair.item0.to[S32](), pair.item1)
 
-routine S32.to_digit_bytes!() -> Bytes
+failable routine S32.to_digit_bytes() -> Bytes
     return me.to[S64]().to_digit_bytes()
 
 # ============================================================================
 # Narrower unsigned widths — delegate to U64 then narrow.
 # ============================================================================
 
-common routine U8.from_digit_bytes!(bytes: Bytes) -> U8
+failable common routine U8.from_digit_bytes(bytes: Bytes) -> U8
     return U64.from_digit_bytes(bytes: bytes).to[U8]()
 
-common routine U8.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U8, U64]
+failable common routine U8.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[U8, U64]
     var pair = U64.from_digit_bytes_at(bytes: bytes, start: start)
     return (pair.item0.to[U8](), pair.item1)
 
-routine U8.to_digit_bytes!() -> Bytes
+failable routine U8.to_digit_bytes() -> Bytes
     return me.to[U64]().to_digit_bytes()
 
-common routine U16.from_digit_bytes!(bytes: Bytes) -> U16
+failable common routine U16.from_digit_bytes(bytes: Bytes) -> U16
     return U64.from_digit_bytes(bytes: bytes).to[U16]()
 
-common routine U16.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U16, U64]
+failable common routine U16.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[U16, U64]
     var pair = U64.from_digit_bytes_at(bytes: bytes, start: start)
     return (pair.item0.to[U16](), pair.item1)
 
-routine U16.to_digit_bytes!() -> Bytes
+failable routine U16.to_digit_bytes() -> Bytes
     return me.to[U64]().to_digit_bytes()
 
-common routine U32.from_digit_bytes!(bytes: Bytes) -> U32
+failable common routine U32.from_digit_bytes(bytes: Bytes) -> U32
     return U64.from_digit_bytes(bytes: bytes).to[U32]()
 
-common routine U32.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U32, U64]
+failable common routine U32.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[U32, U64]
     var pair = U64.from_digit_bytes_at(bytes: bytes, start: start)
     return (pair.item0.to[U32](), pair.item1)
 
-routine U32.to_digit_bytes!() -> Bytes
+failable routine U32.to_digit_bytes() -> Bytes
     return me.to[U64]().to_digit_bytes()
 
 # ============================================================================
 # S128 — direct accumulation in S128 (won't fit in S64).
 # ============================================================================
 
-common routine S128.from_digit_bytes!(bytes: Bytes) -> S128
+failable common routine S128.from_digit_bytes(bytes: Bytes) -> S128
     var pair = S128.from_digit_bytes_at(bytes: bytes, start: 0)
     return pair.item0
 
-common routine S128.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S128, U64]
+failable common routine S128.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[S128, U64]
     var i = start
     while i < bytes.count() and __is_ascii_ws(b: bytes[i])
         i = i + 1
@@ -314,7 +314,7 @@ routine u128_digits_lsd(mag: U128) -> List[Byte]
         chunk = LLVM::unsigned_div(a: chunk, b: 10)
     return digits
 
-routine S128.to_digit_bytes!() -> Bytes
+failable routine S128.to_digit_bytes() -> Bytes
     if me == 0
         var buf: List[Byte] = []
         buf.add_last(value: b'0')
@@ -336,11 +336,11 @@ routine S128.to_digit_bytes!() -> Bytes
 # U128 — direct accumulation in U128.
 # ============================================================================
 
-common routine U128.from_digit_bytes!(bytes: Bytes) -> U128
+failable common routine U128.from_digit_bytes(bytes: Bytes) -> U128
     var pair = U128.from_digit_bytes_at(bytes: bytes, start: 0)
     return pair.item0
 
-common routine U128.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U128, U64]
+failable common routine U128.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[U128, U64]
     var i = start
     while i < bytes.count() and __is_ascii_ws(b: bytes[i])
         i = i + 1
@@ -360,7 +360,7 @@ common routine U128.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U128
         i = i + 1
     return (acc, i)
 
-routine U128.to_digit_bytes!() -> Bytes
+failable routine U128.to_digit_bytes() -> Bytes
     if me == 0
         var buf: List[Byte] = []
         buf.add_last(value: b'0')
@@ -374,11 +374,11 @@ routine U128.to_digit_bytes!() -> Bytes
 # Integer (arbitrary precision).
 # ============================================================================
 
-common routine Integer.from_digit_bytes!(bytes: Bytes) -> Integer
+failable common routine Integer.from_digit_bytes(bytes: Bytes) -> Integer
     var pair = Integer.from_digit_bytes_at(bytes: bytes, start: 0)
     return pair.item0
 
-common routine Integer.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[Integer, U64]
+failable common routine Integer.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[Integer, U64]
     var i = start
     while i < bytes.count() and __is_ascii_ws(b: bytes[i])
         i = i + 1
@@ -404,7 +404,7 @@ common routine Integer.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[I
     var value: Integer = if negative then -acc else acc
     return (value, i)
 
-routine Integer.to_digit_bytes!() -> Bytes
+failable routine Integer.to_digit_bytes() -> Bytes
     var zero = 0.to[Integer]()
     if me == zero
         var buf: List[Byte] = []

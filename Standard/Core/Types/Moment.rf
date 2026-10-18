@@ -25,7 +25,7 @@ obeys Comparable, DurationAddable, DurationSubtractable
 ### :param nanoseconds: The nanosecond component within the current second.
 ### :returns: The resulting `Moment` value.
 ### :throws: {IntegerOverflowError} when the seconds don't fit in `S64`.
-routine normalize_moment!(seconds: S64, nanoseconds: S64) -> Moment
+failable routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
     return Moment(seconds: seconds + nanoseconds // NS_PER_SECOND,
         nanoseconds: (nanoseconds % NS_PER_SECOND).to[U32]())
 
@@ -147,7 +147,7 @@ routine days_to_day(days_since_epoch: S64) -> S64
 ### :returns: The resulting `Moment` value.
 ### :throws: {InvalidMomentError} when a part is out of its range: a month outside `1..12`, a day the month doesn't
 ### have, an hour outside `0..23`, or a minute or second outside `0..59`.
-routine Moment!(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
+failable routine Moment(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
     require_moment_part(part: "month", value: month, lowest: 1, highest: 12)
     require_moment_part(part: "day", value: day, lowest: 1, highest: days_in_month(year: year, month: month))
     require_moment_part(part: "hour", value: hour, lowest: 0, highest: 23)
@@ -163,7 +163,7 @@ routine Moment!(year: S64, month: S64, day: S64, hour: S64, minute: S64, second:
 ### :param lowest: The smallest value it takes.
 ### :param highest: The largest value it takes.
 ### :throws: {InvalidMomentError} when `value` is out of range.
-secret routine require_moment_part!(part: Text, value: S64, lowest: S64, highest: S64)
+secret failable routine require_moment_part(part: Text, value: S64, lowest: S64, highest: S64)
     if value < lowest or value > highest
         throw InvalidMomentError(part: part, value: value, lowest: lowest, highest: highest)
     return
@@ -299,7 +299,7 @@ routine Moment.timestamp_ms() -> S64
 ### :param duration: The `duration` value.
 ### :returns: The resulting `Moment` value.
 @readonly
-routine Moment.add_duration!(duration: Duration) -> Moment
+failable routine Moment.add_duration(duration: Duration) -> Moment
     return normalize_moment(
         seconds: me.seconds + duration.total_seconds(),
         nanoseconds: me.nanoseconds.to[S64]() + duration.subsec_nanoseconds().to[S64](),
@@ -309,7 +309,7 @@ routine Moment.add_duration!(duration: Duration) -> Moment
 ### :param duration: The time span to subtract.
 ### :returns: The resulting `Moment` value.
 @readonly
-routine Moment.subtract_duration!(duration: Duration) -> Moment
+failable routine Moment.subtract_duration(duration: Duration) -> Moment
     return me.add_duration(duration.neg())
 
 ### Returns the elapsed duration from `earlier` to this moment.
@@ -317,7 +317,7 @@ routine Moment.subtract_duration!(duration: Duration) -> Moment
 ### :param earlier: The earlier comparison instant.
 ### :returns: The resulting `Duration` value.
 @readonly
-routine Moment.elapsed_since!(earlier: Moment) -> Duration
+failable routine Moment.elapsed_since(earlier: Moment) -> Duration
     return normalize_duration(
         seconds: me.seconds - earlier.seconds,
         nanoseconds: me.nanoseconds.to[S64]() - earlier.nanoseconds.to[S64](),
@@ -327,21 +327,21 @@ routine Moment.elapsed_since!(earlier: Moment) -> Duration
 ### :param you: The duration to advance by.
 ### :returns: The resulting `Moment`.
 @readonly
-routine Moment.add!(you: Duration) -> Moment
+failable routine Moment.add(you: Duration) -> Moment
     return me.add_duration(you)
 
 ### Returns the moment reached by retreating this one by `you`.
 ### :param you: The duration to subtract.
 ### :returns: The resulting `Moment`.
 @readonly
-routine Moment.sub!(you: Duration) -> Moment
+failable routine Moment.sub(you: Duration) -> Moment
     return me.subtract_duration(you)
 
 ### Returns the elapsed time from `you` to this moment.
 ### :param you: The earlier moment to measure from.
 ### :returns: The `Duration` between the two moments.
 @readonly
-routine Moment.sub!(you: Moment) -> Duration
+failable routine Moment.sub(you: Moment) -> Duration
     return me.elapsed_since(you)
 
 # ============================================================================

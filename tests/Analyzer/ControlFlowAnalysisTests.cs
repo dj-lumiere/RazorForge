@@ -63,7 +63,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_EarlyReturnInLoop_NoError()
     {
         string source = """
-                        routine find!(items: List[S32], target: S32) -> S32
+                        failable routine find(items: List[S32], target: S32) -> S32
                             each item in items
                                 if item == target
                                     return item
@@ -81,7 +81,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_UnlessElseReturn_NoError()
     {
         string source = """
-                        routine validate!(value: S32) -> S32
+                        failable routine validate(value: S32) -> S32
                             if not (value > 0)
                                 throw ValueError("Must be positive")
                             return value
@@ -119,7 +119,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_CodeAfterAbsent_ReportsWarning()
     {
         string source = """
-                        routine test!() -> S32
+                        failable routine test() -> S32
                             throw AbsentValueError()
                             var x = 10
                             return
@@ -135,7 +135,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_CodeAfterThrow_ReportsWarning()
     {
         string source = """
-                        routine test!() -> S32
+                        failable routine test() -> S32
                             throw ValueError("error")
                             var x = 10
                             return
@@ -241,7 +241,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_AbsentInFailable_NoError()
     {
         string source = """
-                        routine test!() -> S32
+                        failable routine test() -> S32
                             throw AbsentValueError()
                             return
                         """;
@@ -368,7 +368,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_ThrowInFailable_NoError()
     {
         string source = """
-                        routine test!() -> S32
+                        failable routine test() -> S32
                             throw ValueError("error")
                             return
                         """;
@@ -388,7 +388,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_ThrowTerminates_NoMissingReturn()
     {
         string source = """
-                        routine fail!(value: S32) -> S32
+                        failable routine fail(value: S32) -> S32
                             throw ValueError("bad value")
                         """;
 
@@ -405,7 +405,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_ThrowInAllBranches_NoMissingReturn()
     {
         string source = """
-                        routine validate!(value: S32) -> S32
+                        failable routine validate(value: S32) -> S32
                             if value > 0
                                 throw ValueError("too big")
                             else
@@ -425,7 +425,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_AbsentTerminates_NoMissingReturn()
     {
         string source = """
-                        routine lookup!(key: S32) -> S32
+                        failable routine lookup(key: S32) -> S32
                             throw AbsentValueError()
                         """;
 
@@ -442,7 +442,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_AllPathsThrow_NoMissingReturn()
     {
         string source = """
-                        routine always_fails!(condition: bool) -> S32
+                        failable routine always_fails(condition: bool) -> S32
                             if condition
                                 throw ValueError("a")
                             else
@@ -462,7 +462,7 @@ public class ControlFlowAnalysisTests
     public void Analyze_ThrowWithDeadCode_NoMissingReturn()
     {
         string source = """
-                        routine fail!(value: S32) -> S32
+                        failable routine fail(value: S32) -> S32
                             throw ValueError("error")
                             var x = 10
                         """;

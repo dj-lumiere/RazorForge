@@ -176,7 +176,7 @@ public class DiscardTests
                         record Wrapper
                             value: S32
 
-                        routine Wrapper.get_value!(self: Wrapper) -> S32
+                        failable routine Wrapper.get_value(self: Wrapper) -> S32
                             return self.value
 
                         routine test()
@@ -199,12 +199,12 @@ public class DiscardTests
     public void Analyze_DiscardFailableCallInFailableContext_NoError()
     {
         string source = """
-                        routine get!(flag: Bool) -> S32
+                        failable routine get(flag: Bool) -> S32
                             if flag
                                 throw AbsentValueError()
                             return 42
 
-                        routine test!()
+                        failable routine test()
                             drop get(flag: true)
                             return
                         """;
@@ -222,7 +222,7 @@ public class DiscardTests
     public void Analyze_DiscardFailableCallInNonFailableContext_CurrentlySuppressed()
     {
         string source = """
-                        routine get!(flag: Bool) -> S32
+                        failable routine get(flag: Bool) -> S32
                             if flag
                                 throw AbsentValueError()
                             return 42
@@ -244,7 +244,7 @@ public class DiscardTests
     public void Analyze_DiscardTryVariantInNonFailableContext_NoError()
     {
         string source = """
-                        routine get!(flag: Bool) -> S32
+                        failable routine get(flag: Bool) -> S32
                             if flag
                                 throw AbsentValueError()
                             return 42

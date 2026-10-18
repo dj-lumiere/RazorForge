@@ -25,7 +25,7 @@ public class EnterableConformanceTests
     {
         string source = """
                         protocol Openable
-                            routine Me.go!()
+                            failable routine Me.go()
 
                         entity Door obeys Openable
                             secret n: S32
@@ -50,7 +50,7 @@ public class EnterableConformanceTests
                         entity Door obeys Plain
                             secret n: S32
 
-                        routine Door.go!()
+                        failable routine Door.go()
                             throw AbsentValueError()
                         """;
 
@@ -221,7 +221,7 @@ public class EnterableConformanceTests
         string source = """
                         import IO/File
 
-                        routine start!()
+                        failable routine start()
                             var f = FileManager.open_write(at: File(at: "x.txt"))
                             f.flush()
                             return
