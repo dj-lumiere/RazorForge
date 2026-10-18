@@ -267,7 +267,7 @@ public sealed partial class StdlibApiTests
 
         string manifest =
             $"[package]\nname = \"{packageName}\"\nversion = \"0.0.1\"\nrazorforge-version = \"0.1.0\"\n\n" +
-            $"[target]\nexecutable = \"{harnessModule}\"\nmode = \"debug\"\nlibrary = [\"{libraryRel}\"]\n";
+            $"[target]\nexecutable = \"{harnessModule}\"\nmode = \"debug\"\nmodule_paths = [\"{libraryRel}\"]\n";
         File.WriteAllText(path: Path.Combine(path1: harnessDir, path2: "config.toml"),
             contents: manifest);
 

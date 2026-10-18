@@ -1000,7 +1000,7 @@ name = "my-app"
 
 [target]
 executable = "MainModule"   # entry MODULE name (the `module` decl, not a file path)
-library = ["../shared"]     # external dependency DIRECTORIES (optional)
+module_paths = ["../shared"]  # folders whose modules join the solution (optional), a header-less file is named by its place
 mode = "debug"              # debug -O0 | release -O2 | release-time -O3 | release-space -Os
 dump-ast = false            # optional: write .rf.desugared beside generated IR
 sa-timing = false           # optional: print semantic-analysis phase timings
