@@ -41,9 +41,13 @@ When unsure, consult ground truth in the repo/package:
    (integer `//` and `%` by zero throw `DivisionByZeroError`).
    There is no arbitrary-precision binary float: `B128` is the widest, and exact
    arithmetic is `Integer` and the decimals.
-6. **Entities have a single owner.** Assigning or passing an entity requires
-   explicit transfer: `consume(r: steal b)`. Plain `var s = obj.field_entity`
-   is rejected (RF-S413).
+6. **Data exists to be shared, and record and entity are the two ways.** The question that picks one: may each
+   place that shares the value hold its own copy? Yes: a `record`, shared by handing out copies (`=` copies).
+   No, copies would be a problem: an `entity`, whose one legitimate version is the single source of truth, so it
+   follows that the entity lives in one place. Others reach it by permission for a while (`view()`/`modify()`
+   tokens, the builder checks them) or through a manager for longer (`Retained`, `Guarded`, ...). Keeping the
+   same entity in a second place with neither is RF-S413 ("would share one entity between two places with no
+   manager", `var s = obj.field_entity`). `steal` hands it to what keeps it from now on: `consume(r: steal b)`.
 7. **A routine that can fail is declared `failable`** (`failable routine parse(...)`, and
    `failable dangerous routine` / `failable common routine`: `failable` goes first, after a visibility).
    `routine parse!(...)` is RF-G222 (fix and `migrate --step failable` write the keyword), and call sites never
@@ -207,8 +211,8 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
 - varargs parameter notation is **`name...: Type`** (the `...` follows the param
   NAME, before the colon); it binds to a `List[Type]`.
 - **RazorForge has NO "borrow" concept** (that is Rust). Do not use the word
-  "borrow" in prose or API names. Ownership is expressed via entities + `steal`
-  + RC wrappers + **access tokens** (below).
+  "borrow" in prose or API names, nor "owner"/"ownership" for entities. Sharing is expressed with records
+  (copies) and entities: permission (**access tokens**, below), managers (RC wrappers) and `steal`.
 - builder-synthesized per-type routines are **wired routines** (`represent`,
   `diagnose`, `serialize`, the constructor, `eq`, `cmp`, `hash`, …) — named with **NO
   sigil**; wired-ness is INFERRED from protocol conformance. Not
@@ -611,15 +615,16 @@ record Point          # VALUE type: copied, no identity, no destructor
 # construct memberwise, strictly named:
 var p = Point(x: 3, y: 4)
 
-entity Resource       # HEAP type: single owner, deterministic destruct
+entity Resource       # ONE legitimate version, so it lives in one place; deterministic destruct
     tag: S64
 
 var b = Resource(tag: 7)
-consume(r: steal b)   # ownership moves; using b afterwards = build error
-# destruct runs exactly once, at the owner's scope exit (anchored at `return`)
+consume(r: steal b)   # handed to what keeps it now; using b afterwards = build error
+# destruct runs exactly once, at the end of the scope that keeps it (anchored at `return`)
 ```
 
-- Containment is ownership: one owner at a time; `steal` marks every transfer.
+- A container, a member variable or a manager that holds an entity is where it is kept; `steal` marks each
+  hand-over to such a place.
 - A written `destruct` (a plain `routine T.destruct()`, never `dangerous`: RF-S807) tears down what the entity
   owns (its member variables, buffers it holds) and nothing else: the builder gives back the entity's own box
   before each of its returns, so one `destruct` call still ends the entity. Do not write
@@ -639,10 +644,9 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
   `d[k] = v` on a key that is there) tears the old value down first, an entity
   included, so a token on it ends. To keep the old one, take it out with
   `steal … as old inject …`.
-  Returning a bare entity transfers ownership to the caller (`var a = make()`
-  owns it, torn down at scope exit). A routine handing back an entity it does NOT
-  own (e.g. a container's element) must return an access token, never a bare
-  entity — else the caller becomes a second owner and double-frees.
+  Returning a bare entity hands it to the caller (`var a = make()` keeps it, torn down at scope exit). A routine
+  handing back an entity that stays where it is (a container's element) returns an access token, never the bare
+  entity: the entity would otherwise be kept in two places, and torn down twice.
 - **Access tokens** (RF's answer to "borrow" — never call them borrows). A token
   remembers the object it was taken from (its SOURCE), and every rule below is
   checked at build time:
@@ -696,7 +700,7 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     token (`each v in b { a.add(value: v) }` is then allowed). `multiamend` is the same for two `Guarded` handles.
     Handing one container to two parameters of one call when one of them is written
     (`extend(into: xs, from: xs)`) is RF-S623.
-- **RC wrappers** (opt-in shared ownership, reference-counted):
+- **RC wrappers** (managers for sharing an entity for longer, reference-counted):
   - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, `=` makes one more holder);
     forwards direct access to the retained entity.
   - **`Guarded[T, TPolicy]`** — multi-thread strong handle (atomic, `=` makes one more holder);
@@ -709,7 +713,7 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     Every `Atomic` routine is `@readonly` (each change synchronizes itself): `stats.open.fetch_add(delta: 1)`
     works through a read token or a `ReadOnly` Guarded.
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
-- **`Hijacked[T]`** — a non-owning raw handle (no-op destruct); the stdlib's
+- **`Hijacked[T]`** — a raw handle that manages nothing (no-op destruct); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
 - Records never use tokens or `as_entity` — those are entity concepts.
 - `danger` blocks / `dangerous` routines mark **only** operations that can
@@ -718,8 +722,8 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
   channels, failable calls) is **never** wrapped in `danger`; it is not a
   catch-all for "risky" or "advanced". A `dangerous` routine can only be called
   inside a `danger` block.
-- No lifetime syntax; safety comes from single ownership + marked transfers
-  (`steal`) + scope-bound access tokens.
+- No lifetime syntax; safety comes from the one-legitimate-version rule (an entity lives in one place), marked
+  hand-overs (`steal`), scope-bound access tokens and managers.
 
 ```razorforge
 using c.view() as v          # Viewing[Counter], read-only, dead at block end
@@ -734,7 +738,7 @@ using c.modify() as m        # Modifying[Counter], write intent
   `Guarded`/`Tracked`/`Witnessed`). A value type (record/scalar) is a build error
   (**RF-S440**) — values have no identity; use `==`. `Hijacked` is excluded (its `==`
   is already identity — you `peek` to see its value). It is a primitive pointer
-  compare, never a `.eq()` call, so it is not overloadable. For single-owner entities
+  compare, never a `.eq()` call, so it is not overloadable. For bare entities (each kept in one place)
   `a === b` is trivially `false` between distinct bindings; it earns its keep where
   aliasing exists — two `Retained[T]` (or two `Viewing`/`Modifying` tokens) that may
   point at the same entity.
@@ -752,10 +756,10 @@ show(a === make_other())    # false — different objects
 > - **A recursive record is a build error; recursion belongs to entity.** Surface rule: *a record is a
 >   copied value, an infinitely-sized value cannot be copied, so a record cannot contain itself.*
 >   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
->   nullable pointer; unique ownership makes the structure a tree = acyclic = deterministic teardown).
+>   nullable pointer; each node kept in one place makes the structure a tree = acyclic = deterministic teardown).
 > - Generic param kinds: bare `[TKey, TValue]` = `AnyType`; annotate `T: record` / `T: entity` only to constrain.
->   No copyability bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the ownership
->   wrappers below name only *departures* from the bare-entity default (unique ownership is unnamed).
+>   No copyability bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the managers
+>   below name only *departures* from the bare-entity default (kept in one place, unnamed).
 > - Entity allocation is stack/inline by default; heap is induced by a wrapper (`Retained`/…) or recursion,
 >   not a marked concern.
 
@@ -764,7 +768,7 @@ entity nor a type parameter that could be one (**RF-S409**): a copy would make t
 by declaring the type `entity`, holding a handle that copies (`Retained[E]`), keeping the parameter to values
 (`needs RecordType T`), or declaring it `bundle`. A `bundle` is the generic aggregate whose kind each
 instantiation decides: `bundle Pair[T]` with `T = S64` is a copyable value; with an entity `T` it is
-single-owner (moved with `steal`, RF-S413 on a copy), has no identity (`===` is an error), is laid out in
+kept in one place like an entity (handed over with `steal`, RF-S413 on a copy), has no identity (`===` is an error), is laid out in
 place, is never copied by `=`, and has `duplicate()` only when every member is Copyable (RF-S150 naming the member
 otherwise). A bundle needs type parameters (**RF-S445**) and cannot contain itself (**RF-S446**; a recursive
 structure is an entity, as for records, RF-S960).
@@ -942,7 +946,7 @@ explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
 where it sits. A new variable (`var x = boxes[0]`) is the exception: it holds a
 token on the element with the container's permission (see access tokens). Calling the reading routines
 yourself copies a VALUE or handle element (`=`: a copy, one more holder for a
-handle). A single-owner ENTITY element is never copied behind your back: there
+handle). An ENTITY element is never copied behind your back: there
 is no copying `getitem`/`first()`/`last()` for it. Read it in place
 (`boxes[0]`), or make a new one on purpose with `boxes[0].duplicate()` (the
 entity must `obeys Copyable`, else RF-S150). Element
@@ -1150,8 +1154,8 @@ Verbs (methods on `Agent[T]`, all failable):
   all, each Agent's value or failure in input order), `take_finished() -> List[Agent[T]]` (takes the finished Agents
   out in place and returns them, leaving the rest: rebuilding the list with `where` would drop work still
   running). `gather` and `race` start the Agents nothing started with `start_now()`.
-- An Agent is an entity with one owner: `steal` moves it, `var b = a` is RF-S413. When its owner lets go of it
-  before a verb took its value (`drop job`, or the end of the scope or list that holds it), the work is cancelled
+- An Agent is an entity kept in one place: `steal` hands it over, `var b = a` is RF-S413. When the place that
+  keeps it lets go of it before a verb took its value (`drop job`, or the end of the scope or list that holds it), the work is cancelled
   and waited for. A started Agent nothing retrieves, drops or hands on is warning RF-W009.
 - There is no fire-and-forget verb: start with `start_now()` and collect later with `retrieve()` or
   `gather()`. An Agent thrown away before anything starts it (`f.to[Agent]()` as a statement, or
@@ -1338,7 +1342,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop` `with`
   `while` `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes` `until`
-- **Iteration / range / ownership**: `in` (loops only) `to` `til` `by` `steal`†
+- **Iteration / range / hand-over**: `in` (loops only) `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`
 - **Logical operators**: `and` `or` `not`
