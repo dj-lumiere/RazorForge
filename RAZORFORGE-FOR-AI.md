@@ -135,6 +135,15 @@ When unsure, consult ground truth in the repo/package:
    binding the routine owns (a local, an entity parameter handed over with `steal`) tears it down there and ends
    the name like `steal x` (RF-S615 after, RF-S616 on some paths only, tokens from it end, RF-S643); a member
    variable, a token, `me` or a global is RF-S421.
+   **Notes and fixes (RF and SF).** A NOTE is a likely slip that builds as written: `check`, `lint` (SF files) and
+   the language server show it (`note[RF-W###]`), a build never does. `while true` / `until false` get RF-W304 with
+   the fix "Write 'loop'". The body of `while false` / `until true` gets RF-W057 and, like the code after an
+   unconditional `return`/`break` (RF-S786, still an error), is shown FADED (LSP `Unnecessary` tag, range through its
+   last line). Diagnostics carry an optional `Fix` (title + 1-based `TextEdit`s): the language server offers it as a
+   quick fix (sent in `diagnostic.data`), and `check --json` writes every error/warning/note as a JSON array (`file`,
+   `line`, `column`, `severity`, `code`, `message`, `endLine?`, `fix?`). Fixes so far: RF-G211 removes the call-site
+   `!`, RF-G212 writes `xs.has(x)`, RF-W007 prepends `drop`, RF-S767 converts two named operands to the type holding
+   both. Named Bool conditions get no loop note.
 10. **Indentation is 4 spaces and blocks are indentation-delimited.** No braces.
 11. **Chained comparisons are one expression**: `0 <= x <= 10` works. A chain goes one way: `<`, `<=`, `==`
     together or `>`, `>=`, `==` together (`a < b > c`, `!=` and `<=>` in a chain are errors). Every
