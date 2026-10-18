@@ -87,4 +87,62 @@ public class RejectedBeforeEmitterTests
                          """,
             expectedErrorSubstring: "'Shape' is not built from a 'Bool'");
     }
+
+    [Fact]
+    public void Analyze_DictionaryFromKeyValueCall_IsRejected()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var d = Dict(1: 10, 2: 20)
+                             return
+                         """,
+            expectedErrorSubstring: "is not built from key-value pairs in a call");
+    }
+
+    [Fact]
+    public void Analyze_BitArrayFromValueCall_IsRejected()
+    {
+        AssertHasErrorSa(source: """
+                         import Collections
+
+                         routine start()
+                             var b = BitArray[4](true, false, true, false)
+                             return
+                         """,
+            expectedErrorSubstring: "is not built from its values in a call");
+    }
+
+    [Fact]
+    public void Analyze_ReadBackOfTypeWithSecretMember_IsRejected()
+    {
+        AssertHasErrorSa(source: """
+                         record Hidden
+                             secret n: S64
+
+                         record Box
+                             h: Hidden
+
+                         routine start()
+                             var sv = SerialValue(from: "x")
+                             var b = try sv.to[Box]()
+                             return
+                         """,
+            expectedErrorSubstring: "'Hidden' ('Box' holds it) cannot be read back from a serialized value",
+            fileName: "read_back.rf");
+    }
+
+    [Fact]
+    public void Parse_TupleArmWrittenWithIs_GivesOneErrorWithTheSpelling()
+    {
+        (_, Builder.Parser.Parser parser) = ParseWithErrors(source: """
+            routine start()
+                var p = (1, 2)
+                when p
+                    is (1, 2) => return
+                    else => return
+            """);
+        List<string> errors = parser.GetErrors();
+        Assert.Single(collection: errors);
+        Assert.Contains(expectedSubstring: "A tuple arm is written without 'is'", actualString: errors[index: 0]);
+    }
 }

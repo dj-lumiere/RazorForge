@@ -294,7 +294,9 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   its value (`w.to[S64]()`). `when_interrupted`/`when_terminated` link and run.
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
   An empty flags value shows as `none`, a one-item tuple as `(1,)`. A global record's member can't be assigned
-  (RF-S257, like the global itself). `try sv.to[List[S64]]()` recovers a bad element too.
+  (RF-S257, like the global itself). `try sv.to[List[S64]]()` recovers a bad element too. Every collection reads
+  back with `sv.to[T]()` (`Dict`, `Set`, `SortedDict`, `SortedList`, `SortedSet`, `CircularList`), a dictionary's keys
+  from their text. A type holding a `secret` member variable, at any depth, can't be read back: RF-S813.
 - A `Moment` shows as `2026-03-05 09:00:00` (each part zero-padded), a `LocalMoment` adds `Z` or `+09:00`.
 - `ask_line()` gives a blank line as `""` and crashes with `EndOfInputError` (`IO/Errors`) at the end of the input, as
   does `ask_word()`: read until the end with `when check ask_line()` + `is EndOfInputError => break`. An `ask_line()`

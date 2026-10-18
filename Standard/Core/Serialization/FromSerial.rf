@@ -39,6 +39,17 @@ routine serial_text!(value: SerialValue) -> Text
         is Text as t => return t
         else => throw SerialShapeError(detail: "expected text")
 
+### The key a serialized dictionary entry names: `serialize` writes each key with `represent`, so a `Text` key is
+### the text itself and any other key is read back from it.
+### :typeparam T: The key type.
+### :param key: The entry's name.
+### :returns: The key.
+### :throws: A parse error when `key` does not read as a `T`.
+routine serial_key![T](key: Text) -> T
+    when T
+        is Text => return serial_decode[T](value: SerialValue(from: key))
+        else => return key.to[T]()
+
 ### Builds a `T` from its serialized form: the generic entry point the builder-synthesized `from_serial`
 ### routines call for their member variables and arms. A part that does not fit fails the whole rebuild, so
 ### `try sv.to[List[S64]]()` recovers a bad element too.
@@ -298,4 +309,33 @@ common routine List[T].from_serial!(value: SerialValue) -> List[T]
                 result.add_last(value: serial_decode[T](value: item))
         else =>
             throw SerialShapeError(detail: "expected a list")
+    return steal result
+
+### Builds the set from its serialized element list, the reverse of `serialize`.
+### :param value: The serialized element list.
+### :returns: The rebuilt set.
+### :throws: {SerialShapeError} when the value is not a list or an element does not fit `T`.
+common routine Set[T].from_serial!(value: SerialValue) -> Set[T]
+    var result = Set[T]()
+    when value
+        is List[SerialValue] as items =>
+            each item in items
+                drop result.add(value: serial_decode[T](value: item))
+        else =>
+            throw SerialShapeError(detail: "expected a list")
+    return steal result
+
+### Builds the dictionary from its serialized entry table, the reverse of `serialize`.
+### :param value: The serialized entry table.
+### :returns: The rebuilt dictionary.
+### :throws: {SerialShapeError} when the value is not a table or an entry does not fit, or a parse error when a key
+### does not read as a `TKey`.
+common routine Dict[TKey, TValue].from_serial!(value: SerialValue) -> Dict[TKey, TValue]
+    var result = Dict[TKey, TValue]()
+    when value
+        is Dict[Text, SerialValue] as entries =>
+            each entry in entries
+                result[serial_key[TKey](key: entry.key)] = serial_decode[TValue](value: entry.value)
+        else =>
+            throw SerialShapeError(detail: "expected an entry table")
     return steal result
