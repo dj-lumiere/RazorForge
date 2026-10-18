@@ -50,6 +50,24 @@ public class GlobalTests
     }
 
     [Fact]
+    public void Analyze_RecordGlobalMemberWrite_IsRejected()
+    {
+        AnalysisResult result = AssertHasErrorSa(source: """
+                                                         record Settings
+                                                             volume: S64
+
+                                                         global settings: Settings = Settings(volume: 3)
+
+                                                         routine start()
+                                                             settings.volume = 5
+                                                             return
+                                                         """,
+            expectedErrorSubstring: "its member variable 'volume' can't be assigned");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MemberVariableAssignmentOnImmutable);
+    }
+
+    [Fact]
     public void Analyze_EntityGlobalChange_IsRejected()
     {
         AssertHasErrorSa(source: """

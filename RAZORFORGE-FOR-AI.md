@@ -281,6 +281,9 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   `Moment(year:, …)` crashes with `InvalidMomentError` on a part out of range (month 13, February 30, hour 25).
 - `Char.to_uppercase`/`to_lowercase`/`is_uppercase`/`is_lowercase` follow Unicode (simple one-to-one mapping,
   `ß` stays `ß`). `lines()` and `ask_lines()` start no new line after a final line ending.
+- A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
+  An empty flags value shows as `none`, a one-item tuple as `(1,)`. A global record's member can't be assigned
+  (RF-S257, like the global itself). `try sv.to[List[S64]]()` recovers a bad element too.
 - A `Moment` shows as `2026-03-05 09:00:00` (each part zero-padded), a `LocalMoment` adds `Z` or `+09:00`.
 - `ask_line()` gives a blank line as `""` and crashes with `EndOfInputError` (`IO/Errors`) at the end of the input, as
   does `ask_word()`: read until the end with `when check ask_line()` + `is EndOfInputError => break`. An `ask_line()`
@@ -332,8 +335,9 @@ constants. A preset is computed when the program is built: one that calls a rout
 a text runs once during the build and becomes the value it came to (number, Bool, Text, Char, or a record/tuple/
 choice of those; RF-S258 if it fails or has no such value). A preset made by a construction is one read-only value
 everywhere (an entity preset has one identity). (`lateinit var x: T` defers initialization: storage is allocated at
-the declaration — entities get a real zeroed block, the constructor not run — so the
-binding is immediately valid and borrowable; assign before reading.)
+the declaration — entities get a real zeroed block, the constructor not run. Assign before reading: a read (a token
+from it included) where some path hasn't assigned it is RF-S202, a `return` path doesn't count and a loop is left with
+what its `break`s assigned. Writing a member (`r.x = 1`) counts as giving it its value.)
 
 **No shadowing inside a routine.** A `var` may not reuse the name of a parameter
 or of a local of an enclosing block (RF-S008, the same rule as `when` pattern
