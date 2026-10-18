@@ -231,6 +231,60 @@ public sealed class LspServerTests
         Assert.NotNull(@object: LspTestHarness.ReplyWithId(replies: replies, id: 6));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Hover_OverAnnotatedType_ShowsItsDocComment(bool annotated)
+    {
+        // An annotation between a type's doc comment and its header (`@layout`) doesn't hide the doc from a hover.
+        string source =
+            "### Two numbers packed side by side.\n" +
+            (annotated ? "@layout(\"packed\")\n" : "") +
+            "record Pair\n" +
+            "    a: U8\n" +
+            "    b: U32\n" +
+            "\n" +
+            "routine start()\n" +
+            "    var p = Pair(a: 1, b: 2)\n" +
+            "    return\n";
+        // The document is a real file: analysis reads the file's folder to find its module.
+        string dir = Directory.CreateTempSubdirectory(prefix: "lsp_hover_").FullName;
+        string path = Path.Combine(path1: dir, path2: "main.rf");
+        File.WriteAllText(path: path, contents: source);
+        string uri = new System.Uri(uriString: path).AbsoluteUri;
+        (int line, int character) = LspTestHarness.PositionOf(text: source, needle: "Pair", occurrence: 2);
+        IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
+            LspTestHarness.DidOpen(uri: uri, text: source),
+            LspTestHarness.Positional(id: 8, method: "textDocument/hover", uri: uri, line: line, character: character),
+            Exit);
+
+        JsonElement? reply = LspTestHarness.ReplyWithId(replies: replies, id: 8);
+        Assert.NotNull(@object: reply);
+        Assert.True(condition: reply!.Value.GetRawText().Contains(value: "packed side by side"),
+            userMessage: string.Join("\n", replies.Select(r => r.RootElement.GetRawText())));
+    }
+
+    [Theory]
+    [InlineData("main.rf", "routine start()\n    var d = Duration.zero()\n    return\n", "Duration", "span of time")]
+    [InlineData("main.rf", "routine start()\n    var m = Moment.epoch()\n    return\n", "Moment", "absolute point in time")]
+    public void Hover_OverStdlibType_ShowsItsDocComment(string file, string source, string needle, string doc)
+    {
+        string dir = Directory.CreateTempSubdirectory(prefix: "lsp_hover_").FullName;
+        string path = Path.Combine(path1: dir, path2: file);
+        File.WriteAllText(path: path, contents: source);
+        string uri = new System.Uri(uriString: path).AbsoluteUri;
+        (int line, int character) = LspTestHarness.PositionOf(text: source, needle: needle);
+        IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
+            LspTestHarness.DidOpen(uri: uri, text: source),
+            LspTestHarness.Positional(id: 9, method: "textDocument/hover", uri: uri, line: line, character: character),
+            Exit);
+
+        JsonElement? reply = LspTestHarness.ReplyWithId(replies: replies, id: 9);
+        Assert.NotNull(@object: reply);
+        Assert.True(condition: reply!.Value.GetRawText().Contains(value: doc),
+            userMessage: string.Join("\n", replies.Select(r => r.RootElement.GetRawText())));
+    }
+
     [Fact]
     public void Hover_OverWhitespace_ReturnsNullResult()
     {
