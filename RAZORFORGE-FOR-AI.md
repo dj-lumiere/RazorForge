@@ -286,6 +286,8 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   through an element read from a `Viewing` token, a variant built from a non-member type. `Check[T]` has
   `unwrap!()` (`check f() !!`), `strip_out()` works for entities, `br"..."` builds, a value assigned to a `T?`
   variable becomes present (`port ??= 8080`).
+- A variant holding only values copies with `=` (one that may hold an entity is RF-S413). A file of only `var` lines
+  is a script. The overflow message is "Integer overflow error: The value does not fit in the target type."
 - A field-by-field construction infers type arguments (`Pair(first: 1, second: "one")` is `Pair[S64, Text]`). A type
   obeying `Iterable[T]` gets its `Iter` from what its `iter()` returns (no `relates` needed), so IterTools adapters
   walk it. A bundle holding an entity moves with `steal` (no copy step). An element token from `each` converts like

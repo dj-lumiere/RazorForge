@@ -115,7 +115,8 @@ routine crash_write_library_caller(library: Text) -> Bool
         while i < shown
             var index = LLVM::bit_and(a: depth -% 1 -% i, b: 31)
             var frame = frames.stride(count: LLVM::sign_extend[S32, S64](index)).peek()
-            if not c_text_starts_with(text: frame.file, prefix: library)
+            # A frame with no line is a library frame named by the library (Suflae), not by its file.
+            if frame.line != 0 and not c_text_starts_with(text: frame.file, prefix: library)
                 crash_write_c_text(text: frame.file)
                 crash_write(text: ":")
                 crash_write_number(value: frame.line)
@@ -204,10 +205,12 @@ routine crash_write_frames(depth: S32, frames: Hijacked[TraceFrame])
             crash_write_c_text(text: frame.routine_name)
             crash_write(text: " (")
             crash_write_c_text(text: frame.file)
-            crash_write(text: ":")
-            crash_write_number(value: frame.line)
-            crash_write(text: ":")
-            crash_write_number(value: frame.column)
+            # A frame with no line names a place, not a file position (the standard library in Suflae).
+            if frame.line != 0
+                crash_write(text: ":")
+                crash_write_number(value: frame.line)
+                crash_write(text: ":")
+                crash_write_number(value: frame.column)
             crash_write(text: ")\n")
         i = i +% 1
     if depth > 32
