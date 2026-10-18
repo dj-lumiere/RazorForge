@@ -297,6 +297,14 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   (RF-S257, like the global itself). `try sv.to[List[S64]]()` recovers a bad element too. Every collection reads
   back with `sv.to[T]()` (`Dict`, `Set`, `SortedDict`, `SortedList`, `SortedSet`, `CircularList`), a dictionary's keys
   from their text. A type holding a `secret` member variable, at any depth, can't be read back: RF-S813.
+- Inside a `when` arm whose name reaches the variant's own value (`is Upload as u` on an entity branch, or a
+  `Retained`/`Hijacked`/`Maybe` branch), giving the matched variable a new value is RF-S264: assign it after the
+  `when`. A value branch's name is a copy, so assigning there is fine.
+- `each x in steal xs` takes a `List` apart (`take_each()`): the loop variable holds each element, a `break` ends the
+  rest with the walk, and using `xs` after the loop is RF-S615 naming the loop. Other collections can't be taken
+  apart that way (a build error says so).
+- A routine written outside its type may name the slots its own way (`routine Pair[TLeft, TRight].swapped() ->
+  Pair[TRight, TLeft]` for `record Pair[TFirst, TSecond]`): the names bind by position.
 - A `Moment` shows as `2026-03-05 09:00:00` (each part zero-padded), a `LocalMoment` adds `Z` or `+09:00`.
 - `ask_line()` gives a blank line as `""` and crashes with `EndOfInputError` (`IO/Errors`) at the end of the input, as
   does `ask_word()`: read until the end with `when check ask_line()` + `is EndOfInputError => break`. An `ask_line()`
@@ -650,10 +658,12 @@ consume(r: steal b)   # ownership moves; using b afterwards = build error
     `h.inner.view()`. Every return takes it from the same parameter, never from a
     local, a temporary, or an entity parameter the routine owns (RF-S600). The
     caller's token has that argument as source.
-  - An entity element read into a variable is a read token on the element:
-    `var b = boxes[0]` holds `boxes.view_at(index: 0)`. Anything that can add to
-    or remove from `boxes` ends it. Write through `boxes[0].n = 5` or take
-    `boxes.modify_at(index: 0)`.
+  - An entity element read into a variable is a token on the element with the
+    container's permission: `var b = boxes[0]` holds `boxes.modify_at(index: 0)`
+    when `boxes` can be changed there (`b.n += 1` changes the element in the
+    list), and `boxes.view_at(index: 0)` when `boxes` is reached read-only (a
+    `Viewing` parameter, a `@readonly` routine's `me`). Anything that can add to
+    or remove from `boxes` ends it.
   - The lock tokens (`Consulting`/`Amending`) are always opened with `using`.
   - **`Viewing[T]` / `Modifying[T]`** — read / write intent on a directly-owned
     entity. Produced by `a.view()` / `a.modify()`.
@@ -917,7 +927,7 @@ keeps its items, so a variable goes in with `steal` too: `(steal z, 1)`). Take a
 element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
 explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
 where it sits. A new variable (`var x = boxes[0]`) is the exception: it holds a
-read token on the element (see access tokens). Calling the reading routines
+token on the element with the container's permission (see access tokens). Calling the reading routines
 yourself copies a VALUE or handle element (`=`: a copy, one more holder for a
 handle). A single-owner ENTITY element is never copied behind your back: there
 is no copying `getitem`/`first()`/`last()` for it. Read it in place

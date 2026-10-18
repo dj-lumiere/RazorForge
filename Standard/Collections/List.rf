@@ -498,6 +498,52 @@ needs EntityType T
         me.index = me.index + 1
         return Modifying[T](address)
 
+### Walks the elements of a `List[T]` front to back and hands each one over: what `each x in steal xs` walks. The
+### walk holds the list's buffer from its start, and the elements it has not handed over end with it.
+### :typeparam T: The element type.
+entity ListTakingEmittable[T]
+obeys Emittable[T]
+    ### Stores the buffer, which the walk frees.
+    secret data: Hijacked[T]
+    ### Stores the number of elements in the buffer.
+    secret count: U64
+    ### Stores the position of the next element to hand over.
+    secret index: U64
+
+### Hands the elements over to a walk and leaves the list empty.
+### :returns: The walk.
+@reshaping
+routine List[T].take_each() -> ListTakingEmittable[T]
+    var walk = ListTakingEmittable[T](data: me.data, count: me.count, index: 0)
+    me.data = hijacked_none[T]()
+    me.count = 0
+    me.capacity = 0
+    return steal walk
+
+### Hands over the next element.
+### :returns: The element.
+### :throws: {AbsentValueError} The walk is over.
+routine ListTakingEmittable[T].emit!() -> T
+    if me.index >= me.count
+        throw AbsentValueError()
+    var slot = me.index
+    me.index = me.index + 1
+    danger
+        return me.data.offset(T.data_size() * slot).peek()
+
+### Ends the elements not handed over yet, then frees the buffer.
+@override
+routine ListTakingEmittable[T].destruct()
+    danger
+        var elem_size = T.data_size()
+        each i in me.index til me.count
+            me.data
+                .offset(elem_size * i)
+                .peek()
+                .destruct()
+        me.data.invalidate()
+        return
+
 ### Returns true if both lists contain the same elements in the same order.
 ### :param you: The other list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.

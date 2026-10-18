@@ -145,4 +145,41 @@ public class RejectedBeforeEmitterTests
         Assert.Single(collection: errors);
         Assert.Contains(expectedSubstring: "A tuple arm is written without 'is'", actualString: errors[index: 0]);
     }
+
+    [Fact]
+    public void Analyze_MatchedVariableAssignedInItsArm_IsRejected()
+    {
+        AssertHasErrorSa(source: """
+                         entity Player
+                             name: Text
+
+                         variant Seat
+                             Player
+                             Text
+
+                         routine start()
+                             var seat: Seat = Player(name: "Ada")
+                             when seat
+                                 is Player as p =>
+                                     seat = "empty"
+                                     show(p.name)
+                                 is Text as t => show(t)
+                             return
+                         """,
+            expectedErrorSubstring: "inside the arm where 'p' reads what 'seat' holds");
+    }
+
+    [Fact]
+    public void Analyze_StealLoopOverSet_NamesTheLoop()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var s = Set[S64]()
+                             drop s.add(1)
+                             each n in steal s
+                                 show(n)
+                             return
+                         """,
+            expectedErrorSubstring: "'each ... in steal' takes the elements out of a 'List'");
+    }
 }

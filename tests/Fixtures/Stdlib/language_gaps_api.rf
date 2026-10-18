@@ -15,6 +15,33 @@ obeys Comparable
     major: S64
     minor: S64
 
+record Pair[A, B]
+needs RecordType A, RecordType B
+    first: A
+    second: B
+
+record Box[T]
+needs RecordType T
+    item: T
+
+routine Box[TItem].peek() -> TItem
+    return me.item
+
+routine Pair[X, Y].swapped() -> Pair[Y, X]
+    var f: Y = me.second
+    var s: X = me.first
+    return Pair[Y, X](first: f, second: s)
+
+entity Crate
+    label: Text
+
+routine archive(crate: Crate)
+    show(f"archived {crate.label}")
+    return
+
+routine weigh(crate: Crate) -> S64
+    return crate.label.count().to[S64]()
+
 routine total(values...: S64) -> S64
     var sum: S64 = 0
     each v in values
@@ -66,4 +93,24 @@ routine start()
     when bad
         is None => show("not a dictionary of numbers")
         else => show("read back")
+
+    # A receiver's parameter names are the type's own slots, whatever they are called.
+    show(Box[S64](item: 4).peek())
+    var swapped = Pair[S64, Text](first: 1, second: "one").swapped()
+    show(f"{swapped.first} {swapped.second}")
+
+    # `each x in steal xs` hands each element over, and the loop variable is a new name each time.
+    var crates = [Crate(label: "a"), Crate(label: "b")]
+    each c in steal crates
+        archive(crate: steal c)
+    var more = [Crate(label: "c"), Crate(label: "d"), Crate(label: "e")]
+    each c in steal more
+        if c.label == "d"
+            break
+        archive(crate: steal c)
+
+    # An entity made right in an agent's argument goes to the agent.
+    var job = weigh.to[Agent](crate: Crate(label: "heavy"))
+    job.start_now()
+    show(job.retrieve())
     return
