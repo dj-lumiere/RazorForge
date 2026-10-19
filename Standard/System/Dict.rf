@@ -1,0 +1,666 @@
+module System
+
+import BuilderQuery
+secret preset DICT_INITIAL_CAPACITY: U64 = 16
+secret preset DICT_INITIAL_ENTRIES: U64 = 16
+secret preset CTRL_EMPTY: U8 = 128
+secret preset CTRL_TOMBSTONED: U8 = 254
+secret preset CTRL_H2_MASK: U8 = 127
+secret preset ENTRY_DEAD: U8 = 0
+secret preset ENTRY_LIVE: U8 = 1
+
+### A hash-flooding-resistant insertion-ordered key-value dictionary.
+###
+### `Dict[TKey, TValue]` works like {Dict[TKey, TValue]} (insertion-ordered iteration, O(1) average
+### operations) but uses SipHash-2-4 keyed with a per-instance secret to make the probe
+### sequence unpredictable to external attackers. Iteration order follows insertion order;
+### the secure key only affects the probe-array layout, not the entries array.
+###
+### **When to use**
+### - You are storing data derived from untrusted input (e.g. HTTP headers, user IDs, file names).
+### - You need the same insert/lookup/remove interface as {Dict[TKey, TValue]} with a security guarantee.
+###
+### **Complexity**
+### | Operation | Average | Worst case |
+### |---|---|---|
+### | `add` | O(1) | O(n) (rehash) |
+### | `remove` | O(1) | O(n) |
+### | `contains` / `get_or_default` | O(1) | O(n) |
+### | Iteration | O(n + tombstones) | O(n + tombstones) |
+###
+### :typeparam TKey: The key type. Must obey {Hashable} and {Equatable}.
+### :typeparam TValue: The value type associated with each key.
+### :see: {Set[T]} for the set counterpart.
+entity Dict[TKey, TValue]
+relates DictEmittable[TKey, TValue] as Iter, TKey as Key, TValue as Value
+obeys Iterable[DictEntry[TKey, TValue]], KeyFindable, KeyContainer,
+    Copyable when TKey obeys Copyable and TValue obeys Copyable, DictLiteral[TKey, TValue]
+needs TKey obeys Hashable, Equatable
+    secret ctrl: Hijacked[U8]
+    secret indices: Hijacked[U64]
+    secret keys: Hijacked[TKey]
+    secret vals: Hijacked[TValue]
+    secret entry_live: Hijacked[U8]
+    secret count: U64
+    secret deleted: U64
+    secret entries_used: U64
+    secret capacity: U64
+    secret entries_cap: U64
+    secret k0: U64
+    secret k1: U64
+
+### Emittable that walks the dense entries array of a {Dict[TKey, TValue]} in insertion order.
+entity DictEmittable[TKey, TValue]
+obeys Emittable[DictEntry[TKey, TValue]]
+    secret keys: Hijacked[TKey]
+    secret vals: Hijacked[TValue]
+    secret entry_live: Hijacked[U8]
+    secret entries_used: U64
+    secret pos: U64
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Creates a dict containing the given key-value `pairs`. Variadic constructor behind the `{k: v, …}`
+### dict-literal syntax (the `DictLiteral` opt-in): the builder packs the pairs into a fixed
+### `Array[DictEntry[TKey, TValue], N]` and monomorphizes one body per pair count. A later duplicate key overwrites.
+### :param pairs: The key-value pairs as `DictEntry[TKey, TValue]` values.
+### :returns: A dict of the given pairs.
+common routine Dict[TKey, TValue].from_literal(pairs...: DictEntry[TKey, TValue]) -> Dict[TKey, TValue]
+needs TKey obeys Hashable, Equatable
+    var result = Dict[TKey, TValue]()
+    var i: U64 = 0
+    # Each pair is read in place: `put` makes the dictionary's holders, and the caller releases the
+    # literal's own afterwards.
+    while i < pairs.count()
+        drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
+        i = i +% 1
+    return result
+
+routine Dict[TKey, TValue]() -> Dict[TKey, TValue]
+    return Dict[TKey, TValue](key: SecureHashKey.random())
+
+routine Dict[TKey, TValue](key: SecureHashKey) -> Dict[TKey, TValue]
+    var cap = DICT_INITIAL_CAPACITY
+    var ecap = DICT_INITIAL_ENTRIES
+    var dict = Dict[TKey, TValue](
+        ctrl: hijacked_none[U8](),
+        indices: hijacked_none[U64](),
+        keys: hijacked_none[TKey](),
+        vals: hijacked_none[TValue](),
+        entry_live: hijacked_none[U8](),
+        count: 0,
+        deleted: 0,
+        entries_used: 0,
+        capacity: cap,
+        entries_cap: ecap,
+        k0: key.k0,
+        k1: key.k1,
+    )
+    danger
+        dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](dict.ctrl),
+            value: CTRL_EMPTY,
+            size: cap,
+        )
+        dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
+        dict.keys = hijacked_from[TKey](rf_allocate_dynamic_uninit(TKey.data_size() * ecap))
+        dict.vals = hijacked_from[TValue](rf_allocate_dynamic_uninit(TValue.data_size() * ecap))
+        dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
+    return steal dict
+
+routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TValue]
+    var cap = DICT_INITIAL_CAPACITY
+    while cap < capacity
+        cap = cap *% 2
+    var ecap = DICT_INITIAL_ENTRIES
+    while ecap < capacity
+        ecap = ecap *% 2
+    var dict = Dict[TKey, TValue](
+        ctrl: hijacked_none[U8](),
+        indices: hijacked_none[U64](),
+        keys: hijacked_none[TKey](),
+        vals: hijacked_none[TValue](),
+        entry_live: hijacked_none[U8](),
+        count: 0,
+        deleted: 0,
+        entries_used: 0,
+        capacity: cap,
+        entries_cap: ecap,
+        k0: key.k0,
+        k1: key.k1,
+    )
+    danger
+        dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](dict.ctrl),
+            value: CTRL_EMPTY,
+            size: cap,
+        )
+        dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
+        dict.keys = hijacked_from[TKey](rf_allocate_dynamic_uninit(TKey.data_size() * ecap))
+        dict.vals = hijacked_from[TValue](rf_allocate_dynamic_uninit(TValue.data_size() * ecap))
+        dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
+    return steal dict
+
+### Frees the heap buffers owned by this dictionary. The element/key/value contents are
+### not recursed into — only the backing arrays are released.
+@override
+routine Dict[TKey, TValue].destruct()
+    danger
+        # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
+        # in DictEmittable.emit!). No-op for value types; frees owned entity keys/values.
+        var p: U64 = 0
+        while p < me.entries_used
+            if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+                me.keys
+                    .offset(TKey.data_size() * p)
+                    .peek()
+                    .destruct()
+                me.vals
+                    .offset(TValue.data_size() * p)
+                    .peek()
+                    .destruct()
+            p = p + 1
+        me.ctrl.invalidate()
+        me.indices.invalidate()
+        me.keys.invalidate()
+        me.vals.invalidate()
+        me.entry_live.invalidate()
+        return
+
+### Cycle-collector TRACE: report every live key and value to the collector. The entries buffers are
+### SPARSE (open-addressing with tombstones), so `cyclic_trace_sparse_buffer` scans slots `0..used`,
+### skipping dead entries via the `entry_live` bitmap. A `Roamed` key/value reports its controller; a
+### value key/value is a no-op. Overrides the universal member-walk (raw buffers cannot self-trace).
+@override
+dangerous routine Dict[TKey, TValue].roam_trace()
+    me.keys.cyclic_trace_sparse_buffer(live: me.entry_live, used: me.entries_used)
+    me.vals.cyclic_trace_sparse_buffer(live: me.entry_live, used: me.entries_used)
+    return
+
+### Cycle-collector FREE: free every owned buffer and this dict's own box, but NOT the keys/values (the
+### collector frees the whole white cycle directly).
+@override
+dangerous routine Dict[TKey, TValue].roam_free()
+    me.ctrl.invalidate()
+    me.indices.invalidate()
+    me.keys.invalidate()
+    me.vals.invalidate()
+    me.entry_live.invalidate()
+    return
+
+# ============================================================================
+# Internal Helpers
+# ============================================================================
+
+@readonly
+routine Dict[TKey, TValue].h2(hash: U64) -> U8
+    return (hash & CTRL_H2_MASK.to[U64]()).to[U8]()
+
+@readonly
+routine Dict[TKey, TValue].h1(hash: U64) -> U64
+    return hash >> 7
+
+@readonly
+routine Dict[TKey, TValue].read_index(slot: U64) -> U64
+    danger
+        return me.indices.offset(U64.data_size() * slot).peek()
+
+@readonly
+routine Dict[TKey, TValue].read_key_at(ei: U64) -> TKey
+    danger
+        return me.keys.offset(TKey.data_size() * ei).peek()
+
+@readonly
+routine Dict[TKey, TValue].read_val_at(ei: U64) -> TValue
+    danger
+        return me.vals.offset(TValue.data_size() * ei).peek()
+
+routine Dict[TKey, TValue].write_val_at(ei: U64, val: TValue)
+    danger
+        me.vals.offset(TValue.data_size() * ei).poke(val)
+    return
+
+@readonly
+routine Dict[TKey, TValue].find_slot(key: TKey) -> U64
+    var h = key.hash(k0: me.k0, k1: me.k1)
+    var target = me.h2(h)
+    var mask = me.capacity -% 1
+    var i = me.h1(h) & mask
+    danger
+        loop
+            var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
+            if c == CTRL_EMPTY
+                return me.capacity
+            if c == target
+                var ei = me.indices.offset(U64.data_size() * i).peek()
+                if me.keys.offset(TKey.data_size() * ei).peek() == key
+                    return i
+            i = i +% 1 & mask
+    return me.capacity
+
+@reshaping
+routine Dict[TKey, TValue].insert_index_raw(h: U64, entry_index: U64)
+    var h2_val = me.h2(h)
+    var mask = me.capacity -% 1
+    var i = me.h1(h) & mask
+    danger
+        loop
+            var c = me.ctrl.offset(ByteSize(bytes: i)).peek()
+            if c == CTRL_EMPTY
+                me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+                me.indices.offset(U64.data_size() * i).poke(entry_index)
+                return
+            if c == CTRL_TOMBSTONED
+                me.ctrl.offset(ByteSize(bytes: i)).poke(h2_val)
+                me.indices.offset(U64.data_size() * i).poke(entry_index)
+                me.deleted = me.deleted -% 1
+                return
+            i = i +% 1 & mask
+    return
+
+@readonly
+routine Dict[TKey, TValue].should_rehash() -> Bool
+    if (me.count +% me.deleted) *% 8 >= me.capacity *% 7
+        return true
+    if me.entries_used >= me.entries_cap
+        return true
+    return false
+
+@reshaping
+routine Dict[TKey, TValue].rehash()
+    var old_cap = me.capacity
+    var old_ecap = me.entries_cap
+    var old_ctrl = me.ctrl
+    var old_indices = me.indices
+    var old_keys = me.keys
+    var old_vals = me.vals
+    var old_entry_live = me.entry_live
+    var old_entries_used = me.entries_used
+
+    var table_pressured = (me.count +% me.deleted) *% 8 >= old_cap *% 7
+    var new_cap = old_cap
+    if table_pressured
+        new_cap = old_cap *% 2
+
+    var new_ecap = old_ecap
+    if me.count *% 2 >= old_ecap
+        new_ecap = old_ecap *% 2
+
+    danger
+        me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](me.ctrl),
+            value: CTRL_EMPTY,
+            size: new_cap,
+        )
+        me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
+        me.keys = hijacked_from[TKey](rf_allocate_dynamic_uninit(TKey.data_size() * new_ecap))
+        me.vals = hijacked_from[TValue](rf_allocate_dynamic_uninit(TValue.data_size() * new_ecap))
+        me.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_ecap))
+    me.capacity = new_cap
+    me.entries_cap = new_ecap
+    me.count = 0
+    me.deleted = 0
+    me.entries_used = 0
+
+    var i: U64 = 0
+    while i < old_entries_used
+        danger
+            var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
+            if live == ENTRY_LIVE
+                var k = old_keys.offset(TKey.data_size() * i).peek()
+                var v = old_vals.offset(TValue.data_size() * i).peek()
+                var new_ei = me.entries_used
+                me.keys.offset(TKey.data_size() * new_ei).poke(k)
+                me.vals.offset(TValue.data_size() * new_ei).poke(v)
+                me.entry_live.offset(ByteSize(bytes: new_ei)).poke(ENTRY_LIVE)
+                me.entries_used = me.entries_used +% 1
+                me.insert_index_raw(h: k.hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
+                me.count = me.count +% 1
+        i = i +% 1
+
+    danger
+        if not old_ctrl.is_none()
+            rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
+        if not old_indices.is_none()
+            rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
+        if not old_keys.is_none()
+            rf_invalidate(LLVM::pointer_to_int[TKey, Address](old_keys))
+        if not old_vals.is_none()
+            rf_invalidate(LLVM::pointer_to_int[TValue, Address](old_vals))
+        if not old_entry_live.is_none()
+            rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
+    return
+
+# ============================================================================
+# Core Operations
+# ============================================================================
+
+@readonly
+routine Dict[TKey, TValue].count() -> U64
+    return me.count
+
+@readonly
+routine Dict[TKey, TValue].is_empty() -> Bool
+    return me.count == 0
+
+@reshaping
+routine Dict[TKey, TValue].clear()
+    danger
+        C::rf_set_bytes_at(
+            dest: LLVM::pointer_to_int[U8, Address](me.ctrl),
+            value: CTRL_EMPTY,
+            size: me.capacity,
+        )
+    me.count = 0
+    me.deleted = 0
+    me.entries_used = 0
+    return
+
+@readonly
+routine Dict[TKey, TValue].has_key(key: TKey) -> Bool
+    return me.find_slot(key) < me.capacity
+
+### Returns whether `key` has no entry (`d lack k`).
+### :param key: The key to look for.
+@readonly
+routine Dict[TKey, TValue].lacks_key(key: TKey) -> Bool
+    return not me.has_key(key: key)
+
+@reshaping
+@discardable
+secret routine Dict[TKey, TValue].put(key: TKey, value: TValue) -> Bool
+    if me.should_rehash()
+        me.rehash()
+    var slot = me.find_slot(key)
+    if slot < me.capacity
+        var existing_ei = me.read_index(slot)
+        danger
+            me.read_val_at(existing_ei).destruct()
+        me.write_val_at(ei: existing_ei, val: value)
+        return false
+    var ei = me.entries_used
+    danger
+        me.keys.offset(TKey.data_size() * ei).poke(key)
+        me.vals.offset(TValue.data_size() * ei).poke(value)
+        me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
+    me.entries_used = me.entries_used +% 1
+    me.insert_index_raw(h: key.hash(k0: me.k0, k1: me.k1), entry_index: ei)
+    me.count = me.count +% 1
+    return true
+
+### Single-probe find-or-insert returning a raw handle to the VALUE slot for `key` — the general
+### primitive behind read-modify-write. On miss inserts `seed` and returns a handle to it; on hit returns
+### a handle to the existing value. ONE hash/probe replaces the `contains` → `[]` → `add` three-hash RMW
+### idiom: `var p = d.slot(k, seed)` then read/write `p.peek()`/`p.poke(...)` directly. Any accumulator
+### (`+= v`, min/max, counters) is a caller-side one-liner over this, so no bespoke `updating_add` is needed.
+### DANGER: the handle is invalidated by the NEXT structural mutation on this dict — an insert that triggers
+### `rehash` reallocates the values buffer. Read/modify it BEFORE any further `add`/`slot`-insert.
+### :param key: The key to find or insert.
+### :param seed: The value stored (and returned) when `key` is absent.
+### :returns: A {Hijacked[TValue]} addressing the value cell for `key`.
+@inline
+routine Dict[TKey, TValue].slot(key: TKey, seed: TValue) -> Hijacked[TValue]
+    if me.should_rehash()
+        me.rehash()
+    var s = me.find_slot(key)
+    var ei: U64 = 0
+    if s < me.capacity
+        ei = me.read_index(s)
+    else
+        ei = me.entries_used
+        danger
+            me.keys.offset(TKey.data_size() * ei).poke(key)
+            me.vals.offset(TValue.data_size() * ei).poke(seed)
+            me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
+        me.entries_used = me.entries_used +% 1
+        me.insert_index_raw(h: key.hash(k0: me.k0, k1: me.k1), entry_index: ei)
+        me.count = me.count +% 1
+    danger
+        return me.vals.offset(TValue.data_size() * ei)
+
+@reshaping
+@discardable
+routine Dict[TKey, TValue].remove(key: TKey) -> Bool
+    var slot = me.find_slot(key)
+    if slot >= me.capacity
+        return false
+    var ei = me.read_index(slot)
+    danger
+        me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
+        me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
+    me.count = me.count -% 1
+    me.deleted = me.deleted +% 1
+    return true
+
+@readonly
+routine Dict[TKey, TValue].get_or_default(key: TKey, default_value: TValue) -> TValue
+    var slot = me.find_slot(key)
+    if slot >= me.capacity
+        return default_value
+    return me.read_val_at(me.read_index(slot))
+
+# ============================================================================
+# Indexing
+# ============================================================================
+
+@readonly
+@overridable
+failable routine Dict[TKey, TValue].getitem(key: Viewing[TKey]) -> TValue
+needs RecordType TValue
+    var slot = me.find_slot(key)
+    if slot >= me.capacity
+        throw KeyNotFoundError(key: key.represent())
+    return me.read_val_at(me.read_index(slot)).share()
+
+### Puts `value` at `key` (`d[k] = v`): replaces the value of a key that is there, and adds the key otherwise.
+### :param key: The key.
+### :param value: The value.
+@reshaping
+routine Dict[TKey, TValue].setitem(key: TKey, value: TValue)
+    drop me.put(key: key, value: value)
+    return
+
+### Puts `value` at `key` and gives back the value that was there, in one step. This is what
+### `steal d[k] as old inject fresh` runs, so the place is never empty.
+### :param key: The key, which must be there.
+### :param value: The value that goes in.
+### :returns: The value that was there.
+### :throws: {KeyNotFoundError} if `key` is not there.
+secret failable routine Dict[TKey, TValue].exchange(key: Viewing[TKey], value: TValue) -> TValue
+    var slot = me.find_slot(key)
+    if slot >= me.capacity
+        throw KeyNotFoundError(key: key.represent())
+    var ei = me.read_index(slot)
+    var old = me.read_val_at(ei)
+    me.write_val_at(ei: ei, val: value)
+    return old
+
+### Returns a write token on the entity stored at `key`, so one call through it changes the value in place:
+### `groups["a"].add_last(value: 1)` lowers to `groups.modify_at(key: "a").add_last(value: 1)`. A plain
+### `getitem` hands back a copy, and a call on that copy would change only the copy. Like `T.modify()`, the
+### token lives only for that one call (the builder keeps the container still meanwhile, RF-S639). Entity
+### elements only.
+failable routine Dict[TKey, TValue].modify_at(key: Viewing[TKey]) -> Modifying[TValue]
+needs EntityType TValue
+    var slot = me.find_slot(key)
+    if slot >= me.capacity
+        throw AbsentValueError()
+    danger
+        return Modifying[TValue](
+            me.vals.offset(TValue.data_size() * me.read_index(slot)).peek_as[Hijacked[TValue]](),
+        )
+
+### Returns a read token on the entity stored at `key`, so one call through it reads the value without
+### copying it: `groups["a"].count()` lowers to `groups.view_at(key: "a").count()`. A plain `getitem` hands
+### back a copy, and a call on that copy would copy the whole value first. Like `T.view()`, the token lives
+### only for that one call (the builder keeps the container still meanwhile, RF-S639). Entity elements only.
+@readonly
+failable routine Dict[TKey, TValue].view_at(key: Viewing[TKey]) -> Viewing[TValue]
+needs EntityType TValue
+    var slot = me.find_slot(key)
+    if slot >= me.capacity
+        throw AbsentValueError()
+    danger
+        return Viewing[TValue](
+            me.vals.offset(TValue.data_size() * me.read_index(slot)).peek_as[Hijacked[TValue]](),
+        )
+
+# ============================================================================
+# Keys / Values / Entries
+# ============================================================================
+
+### Returns all live keys in insertion order.
+### :returns: A {List[TKey]} of every key; order matches the sequence in which the keys were first added.
+@readonly
+routine Dict[TKey, TValue].keys() -> List[TKey]
+    var result = List[TKey](me.count)
+    var i: U64 = 0
+    while i < me.entries_used
+        danger
+            if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
+                result.add_last(me.keys.offset(TKey.data_size() * i).peek())
+        i = i +% 1
+    return steal result
+
+### Returns all live values in insertion order.
+### :returns: A {List[TValue]} of every value; order matches the corresponding `keys()` call.
+@readonly
+routine Dict[TKey, TValue].values() -> List[TValue]
+    var result = List[TValue](me.count)
+    var i: U64 = 0
+    while i < me.entries_used
+        danger
+            if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
+                result.add_last(me.vals.offset(TValue.data_size() * i).peek())
+        i = i +% 1
+    return steal result
+
+### Returns every key and value as a pair, in insertion order: `each (k, v) in d.items()`.
+### :returns: A {List} of `(key, value)` tuples; order matches the sequence in which the keys were first added.
+@readonly
+routine Dict[TKey, TValue].items() -> List[(TKey, TValue)]
+needs RecordType TValue
+    var result = List[Tuple[TKey, TValue]](capacity: me.count)
+    var i: U64 = 0
+    while i < me.entries_used
+        danger
+            if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
+                result.add_last(value: (me.keys.offset(TKey.data_size() * i).peek(),
+                    me.vals.offset(TValue.data_size() * i).peek()))
+        i = i +% 1
+    return steal result
+
+# ============================================================================
+# Iteration
+# ============================================================================
+
+@readonly
+routine Dict[TKey, TValue].iter() -> DictEmittable[TKey, TValue]
+    danger
+        return DictEmittable[TKey, TValue](
+            keys: me.keys,
+            vals: me.vals,
+            entry_live: me.entry_live,
+            entries_used: me.entries_used,
+            pos: 0,
+        )
+
+failable routine DictEmittable[TKey, TValue].emit() -> DictEntry[TKey, TValue]
+    danger
+        while me.pos < me.entries_used
+            var p = me.pos
+            me.pos = me.pos + 1
+            if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+                var k = me.keys.offset(TKey.data_size() * p).peek()
+                var v = me.vals.offset(TValue.data_size() * p).peek()
+                return DictEntry[TKey, TValue](key: k, value: v)
+    throw AbsentValueError()
+
+# ============================================================================
+# Copy
+# ============================================================================
+
+### Returns a deep, independent copy of this dictionary. Every key and value is copied through
+### `copy`, so the result shares no heap storage with the original (managed leaves like `Text`
+### bump their refcount; aggregate values are duplicated recursively). This is the deep-copy point
+### the builder inserts when a `Dict[TKey, TValue]` is an owned arm of a value being copied.
+### :returns: A new `Dict[TKey, TValue]` owning independent copies of every entry.
+routine Dict[TKey, TValue].duplicate() -> Dict[TKey, TValue]
+needs RecordType TKey
+needs RecordType TValue
+    var result = Dict[TKey, TValue]()
+    each entry in me
+        result[entry.key] = entry.value
+    return steal result
+
+# ============================================================================
+# Display
+# ============================================================================
+
+@readonly
+@override
+routine Dict[TKey, TValue].represent() -> Text
+    if me.is_empty()
+        return "{:}"
+    var result = "{"
+    var first = true
+    each entry in me
+        if not first
+            result = result + ", "
+        result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
+        first = false
+    result = result + "}"
+    return steal result
+
+@readonly
+@override
+routine Dict[TKey, TValue].diagnose() -> Text
+    var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
+    var first = true
+    each entry in me
+        if not first
+            result = result + ", "
+        result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
+        first = false
+    result = result + "})"
+    return steal result
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+@readonly
+routine Dict[TKey, TValue].eq(you: Viewing[Dict[TKey, TValue]]) -> Bool
+needs TValue obeys Equatable
+    if me.count != you.count
+        return false
+    var i: U64 = 0
+    while i < me.entries_used
+        danger
+            if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
+                var k = me.keys.offset(TKey.data_size() * i).peek()
+                var v = me.vals.offset(TValue.data_size() * i).peek()
+                var slot = you.find_slot(k)
+                if slot >= you.capacity
+                    return false
+                var other_ei = you.indices.offset(U64.data_size() * slot).peek()
+                var other_v = you.vals.offset(TValue.data_size() * other_ei).peek()
+                if v != other_v
+                    return false
+        i = i +% 1
+    return true
+
+### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.
+### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
+@readonly
+@override
+routine Dict[TKey, TValue].serialize() -> SerialValue
+    var __sv = Dict[Text, SerialValue]()
+    each __e in me
+        __sv[__e.key.represent()] = __e.value.serialize()
+    return SerialValue(steal __sv)

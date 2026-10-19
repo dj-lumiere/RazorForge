@@ -1,0 +1,130 @@
+module System/Memory
+
+import BuilderQuery
+### What `view()` and `try_view()` on a {Guarded[T, TPolicy]} hand to `using`. Entering the `using` block takes a read
+### hold on the lock (the {GuardManager[T, TPolicy]} counts the reader) and binds a plain {Viewing[T]}. Leaving the
+### block by any way (its end, `return`, `throw`, `break`) releases the hold, so the hold lasts exactly as long as the
+### block. It only points at the manager and holds nothing itself.
+### :typeparam T: The guarded entity type.
+### :typeparam TPolicy: The lock policy of the `Guarded` it came from.
+### :see: {ModifyingGuarded[T, TPolicy]}, {Viewing[T]}, {Guarded[T, TPolicy]}
+@llvm("ptr")
+record ViewingGuarded[T, TPolicy]
+obeys Enterable
+needs EntityType T
+needs TPolicy obeys LockPolicy
+    pass
+
+### Called on entry to the `using` block: takes the read hold, waiting while a writer holds the lock.
+### :returns: The read token the block binds.
+routine ViewingGuarded[T, TPolicy].enter() -> Viewing[T]
+    danger
+        var manager = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
+        manager.add_inspector()
+        return Viewing[T](manager.raw_data())
+
+### Called on entry to a `using ... fallback` block: tries the read hold once, without waiting.
+### :returns: `true` when the hold was taken (the block runs and `exit` releases it), `false` when a writer holds the
+###           lock right now (the `fallback` branch runs and nothing is held).
+routine ViewingGuarded[T, TPolicy].try_enter() -> Bool
+    danger
+        var manager = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
+        return manager.try_add_inspector()
+
+### Called once `try_enter` took the hold: the read token the block binds.
+### :returns: The read token the block binds.
+routine ViewingGuarded[T, TPolicy].entered() -> Viewing[T]
+    danger
+        return Viewing[T](Hijacked[GuardManager[T, TPolicy]](me).as_entity().raw_data())
+
+### Called on every exit from the `using` block: releases the read hold.
+routine ViewingGuarded[T, TPolicy].exit()
+    danger
+        var manager = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
+        manager.remove_inspector()
+    return
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine ViewingGuarded[T, TPolicy].represent() -> Text
+    danger
+        return me.type_name()
+
+### Returns the diagnostic representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine ViewingGuarded[T, TPolicy].diagnose() -> Text
+    danger
+        return me.type_name()
+
+### Nothing to release: the hold is released by `exit`, and the manager belongs to the `Guarded` handles.
+@override
+routine ViewingGuarded[T, TPolicy].destruct()
+    return
+
+### What `modify()` and `try_modify()` on a {Guarded[T, TPolicy]} hand to `using`. Entering the `using` block takes the
+### write hold on the lock (the {GuardManager[T, TPolicy]} records the writer) and binds a plain {Modifying[T]}.
+### Leaving the block by any way (its end, `return`, `throw`, `break`) releases the hold, so the hold lasts exactly as
+### long as the block. It only points at the manager and holds nothing itself.
+### :typeparam T: The guarded entity type.
+### :typeparam TPolicy: The lock policy of the `Guarded` it came from.
+### :see: {ViewingGuarded[T, TPolicy]}, {Modifying[T]}, {Guarded[T, TPolicy]}
+@llvm("ptr")
+record ModifyingGuarded[T, TPolicy]
+obeys Enterable
+needs EntityType T
+needs TPolicy obeys LockPolicy
+    pass
+
+### Called on entry to the `using` block: takes the write hold, waiting while any reader or writer holds the lock.
+### :returns: The write token the block binds.
+routine ModifyingGuarded[T, TPolicy].enter() -> Modifying[T]
+    danger
+        var manager = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
+        manager.add_claimer()
+        return Modifying[T](manager.raw_data())
+
+### Called on entry to a `using ... fallback` block: tries the write hold once, without waiting.
+### :returns: `true` when the hold was taken (the block runs and `exit` releases it), `false` when any reader or writer
+###           holds the lock right now (the `fallback` branch runs and nothing is held).
+routine ModifyingGuarded[T, TPolicy].try_enter() -> Bool
+    danger
+        var manager = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
+        return manager.try_add_claimer()
+
+### Called once `try_enter` took the hold: the write token the block binds.
+### :returns: The write token the block binds.
+routine ModifyingGuarded[T, TPolicy].entered() -> Modifying[T]
+    danger
+        return Modifying[T](Hijacked[GuardManager[T, TPolicy]](me).as_entity().raw_data())
+
+### Called on every exit from the `using` block: releases the write hold.
+routine ModifyingGuarded[T, TPolicy].exit()
+    danger
+        var manager = Hijacked[GuardManager[T, TPolicy]](me).as_entity()
+        manager.remove_claimer()
+    return
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine ModifyingGuarded[T, TPolicy].represent() -> Text
+    danger
+        return me.type_name()
+
+### Returns the diagnostic representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine ModifyingGuarded[T, TPolicy].diagnose() -> Text
+    danger
+        return me.type_name()
+
+### Nothing to release: the hold is released by `exit`, and the manager belongs to the `Guarded` handles.
+@override
+routine ModifyingGuarded[T, TPolicy].destruct()
+    return

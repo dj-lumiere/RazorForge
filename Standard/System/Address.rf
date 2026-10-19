@@ -1,0 +1,198 @@
+module System
+
+### Represents a raw machine address value.
+### `Address` is used for pointer interop, low-level memory helpers, and runtime-facing APIs where a typed reference is not available.
+### Prefer typed wrappers such as {Hijacked[T]} when the pointee type is known.
+### :see: {ByteSize}, {Hijacked[T]}
+@llvm("i64")
+record Address
+obeys Comparable, ConstCompatible, WrappingAddable, WrappingSubtractable, OffsetAddable, OffsetSubtractable,
+    Copyable
+    pass
+
+# ============================================================================
+# No create routines — Address has no implicit or explicit conversions.
+# Use Hijacked[T] for converting between Address and you types.
+# ============================================================================
+
+### The address a `U64` names: `0x1000_u64.to[Address]()`.
+### :returns: The address.
+routine U64.to[Address]() -> Address
+    return LLVM::reinterpret_bits[U64, Address](value: me)
+
+### Reads this address as a `U64`: `a.to[U64]()`.
+### :returns: The address as a number.
+routine Address.to[U64]() -> U64
+    return LLVM::reinterpret_bits[Address, U64](value: me)
+
+# ============================================================================
+# Wrapping Arithmetic Operations (+%, -%)
+# These explicitly wrap on overflow - the only arithmetic allowed on Address
+# ============================================================================
+
+### Returns the wrapping sum of two raw addresses.
+### This is intended for low-level pointer arithmetic where wraparound semantics
+### are explicit and acceptable.
+### :param you: The address offset or peer address value to add.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.add_wrap(you: Address) -> Address
+    return LLVM::add(me, you)
+
+### Returns the wrapping difference between two raw addresses.
+### :param you: The address value to subtract.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.sub_wrap(you: Address) -> Address
+    return LLVM::sub(me, you)
+
+# Note: Address × Address and Address // Address have no meaningful semantics
+# (addresses are points in a memory space, not scalars). Use pointer arithmetic
+# via `Address + ByteSize` / `Address - ByteSize` instead, and `Address - Address`
+# to obtain the byte-distance as a `ByteSize`.
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Address.eq(you: Address) -> Bool
+    return LLVM::int_eq(me, you)
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Address.compare(you: Address) -> ComparisonSign
+    if LLVM::unsigned_lt(me, you)
+        return ME_SMALL
+    if LLVM::unsigned_gt(me, you)
+        return ME_LARGE
+    return SAME
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns the smaller of two addresses in unsigned address order.
+### :param you: The other address to compare against.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.min(you: Address) -> Address
+    if me <= you
+        return me
+    return you
+
+### Returns the larger of two addresses in unsigned address order.
+### :param you: The other address to compare against.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.max(you: Address) -> Address
+    if me >= you
+        return me
+    return you
+
+### Returns `true` when this address value is a power of two.
+### This is mainly useful for alignment checks and low-level mask logic.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Address.is_power_of_two() -> Bool
+    return me != 0 and LLVM::bit_and(a: me, b: me -% 1) == 0
+
+# ============================================================================
+# ByteSize Arithmetic
+# ============================================================================
+
+### Returns the result of offsetting this address by a byte size.
+### :param offset: The byte count to add.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.add(offset: ByteSize) -> Address
+    return LLVM::add(me, LLVM::reinterpret_bits[ByteSize, Address](value: offset))
+
+### Returns the byte distance from this address to another address.
+### :param you: The address to subtract.
+### :returns: The resulting `ByteSize` value.
+@readonly
+routine Address.sub(you: Address) -> ByteSize
+    return ByteSize((LLVM::sub(me, you)).to[U64]())
+
+### Returns the result of stepping this address back by a byte size.
+### :param offset: The byte count to subtract.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.sub(offset: ByteSize) -> Address
+    return LLVM::sub(me, LLVM::reinterpret_bits[ByteSize, Address](value: offset))
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+### Returns the display form of this address.
+### Addresses are rendered in grouped hexadecimal form to make pointer values
+### easier to scan in diagnostics.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Address.represent() -> Text
+    # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
+    var digits = List[Char]()
+    digits.add_last('0')
+    digits.add_last('x')
+    var i: U32 = 0
+    while i < 16
+        if i > 0 and i % 4 == 0
+            digits.add_last('_')
+        var shift = (15 - i) * 4
+        var nibble = ((me.to[U64]() >> shift) & 0x0F).to[U32]()
+        if nibble < 10
+            digits.add_last(Char(0x0030 + nibble))
+        else
+            digits.add_last(Char(0x0041 + nibble - 10))
+        i = i + 1
+    return Text(from_list: steal digits)
+
+### Returns the diagnostic form of this address.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Address.diagnose() -> Text
+    return "Address(" + me.represent() + ")"
+
+### Parses an address from hexadecimal text.
+### The accepted format is hex digits with an optional `0x`/`0X` prefix and
+### optional underscore separators.
+### :returns: The resulting `Address` value.
+### :throws: May throw {InvalidValueError}.
+failable routine Text.to[Address]() -> Address
+    # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
+    if me.count() == 0
+        throw InvalidValueError(input: me, target: "Address")
+    var result: U64 = 0
+    var i: U64 = 0
+    # Skip optional "0x" prefix
+    if me.count() > 1
+        if me[0] == '0'
+            if me[1] == 'x'
+                i = 2
+            elseif me[1] == 'X'
+                i = 2
+    if i >= me.count()
+        throw InvalidValueError(input: me, target: "Address")
+    while i < me.count()
+        var cp = me[i].codepoint()
+        if 0x0030 <= cp <= 0x0039
+            result = (result << 4) + (cp - 0x0030).to[U64]()
+        elseif 0x0041 <= cp <= 0x0046
+            result = (result << 4) + (cp - 0x0041 + 10).to[U64]()
+        elseif 0x0061 <= cp <= 0x0066
+            result = (result << 4) + (cp - 0x0061 + 10).to[U64]()
+        elseif cp == 0x005F
+            pass
+        else
+            throw InvalidValueError(input: me, target: "Address")
+        i = i + 1
+    return Address(result)

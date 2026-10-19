@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Writes Standard/Core/Types/CharCase.rf from UnicodeData.txt: the simple uppercase and lowercase mappings and the
+Writes Standard/System/Text/CharCase.rf from UnicodeData.txt: the simple uppercase and lowercase mappings and the
 uppercase (Lu) and lowercase (Ll) letters, as runs a binary search walks.
 
 Usage: gen_char_case.py <UnicodeData.txt> <unicode version> <output .rf>
@@ -112,7 +112,7 @@ def main():
     lu_runs = runs(lu, lambda cp: 0)
     ll_runs = runs(ll, lambda cp: 0)
     parts = [
-        "module Core",
+        "module System/Text",
         "",
         f"# Unicode {version} simple case mappings and the uppercase (Lu) and lowercase (Ll) letters, written by",
         "# scripts/gen_char_case.py from UnicodeData.txt. Write it again with that script, not by hand.",

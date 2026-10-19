@@ -1,0 +1,646 @@
+module System/Numerics
+
+### A complex number with quadruple-precision real and imaginary components.
+### `C256` stores two `B128` values and provides the widest complex precision
+### in the stdlib, including a full set of transcendental functions (pure-RF
+### software B128). Use this type when `C128` does not provide enough accuracy.
+record C256
+obeys Numeric, Equatable, Hashable
+    ### The real part.
+    real: B128
+    ### The imaginary part.
+    imag: B128
+
+# The math lives in Ingrid's Tessera library (`Ingrid/tessera/complex.te`), which RazorForge and Suflae share:
+# each routine below that computes hands the parts to a `C::ingrid_c256_*` routine (declared in
+# System/NativeDeclarations.rf). Its `+ - * /` are checked like B128's own, so a part that overflows or has no real
+# value crashes as it does here, and the elementary functions are the same correctly rounded ones.
+
+# Complex constants. `common routine` factories (not `preset`s): a `C256` value is a two-`B128` record,
+# not a buildtime scalar constant, so inlining it at every use (what a `preset` does) leaves the
+# construction unresolved / emits an undefined creator symbol at codegen.
+### The complex zero value (0 + 0i). :returns: The resulting `C256` value.
+common routine C256.zero() -> C256
+    return C256(real: 0.0, imag: 0.0)
+
+### The complex unit value (1 + 0i). :returns: The resulting `C256` value.
+common routine C256.one() -> C256
+    return C256(real: 1.0, imag: 0.0)
+
+### The imaginary unit (0 + 1i). :returns: The resulting `C256` value.
+common routine C256.i() -> C256
+    return C256(real: 0.0, imag: 1.0)
+
+### The low 64 bits of a B128's bits: an Ingrid routine takes each C256 part as its low and high halves, because a
+### 128-bit value crosses Win64 by pointer from Tessera but by value from RazorForge.
+secret routine c256_low(v: B128) -> U64
+    return LLVM::int_truncate[U128, U64](v.to_bits())
+
+### The high 64 bits of a B128's bits.
+secret routine c256_high(v: B128) -> U64
+    return LLVM::int_truncate[U128, U64](v.to_bits() >>> 64)
+
+### Reads the B128 an Ingrid routine hands back: its low 64 bits in `w0`, its high 64 bits in `w1`.
+secret routine c256_scalar(w: IngridWords) -> B128
+    var high = LLVM::zero_extend[U64, U128](w.w1) << 64
+    return B128.from_bits(bits: high | LLVM::zero_extend[U64, U128](w.w0))
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Constructs a `C256` with the given real component and zero imaginary part.
+### :returns: The corresponding `C256` value.
+routine B128.to[C256]() -> C256
+    return C256(real: me, imag: 0.0)
+
+### Widens a `C64` to `C256` by extending each component to `B128`.
+### :returns: A `C256` carrying the same numeric value.
+routine C64.to[C256]() -> C256
+    return C256(real: me.real.to[B128](), imag: me.imag.to[B128]())
+
+### Widens a `C128` to `C256` by extending each component to `B128`.
+### :returns: A `C256` carrying the same numeric value.
+routine C128.to[C256]() -> C256
+    return C256(real: me.real.to[B128](), imag: me.imag.to[B128]())
+
+### Real scalar -> `C256` (imaginary part 0), routing the value through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine S8.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `S16` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine S16.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `S32` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine S32.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `S64` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine S64.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `S128` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine S128.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `S256` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine S256.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `U8` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine U8.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `U16` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine U16.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `U32` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine U32.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `U64` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine U64.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `U128` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine U128.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `U256` scalar -> `C256` (imaginary part 0), value routed through `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine U256.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `B16` scalar -> `C256` (imaginary part 0), value widened to `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine B16.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `B32` scalar -> `C256` (imaginary part 0), value widened to `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine B32.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Real `B64` scalar -> `C256` (imaginary part 0), value widened to `B128`.
+### :returns: `me + 0i` in quadruple precision.
+routine B64.to[C256]() -> C256
+    return C256(real: me.to[B128](), imag: 0.0)
+
+### Constructs a `C256` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
+### :param r: The modulus (distance from origin).
+### :param theta: The argument (angle in radians).
+### :returns: The complex value at that polar position.
+routine C256.from_polar(r: B128, theta: B128) -> C256
+    return C::ingrid_c256_from_polar(
+        r_low: c256_low(v: r),
+        r_high: c256_high(v: r),
+        theta_low: c256_low(v: theta),
+        theta_high: c256_high(v: theta),
+    )
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Returns the complex sum `me + you` (component-wise addition).
+### :param you: The addend.
+### :returns: A `C256` whose components are the sums of the corresponding components.
+@readonly
+routine C256.add(you: C256) -> C256
+    return C256(real: me.real + you.real, imag: me.imag + you.imag)
+
+### Returns the complex difference `me - you` (component-wise subtraction).
+### :param you: The value to subtract.
+### :returns: A `C256` whose components are the differences of the corresponding components.
+@readonly
+routine C256.sub(you: C256) -> C256
+    return C256(real: me.real - you.real, imag: me.imag - you.imag)
+
+### Returns `me + you`, promoting the real `you` to complex (imaginary part 0). `+`/`-`/`*`/`/` accept
+### a real operand; the component width must match (B128 pairs with C256).
+### :param you: The real addend.
+### :returns: The complex sum.
+routine C256.add(you: B128) -> C256
+    return me.add(you.to[C256]())
+
+### Returns `me - you`, promoting the real `you` to complex (imaginary part 0).
+### :param you: The real value to subtract.
+### :returns: The complex difference.
+routine C256.sub(you: B128) -> C256
+    return me.sub(you.to[C256]())
+
+### Returns `me * you` for a real `you` (both components scaled).
+### :param you: The real factor.
+### :returns: The scaled complex value.
+@readonly
+routine C256.mul(you: B128) -> C256
+    return C256(real: me.real * you, imag: me.imag * you)
+
+### Returns `me / you` for a real `you` (both components divided).
+### :param you: The real divisor.
+### :returns: The divided complex value.
+@readonly
+routine C256.truediv(you: B128) -> C256
+    return C256(real: me.real / you, imag: me.imag / you)
+
+### Returns the complex product `me * you` using the formula `(ac−bd) + (ad+bc)i`.
+### :param you: The right operand.
+### :returns: The Gaussian product.
+routine C256.mul(you: C256) -> C256
+    return C::ingrid_c256_mul(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+        other_real_low: c256_low(v: you.real),
+        other_real_high: c256_high(v: you.real),
+        other_imag_low: c256_low(v: you.imag),
+        other_imag_high: c256_high(v: you.imag),
+    )
+
+### Returns the complex quotient `me / you`.
+### Divides by the squared modulus of `you`.
+### :param you: The divisor.
+### :returns: The complex quotient.
+routine C256.truediv(you: C256) -> C256
+    return C::ingrid_c256_div(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+        other_real_low: c256_low(v: you.real),
+        other_real_high: c256_high(v: you.real),
+        other_imag_low: c256_low(v: you.imag),
+        other_imag_high: c256_high(v: you.imag),
+    )
+
+### Returns this complex value raised to the complex power `you` via `exp(you * log(me))`.
+### :param you: The complex exponent.
+### :returns: `me ** you` in quadruple precision.
+@readonly
+routine C256.pow(you: C256) -> C256
+    return C::ingrid_c256_pow(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+        other_real_low: c256_low(v: you.real),
+        other_real_high: c256_high(v: you.real),
+        other_imag_low: c256_low(v: you.imag),
+        other_imag_high: c256_high(v: you.imag),
+    )
+
+### Returns the arithmetic negation of this value.
+### :returns: A `C256` with both components negated.
+@readonly
+routine C256.neg() -> C256
+    return C256(real: -me.real, imag: -me.imag)
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns `true` if both components compare equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me.real == you.real` and `me.imag == you.imag`.
+@readonly
+routine C256.eq(you: C256) -> Bool
+    return me.real == you.real and me.imag == you.imag
+
+# ============================================================================
+# Components and Properties
+# ============================================================================
+
+### Returns the modulus (absolute value) of this complex number.
+### :returns: `√(real² + imag²)`.
+routine C256.abs() -> B128
+    var w = C::ingrid_c256_abs(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+    return c256_scalar(w: w)
+
+### Returns the phase angle of this complex value in radians.
+### :returns: `atan2(imag, real)`, in the range (−π, π].
+routine C256.arg() -> B128
+    var w = C::ingrid_c256_arg(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+    return c256_scalar(w: w)
+
+### Returns the complex conjugate (negates the imaginary part).
+### :returns: `real - imag·i`.
+routine C256.conjugate() -> C256
+    return C256(real: me.real, imag: -me.imag)
+
+### Returns the squared modulus (avoids the square root of `abs`).
+### :returns: `real² + imag²`.
+routine C256.norm() -> B128
+    var w = C::ingrid_c256_norm(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+    return c256_scalar(w: w)
+
+# ============================================================================
+# Trigonometric (using native B128 sinh/cosh)
+# ============================================================================
+
+### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
+### :returns: The complex sine of this value.
+routine C256.sin() -> C256
+    return C::ingrid_c256_sin(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
+### :returns: The complex cosine of this value.
+routine C256.cos() -> C256
+    return C::ingrid_c256_cos(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex tangent of this value.
+### :returns: The complex tangent.
+routine C256.tan() -> C256
+    return C::ingrid_c256_tan(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex arcsine of this value.
+### :returns: The principal value of `arcsin(me)`.
+routine C256.asin() -> C256
+    return C::ingrid_c256_asin(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex arccosine of this value.
+### :returns: The principal value of `arccos(me)`.
+routine C256.acos() -> C256
+    return C::ingrid_c256_acos(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex arctangent of this value.
+### :returns: The principal value of `arctan(me)`.
+routine C256.atan() -> C256
+    return C::ingrid_c256_atan(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+# ============================================================================
+# Hyperbolic (using native B128 sinh/cosh)
+# ============================================================================
+
+### Returns the complex hyperbolic sine of this value.
+### :returns: The complex hyperbolic sine.
+routine C256.sinh_unchecked() -> C256
+    return C::ingrid_c256_sinh(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex hyperbolic cosine of this value.
+### :returns: The complex hyperbolic cosine.
+routine C256.cosh_unchecked() -> C256
+    return C::ingrid_c256_cosh(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex hyperbolic tangent of this value.
+### :returns: The complex hyperbolic tangent.
+routine C256.tanh() -> C256
+    return C::ingrid_c256_tanh(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex inverse hyperbolic sine of this value.
+### :returns: The principal value of `arcsinh(me)`.
+routine C256.asinh() -> C256
+    return C::ingrid_c256_asinh(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex inverse hyperbolic cosine of this value.
+### :returns: The principal value of `arccosh(me)`.
+routine C256.acosh() -> C256
+    return C::ingrid_c256_acosh(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the complex inverse hyperbolic tangent of this value.
+### :returns: The principal value of `arctanh(me)`.
+routine C256.atanh() -> C256
+    return C::ingrid_c256_atanh(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+# ============================================================================
+# Exponential and Logarithmic
+# ============================================================================
+
+### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
+### :returns: The complex exponential.
+routine C256.exp_unchecked() -> C256
+    return C::ingrid_c256_exp(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the principal natural logarithm of this complex value.
+### :returns: `ln(|me|) + i·arg(me)`.
+routine C256.ln_unchecked() -> C256
+    return C::ingrid_c256_ln(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the base-10 logarithm of this complex value.
+### :returns: `ln(me) / ln(10)`.
+routine C256.log10() -> C256
+    return C::ingrid_c256_log10(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the base-2 logarithm of this complex value.
+### :returns: `ln(me) / ln(2)`.
+routine C256.log2() -> C256
+    return C::ingrid_c256_log2(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the multiplicative inverse `1/me` (conjugate over the squared modulus).
+### :returns: `conj(me) / |me|²`.
+routine C256.reciprocal() -> C256
+    return C::ingrid_c256_reciprocal(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Returns the polar form `(magnitude, angle-in-radians)` — the inverse of `from_polar`.
+### :returns: A tuple `(abs, arg)`.
+routine C256.to_polar() -> (B128, B128)
+    return (me.abs(), me.arg())
+
+### Returns the complex square root, choosing the root with non-negative real part.
+### :returns: The principal square root of this value.
+routine C256.sqrt_unchecked() -> C256
+    return C::ingrid_c256_sqrt(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+
+### Crashes unless both parts of `r` are finite: a NaN part is a domain error, an infinite part an
+### overflow. The check behind the `!` forms of `exp`/`ln`/`sqrt`/`sinh`/`cosh`.
+failable routine c256_checked(r: C256) -> C256
+    if r.real.is_finite() and r.imag.is_finite()
+        return r
+    if r.real.is_nan() or r.imag.is_nan()
+        throw NumericDomainError(description: "domain error: no complex result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `e` raised to this value. Checked: crashes if a part of the result is not finite.
+### Use `exp_unchecked` for raw IEEE 754 propagation.
+### :returns: The complex exponential.
+failable routine C256.exp() -> C256
+    return c256_checked(r: me.exp_unchecked())
+
+### Returns the principal natural logarithm. Checked: crashes on `ln(0)` (an infinite real part).
+### Use `ln_unchecked` for raw IEEE 754 propagation.
+### :returns: `ln(|me|) + i·arg(me)`.
+failable routine C256.ln() -> C256
+    return c256_checked(r: me.ln_unchecked())
+
+### Returns the principal square root. Checked: crashes if a part of the result is not finite.
+### Use `sqrt_unchecked` for raw IEEE 754 propagation.
+### :returns: The square root with non-negative real part.
+failable routine C256.sqrt() -> C256
+    return c256_checked(r: me.sqrt_unchecked())
+
+### Returns the hyperbolic sine. Checked: crashes if a part of the result is not finite.
+### :returns: The complex hyperbolic sine.
+failable routine C256.sinh() -> C256
+    return c256_checked(r: me.sinh_unchecked())
+
+### Returns the hyperbolic cosine. Checked: crashes if a part of the result is not finite.
+### :returns: The complex hyperbolic cosine.
+failable routine C256.cosh() -> C256
+    return c256_checked(r: me.cosh_unchecked())
+
+### Returns this value raised to the integer power `exp` by repeated squaring (exact up to rounding of
+### each product, no `ln`/`exp` round trip). A negative `exp` inverts first; `exp` 0 gives `1`.
+### :param exp: The integer exponent.
+### :returns: `me ** exp`.
+routine C256.pow(exp: S64) -> C256
+    return C::ingrid_c256_powi(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+        n: exp,
+    )
+
+# ============================================================================
+# Query Routines
+# ============================================================================
+
+### Returns `true` if both the real and imaginary parts are exactly zero.
+### :returns: `true` if `me == C256.zero()`.
+routine C256.is_zero() -> Bool
+    return me.real == 0.0 and me.imag == 0.0
+
+### Returns `true` if the imaginary part is exactly zero (the value lies on the real axis).
+### :returns: `true` if `me.imag == 0.0`.
+routine C256.is_real() -> Bool
+    return me.imag == 0.0
+
+### Returns `true` if the real part is exactly zero (the value lies on the imaginary axis).
+### :returns: `true` if `me.real == 0.0`.
+routine C256.is_imaginary() -> Bool
+    return me.real == 0.0
+
+### Returns `true` if either part is NaN.
+routine C256.is_nan() -> Bool
+    return me.real.is_nan() or me.imag.is_nan()
+
+### Returns `true` if either part is infinite.
+routine C256.is_infinite() -> Bool
+    return me.real.is_infinite() or me.imag.is_infinite()
+
+### Returns `true` if both parts are finite.
+routine C256.is_finite() -> Bool
+    return me.real.is_finite() and me.imag.is_finite()
+
+# ============================================================================
+# Text Representation
+# ============================================================================
+
+### Formats this value compactly as `a+bi` / `a-bi` (e.g. `1.5+2i`). The `i`
+### spelling matches the imaginary literal suffixes, so output is valid
+### literal syntax. Standard `represent` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+@override
+routine C256.represent() -> Text
+    var real_text = me.real.represent()
+    var imag_abs = me.imag.abs().represent()
+    if me.imag < 0.0
+        return real_text + "-" + imag_abs + "i"
+    return real_text + "+" + imag_abs + "i"
+
+### Formats this value as `a+bi` / `a-bi` with exactly `places` digits after the point in each part
+### (see `B128.fixed`).
+### :param places: The number of digits after the point.
+### :returns: The resulting `Text` value.
+routine C256.fixed(places: U64) -> Text
+    var imag_abs = me.imag.abs().fixed(places)
+    if me.imag < 0.0
+        return me.real.fixed(places) + "-" + imag_abs + "i"
+    return me.real.fixed(places) + "+" + imag_abs + "i"
+
+### Parses `a`, `bi`, `a+bi` or `a-bi` (a bare `i` / `-i` is a unit imaginary part), the form
+### `represent` writes. Each part uses `B128`'s own number syntax.
+### :returns: The parsed value.
+### :throws: {InvalidValueError} if the text is not a complex number.
+failable routine Text.to[C256]() -> C256
+    var parts = split_complex_text(text: me, target: "C256")
+    return C256(real: parts.real.to[B128](), imag: parts.imag.to[B128]())
+
+### Returns the real component (the `real` field is also public).
+### :returns: The real part as `B128`.
+routine C256.real_part() -> B128
+    return me.real
+
+### Returns the imaginary component (the `imag` field is also public).
+### :returns: The imaginary part as `B128`.
+routine C256.imag_part() -> B128
+    return me.imag
+
+### Returns a diagnostic string wrapping the value with its type name (e.g. `C256(1.5+2i)`).
+### Standard `diagnose` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+@override
+routine C256.diagnose() -> Text
+    return "C256(" + me.represent() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a SipHash-2-4 keyed hash of this complex value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+@readonly
+routine C256.hash(k0: U64, k1: U64) -> U64
+    var acc = __hash_round(acc: 0, h: me.real.hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.imag.hash(k0: k0, k1: k1))
+    return __hash_finalize(h: acc)

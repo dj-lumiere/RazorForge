@@ -6,7 +6,7 @@ namespace RazorForge.Tests.Meta;
 /// <summary>
 /// Validates the managed <see cref="NumericLiteralParser.EncodeDecimalCanonical"/> (buildtime
 /// decimal literal → finite-only CANONICAL 34-digit BID decimal128 bits) by round-trip: decoding
-/// the produced i128 back to (sign, exp, coeff) — exactly as <c>Core.D128</c> <c>decode()</c> does
+/// the produced i128 back to (sign, exp, coeff) — exactly as <c>System.D128</c> <c>decode()</c> does
 /// — must reproduce the literal (exact for ≤34 significant digits, with fractional trailing zeros
 /// stripped). Layout: bit127 sign, bits126..113 biased exponent (bias 6176), bits112..0 coefficient.
 /// </summary>

@@ -319,7 +319,7 @@ public class CollectionLiteralTests
 
         TypeSymbol? resolvedType = variable.Initializer?.ResolvedType;
         Assert.NotNull(@object: resolvedType);
-        Assert.Equal(expected: "Core.List[Core.List[Core.S64]]", actual: resolvedType!.FullName);
+        Assert.Equal(expected: "System.List[System.List[System.S64]]", actual: resolvedType!.FullName);
     }
 
     /// <summary>
@@ -354,7 +354,7 @@ public class CollectionLiteralTests
 
         TypeSymbol? resolvedType = variable.Initializer?.ResolvedType;
         Assert.NotNull(@object: resolvedType);
-        Assert.Equal(expected: "Core.List[Core.S64]", actual: resolvedType!.FullName);
+        Assert.Equal(expected: "System.List[System.S64]", actual: resolvedType!.FullName);
     }
 
     /// <summary>
@@ -393,7 +393,7 @@ public class CollectionLiteralTests
 
         TypeSymbol? resolvedType = variable.Initializer?.ResolvedType;
         Assert.NotNull(@object: resolvedType);
-        Assert.Equal(expected: "Core.List[Core.S64]", actual: resolvedType!.FullName);
+        Assert.Equal(expected: "System.List[System.S64]", actual: resolvedType!.FullName);
     }
 
     /// <summary>

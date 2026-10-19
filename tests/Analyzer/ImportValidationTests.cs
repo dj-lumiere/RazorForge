@@ -22,7 +22,7 @@ public class ImportValidationTests
                         record Point
                             x: S32
                             y: S32
-                        import Core
+                        import System
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -36,7 +36,7 @@ public class ImportValidationTests
     public void Analyze_ImportBeforeDeclaration_NoError()
     {
         string source = """
-                        import Core
+                        import System
                         record Point
                             x: S32
                             y: S32
@@ -53,9 +53,9 @@ public class ImportValidationTests
     public void Analyze_MultipleImportsBeforeDeclarations_NoError()
     {
         string source = """
-                        import Core
-                        import Core.Text
-                        import Core.Bool
+                        import System
+                        import System.Text
+                        import System.Bool
                         record Point
                             x: S32
                             y: S32
@@ -77,8 +77,8 @@ public class ImportValidationTests
     public void Analyze_DuplicateImportedSymbol_ReportsError()
     {
         string source = """
-                        import Core.[Text]
-                        import Core.[Text]
+                        import System.[Text]
+                        import System.[Text]
                         record Dummy
                             value: S32
                         """;
@@ -94,8 +94,8 @@ public class ImportValidationTests
     public void Analyze_DisjointSpecificImports_NoError()
     {
         string source = """
-                        import Core.[Text]
-                        import Core.[Bool]
+                        import System.[Text]
+                        import System.[Bool]
                         record Dummy
                             value: S32
                         """;

@@ -101,7 +101,7 @@ public partial class RazorForgeLexer
                 ScanDotOperator();
                 break;
             case ':':
-                // `::` is the realm-qualifier separator (e.g. `RF::Core.List`); bare `:` is a colon.
+                // `::` is the realm-qualifier separator (e.g. `RF::System.List`); bare `:` is a colon.
                 AddToken(type: Match(expected: ':')
                     ? TokenType.DoubleColon
                     : TokenType.Colon);

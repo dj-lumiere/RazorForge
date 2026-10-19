@@ -1,0 +1,992 @@
+module System/Text
+
+import BuilderQuery
+### Represents immutable UTF-32 text with constant-time character indexing.
+###
+### Layout:
+###   data:  Hijacked[Char]                 — the list's buffer, read directly
+###   count: U64                            — number of code points
+###   owner: Guarded[List[Char], ReadOnly]  — the list holding the characters (null for an empty or literal text)
+###
+### `Text` is a record (value semantics from the user's view) over a shared, read-only list of characters. Copying a
+### `Text` shares the list (its `Guarded` owner counts one more holder) and copies the `data`/`count` cache, so a read
+### never goes through the owner. The last copy to go ends the list. An empty text and a text literal have no owner:
+### `data` points at constant data (or nowhere) and nothing is counted or freed.
+record Text
+relates TextEmittable as Iter
+obeys Copyable, Addable, Comparable, Hashable, TextRepeatable, Iterable[Char],
+    Container
+    ### The characters: the owner list's buffer, or constant data for a literal.
+    secret data: Hijacked[Char]
+    ### Stores the number of characters.
+    secret count: U64
+    ### The list holding the characters, shared read-only by every copy (null for an empty or literal text).
+    secret owner: Guarded[List[Char], ReadOnly]
+
+### Represents the iterator used to traverse a `Text` value.
+### The iterator reads the text sequentially from the first character to the
+### last.
+entity TextEmittable
+    ### Stores the source text.
+    text: Text
+    ### Stores the current character index.
+    index: U64
+
+### Copy (Copyable): a `Text` is immutable, so a copy shares the same characters.
+@readonly
+@inline
+routine Text.duplicate() -> Text
+    return me
+
+# Creators
+
+### Creates an empty text value.
+### The returned value contains no characters and owns no backing buffer.
+### :returns: The resulting `Text` value.
+routine Text() -> Text
+    return Text(
+        owner: guarded_none[List[Char], ReadOnly](),
+        data: hijacked_none[Char](),
+        count: 0,
+    )
+
+### Makes a `Text` of `count` characters for the caller to fill through `result.data`: a fresh list of that length
+### becomes the owner (one strong holder, not yet shared). `count` MUST be > 0, callers special-case empty to `Text()`.
+### :param count: The number of Characters the text holds.
+### :returns: A `Text` owning a fresh list of `count` Characters.
+routine text_alloc(count: U64) -> Text
+    var chars = List[Char](capacity: count)
+    chars.count = count
+    var data = chars.data
+    return Text(data: data, count: count, owner: Guarded[List[Char], ReadOnly](from: steal chars))
+
+### Creates text from a list of characters. The list itself becomes the text's characters, nothing is copied, so
+### this is O(1): hand it over with `steal` (`Text(from_list: steal chars)`).
+### :param from_list: The characters, taken over by the new text value.
+### :returns: The resulting `Text` value.
+routine Text(from_list: List[Char]) -> Text
+    var n = from_list.count()
+    if n == 0
+        return Text()
+    var data = from_list.data
+    return Text(data: data, count: n, owner: Guarded[List[Char], ReadOnly](from: steal from_list))
+
+### Makes one-character text: `'x'.to[Text]()`.
+### :returns: The resulting `Text` value.
+routine Char.to[Text]() -> Text
+    var result = text_alloc(count: 1)
+    danger
+        result.data.poke(value: me)
+    return result
+
+### Creates text by copying `count` Characters from a raw span (e.g. a stack buffer). Exactly ONE
+### buffer allocation (+ controller) — no intermediate `List`/`add_first`, unlike `Text(from_list:)`.
+### Caller guarantees `from_span` has at least `count` Characters. Backs the fixed-width integer
+### `represent`s via `int_to_text`.
+### :param from_span: Pointer to the first Char to copy.
+### :param count: Number of Characters to copy.
+### :returns: The resulting `Text` value.
+routine Text(from_span: Hijacked[Char], count: U64) -> Text
+    if count == 0
+        return Text()
+    var result = text_alloc(count: count)
+    danger
+        var i: U64 = 0
+        loop
+            if i >= count
+                break
+            result.data
+                .stride(count: LLVM::reinterpret_bits[U64, S64](i))
+                .poke(value: from_span.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek())
+            i += 1
+    return result
+
+### Renders an unsigned magnitude (with an optional leading `-`) as decimal `Text` through a STACK
+### buffer: digits are written back-to-front into a fixed `Array[Char, 21]` (max 20 digits + sign),
+### then copied out in ONE `Text` allocation. No `List`, no O(n) `add_first`, no `"-" +` concat — the
+### three heap allocations the old `List[Char]` + `Text(from_list:)` + sign-concat path did per call
+### collapse to the one Text buffer. `// 10` / `% 10` are scalar-by-constant (backend reciprocal multiply).
+### Every fixed-width integer `represent` funnels through here.
+### :param mag: The absolute value to render (0..2⁶⁴−1).
+### :param negative: Whether to prefix a `-`.
+### :returns: the decimal rendering.
+routine int_to_text(mag: U64, negative: Bool) -> Text
+    if LLVM::int_eq(a: mag, b: 0)
+        return "0"
+    danger
+        var buf = Array[Char, 21]()
+        var p = LLVM::reinterpret_bits[Hijacked[Array[Char, 21]], Hijacked[Char]](buf.hijack())
+        var idx = 21
+        var m = mag
+        while LLVM::int_ne(a: m, b: 0)
+            idx = LLVM::sub(a: idx, b: 1)
+            var d = LLVM::int_truncate[U64, U32](LLVM::unsigned_rem(a: m, b: 10))
+            p.stride(count: idx).poke(value: Char(LLVM::add(a: 0x0030, b: d)))
+            m = LLVM::unsigned_div(a: m, b: 10)
+        if negative
+            idx = LLVM::sub(a: idx, b: 1)
+            p.stride(count: idx).poke(value: '-')
+        return Text(
+            from_span: p.stride(count: idx),
+            count: LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 21, b: idx)),
+        )
+
+### Decodes UTF-8 text from a null-terminated C string.
+### A malformed sequence (a missing or stray continuation byte, an overlong encoding, a surrogate, or a
+### code point past U+10FFFF) becomes one U+FFFD replacement character per offending lead byte, the same
+### rule `Bytes.decode_as_utf8_lossy` follows.
+### :returns: The resulting `Text` value.
+routine CStrView.to[Text]() -> Text
+    if me.is_null()
+        return Text()
+    danger
+        var len = me.count()
+        if len == 0
+            return Text()
+
+        var list = List[Char]()
+        var i: U64 = 0
+        loop
+            if i >= len
+                break
+            var b0 = me[i].to[U32]()
+            # A malformed sequence leaves the replacement character and consumes only its lead byte.
+            var codepoint: U32 = 0xFFFD
+            var width: U64 = 1
+
+            if b0 <= 0x7F
+                codepoint = b0
+            elseif (b0 & 0xE0) == 0xC0 and i + 1 < len
+                var b1 = me[i + 1].to[U32]()
+                # C0 and C1 leads can only spell an overlong ASCII character.
+                if (b1 & 0xC0) == 0x80 and b0 >= 0xC2
+                    codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
+                    width = 2
+            elseif (b0 & 0xF0) == 0xE0 and i + 2 < len
+                var b1 = me[i + 1].to[U32]()
+                var b2 = me[i + 2].to[U32]()
+                if (b1 & 0xC0) == 0x80 and (b2 & 0xC0) == 0x80
+                    var candidate = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
+                    # Below U+0800 is overlong, and U+D800..U+DFFF are surrogates, never characters.
+                    if candidate >= 0x800 and (candidate < 0xD800 or candidate > 0xDFFF)
+                        codepoint = candidate
+                        width = 3
+            elseif (b0 & 0xF8) == 0xF0 and i + 3 < len
+                var b1 = me[i + 1].to[U32]()
+                var b2 = me[i + 2].to[U32]()
+                var b3 = me[i + 3].to[U32]()
+                if (b1 & 0xC0) == 0x80
+                    and (b2 & 0xC0) == 0x80
+                    and (b3 & 0xC0) == 0x80
+                    var candidate = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F)
+                    # Below U+10000 is overlong, and past U+10FFFF is outside Unicode.
+                    if 0x10000 <= candidate <= 0x10FFFF
+                        codepoint = candidate
+                        width = 4
+
+            list.add_last(Char(codepoint))
+            i = i + width
+        return Text(from_list: steal list)
+
+# Core operations
+
+### Returns the number of characters in this text value.
+### Because `Text` is UTF-32 based, this is also the number of stored code points.
+### :returns: The resulting `U64` value.
+@readonly
+routine Text.count() -> U64
+    return me.count
+
+### Returns the number of occurrences of a character.
+### Matching is exact and does not perform any case folding or normalization.
+### :param character: The character to search for.
+### :returns: The resulting `U64` value.
+@readonly
+routine Text.count_of(character: Char) -> U64
+    var result: U64 = 0
+    each ch in me
+        if ch == character
+            result += 1
+    return result
+
+### Returns the number of non-overlapping occurrences of a substring.
+### After a match the scan resumes past it, so occurrences never overlap
+### (`"aaa".count_of("aa")` is `1`). An empty substring yields `0`.
+### :param other: The substring to search for.
+### :returns: The resulting `U64` value.
+@readonly
+routine Text.count_of(other: Text) -> U64
+    var oc = other.count()
+    if oc == 0 or oc > me.count
+        return 0
+    var result: U64 = 0
+    var i: U64 = 0
+    while i + oc <= me.count
+        var found = true
+        each j in 0 til oc
+            if me[i + j] != other[j]
+                found = false
+                break
+        if found
+            result += 1
+            i += oc
+        else
+            i += 1
+    return result
+
+### Returns `true` when this text contains no characters.
+### This is equivalent to checking whether `count()` is `0`.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Text.is_empty() -> Bool
+    return me.count == 0
+
+# Indexing
+
+### Returns the character at `index`.
+### The index is zero-based and must refer to an existing character.
+### :param index: The zero-based position to use.
+### :returns: The resulting `Char` value.
+@readonly
+failable routine Text.getitem(index: U64) -> Char
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    danger
+        return me.data.stride(count: index.to[S64]()).peek()
+
+### Returns the sub-text spanning an index range — the slice form of indexing (`text[a til b]`).
+### A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields `[a, b]`; a range that
+### counts down (`by -1`) reverses the segment. Positions at or past `count` are skipped, so `text[a til ^0]` (end bound one
+### past the last index) slices cleanly to the end of the string. `Text` is immutable, so the result
+### is a freshly allocated copy — the original is unchanged.
+### :param range: The index range to extract.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.getitem(range: Range[U64]) -> Text
+    var result = List[Char]()
+    danger
+        each i in range
+            if i < me.count
+                result.add_last(me.data.stride(count: i.to[S64]()).peek())
+    return Text(from_list: steal result)
+
+# String operations
+
+### Returns a new value with `other` appended.
+### The original operands are left unchanged because `Text` is immutable.
+### :param other: The text to append.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.concat(other: Text) -> Text
+    var n = me.count + other.count()
+    if n == 0
+        return Text()
+    var result = text_alloc(count: n)
+    danger
+        if me.count > 0
+            rf_copy_bytes_at(
+                dest: result.data.address(),
+                src: me.data.address(),
+                size: Char.data_size() * me.count,
+            )
+        var other_count = other.count()
+        if other_count > 0
+            rf_copy_bytes_at(
+                dest: result.data.stride(count: me.count.to[S64]()).address(),
+                src: other.data.address(),
+                size: Char.data_size() * other_count,
+            )
+    return result
+
+### Returns the sum of this value and the other value.
+### This is the operator form of `concat`.
+### :param other: The text to append.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.add(other: Text) -> Text
+    return me.concat(other)
+
+### Returns this text repeated `count` times.
+### Repeating zero times or repeating an empty string returns empty text.
+### :param count: The number of repetitions to produce.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.mul(count: U64) -> Text
+    var times = count
+    if times == 0 or me.count == 0
+        return Text()
+    var n = me.count * times
+    var result = text_alloc(count: n)
+    danger
+        var t: U64 = 0
+        loop
+            if t >= times
+                break
+            var dest = result.data.stride(count: (t * me.count).to[S64]())
+            rf_copy_bytes_at(
+                dest: dest.address(),
+                src: me.data.address(),
+                size: Char.data_size() * me.count,
+            )
+            t += 1
+    return result
+
+### Returns whether both values are equal.
+### Equality requires the same length and the same character at each position.
+### :param other: The other text to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Text.eq(other: Text) -> Bool
+    if me.count != other.count()
+        return false
+    var i: U64 = 0
+    loop
+        if i >= me.count
+            break
+        if me[i] != other[i]
+            return false
+        i += 1
+    return true
+
+# Comparison
+
+### Compares this value with the other value.
+### Comparison is lexicographic over stored characters.
+### :param you: The other text to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Text.compare(you: Text) -> ComparisonSign
+    var you_count = you.count()
+    var min_len = me.count
+    if you_count < min_len
+        min_len = you_count
+    each i in 0 til min_len
+        if me[i] < you[i]
+            return ComparisonSign.ME_SMALL
+        if me[i] > you[i]
+            return ComparisonSign.ME_LARGE
+    if me.count < you_count
+        return ComparisonSign.ME_SMALL
+    if me.count > you_count
+        return ComparisonSign.ME_LARGE
+    return ComparisonSign.SAME
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### Each code point is folded into the keyed hash so equal texts under the same
+### key produce the same digest.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` keyed hash.
+@readonly
+routine Text.hash(k0: U64, k1: U64) -> U64
+    var h = __hash_leaf(v: me.count)
+    each i in 0 til me.count
+        h = __hash_round(acc: h, h: __secure_hash_u64(v: me[i].codepoint().to[U64](), k0: k0, k1: k1))
+    return __hash_finalize(h)
+
+# Search
+
+### Returns `true` when this text contains `character`.
+### The search succeeds when any stored character matches exactly.
+### :param character: The character to test.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Text.has(character: Char) -> Bool
+    each i in 0 til me.count
+        if me[i] == character
+            return true
+    return false
+
+### Returns whether `character` is not in this value: the opposite of `has`.
+### :param character: The value to look for.
+### :returns: `true` when `character` is absent.
+@readonly
+routine Text.lacks(character: Char) -> Bool
+    return not me.has(character)
+
+### Returns `true` when this text contains `other` as a contiguous substring.
+### An empty `other` value is always considered contained. Uses the
+### Knuth-Morris-Pratt algorithm for O(n + m) worst-case scanning.
+### :param other: The substring to search for.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Text.has(other: Text) -> Bool
+    if other.is_empty()
+        return true
+    var other_count = other.count()
+    if other_count > me.count
+        return false
+
+
+    # Build KMP longest-proper-prefix-also-suffix (LPS) table for `other`.
+    var lps = List[U64]()
+    each _ in 0 til other_count
+        lps.add_last(value: 0)
+    var length: U64 = 0
+    var i: U64 = 1
+    while i < other_count
+        if other[i] == other[length]
+            length = length + 1
+            lps[i] = length
+            i = i + 1
+        elseif length != 0
+            length = lps[length - 1]
+        else
+            lps[i] = 0
+            i = i + 1
+
+    # Scan `me` against `other` using the LPS table.
+    var hay: U64 = 0
+    var needle: U64 = 0
+    while hay < me.count
+        if me[hay] == other[needle]
+            hay = hay + 1
+            needle = needle + 1
+            if needle == other_count
+                return true
+        elseif needle != 0
+            needle = lps[needle - 1]
+        else
+            hay = hay + 1
+    return false
+
+### Returns whether `other` is not in this value: the opposite of `has`.
+### :param other: The value to look for.
+### :returns: `true` when `other` is absent.
+@readonly
+routine Text.lacks(other: Text) -> Bool
+    return not me.has(other)
+
+### Returns `true` when this text begins with `prefix`.
+### The entire `prefix` must match from the first character onward.
+### :param prefix: The prefix to test.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Text.starts_with(prefix: Text) -> Bool
+    var prefix_count = prefix.count()
+    if prefix_count > me.count
+        return false
+    each i in 0 til prefix_count
+        if me[i] != prefix[i]
+            return false
+    return true
+
+### Returns `true` when this text ends with `suffix`.
+### The entire `suffix` must match at the end of the text.
+### :param suffix: The suffix to test.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Text.ends_with(suffix: Text) -> Bool
+    var suffix_count = suffix.count()
+    if suffix_count > me.count
+        return false
+    var offset = me.count - suffix_count
+    each i in 0 til suffix_count
+        if me[offset + i] != suffix[i]
+            return false
+    return true
+
+### Returns the position of the first occurrence of `letter`.
+### :param letter: The character to search for.
+### :returns: The resulting `U64` value.
+### :throws: {AbsentValueError} Thrown when the requested value is unavailable.
+@readonly
+failable routine Text.find(letter: Char) -> U64
+    each i in 0 til me.count
+        if me[i] == letter
+            return i
+    throw AbsentValueError()
+
+### Returns the position of the first occurrence of `other`.
+### :param other: The substring to search for.
+### :returns: The resulting `U64` value.
+### :throws: {AbsentValueError} Thrown when the requested value is unavailable.
+@readonly
+failable routine Text.find(other: Text) -> U64
+    if other.is_empty()
+        return 0
+    if other.count() > me.count
+        throw AbsentValueError()
+    var limit = me.count - other.count() + 1
+    each i in 0 til limit
+        var found = true
+        each j in 0 til other.count()
+            if me[i + j] != other[j]
+                found = false
+                break
+        if found
+            return i
+    throw AbsentValueError()
+
+### Returns the position of the LAST occurrence of `letter` (reverse search).
+### :param letter: The character to search for.
+### :returns: The resulting `U64` value.
+### :throws: {AbsentValueError} Thrown when the requested value is unavailable.
+@readonly
+failable routine Text.find_last(letter: Char) -> U64
+    var i = me.count
+    loop
+        if i == 0
+            break
+        i -= 1
+        if me[i] == letter
+            return i
+    throw AbsentValueError()
+
+### Returns the position of the LAST occurrence of `other` (reverse search).
+### An empty `other` matches at `count()` (one past the last index).
+### :param other: The substring to search for.
+### :returns: The resulting `U64` value.
+### :throws: {AbsentValueError} Thrown when the requested value is unavailable.
+@readonly
+failable routine Text.find_last(other: Text) -> U64
+    var oc = other.count()
+    if oc == 0
+        return me.count
+    if oc > me.count
+        throw AbsentValueError()
+    var i = me.count - oc + 1
+    loop
+        if i == 0
+            break
+        i -= 1
+        var found = true
+        each j in 0 til oc
+            if me[i + j] != other[j]
+                found = false
+                break
+        if found
+            return i
+    throw AbsentValueError()
+
+### Splits at the FIRST occurrence of `separator` into a `(before, after)` pair.
+### The separator itself appears in neither half. Absents when the separator is
+### not present (use `try_split_once` to recover a `Maybe`).
+### :param separator: The separator to split on.
+### :returns: A `(before, after)` tuple.
+### :throws: {AbsentValueError} Thrown when the separator is not found.
+@readonly
+failable routine Text.split_once(separator: Text) -> (Text, Text)
+    var pos = me.find(separator)
+    var before = me[0 til pos]
+    var after = me[pos + separator.count() til ^0]
+    return (before, after)
+
+# Transform
+
+### Converts this value to uppercase.
+### Case conversion follows the behavior defined on `Char`.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.to_uppercase() -> Text
+    var result = List[Char]()
+    each i in 0 til me.count
+        result.add_last(me[i].to_uppercase())
+    return Text(from_list: steal result)
+
+### Converts this value to lowercase.
+### Case conversion follows the behavior defined on `Char`.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.to_lowercase() -> Text
+    var result = List[Char]()
+    each i in 0 til me.count
+        result.add_last(me[i].to_lowercase())
+    return Text(from_list: steal result)
+
+### Returns a copy with the first character uppercased and the rest lowercased.
+### Empty text is returned unchanged. This follows the common "capitalize a word"
+### convention (the whole tail is lowercased, not left as-is).
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.capitalize() -> Text
+    if me.is_empty()
+        return me
+    var result = List[Char]()
+    result.add_last(me[0].to_uppercase())
+    each i in 1 til me.count
+        result.add_last(me[i].to_lowercase())
+    return Text(from_list: steal result)
+
+### Returns whether both values are equal ignoring ASCII/Unicode case.
+### Both operands are case-folded via `to_lowercase` before comparison.
+### :param other: The other text to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Text.eq_ignore_case(other: Text) -> Bool
+    return me.to_lowercase().eq(other.to_lowercase())
+
+### Returns a copy with leading and trailing whitespace removed.
+### Whitespace is identified using `Char.is_whitespace()`.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.trim() -> Text
+    var start: U64 = 0
+    loop
+        if start >= me.count
+            return Text()
+        if not me[start].is_whitespace()
+            break
+        start += 1
+    var end_idx = me.count
+    loop
+        if end_idx <= start
+            break
+        if not me[end_idx - 1].is_whitespace()
+            break
+        end_idx -= 1
+    var result = List[Char]()
+    each i in start til end_idx
+        result.add_last(me[i])
+    return Text(from_list: steal result)
+
+### Returns a copy with leading whitespace removed.
+### Trailing content is preserved unchanged.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.trim_start() -> Text
+    var start: U64 = 0
+    loop
+        if start >= me.count
+            return Text()
+        if not me[start].is_whitespace()
+            break
+        start += 1
+    var result = List[Char]()
+    each i in start til me.count
+        result.add_last(me[i])
+    return Text(from_list: steal result)
+
+### Returns a copy with trailing whitespace removed.
+### Leading content is preserved unchanged.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.trim_end() -> Text
+    if me.is_empty()
+        return me
+    var end_idx = me.count
+    loop
+        if end_idx == 0
+            return Text()
+        if not me[end_idx - 1].is_whitespace()
+            break
+        end_idx -= 1
+    var result = List[Char]()
+    each i in 0 til end_idx
+        result.add_last(me[i])
+    return Text(from_list: steal result)
+
+### Returns a copy with each `old` value replaced by `new`.
+### Replacement is performed left to right and does not re-scan newly inserted text.
+### :param old: The value to replace.
+### :param new: The replacement value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.replace(old: Text, new: Text) -> Text
+    if old.is_empty()
+        return me
+    var old_count = old.count()
+    var new_count = new.count()
+    var result = List[Char]()
+    var i: U64 = 0
+    loop
+        if i >= me.count
+            break
+        var found = false
+        if i + old_count <= me.count
+            found = true
+            each j in 0 til old_count
+                if me[i + j] != old[j]
+                    found = false
+                    break
+        if found
+            each j in 0 til new_count
+                result.add_last(new[j])
+            i += old_count
+        else
+            result.add_last(me[i])
+            i += 1
+    return Text(from_list: steal result)
+
+### Returns a copy with only the FIRST occurrence of `old` replaced by `new`.
+### When `old` is empty or not present, the original text is returned unchanged.
+### :param old: The value to replace.
+### :param new: The replacement value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.replace_first(old: Text, new: Text) -> Text
+    if old.is_empty()
+        return me
+    var oc = old.count()
+    if oc > me.count
+        return me
+    var pos = me.count
+    var i: U64 = 0
+    while i + oc <= me.count
+        var found = true
+        each j in 0 til oc
+            if me[i + j] != old[j]
+                found = false
+                break
+        if found
+            pos = i
+            break
+        i += 1
+    if pos == me.count
+        return me
+    var before = me[0 til pos]
+    var after = me[pos + oc til ^0]
+    return before.concat(new).concat(after)
+
+### Returns a copy without the matching prefix.
+### When `prefix` is not present, the original text is returned unchanged.
+### :param prefix: The prefix to remove if present.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.remove_prefix(prefix: Text) -> Text
+    if me.starts_with(prefix)
+        var result = List[Char]()
+        each i in prefix.count() til me.count
+            result.add_last(me[i])
+        return Text(from_list: steal result)
+    return me
+
+### Returns a copy without the matching suffix.
+### When `suffix` is not present, the original text is returned unchanged.
+### :param suffix: The suffix to remove if present.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.remove_suffix(suffix: Text) -> Text
+    if me.ends_with(suffix)
+        var result = List[Char]()
+        var end_idx = me.count - suffix.count()
+        each i in 0 til end_idx
+            result.add_last(me[i])
+        return Text(from_list: steal result)
+    return me
+
+### Returns a repeated copy of this value.
+### This is the named form of the repetition operator.
+### :param times: The number of repetitions to produce.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.repeat(times: U64) -> Text
+    return me.mul[U64](count: times)
+
+### Returns a copy with the value order reversed.
+### Characters are reversed by position; no grapheme-aware processing is applied.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.reverse() -> Text
+    var result = List[Char]()
+    var i = me.count
+    loop
+        if i == 0
+            break
+        i -= 1
+        result.add_last(me[i])
+    return Text(from_list: steal result)
+
+### Returns a copy padded on the left.
+### If `width` is less than or equal to the current length, the original text is returned.
+### :param width: The total width to target.
+### :param fill: The fill character to use (a space when omitted).
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.pad_start(width: U64, fill: Char = ' ') -> Text
+    if me.count >= width
+        return me
+    var result = List[Char]()
+    var pad_count = width - me.count
+    each p in 0 til pad_count
+        result.add_last(fill)
+    each i in 0 til me.count
+        result.add_last(me[i])
+    return Text(from_list: steal result)
+
+### Returns a copy padded on the right.
+### If `width` is less than or equal to the current length, the original text is returned.
+### :param width: The total width to target.
+### :param fill: The fill character to use (a space when omitted).
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.pad_end(width: U64, fill: Char = ' ') -> Text
+    if me.count >= width
+        return me
+    var result = List[Char]()
+    each i in 0 til me.count
+        result.add_last(me[i])
+    var pad_count = width - me.count
+    each p in 0 til pad_count
+        result.add_last(fill)
+    return Text(from_list: steal result)
+
+### Returns a copy centered within `width`, padded on both sides with `fill`.
+### An odd remainder puts the extra fill character on the right. If `width` is at
+### or below the current length, the original text is returned.
+### :param width: The total width to target.
+### :param fill: The fill character to use (a space when omitted).
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.center(width: U64, fill: Char = ' ') -> Text
+    if me.count >= width
+        return me
+    var total = width - me.count
+    var left = total // 2
+    var right = total - left
+    var result = List[Char]()
+    each p in 0 til left
+        result.add_last(fill)
+    each i in 0 til me.count
+        result.add_last(me[i])
+    each p in 0 til right
+        result.add_last(fill)
+    return Text(from_list: steal result)
+
+### Returns a copy padded on the left with `0` to `width`, keeping a leading sign (`-` or `+`) in front,
+### so a rendered number stays a number: `"-5".zero_pad(4)` is `-005`, `"ff".zero_pad(4)` is `00ff`.
+### If `width` is at or below the current length, the original text is returned.
+### :param width: The total width to target, sign included.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.zero_pad(width: U64) -> Text
+    if me.count >= width
+        return me
+    if me.count > 0 and (me[0] == '-' or me[0] == '+')
+        return me[0 til 1] + me[1 til me.count].pad_start(width: width - 1, fill: '0')
+    return me.pad_start(width: width, fill: '0')
+
+# Split/Join
+
+### Splits this value into parts.
+### Separator characters are not included in the returned segments.
+### :param separator: The separator to use.
+### :returns: The resulting `List[Text]` value.
+@readonly
+routine Text.split(separator: Char) -> List[Text]
+    var parts = List[Text]()
+    var current = List[Char]()
+    each i in 0 til me.count
+        if me[i] == separator
+            parts.add_last(Text(from_list: steal current))
+            current = List[Char]()
+        else
+            current.add_last(me[i])
+    parts.add_last(Text(from_list: steal current))
+    return steal parts
+
+### Splits this value into parts.
+### An empty separator splits the text into one-character segments.
+### :param separator: The separator to use.
+### :returns: The resulting `List[Text]` value.
+@readonly
+routine Text.split(separator: Text) -> List[Text]
+    if separator.is_empty()
+        var parts = List[Text]()
+        each i in 0 til me.count
+            parts.add_last(me[i].to[Text]())
+        return steal parts
+    var separator_count = separator.count()
+    var parts = List[Text]()
+    var start: U64 = 0
+    var i: U64 = 0
+    loop
+        if i + separator_count > me.count
+            break
+        var found = true
+        each j in 0 til separator_count
+            if me[i + j] != separator[j]
+                found = false
+                break
+        if found
+            var seg = List[Char]()
+            each k in start til i
+                seg.add_last(me[k])
+            parts.add_last(Text(from_list: steal seg))
+            i += separator_count
+            start = i
+        else
+            i += 1
+    var tail = List[Char]()
+    each k in start til me.count
+        tail.add_last(me[k])
+    parts.add_last(Text(from_list: steal tail))
+    return steal parts
+
+### Returns the lines in this text. A line ends at `\n` or `\r\n`, and the line ending is not part of it. A line
+### ending at the very end ends the last line and starts no new one, so `"a\nb\n"` has the lines `"a"` and `"b"`, and
+### the empty text has none.
+### :returns: The resulting `List[Text]` value.
+@readonly
+routine Text.lines() -> List[Text]
+    var normalized = me.replace(old: "\r\n", new: "\n")
+    if normalized.count == 0
+        return List[Text]()
+    var parts = normalized.split(CHARACTER_NEWLINE)
+    if normalized.ends_with(suffix: "\n")
+        drop parts.remove_last()
+    return steal parts
+
+### Returns the whitespace-delimited words in this text.
+### Consecutive whitespace is treated as a single separator.
+### :returns: The resulting `List[Text]` value.
+@readonly
+routine Text.words() -> List[Text]
+    var parts = List[Text]()
+    var current = List[Char]()
+    each i in 0 til me.count
+        if me[i].is_whitespace()
+            if not current.is_empty()
+                parts.add_last(Text(from_list: steal current))
+                current = List[Char]()
+        else
+            current.add_last(me[i])
+    if not current.is_empty()
+        parts.add_last(Text(from_list: steal current))
+        return steal parts
+    return steal parts
+
+# Conversion to modifiable list
+
+# Iteration
+
+### Returns the display form of this text.
+### For `Text`, the display form is the value itself.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Text.represent() -> Text
+    return me
+
+### Returns the diagnostic representation of this text.
+### The result includes the type name and character count for debugging.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Text.diagnose() -> Text
+    return f"Text(count: {me.count}, \"{me}\")"
+
+### Returns an iterator over this text value.
+### The iterator starts at index `0`.
+### :returns: The resulting `TextEmittable` value.
+@readonly
+routine Text.iter() -> TextEmittable
+    return TextEmittable(text: me, index: 0)
+
+### Returns the next character from this iterator.
+### Each successful call advances the iterator by one character.
+### :returns: The resulting `Char` value.
+### :throws: {AbsentValueError} Thrown when the requested value is unavailable.
+failable routine TextEmittable.emit() -> Char
+    if me.index >= me.text.count
+        throw AbsentValueError()
+    var value = me.text[me.index]
+    me.index = me.index + 1
+    return value
+
+
+### A text as itself, so a `Text` item of a tuple reads as its word. Written in a program, converting a value to
+### its own type is a build error: use the value as it is.
+### :returns: This text.
+routine Text.to[Text]() -> Text
+    return me

@@ -10,12 +10,12 @@ namespace RazorForge.Tests.Perf;
 /// <summary>
 /// Regression lock for the warm-restore stdlib re-lowering crash. The compile daemon captures a fully
 /// lowered stdlib snapshot once, then serves many warm compiles from it. A warm compile that imports a
-/// non-Core module (e.g. <c>Collections.CircularList</c>) triggers the fresh loader's <c>ScanStdlibFiles</c>,
-/// which re-parses EVERY <c>module Core</c> file into <c>_corePrograms</c> as unanalyzed/unlowered ASTs.
+/// non-System module (e.g. <c>Collections.CircularList</c>) triggers the fresh loader's <c>ScanStdlibFiles</c>,
+/// which re-parses EVERY <c>module System</c> file into <c>_corePrograms</c> as unanalyzed/unlowered ASTs.
 /// Before the fix those stale copies leaked into <c>FreshlyLoadedStdlibPrograms</c>, so the postprocessing
 /// pipeline tried to lower them and threw ("ConditionalExpression reached ExpressionLoweringPass without a
 /// resolved type" on a D128 ternary). The fix flags the warm loader <c>CoreResident</c> so its
-/// <c>AllLoadedPrograms</c> excludes the fresh Core re-parse. Runs multiple warm compiles on ONE shared
+/// <c>AllLoadedPrograms</c> excludes the fresh System re-parse. Runs multiple warm compiles on ONE shared
 /// snapshot to also catch any cross-compile corruption of the restored ASTs.
 /// </summary>
 public sealed class WarmRestoreReproTests
@@ -40,8 +40,8 @@ public sealed class WarmRestoreReproTests
         SemanticVerifier.CompiledStdlibState warm =
             SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
 
-        // A non-Core import (Collections.CircularList) is what makes the fresh loader re-scan stdlib and re-parse
-        // every Core file — the trigger for the leaked-fresh-Core crash this test guards.
+        // A non-System import (Collections.CircularList) is what makes the fresh loader re-scan stdlib and re-parse
+        // every System file — the trigger for the leaked-fresh-System crash this test guards.
         const string user = """
                             module Bench
                             import IO/Console

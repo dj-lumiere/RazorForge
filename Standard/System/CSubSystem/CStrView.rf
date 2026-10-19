@@ -1,0 +1,96 @@
+module System/CSubSystem
+
+### A C string pointer, C's `char*`: bytes up to a zero byte, in memory RazorForge never frees. A string C
+### returns is a `CStrView`, and a C routine takes its string parameters as `CStrView`, where a {CStr} goes too.
+### :see: {CStr}, {Bytes}
+@llvm("ptr")
+record CStrView
+    pass
+
+### The null C string, a null `char*`. A `common routine` and not a `preset`: its value is a
+### `reinterpret_bits` of a `hijacked_none()` construction, not a buildtime scalar constant.
+### :returns: The null `CStrView` value.
+common routine CStrView.null() -> CStrView
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStrView](hijacked_none[Byte]())
+
+### Returns the raw null-terminated byte pointer backing this C string.
+### :returns: The underlying `Hijacked[Byte]` pointer.
+@readonly
+routine CStrView.ptr() -> Hijacked[Byte]
+    return LLVM::reinterpret_bits[CStrView, Hijacked[Byte]](me)
+
+### Wraps an existing null-terminated byte pointer as `CStrView`.
+### No copy is performed and ownership is not changed.
+### :param from_ptr: The pointer to wrap.
+### :returns: The resulting `CStrView` value.
+routine CStrView(from_ptr: Hijacked[Byte]) -> CStrView
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStrView](from_ptr)
+
+### Wraps an existing raw address as `CStrView`.
+### No copy is performed and ownership is not changed.
+### :param from_ptr: The address to wrap.
+### :returns: The resulting `CStrView` value.
+routine CStrView(from_ptr: Address) -> CStrView
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStrView](Hijacked[Byte](from_ptr))
+
+### Returns the length of this C string in bytes, excluding the trailing null.
+### :returns: The byte count, not including the null terminator.
+routine CStrView.count() -> U64
+    return C::rf_cstr_count(me)
+
+### Returns `true` when this wrapper does not reference any C string.
+### :returns: The resulting `Bool` value.
+routine CStrView.is_null() -> Bool
+    danger
+        return me.ptr().is_none()
+
+### Returns `true` when this C string is null or has zero length.
+### :returns: The resulting `Bool` value.
+routine CStrView.is_empty() -> Bool
+    return me.is_null() or me.count() == 0
+
+### Returns the byte at `index` in the referenced C string.
+### This does not copy the string and assumes the caller stays within bounds.
+### :param index: The zero-based position to use.
+### :returns: The resulting `Byte` value.
+dangerous routine CStrView.getitem(index: U64) -> Byte
+    return me
+        .ptr()
+        .offset(ByteSize(bytes: index))
+        .peek()
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine CStrView.eq(you: CStrView) -> Bool
+    return C::rf_cstr_compare(a: me, b: you) == 0
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine CStrView.compare(you: CStrView) -> ComparisonSign
+    var cmp = C::rf_cstr_compare(a: me, b: you)
+    if cmp < 0
+        return ME_SMALL
+    if cmp > 0
+        return ME_LARGE
+    return SAME
+
+### Copies this C string into a {CStr}, which is torn down at the end of its scope.
+### :returns: The copy.
+routine CStrView.duplicate() -> CStr
+    return Bytes(ptr: me).to[CStr]()
+
+### Returns a `CStrView` `n` bytes further into the same string.
+### :param n: The number of bytes to skip.
+### :returns: The resulting `CStrView` value.
+dangerous routine CStrView.offset(n: U64) -> CStrView
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStrView](me.ptr().offset(ByteSize(bytes: n)))
+
+### Returns a `CStrView` view starting at `start` bytes from the current pointer.
+### :param start: The inclusive starting position.
+### :returns: The resulting `CStrView` value.
+dangerous routine CStrView.from_index(start: U64) -> CStrView
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStrView](me.ptr().offset(ByteSize(bytes: start)))

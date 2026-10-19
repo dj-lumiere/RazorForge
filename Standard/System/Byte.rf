@@ -1,0 +1,189 @@
+module System
+
+# Common byte constants
+preset BYTE_NULL: Byte = b'\0'
+preset BYTE_SPACE: Byte = b' '
+preset BYTE_NEWLINE: Byte = b'\n'
+preset BYTE_TAB: Byte = b'\t'
+
+### Represents one raw 8-bit byte.
+### `Byte` is a binary payload type, not a text character, so its display form
+### always uses an escaped hexadecimal representation.
+@llvm("i8")
+record Byte
+obeys ConstCompatible, Copyable
+    pass
+
+# Creators
+
+### Reads an unsigned 8-bit integer as a `Byte` with the same bits: `0x41u8.to[Byte]()`.
+### :returns: The byte.
+routine U8.to[Byte]() -> Byte
+    return LLVM::reinterpret_bits[U8, Byte](value: me)
+
+### Builds the byte a byte literal (`b'A'`) stands for from its value.
+### :param from: The value.
+### :returns: The byte.
+secret routine Byte(from: U8) -> Byte
+    return LLVM::reinterpret_bits[U8, Byte](value: from)
+
+### Reads this byte's bits as a `U8`: `b.to[U8]()`.
+### :returns: The same bits as a `U8`.
+routine Byte.to[U8]() -> U8
+    return LLVM::reinterpret_bits[Byte, U8](value: me)
+
+### Widens this byte to a `U32`: `b.to[U32]()`.
+### :returns: The byte's value as a `U32`.
+routine Byte.to[U32]() -> U32
+    return LLVM::zero_extend[U8, U32](LLVM::reinterpret_bits[Byte, U8](value: me))
+
+### Widens this byte to a `U16`: `b.to[U16]()`.
+### :returns: The byte's value as a `U16`.
+routine Byte.to[U16]() -> U16
+    return LLVM::zero_extend[U8, U16](LLVM::reinterpret_bits[Byte, U8](value: me))
+
+### Widens this byte to a `U64`: `b.to[U64]()`.
+### :returns: The byte's value as a `U64`.
+routine Byte.to[U64]() -> U64
+    return LLVM::zero_extend[U8, U64](LLVM::reinterpret_bits[Byte, U8](value: me))
+
+# ============================================================================
+# Comparison operations
+# ============================================================================
+
+### Returns this character's value as a raw byte.
+### This helper is available only for values that are already representable in
+### one byte.
+### :returns: The resulting `U8` value.
+@readonly
+routine Char.byte_value() -> U8
+    return me.to[U32]().to[U8]()
+
+### Returns this byte as an unsigned numeric code value.
+### :returns: The resulting `U32` value.
+@readonly
+routine Byte.codepoint() -> U32
+    return me.to[U8]().to[U32]()
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Byte.eq(you: Byte) -> Bool
+    return me.to[U8]() == you.to[U8]()
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Byte.compare(you: Byte) -> ComparisonSign
+    return me.to[U8]() <=> you.to[U8]()
+
+# ============================================================================
+# Range check
+# ============================================================================
+
+### Returns `true` when this byte falls within the inclusive range
+### `[low, high]`.
+### :param low: The lower inclusive bound.
+### :param high: The upper inclusive bound.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Byte.in_range(low: U8, high: U8) -> Bool
+    return low <= me.to[U8]() <= high
+
+# ============================================================================
+# Parsing helpers (useful for binary protocols)
+# ============================================================================
+
+### Returns `true` when this byte is in the 7-bit ASCII range.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Byte.is_ascii() -> Bool
+    return me.to[U8]() <= 0x7F
+
+### Returns `true` when this byte is the ASCII encoding of `0` through `9`.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Byte.is_digit() -> Bool
+    return 0x30 <= me.to[U8]() <= 0x39  # ASCII 0-9
+
+### Returns the numeric value of an ASCII digit byte.
+### :returns: The resulting `U8` value.
+### :throws: May throw {InvalidDigitError}.
+@readonly
+failable routine Byte.digit_value() -> U8
+    if not me.is_digit()
+        throw InvalidDigitError()
+    return me.to[U8]() - 0x30
+
+### Returns `true` when this byte is an ASCII hexadecimal digit.
+### Accepted digits are `0-9`, `A-F`, and `a-f`.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Byte.is_hex_digit() -> Bool
+    var v = me.to[U8]()
+    var is_digit = 0x30 <= v <= 0x39
+    var is_upper_hex = 0x41 <= v <= 0x46
+    var is_lower_hex = 0x61 <= v <= 0x66
+    return is_digit or is_upper_hex or is_lower_hex
+
+### Returns the numeric value of an ASCII hexadecimal digit.
+### :returns: The resulting `U8` value.
+### :throws: May throw {InvalidHexDigitError}.
+@readonly
+failable routine Byte.hex_value() -> U8
+    var v = me.to[U8]()
+    when
+        0x30 <= v <= 0x39 => return v - 0x30  # 0-9
+        0x41 <= v <= 0x46 => return v - 0x37  # A-F (10-15)
+        0x61 <= v <= 0x66 => return v - 0x57  # a-f (10-15)
+        else => throw InvalidHexDigitError()
+
+# ============================================================================
+# Display — always \xHH format (raw bytes have no encoding)
+# ============================================================================
+
+### Returns the display form of this byte.
+### Raw bytes are rendered as `\\xHH` so output remains unambiguous regardless of
+### encoding context.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Byte.represent() -> Text
+    var digits = List[Char]()
+    digits.add_last('\\')  # \
+    digits.add_last('x')  # x
+    var v = me.to[U8]().to[U32]()
+    var high = (v >> 4) & 0x0F
+    var low = v & 0x0F
+    if high < 10
+        digits.add_last(Char(0x0030 + high))
+    else
+        digits.add_last(Char(0x0041 + high - 10))
+    if low < 10
+        digits.add_last(Char(0x0030 + low))
+    else
+        digits.add_last(Char(0x0041 + low - 10))
+    return Text(from_list: steal digits)
+
+### Returns the diagnostic form of this byte.
+### The diagnostic form includes both the unsigned numeric value and the escaped
+### byte representation.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Byte.diagnose() -> Text
+    return "Byte(" + me.to[U8]().represent() + ", " + me.represent() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+@readonly
+routine Byte.hash(k0: U64, k1: U64) -> U64
+    return __secure_hash_u64(v: LLVM::zero_extend[Byte, U64](me), k0: k0, k1: k1)

@@ -130,9 +130,9 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "caught: deep failure: n too big", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
         string report = stdout + stderr;
-        Assert.Contains(expectedSubstring: "innermost!(Core.S64) (", actualString: report);
+        Assert.Contains(expectedSubstring: "innermost(System.S64) (", actualString: report);
         Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rf:16:9)", actualString: report);
-        Assert.Contains(expectedSubstring: "middle!(Core.S64) (", actualString: report);
+        Assert.Contains(expectedSubstring: "middle(System.S64) (", actualString: report);
         Assert.Contains(expectedSubstring: "Thrown again at", actualString: report);
         Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rf:27:13", actualString: report);
     }
@@ -149,7 +149,7 @@ public sealed class ExitCodeTests
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
         string report = stdout + stderr;
-        Assert.Contains(expectedSubstring: "boom!(Core.S64) (", actualString: report);
+        Assert.Contains(expectedSubstring: "boom(System.S64) (", actualString: report);
         Assert.Contains(expectedSubstring: "agent in Tests/ExitCode/AgentCrashReport.start() (", actualString: report);
         Assert.DoesNotContain(expectedSubstring: "__agent", actualString: report);
         Assert.Contains(expectedSubstring: "Thrown again at", actualString: report);

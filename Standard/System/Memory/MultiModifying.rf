@@ -1,0 +1,125 @@
+module System/Memory
+
+import BuilderQuery
+### Write access to two different entities at once, so one can be changed while an element of the other is held.
+### Made by {multimodify} and opened with `using ... as (a, b)`, which binds one {Modifying[T]} token per entity.
+### :typeparam T: The entity type being modified.
+### :see: {Modifying[T]}
+record MultiModifying[T]
+obeys Enterable
+needs EntityType T
+    first: Modifying[T]
+    second: Modifying[T]
+
+### Opens write access to two different entities at once: `using multimodify(first: a, second: b) as (x, y)`. Two
+### tokens a routine takes may be the same entity, so the builder doesn't let one change shape while an element of
+### the other is held. The two tokens `multimodify` hands out were checked to be different, so it does.
+### :param first: The entity the first token modifies.
+### :param second: The entity the second token modifies.
+### :returns: A scoped `MultiModifying[T]` that binds the two tokens.
+### :throws: {AliasedTokensError} when the two are the same entity.
+failable routine multimodify[T](first: Modifying[T], second: Modifying[T]) -> MultiModifying[T]
+needs EntityType T
+    danger
+        if Hijacked[T](first).get_address() == Hijacked[T](second).get_address()
+            throw AliasedTokensError()
+        return MultiModifying[T](first: first, second: second)
+
+### Called on entry to the `using` block: hands out the two tokens.
+### :returns: The two tokens, in the order the entities were given.
+routine MultiModifying[T].enter() -> (Modifying[T], Modifying[T])
+    return (me.first, me.second)
+
+### Called on every exit from the `using` block: there is nothing to release.
+routine MultiModifying[T].exit()
+    return
+
+### Write access to one entity and read access to another, different one, at once: what a routine that reads one
+### container into another needs (`merge_set(into:, from:)`). Made by {multimodify} and opened with
+### `using ... as (a, b)`.
+### :typeparam T: The entity type.
+### :see: {MultiModifying[T]}
+record ModifyingAndViewing[T]
+obeys Enterable
+needs EntityType T
+    first: Modifying[T]
+    second: Viewing[T]
+
+### Opens write access to one entity and read access to another at once:
+### `using multimodify(first: into, second: from) as (a, b)`. The two were checked to be different entities, so the
+### builder lets `b` be walked while `a` grows.
+### :param first: The entity the first token modifies.
+### :param second: The entity the second token views.
+### :returns: A scoped `ModifyingAndViewing[T]` that binds the two tokens.
+### :throws: {AliasedTokensError} when the two are the same entity.
+failable routine multimodify[T](first: Modifying[T], second: Viewing[T]) -> ModifyingAndViewing[T]
+needs EntityType T
+    danger
+        if Hijacked[T](first).get_address() == Hijacked[T](second).get_address()
+            throw AliasedTokensError()
+        return ModifyingAndViewing[T](first: first, second: second)
+
+### Called on entry to the `using` block: hands out the two tokens.
+### :returns: The write token and the read token, in the order the entities were given.
+routine ModifyingAndViewing[T].enter() -> (Modifying[T], Viewing[T])
+    return (me.first, me.second)
+
+### Called on every exit from the `using` block: there is nothing to release.
+routine ModifyingAndViewing[T].exit()
+    return
+
+### Write access to two different {Guarded[T, TPolicy]} handles at once, taken without deadlock: the two locks are
+### taken in address order, whatever order the threads name them in. Made by {multimodify} and opened with
+### `using ... as (a, b)`, which takes both locks and binds one {Modifying[T]} token per handle. The locks are held
+### for exactly the `using` block.
+### :typeparam T: The entity type being modified.
+### :typeparam TPolicy: The lock policy of the two handles.
+### :see: {MultiModifying[T]}, {Guarded[T, TPolicy]}
+record MultiModifyingGuarded[T, TPolicy]
+obeys Enterable
+needs EntityType T
+needs TPolicy obeys LockPolicy
+    first: Guarded[T, TPolicy]
+    second: Guarded[T, TPolicy]
+
+### Opens write access to two different guarded entities at once: `using multimodify(first: x[i], second: x[j]) as
+### (a, b)`. One `using` inside the other would take the same lock twice when they are the same handle, and two
+### threads naming them in opposite orders would wait on each other forever. `multimodify` takes the locks in address
+### order. The two tokens are two different entities, so the builder lets one be changed while an element of the
+### other is held.
+### :param first: The handle the first token modifies.
+### :param second: The handle the second token modifies.
+### :returns: A scoped `MultiModifyingGuarded[T, TPolicy]` that takes the locks and binds the two tokens.
+### :throws: {AliasedTokensError} when the two handles are the same entity.
+failable routine multimodify[T, TPolicy](first: Guarded[T, TPolicy], second: Guarded[T, TPolicy]) -> MultiModifyingGuarded[T, TPolicy]
+needs EntityType T
+needs TPolicy in [Exclusive, MultiRead]
+    if first === second
+        throw AliasedTokensError()
+    return MultiModifyingGuarded[T, TPolicy](first: first, second: second)
+
+### Called on entry to the `using` block: takes both write locks, the lower address first, and hands out the two
+### tokens.
+### :returns: The two tokens, in the order the handles were given.
+routine MultiModifyingGuarded[T, TPolicy].enter() -> (Modifying[T], Modifying[T])
+    danger
+        var low = Hijacked[GuardManager[T, TPolicy]](me.first)
+        var high = Hijacked[GuardManager[T, TPolicy]](me.second)
+        if high.get_address() < low.get_address()
+            (low, high) = (high, low)
+        low.as_entity().add_claimer()
+        high.as_entity().add_claimer()
+        var a = Modifying[T](Hijacked[GuardManager[T, TPolicy]](me.first).as_entity().raw_data())
+        var b = Modifying[T](Hijacked[GuardManager[T, TPolicy]](me.second).as_entity().raw_data())
+        return (a, b)
+
+### Called on every exit from the `using` block: releases the locks `enter` took, the higher address first.
+routine MultiModifyingGuarded[T, TPolicy].exit()
+    danger
+        var low = Hijacked[GuardManager[T, TPolicy]](me.first)
+        var high = Hijacked[GuardManager[T, TPolicy]](me.second)
+        if high.get_address() < low.get_address()
+            (low, high) = (high, low)
+        high.as_entity().remove_claimer()
+        low.as_entity().remove_claimer()
+    return

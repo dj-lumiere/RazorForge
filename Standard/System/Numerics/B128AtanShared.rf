@@ -1,0 +1,351 @@
+module System/Numerics
+
+# --- tables -------------------------------------------------------------------------------------------
+
+# a 15-bit approximation of tan(i*pi/4/64)
+secret preset B128_ATANFAM_TN: Array[U64, 65] = [
+    0, 402, 804, 1207, 1610, 2013, 2417, 2822, 3227, 3634,
+    4042, 4450, 4861, 5272, 5686, 6101, 6518, 6937, 7358,
+    7782, 8208, 8637, 9068, 9503, 9940, 10381, 10825, 11273,
+    11725, 12180, 12640, 13104, 13573, 14046, 14525, 15009,
+    15498, 15993, 16494, 17001, 17515, 18035, 18563, 19098,
+    19640, 20191, 20750, 21318, 21895, 22481, 23078, 23685,
+    24302, 24931, 25572, 26226, 26892, 27572, 28266, 28975,
+    29699, 30440, 31198, 31973, 32768,
+]
+# phi0[i] = atan(tn[i]) as 6-limb fixed point (row i = limbs 6i .. 6i+5, least significant first)
+secret preset B128_ATANFAM_PHI0: Array[U64, 384] = [
+    0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
+    0x0000000000000000, 0x0000000000000000, 0x02C1E09886F8FC65, 0x12BEFE0E684801AB,
+    0x5B500D3AA545CF10, 0xC29C938F5E9594C8, 0xE19FB2A3207F6303, 0x00C8FD6B34169A4D,
+    0x4CB54DF37491326D, 0xBCC2D6B5024DE6BA, 0x0140A83479A7D09B, 0xB47181E24638FE92,
+    0x94E685C329B2D773, 0x0191EB5B0F2AF2CB, 0x96290951CE6369C6, 0xE6F739FC68793759,
+    0x23222E343D6F817C, 0xB5A31899B4D03CBB, 0xE18DC8765EB3B239, 0x025B3A2F01F4CF05,
+    0x26A8B16AC189860C, 0xEC201BCA4B528CE4, 0xD8B160E7C9C348ED, 0xF7384A1BCDE479ED,
+    0x3665E6A2207124BC, 0x03245A68934296F4, 0x2B2747A2B7B246BD, 0x0EB316EA6AF2C481,
+    0x8994C96123649FAD, 0x40C4923ADDF07637, 0x7EB0104C3BBAEEBB, 0x03ED3C99EC5F4FD6,
+    0xC1AA40ED9CF81137, 0x7B9341C26981BA2C, 0xA3F94FEBB560FEC3, 0x038B8F349E0B9941,
+    0x60A39999B30013E3, 0x04B650C091B47191, 0x23FB4C9FABD5A3F5, 0x8E9C1D3E3A2A9E80,
+    0x4F7D972251777188, 0x7F688F435290217B, 0xA760B14EE5C8185B, 0x057F86EF8CCE05D9,
+    0xA345983253154B9F, 0x742E9E3F6BBF6DB1, 0xBE3B949D708E4AB7, 0xB8F721B926DD7968,
+    0xBC9CC590F04C39B1, 0x0648506548567E1C, 0x4270E6EC850ED3D4, 0xBD6ADD47DD4704AE,
+    0xD7F4F0121BBB10D8, 0x6420ACC6D7AA717A, 0x5181CC2B7F67466D, 0x07119AFB1DB64D3B,
+    0x3C0DDCB933C0132F, 0x29AC0726E281C9C4, 0x8AF040655AE13A00, 0xE5E69A461EFEE36F,
+    0x98430538072960BC, 0x07DAD79D66D396E1, 0xC3D6EAAA86B1E257, 0x478E9831C107B273,
+    0x91ECE4CA7C8C9A92, 0x7E4D9CD1133D108E, 0x6B2499055EF359F2, 0x08A378A00557419C,
+    0xE452B1A89A5919EA, 0x3CFB3638E459C56F, 0x82A58FF9C80F179F, 0x98506BFC8617B00D,
+    0xEEF4781DE96151B3, 0x096CE71F84443705, 0x7022BA3FD2C3A3EC, 0x1E810CE3F03023FB,
+    0x080EA2CE1B951A1B, 0xDC28825E93081751, 0xFA554A296E7BBD3E, 0x0A359A37AD347506,
+    0x5082480B4642639F, 0xF6D143858AFFFC0B, 0xE83A1D095CEB9D93, 0xF1C6B6F3F95D034C,
+    0xBE30339B35470763, 0x0AFEF860CED6731A, 0x06A1328F3ED37CE1, 0xA8FBDDADE1AB0E4E,
+    0xACE3BBF391D4780D, 0xC419DE3FAFB1443C, 0x71D3F327DC1666E5, 0x0BC7F750A98AAF11,
+    0x2CDEF1893D2BE331, 0x1644A02BCE301472, 0xE8835BD11F8A7463, 0x7F78B6932FE4C9A9,
+    0x573436E5491C3C3B, 0x0C910288A5912F73, 0x820F7FDD710EBD56, 0xBA60AAB851AFD713,
+    0x4453D264039E6104, 0xD07A8BD375DB11FB, 0x1A70AD3CE98DD37D, 0x0D5A08C366F7AD26,
+    0x23C5850E662DF2A8, 0x48EB29D7959AF0D9, 0x1DB3E8CA092B26FF, 0x1576EAF97FFDE937,
+    0x2B63C532AAE1BAEF, 0x0E22F8C260CCBEB2, 0x5A1CBDCC77CCBEBD, 0x42D39881973AB439,
+    0xEA1AB61B1291BF62, 0x61D834C4D89794DE, 0x3EA9630254B006A7, 0x0EEC3A81159AD32D,
+    0x354BAA05F6E10D1C, 0x2FF82BD8A784B660, 0x2161DC75B94D9DAD, 0xF2CEBF4C84ED043F,
+    0xF9F105FB8919B427, 0x0FB5424B656558F6, 0xB89DDE65241D6464, 0xBB4AD1F58D638111,
+    0xFA29639AEB3BA102, 0x9A4C65CD7E32AF7D, 0x7ED90DB179691680, 0x107E76C03C9DEA1C,
+    0xC92938551B12CAD8, 0xEC7DCFE04738FEFB, 0x2937DD301A0B4CA0, 0x01F63AEDEB6B1188,
+    0x3E1132674A1A6ECE, 0x11474DB47224D179, 0xB8CD0FC44F74D861, 0x2E822666FD0D636E,
+    0x8E1D4CEC346D99BE, 0xC6330A710A48D5DA, 0x5F1A2B16680C1A30, 0x1210A27E5FF90C02,
+    0x5E1C793DA47D6569, 0xFFF7D2B2957A644F, 0xEEEBD0BCF6FEE6C2, 0xEB7EB29DB9B819FC,
+    0xE00180E9012B321A, 0x12D974FAE8CCB2FC, 0x8A7AA5432DDDB0A8, 0xF6F9C2E4F0D2B4B7,
+    0x2C27002EEEF60E9F, 0xE93934B45F17A029, 0x10AB1E3995F97ABE, 0x13A29D51B33D21E1,
+    0x8016D96EC5B3E5DF, 0x0D12EA7481262996, 0x0BA014F4FCF82814, 0xA94B6C896608A877,
+    0x0CE9531D42E1282F, 0x146B92651A66881B, 0xA3A7DC6A86BC6CA7, 0x6832F1AF6EEB7D1B,
+    0x80FA69802980962A, 0x4FBF24D0D8A67B5D, 0x81C083440206AC79, 0x1534B3C5AC621E6D,
+    0x10236FC7BC489479, 0xE866BBCF232064E3, 0x8DECEDC977F53A0C, 0x01533415A5B2003D,
+    0xF33CB2EE84283A29, 0x15FDEBCFF69FCE1E, 0x1C6A16ED73097FED, 0x04B6B552132A277C,
+    0x873E480EDE4B49F9, 0xD2E10ECF59B39D8D, 0x3181A4FF744E39C8, 0x16C6B4791C7551CB,
+    0x3762DB8A2F46AE6C, 0xE605126135C4D13E, 0x95CD248F2199C031, 0x046E6925E63B921F,
+    0x1EDBBE0A60738519, 0x178FDA3CF9A1F86A, 0x622DD7B0D6052B2B, 0x6C52C04B49A43F67,
+    0x88C53F408D6EFFD6, 0x2F9443C296486B1E, 0xB29D416F839B4C6A, 0x1858D64DE0ABAFB9,
+    0x41E74E55D8377C5C, 0x6D71BF109D52B4B4, 0x257CC4F9C5AC1896, 0xB36F178C4EC3381D,
+    0x48B86FB55342A616, 0x192200CA656F9B4E, 0x9CE847BBA8A998F8, 0xD11A4C5B5DD0F414,
+    0xE01BCB3136D1EBDB, 0xA0862F030B9C517C, 0xA825B4E5BA19AA06, 0x19EAD54CC2CA2709,
+    0x414DA7FE923AA6B3, 0x7937289AE91C4E1E, 0x023D066C6E855B6C, 0xD806EDE78BCF8603,
+    0x7557AECADB39E171, 0x1AB4151B72C17C74, 0xEBA76A289FD187B2, 0x806EBE30E6895092,
+    0xC8828C04732A6E15, 0x7160EBA8B1434D38, 0x425D9AFF030711EA, 0x1B7D3B004CB73B1D,
+    0xE3DE9FA9DFE3AF41, 0x88B2384A90AC9A3C, 0x4E49B80C84414A77, 0xC31388BA77526296,
+    0xADF256EC30DEE5F4, 0x1C462F4336D5D87F, 0xC8016DB77A6FE180, 0x74D367AD0DE559F3,
+    0x3590C43F99974721, 0xDE083347F4AE4C39, 0x83520693C00F13AE, 0x1D0F41D64261E9AD,
+    0x90D94A7879B7F974, 0x7F4261801E9D8880, 0xE65DEEC790B85094, 0xC1610E738A4C9F6C,
+    0xC4C9618E94BF1B41, 0x1DD857E3AB6AE652, 0xCF5CA650E7803992, 0xDA4170D655E373A3,
+    0xD03830653BB48D42, 0x389DF7EA5A405F86, 0x988FA1D2CC3A0516, 0x1EA156D864E87301,
+    0x63AC43B79FD4A119, 0x860223D73B8C2C2C, 0xD57B1B3B47B73093, 0x19CDEA35FAB86A95,
+    0xA4546BF333AD5F5E, 0x1F6A88026BDC2F47, 0x1732B191C4B0E778, 0x9352DBB5661DD274,
+    0x144FE9B20EE58259, 0x0EB5ED9AFEE849A5, 0xAD9B43AD3C3E1FA7, 0x20336B52F6BB9AB6,
+    0xA982314F96806C98, 0x0B0C5B3F526AA38C, 0x90F83830B407E311, 0xAD1715D205E8CE0E,
+    0x196BDC15AF2356B3, 0x20FCA91C686855D2, 0xFE926DFB72A70556, 0x3B5F2A42166F3183,
+    0xA62B33BCA0F85ECA, 0xED2DBB498FB85D4D, 0xF309E31FBDC9AEB7, 0x21C5C0B58968023E,
+    0xCF2FE2CA74009C66, 0xA73A2906ABA43E6E, 0x9871F53EC824467B, 0x1A38CEAB9FCE7F8F,
+    0xBFDEFF67B18287C1, 0x228E9579F321C783, 0x4D3B3149CAA4F593, 0xA46A448C68BDEFA9,
+    0xAA62FE638979D0B3, 0x56D7577E496786B1, 0x9F94DB3D59A078D7, 0x2357C4DA5035F70F,
+    0xF4EABDCA73374AF6, 0xAE0684761C9EBB0F, 0x44CDEED621E49A28, 0x7928137DDD0FA064,
+    0xFD755DD3BDCBAB23, 0x2420CF7EE51F46E0, 0xD104943294266A7E, 0xA603AAFF8EA1B4E0,
+    0xF074B304A436B2E8, 0x08F6BAC958FC93E0, 0x6402F3A15AABB8F2, 0x24E9F01E8E1F712C,
+    0x3D3B9D056AA1EE79, 0x345A09EB2405F477, 0xE168C8E2FB055C2A, 0x49420A6B6791619D,
+    0x8787FB8A5A45B05B, 0x25B303D3106131A6, 0xB805175699CB99A9, 0x4FE4BE06B00AEC48,
+    0xD121EF2ED145DBC9, 0x6D83A3084993FDC2, 0xCD1219F2665F60D6, 0x267BE85A925B38D2,
+    0x73B42B0D4B9F4CF9, 0xA7B9B20992B3D8A1, 0x558F26417137E904, 0x257DE5E0913D9714,
+    0x13B1717F1DC3721F, 0x2745274CFD47C28C, 0x2C961AD29E10D590, 0xBE94571F4B227C15,
+    0xC65400B7A5517CA5, 0xF8C749ADDAC40559, 0xD2ADC89B03C20921, 0x280E42F64D3F9844,
+    0x279B685AF05D793C, 0xDDFA01D66DC021D9, 0x03E0FC67AB913EE1, 0x6C0A3ECF5778F283,
+    0xE8E9142622EBDBB4, 0x28D716F50D9E9584, 0xCF4EC61EC1887D94, 0x502713A07A267307,
+    0x5FDBB5A9B9C8750A, 0xD5CF19043439B62C, 0x1136BF78715F5851, 0x29A021F7D8CB387A,
+    0xBCA0A7DD978CEF70, 0x98E574273B015563, 0x67A77B57DA9AFB00, 0x54DE998591FC535C,
+    0xA86E6B5B7A9BAE15, 0x2A693870FC67C444, 0x7C6CBE72316CE0D5, 0x1E0FD83317165E74,
+    0x71ADF16AA60F3AF3, 0xA9341D97E4F6ADCB, 0xE717978B9134D491, 0x2B327DD7AB2CA09D,
+    0xA0AE2C41858D5C87, 0x239D87B916E40920, 0xA024D4FA90F4F26B, 0xB55BE89CE49EF928,
+    0x28B56505DD97D3DD, 0x2BFB77A035071FB6, 0xB0030B87C9B62D18, 0x9992BF2E20CE7CD4,
+    0x1765547834A268E5, 0xA187FEC213BE1016, 0x3FBCD166548791EE, 0x2CC4936B1987B1B3,
+    0xD339BEA7CA0B74E0, 0xC29C5E9826B1F6E3, 0x2F5E5AB61673E3F6, 0xFF998A6F2D19532F,
+    0x9D5322247BB149E5, 0x2D8DA0FCD932A561, 0xD20D77DC0B077313, 0xBFCCAA053A043A9B,
+    0x12B3010BE6A1EB3F, 0xF316FCB46D0FFB40, 0x4095F9630A4EB3E1, 0x2E56B94DA0515984,
+    0xD168195D379149A7, 0x60A53F3DE0E7EFD3, 0x3658CD3898020CE5, 0xA30583591A2DFFBE,
+    0x1E375BD40E0E3933, 0x2F1FAA4F3A17939D, 0xEE927D556DFB2AE8, 0xB5CD6AE1598C854E,
+    0x217441A97323D25E, 0xE696C043BB881630, 0xE2445AD229E46E95, 0x2FE8CCF5EBF0A133,
+    0x159FDFC634D4D38A, 0x9724055712324CED, 0x7C59984442C9D80A, 0x6B5F6D06B34C1DA6,
+    0x12B2F428FF7ACB76, 0x30B1E91CF0943362, 0xA9ACFC1B07DBDC4D, 0xCC77842A2FE6F682,
+    0xE7F3A1E83C315272, 0x19506E1283EE2A6B, 0xBE60466777B9622D, 0x317AC874B0FBA710,
+]
+# quadrant offsets 0, pi/2, pi in the same 6-limb fixed point
+secret preset B128_ATANFAM_QOFF: Array[U64, 18] = [
+    0x0000000000000000, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000,
+    0x0000000000000000, 0x0000000000000000, 0xF7CA8CD9E69D218E, 0x28A5043CC71A026E,
+    0x0105DF531D89CD91, 0x948127044533E63A, 0x62633145C06E0E68, 0x6487ED5110B4611A,
+    0xEF9519B3CD3A431B, 0x514A08798E3404DD, 0x020BBEA63B139B22, 0x29024E088A67CC74,
+    0xC4C6628B80DC1CD1, 0xC90FDAA22168C234,
+]
+# coefficients of the fast series (pairs lo, hi)
+secret preset B128_ATANFAM_C: Array[U64, 18] = [
+    0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0x555555555555554F, 0x0015555555555555,
+    0x3333333333332F55, 0x0000033333333333, 0x49249249249147DF, 0x0000000092492492,
+    0x1C71C71C71A599E3, 0x00000000001C71C7, 0x745D1745CF00B15F, 0x00000000000005D1,
+    0x3B13B13AF8B70DD8, 0x0000000000000001, 0x004444439744D102, 0x0000000000000000,
+    0x00000F0CB8C66F08, 0x0000000000000000,
+]
+
+# ============================================================================
+# Shared kernel of CORE-MATH's arc tangent (atan, atan2) of B128
+# ============================================================================
+# B128.atan and atan2 are Tessera's, through Ingrid. What stays is what the arc tangent's fast phase
+# needs, which the D128 transcendentals (D128Fast.rf) build on.
+# Ported from CORE-MATH, src/binary128/atan/atanq.c and src/binary128/atan2/atan2q.c
+# (https://core-math.gitlabpages.inria.fr/). The two files carry identical integer helpers, tables and
+# evaluation kernels, which live here once.
+# Copyright (c) 2026 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see THIRD-PARTY-NOTICES.md at the repository root. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# errno and exception-flag handling are dropped).
+#
+# Everything runs on integers: the reduced argument is a 128-bit fixed-point fraction, the fast path
+# evaluates the arc tangent series in 128-bit words and the accurate path in up to 8 64-bit limbs held in
+# an `Array[U64, 8]` (limb 0 least significant) together with an explicit limb count.
+
+# --- word helpers -----------------------------------------------------------------------------------
+
+@inline
+secret routine b128_atanfam_lo(v: U128) -> U64
+    return LLVM::int_truncate[U128, U64](v)
+
+@inline
+secret routine b128_atanfam_hi(v: U128) -> U64
+    return LLVM::int_truncate[U128, U64](v >>> 64)
+
+@inline
+secret routine b128_atanfam_mk(hi: U64, lo: U64) -> U128
+    return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+
+# full 64x64 -> 128-bit product
+@inline
+secret routine b128_atanfam_mul(a: U64, b: U64) -> U128
+    return LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)
+
+# a non-negative shift amount as the U32 the shift operators take
+@inline
+secret routine b128_atanfam_sa(n: S64) -> U32
+    return LLVM::int_truncate[S64, U32](n)
+
+# leading zero count of a 64-bit word as a signed int (64 for zero)
+@inline
+secret routine b128_atanfam_clz(v: U64) -> S64
+    return LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(v))
+
+# high 64 bits of the 64x64 product
+@inline
+secret routine b128_atanfam_mhuu(a: U64, b: U64) -> U64
+    return b128_atanfam_hi(v: b128_atanfam_mul(a: a, b: b))
+
+# high 128 bits of the 64x128 product
+@inline
+secret routine b128_atanfam_mhuu128(y: U64, x: U128) -> U128
+    var xy0 = b128_atanfam_mul(a: b128_atanfam_lo(v: x), b: y)
+    var xy1 = b128_atanfam_mul(a: b128_atanfam_hi(v: x), b: y)
+    return xy1 +% (xy0 >>> 64)
+
+# approximate high 128 bits of the square of a 128-bit word
+@inline
+secret routine b128_atanfam_sqrh(a: U128) -> U128
+    var a1 = b128_atanfam_hi(v: a)
+    var a10 = b128_atanfam_mul(a: a1, b: b128_atanfam_lo(v: a))
+    var a11 = b128_atanfam_mul(a: a1, b: a1)
+    a11 = a11 +% (a10 >>> 64)
+    a11 = a11 +% (a10 >>> 64)
+    return a11
+
+# approximate high 128 bits of the 128x128 product
+@inline
+secret routine b128_atanfam_mhuu256(a: U128, b: U128) -> U128
+    var a0 = b128_atanfam_lo(v: a)
+    var a1 = b128_atanfam_hi(v: a)
+    var b0 = b128_atanfam_lo(v: b)
+    var b1 = b128_atanfam_hi(v: b)
+    var a1b0 = b128_atanfam_mul(a: a1, b: b0)
+    var a0b1 = b128_atanfam_mul(a: a0, b: b1)
+    var a1b1 = b128_atanfam_mul(a: a1, b: b1)
+    a1b1 = a1b1 +% (a1b0 >>> 64)
+    a1b1 = a1b1 +% (a0b1 >>> 64)
+    return a1b1
+
+# 2^255 / kd rounded to 128 bits for a normalized kd (top bit set): one Newton step on a 64-bit quotient
+@inline
+secret routine b128_atanfam_reciprocal(kd: U128) -> U128
+    var kdh = kd >>> 64
+    var kdl = kd & 0xFFFFFFFFFFFFFFFF
+    # r = 2^127 / kdh truncated to 64 bits (all ones when the quotient is 2^64), a single 128/64 divide
+    var d = LLVM::int_truncate[U128, U64](kdh)
+    var r: U64 = 0xFFFFFFFFFFFFFFFF
+    if d != 0x8000000000000000
+        r = div2by1(u1: 0x8000000000000000, u0: 0, d: d, v: reciprocal_word(d: d)).q
+    var rr = LLVM::zero_extend[U64, U128](r)
+    var hh = kdh *% rr
+    var hl = kdl *% rr
+    hh = hh +% (hl >>> 64)
+    hh = hh << 57
+    hh = hh | LLVM::zero_extend[U64, U128](b128_atanfam_lo(v: hl) >>> 7)
+    var hh64 = LLVM::int_truncate[S128, S64](LLVM::reinterpret_bits[U128, S128](hh) >> 92)
+    var corr: U128 = 0
+    if hh64 < 0
+        corr = rr << 64
+    var dr = b128_atanfam_mhuu128(y: r, x: hh) -% corr
+    var drs = LLVM::reinterpret_bits[U128, S128](dr) >> 56
+    return (rr << 64) -% LLVM::reinterpret_bits[S128, U128](drs)
+
+# --- fast path: arc tangent series in 128-bit words ----------------------------------------------------
+
+# kn / kd is the reduced argument scaled by 2^-dn (kd normalized); returns the 128-bit fixed-point
+# atan(kn/kd * 2^-dn) * 2^dn before the table angle is added
+@inline
+secret routine b128_atanfam_fast_core(kn: U128, kd: U128, dn: S64) -> U128
+    var rcp = b128_atanfam_reciprocal(kd: kd)
+    var t = b128_atanfam_mhuu256(a: kn, b: rcp)
+    var t2 = b128_atanfam_sqrh(a: t)
+    var dn2 = 2 *% dn -% 12
+    if dn2 < 128
+        t2 = t2 >>> b128_atanfam_sa(n: dn2)
+    else
+        t2 = 0
+    var t2h = b128_atanfam_hi(v: t2)
+    var fl = B128_ATANFAM_C[16]
+    fl = B128_ATANFAM_C[14] -% b128_atanfam_mhuu(a: t2h, b: fl)
+    fl = B128_ATANFAM_C[12] -% b128_atanfam_mhuu(a: t2h, b: fl)
+    var f = b128_atanfam_mk(
+        hi: B128_ATANFAM_C[11],
+        lo: B128_ATANFAM_C[10] -% t2h -% b128_atanfam_mhuu(a: t2h, b: fl),
+    )
+    var i: U64 = 4
+    while i >= 1
+        var ci = b128_atanfam_mk(hi: B128_ATANFAM_C[2 *% i +% 1], lo: B128_ATANFAM_C[2 *% i])
+        f = ci -% b128_atanfam_mhuu256(a: t2, b: f)
+        i = i -% 1
+    f = b128_atanfam_mhuu256(a: t2, b: f)
+    f = b128_atanfam_mhuu256(a: t, b: f)
+    return t -% f
+
+# --- accurate path: multi-limb arithmetic on Array[U64, 8] -----------------------------------------------
+
+# logical left shift of the n-limb a by k >= 0 bits
+secret routine b128_atanfam_shl_pos(a: Array[U64, 8], n: U64, k: S64) -> Array[U64, 8]
+    var o = a
+    var off = k >> 6
+    var dst = LLVM::reinterpret_bits[U64, S64](n) -% 1
+    var src = dst -% off
+    if src >= 0
+        var s = b128_atanfam_sa(n: k & 63)
+        var q = b128_atanfam_sa(n: (k ^ -1) & 63)
+        var c = o[LLVM::reinterpret_bits[S64, U64](src)]
+        src = src -% 1
+        while src >= 0
+            var nt = o[LLVM::reinterpret_bits[S64, U64](src)]
+            src = src -% 1
+            o[LLVM::reinterpret_bits[S64, U64](dst)] = (c << s) | (nt >>> 1 >>> q)
+            dst = dst -% 1
+            c = nt
+        o[LLVM::reinterpret_bits[S64, U64](dst)] = c << s
+        dst = dst -% 1
+    while dst >= 0
+        o[LLVM::reinterpret_bits[S64, U64](dst)] = 0
+        dst = dst -% 1
+    return o
+
+# logical right shift of the n-limb a by k >= 0 bits
+secret routine b128_atanfam_shr_pos(a: Array[U64, 8], n: U64, k: S64) -> Array[U64, 8]
+    var o = a
+    var off = LLVM::reinterpret_bits[S64, U64](k >> 6)
+    var src = off
+    var dst: U64 = 0
+    if src < n
+        var c = o[src]
+        src = src +% 1
+        var s = k & 63
+        if s != 0
+            var su = b128_atanfam_sa(n: s)
+            var q = b128_atanfam_sa(n: 0 -% k & 63)
+            while src < n
+                var nt = o[src]
+                src = src +% 1
+                o[dst] = (c >>> su) | (nt << q)
+                dst = dst +% 1
+                c = nt
+            o[dst] = c >>> su
+            dst = dst +% 1
+        else
+            while src < n
+                var nt = o[src]
+                src = src +% 1
+                o[dst] = c
+                dst = dst +% 1
+                c = nt
+            o[dst] = c
+            dst = dst +% 1
+    while dst < n
+        o[dst] = 0
+        dst = dst +% 1
+    return o
+
+# logical shift right by k bits (left by -k when k < 0)
+secret routine b128_atanfam_shr(a: Array[U64, 8], n: U64, k: S64) -> Array[U64, 8]
+    if k < 0
+        return b128_atanfam_shl_pos(a: a, n: n, k: 0 -% k)
+    return b128_atanfam_shr_pos(a: a, n: n, k: k)
+
+# (a2:a1:a0) + (b2:b1:b0) modulo 2^192
+@inline
+secret routine b128_atanfam_add3(
+    a0: U64,
+    a1: U64,
+    a2: U64,
+    b0: U64,
+    b1: U64,
+    b2: U64,
+) -> (U64, U64, U64)
+    var al = b128_atanfam_mk(hi: a1, lo: a0)
+    var s = al +% b128_atanfam_mk(hi: b1, lo: b0)
+    var top = a2 +% b2
+    if s < al
+        top = top +% 1
+    return (b128_atanfam_lo(v: s), b128_atanfam_hi(v: s), top)

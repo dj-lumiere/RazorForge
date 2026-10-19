@@ -1,0 +1,315 @@
+module System
+
+# Unicode constants
+preset CHARACTER_NULL: Char = '\0'
+preset CHARACTER_SPACE: Char = ' '
+preset CHARACTER_NEWLINE: Char = '\n'
+preset CHARACTER_TAB: Char = '\t'
+preset CHARACTER_REPLACEMENT: Char = '\u00FFFD'
+preset CHARACTER_MAX_UNICODE: Char = '\u10FFFF'
+# Surrogate range (invalid for standalone codepoints)
+preset CHARACTER_SURROGATE_START: U32 = 0xD800
+preset CHARACTER_SURROGATE_END: U32 = 0xDFFF
+
+### Represents one Unicode scalar value.
+### `Char` stores a code point-sized payload and models text characters
+### rather than arbitrary binary bytes.
+@llvm("i32")
+record Char
+obeys ConstCompatible, Comparable, Copyable
+    pass
+
+# Creators
+
+### Reads a byte value (0 to 255) as the character with that codepoint: `65u8.to[Char]()` is `'A'`.
+### :returns: The character.
+routine U8.to[Char]() -> Char
+    return LLVM::reinterpret_bits[U32, Char](value: LLVM::zero_extend[U8, U32](me))
+
+### Reads this character's codepoint as a `U32`: `c.to[U32]()`.
+### :returns: The codepoint.
+routine Char.to[U32]() -> U32
+    return LLVM::reinterpret_bits[Char, U32](value: me)
+
+### Widens this character's codepoint to a `U64`: `c.to[U64]()`.
+### :returns: The codepoint as a `U64`.
+routine Char.to[U64]() -> U64
+    return LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[Char, U32](value: me))
+
+### Reads a Unicode code point as the character with that codepoint: `0x41u32.to[Char]()` is `'A'`.
+### :returns: The character.
+routine U32.to[Char]() -> Char
+    return LLVM::reinterpret_bits[U32, Char](value: me)
+
+### Builds the character a character literal (`'A'`) stands for from its codepoint.
+### :param from: The codepoint.
+### :returns: The character.
+secret routine Char(from: U32) -> Char
+    return LLVM::reinterpret_bits[U32, Char](value: from)
+
+# ============================================================================
+# Char protocol implementation
+# ============================================================================
+
+### Returns the Unicode scalar value stored by this character.
+### :returns: The resulting `U32` value.
+@readonly
+routine Char.codepoint() -> U32
+    return me.to[U32]()
+
+### Returns `true` when this value is a valid Unicode scalar value.
+### Surrogate code points are treated as invalid standalone characters.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_valid() -> Bool
+    var cp = me.to[U32]()
+    # Valid if within Unicode range and not a surrogate
+    return cp <= 0x10FFFF and not (CHARACTER_SURROGATE_START <= cp <= CHARACTER_SURROGATE_END)
+
+### Returns `true` when this character is in the ASCII subset.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_ascii() -> Bool
+    return me.to[U32]() <= 0x007F
+
+### Returns `true` when this character falls in the supported alphabetic ranges.
+### This implementation currently focuses on ASCII and common Latin blocks.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_alphabetic() -> Bool
+    var v = me.to[U32]()
+    var is_ascii_upper = 0x0041 <= v <= 0x005A
+    var is_ascii_lower = 0x0061 <= v <= 0x007A
+    var is_latin_ext = 0x00C0 <= v <= 0x00FF
+    var is_latin_ext_a = 0x0100 <= v <= 0x017F
+    var is_latin_ext_b = 0x0180 <= v <= 0x024F
+    return is_ascii_upper or is_ascii_lower or is_latin_ext or is_latin_ext_a or is_latin_ext_b
+
+### Returns `true` when this character is an ASCII decimal digit.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_numeric() -> Bool
+    var v = me.to[U32]()
+    return 0x0030 <= v <= 0x0039  # 0-9
+
+### Returns `true` when this character is alphabetic or numeric.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_alphanumeric() -> Bool
+    return me.is_alphabetic() or me.is_numeric()
+
+### Returns `true` when this character is an uppercase letter (Unicode category Lu): `A`, `É`, `Σ`.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_uppercase() -> Bool
+    var v = me.to[U32]()
+    if v < 0x80
+        return 0x0041 <= v <= 0x005A
+    return unicode_is_uppercase(cp: v.to[S64]())
+
+### Returns `true` when this character is a lowercase letter (Unicode category Ll): `a`, `é`, `σ`.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_lowercase() -> Bool
+    var v = me.to[U32]()
+    if v < 0x80
+        return 0x0061 <= v <= 0x007A
+    return unicode_is_lowercase(cp: v.to[S64]())
+
+### Returns `true` when this character is one of the supported whitespace code
+### points.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_whitespace() -> Bool
+    var v = me.to[U32]()
+    var is_space = v == 0x0020
+    var is_tab = v == 0x0009
+    var is_lf = v == 0x000A
+    var is_cr = v == 0x000D
+    var is_ff = v == 0x000C
+    var is_nbsp = v == 0x00A0
+    var is_en_quad = v == 0x2000
+    var is_em_quad = v == 0x2001
+    var is_en_space = v == 0x2002
+    var is_em_space = v == 0x2003
+    return is_space
+        or is_tab
+        or is_lf
+        or is_cr
+        or is_ff
+        or is_nbsp
+        or is_en_quad
+        or is_em_quad
+        or is_en_space
+        or is_em_space
+
+### Returns `true` when this character is an ASCII or Latin-1 control code.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_control() -> Bool
+    var v = me.to[U32]()
+    return v <= 0x001F or 0x007F <= v <= 0x009F
+
+### Returns this character's uppercase form by the Unicode simple case mapping (`é` gives `É`, `σ` gives `Σ`), or
+### the character itself when it has none. Each character maps to one character, so `ß` stays `ß`.
+### :returns: The resulting `Char` value.
+@readonly
+routine Char.to_uppercase() -> Char
+    var v = me.to[U32]()
+    if v < 0x80
+        return if 0x0061 <= v <= 0x007A then Char(v - 32) else me
+    return Char(unicode_uppercase(cp: v.to[S64]()).to[U32]())
+
+### Returns this character's lowercase form by the Unicode simple case mapping (`É` gives `é`, `Σ` gives `σ`), or
+### the character itself when it has none.
+### :returns: The resulting `Char` value.
+@readonly
+routine Char.to_lowercase() -> Char
+    var v = me.to[U32]()
+    if v < 0x80
+        return if 0x0041 <= v <= 0x005A then Char(v + 32) else me
+    return Char(unicode_lowercase(cp: v.to[S64]()).to[U32]())
+
+# ============================================================================
+# Comparison operations
+# ============================================================================
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.eq(you: Char) -> Bool
+    return me.to[U32]() == you.to[U32]()
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Char.compare(you: Char) -> ComparisonSign
+    return me.to[U32]() <=> you.to[U32]()
+
+# ============================================================================
+# Type conversions
+# ============================================================================
+
+### Converts this value to byte.
+### This is only meaningful for characters in the ASCII range and currently
+### truncates to the low 7 bits.
+### :returns: The resulting `Byte` value.
+@readonly
+routine Char.to_byte() -> Byte
+    # Only valid for ASCII range - truncates
+    return Byte((me.to[U32]() & 0x7F).to[U8]())
+
+# ============================================================================
+# Display — shows the character itself
+# ============================================================================
+
+### Returns the display form of this character.
+### The display form emits the character itself rather than its numeric code.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Char.represent() -> Text
+    var list = List[Char]()
+    list.add_last(me)
+    return Text(from_list: steal list)
+
+### Returns the diagnostic form of this character.
+### The diagnostic form includes both the printable character and its numeric
+### code point.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Char.diagnose() -> Text
+    return "Char(" + me.represent() + ", " + me.to[U32]().represent() + ")"
+
+# ============================================================================
+# Utility methods
+# ============================================================================
+
+### Returns `true` when this character is a decimal digit.
+### This is an alias for `is_numeric`.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_digit() -> Bool
+    return me.is_numeric()
+
+### Returns the numeric value of an ASCII decimal digit.
+### Returns `-1` when the character is not a supported digit.
+### :returns: The resulting `S32` value.
+@readonly
+routine Char.digit_value() -> S32
+    if me.is_numeric()
+        return (me.to[U32]() - 0x0030).to[S32]()
+    return -1
+
+### Returns `true` when this character is valid and not a control code.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_printable() -> Bool
+    return me.is_valid() and not me.is_control()
+
+### Returns `true` when this character is in the Basic Multilingual Plane.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_bmp() -> Bool
+    # Basic Multilingual Plane: U+0000 to U+FFFF (excluding surrogates)
+    return me.to[U32]() <= 0xFFFF
+        and not (CHARACTER_SURROGATE_START <= me.to[U32]() <= CHARACTER_SURROGATE_END)
+
+### Returns `true` when this character is in one of the Unicode supplementary
+### planes.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_supplementary() -> Bool
+    # Supplementary planes: U+10000 to U+10FFFF
+    return 0x10000 <= me.to[U32]() <= 0x10FFFF
+
+### Returns `true` when this character falls in the supported CJK ranges.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_cjk() -> Bool
+    var v = me.to[U32]()
+    var is_unified = 0x4E00 <= v <= 0x9FFF
+    var is_ext_a = 0x3400 <= v <= 0x4DBF
+    var is_ext_b = 0x20000 <= v <= 0x2A6DF
+    var is_ext_c = 0x2A700 <= v <= 0x2B73F
+    return is_unified or is_ext_a or is_ext_b or is_ext_c
+
+### Returns `true` when this character falls in the supported Latin ranges.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_latin() -> Bool
+    var v = me.to[U32]()
+    var is_basic = 0x0000 <= v <= 0x007F
+    var is_supplement = 0x0080 <= v <= 0x00FF
+    var is_ext_a = 0x0100 <= v <= 0x017F
+    var is_ext_b = 0x0180 <= v <= 0x024F
+    return is_basic or is_supplement or is_ext_a or is_ext_b
+
+### Returns `true` when this character falls in one of the supported emoji
+### blocks.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Char.is_emoji() -> Bool
+    var v = me.to[U32]()
+    var is_emoticons = 0x1F600 <= v <= 0x1F64F
+    var is_misc = 0x1F300 <= v <= 0x1F5FF
+    var is_transport = 0x1F680 <= v <= 0x1F6FF
+    var is_flags = 0x1F1E0 <= v <= 0x1F1FF
+    return is_emoticons or is_misc or is_transport or is_flags
+
+# ============================================================================
+# Codepoint offset
+# ============================================================================
+
+### Returns a character offset by `delta` code points.
+### This is a low-level helper and does not validate that the resulting value is
+### still a valid Unicode scalar.
+### :param delta: The amount to add or subtract.
+### :returns: The resulting `Char` value.
+@readonly
+failable routine Char.offset(delta: S64) -> Char
+    var new_value = me.to[U32]().to[S64]() + delta
+    return Char(new_value.to[U32]())

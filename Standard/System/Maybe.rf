@@ -1,0 +1,147 @@
+module System
+
+import BuilderQuery
+### Represents an optional record value.
+### `Maybe[T]` stores either a present `T` or the absence of a value without
+### carrying crash information.
+### :typeparam T: The wrapped value type.
+bundle Maybe[T]
+    ### Indicates whether the optional currently holds a value.
+    secret present: Bool
+    ### Stores the wrapped value when `present` is true.
+    secret value: T
+
+### Returns the display form of this optional value.
+### Present values are rendered using the wrapped value's text form.
+### :returns: The resulting `Text` value.
+@override
+routine Maybe[T].represent() -> Text
+    if not me.is_present()
+        return "none"
+    return f"{me.value}"
+
+### Returns the diagnostic form of this optional value.
+### This form keeps the `Maybe` wrapper visible for debugging and logs.
+### :returns: The resulting `Text` value.
+@override
+routine Maybe[T].diagnose() -> Text
+    if not me.is_present()
+        return f"{me.full_type_name()}(none)"
+    return f"{me.full_type_name()}({me.value})"
+
+### Frees the wrapped value when present; a no-op when absent. Defined explicitly (rather than
+### auto-derived) so the per-instantiation body is monomorphized and emitted like the other carrier
+### routines, and so the `value` field is only touched when actually present.
+@override
+routine Maybe[T].destruct()
+    if me.is_present()
+        me.value.destruct()
+    return
+
+### Returns the wrapped value, leaving this optional intact (NON-consuming).
+### Use this when absence is a logic error rather than an expected branch. The payload is DUPLICATED: for
+### a managed leaf (Text/…) `duplicate` is the cheap refcount share (`= assign`); for an aggregate it is a
+### deep, independent copy — the ONLY way to co-own something that cannot be shallow-shared (e.g. a variant
+### with a `Dict`/`List` arm is `Copyable` but not `Assignable`). Either way the optional stays intact and
+### the caller gets an independent value. A single-owner ENTITY that did not opt into `Copyable` cannot be
+### duplicated; use `strip_out` to MOVE it out instead.
+### :returns: The contained `T` value (an independent duplicate).
+### :throws: {AbsentValueError} if this `Maybe` is absent.
+@overridable
+failable routine Maybe[T].unwrap() -> T
+needs RecordType T
+    if not me.is_present()
+        throw AbsentValueError()
+    return me.value
+
+### `unwrap` for a single-owner entity: it cannot be shared, so the caller gets an independent duplicate,
+### which needs the entity to declare it can be copied.
+@override
+failable routine Maybe[T].unwrap() -> T
+needs EntityType T
+needs T obeys Copyable
+    if not me.is_present()
+        throw AbsentValueError()
+    return me.value.duplicate()
+
+### `unwrap` for a variant: one with an entity arm cannot be shared, so the caller gets a duplicate.
+@override
+failable routine Maybe[T].unwrap() -> T
+needs VariantType T
+needs T obeys Copyable
+    if not me.is_present()
+        throw AbsentValueError()
+    return me.value.duplicate()
+
+### Returns the wrapped value or `fallback` when absent, leaving this optional intact (NON-consuming).
+### This avoids branching at the call site when a fixed fallback is acceptable. As with `unwrap`, the
+### present-case result is a retaining copy (co-owned); `fallback` goes unused and is torn down at scope
+### exit like any other unconsumed local.
+### :param fallback: The fallback value to return when absent.
+### :returns: The contained `T` value (a co-owning copy), or `fallback` if this `Maybe` is absent.
+@overridable
+routine Maybe[T].unwrap_or(fallback: T) -> T
+needs RecordType T
+    if not me.is_present()
+        return fallback
+    return me.value
+
+### `unwrap_or` for a single-owner entity: the present value comes back as a duplicate (see `unwrap`).
+@override
+routine Maybe[T].unwrap_or(fallback: T) -> T
+needs EntityType T
+needs T obeys Copyable
+    if not me.is_present()
+        return fallback
+    return me.value.duplicate()
+
+### `unwrap_or` for a variant: the present value comes back as a duplicate (see `unwrap`).
+@override
+routine Maybe[T].unwrap_or(fallback: T) -> T
+needs VariantType T
+needs T obeys Copyable
+    if not me.is_present()
+        return fallback
+    return me.value.duplicate()
+
+### MOVES the wrapped value out, CONSUMING this optional (marks it absent). Unlike `unwrap` (which
+### co-owns via a retaining copy and leaves the optional intact), this hands the payload's SINGLE
+### reference to the caller and empties the carrier — the model a `Maybe[Entity]` requires (an entity is
+### single-owner: it cannot be co-owned/retained, only moved). The carrier's own `destruct` then no-ops on
+### `value` (guarded by `is_present()`), so the moved-out payload is freed exactly once by its new owner.
+### A re-`strip_out` of the now-absent optional fails LOUDLY (AbsentValueError), never silently corrupts.
+### :returns: The contained `T` value, moved out.
+### :throws: {AbsentValueError} if this `Maybe` is absent.
+@overridable
+failable routine Maybe[T].strip_out() -> T
+needs RecordType T
+    if not me.is_present()
+        throw AbsentValueError()
+    me.present = false
+    # The value moves out: `present` is cleared first, so this Maybe no longer owns it.
+    danger
+        return me.value.hijack().peek()
+
+### `strip_out` for a variant: the value moves out of its slot, as a record's does.
+@override
+failable routine Maybe[T].strip_out() -> T
+needs VariantType T
+    if not me.is_present()
+        throw AbsentValueError()
+    me.present = false
+    danger
+        return me.value.hijack().peek()
+
+### `strip_out` for an entity: the slot holds the handle, and the address of an entity is the address of the entity
+### itself, so the handle is made from that address instead of read from it.
+@override
+failable routine Maybe[T].strip_out() -> T
+needs EntityType T
+    if not me.is_present()
+        throw AbsentValueError()
+    me.present = false
+    danger
+        return LLVM::reinterpret_bits[Hijacked[T], T](Hijacked[T](me.value.get_address()))
+
+routine Maybe[T].is_present() -> Bool
+    return me.present

@@ -34,7 +34,7 @@ public class IndexExpectedTypeTests
         IndexExpression idx = FindFirstIndexExpression(result: result, routineName: "probe");
         TypeSymbol? indexType = idx.Index.ResolvedType;
         Assert.NotNull(@object: indexType);
-        Assert.Equal(expected: "Core.U64", actual: indexType!.FullName);
+        Assert.Equal(expected: "System.U64", actual: indexType!.FullName);
     }
 
     /// <summary>Verifies integer literals retype to the U32 indexer parameter type.</summary>
@@ -58,7 +58,7 @@ public class IndexExpectedTypeTests
         IndexExpression idx = FindFirstIndexExpression(result: result, routineName: "probe");
         TypeSymbol? indexType = idx.Index.ResolvedType;
         Assert.NotNull(@object: indexType);
-        Assert.Equal(expected: "Core.U32", actual: indexType!.FullName);
+        Assert.Equal(expected: "System.U32", actual: indexType!.FullName);
     }
 
     /// <summary>Verifies that an integer literal overflowing the U8 indexer range reports a build error.</summary>

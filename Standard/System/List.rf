@@ -1,0 +1,1032 @@
+module System
+
+import BuilderQuery
+# ============================================================================
+# Sorting — iterative merge sort with insertion sort for small runs
+# ============================================================================
+
+### The maximum run length sorted with insertion sort before the merge phase begins.
+secret preset SORT_MIN_RUN: U64 = 32
+
+### A growable, contiguous sequence of elements with amortized O(1) append.
+###
+### `List[T]` stores elements in a single resizable heap buffer. Random access
+### by index is O(1). Appending to the back is O(1) amortized because the buffer grows
+### geometrically when capacity runs out (see `next_grow_capacity`: it doubles while small,
+### then grows by 1.5x once large to bound memory waste). Inserting or removing near the
+### front is O(n) due to element shifting.
+###
+### **When to use**
+### - You need fast indexed access (`list[i]`).
+### - You mainly add elements to the back.
+### - You need to sort or reverse a sequence in place.
+### - Use {CircularList[T]} instead when you frequently add or remove from both ends.
+### - Use {SortedList[T]} instead when elements must stay in sorted order.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add_last` | O(1) amortized |
+### | `remove_last!` | O(1) |
+### | `add_first` / `add_at!` | O(n) |
+### | `remove_first!` / `remove_at!` | O(n) |
+### | `getitem!` / `setitem!` | O(1) |
+### | `contains` | O(n) |
+### | `sort` | O(n log n) |
+### | `reverse` | O(n) |
+### | Iteration | O(n) |
+###
+### :typeparam T: The element type stored in the list.
+### :see: {CircularList[T]} for efficient double-ended insertion and removal.
+### :see: {SortedList[T]} for a list that maintains ascending order automatically.
+entity List[T]
+relates ListEmittable[T] as Iter
+obeys Iterable[T], ModifyingIndexable[T], Sized, Container, Equatable,
+    Copyable when T obeys Copyable, ListLiteral[T]
+    ### Stores the backing buffer.
+    secret data: Hijacked[T]
+    ### Stores the number of initialized elements.
+    secret count: U64
+    ### Stores the total number of elements that fit without reallocating.
+    secret capacity: U64
+
+# ============================================================================
+# Iterable protocol support
+# ============================================================================
+
+### Walks the elements of a `List[T]` from front to back, handing out a write token on each element in its slot.
+### The walk points at the list's buffer and has no rights over it: the list outlives the walk and cannot change
+### its shape while it is walked (RF-S625). A walk that starts from a read-only list hands out read tokens.
+### :typeparam T: The element type the tokens point at.
+entity ListEmittable[T]
+obeys Emittable[T]
+    ### Stores a pointer into the source list buffer.
+    secret data: Hijacked[T]
+    ### Stores the element count captured at iterator creation.
+    secret count: U64
+    ### Stores the current iteration position.
+    secret index: U64
+
+# Creators
+
+routine List[T]() -> List[T]
+    return List[T](data: hijacked_none[T](), count: 0, capacity: 0)
+
+### Creates an empty list with storage reserved for at least `capacity` elements.
+### No elements are initialized, but the backing allocation is made immediately to
+### avoid the first few growth steps.
+### :param capacity: The initial capacity to reserve.
+### A list over `count` elements already in `over`, a buffer allocated for exactly them that the list takes over
+### (its capacity is `count`). The list frees the buffer when it ends.
+### :param over: The buffer, holding `count` initialized elements.
+### :param count: The number of elements.
+### :returns: The list owning the buffer.
+dangerous routine List[T](over: Hijacked[T], count: U64) -> List[T]
+    return List[T](data: over, count: count, capacity: count)
+
+routine List[T](capacity: U64) -> List[T]
+    var byte_size = T.data_size() * capacity
+    danger
+        var ptr = rf_allocate_dynamic_uninit(byte_size)
+        return List[T](
+            data: hijacked_from[T](ptr),
+            count: 0,
+            capacity: capacity,
+        )
+
+### Creates a list of `count` copies of `fill_value`. The backing buffer is sized
+### exactly to `count` and every slot is initialized with an independent copy of
+### `fill_value`. Equivalent to {List[T]()} when `count == 0`.
+### :param count: The number of elements to produce.
+### :param fill_value: The value to copy into each slot.
+### :returns: A list containing `count` copies of `fill_value`.
+routine List[T](count: U64, fill_value: T) -> List[T]
+needs RecordType T
+    if count == 0
+        return List[T]()
+
+    var byte_size = T.data_size() * count
+    var t_size = T.data_size()
+    danger
+        var ptr = rf_allocate_dynamic_uninit(byte_size)
+        var data = hijacked_from[T](ptr)
+        var i: U64 = 0
+        while i < count
+            data.offset(t_size * i).poke(fill_value)
+            i = i +% 1
+        return List[T](data: data, count: count, capacity: count)
+
+### Builds a list containing exactly the given `elements`, in order. This static routine is the mechanism
+### behind the `[a, b, c]` list-literal syntax (the `ListLiteral` opt-in): the builder lowers a list
+### literal to `List[T].from_literal(...)`, packing the elements into a fixed `Array[T, K]` and
+### monomorphizing one body per element count `K`. A distinct name (not the `List(...)` constructor) so it
+### never collides with the fixed-arity constructors (`List(capacity)` etc.).
+### :param elements: The elements to populate the list with, in order.
+### :returns: A list of the given elements.
+common routine List[T].from_literal(elements...: T) -> List[T]
+    var result = List[T]()
+    var i: U64 = 0
+    # Each element moves into the list: `add_last` makes the list's holder, and the caller releases the
+    # literal's own afterwards.
+    while i < elements.count()
+        result.add_last(elements.get_raw(index: i))
+        i = i +% 1
+    return result
+
+# Core operations
+
+### Returns the number of elements currently stored in the list.
+### :returns: The live element count.
+@readonly
+routine List[T].count() -> U64
+    return me.count
+
+### Returns the number of elements that fit in the current allocation without reallocating.
+### :returns: The current backing-buffer slot count.
+@readonly
+routine List[T].capacity() -> U64
+    return me.capacity
+
+### Returns true if the list contains no elements.
+### :returns: `true` when `count()` is zero.
+@readonly
+routine List[T].is_empty() -> Bool
+    return me.count == 0
+
+### Appends `value` at the back of the list.
+### The buffer grows automatically when the current capacity is exhausted, following the
+### shared `next_grow_capacity` policy (double while small, 1.5x once large).
+### :param value: The value to append.
+@reshaping
+routine List[T].add_last(value: T)
+    if me.count >= me.capacity
+        me.reserve(
+            next_grow_capacity(
+                current: me.capacity,
+                min_needed: me.count +% 1,
+                element_size: T.data_size().byte_size(),
+            ),
+        )
+
+    var byte_offset = T.data_size() * me.count
+    danger
+        me.data.offset(byte_offset).poke(value)
+    me.count = me.count +% 1
+    return
+
+### Appends every element of `other` to the back of this list, in order.
+### Reserves capacity once up front when the source has a known size, avoiding the
+### per-element growth that a naive `for x in other; me.add_last(value: x)` loop
+### incurs. Equivalent to `extend` in Python or `addAll` in Java/Kotlin.
+###
+### :param you: The sequence to append. Any `Iterable[T]` is accepted; pass a
+###               `List[T]`, `Bytes` (for `List[Byte]`), a generator, an IterTools
+###               chain, etc.
+### :note: Common fast-output idiom: accumulate digit bytes into a `List[Byte]`
+###        via `buf.add_range(you: x.to_digit_bytes())`, then flush once.
+### :see: {List[T].add_last}, {S64.to_digit_bytes}
+###
+### NOTE: Stub signature — implementation pending. Tracking:
+###       memory/bytes_io_api_plan.md (v0.1.0 first additions).
+@reshaping
+routine List[T].add_range(you: Viewing[Iterable[T]])
+    # TODO(fast-io): hoist capacity-reserve when `you` exposes a known count.
+    # For now, fall back to per-element append so the routine type-checks while the
+    # optimized path is being designed.
+    each value in you
+        me.add_last(value: value)
+    return
+
+### Removes and returns the last element, reducing the count by one.
+### Capacity is not reduced.
+### :returns: The element that was at the back.
+### :throws: {AbsentValueError} The list is empty.
+@reshaping
+failable routine List[T].remove_last() -> T
+    if me.is_empty()
+        throw AbsentValueError()
+
+    me.count = me.count - 1
+    var byte_offset = T.data_size() * me.count
+    danger
+        return me.data.offset(byte_offset).peek()
+
+### Inserts `value` at the front of the list.
+### All existing elements are shifted one position toward the back. This is O(n).
+### :param value: The value to insert.
+@reshaping
+routine List[T].add_first(value: T)
+    me.add_at(index: 0, value: value)
+    return
+
+### Inserts `value` at `index`, shifting later elements right by one position.
+### Use `add_last` for back insertion to avoid the O(n) shift cost.
+### :param index: The zero-based insertion position.
+### :param value: The value to insert.
+### :throws: {IndexOutOfBoundsError} if `index` is greater than `count()`.
+@reshaping
+failable routine List[T].add_at(index: U64, value: T)
+    if index > me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+
+    if me.count >= me.capacity
+        me.reserve(
+            next_grow_capacity(
+                current: me.capacity,
+                min_needed: me.count +% 1,
+                element_size: T.data_size().byte_size(),
+            ),
+        )
+
+    # Shift elements right via memmove
+    if index < me.count
+        danger
+            var elem_size = T.data_size()
+            var src_ptr: Hijacked[T] = me.data.offset(elem_size * index)
+            var dst_ptr: Hijacked[T] = me.data.offset(elem_size * (index + 1))
+            rf_copy_bytes_at(
+                dest: dst_ptr.get_address(),
+                src: src_ptr.get_address(),
+                size: elem_size * (me.count - index),
+            )
+
+    danger
+        me.data.offset(T.data_size() * index).poke(value)
+    me.count = me.count + 1
+    return
+
+### Removes and returns the first element, shifting the remaining elements left by one position.
+### :returns: The element that was at the front.
+### :throws: {AbsentValueError} The list is empty.
+@reshaping
+failable routine List[T].remove_first() -> T
+    if me.is_empty()
+        throw AbsentValueError()
+    return me.remove_at(0)
+
+### Removes and returns the element at `index`, shifting later elements left by one position.
+### :param index: The zero-based position to remove.
+### :returns: The element that was at `index`.
+### :throws: {IndexOutOfBoundsError} if `index` is out of range.
+@reshaping
+failable routine List[T].remove_at(index: U64) -> T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+
+    var byte_offset = T.data_size() * index
+    danger
+        var value = me.data.offset(byte_offset).peek()
+
+        # Shift elements left via memmove
+        if index < me.count - 1
+            var elem_size = T.data_size()
+            var src_ptr = me.data.offset(elem_size * (index + 1))
+            var dst_ptr = me.data.offset(elem_size * index)
+            rf_copy_bytes_at(
+                dest: dst_ptr.get_address(),
+                src: src_ptr.get_address(),
+                size: elem_size * (me.count - 1 - index),
+            )
+
+        me.count = me.count - 1
+        return value
+
+### Returns the first element without removing it.
+### :returns: The current first element.
+### :throws: {AbsentValueError} The list is empty.
+@readonly
+@overridable
+failable routine List[T].first() -> T
+needs RecordType T
+    if me.is_empty()
+        throw AbsentValueError()
+    return me.get_raw(index: 0).share()
+
+### Returns the last element without removing it.
+### :returns: The current last element.
+### :throws: {AbsentValueError} The list is empty.
+@readonly
+@overridable
+failable routine List[T].last() -> T
+needs RecordType T
+    if me.is_empty()
+        throw AbsentValueError()
+    return me.get_raw(index: me.count - 1).share()
+
+# ============================================================================
+# Indexing with Integral (forward index)
+# ============================================================================
+
+### Returns the element at `index`.
+### :param index: The zero-based position to read.
+### :returns: The element at that position.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+@readonly
+@overridable
+failable routine List[T].getitem(index: U64) -> T
+needs RecordType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    # A holder of its own: the list keeps its element, the caller gets one more (a share for a counted value).
+    return me.get_raw(index: index).share()
+
+### Replaces the element at `index` with `value`.
+### :param index: The zero-based position to update.
+### :param value: The replacement value.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+failable routine List[T].setitem(index: U64, value: T)
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var byte_offset = T.data_size() * index
+    danger
+        me.data.offset(byte_offset).peek().destruct()
+        me.data.offset(byte_offset).poke(value)
+    return
+
+### Puts `value` at `index` and gives back the element that was there, in one step. This is what
+### `steal xs[i] as old inject fresh` runs, so the place is never empty.
+### :param index: The zero-based position to exchange.
+### :param value: The element that goes in.
+### :returns: The element that was there.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+secret failable routine List[T].exchange(index: U64, value: T) -> T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var old = me.get_raw(index: index)
+    me.set_raw(index: index, value: value)
+    return old
+
+### Returns a write token on the element stored at `index`, so a call or a write through it changes the
+### element in place: `grid[0].add_last(value: 1)` lowers to `grid.modify_at(index: 0).add_last(value: 1)`. A
+### plain `getitem` hands back a copy, and a call on that copy would change only the copy. The token lives
+### while the list keeps its shape (RF-S639).
+@overridable
+failable routine List[T].modify_at(index: U64) -> Modifying[T]
+needs AnyType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    # A record element's token is the address of its slot.
+    danger
+        return Modifying[T](me.data.offset(T.data_size() * index))
+
+### `modify_at` for a single-owner entity: the slot holds the entity's address, which is the token.
+@override
+failable routine List[T].modify_at(index: U64) -> Modifying[T]
+needs EntityType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    danger
+        return Modifying[T](me.data.offset(T.data_size() * index).peek_as[Hijacked[T]]())
+
+### Returns a read token on the element stored at `index`, so a read through it does not copy the element
+### first: `grid[0].count()` lowers to `grid.view_at(index: 0).count()`. A plain `getitem` hands back a copy.
+### The token lives while the list keeps its shape (RF-S639).
+@readonly
+@overridable
+failable routine List[T].view_at(index: U64) -> Viewing[T]
+needs AnyType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    # A record element's token is the address of its slot.
+    danger
+        return Viewing[T](me.data.offset(T.data_size() * index))
+
+### `view_at` for a single-owner entity: the slot holds the entity's address, which is the token.
+@readonly
+@override
+failable routine List[T].view_at(index: U64) -> Viewing[T]
+needs EntityType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    danger
+        return Viewing[T](me.data.offset(T.data_size() * index).peek_as[Hijacked[T]]())
+
+### Returns a NEW list holding independent copies of the elements in `range` — the slice form of
+### indexing (`list[a til b]`). A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields
+### `[a, b]`; a range that counts down (`by -1`) reverses the segment. Positions at or past `count` are skipped, so
+### `list[a til ^0]` slices cleanly to the end. Each element is copied through `copy` (managed leaves
+### like `Text` bump their refcount), so the result shares no structure with the original and mutating
+### one does not affect the other — the value-semantics counterpart to `Text`/`Bytes` slicing.
+### :param range: The index range to extract.
+### :returns: A new `List[T]` owning copies of the selected elements.
+@readonly
+routine List[T].getitem(range: Range[U64]) -> List[T]
+needs RecordType T
+    var result = List[T]()
+    each i in range
+        if i < me.count
+            result.add_last(value: me.get_raw(index: i))
+    return steal result
+
+# ============================================================================
+# Unchecked internal access — no bounds check, for stdlib use only
+# ============================================================================
+
+### Returns the element at `index` without bounds checking.
+### Only call this when the index is already proven to be in range.
+@readonly
+@inline
+routine List[T].get_raw(index: U64) -> T
+    danger
+        return me.data.offset(T.data_size() * index).peek()
+
+### Writes `value` at `index` without bounds checking.
+### Only call this when the index is already proven to be in range.
+@inline
+routine List[T].set_raw(index: U64, value: T)
+    danger
+        me.data.offset(T.data_size() * index).poke(value)
+    return
+
+### Ensures the backing allocation holds at least `new_capacity` elements.
+### Does nothing if the current capacity already meets or exceeds `new_capacity`.
+### :param new_capacity: The minimum slot count to guarantee.
+@reshaping
+routine List[T].reserve(new_capacity: U64)
+    if new_capacity > me.capacity
+        var new_byte_size = T.data_size() * new_capacity
+
+        danger
+            if me.data.is_none()
+                var ptr = rf_allocate_dynamic_uninit(new_byte_size)
+                me.data = hijacked_from[T](ptr)
+            else
+                var ptr = rf_reallocate_dynamic(
+                    ptr: LLVM::pointer_to_int[T, Address](me.data),
+                    size: new_byte_size,
+                )
+                me.data = hijacked_from[T](ptr)
+
+        me.capacity = new_capacity
+    return
+
+### Discards all elements while preserving the current allocation.
+### Use this to reuse a list without paying reallocation costs.
+@reshaping
+routine List[T].clear()
+    me.count = 0
+    return
+
+@readonly
+routine List[T].iter() -> ListEmittable[T]
+    danger
+        return ListEmittable[T](data: me.data, count: me.count(), index: 0)
+
+### Returns a write token on the next element: the address of its slot.
+### :returns: The token.
+### :throws: {AbsentValueError} The walk is over.
+@overridable
+failable routine ListEmittable[T].emit() -> Modifying[T]
+needs AnyType T
+    if me.index >= me.count
+        throw AbsentValueError()
+    danger
+        var slot = me.data.offset(T.data_size() * me.index)
+        me.index = me.index + 1
+        return Modifying[T](slot)
+
+### `emit` for a single-owner entity: the slot holds the entity's address, which is the token.
+### :returns: The token.
+### :throws: {AbsentValueError} The walk is over.
+@override
+failable routine ListEmittable[T].emit() -> Modifying[T]
+needs EntityType T
+    if me.index >= me.count
+        throw AbsentValueError()
+    danger
+        var address = me.data.offset(T.data_size() * me.index).peek_as[Hijacked[T]]()
+        me.index = me.index + 1
+        return Modifying[T](address)
+
+### Walks the elements of a `List[T]` front to back and hands each one over: what `each x in steal xs` walks. The
+### walk holds the list's buffer from its start, and the elements it has not handed over end with it.
+### :typeparam T: The element type.
+entity ListTakingEmittable[T]
+obeys Emittable[T]
+    ### Stores the buffer, which the walk frees.
+    secret data: Hijacked[T]
+    ### Stores the number of elements in the buffer.
+    secret count: U64
+    ### Stores the position of the next element to hand over.
+    secret index: U64
+
+### Hands the elements over to a walk and leaves the list empty.
+### :returns: The walk.
+@reshaping
+routine List[T].take_each() -> ListTakingEmittable[T]
+    var walk = ListTakingEmittable[T](data: me.data, count: me.count, index: 0)
+    me.data = hijacked_none[T]()
+    me.count = 0
+    me.capacity = 0
+    return steal walk
+
+### Hands over the next element.
+### :returns: The element.
+### :throws: {AbsentValueError} The walk is over.
+failable routine ListTakingEmittable[T].emit() -> T
+    if me.index >= me.count
+        throw AbsentValueError()
+    var slot = me.index
+    me.index = me.index + 1
+    danger
+        return me.data.offset(T.data_size() * slot).peek()
+
+### Ends the elements not handed over yet, then frees the buffer.
+@override
+routine ListTakingEmittable[T].destruct()
+    danger
+        var elem_size = T.data_size()
+        each i in me.index til me.count
+            me.data
+                .offset(elem_size * i)
+                .peek()
+                .destruct()
+        me.data.invalidate()
+        return
+
+### Returns true if both lists contain the same elements in the same order.
+### :param you: The other list to compare against.
+### :returns: `true` if both have equal count and all corresponding elements are equal.
+@readonly
+routine List[T].eq(you: Viewing[List[T]]) -> Bool
+needs T obeys Equatable
+    if me.count() != you.count()
+        return false
+    var i: U64 = 0
+    while i < me.count()
+        if me[i] != you[i]
+            return false
+        i = i +% 1
+    return true
+
+### Returns true if any element in the list equals `value`.
+### Uses the element type's equality operator and scans from front to back.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found; `false` if no element matches.
+@readonly
+routine List[T].has(value: Viewing[T]) -> Bool
+needs T obeys Equatable
+    var i: U64 = 0
+    while i < me.count()
+        if me[i] == value
+            return true
+        i = i +% 1
+    return false
+
+### Returns whether `value` is not in this value: the opposite of `has`.
+### :param value: The value to look for.
+### :returns: `true` when `value` is absent.
+@readonly
+routine List[T].lacks(value: Viewing[T]) -> Bool
+needs T obeys Equatable
+    return not me.has(value)
+
+@readonly
+@override
+routine List[T].represent() -> Text
+    var result = "["
+    var i: U64 = 0
+    each v in me
+        if i > 0
+            result = result + ", "
+        result = result + nested_repr(v)
+        i = i +% 1
+    result = result + "]"
+    return result
+
+@readonly
+@override
+routine List[T].diagnose() -> Text
+    var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
+    var i: U64 = 0
+    each v in me
+        if i > 0
+            result = result + ", "
+        result = result + nested_repr(v)
+        i = i +% 1
+    result = result + "])"
+    return result
+
+### Appends `count` elements from `source` beginning at `from` into this list.
+### Elements are copied as a single contiguous range using a memcopy.
+### :param source: The source list to copy from.
+### :param from: The zero-based start index within `source`.
+### :param count: The number of elements to copy.
+### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
+@reshaping
+failable routine List[T].add_range(source: Viewing[List[T]], from: U64, count: U64)
+needs RecordType T
+    if count == 0
+        return
+    if from + count > source.count()
+        throw IndexOutOfBoundsError(index: from + count, count: source.count())
+
+    var new_count = me.count + count
+    if new_count > me.capacity
+        me.reserve(
+            next_grow_capacity(
+                current: me.capacity,
+                min_needed: new_count,
+                element_size: T.data_size().byte_size(),
+            ),
+        )
+
+    # Clone each element through the read-only borrow. `clone` is elided for trivially-copyable T
+    # (no symbol) and delegates to the retain-aware `store` for RC records like Text, so appended
+    # elements are owned independently. The prior bitwise copy aliased buffer pointers (double-free).
+    var i: U64 = 0
+    while i < count
+        me.add_last(value: source[from + i])
+        i = i + 1
+    return
+
+### Returns a deep, independent copy of this list. Each element is copied through `copy`,
+### so the result shares no heap storage with the original (managed leaves like `Text` bump
+### their refcount; aggregate elements are duplicated recursively). This is the deep-copy point
+### the builder inserts when a `List[T]` is an owned arm of a value being copied.
+### :returns: A new `List[T]` owning independent copies of every element.
+routine List[T].duplicate() -> List[T]
+needs RecordType T
+    var result = List[T](capacity: me.count)
+    var i: U64 = 0
+    while i < me.count
+        result.add_last(value: me[i])
+        i = i +% 1
+    return steal result
+
+### Serializes this list to a `SerialValue.List`, serializing each element in order. Overrides the
+### default field-walk so a `List[T]` renders as a sequence of serialized elements, not its internal
+### buffer/count layout.
+### :returns: The `SerialValue.List` holding each element's serialized form.
+@readonly
+@override
+routine List[T].serialize() -> SerialValue
+    var result = List[SerialValue]()
+    var i: U64 = 0
+    while i < me.count
+        result.add_last(value: me[i].serialize())
+        i = i +% 1
+    return SerialValue(steal result)
+
+### Shortens the list to `new_count` elements by discarding elements past the new boundary.
+### The backing allocation is not changed.
+### :param new_count: The new element count; must be no greater than `count()`.
+### :throws: {IndexOutOfBoundsError} if `new_count > count()`.
+@reshaping
+failable routine List[T].truncate(new_count: U64)
+    if new_count > me.count
+        throw IndexOutOfBoundsError(index: new_count, count: me.count)
+    me.count = new_count
+    return
+
+### Sorts the list in ascending order in place using the element's natural `<` ordering.
+### Uses a stable, iterative bottom-up merge sort with insertion sort for small runs.
+### Equal elements preserve their relative order.
+routine List[T].sort()
+needs T obeys Comparable
+    if me.count <= 1
+        return
+
+    # Insertion sort small lists directly
+    if me.count <= SORT_MIN_RUN
+        me.insertion_sort(start: 0, end: me.count)
+        return
+
+    # Phase 1: insertion sort each chunk of SORT_MIN_RUN
+    var i: U64 = 0
+    loop
+        if i >= me.count
+            break
+        var end = i + SORT_MIN_RUN
+        if end > me.count
+            end = me.count
+        me.insertion_sort(start: i, end: end)
+        i = i + SORT_MIN_RUN
+
+    # Phase 2: iterative bottom-up merge, doubling width each pass
+    var buffer = List[T](capacity: me.count)
+    buffer.count = me.count
+
+    var width = SORT_MIN_RUN
+    loop
+        if width >= me.count
+            break
+
+        var left: U64 = 0
+        loop
+            if left >= me.count
+                break
+
+            var mid = left + width
+            if mid > me.count
+                mid = me.count
+            var right = left + width *% 2
+            if right > me.count
+                right = me.count
+
+            if mid < right
+                me.merge_into(left: left, mid: mid, right: right, buffer: buffer)
+
+            left = left + width *% 2
+
+        width = width *% 2
+    return
+
+### Sorts the list in place using a caller-supplied comparator.
+### The comparator must return `true` when `a` should appear before `b`.
+### Uses the same stable, iterative merge sort as `sort()`.
+### :param compare: A two-argument routine that returns `true` when its first argument precedes its second.
+routine List[T].sort_by(compare: Callable[(T, T), Bool])
+    if me.count <= 1
+        return
+
+    if me.count <= SORT_MIN_RUN
+        me.insertion_sort_by(start: 0, end: me.count, compare: compare)
+        return
+
+    var i: U64 = 0
+    loop
+        if i >= me.count
+            break
+        var end = i + SORT_MIN_RUN
+        if end > me.count
+            end = me.count
+        me.insertion_sort_by(start: i, end: end, compare: compare)
+        i = i + SORT_MIN_RUN
+
+    var buffer = List[T](capacity: me.count)
+    buffer.count = me.count
+
+    var width = SORT_MIN_RUN
+    loop
+        if width >= me.count
+            break
+
+        var left: U64 = 0
+        loop
+            if left >= me.count
+                break
+
+            var mid = left + width
+            if mid > me.count
+                mid = me.count
+            var right = left + width *% 2
+            if right > me.count
+                right = me.count
+
+            if mid < right
+                me.merge_into_by(
+                    left: left,
+                    mid: mid,
+                    right: right,
+                    buffer: buffer,
+                    compare: compare,
+                )
+
+            left = left + width *% 2
+
+        width = width *% 2
+    return
+
+### Returns a new list with the same elements sorted in ascending order.
+### The original list is left unchanged.
+### :returns: A new `List[T]` whose elements are in ascending order.
+@readonly
+routine List[T].sorted() -> List[T]
+needs T obeys Comparable
+    var copy = List[T](capacity: me.count)
+    copy.add_range(source: me, from: 0, count: me.count)
+    copy.sort()
+    return steal copy
+
+### Returns a new list with the same elements sorted using `compare`.
+### The original list is left unchanged.
+### :param compare: A two-argument routine that returns `true` when its first argument precedes its second.
+### :returns: A new `List[T]` whose elements are ordered according to `compare`.
+@readonly
+routine List[T].sorted_by(compare: Callable[(T, T), Bool]) -> List[T]
+    var copy = List[T](capacity: me.count)
+    copy.add_range(source: me, from: 0, count: me.count)
+    copy.sort_by(compare)
+    return steal copy
+
+### Swaps the elements at `first` and `second` in place. Nothing is copied or torn down: each element moves to the
+### other's position, so this is how an element leaves the middle of a list without leaving a hole (`steal xs[i]`
+### is RF-S622).
+### :param first: One position.
+### :param second: The other position.
+### :throws: {IndexOutOfBoundsError} if either position is `count()` or more.
+failable routine List[T].swap(first: U64, second: U64)
+    if first >= me.count
+        throw IndexOutOfBoundsError(index: first, count: me.count)
+    if second >= me.count
+        throw IndexOutOfBoundsError(index: second, count: me.count)
+    if first == second
+        return
+    var temp = me.get_raw(first)
+    me.set_raw(index: first, value: me.get_raw(second))
+    me.set_raw(index: second, value: temp)
+    return
+
+### Reverses the order of all elements in place.
+### The first element becomes last, the last becomes first, and element count is unchanged.
+routine List[T].reverse_in_place()
+    if me.count <= 1
+        return
+
+    var lo: U64 = 0
+    var hi = me.count - 1
+    loop
+        if lo >= hi
+            break
+        var temp = me.get_raw(lo)
+        me.set_raw(index: lo, value: me.get_raw(hi))
+        me.set_raw(index: hi, value: temp)
+        lo = lo + 1
+        hi = hi - 1
+    return
+
+# ============================================================================
+# Sorting — internal helpers (secret)
+# ============================================================================
+
+### Sorts the sub-range [start, end) in place using insertion sort.
+### Used by `sort` and `sort_by` for small runs where merge sort has too much overhead.
+### :param start: The inclusive starting index of the range.
+### :param end: The exclusive ending index of the range.
+routine List[T].insertion_sort(start: U64, end: U64)
+needs T obeys Comparable
+    var i = start + 1
+    loop
+        if i >= end
+            break
+        var key = me.get_raw(i)
+        var j = i
+        loop
+            if j <= start
+                break
+            var prev = me.get_raw(j - 1)
+            if not (key < prev)
+                break
+            me.set_raw(index: j, value: prev)
+            j = j - 1
+        me.set_raw(index: j, value: key)
+        i = i + 1
+    return
+
+### Sorts the sub-range [start, end) in place using insertion sort with a custom comparator.
+### :param start: The inclusive starting index of the range.
+### :param end: The exclusive ending index of the range.
+### :param compare: A routine that returns `true` when its first argument should precede its second.
+routine List[T].insertion_sort_by(start: U64, end: U64, compare: Callable[(T, T), Bool])
+    var i = start + 1
+    loop
+        if i >= end
+            break
+        var key = me.get_raw(i)
+        var j = i
+        loop
+            if j <= start
+                break
+            var prev = me.get_raw(j - 1)
+            if not compare(key, prev)
+                break
+            me.set_raw(index: j, value: prev)
+            j = j - 1
+        me.set_raw(index: j, value: key)
+        i = i + 1
+    return
+
+### Merges two adjacent sorted runs `[left, mid)` and `[mid, right)` in place.
+### Uses `buffer` as scratch space; `buffer` must be at least `count()` elements long.
+### This merge is stable: equal elements from the left run always precede those from the right.
+### :param left: Start index of the first sorted run.
+### :param mid: Start index of the second sorted run (and exclusive end of the first).
+### :param right: Exclusive end index of the second sorted run.
+### :param buffer: A pre-allocated list used as temporary storage during the merge.
+routine List[T].merge_into(left: U64, mid: U64, right: U64, buffer: Modifying[List[T]])
+needs T obeys Comparable
+    # Copy [left, right) into the buffer
+    var i = left
+    loop
+        if i >= right
+            break
+        buffer.set_raw(index: i, value: me.get_raw(i))
+        i = i + 1
+
+    var a = left
+    var b = mid
+    var out = left
+
+    loop
+        if a >= mid or b >= right
+            break
+        var va = buffer.get_raw(a)
+        var vb = buffer.get_raw(b)
+        if vb < va
+            me.set_raw(index: out, value: vb)
+            b = b + 1
+        else
+            me.set_raw(index: out, value: va)
+            a = a + 1
+        out = out + 1
+
+    # Copy remaining elements from left run
+    loop
+        if a >= mid
+            break
+        me.set_raw(index: out, value: buffer.get_raw(a))
+        a = a + 1
+        out = out + 1
+
+    # Copy remaining elements from right run
+    loop
+        if b >= right
+            break
+        me.set_raw(index: out, value: buffer.get_raw(b))
+        b = b + 1
+        out = out + 1
+    return
+
+### Merges two adjacent sorted runs `[left, mid)` and `[mid, right)` using a custom comparator.
+### Uses `buffer` as scratch space. Stable: equal elements from the left run are output first.
+### :param left: Start index of the first sorted run.
+### :param mid: Start index of the second sorted run (and exclusive end of the first).
+### :param right: Exclusive end index of the second sorted run.
+### :param buffer: A pre-allocated list used as temporary storage during the merge.
+### :param compare: A routine that returns `true` when its first argument should precede its second.
+routine List[T].merge_into_by(
+    left: U64,
+    mid: U64,
+    right: U64,
+    buffer: Modifying[List[T]],
+    compare: Callable[(T, T), Bool],
+)
+    var i = left
+    loop
+        if i >= right
+            break
+        buffer.set_raw(index: i, value: me.get_raw(i))
+        i = i + 1
+
+    var a = left
+    var b = mid
+    var out = left
+
+    loop
+        if a >= mid or b >= right
+            break
+        var va = buffer.get_raw(a)
+        var vb = buffer.get_raw(b)
+        if compare(vb, va)
+            me.set_raw(index: out, value: vb)
+            b = b + 1
+        else
+            me.set_raw(index: out, value: va)
+            a = a + 1
+        out = out + 1
+
+    loop
+        if a >= mid
+            break
+        me.set_raw(index: out, value: buffer.get_raw(a))
+        a = a + 1
+        out = out + 1
+
+    loop
+        if b >= right
+            break
+        me.set_raw(index: out, value: buffer.get_raw(b))
+        b = b + 1
+        out = out + 1
+    return
+
+### Destroys each live element (no-op for value-typed `T`), then frees the backing buffer.
+@override
+routine List[T].destruct()
+    danger
+        var elem_size = T.data_size()
+        each i in 0 til me.count()
+            me.data
+                .offset(elem_size * i)
+                .peek()
+                .destruct()
+        me.data.invalidate()
+        return
+
+### Cycle-collector TRACE: report every live element to the collector (a `Roamed` element reports its
+### controller, a value element is a no-op) via the backing buffer. Overrides the universal member-walk —
+### a raw `Hijacked` buffer cannot self-trace (it does not know its own length), so the list supplies it.
+@override
+dangerous routine List[T].roam_trace()
+    me.data.cyclic_trace_buffer(count: me.count)
+    return
+
+### Cycle-collector FREE: free the backing buffer and this list's own box, but do NOT tear down the
+### elements — the collector frees the whole white cycle directly, so destroying a `Roamed` element here
+### would double-free a sibling reaped in the same batch. (Contrast `destruct`, which DOES destroy each
+### element for a normal, non-cycle teardown.)
+@override
+dangerous routine List[T].roam_free()
+    me.data.invalidate()
+    return

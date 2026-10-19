@@ -158,13 +158,13 @@ public sealed class PbrfPartitionAnalysis
                         }
 
                         deps.Add(item: cm);
-                        // Sample suspicious Core -> {leaf module} edges: which Core symbol references what?
-                        if (module == "Core" &&
+                        // Sample suspicious System -> {leaf module} edges: which System symbol references what?
+                        if (module == "System" &&
                             (cm == "Random" || cm == "Subprocess" || cm == "Math3D" ||
                              cm == "Collections" || cm == "Numerics") && edgeSamples.Count < 40)
                         {
                             edgeSamples.Add(
-                                item: $"Core[{SymName(o: cur)}] -> {cm}[{SymName(o: child)}]");
+                                item: $"System[{SymName(o: cur)}] -> {cm}[{SymName(o: child)}]");
                         }
 
                         continue;
@@ -245,7 +245,7 @@ public sealed class PbrfPartitionAnalysis
         }
 
         _out.WriteLine(message: "");
-        _out.WriteLine(message: "=== SUSPICIOUS Core -> leaf EDGE SAMPLES ===");
+        _out.WriteLine(message: "=== SUSPICIOUS System -> leaf EDGE SAMPLES ===");
         foreach (string s in edgeSamples)
         {
             _out.WriteLine(message: $"  {s}");

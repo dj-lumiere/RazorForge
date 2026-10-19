@@ -1,0 +1,62 @@
+module System
+
+### Any crashable: the error a `check` caught, whatever its type. `is Crashables e` on a `Check`
+### binds it. It is the address of the heap object the error lives in, whose mold names the crashable's
+### own routines, so `crash_title`, `crash_message`, `represent` and `diagnose` reach that crashable's. The carrier
+### that caught the error owns the object and frees it; a `Crashables` read out of it is valid while the carrier
+### holds the error.
+record Crashables
+    ### The address of the heap object the caught error lives in.
+    secret object: Address
+
+### The caught error's title: its type's name in sentence case, unless the crashable writes its own.
+### :returns: The title.
+@readonly
+@innate
+routine Crashables.crash_title() -> Text
+
+### The caught error's message.
+### :returns: The message.
+@readonly
+@innate
+routine Crashables.crash_message() -> Text
+
+### The caught error as text: its message.
+### :returns: The message.
+@readonly
+@override
+@innate
+routine Crashables.represent() -> Text
+
+### The caught error for diagnostics: its type, message and member variables.
+### :returns: The diagnostic text.
+@readonly
+@override
+@innate
+routine Crashables.diagnose() -> Text
+
+### The caught error's type id, the one a type pattern on a carrier compares.
+### :returns: The type id.
+@readonly
+@innate
+routine Crashables.crash_type_id() -> U64
+
+### Frees the caught error and the object it lives in. Only the carrier that owns the error calls this.
+@innate
+dangerous routine Crashables.free()
+
+# The object a caught error lives in starts with one address-sized word (the builder's), then the crash trace the
+# error was first thrown with: the 32 frames of the thrower's trace ring as they were, then its depth. The builder
+# copies them when it puts the error in the object, so a report of the error thrown again can show where it began.
+
+### The first of the 32 frames the error was first thrown with, a ring its depth indexes modulo 32.
+### :returns: The address of frame 0.
+@untraced
+dangerous routine Crashables.thrown_trace_frames() -> Hijacked[TraceFrame]
+    return Hijacked[Address](me.object).stride(count: 1).recast_as[TraceFrame]()
+
+### How many frames the trace had when the error was first thrown (0 when the build keeps no trace).
+### :returns: The depth.
+@untraced
+dangerous routine Crashables.thrown_trace_depth() -> S32
+    return me.thrown_trace_frames().stride(count: 32).recast_as[S32]().peek()

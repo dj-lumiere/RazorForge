@@ -1,0 +1,1120 @@
+module System/Numerics
+
+import Collections
+# Constants for U256 limits
+preset U256_MIN: U256 = 0
+preset U256_MAX: U256 = 115792089237316195423570985008687907853269984665640564039457584007913129639935
+preset U256_ZERO: U256 = 0
+preset U256_ONE: U256 = 1
+
+# ============================================================================
+# Register-resident U256 / U128 division (specialized, value-based). Mirrors
+# System.knuth_divide's D3-D6 but with U64 locals and the quotient-digit loop hand-
+# unrolled (3 fixed steps), so all limb indices are constant and SROA keeps it in
+# registers instead of the Hijacked[Array] memory traffic the generic kernel forces.
+# Used by D128 div (divisor always fits U128, quotient fits U128).
+# ============================================================================
+
+### One Knuth-D quotient-digit step for a 2-limb divisor: divide (ujn:ujn1:ujn2) by
+### the normalized divisor (vn1:vn0), returning the updated dividend limbs + qhat.
+record KStep
+    ujn: U64
+    ujn1: U64
+    ujn2: U64
+    q: U64
+
+### A 256-bit unsigned integer in the range 0 to 2²⁵⁶−1.
+###
+### `U256` is used for cryptographic computations, very large counters, and as a
+### wide intermediate for the software float / decimal kernels (e.g. B128 products
+### and division numerators). Note that `U256` does not implement `AtomicType`
+### because hardware atomic operations on 256-bit values are not available.
+@llvm("i256")
+record U256
+obeys UnsignedIntegral, Comparable, ConstCompatible, Copyable, Splittable
+    pass
+
+### (quotient, remainder) of `num // den` from ONE Knuth-D call. Caller guarantees
+### `den != 0` (the single-limb path traps on a zero divisor, matching `//!` UB).
+### Replaces the inline `udiv/urem i256` software bit-loop (~256 iterations) with the
+### base-2⁶⁴ Knuth kernel (hardware `DIV r64` per limb).
+record UDR256
+    q: U256
+    r: U256
+
+### Performs one Knuth Algorithm-D quotient-digit step (D3-D6) for a normalized 2-limb
+### divisor (vn1:vn0), against the top dividend limbs (ujn:ujn1:ujn2). Estimates qhat,
+### corrects it, runs the multiply-subtract, and adds the divisor back if it went negative.
+### :returns: the updated top three dividend limbs and the final quotient digit `q`.
+@inline
+routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64, vrec: U64) -> KStep
+    # D3: initial qhat estimate via multiply-only div2by1 (vrec = reciprocal_word(vn1), hoisted by the
+    # caller since vn1 is invariant). ujn == vn1 would break div2by1's u1 < d precondition, so cap at 2^64-1.
+    var qhat: U64 = 0
+    var rhat: U64 = 0
+    if LLVM::int_eq(a: ujn, b: vn1)
+        qhat = 18446744073709551615
+        rhat = LLVM::add(a: ujn1, b: vn1)
+    else
+        var dr = div2by1(u1: ujn, u0: ujn1, d: vn1, v: vrec)
+        qhat = dr.q
+        rhat = dr.r
+    # D3 correction: while qhat*vn0 > (rhat:ujn2), decrement qhat (and grow rhat by vn1).
+    var keep = true
+    while keep
+        var lhs = LLVM::mul(
+            a: LLVM::zero_extend[U64, U128](qhat),
+            b: LLVM::zero_extend[U64, U128](vn0),
+        )
+        var rhs = LLVM::bit_or(
+            a: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](rhat), bits: 64),
+            b: LLVM::zero_extend[U64, U128](ujn2),
+        )
+        if LLVM::unsigned_gt(a: lhs, b: rhs)
+            qhat = LLVM::sub(a: qhat, b: 1)
+            var rnew = LLVM::add(a: rhat, b: vn1)
+            if LLVM::unsigned_lt(a: rnew, b: rhat)
+                keep = false
+            else
+                rhat = rnew
+        else
+            keep = false
+    # D4: un[j..j+2] -= qhat * vn, S128 borrow k
+    var k = LLVM::zero_extend[U64, S128](0)
+    var p0 = LLVM::mul(a: LLVM::zero_extend[U64, U128](qhat), b: LLVM::zero_extend[U64, U128](vn0))
+    var t0 = LLVM::sub(
+        a: LLVM::sub(a: LLVM::zero_extend[U64, S128](ujn2), b: k),
+        b: LLVM::zero_extend[U64, S128](LLVM::int_truncate[U128, U64](p0)),
+    )
+    var nujn2 = LLVM::int_truncate[S128, U64](t0)
+    k = LLVM::sub(
+        a: LLVM::zero_extend[U64, S128](
+            LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(p0, 64)),
+        ),
+        b: LLVM::shift_right_signed(t0, 64),
+    )
+    var p1 = LLVM::mul(a: LLVM::zero_extend[U64, U128](qhat), b: LLVM::zero_extend[U64, U128](vn1))
+    var t1 = LLVM::sub(
+        a: LLVM::sub(a: LLVM::zero_extend[U64, S128](ujn1), b: k),
+        b: LLVM::zero_extend[U64, S128](LLVM::int_truncate[U128, U64](p1)),
+    )
+    var nujn1 = LLVM::int_truncate[S128, U64](t1)
+    k = LLVM::sub(
+        a: LLVM::zero_extend[U64, S128](
+            LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(p1, 64)),
+        ),
+        b: LLVM::shift_right_signed(t1, 64),
+    )
+    var ttop = LLVM::sub(a: LLVM::zero_extend[U64, S128](ujn), b: k)
+    var nujn = LLVM::int_truncate[S128, U64](ttop)
+    var qres = qhat
+    # D5/D6: if the subtraction went negative, qhat was 1 too big — add the divisor back
+    if LLVM::signed_lt(a: ttop, b: LLVM::zero_extend[U64, S128](0))
+        qres = LLVM::sub(a: qhat, b: 1)
+        var sum0 = LLVM::add(
+            a: LLVM::zero_extend[U64, U128](nujn2),
+            b: LLVM::zero_extend[U64, U128](vn0),
+        )
+        nujn2 = LLVM::int_truncate[U128, U64](sum0)
+        var carry = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(sum0, 64))
+        var sum1 = LLVM::add(
+            a: LLVM::add(
+                a: LLVM::zero_extend[U64, U128](nujn1),
+                b: LLVM::zero_extend[U64, U128](vn1),
+            ),
+            b: LLVM::zero_extend[U64, U128](carry),
+        )
+        nujn1 = LLVM::int_truncate[U128, U64](sum1)
+        carry = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(sum1, 64))
+        nujn = LLVM::add(a: nujn, b: carry)
+    return KStep(ujn: nujn, ujn1: nujn1, ujn2: nujn2, q: qres)
+
+### Assemble 4 U64 limbs (little-endian) into a U256.
+@inline
+routine asm256(q0: U64, q1: U64, q2: U64, q3: U64) -> U256
+    return LLVM::bit_or(
+        a: LLVM::bit_or(
+            a: LLVM::zero_extend[U64, U256](q0),
+            b: LLVM::shift_left(
+                value: LLVM::zero_extend[U64, U256](q1),
+                bits: U256.to_width(s: 64),
+            ),
+        ),
+        b: LLVM::bit_or(
+            a: LLVM::shift_left(
+                value: LLVM::zero_extend[U64, U256](q2),
+                bits: U256.to_width(s: 128),
+            ),
+            b: LLVM::shift_left(
+                value: LLVM::zero_extend[U64, U256](q3),
+                bits: U256.to_width(s: 192),
+            ),
+        ),
+    )
+
+### Quotient of num // den (den fits U128) with the round-sticky in bit 0. Register-
+### resident: n=1 long division for a single-limb divisor, unrolled n=2 Knuth otherwise.
+routine udiv256_by_u128_sticky(num: U256, den: U256) -> U256
+    var a0 = LLVM::int_truncate[U256, U64](num)
+    var a1 = LLVM::int_truncate[U256, U64](
+        LLVM::shift_right_unsigned(num, U256.to_width(s: 64)),
+    )
+    var a2 = LLVM::int_truncate[U256, U64](
+        LLVM::shift_right_unsigned(num, U256.to_width(s: 128)),
+    )
+    var a3 = LLVM::int_truncate[U256, U64](
+        LLVM::shift_right_unsigned(num, U256.to_width(s: 192)),
+    )
+    var d0 = LLVM::int_truncate[U256, U64](den)
+    var d1 = LLVM::int_truncate[U256, U64](
+        LLVM::shift_right_unsigned(den, U256.to_width(s: 64)),
+    )
+    if LLVM::int_eq(a: d1, b: 0)
+        # single-limb divisor: normalized long division via multiply-only div2by1 (no hardware divide).
+        # Normalize d0, shift the dividend limbs on the fly; the normalized remainder is nonzero iff the
+        # true remainder is (it equals true_rem << s1, no overflow since true_rem < d0 < 2^(64-s1)).
+        var s1 = LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(d0))
+        var s1u = LLVM::reinterpret_bits[S64, U64](s1)
+        var s1i = LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 64, b: s1))
+        var p1 = LLVM::signed_gt(a: s1, b: 0)
+        var dn1 = LLVM::shift_left(value: d0, bits: s1u)
+        var vr1 = reciprocal_word(dn1)
+        var na3 = LLVM::bit_or(
+            a: LLVM::shift_left(value: a3, bits: s1u),
+            b: if p1 then LLVM::shift_right_unsigned(a2, s1i) else 0,
+        )
+        var na2 = LLVM::bit_or(
+            a: LLVM::shift_left(value: a2, bits: s1u),
+            b: if p1 then LLVM::shift_right_unsigned(a1, s1i) else 0,
+        )
+        var na1 = LLVM::bit_or(
+            a: LLVM::shift_left(value: a1, bits: s1u),
+            b: if p1 then LLVM::shift_right_unsigned(a0, s1i) else 0,
+        )
+        var na0 = LLVM::shift_left(value: a0, bits: s1u)
+        var r0 = if p1 then LLVM::shift_right_unsigned(a3, s1i) else 0
+        var dr3 = div2by1(u1: r0, u0: na3, d: dn1, v: vr1)
+        var dr2 = div2by1(u1: dr3.r, u0: na2, d: dn1, v: vr1)
+        var dr1 = div2by1(u1: dr2.r, u0: na1, d: dn1, v: vr1)
+        var dr0 = div2by1(u1: dr1.r, u0: na0, d: dn1, v: vr1)
+        var q = asm256(q0: dr0.q, q1: dr1.q, q2: dr2.q, q3: dr3.q)
+        if LLVM::int_ne(a: dr0.r, b: 0)
+            q = LLVM::bit_or(a: q, b: LLVM::zero_extend[U64, U256](1))
+        return q
+    # two-limb divisor: Knuth-D, mlen=4 / m=2 unrolled (extra leading quotient digits
+    # naturally come out 0). Normalize so the top divisor limb has its MSB set.
+    var s = LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(d1))
+    var su = LLVM::reinterpret_bits[S64, U64](s)
+    var pos = LLVM::signed_gt(a: s, b: 0)
+    var si = LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 64, b: s))
+    var vn1 = LLVM::bit_or(
+        a: LLVM::shift_left(value: d1, bits: su),
+        b: if pos then LLVM::shift_right_unsigned(d0, si) else 0,
+    )
+    var vn0 = LLVM::shift_left(value: d0, bits: su)
+    # vn1 is normalized and invariant across the 3 unrolled quotient-digit steps → reciprocal once.
+    var vrec = reciprocal_word(vn1)
+    var un0 = LLVM::shift_left(value: a0, bits: su)
+    var un1 = LLVM::bit_or(
+        a: LLVM::shift_left(value: a1, bits: su),
+        b: if pos then LLVM::shift_right_unsigned(a0, si) else 0,
+    )
+    var un2 = LLVM::bit_or(
+        a: LLVM::shift_left(value: a2, bits: su),
+        b: if pos then LLVM::shift_right_unsigned(a1, si) else 0,
+    )
+    var un3 = LLVM::bit_or(
+        a: LLVM::shift_left(value: a3, bits: su),
+        b: if pos then LLVM::shift_right_unsigned(a2, si) else 0,
+    )
+    var un4 = if pos then LLVM::shift_right_unsigned(a3, si) else 0
+    var st2 = knuth_step(ujn: un4, ujn1: un3, ujn2: un2, vn0: vn0, vn1: vn1, vrec: vrec)
+    un4 = st2.ujn
+    un3 = st2.ujn1
+    un2 = st2.ujn2
+    var st1 = knuth_step(ujn: un3, ujn1: un2, ujn2: un1, vn0: vn0, vn1: vn1, vrec: vrec)
+    un3 = st1.ujn
+    un2 = st1.ujn1
+    un1 = st1.ujn2
+    var st0 = knuth_step(ujn: un2, ujn1: un1, ujn2: un0, vn0: vn0, vn1: vn1, vrec: vrec)
+    un2 = st0.ujn
+    un1 = st0.ujn1
+    un0 = st0.ujn2
+    var q = asm256(q0: st0.q, q1: st1.q, q2: st2.q, q3: 0)
+    # denormalized remainder (low 2 limbs) for the sticky
+    var rem0 = LLVM::bit_or(
+        a: LLVM::shift_right_unsigned(un0, su),
+        b: if pos then LLVM::shift_left(value: un1, bits: si) else 0,
+    )
+    var rem1 = LLVM::bit_or(
+        a: LLVM::shift_right_unsigned(un1, su),
+        b: if pos then LLVM::shift_left(value: un2, bits: si) else 0,
+    )
+    if LLVM::int_ne(a: LLVM::bit_or(a: rem0, b: rem1), b: 0)
+        q = LLVM::bit_or(a: q, b: LLVM::zero_extend[U64, U256](1))
+    return q
+
+### Quotient of `num // den` for a 128-bit numerator and a 64-bit divisor, with the round-
+### sticky baked into bit 0 (set iff the remainder was nonzero). Two hardware 128/64 divides
+### (high limb, then low) — no `__udivti3` U128 libcall and no separate %/multiply-back to
+### recover the remainder. The D64 single-limb analog of `udiv256_by_u128_sticky`.
+@inline
+routine udiv128_by_u64_sticky(num: U128, den: U64) -> U128
+    var a0 = LLVM::int_truncate[U128, U64](num)
+    var a1 = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(num, 64))
+    # normalized long division via multiply-only div2by1 (no hardware divide): normalize den,
+    # shift the dividend on the fly; the normalized remainder is nonzero iff the true remainder is.
+    var s1 = LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(den))
+    var s1u = LLVM::reinterpret_bits[S64, U64](s1)
+    var s1i = LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 64, b: s1))
+    var p1 = LLVM::signed_gt(a: s1, b: 0)
+    var dn1 = LLVM::shift_left(value: den, bits: s1u)
+    var vr1 = reciprocal_word(dn1)
+    var na1 = LLVM::bit_or(
+        a: LLVM::shift_left(value: a1, bits: s1u),
+        b: if p1 then LLVM::shift_right_unsigned(a0, s1i) else 0,
+    )
+    var na0 = LLVM::shift_left(value: a0, bits: s1u)
+    var r0 = if p1 then LLVM::shift_right_unsigned(a1, s1i) else 0
+    var dr1 = div2by1(u1: r0, u0: na1, d: dn1, v: vr1)
+    var dr0 = div2by1(u1: dr1.r, u0: na0, d: dn1, v: vr1)
+    var q = LLVM::bit_or(
+        a: LLVM::zero_extend[U64, U128](dr0.q),
+        b: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](dr1.q), bits: 64),
+    )
+    if LLVM::int_ne(a: dr0.r, b: 0)
+        q = LLVM::bit_or(a: q, b: 1)
+    return q
+
+### Quotient of `num // den` when the caller GUARANTEES `hi(num) < den` (so the quotient
+### fits U64) — the sticky is baked into bit 0. A single normalized 2-by-1 divide: ONE x86
+### `divq` (or one M-G `div2by1` on arm64/wasm), NOT the two-limb long division of
+### `udiv128_by_u64_sticky`. Because `hi(num) < den ≤ 2^(64-s)` (s = clz(den)), the shift
+### `num << s` never spills past 128 bits, and the general routine's high-limb step would
+### divide `0:na1` → quotient 0 anyway, so it is pure overhead here. PRECONDITION: `hi(num) <
+### den` (else the result is wrong). D64's divide satisfies it — its digit-scaling caps the
+### quotient at ~18-19 digits (< 2^64).
+@inline
+routine udiv128_hi_lt_den_sticky(num: U128, den: U64) -> U128
+    var a0 = LLVM::int_truncate[U128, U64](num)
+    var a1 = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(num, 64))
+    var s = LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(den))
+    var su = LLVM::reinterpret_bits[S64, U64](s)
+    var si = LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 64, b: s))
+    var p = LLVM::signed_gt(a: s, b: 0)
+    var dn = LLVM::shift_left(value: den, bits: su)
+    var vr = reciprocal_word(dn)
+    # hi(num) < den ⟹ (num << s) fits U128; the normalized high word na1 < dn, so one div2by1
+    # yields the full quotient. dr.r is the normalized remainder (true remainder << s), nonzero
+    # iff the true remainder is → correct sticky without denormalizing.
+    var na1 = LLVM::bit_or(
+        a: LLVM::shift_left(value: a1, bits: su),
+        b: if p then LLVM::shift_right_unsigned(a0, si) else 0,
+    )
+    var na0 = LLVM::shift_left(value: a0, bits: su)
+    var dr = div2by1(u1: na1, u0: na0, d: dn, v: vr)
+    var q = LLVM::zero_extend[U64, U128](dr.q)
+    if LLVM::int_ne(a: dr.r, b: 0)
+        q = LLVM::bit_or(a: q, b: 1)
+    return q
+
+### Quotient of `num // den` with the round-sticky baked into bit 0 (set iff the
+### division left a nonzero remainder). One Knuth-D call returns both quotient and
+### remainder, so callers that only need a sticky avoid a separate %/mul-back.
+routine udiv256_sticky(num: U256, den: U256) -> U256
+    var av = num
+    var bv = den
+    var rem = Array[U64, 4]()
+    danger
+        var qa = knuth_divide[4](
+            a: LLVM::reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
+            b: LLVM::reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
+            rem: rem.hijack(),
+        )
+        var q = LLVM::reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](qa.hijack()).peek()
+        var r = LLVM::reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).peek()
+        if LLVM::int_ne[U256](a: r, b: 0)
+            return LLVM::bit_or(a: q, b: LLVM::zero_extend[U64, U256](1))
+        return q
+
+### (quotient, remainder) of `num // den` from one `knuth_divide[4]` call (base-2⁶⁴
+### Knuth-D over 4 U64 limbs). Caller guarantees `den != 0`.
+### :returns: a `UDR256` holding the quotient `q` and remainder `r`.
+routine udivrem256(num: U256, den: U256) -> UDR256
+    var av = num
+    var bv = den
+    var rem = Array[U64, 4]()
+    danger
+        var qa = knuth_divide[4](
+            a: LLVM::reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](av.hijack()),
+            b: LLVM::reinterpret_bits[Hijacked[U256], Hijacked[Array[U64, 4]]](bv.hijack()),
+            rem: rem.hijack(),
+        )
+        var q = LLVM::reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](qa.hijack()).peek()
+        var r = LLVM::reinterpret_bits[Hijacked[Array[U64, 4]], Hijacked[U256]](rem.hijack()).peek()
+        return UDR256(q: q, r: r)
+
+### Diagnostic name (raw wide intermediate; not decimal-formatted).
+@override
+routine U256.represent() -> Text
+    return wide_dec[U256](me)
+
+### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
+### when negative (`255.to_text(radix: 16)` is `ff`).
+### :param radix: The numeric base.
+### :returns: The rendered `Text`.
+@readonly
+routine U256.to_text(radix: S32) -> Text
+    return wide_radix_text[U256](mag: me, negative: false, radix: radix)
+
+### Diagnostic representation tagged with the type name.
+@override
+routine U256.diagnose() -> Text
+    return "U256(" + me.represent() + ")"
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Converts an `S8` to `U256`, throwing if the value is negative.
+### :returns: A `U256` with the same unsigned value as this value.
+### :throws: {IntegerOverflowError} if `me < 0`.
+failable routine S8.to[U256]() -> U256
+    if me < 0
+        throw IntegerOverflowError()
+    return LLVM::sign_extend[S8, U256](me)
+
+### Converts an `S16` to `U256`, throwing if the value is negative.
+### :returns: A `U256` with the same unsigned value as this value.
+### :throws: {IntegerOverflowError} if `me < 0`.
+failable routine S16.to[U256]() -> U256
+    if me < 0
+        throw IntegerOverflowError()
+    return LLVM::sign_extend[S16, U256](me)
+
+### Converts an `S32` to `U256`, throwing if the value is negative.
+### :returns: A `U256` with the same unsigned value as this value.
+### :throws: {IntegerOverflowError} if `me < 0`.
+failable routine S32.to[U256]() -> U256
+    if me < 0
+        throw IntegerOverflowError()
+    return LLVM::sign_extend[S32, U256](me)
+
+### Converts an `S64` to `U256`, throwing if the value is negative.
+### :returns: A `U256` with the same unsigned value as this value.
+### :throws: {IntegerOverflowError} if `me < 0`.
+failable routine S64.to[U256]() -> U256
+    if me < 0
+        throw IntegerOverflowError()
+    return LLVM::sign_extend[S64, U256](me)
+
+### Converts an `S128` to `U256`, throwing if the value is negative.
+### A non-negative `S128` sign-extends to the same magnitude in 256 bits.
+### :returns: A `U256` with the same unsigned value as this value.
+### :throws: {IntegerOverflowError} if `me < 0`.
+failable routine S128.to[U256]() -> U256
+    if me < 0
+        throw IntegerOverflowError()
+    return LLVM::sign_extend[S128, U256](me)
+
+### Converts an `S256` to `U256`, throwing if the value is negative.
+### :returns: The same bit pattern reinterpreted as `U256`.
+### :throws: {IntegerOverflowError} if `me < 0`.
+failable routine S256.to[U256]() -> U256
+    if me < 0
+        throw IntegerOverflowError()
+    return LLVM::reinterpret_bits[S256, U256](me)
+
+### Zero-extends a `U8` to `U256`.
+### :returns: A `U256` equal in value to this value.
+routine U8.to[U256]() -> U256
+    return LLVM::zero_extend[U8, U256](me)
+
+### Zero-extends a `U16` to `U256`.
+### :returns: A `U256` equal in value to this value.
+routine U16.to[U256]() -> U256
+    return LLVM::zero_extend[U16, U256](me)
+
+### Zero-extends a `U32` to `U256`.
+### :returns: A `U256` equal in value to this value.
+routine U32.to[U256]() -> U256
+    return LLVM::zero_extend[U32, U256](me)
+
+### Zero-extends a `U64` to `U256`.
+### :returns: A `U256` equal in value to this value.
+routine U64.to[U256]() -> U256
+    return LLVM::zero_extend[U64, U256](me)
+
+### Zero-extends a `U128` to `U256`.
+### :returns: A `U256` equal in value to this value.
+routine U128.to[U256]() -> U256
+    return LLVM::zero_extend[U128, U256](me)
+
+### Identity conversion — returns this value unchanged.
+### :returns: this value unchanged.
+routine U256.to[U256]() -> U256
+    return me
+
+### Converts an `B16` to `U256`, truncating toward zero.
+### :returns: The integer part of this value as a `U256`.
+### :throws: {IntegerOverflowError} if this value is NaN, infinite, or negative.
+failable routine B16.to[U256]() -> U256
+    return me.to[B32]().to[U256]()
+
+### Converts an `B32` to `U256`, truncating toward zero.
+### :returns: The integer part of this value as a `U256`.
+### :throws: {IntegerOverflowError} if this value is NaN, infinite, or negative.
+failable routine B32.to[U256]() -> U256
+    if not me.is_finite() or me < 0.0
+        throw IntegerOverflowError()
+    return LLVM::float_to_unsigned[B32, U256](me)
+
+### Converts an `B64` to `U256`, truncating toward zero.
+### :returns: The integer part of this value as a `U256`.
+### :throws: {IntegerOverflowError} if this value is NaN, infinite, negative, or >= 2^256.
+failable routine B64.to[U256]() -> U256
+    if me.is_nan()
+        or me < 0.0
+        or me >= 115792089237316195423570985008687907853269984665640564039457584007913129639936.0
+        throw IntegerOverflowError()
+    return LLVM::float_to_unsigned[B64, U256](me)
+
+### Converts an `B128` to `U256`, truncating toward zero.
+### :returns: The integer part of this value as a `U256`.
+### :throws: {NumericOverflowError} if negative or >= 2^256; {NumericDomainError} if NaN.
+failable routine B128.to[U256]() -> U256
+    var bits = me.to_bits()
+    var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127))
+    var biased = LLVM::int_truncate[U128, U64](
+        LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112), b: 32767),
+    )
+    var frac = LLVM::bit_and(a: bits, b: b128_mant_mask())
+    if biased == 0x7FFF
+        if LLVM::int_eq(a: frac, b: 0)
+            throw NumericOverflowError(description: "cannot convert infinite B128 to U256")
+        throw NumericDomainError(description: "cannot convert NaN B128 to U256")
+    if sign == 1 and (LLVM::int_ne(a: biased, b: 0) or LLVM::int_ne(a: frac, b: 0))
+        throw NumericOverflowError(description: "cannot convert negative B128 to U256")
+    if biased < 16383
+        return 0
+    var actual_exp = LLVM::sub(a: biased, b: 16383)
+    if actual_exp >= 256
+        throw NumericOverflowError(description: "B128 value out of range for U256")
+    var sig = LLVM::zero_extend[U128, U256](LLVM::bit_or(a: b128_implicit(), b: frac))
+    if actual_exp <= 112
+        return LLVM::shift_right_unsigned(
+            sig,
+            LLVM::zero_extend[U64, U256](LLVM::sub(a: 112, b: actual_exp)),
+        )
+    return LLVM::shift_left(sig, LLVM::zero_extend[U64, U256](LLVM::sub(a: actual_exp, b: 112)))
+
+### Converts a `D32` to `U256`, truncating toward zero.
+### :returns: The integer part of this value as a `U256`.
+### :throws: {NumericOverflowError} if the integer part overflows U256.
+failable routine D32.to[U256]() -> U256
+    return me.to[D128]().to[U256]()
+
+### Converts a `D64` to `U256`, truncating toward zero.
+### :returns: The integer part of this value as a `U256`.
+### :throws: {NumericOverflowError} if the integer part overflows U256.
+failable routine D64.to[U256]() -> U256
+    return me.to[D128]().to[U256]()
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+### Returns the sum and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_sum, overflowed)`.
+routine U256.add_with_overflow(you: U256) -> (U256, Bool)
+    return LLVM::unsigned_add_checked[U256](me, you)
+
+### Returns the difference and a flag indicating whether the result wrapped around.
+### :param you: The value to subtract.
+### :returns: A tuple of `(wrapped_difference, overflowed)`.
+routine U256.sub_with_overflow(you: U256) -> (U256, Bool)
+    return LLVM::unsigned_sub_checked[U256](me, you)
+
+### Returns the product and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_product, overflowed)`.
+routine U256.mul_with_overflow(you: U256) -> (U256, Bool)
+    return LLVM::unsigned_mul_checked[U256](me, you)
+
+### Returns `me + you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The sum `me + you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U256_MAX`.
+failable routine U256.add(you: U256) -> U256
+    var result = me.add_with_overflow(you)
+    if result.item1
+        throw IntegerOverflowError()
+    return result.item0
+
+### Returns `me - you`, throwing on underflow.
+### :param you: The value to subtract.
+### :returns: The difference `me - you`.
+### :throws: {IntegerOverflowError} if the result is less than `U256_MIN` (0).
+failable routine U256.sub(you: U256) -> U256
+    var result = me.sub_with_overflow(you)
+    if result.item1
+        throw IntegerOverflowError()
+    return result.item0
+
+### Returns `me * you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U256_MAX`.
+failable routine U256.mul(you: U256) -> U256
+    var result = me.mul_with_overflow(you)
+    if result.item1
+        throw IntegerOverflowError()
+    return result.item0
+
+### Returns `me // you` (integer division), throwing if `you` is zero.
+### :param you: The divisor.
+### :returns: The quotient `me // you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+failable routine U256.floordiv(you: U256) -> U256
+    if you == 0
+        throw DivisionByZeroError()
+    return udivrem256(num: me, den: you).q
+
+### Returns `me % you` (integer remainder), throwing if `you` is zero.
+### :param you: The divisor.
+### :returns: The remainder `me % you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+failable routine U256.mod(you: U256) -> U256
+    if you == 0
+        throw DivisionByZeroError()
+    return udivrem256(num: me, den: you).r
+
+### (quotient, remainder) of `me // you` and `me % you` from ONE Knuth-D pass — half the work of
+### calling `//` and `%` separately (each runs its own full `udivrem256`). Throws on a zero divisor.
+### :param you: The divisor.
+### :returns: The tuple `(me // you, me % you)`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+@readonly
+failable routine U256.divmod(you: U256) -> (U256, U256)
+    if you == 0
+        throw DivisionByZeroError()
+    var dr = udivrem256(num: me, den: you)
+    return (dr.q, dr.r)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+### Returns `(me + you) mod 2²⁵⁶` without overflow check.
+### :param you: The right operand.
+### :returns: The sum modulo 2²⁵⁶.
+routine U256.add_wrap(you: U256) -> U256
+    return LLVM::add(a: me, b: you)
+
+### Returns `(me - you) mod 2²⁵⁶` without underflow check.
+### :param you: The value to subtract.
+### :returns: The difference modulo 2²⁵⁶.
+routine U256.sub_wrap(you: U256) -> U256
+    return LLVM::sub(a: me, b: you)
+
+### Returns `(me * you) mod 2²⁵⁶` without overflow check.
+### :param you: The right operand.
+### :returns: The product modulo 2²⁵⁶.
+routine U256.mul_wrap(you: U256) -> U256
+    return LLVM::mul(a: me, b: you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Returns `me + you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The sum, assuming no overflow.
+dangerous routine U256.add_unchecked(you: U256) -> U256
+    return LLVM::unsigned_add_exact[U256](a: me, b: you)
+
+### Returns `me - you` with undefined behavior on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, assuming no underflow.
+dangerous routine U256.sub_unchecked(you: U256) -> U256
+    return LLVM::unsigned_sub_exact[U256](a: me, b: you)
+
+### Returns `me * you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The product, assuming no overflow.
+dangerous routine U256.mul_unchecked(you: U256) -> U256
+    return LLVM::unsigned_mul_exact[U256](a: me, b: you)
+
+### Returns `me // you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The quotient, assuming `you != 0`.
+@readonly
+dangerous routine U256.floordiv_unchecked(you: U256) -> U256
+    return udivrem256(num: me, den: you).q
+
+### Returns `me % you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The remainder, assuming `you != 0`.
+@readonly
+dangerous routine U256.mod_unchecked(you: U256) -> U256
+    return udivrem256(num: me, den: you).r
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+### Returns `me + you`, clamped to `U256_MAX` on overflow.
+### :param you: The right operand.
+### :returns: The sum, or `U256_MAX` if it would overflow.
+@readonly
+routine U256.add_clamp(you: U256) -> U256
+    return LLVM::unsigned_add_sat[U256](a: me, b: you)
+
+### Returns `me - you`, clamped to `U256_MIN` on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, or `0` if it would go below `U256_MIN`.
+@readonly
+routine U256.sub_clamp(you: U256) -> U256
+    return LLVM::unsigned_sub_sat[U256](a: me, b: you)
+
+### Returns `me * you`, clamped to `U256_MAX` on overflow.
+### Uses a division-based overflow check since no 512-bit public type is available.
+### :param you: The right operand.
+### :returns: The product, or `U256_MAX` if it would overflow.
+@readonly
+routine U256.mul_clamp(you: U256) -> U256
+    if LLVM::int_eq(a: me, b: 0) or LLVM::int_eq(a: you, b: 0)
+        return 0
+    var result = LLVM::mul(a: me, b: you)
+    if LLVM::int_ne(udivrem256(num: result, den: me).q, you)
+        return U256_MAX
+    return result
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+### Returns `me ** exp` and a flag indicating whether the result wrapped around.
+### :param exp: The exponent.
+### :returns: A tuple of `(wrapped_result, overflowed)`.
+routine U256.pow_with_overflow(exp: U256) -> (U256, Bool)
+    var result: U256 = 1
+    var base: U256 = me
+    var e: U32 = exp.to[U32]()
+    var overflow = false
+    while e > 0
+        if (e & 1) == 1
+            var mul_result = result.mul_with_overflow(base)
+            result = mul_result.item0
+            overflow = overflow or mul_result.item1
+        e = e >> 1
+        if e > 0
+            var square_result = base.mul_with_overflow(base)
+            base = square_result.item0
+            overflow = overflow or square_result.item1
+    return (result, overflow)
+
+### Returns `me ** exp`, throwing on overflow.
+### :param exp: The exponent.
+### :returns: The result of raising `me` to the power `exp`.
+### :throws: {IntegerOverflowError} if the result exceeds `U256_MAX`.
+failable routine U256.pow(exp: U256) -> U256
+    var result = me.pow_with_overflow(exp)
+    if result.item1
+        throw IntegerOverflowError()
+    return result.item0
+
+### Returns `me ** exp` with wrapping arithmetic (mod 2²⁵⁶).
+### :param exp: The exponent.
+### :returns: The result modulo 2²⁵⁶.
+routine U256.pow_wrap(exp: U256) -> U256
+    var result: U256 = 1
+    var base: U256 = me
+    var e: U32 = exp.to[U32]()
+    while e > 0
+        if (e & 1) == 1
+            result = result.mul_wrap(base)
+        e = e >> 1
+        if e > 0
+            base = base.mul_wrap(base)
+    return result
+
+### Returns `me ** exp`, clamped to `U256_MAX` on overflow.
+### :param exp: The exponent.
+### :returns: The result, or `U256_MAX` if it would overflow.
+@readonly
+routine U256.pow_clamp(exp: U256) -> U256
+    var result: U256 = 1
+    var base: U256 = me
+    var e: U32 = exp.to[U32]()
+    while e > 0
+        if (e & 1) == 1
+            result = result.mul_clamp(base)
+        base = base.mul_clamp(base)
+        e = e >> 1
+    return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+### Returns the bitwise AND of this value and `you`.
+### :param you: The right operand.
+### :returns: `me & you`.
+routine U256.bitand(you: U256) -> U256
+    return LLVM::bit_and(a: me, b: you)
+
+### Returns the bitwise OR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me | you`.
+routine U256.bitor(you: U256) -> U256
+    return LLVM::bit_or(a: me, b: you)
+
+### Returns the bitwise XOR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me ^ you`.
+routine U256.bitxor(you: U256) -> U256
+    return LLVM::bit_xor(a: me, b: you)
+
+### Returns the bitwise complement of this value.
+### :returns: `~me` — each bit flipped.
+@readonly
+routine U256.bitnot() -> U256
+    return LLVM::bit_xor(a: me, b: U256_MAX)
+
+# ============================================================================
+# Shift Operations (<<, >>, >>>)
+# Shifting by the width or more pushes every bit out: `<<` and `>>>` give 0, and `>>` gives the
+# fill (0; for unsigned types `>>` and `>>>` are the same).
+# ============================================================================
+
+### Left-shifts this value by `bits` positions, filling vacated bits with zero. Shifting by
+### 256 or more gives 0.
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U256.shift_left(bits: U32) -> U256
+    if bits >= 256
+        return 0
+    return LLVM::shift_left(me, bits.to[U256]())
+
+### Right-shifts this value by `bits` positions, filling vacated bits with zero (the same as
+### `>>>` for an unsigned type). Shifting by 256 or more gives 0.
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits`.
+routine U256.arith_shift_right(bits: U32) -> U256
+    if bits >= 256
+        return 0
+    return LLVM::shift_right_unsigned(me, bits.to[U256]())
+
+### Right-shifts this value by `bits` positions, filling vacated bits with zero (the same as
+### `>>` for an unsigned type). Shifting by 256 or more gives 0.
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >>> bits`.
+routine U256.logical_shift_right(bits: U32) -> U256
+    if bits >= 256
+        return 0
+    return LLVM::shift_right_unsigned(me, bits.to[U256]())
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns `true` when both values are equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me == you`; `false` otherwise.
+@readonly
+routine U256.eq(you: U256) -> Bool
+    return LLVM::int_eq(a: me, b: you)
+
+### Compares this value with `you`, returning the ordering relationship.
+### :param you: The value to compare against.
+### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+@readonly
+routine U256.compare(you: U256) -> ComparisonSign
+    if LLVM::unsigned_lt(me, you)
+        return ME_SMALL
+    if LLVM::unsigned_gt(me, you)
+        return ME_LARGE
+    return SAME
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`; otherwise `you`.
+routine U256.min(you: U256) -> U256
+    return if me <= you then me else you
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`; otherwise `you`.
+routine U256.max(you: U256) -> U256
+    return if me >= you then me else you
+### Returns this value clamped to the range `min_val..=max_val`.
+### :param min_val: The lower bound (inclusive).
+### :param max_val: The upper bound (inclusive).
+### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
+routine U256.clamp(min_val: U256, max_val: U256) -> U256
+    return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+### Returns the count of set bits (popcount) in this value's 256-bit representation.
+### :returns: The number of `1` bits; between 0 and 256.
+routine U256.count_ones() -> U256
+    return LLVM::count_ones[U256](me)
+
+### Returns the count of clear bits in this value's 256-bit representation.
+### :returns: `256` minus the popcount; between 0 and 256.
+routine U256.count_zeros() -> U256
+    return 256 -% me.count_ones()
+
+### Returns the number of leading zero bits, starting from the most-significant bit.
+### :returns: The leading zero count; `256` if the value is zero.
+routine U256.leading_zeros() -> U256
+    return LLVM::leading_zeros(me)
+
+### Returns the number of trailing zero bits, starting from the least-significant bit.
+### :returns: The trailing zero count; `256` if the value is zero.
+routine U256.trailing_zeros() -> U256
+    return LLVM::trailing_zeros(me)
+
+### Returns the number of leading one bits, starting from the most-significant bit.
+### :returns: The leading one count; `256` if the value is `U256_MAX`.
+routine U256.leading_ones() -> U256
+    return me.bitnot().leading_zeros()
+
+### Returns the number of trailing one bits, starting from the least-significant bit.
+### :returns: The trailing one count; `256` if the value is `U256_MAX`.
+routine U256.trailing_ones() -> U256
+    return me.bitnot().trailing_zeros()
+
+### Returns this value with its bits reversed (bit 255 ↔ bit 0, etc.).
+### :returns: The bit-reversed `U256`.
+routine U256.reverse_bits() -> U256
+    return LLVM::reverse_bits[U256](me)
+
+### Returns this value with its 32 bytes swapped (for endianness conversion).
+### :returns: A `U256` with its bytes in reverse order.
+routine U256.swap_bytes() -> U256
+    return LLVM::byte_swap(me)
+
+### Returns `true` if this value is an exact power of two.
+### :returns: `true` if `me` is 1, 2, 4, ..., 2²⁵⁵; `false` otherwise (including zero).
+routine U256.is_power_of_two() -> Bool
+    return me != 0 and (me & me - 1) == 0
+
+### Returns this value rotated left by `bits` positions.
+routine U256.rotate_left(bits: U32) -> U256
+    var n = bits % 256
+    if n == 0
+        return me
+    return LLVM::bit_or(
+        a: LLVM::shift_left(me, n.to[U256]()),
+        b: LLVM::shift_right_unsigned(me, (256 -% n).to[U256]()),
+    )
+
+### Returns this value rotated right by `bits` positions.
+routine U256.rotate_right(bits: U32) -> U256
+    var n = bits % 256
+    if n == 0
+        return me
+    return LLVM::bit_or(
+        a: LLVM::shift_right_unsigned(me, n.to[U256]()),
+        b: LLVM::shift_left(me, (256 -% n).to[U256]()),
+    )
+
+### Returns the raw byte representation of this value in little-endian order.
+routine U256.to_bytes_le() -> Array[Byte, 32]
+    var result = Array[Byte, 32]()
+    var i: U64 = 0
+    while i < 32
+        var b = LLVM::int_truncate[U256, U8](LLVM::shift_right_unsigned(me, (i * 8).to[U256]()))
+        result = LLVM::set_byte_at(array: result, index: i, value: b)
+        i = i + 1
+    return result
+
+### Returns the raw byte representation of this value in big-endian order.
+routine U256.to_bytes_be() -> Array[Byte, 32]
+    return me.swap_bytes().to_bytes_le()
+
+### Builds a `U256` from its little-endian raw byte representation.
+common routine U256.from_bytes_le(bytes: Array[Byte, 32]) -> U256
+    var result: U256 = 0
+    var i: U64 = 0
+    while i < 32
+        var part = LLVM::shift_left(
+            LLVM::zero_extend[U8, U256](LLVM::byte_at(array: bytes, index: i)),
+            (i * 8).to[U256](),
+        )
+        result = LLVM::bit_or(a: result, b: part)
+        i = i + 1
+    return result
+
+### Builds a `U256` from its big-endian raw byte representation.
+common routine U256.from_bytes_be(bytes: Array[Byte, 32]) -> U256
+    return U256.from_bytes_le(bytes: bytes).swap_bytes()
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns `true` if this value is zero.
+### :returns: `true` if `me == 0`.
+routine U256.is_zero() -> Bool
+    return me == 0
+
+### Returns `true` if this value is divisible by 2.
+### :returns: `true` if the least-significant bit is 0.
+routine U256.is_even() -> Bool
+    var result = LLVM::bit_and(a: me, b: 1)
+    return LLVM::int_eq(a: result, b: 0)
+
+### Returns `true` if this value is not divisible by 2.
+### :returns: `true` if the least-significant bit is 1.
+routine U256.is_odd() -> Bool
+    return not me.is_even()
+
+### Returns the upper 128 bits of this 256-bit value.
+### :returns: Bits 255..128 as a `U128`.
+routine U256.high128() -> U128
+    var shifted = LLVM::shift_right_unsigned[U256](me, 128)
+    return LLVM::int_truncate[U256, U128](shifted)
+
+### Returns the lower 128 bits of this 256-bit value.
+### :returns: Bits 127..0 as a `U128`.
+routine U256.low128() -> U128
+    return LLVM::int_truncate[U256, U128](me)
+
+# ============================================================================
+# Parsing
+# ============================================================================
+
+### Parses a decimal string into a `U256`.
+### :returns: The parsed `U256` value.
+### :throws: {InvalidValueError} if this value is empty or contains non-digit characters.
+### :throws: {IntegerOverflowError} if the value does not fit in `U256`.
+failable routine Text.to[U256]() -> U256
+    if me.count() == 0
+        throw InvalidValueError(input: me, target: "U256")
+    var result: U256 = 0
+    var i: U64 = 0
+    while i < me.count()
+        var ch = me[i]
+        if ch.is_numeric()
+            var digit = ch.digit_value().to[U256]()
+            # Stop before `result * 10 + digit` passes U256's maximum.
+            if result > 11579208923731619542357098500868790785326998466564056403945758400791312963993
+                or (result == 11579208923731619542357098500868790785326998466564056403945758400791312963993
+                    and digit > 5)
+                throw IntegerOverflowError()
+            result = result * 10 + digit
+        else
+            throw InvalidValueError(input: me, target: "U256")
+        i = i + 1
+    return result
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a SipHash-2-4 keyed hash of this 256-bit value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine U256.hash(k0: U64, k1: U64) -> U64
+    var lo = __secure_hash_u128(v: me.low128(), k0: k0, k1: k1)
+    var hi = __secure_hash_u128(v: me.high128(), k0: k0, k1: k1)
+    return lo ^ hi
+
+# ============================================================================
+# Integer Math (roots)
+# ============================================================================
+
+### Returns the integer square root ⌊√me⌋ — the largest value whose square is ≤ me.
+### :returns: The floor of the square root of `me`.
+routine U256.isqrt() -> U256
+    return me.sqrtrem().item0
+
+### Returns the integer square root together with its remainder: `(s, r)` with `s = ⌊√me⌋` and
+### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
+### :returns: The tuple `(root, remainder)`.
+routine U256.sqrtrem() -> (U256, U256)
+    var x = me
+    var result: U256 = 0
+    var bit: U256 = 1 << 254
+    while bit > x
+        bit = bit.logical_shift_right(2)
+    while bit != 0
+        var next = result.add_wrap(bit)
+        if x >= next
+            x = x.sub_wrap(next)
+            result = result.logical_shift_right(1).add_wrap(bit)
+        else
+            result = result.logical_shift_right(1)
+        bit = bit.logical_shift_right(2)
+    return (result, x)
+
+# ============================================================================
+# Width-generic integer helpers: shift amounts and decimal digit strings
+# ============================================================================
+
+### Converts a non-negative S64 amount `s` into a value of int type `T` (for shift amounts
+### derived from runtime S64 values, which are strictly typed). A `common` routine keyed on the
+### TARGET type `T` (not a `[T]`-parametrized S64 member): keying on the receiver type seeds every
+### width the reachability pass meets, where a method-level type param would be pruned when the width
+### is reached only through nested generic-member instantiations.
+common routine T.to_width(s: S64) -> T
+    return LLVM::zero_extend[U64, T](LLVM::reinterpret_bits[S64, U64](s))
+
+### The 9 decimal digits of a U64 in [0, 10⁹), zero-padded (interior base-10⁹ chunk of `wide_dec`).
+### The `// 10` / `% 10` here are on a scalar U64 by a constant, so the backend lowers them to a
+### reciprocal multiply (no hardware divide) — the "magic/Montgomery" step for the constant divisor.
+routine wide_dec9(c: U64) -> Text
+    var s = ""
+    var x = c
+    var i = 0
+    while LLVM::signed_lt(a: i, b: 9)
+        s = f"{LLVM::unsigned_rem(a: x, b: 10)}" + s
+        x = LLVM::unsigned_div(a: x, b: 10)
+        i = LLVM::add(a: i, b: 1)
+    return s
+
+### The decimal digits of a nonzero U64 with no leading zeros (the most-significant base-10⁹ chunk).
+routine wide_dec_head(c: U64) -> Text
+    var s = ""
+    var x = c
+    while LLVM::int_ne(a: x, b: 0)
+        s = f"{LLVM::unsigned_rem(a: x, b: 10)}" + s
+        x = LLVM::unsigned_div(a: x, b: 10)
+    return s
+
+### Decimal digit string of a wide unsigned integer (MSD first; "0" for zero). Peels base-10⁹
+### chunks: one wide `// 10⁹` / `% 10⁹` per 9 digits (vs per-digit) through the type's knuth-based
+### FloorDivisible, then formats each 9-digit chunk with scalar reciprocal-multiply `// 10`. The
+### wide divisor 10⁹ fits one limb, so each peel is the fast single-limb divide. Backs the wide-int
+### and Decimal `represent`s; table-free, any width.
+routine wide_dec[T](v: T) -> Text
+needs RecordType T
+needs T obeys FloorDivisible
+    if LLVM::int_eq(a: v, b: LLVM::zero_extend[U64, T](0))
+        return "0"
+    var ten9 = LLVM::zero_extend[U64, T](1000000000)
+    var out = ""
+    var x = v
+    # divide first, then take the remainder as x - q*10⁹ (a wide mul+sub, not a second wide divide)
+    var q = x // ten9
+    var chunk = LLVM::int_truncate[T, U64](LLVM::sub(a: x, b: LLVM::mul(a: q, b: ten9)))
+    x = q
+    while LLVM::int_ne(a: x, b: LLVM::zero_extend[U64, T](0))
+        out = wide_dec9(c: chunk) + out
+        q = x // ten9
+        chunk = LLVM::int_truncate[T, U64](LLVM::sub(a: x, b: LLVM::mul(a: q, b: ten9)))
+        x = q
+    out = wide_dec_head(c: chunk) + out
+    return out

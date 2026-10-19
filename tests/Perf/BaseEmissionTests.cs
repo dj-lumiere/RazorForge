@@ -417,7 +417,7 @@ public sealed partial class BaseEmissionTests
     }
 
     [Fact(Skip =
-        "Local Phase 0a (a') hardening harness: needs libLLVM staged next to the test binary (parse is an LLVM call). Currently FAILS — non-pruned base surfaces a genuine stdlib-internal monomorphization gap: List[Bytes].duplicate() calls abstract Core.Copyable.duplicate() (ptr) instead of concrete Bytes.duplicate(). See RESIDENT-JIT doc Phase 0a finding.")]
+        "Local Phase 0a (a') hardening harness: needs libLLVM staged next to the test binary (parse is an LLVM call). Currently FAILS — non-pruned base surfaces a genuine stdlib-internal monomorphization gap: List[Bytes].duplicate() calls abstract System.Copyable.duplicate() (ptr) instead of concrete Bytes.duplicate(). See RESIDENT-JIT doc Phase 0a finding.")]
     public void GenerateBase_Standalone_ParsesValid()
     {
         AnalysisResult baseR = new SemanticVerifier(language: Language.RazorForge).Analyze(

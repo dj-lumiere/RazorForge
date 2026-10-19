@@ -31,7 +31,7 @@ public sealed partial class StdlibApiTests
     // Suflae (.sf) sibling harness. SF fixtures live under a DISTINCT namespace prefix
     // (Tests/StdlibSf/*) and their own fixtures dir so the SF bundle's prefix import pulls only `.sf`
     // files — a shared prefix would drag `.rf` fixtures into the SF project and trip BuildDriver's
-    // cross-language import guard. SF reuses the RazorForge stdlib wholesale (SF's Core IS RF's Core),
+    // cross-language import guard. SF reuses the RazorForge stdlib wholesale (SF's System IS RF's System),
     // so the ONLY difference here is the fixtures dir, entry extension, module name, and library path.
     private static readonly string SuflaeFixturesDir = Path.Combine(path1: RepoRoot,
         path2: "tests",
@@ -109,7 +109,7 @@ public sealed partial class StdlibApiTests
         // 2b) stderr must be CLEAN. The build's own progress banners go to stdout; anything on stderr is
         // a diagnostic — a builder warning/error or a runtime fault. These are silently swallowed if we
         // only check stdout+exit (that is exactly how a flood of "Synthesized body codegen failed" /
-        // "Unresolved generic memberRoutine 'Core.Dict.create'" warnings hid for so long). Fail on any of them.
+        // "Unresolved generic memberRoutine 'System.Dict.create'" warnings hid for so long). Fail on any of them.
         string[] offending = run.Stderr
                                 .Split(separator: '\n')
                                 .Select(selector: l => l.TrimEnd(trimChar: '\r'))
@@ -230,28 +230,8 @@ public sealed partial class StdlibApiTests
 
         Directory.CreateDirectory(path: harnessDir);
         var lines = new List<string> { $"module {harnessModule}", "", "import IO/Console" };
-        // Prefix/package import: a single `import Tests/Stdlib` pulls in every Tests/Stdlib/* fixture
-        // module (all fixtures share that namespace), replacing one `import` line per fixture. Falls
-        // back to per-module imports if the fixtures ever stop sharing a common namespace prefix.
-        string commonPrefix = entries.Count > 0 && entries[index: 0]
-                                                  .Module
-                                                  .Contains(value: '/')
-            ? entries[index: 0]
-               .Module[..entries[index: 0]
-                        .Module
-                        .LastIndexOf(value: '/')]
-            : "";
-        if (commonPrefix.Length > 0 && entries.All(predicate: e =>
-                e.Module.StartsWith(value: commonPrefix + "/",
-                    comparisonType: StringComparison.Ordinal)))
-        {
-            lines.Add(item: $"import {commonPrefix}");
-        }
-        else
-        {
-            lines.AddRange(collection: entries.Select(selector: e => $"import {e.Module}"));
-        }
-
+        // One import per fixture module: an import brings the module it names, never the modules under it.
+        lines.AddRange(collection: entries.Select(selector: e => $"import {e.Module}"));
         lines.Add(item: "");
         lines.Add(item: "routine start()");
         foreach ((string stem, _, string leaf) in entries)

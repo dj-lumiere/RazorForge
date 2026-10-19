@@ -132,7 +132,7 @@ public class PresetAndOverloadRegressionTests
                                        var r = LLVM::load_element_ref[Array[U64, 2], U64](TAB, 0)
                                    return
                                """,
-            expectedErrorSubstring: "cannot convert 'Array[Core.U64, 2]' to 'Hijacked[Core.Array[Core.U64, 2]]'");
+            expectedErrorSubstring: "cannot convert 'Array[System.U64, 2]' to 'Hijacked[System.Array[System.U64, 2]]'");
     }
 
     /// <summary>

@@ -15,7 +15,7 @@ public class RealmImportAliasTests
     public void ImportAlias_C_AllowsBareCall()
     {
         AssertAnalyzes(source: """
-                               import Core.C::rf_runtime_init
+                               import System.C::rf_runtime_init
 
                                routine start()
                                    rf_runtime_init()
@@ -40,7 +40,7 @@ public class RealmImportAliasTests
     public void ImportAlias_LLVM_AllowsBareCall()
     {
         AssertAnalyzes(source: """
-                               import Core.LLVM::add
+                               import System.LLVM::add
 
                                routine start()
                                    var x: S32 = 20
@@ -56,7 +56,7 @@ public class RealmImportAliasTests
     public void ImportAlias_DoesNotLeakToOtherRoutine()
     {
         AssertHasError(source: """
-                               import Core.C::rf_runtime_init
+                               import System.C::rf_runtime_init
 
                                routine start()
                                    var z = add[S32](a: 1, b: 2)

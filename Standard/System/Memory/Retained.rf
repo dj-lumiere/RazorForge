@@ -1,0 +1,141 @@
+module System/Memory
+
+import BuilderQuery
+### Single-threaded strong reference. Thin pointer to {RetainManager[T]}.
+### Equivalent to `Rc[T]` in Rust. Copying bumps the strong count; dropping decrements it.
+### :typeparam T: The exclusively owned entity type.
+@llvm("ptr")
+record Retained[T]
+obeys Copyable when T obeys Copyable
+needs EntityType T
+    pass
+
+# ============================================================================
+# Construction
+# ============================================================================
+
+### `Retained[T](from: n)`: wraps `from` in a reference-counted {Retained[T]}. Ownership of the entity
+### moves into the RC system.
+routine Retained[T](from: T) -> Retained[T]
+needs EntityType T
+    danger
+        var ctrl = RetainManager[T](data: from.hijack()).hijack()
+        return Retained[T](ctrl)
+
+# ============================================================================
+# Reference counting
+# ============================================================================
+
+### Returns a new strong reference to the same entity, incrementing the strong count.
+### :returns: A new strong handle sharing the same underlying entity.
+@readonly
+@override
+secret routine Retained[T].share() -> Retained[T]
+    danger
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+        ctrl.hold()
+    return me
+
+### An independent copy: a new entity duplicated from this one, in a handle of its own. Only an entity that
+### declares it can be copied (`obeys Copyable`) has one; `share` (and `b = a`) is one more handle to the same
+### entity.
+### :returns: A handle to a new entity equal to this one.
+@readonly
+routine Retained[T].duplicate() -> Retained[T]
+needs T obeys Copyable
+    return Retained[T](from: me.view().access().duplicate())
+
+### Creates a weak reference to the same entity.
+### :returns: A new weak handle to the same entity's controller.
+routine Retained[T].observe() -> Tracked[T]
+    danger
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+        ctrl.observe()
+        return Tracked[T](me)
+
+# ============================================================================
+# Inspection
+# ============================================================================
+
+### Returns the current strong reference count.
+### :returns: The number of live strong handles to this entity.
+routine Retained[T].strong_count() -> U32
+    danger
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+        return ctrl.strong_count()
+
+### Returns the current weak reference count.
+### :returns: The number of live weak handles to this entity's controller.
+routine Retained[T].weak_count() -> U32
+    danger
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+        return ctrl.weak_count()
+
+# ============================================================================
+# Tokens on the held entity
+# ============================================================================
+
+### Read access to the held entity. A call hands this to a `Viewing[T]` parameter given the `Retained[T]`.
+### :returns: The token.
+@readonly
+routine Retained[T].view() -> Viewing[T]
+    danger
+        return Viewing[T](Hijacked[RetainManager[T]](me).as_entity().raw_data())
+
+### Write access to the held entity. A call hands this to a `Modifying[T]` parameter given the `Retained[T]`.
+### :returns: The token.
+routine Retained[T].modify() -> Modifying[T]
+    danger
+        return Modifying[T](Hijacked[RetainManager[T]](me).as_entity().raw_data())
+
+# ============================================================================
+# Display (transparent — delegates to inner value)
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Retained[T].represent() -> Text
+    danger
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+        return ctrl
+            .raw_data()
+            .as_entity()
+            .represent()
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Retained[T].diagnose() -> Text
+    danger
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+        var rc = ctrl.strong_count()
+        var weak = ctrl.weak_count()
+        var addr = ctrl.raw_data().get_address()
+        return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ", " + ctrl
+            .raw_data()
+            .as_entity()
+            .diagnose() + ")"
+
+### `steal handle`: the entity comes out of the handle, which ends. The builder calls this for `steal` on a
+### `Retained`. Weak handles see the entity gone afterwards.
+### :returns: The entity.
+### :throws: {SharedHandleStealError} when another strong handle still shares the entity.
+failable dangerous routine Retained[T].release_inner() -> T
+    var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+    if ctrl.strong_count() != 1
+        throw SharedHandleStealError(holders: ctrl.strong_count().to[U64]())
+    return ctrl.release_data().as_entity()
+
+### Decrements the strong count, tearing down the entity at zero (and the controller when both counts
+### reach zero). This IS the decrement — there is no separate `release` verb; `destruct` is the teardown.
+@override
+routine Retained[T].destruct()
+    danger
+        if Hijacked[RetainManager[T]](me).get_address() == 0
+            return
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+        ctrl.unhold()
+        return

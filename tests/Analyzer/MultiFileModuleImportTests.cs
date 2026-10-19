@@ -412,7 +412,7 @@ public sealed class MultiFileModuleImportTests
 
     /// <summary>
     /// A foreign intrinsic is reachable only through its realm qualifier, so it must not hide a user
-    /// routine of the same name: the bare lookup of <c>add</c> falls back to <c>Core.add</c>, which the
+    /// routine of the same name: the bare lookup of <c>add</c> falls back to <c>System.add</c>, which the
     /// generic <c>LLVM::add[T]</c> intrinsic owns. Both the entry module's own <c>add</c> and one from an
     /// imported module must win (the bug reported RF-S460 "call it as LLVM::add").
     /// </summary>
@@ -479,6 +479,110 @@ public sealed class MultiFileModuleImportTests
             moduleFiles: []);
 
         Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+    }
+
+    /// <summary>
+    /// <c>import Garden</c> brings Garden's names, not those of <c>Garden/Tools</c>, the module under it.
+    /// </summary>
+    [Fact]
+    public void ParentImport_DoesNotBringModuleUnderIt_Reported()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import Garden
+
+                                                             routine start()
+                                                                 var n = describe() + tool_count()
+                                                                 return
+                                                             """,
+            moduleFiles:
+            [
+                ("garden/garden.rf", """
+                                     module Garden
+
+                                     routine describe() -> S64
+                                         return 1
+                                     """),
+                ("garden/tools/tools.rf", """
+                                          module Garden/Tools
+
+                                          routine tool_count() -> S64
+                                              return 2
+                                          """)
+            ]);
+
+        Assert.Contains(collection: errors, filter: e => e.Message.Contains(value: "tool_count"));
+        Assert.DoesNotContain(collection: errors, filter: e => e.Message.Contains(value: "describe"));
+    }
+
+    /// <summary>
+    /// A <c>secret</c> routine of <c>Garden</c> is seen in <c>Garden/Tools</c>, a module under it.
+    /// </summary>
+    [Fact]
+    public void SecretRoutine_SeenInModuleUnderIt_NoErrors()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import IO/Console
+                                                             import Garden/Tools
+
+                                                             routine start()
+                                                                 show(planted(extra: 2))
+                                                                 return
+                                                             """,
+            moduleFiles:
+            [
+                ("garden/garden.rf", """
+                                     module Garden
+
+                                     secret routine starting_plants() -> S64
+                                         return 3
+                                     """),
+                ("garden/tools/tools.rf", """
+                                          module Garden/Tools
+
+                                          import Garden
+
+                                          routine planted(extra: S64) -> S64
+                                              return starting_plants() + extra
+                                          """)
+            ]);
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+    }
+
+    /// <summary>
+    /// A <c>secret</c> routine of <c>Garden/Tools</c> is not seen in <c>Garden</c>, the module above it (RF-S403).
+    /// </summary>
+    [Fact]
+    public void SecretRoutine_NotSeenInModuleAboveIt_Reported()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import Garden
+
+                                                             routine start()
+                                                                 var n = plants()
+                                                                 return
+                                                             """,
+            moduleFiles:
+            [
+                ("garden/garden.rf", """
+                                     module Garden
+
+                                     import Garden/Tools
+
+                                     routine plants() -> S64
+                                         return spare_plants()
+                                     """),
+                ("garden/tools/tools.rf", """
+                                          module Garden/Tools
+
+                                          secret routine spare_plants() -> S64
+                                              return 4
+                                          """)
+            ]);
+
+        Assert.Contains(collection: errors,
+            filter: e => e.Code == SemanticDiagnosticCode.SecretMemberAccess &&
+                         e.Message.Contains(value: "secret to module 'Garden/Tools'"));
     }
 
     private static List<SemanticError> RunProject(string entrySource,

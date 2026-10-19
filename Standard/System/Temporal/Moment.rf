@@ -1,0 +1,407 @@
+module System/Temporal
+
+# ============================================================================
+# Record definition
+# ============================================================================
+
+### Represents an absolute point in time with nanosecond precision.
+### `Moment` is stored as Unix-epoch seconds plus a normalized nanosecond component and uses the proleptic Gregorian calendar.
+### It is the canonical UTC time-point type for timestamps, deadlines, and duration arithmetic.
+### :see: {Duration}, {LocalMoment}
+record Moment
+obeys Comparable, DurationAddable, DurationSubtractable
+    ### Stores the whole seconds since the Unix epoch.
+    secret seconds: S64  # Seconds since Unix epoch (1970-01-01), negative for dates before
+    ### Stores the normalized nanoseconds within the current second.
+    secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
+
+# ============================================================================
+# Normalization helper
+# ============================================================================
+
+### Normalizes raw second and nanosecond parts into canonical `Moment` storage.
+### The result always has nanoseconds in the range `[0, 1_000_000_000)`.
+### :param seconds: The whole-second component.
+### :param nanoseconds: The nanosecond component within the current second.
+### :returns: The resulting `Moment` value.
+### :throws: {IntegerOverflowError} when the seconds don't fit in `S64`.
+failable routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
+    return Moment(seconds: seconds + nanoseconds // NS_PER_SECOND,
+        nanoseconds: (nanoseconds % NS_PER_SECOND).to[U32]())
+
+# ============================================================================
+# Civil calendar helpers (proleptic Gregorian)
+# ============================================================================
+
+### Converts a civil year-month-day triple to days since the Unix epoch.
+### :param year: The `year` value.
+### :param month: The `month` value.
+### :param day: The `day` value.
+### :returns: The resulting `S64` value.
+routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
+    # Shift year so March is month 0
+    var y = year
+    var m = month
+    if m <= 2
+        y = y -% 1
+
+    # Era-based calculation for proleptic Gregorian
+    var era_year = y -% LLVM::signed_div(y, 400) *% 400
+    var era = LLVM::signed_div(y, 400)
+
+    # Day of year within March-based year
+    if m > 2
+        m = m -% 3
+    else
+        m = m +% 9
+    var doy = LLVM::signed_div(153 *% m +% 2, 5) +% day -% 1
+
+    # Day of era
+    var doe = era_year *% 365 +% LLVM::signed_div(era_year, 4) -% LLVM::signed_div(
+        era_year,
+        100,
+    ) +% doy
+
+    # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
+    return era *% 146097 +% doe -% 719468
+
+### Converts an epoch-day count to its calendar year component.
+### :param days_since_epoch: The day count relative to the Unix epoch.
+### :returns: The resulting `S64` value.
+routine days_to_year(days_since_epoch: S64) -> S64
+    var z = days_since_epoch +% 719468
+    var era = LLVM::signed_div(if z >= 0 then z else z -% 146096, 146097)
+    var doe = z -% era *% 146097
+    var yoe = LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460) +% LLVM::signed_div(
+            doe,
+            36524,
+        ) -% LLVM::signed_div(doe, 146096),
+        365,
+    )
+    var y = yoe +% era *% 400
+    var doy = doe -% (365 *% yoe +% LLVM::signed_div(yoe, 4) -% LLVM::signed_div(
+        yoe,
+        100,
+    ))
+    var mp = LLVM::signed_div(5 *% doy +% 2, 153)
+    var m = mp +% (if mp < 10 then 3 else 0 -% 9)
+    if m <= 2
+        return y +% 1
+    return y
+
+### Converts an epoch-day count to its calendar month component.
+### :param days_since_epoch: The day count relative to the Unix epoch.
+### :returns: The resulting `S64` value.
+routine days_to_month(days_since_epoch: S64) -> S64
+    var z = days_since_epoch +% 719468
+    var era = LLVM::signed_div(if z >= 0 then z else z -% 146096, 146097)
+    var doe = z -% era *% 146097
+    var yoe = LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460) +% LLVM::signed_div(
+            doe,
+            36524,
+        ) -% LLVM::signed_div(doe, 146096),
+        365,
+    )
+    var doy = doe -% (365 *% yoe +% LLVM::signed_div(yoe, 4) -% LLVM::signed_div(
+        yoe,
+        100,
+    ))
+    var mp = LLVM::signed_div(5 *% doy +% 2, 153)
+    return mp +% (if mp < 10 then 3 else 0 -% 9)
+
+### Converts an epoch-day count to its day-of-month component.
+### :param days_since_epoch: The day count relative to the Unix epoch.
+### :returns: The resulting `S64` value.
+routine days_to_day(days_since_epoch: S64) -> S64
+    var z = days_since_epoch +% 719468
+    var era = LLVM::signed_div(if z >= 0 then z else z -% 146096, 146097)
+    var doe = z -% era *% 146097
+    var yoe = LLVM::signed_div(
+        doe -% LLVM::signed_div(doe, 1460) +% LLVM::signed_div(
+            doe,
+            36524,
+        ) -% LLVM::signed_div(doe, 146096),
+        365,
+    )
+    var doy = doe -% (365 *% yoe +% LLVM::signed_div(yoe, 4) -% LLVM::signed_div(
+        yoe,
+        100,
+    ))
+    var mp = LLVM::signed_div(5 *% doy +% 2, 153)
+    return doy -% LLVM::signed_div(153 *% mp +% 2, 5) +% 1
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Creates a UTC moment from civil date-time components.
+### The supplied components are interpreted in the proleptic Gregorian calendar.
+### :param year: The calendar year.
+### :param month: The month number in the range `1..12`.
+### :param day: The day of month.
+### :param hour: The hour component.
+### :param minute: The minute component.
+### :param second: The second component.
+### :returns: The resulting `Moment` value.
+### :throws: {InvalidMomentError} when a part is out of its range: a month outside `1..12`, a day the month doesn't
+### have, an hour outside `0..23`, or a minute or second outside `0..59`.
+failable routine Moment(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
+    require_moment_part(part: "month", value: month, lowest: 1, highest: 12)
+    require_moment_part(part: "day", value: day, lowest: 1, highest: days_in_month(year: year, month: month))
+    require_moment_part(part: "hour", value: hour, lowest: 0, highest: 23)
+    require_moment_part(part: "minute", value: minute, lowest: 0, highest: 59)
+    require_moment_part(part: "second", value: second, lowest: 0, highest: 59)
+    var d = ymd_to_days(year: year, month: month, day: day)
+    var s = d * SECONDS_PER_DAY + hour * SECONDS_PER_HOUR + minute * SECONDS_PER_MINUTE + second
+    return Moment(seconds: s, nanoseconds: 0)
+
+### Crashes with {InvalidMomentError} when `value` is outside `lowest..highest`.
+### :param part: The name of the part.
+### :param value: The value given for it.
+### :param lowest: The smallest value it takes.
+### :param highest: The largest value it takes.
+### :throws: {InvalidMomentError} when `value` is out of range.
+secret failable routine require_moment_part(part: Text, value: S64, lowest: S64, highest: S64)
+    if value < lowest or value > highest
+        throw InvalidMomentError(part: part, value: value, lowest: lowest, highest: highest)
+    return
+
+### Returns how many days a month of the proleptic Gregorian calendar has.
+### :param year: The year, which decides February.
+### :param month: The month, in `1..12`.
+### :returns: The number of days, from 28 to 31.
+secret routine days_in_month(year: S64, month: S64) -> S64
+    if month == 2
+        var leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+        return if leap then 29 else 28
+    if month == 4 or month == 6 or month == 9 or month == 11
+        return 30
+    return 31
+
+### Returns the Unix epoch.
+### This is `1970-01-01 00:00:00 UTC`.
+### :returns: The resulting `Moment` value.
+common routine Moment.epoch() -> Moment
+    return Moment(seconds: 0, nanoseconds: 0)
+
+### Creates a value from timestamp.
+### :param seconds: The whole-second component.
+### :returns: The resulting `Moment` value.
+common routine Moment.from_timestamp(seconds: S64) -> Moment
+    return Moment(seconds: seconds, nanoseconds: 0)
+
+# ============================================================================
+# Date accessors (derived from seconds member variable)
+# ============================================================================
+
+### Returns the UTC calendar year of this moment.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.year() -> S64
+    return days_to_year(LLVM::signed_div(me.seconds, SECONDS_PER_DAY))
+
+### Returns the UTC calendar month of this moment.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.month() -> S64
+    return days_to_month(LLVM::signed_div(me.seconds, SECONDS_PER_DAY))
+
+### Returns the UTC day of month of this moment.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.day() -> S64
+    return days_to_day(LLVM::signed_div(me.seconds, SECONDS_PER_DAY))
+
+### Returns the UTC day of week for this moment.
+### The result uses `0 = Monday` through `6 = Sunday`.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.day_of_week() -> S64
+    # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
+    var days = LLVM::signed_div(me.seconds, SECONDS_PER_DAY)
+    var dow = LLVM::signed_rem(days +% 3, 7)
+    if dow < 0
+        return dow +% 7
+    return dow
+
+# ============================================================================
+# Time accessors (derived from seconds and nanoseconds member variables)
+# ============================================================================
+
+### Returns the UTC hour component of this moment.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.hour() -> S64
+    return LLVM::signed_div(LLVM::signed_rem(me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
+
+### Returns the UTC minute component of this moment.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.minute() -> S64
+    return LLVM::signed_div(LLVM::signed_rem(me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
+
+### Returns the UTC second component of this moment.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.second() -> S64
+    return LLVM::signed_rem(me.seconds, SECONDS_PER_MINUTE)
+
+### Returns the millisecond component within the current second.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.millisecond() -> S64
+    return LLVM::signed_div(me.nanoseconds.to[S64](), NS_PER_MILLISECOND)
+
+### Returns the microsecond component within the current millisecond.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.microsecond() -> S64
+    return LLVM::signed_div(
+        LLVM::signed_rem(me.nanoseconds.to[S64](), NS_PER_MILLISECOND),
+        NS_PER_MICROSECOND,
+    )
+
+### Returns the nanosecond component within the current microsecond.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.nanosecond() -> S64
+    return LLVM::signed_rem(me.nanoseconds.to[S64](), NS_PER_MICROSECOND)
+
+# ============================================================================
+# Conversion
+# ============================================================================
+
+### Returns the whole-second Unix timestamp of this moment.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.timestamp() -> S64
+    return me.seconds
+
+### Returns the Unix timestamp of this moment in milliseconds.
+### :returns: The resulting `S64` value.
+@readonly
+routine Moment.timestamp_ms() -> S64
+    return me.seconds *% 1_000 +% LLVM::signed_div(me.nanoseconds.to[S64](), NS_PER_MILLISECOND)
+
+# ============================================================================
+# Arithmetic with Duration
+# ============================================================================
+
+### Adds a value using `add_duration`.
+### :param duration: The `duration` value.
+### :returns: The resulting `Moment` value.
+@readonly
+failable routine Moment.add_duration(duration: Duration) -> Moment
+    return normalize_moment(
+        seconds: me.seconds + duration.total_seconds(),
+        nanoseconds: me.nanoseconds.to[S64]() + duration.subsec_nanoseconds().to[S64](),
+    )
+
+### Returns this moment shifted backward by `duration`.
+### :param duration: The time span to subtract.
+### :returns: The resulting `Moment` value.
+@readonly
+failable routine Moment.subtract_duration(duration: Duration) -> Moment
+    return me.add_duration(duration.neg())
+
+### Returns the elapsed duration from `earlier` to this moment.
+### Positive results mean this moment occurs after `earlier`.
+### :param earlier: The earlier comparison instant.
+### :returns: The resulting `Duration` value.
+@readonly
+failable routine Moment.elapsed_since(earlier: Moment) -> Duration
+    return normalize_duration(
+        seconds: me.seconds - earlier.seconds,
+        nanoseconds: me.nanoseconds.to[S64]() - earlier.nanoseconds.to[S64](),
+    )
+
+### Returns the moment reached by advancing this one by `you`.
+### :param you: The duration to advance by.
+### :returns: The resulting `Moment`.
+@readonly
+failable routine Moment.add(you: Duration) -> Moment
+    return me.add_duration(you)
+
+### Returns the moment reached by retreating this one by `you`.
+### :param you: The duration to subtract.
+### :returns: The resulting `Moment`.
+@readonly
+failable routine Moment.sub(you: Duration) -> Moment
+    return me.subtract_duration(you)
+
+### Returns the elapsed time from `you` to this moment.
+### :param you: The earlier moment to measure from.
+### :returns: The `Duration` between the two moments.
+@readonly
+failable routine Moment.sub(you: Moment) -> Duration
+    return me.elapsed_since(you)
+
+# ============================================================================
+# Comparison operators
+# ============================================================================
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Moment.eq(you: Moment) -> Bool
+    return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Moment.compare(you: Moment) -> ComparisonSign
+    if me.seconds < you.seconds
+        return ME_SMALL
+    if me.seconds > you.seconds
+        return ME_LARGE
+    if me.nanoseconds < you.nanoseconds
+        return ME_SMALL
+    if me.nanoseconds > you.nanoseconds
+        return ME_LARGE
+    return SAME
+
+# ============================================================================
+# Text representation
+# ============================================================================
+
+### Returns the display form of this moment in a compact UTC civil-time style.
+### :returns: The resulting `Text` value.
+@override
+routine Moment.represent() -> Text
+    return civil_display(moment: me)
+
+### The civil date and time of a moment as `YYYY-MM-DD hh:mm:ss`, each part padded with `0`.
+### :param moment: The moment to show.
+### :returns: The resulting `Text` value.
+secret routine civil_display(moment: Moment) -> Text
+    var y = moment.year().represent().zero_pad(4)
+    var mo = moment.month().represent().zero_pad(2)
+    var d = moment.day().represent().zero_pad(2)
+    var h = moment.hour().represent().zero_pad(2)
+    var mi = moment.minute().represent().zero_pad(2)
+    var s = moment.second().represent().zero_pad(2)
+    return f"{y}-{mo}-{d} {h}:{mi}:{s}"
+
+### Returns the diagnostic form of this moment using its normalized internal
+### representation.
+### :returns: The resulting `Text` value.
+@override
+routine Moment.diagnose() -> Text
+    return "Moment(seconds: " + me.seconds.represent() + ", nanoseconds: " + me.nanoseconds.represent() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a SipHash-2-4 keyed hash of this moment.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine Moment.hash(k0: U64, k1: U64) -> U64
+    var acc = __hash_round(acc: 0, h: me.seconds.hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.nanoseconds.hash(k0: k0, k1: k1))
+    return __hash_finalize(h: acc)

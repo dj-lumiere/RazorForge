@@ -124,7 +124,7 @@ When unsure, consult ground truth in the repo/package:
    crash. A native signal (e.g. a segfault) is not 82 either — that is a builder or
    runtime bug (or `danger` code), not a language failure. A run that returns from
    `start` normally exits with 0, or with the status `set_exit_code(code)` (an `S32`,
-   in Core) set last: one atomic value, so any thread may set it and the last call
+   in System) set last: one atomic value, so any thread may set it and the last call
    wins. A crash keeps 82 whatever was set.
 8. **A number takes its type from where it goes; variables do not adapt.**
    A number carries no type of its own: there are no type suffixes (`5_u8`, `10n`, `2.5dn` are RF-G010). It
@@ -179,7 +179,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   "class"/"struct".
 - field → **member variable**, declared as a bare `name: Type` line — **no `var`,
   no `open`**. Only restricted visibility is written: `posted` (module-write) /
-  `secret` (type/module-private). `open` is the unwritten default. Giving a `secret` or `posted` member
+  `secret` (type/module-private: seen in its module and the modules under it). `open` is the unwritten default. Giving a `secret` or `posted` member
   variable a value in `T(field: value, ...)` is allowed only inside the type's module (RF-S403 / RF-S404):
   outside, build it with a routine the module opens (`HttpResult.ok(body: b)`). There is no
   static `let`/`var` distinction for members. Locals inside routines still use
@@ -265,7 +265,21 @@ override that. Imports use `/` separators.
 
 **Two import forms, distinct meaning:** `import Foo/Bar` is a **module** import
 (`Bar` is a submodule of `Foo`). `import Foo.bar` is a **member** import (`bar` is
-a type/routine/preset in module `Foo`). `Core` is auto-imported everywhere.
+a type/routine/preset in module `Foo`). An import brings the module it names, never the
+modules under it (`import IO` doesn't bring `IO/Console`). `System` and every module under
+it are seen everywhere without an import.
+
+**The standard library's modules.** A standard library module is its folder
+(`Standard/RazorForge/System/Text/` is `System/Text`), and a `module` line that names another
+module is a build error. `System` is the base: the built-in types, `List` / `Dict` / `Set`,
+the protocols and the errors, with `System/Numerics` (every number type and its math,
+`Integer`, `Decimal`), `System/Text` (`Text`, `Bytes`, formatting), `System/Memory` (the
+wrappers and controllers, `ByteSize`), `System/Temporal` (`Duration`, `Moment`, `Clock`),
+`System/Concurrency`, `System/Serialization` and `System/CSubSystem` (C types and strings).
+The rest takes an import: `Collections`, `IO/Console`, `IO/File`, `IterTools`, `Math3D`,
+`Random`, `Simd`, `Signals`, `Subprocess`, `BuilderQuery`, `BuilderExpansion`.
+`migrate --step modules` drops imports of `Core` and `Numerics` and rewrites `Core.X` to
+`System.X`.
 
 **Globals (RazorForge).** `global name: Type = init` (type and initializer both required):
 initialized in dependency order when `start()` begins (a cycle is RF-S436, no `start()` is
@@ -417,8 +431,6 @@ declare their own `i`.
 **Conversions: `x.to[T]()`, the one way to convert.**
 
 ```razorforge
-import Numerics.Integer            # Integer is not in Core
-
 var small = count.to[U8]()        # number to number
 var big = count.to[Integer]()      # Integer/Decimal convert on to B32/B64 (nearest value)
 var n = "42".to[S64]()             # text parsing (also Integer, Decimal, B64, ...)
@@ -880,7 +892,7 @@ sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
   Beyond the basics, `Text` carries a rich pure-RF method set (search, split,
   case, padding) — e.g. `count_of`, `find!`/`find_last!`, `split_once!`,
   `replace_first`, `capitalize`, `center`, `eq_ignore_case`. Verify exact names
-  in `Standard/RazorForge/Core/Types/Text.rf`.
+  in `Standard/RazorForge/System/Text/Text.rf`.
 - **`Bytes` `obeys Comparable, Hashable`** — usable as a `Dict` key and sortable.
   It supports range slicing (`bs[a til b]`), sub-sequence `contains`/`find!`/
   `split`, and hex `to_hex`/`from_hex!`. Container `represent` quotes elements
@@ -928,7 +940,7 @@ that differ from other languages:
   `RangeStepZeroError` when the range is iterated. `has`/`lacks` follow the
   same rule (`(10 to 0 by -2).has(4)` is true). Slicing with a counting-down range
   reverses: `text[4 to 0 by -1]`.
-- `List`, `Set`, `Dict` live in **`Core`** (always available — never suggest
+- `List`, `Set`, `Dict` live in **`System`** (always available — never suggest
   `using Collections`). Only these three canonical collections have literal
   syntax of their own (`[1, 2]`, `{1, 2}`, `{1: 10}`); a specialized container
   (`SortedSet`, `CircularList`, `Array`, `BitArray`, `BitList`, `PriorityQueue`, …)
@@ -1254,7 +1266,7 @@ Async file I/O (parks a job while waiting, blocks elsewhere), in `IO/File`:
 `FileManager.read_text!(at: File) -> Text` and `FileManager.write_text!(at: File, content: Text)`. Prefer these to
 opening a `FileSource`/`FileSink` inside a job.
 
-**Channels** (`Core`, no import) — typed producer/consumer queues:
+**Channels** (`System`, no import) — typed producer/consumer queues:
 - `make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])` — single consumer. `capacity` 0 =
   rendezvous (send waits for a taker); N = bounded buffer (send blocks when full = backpressure).
 - `make_shared_channel[T](capacity: U64) -> (Sender[T], SharedReceiver[T])` — multiple consumers

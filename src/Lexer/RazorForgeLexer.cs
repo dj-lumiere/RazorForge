@@ -268,7 +268,7 @@ public partial class RazorForgeLexer
         _keywords[key: "failable"] = TokenType.Failable;
         _keywords[key: "steal"] = TokenType.Steal;
         // Buildtime reflection is RF's model (monomorph unroll). Suflae's reflection is the runtime
-        // ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via wholesale Core
+        // ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via wholesale System
         // reuse, so it never needs `expand` itself. `expand` is the ONLY reflection keyword; the sources
         // (`openmemvarof`/`allmemvarof`/`caseof`/`branchof`) and accessors (`nameof`/`typeof`/…)
         // tokenize as plain identifiers and are classified in SA (see ExpandSources / the
