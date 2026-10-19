@@ -424,15 +424,23 @@ routine B64.midpoint(you: B64) -> B64
 # Utility Methods
 # ============================================================================
 
-### Returns the smaller of this value and `you`.
-### :param you: The value to compare against.
-### :returns: The lower of the two values under the ordered comparison rules.
+### The smaller of `me` and `you`. If one operand is NaN, the other one.
+### :param you: The value to compare with.
+### :returns: The smaller value, the other operand when one is NaN, and NaN when both are.
 routine B64.min(you: B64) -> B64
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
     return if me <= you then me else you
-### Returns the larger of this value and `you`.
-### :param you: The value to compare against.
-### :returns: The greater of the two values under the ordered comparison rules.
+### The larger of `me` and `you`. If one operand is NaN, the other one.
+### :param you: The value to compare with.
+### :returns: The larger value, the other operand when one is NaN, and NaN when both are.
 routine B64.max(you: B64) -> B64
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
     return if me >= you then me else you
 ### Restricts this value to the closed interval `[min_val, max_val]`.
 ### :param min_val: The lower bound to enforce.
@@ -750,10 +758,10 @@ failable routine hypot(x: B64, y: B64, z: B64) -> B64
 routine hypot_unchecked(x: B64, y: B64, z: B64) -> B64
     return C::ingrid_b64_hypot3(x: x, y: y, z: z)
 
-### Fused multiply-add me*b + c (single rounding). Checked: crashes on overflow. Use `fma_unchecked`
+### Fused multiply-add me*b + c (single rounding). Checked: crashes on overflow. Use `mul_add_unchecked`
 ### for raw IEEE.
-failable routine B64.fma(b: B64, c: B64) -> B64
-    var r = me.fma_unchecked(b: b, c: c)
+failable routine B64.mul_add(b: B64, c: B64) -> B64
+    var r = me.mul_add_unchecked(b: b, c: c)
     if r.is_finite()
         return r
     if r.is_nan()
@@ -761,7 +769,7 @@ failable routine B64.fma(b: B64, c: B64) -> B64
     throw NumericOverflowError(description: "overflow: out of range")
 
 ### Fused multiply-add with raw IEEE 754 propagation.
-routine B64.fma_unchecked(b: B64, c: B64) -> B64
+routine B64.mul_add_unchecked(b: B64, c: B64) -> B64
     return LLVM::fma[B64](a: me, b: b, c: c)
 
 ### Arc sine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `asin_unchecked` for raw
@@ -834,8 +842,8 @@ failable routine B64.gamma() -> B64
 
 # ============================================================================
 # Extended libm parity: exp10, sinpi/cospi/tanpi, nextafter, scalbn/ldexp,
-# frexp, modf, rint, fdim, fmod, remainder, fmax/fmin, trunc, frac, and
-# classification (signbit/is_normal/is_subnormal/fpclassify).
+# frexp, modf, rint, fdim, mod_trunc, rem, trunc, fract, and
+# classification (is_sign_negative/is_normal/is_subnormal/fpclassify).
 # ============================================================================
 ### C libm extern (rf_b64_ passthrough): next representable value after x toward y.
 routine C::rf_b64_nextafter(x: B64, y: B64) -> B64
@@ -850,7 +858,7 @@ routine C::rf_b64_ilogb(value: B64) -> S64
 routine C::rf_b64_fdim(x: B64, y: B64) -> B64
 
 ### C libm extern (rf_b64_ passthrough): IEEE remainder, ties to even (C remainder).
-routine C::rf_b64_remainder(x: B64, y: B64) -> B64
+routine C::rf_b64_rem(x: B64, y: B64) -> B64
 
 ### Base-10 exponential 10**me. Checked: crashes on overflow. Use `exp10_unchecked` for raw IEEE.
 failable routine B64.exp10() -> B64
@@ -882,27 +890,19 @@ routine B64.fdim(you: B64) -> B64
     return C::rf_b64_fdim(x: me, y: you)
 
 ### Floating-point remainder of me/you (C fmod).
-routine B64.fmod(you: B64) -> B64
+routine B64.mod_trunc(you: B64) -> B64
     return LLVM::float_rem[B64](a: me, b: you)
 
 ### IEEE remainder of me/you, ties to even (C remainder).
-routine B64.remainder(you: B64) -> B64
-    return C::rf_b64_remainder(x: me, y: you)
-
-### Larger of me and you (C fmax).
-routine B64.fmax(you: B64) -> B64
-    return LLVM::maxnum[B64](a: me, b: you)
-
-### Smaller of me and you (C fmin).
-routine B64.fmin(you: B64) -> B64
-    return LLVM::minnum[B64](a: me, b: you)
+routine B64.rem(you: B64) -> B64
+    return C::rf_b64_rem(x: me, y: you)
 
 ### Truncates toward zero (C trunc; alias of int_truncate).
 routine B64.trunc() -> B64
     return LLVM::float_truncate[B64](me)
 
 ### Fractional part me - trunc(me).
-routine B64.frac() -> B64
+routine B64.fract() -> B64
     return me - LLVM::float_truncate[B64](me)
 
 ### Integer and fractional parts (C modf); both carry me's sign.
@@ -918,7 +918,7 @@ routine B64.frexp() -> (B64, S64)
     return (C::rf_b64_scalbn(value: me, n: LLVM::sub(a: 0, b: e)), e)
 
 ### True if the sign bit is set (C signbit; true for -0 and -NaN).
-routine B64.signbit() -> Bool
+routine B64.is_sign_negative() -> Bool
     return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: 0x8000000000000000), b: 0)
 
 ### True for a subnormal (denormalized, nonzero) value.
@@ -961,10 +961,10 @@ routine b64_order_key(bits: U64) -> U64
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
-routine B64.total_order(you: B64) -> Bool
+routine B64.total_compare(you: B64) -> Bool
     return b64_order_key(bits: me.to_bits()) <= b64_order_key(bits: you.to_bits())
 
-### IEEE 754 totalOrderMag: `total_order` applied to the magnitudes (sign bit cleared).
+### IEEE 754 totalOrderMag: `total_compare` applied to the magnitudes (sign bit cleared).
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine B64.total_order_mag(you: B64) -> Bool
@@ -1041,7 +1041,7 @@ routine B64.minimum(you: B64) -> B64
         return you
     if me == you
         if me.is_zero()
-            return if me.signbit() then me else you
+            return if me.is_sign_negative() then me else you
         return me
     return if me < you then me else you
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, and ordering +0 above -0.
@@ -1054,7 +1054,7 @@ routine B64.maximum(you: B64) -> B64
         return you
     if me == you
         if me.is_zero()
-            return if me.signbit() then you else me
+            return if me.is_sign_negative() then you else me
         return me
     return if me > you then me else you
 ### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero

@@ -342,15 +342,23 @@ routine B16.midpoint(you: B16) -> B16
 # Utility Methods
 # ============================================================================
 
-### Returns the smaller of this value and `you`.
-### :param you: The value to compare against.
-### :returns: The lower of the two values under the ordered comparison rules.
+### The smaller of `me` and `you`. If one operand is NaN, the other one.
+### :param you: The value to compare with.
+### :returns: The smaller value, the other operand when one is NaN, and NaN when both are.
 routine B16.min(you: B16) -> B16
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
     return if me <= you then me else you
-### Returns the larger of this value and `you`.
-### :param you: The value to compare against.
-### :returns: The greater of the two values under the ordered comparison rules.
+### The larger of `me` and `you`. If one operand is NaN, the other one.
+### :param you: The value to compare with.
+### :returns: The larger value, the other operand when one is NaN, and NaN when both are.
 routine B16.max(you: B16) -> B16
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
     return if me >= you then me else you
 ### Restricts this value to the closed interval `[min_val, max_val]`.
 ### :param min_val: The lower bound to enforce.
@@ -710,8 +718,8 @@ routine hypot_unchecked(x: B16, y: B16, z: B16) -> B16
     return C::ingrid_b16_hypot3(x: x, y: y, z: z)
 
 ### Fused multiply-add me*b + c with a single rounding.
-failable routine B16.fma(b: B16, c: B16) -> B16
-    var rr = me.fma_unchecked(b: b, c: c)
+failable routine B16.mul_add(b: B16, c: B16) -> B16
+    var rr = me.mul_add_unchecked(b: b, c: c)
     if rr.is_finite()
         return rr
     if rr.is_nan()
@@ -720,7 +728,7 @@ failable routine B16.fma(b: B16, c: B16) -> B16
 
 ### Fused multiply-add me*b + c with raw IEEE 754 propagation, correctly rounded (one rounding to
 ### nearest, ties to even).
-routine B16.fma_unchecked(b: B16, c: B16) -> B16
+routine B16.mul_add_unchecked(b: B16, c: B16) -> B16
     # me*b has at most 22 significant bits, so it is exact in binary64 and p + c is the only inexact step.
     # TwoSum recovers that step's error exactly, which turns the binary64 sum into a round-to-odd result.
     # Rounding it to nearest binary16 is then a single correct rounding (going through binary32 instead
@@ -742,24 +750,16 @@ routine B16.fma_unchecked(b: B16, c: B16) -> B16
     return s.to[B16]()
 
 ### Floating-point remainder (C fmod).
-routine B16.fmod(you: B16) -> B16
-    return me.to[B32]().fmod(you: you.to[B32]()).to[B16]()
+routine B16.mod_trunc(you: B16) -> B16
+    return me.to[B32]().mod_trunc(you: you.to[B32]()).to[B16]()
 
 ### IEEE remainder (C remainder).
-routine B16.remainder(you: B16) -> B16
-    return me.to[B32]().remainder(you: you.to[B32]()).to[B16]()
+routine B16.rem(you: B16) -> B16
+    return me.to[B32]().rem(you: you.to[B32]()).to[B16]()
 
 ### Positive difference max(me - you, 0) (C fdim).
 routine B16.fdim(you: B16) -> B16
     return me.to[B32]().fdim(you: you.to[B32]()).to[B16]()
-
-### Larger of me and you (C fmax).
-routine B16.fmax(you: B16) -> B16
-    return me.to[B32]().fmax(you: you.to[B32]()).to[B16]()
-
-### Smaller of me and you (C fmin).
-routine B16.fmin(you: B16) -> B16
-    return me.to[B32]().fmin(you: you.to[B32]()).to[B16]()
 
 ### Next representable value after me toward you. Steps the 16-bit sign-magnitude
 ### pattern directly (a B32 step would narrow back to the same B16 value).
@@ -806,7 +806,7 @@ routine B16.trunc() -> B16
     return LLVM::float_truncate[B16](me)
 
 ### Fractional part me - trunc(me).
-routine B16.frac() -> B16
+routine B16.fract() -> B16
     return me - LLVM::float_truncate[B16](me)
 
 ### Integer and fractional parts (C modf); both carry the sign of me.
@@ -822,7 +822,7 @@ routine B16.frexp() -> (B16, S64)
     return (me.scalbn(n: LLVM::sub(a: 0, b: e)), e)
 
 ### True if the sign bit is set (C signbit).
-routine B16.signbit() -> Bool
+routine B16.is_sign_negative() -> Bool
     return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: 0x8000), b: 0)
 
 ### True for a subnormal (denormalized, nonzero) value.
@@ -865,10 +865,10 @@ routine b16_order_key(bits: U16) -> U16
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
-routine B16.total_order(you: B16) -> Bool
+routine B16.total_compare(you: B16) -> Bool
     return b16_order_key(bits: me.to_bits()) <= b16_order_key(bits: you.to_bits())
 
-### IEEE 754 totalOrderMag: `total_order` applied to the magnitudes (sign bit cleared).
+### IEEE 754 totalOrderMag: `total_compare` applied to the magnitudes (sign bit cleared).
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine B16.total_order_mag(you: B16) -> Bool
@@ -924,13 +924,13 @@ routine B16.scaleb_unchecked(n: S64) -> B16
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, ignoring NaN.
 routine B16.min_num(you: B16) -> B16
-    return me.fmin(you: you)
+    return me.min(you: you)
 
 ### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, ignoring NaN.
 routine B16.max_num(you: B16) -> B16
-    return me.fmax(you: you)
+    return me.max(you: you)
 
 ### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
 ### :param you: The value to compare against.
@@ -942,7 +942,7 @@ routine B16.minimum(you: B16) -> B16
         return you
     if me == you
         if me.is_zero()
-            return if me.signbit() then me else you
+            return if me.is_sign_negative() then me else you
         return me
     return if me < you then me else you
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
@@ -955,7 +955,7 @@ routine B16.maximum(you: B16) -> B16
         return you
     if me == you
         if me.is_zero()
-            return if me.signbit() then you else me
+            return if me.is_sign_negative() then you else me
         return me
     return if me > you then me else you
 ### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero.

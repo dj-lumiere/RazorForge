@@ -663,7 +663,7 @@ routine C::ingrid_c256_from_polar(r_low: U64, r_high: U64, theta_low: U64, theta
 # The library functions of B16, B32, B64 and B128, each one call to Tessera's correctly rounded routine (the
 # CORE-MATH ports). Each is the raw IEEE function (a NaN, an infinity or a pole passes through): the checked
 # routines crash in RazorForge. Each is the RazorForge routine of the same name (`exp` is `exp_unchecked`, `ln`
-# is `ln_unchecked`, `gamma` is `gamma_unchecked`, `hypot` is `hypot_unchecked`, `fma` is `fma_unchecked`,
+# is `ln_unchecked`, `gamma` is `gamma_unchecked`, `hypot` is `hypot_unchecked`, `mul_add` is `mul_add_unchecked`,
 # ...). A B16, B32 or B64 crosses as itself. A B128 goes in as its low and high 64 bits (a 128-bit value crosses
 # Win64 by pointer from Tessera but by value from RazorForge, so neither side passes one) and comes back in
 # `IngridWords` (`w0` low, `w1` high, and for `sin_cos` the cosine in `w2` and `w3`).
@@ -737,7 +737,7 @@ routine C::ingrid_bf16_powi(x: U16, n: S32) -> U16
 routine C::ingrid_bf16_atan2(y: U16, x: U16) -> U16
 routine C::ingrid_bf16_hypot(x: U16, y: U16) -> U16
 routine C::ingrid_bf16_hypot3(x: U16, y: U16, z: U16) -> U16
-routine C::ingrid_bf16_fma(x: U16, y: U16, z: U16) -> U16
+routine C::ingrid_bf16_mul_add(x: U16, y: U16, z: U16) -> U16
 routine C::ingrid_bf16_exp2_m1(x: U16) -> U16
 routine C::ingrid_bf16_exp10_m1(x: U16) -> U16
 routine C::ingrid_bf16_log2_1p(x: U16) -> U16
@@ -853,7 +853,7 @@ routine C::ingrid_b128_powi(low: U64, high: U64, n: S32) -> IngridWords
 routine C::ingrid_b128_atan2(y_low: U64, y_high: U64, x_low: U64, x_high: U64) -> IngridWords
 routine C::ingrid_b128_hypot(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
 routine C::ingrid_b128_hypot3(low: U64, high: U64, y_low: U64, y_high: U64, z_low: U64, z_high: U64) -> IngridWords
-routine C::ingrid_b128_fma(low: U64, high: U64, y_low: U64, y_high: U64, z_low: U64, z_high: U64) -> IngridWords
+routine C::ingrid_b128_mul_add(low: U64, high: U64, y_low: U64, y_high: U64, z_low: U64, z_high: U64) -> IngridWords
 
 # ============================================================================
 # Decimal floats (Ingrid/tessera/decimal/)
@@ -881,7 +881,7 @@ routine C::ingrid_d32_div(a: U32, b: U32) -> U32
 routine C::ingrid_d32_order(a: U32, b: U32) -> S64
 
 ### `a * b + c` rounded once to 7 digits.
-routine C::ingrid_d32_fma(a: U32, b: U32, c: U32) -> U32
+routine C::ingrid_d32_mul_add(a: U32, b: U32, c: U32) -> U32
 
 ### The square root, correctly rounded and reduced (NaN for a negative number).
 routine C::ingrid_d32_sqrt(x: U32) -> U32
@@ -899,10 +899,10 @@ routine C::ingrid_d32_round_int(x: U32, mode: U32) -> U32
 routine C::ingrid_d32_quantize(a: U32, b: U32) -> U32
 
 ### The remainder of a truncated division, exact, with a's sign: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
-routine C::ingrid_d32_fmod(a: U32, b: U32) -> U32
+routine C::ingrid_d32_mod_trunc(a: U32, b: U32) -> U32
 
 ### The IEEE remainder a - n b, n the integer nearest a / b (ties to even), exact: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
-routine C::ingrid_d32_remainder(a: U32, b: U32) -> U32
+routine C::ingrid_d32_rem(a: U32, b: U32) -> U32
 
 ### The simplest member of x's cohort (trailing zeros stripped, a zero with exponent 0); a special comes back as it is.
 routine C::ingrid_d32_normalize(x: U32) -> U32
@@ -947,7 +947,7 @@ routine C::ingrid_d64_div(a: U64, b: U64) -> U64
 routine C::ingrid_d64_order(a: U64, b: U64) -> S64
 
 ### `a * b + c` rounded once to 16 digits.
-routine C::ingrid_d64_fma(a: U64, b: U64, c: U64) -> U64
+routine C::ingrid_d64_mul_add(a: U64, b: U64, c: U64) -> U64
 
 ### The square root, correctly rounded and reduced (NaN for a negative number).
 routine C::ingrid_d64_sqrt(x: U64) -> U64
@@ -965,10 +965,10 @@ routine C::ingrid_d64_round_int(x: U64, mode: U32) -> U64
 routine C::ingrid_d64_quantize(a: U64, b: U64) -> U64
 
 ### The remainder of a truncated division, exact, with a's sign: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
-routine C::ingrid_d64_fmod(a: U64, b: U64) -> U64
+routine C::ingrid_d64_mod_trunc(a: U64, b: U64) -> U64
 
 ### The IEEE remainder a - n b, n the integer nearest a / b (ties to even), exact: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
-routine C::ingrid_d64_remainder(a: U64, b: U64) -> U64
+routine C::ingrid_d64_rem(a: U64, b: U64) -> U64
 
 ### The simplest member of x's cohort (trailing zeros stripped, a zero with exponent 0); a special comes back as it is.
 routine C::ingrid_d64_normalize(x: U64) -> U64
@@ -1013,7 +1013,7 @@ routine C::ingrid_d128_div(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> 
 routine C::ingrid_d128_order(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S64
 
 ### `a * b + c` rounded once to 34 digits.
-routine C::ingrid_d128_fma(a_low: U64, a_high: U64, b_low: U64, b_high: U64, c_low: U64, c_high: U64) -> IngridWords
+routine C::ingrid_d128_mul_add(a_low: U64, a_high: U64, b_low: U64, b_high: U64, c_low: U64, c_high: U64) -> IngridWords
 
 ### The square root, correctly rounded and reduced (NaN for a negative number).
 routine C::ingrid_d128_sqrt(x_low: U64, x_high: U64) -> IngridWords
@@ -1031,10 +1031,10 @@ routine C::ingrid_d128_round_int(x_low: U64, x_high: U64, mode: U32) -> IngridWo
 routine C::ingrid_d128_quantize(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
 
 ### The remainder of a truncated division, exact, with a's sign: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
-routine C::ingrid_d128_fmod(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+routine C::ingrid_d128_mod_trunc(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
 
 ### The IEEE remainder a - n b, n the integer nearest a / b (ties to even), exact: NaN for a NaN, an infinite a, or a zero b; a as it is for an infinite b.
-routine C::ingrid_d128_remainder(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+routine C::ingrid_d128_rem(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
 
 ### The simplest member of x's cohort (trailing zeros stripped, a zero with exponent 0); a special comes back as it is.
 routine C::ingrid_d128_normalize(x_low: U64, x_high: U64) -> IngridWords

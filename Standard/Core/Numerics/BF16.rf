@@ -146,7 +146,7 @@ routine BF16.is_zero() -> Bool
     return (me.to_bits() & 0x7FFF) == 0
 
 ### Returns `true` when the sign bit is set (negative values, -0 and negative NaNs).
-routine BF16.signbit() -> Bool
+routine BF16.is_sign_negative() -> Bool
     return (me.to_bits() & 0x8000) != 0
 
 # ============================================================================
@@ -382,8 +382,8 @@ routine BF16.int_truncate() -> BF16
 
 ### Returns the fractional part, `me - me.trunc()`.
 ### :returns: The result.
-routine BF16.frac() -> BF16
-    return me.to[B32]().frac().to[BF16]()
+routine BF16.fract() -> BF16
+    return me.to[B32]().fract().to[BF16]()
 
 ### Returns `1 / me`, rounded once to BF16.
 ### :returns: The result.
@@ -416,15 +416,15 @@ routine BF16.logb() -> BF16
 routine BF16.midpoint(you: BF16) -> BF16
     return me.to[B32]().midpoint(you.to[B32]()).to[BF16]()
 
-### Returns the smaller value.
-### :param you: The other value.
-### :returns: The result.
+### The smaller of `me` and `you`. If one operand is NaN, the other one.
+### :param you: The value to compare with.
+### :returns: The smaller value, the other operand when one is NaN, and NaN when both are.
 routine BF16.min(you: BF16) -> BF16
     return me.to[B32]().min(you.to[B32]()).to[BF16]()
 
-### Returns the larger value.
-### :param you: The other value.
-### :returns: The result.
+### The larger of `me` and `you`. If one operand is NaN, the other one.
+### :param you: The value to compare with.
+### :returns: The larger value, the other operand when one is NaN, and NaN when both are.
 routine BF16.max(you: BF16) -> BF16
     return me.to[B32]().max(you.to[B32]()).to[BF16]()
 
@@ -452,18 +452,6 @@ routine BF16.minimum(you: BF16) -> BF16
 routine BF16.maximum(you: BF16) -> BF16
     return me.to[B32]().maximum(you.to[B32]()).to[BF16]()
 
-### Returns the larger value, the other one when one is NaN (C `fmax`).
-### :param you: The other value.
-### :returns: The result.
-routine BF16.fmax(you: BF16) -> BF16
-    return me.to[B32]().fmax(you.to[B32]()).to[BF16]()
-
-### Returns the smaller value, the other one when one is NaN (C `fmin`).
-### :param you: The other value.
-### :returns: The result.
-routine BF16.fmin(you: BF16) -> BF16
-    return me.to[B32]().fmin(you.to[B32]()).to[BF16]()
-
 ### Returns `me - you` when it is positive, otherwise 0.
 ### :param you: The other value.
 ### :returns: The result.
@@ -473,14 +461,14 @@ routine BF16.fdim(you: BF16) -> BF16
 ### Returns the remainder of `me / you` truncated toward zero (C `fmod`).
 ### :param you: The other value.
 ### :returns: The result.
-routine BF16.fmod(you: BF16) -> BF16
-    return me.to[B32]().fmod(you.to[B32]()).to[BF16]()
+routine BF16.mod_trunc(you: BF16) -> BF16
+    return me.to[B32]().mod_trunc(you.to[B32]()).to[BF16]()
 
 ### Returns the remainder of `me / you` rounded to nearest (C `remainder`).
 ### :param you: The other value.
 ### :returns: The result.
-routine BF16.remainder(you: BF16) -> BF16
-    return me.to[B32]().remainder(you.to[B32]()).to[BF16]()
+routine BF16.rem(you: BF16) -> BF16
+    return me.to[B32]().rem(you.to[B32]()).to[BF16]()
 
 ### Returns `me * 2^n`, rounded once to BF16.
 ### :param n: The power of two.
@@ -531,17 +519,17 @@ routine BF16.powi(n: S32) -> BF16
 ### :param b: The multiplier.
 ### :param c: The addend.
 ### :returns: The fused result.
-routine BF16.fma_unchecked(b: BF16, c: BF16) -> BF16
-    return BF16.from_bits(bits: C::ingrid_bf16_fma(x: me.to_bits(), y: b.to_bits(), z: c.to_bits()))
+routine BF16.mul_add_unchecked(b: BF16, c: BF16) -> BF16
+    return BF16.from_bits(bits: C::ingrid_bf16_mul_add(x: me.to_bits(), y: b.to_bits(), z: c.to_bits()))
 
-### Returns `me * b + c` with one rounding. Checked: crashes when the result isn't finite. Use `fma_unchecked` for raw IEEE 754 results.
+### Returns `me * b + c` with one rounding. Checked: crashes when the result isn't finite. Use `mul_add_unchecked` for raw IEEE 754 results.
 ### :param b: The multiplier.
 ### :param c: The addend.
 ### :returns: The result.
 ### :throws: {NumericDomainError} when there is no real result.
 ### :throws: {NumericOverflowError} when the result is out of range.
-failable routine BF16.fma(b: BF16, c: BF16) -> BF16
-    var r = me.fma_unchecked(b, c)
+failable routine BF16.mul_add(b: BF16, c: BF16) -> BF16
+    var r = me.mul_add_unchecked(b, c)
     if r.is_finite()
         return r
     if r.is_nan()
@@ -588,8 +576,8 @@ routine BF16.fpclassify() -> FpClass
 ### The IEEE 754 total order: -NaN, -infinity, ..., -0, +0, ..., +infinity, +NaN.
 ### :param you: The other value.
 ### :returns: True when `me` comes no later than `you` in that order.
-routine BF16.total_order(you: BF16) -> Bool
-    return me.to[B32]().total_order(you.to[B32]())
+routine BF16.total_compare(you: BF16) -> Bool
+    return me.to[B32]().total_compare(you.to[B32]())
 
 ### The IEEE 754 total order of the magnitudes.
 ### :param you: The other value.

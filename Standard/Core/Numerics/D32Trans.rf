@@ -4,7 +4,7 @@ module Core
 # D32Trans — the decimal32 transcendentals and libm surface. Every value is computed by Ingrid's decimal engine
 # (Ingrid/tessera/decimal/, written in Tessera), one engine for D32, D64 and D128: each transcendental is
 # correctly rounded (Ziv's strategy over a multiprecision evaluation with a tracked error bound), and sqrt, cbrt,
-# hypot, fma, quantize, fmod and remainder are exact computations rounded once. A bare `op()` that can leave the
+# hypot, mul_add, quantize, mod_trunc and rem are exact computations rounded once. A bare `op()` that can leave the
 # finite range is CHECKED (it crashes on a non-finite result), `op_unchecked()` gives the raw IEEE value.
 # ============================================================================
 
@@ -308,8 +308,8 @@ routine hypot_unchecked(x: D32, y: D32, z: D32) -> D32
     return D32.from_bits(bits: C::ingrid_d32_hypot3(x: x.to_bits(), y: y.to_bits(), z: z.to_bits()))
 
 ### Fused multiply-add me*b + c with a single rounding. Crashes on a non-finite result.
-failable routine D32.fma(b: D32, c: D32) -> D32
-    var r = me.fma_unchecked(b: b, c: c)
+failable routine D32.mul_add(b: D32, c: D32) -> D32
+    var r = me.mul_add_unchecked(b: b, c: c)
     if r.is_finite()
         return r
     if r.is_nan()
@@ -317,15 +317,15 @@ failable routine D32.fma(b: D32, c: D32) -> D32
     throw NumericOverflowError(description: "overflow: out of range")
 
 ### me*b + c with a single rounding, raw IEEE.
-routine D32.fma_unchecked(b: D32, c: D32) -> D32
-    return D32.from_bits(bits: C::ingrid_d32_fma(a: me.to_bits(), b: b.to_bits(), c: c.to_bits()))
+routine D32.mul_add_unchecked(b: D32, c: D32) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_mul_add(a: me.to_bits(), b: b.to_bits(), c: c.to_bits()))
 
 # ============================================================================
 # libm manipulation and classification (value = (-1)^sign * coeff * 10^exp)
 # ============================================================================
 
 ### IEEE 754 signbit: the raw sign bit (true for negatives, -0, and -NaN). Never crashes.
-routine D32.signbit() -> Bool
+routine D32.is_sign_negative() -> Bool
     return me.decode().sign
 
 ### True if me is negative (sign bit set, which includes -0 and -NaN).
@@ -383,7 +383,7 @@ routine D32.abs() -> D32
 ### member precedes when positive (the reverse when negative).
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
-routine D32.total_order(you: D32) -> Bool
+routine D32.total_compare(you: D32) -> Bool
     var pa = me.decode()
     var pb = you.decode()
     if pa.special >= 2 or pb.special >= 2
@@ -400,11 +400,11 @@ routine D32.total_order(you: D32) -> Bool
         return pa.exp >= pb.exp
     return pa.exp <= pb.exp
 
-### IEEE 754 totalOrderMag for decimals: `total_order` applied to the magnitudes.
+### IEEE 754 totalOrderMag for decimals: `total_compare` applied to the magnitudes.
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine D32.total_order_mag(you: D32) -> Bool
-    return me.abs().total_order(you: you.abs())
+    return me.abs().total_compare(you: you.abs())
 
 ### Negation -me (flips the sign bit, keeps specials and the cohort). Never crashes.
 @readonly
@@ -436,30 +436,8 @@ failable routine D32.finite() -> D32
     return me
 
 ### C99 fmod: me - trunc(me/you)*you, exact, with me's sign (NaN for an infinite me or a zero you).
-routine D32.fmod(you: D32) -> D32
-    return D32.from_bits(bits: C::ingrid_d32_fmod(a: me.to_bits(), b: you.to_bits()))
-
-### C99 fmax: the larger of me and you, treating NaN as missing (returns the non-NaN operand).
-### :param you: The value to compare against.
-routine D32.fmax(you: D32) -> D32
-    if me.is_nan()
-        return you
-    if you.is_nan()
-        return me
-    if (me - you).decode().sign
-        return you
-    return me
-
-### C99 fmin: the smaller of me and you, treating NaN as missing (returns the non-NaN operand).
-### :param you: The value to compare against.
-routine D32.fmin(you: D32) -> D32
-    if me.is_nan()
-        return you
-    if you.is_nan()
-        return me
-    if (me - you).decode().sign
-        return me
-    return you
+routine D32.mod_trunc(you: D32) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_mod_trunc(a: me.to_bits(), b: you.to_bits()))
 
 ### C99 fdim: the positive difference max(me - you, 0), NaN if either operand is NaN.
 ### :param you: The value to subtract.
@@ -498,13 +476,13 @@ routine D32.logb() -> D32
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, ignoring NaN.
 routine D32.min_num(you: D32) -> D32
-    return me.fmin(you: you)
+    return me.min(you: you)
 
 ### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, ignoring NaN.
 routine D32.max_num(you: D32) -> D32
-    return me.fmax(you: you)
+    return me.max(you: you)
 
 ### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
 ### :param you: The value to compare against.
@@ -520,7 +498,7 @@ routine D32.minimum(you: D32) -> D32
     if c == ME_LARGE
         return you
     if me.is_zero()
-        return if me.signbit() then me else you
+        return if me.is_sign_negative() then me else you
     return me
 
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
@@ -537,7 +515,7 @@ routine D32.maximum(you: D32) -> D32
     if c == ME_SMALL
         return you
     if me.is_zero()
-        return if me.signbit() then you else me
+        return if me.is_sign_negative() then you else me
     return me
 
 ### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero (alias of
@@ -570,8 +548,8 @@ routine D32.quantize(you: D32) -> D32
 ### is infinite or `you` is zero, `me` if `you` is infinite. Never crashes.
 ### :param you: The divisor.
 ### :returns: The IEEE remainder of `me / you`.
-routine D32.remainder(you: D32) -> D32
-    return D32.from_bits(bits: C::ingrid_d32_remainder(a: me.to_bits(), b: you.to_bits()))
+routine D32.rem(you: D32) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_rem(a: me.to_bits(), b: you.to_bits()))
 
 ### IEEE 754 normalize (the `reduce` operation): the value with trailing zeros stripped to the simplest member of
 ### its cohort (`3.00` -> `3`, `100` -> `1E+2`, `0.00` -> `0`). Specials pass through. Never crashes.
@@ -605,7 +583,7 @@ routine D32.rint() -> D32
     return d32_round_int(x: me, mode: 4)
 
 ### Fractional part me - trunc(me), with me's sign. A NaN propagates, ±inf gives ±0. Never crashes.
-routine D32.frac() -> D32
+routine D32.fract() -> D32
     if me.is_nan()
         return me
     if me.is_infinite()

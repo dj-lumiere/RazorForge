@@ -281,7 +281,7 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
 - `BF16` (bfloat16, ML weights/tensors): bit patterns (`from_bits`/`to_bits`/bytes), `b.to[B32]()`/`b.to[B64]()`
   widen exactly, `x.to[BF16]()` (from `B32`/`B64`) narrows with ONE round-to-nearest-even (from `B64` directly,
   never through `B32`), `represent`/`t.to[BF16]()`, `==`/`<`. Arithmetic (`obeys Numeric`, the B16 surface:
-  `+ - * /`, `sqrt`, `floor`..., `fma`, `next_up`...) works on the B32 values and rounds once (correctly rounded for
+  `+ - * /`, `sqrt`, `floor`..., `mul_add`, `next_up`...) works on the B32 values and rounds once (correctly rounded for
   `+ - * /`/`sqrt`), and the library functions (`exp`, `ln`, `sin`, `pow`, `atan2`, `hypot`, `sin_pi`...) call
   Tessera's correctly rounded BF16 routines through Ingrid (`ingrid_bf16_*`, bits as `U16`). No literals of its own.
 - Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `var eps: B32 = 0x1p-23`,
@@ -402,8 +402,12 @@ declare their own `i`.
   `shift_left`, `>>` `arith_shift_right`, `>>>` `logical_shift_right` (the others: `add`, `eq`, `lt`, `bitand`, ...).
 - Float and decimal math names: natural log `ln`, `ln_1p`, `log2`, `log10`, `log2_1p`, `log10_1p`, `exp_m1`,
   `exp2_m1`, `exp10_m1`, `sin_pi` / `cos_pi` / `tan_pi`, `asin_pi` / `acos_pi` / `atan_pi`, `atan2_pi`,
-  `recip_sqrt`, `sin_cos`, `gamma`, `ln_gamma`, each with its `_unchecked` form. `migrate --step names` rewrites
-  calls and declarations written with the C names (`expm1`, `log`, `cmp`, `ashl`, ...).
+  `recip_sqrt`, `sin_cos`, `gamma`, `ln_gamma`, `mul_add` (fused `me * b + c`), each with its `_unchecked` form,
+  and `mod_trunc` (remainder of a truncated division, sign of `me`), `rem` (IEEE remainder, quotient rounded to
+  nearest even), `fract` (`me - trunc(me)`), `is_sign_negative` (sign bit, true for -0), `total_compare` (IEEE
+  totalOrder). Float/decimal `max`/`min` return the other operand when one is NaN (NaN only when both are);
+  `maximum`/`minimum` propagate NaN. `migrate --step names` rewrites calls and declarations written with the C
+  names (`expm1`, `log`, `fma`, `fmod`, `remainder`, `fmax`, `frac`, `signbit`, `total_order`, `cmp`, `ashl`, ...).
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
   idiom is `try x.abs()!!`
 - Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`

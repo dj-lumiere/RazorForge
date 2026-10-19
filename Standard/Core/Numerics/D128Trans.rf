@@ -4,7 +4,7 @@ module Core
 # D128Trans — the decimal128 transcendentals and libm surface. Every value is computed by Ingrid's decimal engine
 # (Ingrid/tessera/decimal/, written in Tessera), one engine for D32, D64 and D128: each transcendental is
 # correctly rounded (Ziv's strategy over a multiprecision evaluation with a tracked error bound), and sqrt, cbrt,
-# hypot, fma, quantize, fmod and remainder are exact computations rounded once. A bare `op()` that can leave the
+# hypot, mul_add, quantize, mod_trunc and rem are exact computations rounded once. A bare `op()` that can leave the
 # finite range is CHECKED (it crashes on a non-finite result), `op_unchecked()` gives the raw IEEE value.
 # ============================================================================
 
@@ -338,8 +338,8 @@ routine hypot_unchecked(x: D128, y: D128, z: D128) -> D128
     )
 
 ### Fused multiply-add me*b + c with a single rounding. Crashes on a non-finite result.
-failable routine D128.fma(b: D128, c: D128) -> D128
-    var r = me.fma_unchecked(b: b, c: c)
+failable routine D128.mul_add(b: D128, c: D128) -> D128
+    var r = me.mul_add_unchecked(b: b, c: c)
     if r.is_finite()
         return r
     if r.is_nan()
@@ -347,9 +347,9 @@ failable routine D128.fma(b: D128, c: D128) -> D128
     throw NumericOverflowError(description: "overflow: out of range")
 
 ### me*b + c with a single rounding, raw IEEE.
-routine D128.fma_unchecked(b: D128, c: D128) -> D128
+routine D128.mul_add_unchecked(b: D128, c: D128) -> D128
     return d128_of_words(
-        w: C::ingrid_d128_fma(
+        w: C::ingrid_d128_mul_add(
             a_low: d128_low(v: me),
             a_high: d128_high(v: me),
             b_low: d128_low(v: b),
@@ -364,7 +364,7 @@ routine D128.fma_unchecked(b: D128, c: D128) -> D128
 # ============================================================================
 
 ### IEEE 754 signbit: the raw sign bit (true for negatives, -0, and -NaN). Never crashes.
-routine D128.signbit() -> Bool
+routine D128.is_sign_negative() -> Bool
     return me.decode().sign
 
 ### True if me is negative (sign bit set, which includes -0 and -NaN).
@@ -437,7 +437,7 @@ routine decimal_order_band(sign: Bool, special: U64) -> S64
 ### member precedes when positive (the reverse when negative).
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
-routine D128.total_order(you: D128) -> Bool
+routine D128.total_compare(you: D128) -> Bool
     var pa = me.decode()
     var pb = you.decode()
     if pa.special >= 2 or pb.special >= 2
@@ -454,11 +454,11 @@ routine D128.total_order(you: D128) -> Bool
         return pa.exp >= pb.exp
     return pa.exp <= pb.exp
 
-### IEEE 754 totalOrderMag for decimals: `total_order` applied to the magnitudes.
+### IEEE 754 totalOrderMag for decimals: `total_compare` applied to the magnitudes.
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine D128.total_order_mag(you: D128) -> Bool
-    return me.abs().total_order(you: you.abs())
+    return me.abs().total_compare(you: you.abs())
 
 ### Negation -me (flips the sign bit, keeps specials and the cohort). Never crashes.
 @readonly
@@ -490,37 +490,15 @@ failable routine D128.finite() -> D128
     return me
 
 ### C99 fmod: me - trunc(me/you)*you, exact, with me's sign (NaN for an infinite me or a zero you).
-routine D128.fmod(you: D128) -> D128
+routine D128.mod_trunc(you: D128) -> D128
     return d128_of_words(
-        w: C::ingrid_d128_fmod(
+        w: C::ingrid_d128_mod_trunc(
             a_low: d128_low(v: me),
             a_high: d128_high(v: me),
             b_low: d128_low(v: you),
             b_high: d128_high(v: you),
         ),
     )
-
-### C99 fmax: the larger of me and you, treating NaN as missing (returns the non-NaN operand).
-### :param you: The value to compare against.
-routine D128.fmax(you: D128) -> D128
-    if me.is_nan()
-        return you
-    if you.is_nan()
-        return me
-    if (me - you).decode().sign
-        return you
-    return me
-
-### C99 fmin: the smaller of me and you, treating NaN as missing (returns the non-NaN operand).
-### :param you: The value to compare against.
-routine D128.fmin(you: D128) -> D128
-    if me.is_nan()
-        return you
-    if you.is_nan()
-        return me
-    if (me - you).decode().sign
-        return me
-    return you
 
 ### C99 fdim: the positive difference max(me - you, 0), NaN if either operand is NaN.
 ### :param you: The value to subtract.
@@ -559,13 +537,13 @@ routine D128.logb() -> D128
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, ignoring NaN.
 routine D128.min_num(you: D128) -> D128
-    return me.fmin(you: you)
+    return me.min(you: you)
 
 ### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, ignoring NaN.
 routine D128.max_num(you: D128) -> D128
-    return me.fmax(you: you)
+    return me.max(you: you)
 
 ### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
 ### :param you: The value to compare against.
@@ -581,7 +559,7 @@ routine D128.minimum(you: D128) -> D128
     if c == ME_LARGE
         return you
     if me.is_zero()
-        return if me.signbit() then me else you
+        return if me.is_sign_negative() then me else you
     return me
 
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
@@ -598,7 +576,7 @@ routine D128.maximum(you: D128) -> D128
     if c == ME_SMALL
         return you
     if me.is_zero()
-        return if me.signbit() then you else me
+        return if me.is_sign_negative() then you else me
     return me
 
 ### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero (alias of
@@ -638,9 +616,9 @@ routine D128.quantize(you: D128) -> D128
 ### is infinite or `you` is zero, `me` if `you` is infinite. Never crashes.
 ### :param you: The divisor.
 ### :returns: The IEEE remainder of `me / you`.
-routine D128.remainder(you: D128) -> D128
+routine D128.rem(you: D128) -> D128
     return d128_of_words(
-        w: C::ingrid_d128_remainder(
+        w: C::ingrid_d128_rem(
             a_low: d128_low(v: me),
             a_high: d128_high(v: me),
             b_low: d128_low(v: you),
@@ -680,7 +658,7 @@ routine D128.rint() -> D128
     return d128_round_int(x: me, mode: 4)
 
 ### Fractional part me - trunc(me), with me's sign. A NaN propagates, ±inf gives ±0. Never crashes.
-routine D128.frac() -> D128
+routine D128.fract() -> D128
     if me.is_nan()
         return me
     if me.is_infinite()

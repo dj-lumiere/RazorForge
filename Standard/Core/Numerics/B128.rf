@@ -124,8 +124,8 @@ routine B128.is_zero() -> Bool
 routine B128.is_subnormal() -> Bool
     return me.raw_exponent() == 0 and LLVM::int_ne(a: me.raw_mantissa(), b: 0)
 
-### Returns `true` when the sign bit is set (C `signbit`; true for -0 and -NaN too).
-routine B128.signbit() -> Bool
+### Returns `true` when the sign bit is set (C `is_sign_negative`; true for -0 and -NaN too).
+routine B128.is_sign_negative() -> Bool
     return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()), b: 0)
 
 ### Returns `true` for a finite, normal value (nonzero and not subnormal).
@@ -161,10 +161,10 @@ routine b128_order_key(bits: U128) -> U128
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
-routine B128.total_order(you: B128) -> Bool
+routine B128.total_compare(you: B128) -> Bool
     return b128_order_key(bits: me.to_bits()) <= b128_order_key(bits: you.to_bits())
 
-### IEEE 754 totalOrderMag: `total_order` applied to the magnitudes (sign bit cleared).
+### IEEE 754 totalOrderMag: `total_compare` applied to the magnitudes (sign bit cleared).
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine B128.total_order_mag(you: B128) -> Bool
@@ -226,7 +226,7 @@ routine B128.min_num(you: B128) -> B128
         return me
     if me == you
         if me.is_zero()
-            return if me.signbit() then me else you
+            return if me.is_sign_negative() then me else you
         return me
     return if me < you then me else you
 ### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
@@ -239,7 +239,7 @@ routine B128.max_num(you: B128) -> B128
         return me
     if me == you
         if me.is_zero()
-            return if me.signbit() then you else me
+            return if me.is_sign_negative() then you else me
         return me
     return if me > you then me else you
 ### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
@@ -252,7 +252,7 @@ routine B128.minimum(you: B128) -> B128
         return you
     if me == you
         if me.is_zero()
-            return if me.signbit() then me else you
+            return if me.is_sign_negative() then me else you
         return me
     return if me < you then me else you
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
@@ -265,22 +265,9 @@ routine B128.maximum(you: B128) -> B128
         return you
     if me == you
         if me.is_zero()
-            return if me.signbit() then you else me
+            return if me.is_sign_negative() then you else me
         return me
     return if me > you then me else you
-### C `fmax`: the larger operand, treating NaN as missing (alias of `max_num`). Provided for
-### parity with B16/B32/B64 and the decimal types. Never crashes.
-### :param you: The value to compare against.
-### :returns: The maximum of `me` and `you`, ignoring NaN.
-routine B128.fmax(you: B128) -> B128
-    return me.max_num(you: you)
-
-### C `fmin`: the smaller operand, treating NaN as missing (alias of `min_num`). Provided for
-### parity with B16/B32/B64 and the decimal types. Never crashes.
-### :param you: The value to compare against.
-### :returns: The minimum of `me` and `you`, ignoring NaN.
-routine B128.fmin(you: B128) -> B128
-    return me.min_num(you: you)
 
 ### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero.
 ### :returns: `me` rounded to an integral value with ties away from zero.
@@ -293,7 +280,7 @@ routine B128.round_ties_away() -> B128
     return rounded.copysign(sign: me)
 
 ### Returns the fractional part `me - trunc(me)`, preserving sign (frac(±inf) = ±0).
-routine B128.frac() -> B128
+routine B128.fract() -> B128
     if me.is_nan()
         return me
     if me.is_infinite()
@@ -550,7 +537,7 @@ routine b128_round_to_int(bits: U128, half_even: Bool) -> U128
     )
     return LLVM::bit_or(a: packed, b: LLVM::bit_and(a: intsig, b: b128_mant_mask()))
 
-### Returns the smaller of two values (C `fmin`: NaN-agnostic, -0 < +0).
+### The smaller of `me` and `you`. If one operand is NaN, the other one. -0 counts below +0.
 ### :param you: The value to compare against.
 ### :returns: The minimum.
 routine B128.min(you: B128) -> B128
@@ -566,7 +553,7 @@ routine B128.min(you: B128) -> B128
         return me
     return you
 
-### Returns the larger of two values (C `fmax`: NaN-agnostic, -0 < +0).
+### The larger of `me` and `you`. If one operand is NaN, the other one. -0 counts below +0.
 ### :param you: The value to compare against.
 ### :returns: The maximum.
 routine B128.max(you: B128) -> B128
@@ -1269,11 +1256,11 @@ routine b128_fmod_core(abits: U128, bbits: U128) -> (U128, Bool)
         return (0, qodd)
     return (b128_norm_pack(sign: 0, sig: x, exp_lsb: LLVM::sub(a: emsbb, b: 112)), qodd)
 
-### Returns `me mod you` truncated toward zero (C `fmod`): result has the sign of
+### Returns `me mod you` truncated toward zero (C `mod_trunc`): result has the sign of
 ### `me` and magnitude strictly less than `|you|`.
 ### :param you: The divisor.
 ### :returns: The truncated remainder.
-routine B128.fmod(you: B128) -> B128
+routine B128.mod_trunc(you: B128) -> B128
     if me.is_nan()
         return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
     if you.is_nan()
@@ -1291,10 +1278,10 @@ routine B128.fmod(you: B128) -> B128
     return B128.from_bits(bits: rbits)
 
 ### Returns the IEEE 754 remainder `me - n*you` where `n` is `me/you` rounded to
-### the nearest integer, ties to even (C `remainder`).
+### the nearest integer, ties to even (C `rem`).
 ### :param you: The divisor.
 ### :returns: The remainder in `[-|you|/2, |you|/2]`.
-routine B128.remainder(you: B128) -> B128
+routine B128.rem(you: B128) -> B128
     if me.is_nan()
         return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
     if you.is_nan()
