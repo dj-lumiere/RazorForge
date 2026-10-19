@@ -214,7 +214,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   "borrow" in prose or API names, nor "owner"/"ownership" for entities. Sharing is expressed with records
   (copies) and entities: permission (**access tokens**, below), managers (RC wrappers) and `steal`.
 - builder-synthesized per-type routines are **wired routines** (`represent`,
-  `diagnose`, `serialize`, the constructor, `eq`, `cmp`, `hash`, …) — named with **NO
+  `diagnose`, `serialize`, the constructor, `eq`, `compare`, `hash`, …) — named with **NO
   sigil**; wired-ness is INFERRED from protocol conformance. Not
   "derives"/"macros"/"trait impls". (The `$` sigil is a separate, unrelated
   feature — a buildtime SPLICE, e.g. `$nameof(m)`.)
@@ -280,7 +280,7 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
   widen exactly, `x.to[BF16]()` (from `B32`/`B64`) narrows with ONE round-to-nearest-even (from `B64` directly,
   never through `B32`), `represent`/`t.to[BF16]()`, `==`/`<`. Arithmetic (`obeys Numeric`, the B16 surface:
   `+ - * /`, `sqrt`, `floor`..., `fma`, `next_up`...) works on the B32 values and rounds once (correctly rounded for
-  `+ - * /`/`sqrt`), and the library functions (`exp`, `log`, `sin`, `pow`, `atan2`, `hypot`, `sinpi`...) call
+  `+ - * /`/`sqrt`), and the library functions (`exp`, `ln`, `sin`, `pow`, `atan2`, `hypot`, `sin_pi`...) call
   Tessera's correctly rounded BF16 routines through Ingrid (`ingrid_bf16_*`, bits as `U16`). No literals of its own.
 - Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `var eps: B32 = 0x1p-23`,
   `0x1.fffffep+127` where a `B32` goes. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
@@ -393,9 +393,15 @@ declare their own `i`.
   any integer type (`x << n` with `n: S64`); a negative amount crashes. Shifting by the
   width or more pushes every bit out: `<<` and `>>>` give 0, `>>` gives -1 for a negative
   value, else 0. A subscript index may be any integer type too (`xs[i]` with `i: S64` or
-  `U8`); a negative index crashes with `NegativeIndexError`. The named routines (`x.ashl(bits:)`, `xs.getitem(index:)`)
+  `U8`); a negative index crashes with `NegativeIndexError`. The named routines (`x.shift_left(bits:)`, `xs.getitem(index:)`)
   keep their parameter types.
 - `//` floor division, `/` true division, `%` remainder
+- An operator is a call of its routine: `/` `truediv`, `//` `floordiv`, `%` `mod`, `<=>` `compare`, `<<`
+  `shift_left`, `>>` `arith_shift_right`, `>>>` `logical_shift_right` (the others: `add`, `eq`, `lt`, `bitand`, ...).
+- Float and decimal math names: natural log `ln`, `ln_1p`, `log2`, `log10`, `log2_1p`, `log10_1p`, `exp_m1`,
+  `exp2_m1`, `exp10_m1`, `sin_pi` / `cos_pi` / `tan_pi`, `asin_pi` / `acos_pi` / `atan_pi`, `atan2_pi`,
+  `recip_sqrt`, `sin_cos`, `gamma`, `ln_gamma`, each with its `_unchecked` form. `migrate --step names` rewrites
+  calls and declarations written with the C names (`expm1`, `log`, `cmp`, `ashl`, ...).
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
   idiom is `try x.abs()!!`
 - Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
@@ -583,7 +589,7 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   `try get_text(n: 0)` → `Maybe[Text]`/`Text?`; `check get_text(n: 0)` → `Check[Text]`
   (keeps the `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
-  the constructor `T(...)`, `destruct`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
+  the constructor `T(...)`, `destruct`, `copy`, `eq`, `compare`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
 - Failure inside a failable routine: `throw SomeError(...)`. A routine with no
@@ -824,7 +830,7 @@ relates ListEmitter[T] as Iter        # associated type binding
   settled by name lookup after parsing (`BracketReclassifyPass`), not by a
   heuristic. A generic argument is a type-level `getitem`.
 - Everything monomorphizes; there is **no runtime dispatch** of any kind.
-- A protocol member declared `@readonly` (`eq`, `cmp`, `hash`, the arithmetic operators, `count`, `iter`,
+- A protocol member declared `@readonly` (`eq`, `compare`, `hash`, the arithmetic operators, `count`, `iter`,
   `getitem`, `duplicate`, …) is implemented `@readonly` too, and its body is checked to change nothing:
   an implementation without it is RF-S771. Suflae has neither `@readonly` nor `@reshaping`.
 

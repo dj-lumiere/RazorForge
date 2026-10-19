@@ -309,16 +309,16 @@ needs T obeys Equatable
             return false
     return true
 
-### The auto-derived default `cmp()` for any record/entity/tuple: lexicographic comparison in
+### The auto-derived default `compare()` for any record/entity/tuple: lexicographic comparison in
 ### declaration order, returning at the first non-`SAME` member. Written as the universal
-### `@overridable routine T.cmp()`; `lt`/`le`/`gt`/`ge` are derived from this by the builder. A
+### `@overridable routine T.compare()`; `lt`/`le`/`gt`/`ge` are derived from this by the builder. A
 ### zero-field type expands to no comparisons and returns `SAME`.
 @overridable
-routine T.cmp(you: Viewing[T]) -> ComparisonSign
+routine T.compare(you: Viewing[T]) -> ComparisonSign
 needs T obeys Comparable
     expand m in allmemvarof(T)
-        if me.$nameof(m).cmp(you: you.$nameof(m)) != SAME
-            return me.$nameof(m).cmp(you: you.$nameof(m))
+        if me.$nameof(m).compare(you: you.$nameof(m)) != SAME
+            return me.$nameof(m).compare(you: you.$nameof(m))
     return SAME
 
 ### Returns this choice's discriminant: `status.to[S32]()`.
@@ -342,20 +342,20 @@ routine T.to[U64]() -> U64
 needs FlagsType T
     return LLVM::reinterpret_bits[T, U64](me)
 
-### Choice `eq`/`cmp`: a choice holds EXACTLY ONE case, so equality and ordering are just a compare of
+### Choice `eq`/`compare`: a choice holds EXACTLY ONE case, so equality and ordering are just a compare of
 ### the S32 discriminant — NOT the record field-walk above (a choice has no member variables, so
 ### `allmemvarof(T)` is empty and the record template would wrongly return `true`/`SAME` for every pair).
 ### Reading the discriminant is a reinterpretation of the value (the same read the choice `represent` makes), and the inner
-### `==`/`cmp` resolve to the hand-written `S32` ops, so there is no recursion back into this derive.
+### `==`/`compare` resolve to the hand-written `S32` ops, so there is no recursion back into this derive.
 @override
 routine T.eq(you: Viewing[T]) -> Bool
 needs ChoiceType T
     return LLVM::reinterpret_bits[T, S32](me) == LLVM::reinterpret_bits[T, S32](you)
 
 @override
-routine T.cmp(you: Viewing[T]) -> ComparisonSign
+routine T.compare(you: Viewing[T]) -> ComparisonSign
 needs ChoiceType T
-    return LLVM::reinterpret_bits[T, S32](me).cmp(you: LLVM::reinterpret_bits[T, S32](you))
+    return LLVM::reinterpret_bits[T, S32](me).compare(you: LLVM::reinterpret_bits[T, S32](you))
 
 ### Choice `hash`: a choice IS its S32 discriminant, so hashing reinterprets to the integral identity
 ### (the discriminant widened to `S64`) and defers to the hand-written `S64` keyed hash. Without
@@ -368,7 +368,7 @@ needs ChoiceType T
 ### Flags `eq`: EXACT bitmask equality (`perms == READ` means "exactly READ, nothing else"). A flags value
 ### is a SET of bits, so membership/subset ("is READ on?") is the separate `in` operator, never `==`. Like
 ### the choice derives, this compares the reinterpreted U64 bitmask via the hand-written `U64` op — no
-### field-walk, no recursion. Flags have no natural total order, so no `cmp` derive.
+### field-walk, no recursion. Flags have no natural total order, so no `compare` derive.
 @override
 routine T.eq(you: Viewing[T]) -> Bool
 needs FlagsType T
@@ -448,26 +448,26 @@ needs FlagsType T
         mask = mask.bitor(you: $valueof(c))
     return LLVM::reinterpret_bits[U64, Me](mask)
 
-### The auto-derived ordering helpers `lt`/`le`/`gt`/`ge` for any Comparable type, derived from `cmp`
-### (`me.cmp(you)` is `ME_SMALL`/`SAME`/`ME_LARGE`). These used to be emitted by the C# DerivedOperatorPass,
+### The auto-derived ordering helpers `lt`/`le`/`gt`/`ge` for any Comparable type, derived from `compare`
+### (`me.compare(you)` is `ME_SMALL`/`SAME`/`ME_LARGE`). These used to be emitted by the C# DerivedOperatorPass,
 ### which the collector/harness codegen path lost; deriving them here routes them through the same
-### everywhere-derive template mechanism as `represent`/`cmp` (registered + materialized by the collector),
+### everywhere-derive template mechanism as `represent`/`compare` (registered + materialized by the collector),
 ### so `a < b` (-> `a.lt(b)`) resolves for Char, numerics, records, collections uniformly.
 routine T.lt(you: Viewing[T]) -> Bool
 needs T obeys Comparable
-    return me.cmp(you: you) == ME_SMALL
+    return me.compare(you: you) == ME_SMALL
 
 routine T.le(you: Viewing[T]) -> Bool
 needs T obeys Comparable
-    return me.cmp(you: you) != ME_LARGE
+    return me.compare(you: you) != ME_LARGE
 
 routine T.gt(you: Viewing[T]) -> Bool
 needs T obeys Comparable
-    return me.cmp(you: you) == ME_LARGE
+    return me.compare(you: you) == ME_LARGE
 
 routine T.ge(you: Viewing[T]) -> Bool
 needs T obeys Comparable
-    return me.cmp(you: you) != ME_SMALL
+    return me.compare(you: you) != ME_SMALL
 
 ### The auto-derived fast `hash()` for any record/entity/tuple: XOR-fold each member variable's fast
 ### hash. Seeded at `0` (the XOR identity), so a single-field type hashes to exactly that field's hash

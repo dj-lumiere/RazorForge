@@ -146,7 +146,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                             @readonly
-                            routine Me.$cmp(other: Me) -> S32
+                            routine Me.$compare(other: Me) -> S32
 
                         record Value obeys Displayable, Comparable
                             value: S32
@@ -156,7 +156,7 @@ public class ProtocolImplementationTests
                             return "value"
 
                         @readonly
-                        routine Value.$cmp(other: Value) -> S32
+                        routine Value.$compare(other: Value) -> S32
                             return me.value - other.value
                         """;
 
@@ -176,7 +176,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                             @readonly
-                            routine Me.$cmp(other: Me) -> S32
+                            routine Me.$compare(other: Me) -> S32
 
                         record Value obeys Displayable, Comparable
                             value: S32
@@ -610,7 +610,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                             @readonly
-                            routine Me.$cmp(other: Me) -> S32
+                            routine Me.$compare(other: Me) -> S32
 
                         routine foo[T obeys Displayable, Comparable](item: T) -> Text
                             return item.display()
@@ -632,7 +632,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                             @readonly
-                            routine Me.$cmp(other: Me) -> S32
+                            routine Me.$compare(other: Me) -> S32
 
                         routine foo[T](item: T) needs T obeys Displayable, Comparable -> Text
                             return item.display()

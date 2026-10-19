@@ -395,7 +395,7 @@ routine div_round_half_even(n: Integer, d: Integer) -> Integer
     var q = qr.item0
     var r = qr.item1
     var r2 = r.add(other: r)
-    var c = r2.cmp(you: d)
+    var c = r2.compare(you: d)
     if c == ME_LARGE
         return q.add(other: Integer.one())
     if c == SAME
@@ -407,8 +407,8 @@ routine div_round_half_even(n: Integer, d: Integer) -> Integer
 ### True when num/den >= 2^k (k may be negative), an exact big-integer test.
 routine ratio_ge_pow2(num: Integer, den: Integer, k: S64) -> Bool
     if k >= 0
-        return num.cmp(you: den.shl(bits: LLVM::int_truncate[S64, S32](k))) != ME_SMALL
-    return num.shl(bits: LLVM::int_truncate[S64, S32](0 - k)).cmp(you: den) != ME_SMALL
+        return num.compare(you: den.shift_left(bits: LLVM::int_truncate[S64, U32](k))) != ME_SMALL
+    return num.shift_left(bits: LLVM::int_truncate[S64, U32](0 - k)).compare(you: den) != ME_SMALL
 
 # ----------------------------------------------------------------------------
 # Formatting: significant-digit extraction + %g layout
@@ -421,9 +421,9 @@ routine binary_float_digits(m: U64, e2: S64, sig: U64) -> FloatDigits
     var num = m.to[Integer]()
     var den = Integer.one()
     if e2 >= 0
-        num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
+        num = num.shift_left(bits: LLVM::int_truncate[S64, U32](e2))
     else
-        den = den.shl(bits: LLVM::int_truncate[S64, S32](0 - e2))
+        den = den.shift_left(bits: LLVM::int_truncate[S64, U32](0 - e2))
     var sigi = LLVM::reinterpret_bits[U64, S64](sig)
     var sigm1 = sigi - 1
     var lo = pow10_int(k: sigm1)
@@ -445,16 +445,16 @@ routine binary_float_digits(m: U64, e2: S64, sig: U64) -> FloatDigits
         dd = div_round_half_even(n: n2, d: d2)
         if guard >= 6
             done = true
-        elseif dd.cmp(you: hi) != ME_SMALL
+        elseif dd.compare(you: hi) != ME_SMALL
             ee = ee + 1
             guard = guard + 1
-        elseif dd.cmp(you: lo) == ME_SMALL
+        elseif dd.compare(you: lo) == ME_SMALL
             ee = ee - 1
             guard = guard + 1
         else
             done = true
     # Safety: if the guard tripped with a rounded-up extra digit, drop it.
-    if dd.cmp(you: hi) != ME_SMALL
+    if dd.compare(you: hi) != ME_SMALL
         dd = dd.floordiv(other: 10)
         ee = ee + 1
     return FloatDigits(digits: dd.represent(), point_exp: ee)
@@ -570,24 +570,24 @@ routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatD
     var m_minus = Integer.one()
     # Everything is scaled by 2 (by 4 when the lower gap is the narrow one) so the half-gaps stay integers.
     if e2 >= 0
-        var ulp = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](e2))
+        var ulp = Integer.one().shift_left(bits: LLVM::int_truncate[S64, U32](e2))
         if lower_closer
-            r = m.mul(other: ulp).shl(bits: 2)
+            r = m.mul(other: ulp).shift_left(bits: 2)
             s = 4
-            m_plus = ulp.shl(bits: 1)
+            m_plus = ulp.shift_left(bits: 1)
             m_minus = ulp
         else
-            r = m.mul(other: ulp).shl(bits: 1)
+            r = m.mul(other: ulp).shift_left(bits: 1)
             s = 2
             m_plus = ulp
             m_minus = ulp
     elseif lower_closer
-        r = m.shl(bits: 2)
-        s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](2 - e2))
+        r = m.shift_left(bits: 2)
+        s = Integer.one().shift_left(bits: LLVM::int_truncate[S64, U32](2 - e2))
         m_plus = 2
     else
-        r = m.shl(bits: 1)
-        s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](1 - e2))
+        r = m.shift_left(bits: 1)
+        s = Integer.one().shift_left(bits: LLVM::int_truncate[S64, U32](1 - e2))
     # Find k with 10^(k-1) <= (upper interval end) < 10^k: estimate from the bit lengths, then settle
     # it exactly in whichever direction the estimate was off.
     var bl = LLVM::reinterpret_bits[U64, S64](r.bit_length()) - LLVM::reinterpret_bits[U64, S64](s.bit_length())
@@ -601,7 +601,7 @@ routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatD
         m_minus = m_minus.mul(other: scale)
     var settled = false
     while not settled
-        var top = r.add(other: m_plus).cmp(you: s)
+        var top = r.add(other: m_plus).compare(you: s)
         if top == ME_LARGE or (inclusive and top == SAME)
             s = s.mul(other: ten)
             k = k + 1
@@ -609,7 +609,7 @@ routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatD
             var below = r
                 .add(other: m_plus)
                 .mul(other: ten)
-                .cmp(you: s)
+                .compare(you: s)
             if below == ME_SMALL or (not inclusive and below == SAME)
                 r = r.mul(other: ten)
                 m_plus = m_plus.mul(other: ten)
@@ -628,13 +628,13 @@ routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatD
         var qr = r.divmod(other: s)
         var d = qr.item0.to[U64]()
         r = qr.item1
-        var low_c = r.cmp(you: m_minus)
+        var low_c = r.compare(you: m_minus)
         var low = low_c == ME_SMALL or (inclusive and low_c == SAME)
-        var high_c = r.add(other: m_plus).cmp(you: s)
+        var high_c = r.add(other: m_plus).compare(you: s)
         var high = high_c == ME_LARGE or (inclusive and high_c == SAME)
         if low and high
             # Both d and d + 1 read back correctly: keep the one closer to the exact value, even on a tie.
-            var half = r.shl(bits: 1).cmp(you: s)
+            var half = r.shift_left(bits: 1).compare(you: s)
             if half == ME_LARGE
                 or (half == SAME and LLVM::int_ne(a: LLVM::bit_and(a: d, b: 1), b: 0))
                 d = d + 1
@@ -994,9 +994,9 @@ routine fixed_from_binary(neg: Bool, m: Integer, e2: S64, places: U64) -> Text
     var num = m
     var den = Integer.one()
     if e2 >= 0
-        num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
+        num = num.shift_left(bits: LLVM::int_truncate[S64, U32](e2))
     else
-        den = den.shl(bits: LLVM::int_truncate[S64, S32](0 - e2))
+        den = den.shift_left(bits: LLVM::int_truncate[S64, U32](0 - e2))
     return fixed_from_ratio(neg: neg, num: num, den: den, places: places)
 
 ### Renders a B64 with exactly `places` digits after the point (B16/B32 widen to B64 exactly first).
@@ -1184,14 +1184,14 @@ routine round_and_pack(neg: Bool, num_in: Integer, den_in: Integer, fmt: S32) ->
     var n2 = num
     var d2 = den
     if lsb >= 0
-        d2 = den.shl(bits: LLVM::int_truncate[S64, S32](lsb))
+        d2 = den.shift_left(bits: LLVM::int_truncate[S64, U32](lsb))
     else
-        n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0 - lsb))
+        n2 = num.shift_left(bits: LLVM::int_truncate[S64, U32](0 - lsb))
     var q = div_round_half_even(n: n2, d: d2)
     # A round-up can carry to 2^p; renormalize one bit.
-    var pbits = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](p))
-    if q.cmp(you: pbits) != ME_SMALL
-        q = q.shr(bits: 1)
+    var pbits = Integer.one().shift_left(bits: LLVM::int_truncate[S64, U32](p))
+    if q.compare(you: pbits) != ME_SMALL
+        q = q.arith_shift_right(bits: 1)
         lsb = lsb + 1
     # Pack the IEEE fields (generic over the format's widths).
     var sign: U64 = 0
@@ -1462,13 +1462,13 @@ routine b128_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B128
     var n2 = num
     var d2 = den
     if lsb >= 0
-        d2 = den.shl(bits: LLVM::int_truncate[S64, S32](lsb))
+        d2 = den.shift_left(bits: LLVM::int_truncate[S64, U32](lsb))
     else
-        n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0 - lsb))
+        n2 = num.shift_left(bits: LLVM::int_truncate[S64, U32](0 - lsb))
     var q = div_round_half_even(n: n2, d: d2)
     # A round-up can carry to 2^113; renormalize one bit.
-    if q.cmp(you: Integer.one().shl(bits: 113)) != ME_SMALL
-        q = q.shr(bits: 1)
+    if q.compare(you: Integer.one().shift_left(bits: 113)) != ME_SMALL
+        q = q.arith_shift_right(bits: 1)
         lsb = lsb + 1
     if q.is_zero()
         return B128.from_bits(bits: sign_bit)
@@ -1476,8 +1476,8 @@ routine b128_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B128
     var efinal = lsb + leading - 1
     if efinal > 16383
         return B128.from_bits(bits: b128_inf(sign: sign))
-    var q_hi = q.shr(bits: 64)
-    var q_lo = q.sub(other: q_hi.shl(bits: 64))
+    var q_hi = q.arith_shift_right(bits: 64)
+    var q_lo = q.sub(other: q_hi.shift_left(bits: 64))
     var qbits = LLVM::bit_or(
         a: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](q_hi.to[U64]()), bits: 64),
         b: LLVM::zero_extend[U64, U128](q_lo.to[U64]()),

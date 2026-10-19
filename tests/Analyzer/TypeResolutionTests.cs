@@ -316,7 +316,7 @@ public class TypeResolutionTests
         string source = """
                         protocol Comparable
                             @readonly
-                            routine Me.$cmp(other: Me) -> S32
+                            routine Me.$compare(other: Me) -> S32
 
                         bundle Wrapper[T]
                         needs T obeys Comparable

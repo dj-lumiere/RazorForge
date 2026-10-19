@@ -273,7 +273,7 @@ routine B64.eq(you: B64) -> Bool
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL`, `ME_LARGE`, or `SAME`.
 @readonly
-routine B64.cmp(you: B64) -> ComparisonSign
+routine B64.compare(you: B64) -> ComparisonSign
     if LLVM::float_lt[B64](a: me, b: you)
         return ME_SMALL
     if LLVM::float_gt[B64](a: me, b: you)
@@ -336,11 +336,11 @@ failable routine B64.exp() -> B64
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns the natural logarithm. Checked: crashes on a non-finite result (`log(0)` -> -inf,
-### `log(<0)` -> NaN). Use `log_unchecked` for raw IEEE 754 propagation.
+### Returns the natural logarithm. Checked: crashes on a non-finite result (`ln(0)` -> -inf,
+### `ln(<0)` -> NaN). Use `ln_unchecked` for raw IEEE 754 propagation.
 ### :returns: The double-precision natural-log result (always finite).
-failable routine B64.log() -> B64
-    var r = me.log_unchecked()
+failable routine B64.ln() -> B64
+    var r = me.ln_unchecked()
     if r.is_finite()
         return r
     if r.is_nan()
@@ -680,9 +680,9 @@ routine C::rf_b64_cbrt(value: B64) -> B64
 # B64 libm methods (the C99 doubles B64 didn't already have via LLVM intrinsics),
 # delegating to the rf_b64_* runtime passthroughs / bare libm externals above.
 # ============================================================================
-### exp(me) - 1, accurate near 0. Checked: crashes on overflow. Use `expm1_unchecked` for raw IEEE.
-failable routine B64.expm1() -> B64
-    var r = me.expm1_unchecked()
+### exp(me) - 1, accurate near 0. Checked: crashes on overflow. Use `exp_m1_unchecked` for raw IEEE.
+failable routine B64.exp_m1() -> B64
+    var r = me.exp_m1_unchecked()
     if r.is_finite()
         return r
     if r.is_nan()
@@ -698,10 +698,10 @@ failable routine B64.exp2() -> B64
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### log(1 + me), accurate near 0. Checked: crashes on a non-finite result. Use `log1p_unchecked` for
+### log(1 + me), accurate near 0. Checked: crashes on a non-finite result. Use `ln_1p_unchecked` for
 ### raw IEEE.
-failable routine B64.log1p() -> B64
-    var r = me.log1p_unchecked()
+failable routine B64.ln_1p() -> B64
+    var r = me.ln_1p_unchecked()
     if r.is_finite()
         return r
     if r.is_nan()
@@ -823,9 +823,9 @@ failable routine B64.atanh() -> B64
     throw NumericOverflowError(description: "overflow: out of range")
 
 ### Gamma function. Checked: crashes on a non-finite result (overflow or pole). Use
-### `tgamma_unchecked` for raw IEEE.
-failable routine B64.tgamma() -> B64
-    var r = me.tgamma_unchecked()
+### `gamma_unchecked` for raw IEEE.
+failable routine B64.gamma() -> B64
+    var r = me.gamma_unchecked()
     if r.is_finite()
         return r
     if r.is_nan()
@@ -1147,10 +1147,10 @@ routine B64.cosh_unchecked() -> B64
 
 ### Returns cos(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
 ### identical on every platform. It is exact at integers (±1) and half-integers (+0),
-### `cospi(-x) == cospi(x)`, and ±infinity and NaN give NaN.
+### `cos_pi(-x) == cos_pi(x)`, and ±infinity and NaN give NaN.
 ### :returns: The correctly rounded cosine of pi times this value.
-routine B64.cospi() -> B64
-    return C::ingrid_b64_cospi(x: me)
+routine B64.cos_pi() -> B64
+    return C::ingrid_b64_cos_pi(x: me)
 
 ### Returns the error function `erf(x) = 2/sqrt(pi) * integral from 0 to x of exp(-t^2) dt` of this
 ### value, correctly rounded: the exact result rounded to the nearest `B64` (ties to even), identical on
@@ -1190,10 +1190,10 @@ routine B64.exp2_unchecked() -> B64
 
 ### Returns `e` raised to this value, minus 1, correctly rounded: the exact `e^x - 1` rounded to the
 ### nearest `B64` (ties to even), identical on every platform and accurate near 0, with raw IEEE 754
-### propagation (overflow -> +infinity, `expm1(-infinity) == -1`, NaN -> NaN).
+### propagation (overflow -> +infinity, `exp_m1(-infinity) == -1`, NaN -> NaN).
 ### :returns: The correctly rounded `e^x - 1`, possibly +infinity.
-routine B64.expm1_unchecked() -> B64
-    return C::ingrid_b64_expm1(x: me)
+routine B64.exp_m1_unchecked() -> B64
+    return C::ingrid_b64_exp_m1(x: me)
 
 ### Euclidean distance sqrt(x^2 + y^2), correctly rounded: the exact distance rounded to the nearest `B64`
 ### (ties to even), identical on every platform, with no intermediate overflow or underflow (overflow of
@@ -1209,15 +1209,15 @@ routine hypot_unchecked(x: B64, y: B64) -> B64
 ### rounded: the exact ln|gamma(x)| rounded to the nearest `B64` (ties to even), identical on every
 ### platform. Poles (zero and the negative integers) and ±infinity give +infinity, and NaN stays NaN.
 ### :returns: The correctly rounded ln|gamma(x)|, possibly +infinity or NaN.
-routine B64.lgamma() -> B64
-    return C::ingrid_b64_lgamma(x: me)
+routine B64.ln_gamma() -> B64
+    return C::ingrid_b64_ln_gamma(x: me)
 
 ### Returns the natural logarithm with raw IEEE 754 propagation, correctly rounded: the exact natural
-### logarithm rounded to the nearest `B64` (ties to even), identical on every platform. `log(±0)` is
-### -infinity, `log(+infinity)` is +infinity, and a negative argument or NaN gives NaN.
+### logarithm rounded to the nearest `B64` (ties to even), identical on every platform. `ln(±0)` is
+### -infinity, `ln(+infinity)` is +infinity, and a negative argument or NaN gives NaN.
 ### :returns: The correctly rounded natural logarithm.
-routine B64.log_unchecked() -> B64
-    return C::ingrid_b64_log(x: me)
+routine B64.ln_unchecked() -> B64
+    return C::ingrid_b64_ln(x: me)
 
 ### Returns the base-10 logarithm with raw IEEE 754 propagation, correctly rounded: the exact base-10
 ### logarithm rounded to the nearest `B64` (ties to even), identical on every platform. `log10(±0)` is
@@ -1229,11 +1229,11 @@ routine B64.log10_unchecked() -> B64
 
 ### log(1 + me) with raw IEEE 754 propagation, correctly rounded: the exact value of log(1 + x) rounded to
 ### the nearest `B64` (ties to even), identical on every platform, and accurate near 0 where
-### `log(1.0 + x)` loses digits. `log1p(±0)` is ±0, `log1p(-1)` is -infinity, `log1p(+infinity)` is
+### `ln(1.0 + x)` loses digits. `ln_1p(±0)` is ±0, `ln_1p(-1)` is -infinity, `ln_1p(+infinity)` is
 ### +infinity, and an argument below -1 or NaN gives NaN.
 ### :returns: The correctly rounded log(1 + x).
-routine B64.log1p_unchecked() -> B64
-    return C::ingrid_b64_log1p(x: me)
+routine B64.ln_1p_unchecked() -> B64
+    return C::ingrid_b64_ln_1p(x: me)
 
 ### Base-2 logarithm with raw IEEE 754 propagation, correctly rounded: the exact base-2 logarithm rounded
 ### to the nearest `B64` (ties to even), identical on every platform. `log2(±0)` is -infinity,
@@ -1268,10 +1268,10 @@ routine B64.sinh_unchecked() -> B64
 
 ### Returns sin(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
 ### identical on every platform. It is exact at integers (±0, with the sign of the input) and
-### half-integers (±1), `sinpi(-x) == -sinpi(x)`, and ±infinity and NaN give NaN.
+### half-integers (±1), `sin_pi(-x) == -sin_pi(x)`, and ±infinity and NaN give NaN.
 ### :returns: The correctly rounded sine of pi times this value.
-routine B64.sinpi() -> B64
-    return C::ingrid_b64_sinpi(x: me)
+routine B64.sin_pi() -> B64
+    return C::ingrid_b64_sin_pi(x: me)
 
 ### Returns the tangent of this value, interpreting it as radians, correctly rounded: the exact tangent
 ### rounded to the nearest `B64` (ties to even), identical on every platform. `tan(-x) == -tan(x)`, ±0
@@ -1288,15 +1288,15 @@ routine B64.tanh() -> B64
 
 ### Returns tan(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
 ### identical on every platform. It is exact at multiples of 1/4: ±0 at integers, ±1 at odd quarters and
-### ±infinity at half-integers; `tanpi(-x) == -tanpi(x)`, and ±infinity and NaN give NaN.
+### ±infinity at half-integers; `tan_pi(-x) == -tan_pi(x)`, and ±infinity and NaN give NaN.
 ### :returns: The correctly rounded tangent of pi times this value.
-routine B64.tanpi() -> B64
-    return C::ingrid_b64_tanpi(x: me)
+routine B64.tan_pi() -> B64
+    return C::ingrid_b64_tan_pi(x: me)
 
 ### Returns the gamma function of this value, correctly rounded: the exact gamma(x) rounded to the
 ### nearest `B64` (ties to even), identical on every platform, with raw IEEE 754 propagation: overflow
 ### gives +infinity, a pole (±0) gives ±infinity, a negative integer or -infinity gives NaN, and NaN
 ### stays NaN.
 ### :returns: The correctly rounded gamma function, possibly ±infinity or NaN.
-routine B64.tgamma_unchecked() -> B64
-    return C::ingrid_b64_tgamma(x: me)
+routine B64.gamma_unchecked() -> B64
+    return C::ingrid_b64_gamma(x: me)

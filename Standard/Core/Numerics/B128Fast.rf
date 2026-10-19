@@ -11,10 +11,10 @@ secret preset B128_SINH_POLY: Array[U128, 12] = [
 ]
 secret preset B128_FAST_45: U128 = 0x40046800000000000000000000000000
 # ============================================================================
-# log1p
+# ln_1p
 # ============================================================================
 
-# 2^128 / k rounded, k = 3 .. 8, for the log1p series.
+# 2^128 / k rounded, k = 3 .. 8, for the ln_1p series.
 secret preset B128_LOG1P_Q: Array[U128, 6] = [
     0x55555555555555555555555555555555, 0x40000000000000000000000000000000,
     0x33333333333333333333333333333333, 0x2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB,
@@ -29,7 +29,7 @@ secret preset B128_ASINH_Q: Array[U128, 3] = [
     0x2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB, 0x13333333333333333333333333333333,
     0x0B6DB6DB6DB6DB6DB6DB6DB6DB6DB6DB,
 ]
-# round(2^254 / k) for k = 2..65, for the log1p series.
+# round(2^254 / k) for k = 2..65, for the ln_1p series.
 secret preset B128_LOG1P_RECIP: Array[U256, 64] = [
     0x2000000000000000000000000000000000000000000000000000000000000000,
     0x1555555555555555555555555555555555555555555555555555555555555555,
@@ -353,7 +353,7 @@ secret routine b128_exp_pair(a: U128, acc: Bool) -> (Bool, B128Fx, Bool, B128Fx)
     var (ok2, e2) = b128_exp_fx(x: B128.from_bits(bits: a | (1 << 127)), acc: acc)
     return (ok2, e1, true, e2)
 
-### log1p(x) for 0 < |x| < 2^-20 as a B128Fx: x * P with P = sum (-x)^k/(k+1), k = 0..7 (the rest is below
+### ln_1p(x) for 0 < |x| < 2^-20 as a B128Fx: x * P with P = sum (-x)^k/(k+1), k = 0..7 (the rest is below
 ### 2^-160), split as P = 1 + E - x O with E = x^2/3 + x^4/5 + x^6/7 and O = 1/2 + x^2/4 + x^4/6 + x^6/8 so
 ### every term is unsigned, in units of 2^-128. Each truncated product is up to 3 units short and the small
 ### factors (x^2 < 2^-40) damp the inner errors, so E and x O are within 4 units each and P within 12 (with
@@ -389,7 +389,7 @@ secret routine b128_log1p_small(xf: B128Fx) -> B128Fx
     return b128fx_mul(a: xf, b: p)
 
 # ============================================================================
-# tan, sinpi, cospi, tanpi
+# tan, sin_pi, cos_pi, tan_pi
 # ============================================================================
 
 ### A sine/cosine fast-tail result (vouched, frac, e2, sign) as a B128Fx: frac * 2^(e2-128) within 16 units
@@ -482,7 +482,7 @@ secret routine b128_trigpi_parts(ax: U128) -> (U128, S64)
     return ((ax & implicit -% 1) | implicit, ex -% 16383)
 
 # ============================================================================
-# Conversions, log1p and sqrt on B128Fx
+# Conversions, ln_1p and sqrt on B128Fx
 # ============================================================================
 
 ### |v| as a B64 (within 2^-52), for a B128Fx whose magnitude is inside the B64 range.
@@ -516,12 +516,12 @@ secret routine b128fx_neg(v: B128Fx) -> B128Fx
 secret routine b128fx_one() -> B128Fx
     return B128Fx(neg: false, m: 1 << 127, e: -127, rel: 0.0)
 
-### log1p(t) for a B128Fx t > -1 at or above 2^-20 in magnitude (t.e >= -148), or false, as the fixed-point value
-### (neg, mag, err): log1p(t) = (-1)^neg mag 2^-148 within err units. 1 + t is split exactly into v + c, v the
-### truncation of 1 + t to 113 bits and c >= 0 the rest, and log1p(t) = log(v) + c/v with (c/v)^2/2 (below 2^-220)
+### ln_1p(t) for a B128Fx t > -1 at or above 2^-20 in magnitude (t.e >= -148), or false, as the fixed-point value
+### (neg, mag, err): ln_1p(t) = (-1)^neg mag 2^-148 within err units. 1 + t is split exactly into v + c, v the
+### truncation of 1 + t to 113 bits and c >= 0 the rest, and ln_1p(t) = log(v) + c/v with (c/v)^2/2 (below 2^-220)
 ### dropped: log(v) is the CORE-MATH fixed-point value (12 units, v is at least 2^-28 away from 1 so it is above
 ### 2^119 units), and c/v, below 2^-112 of v (under 2^37 units), is added as an integer from B64 values (within
-### 2^-50 of it, plus half a unit for its rounding). t's own error moves log1p by |t| t.rel / v. The split and
+### 2^-50 of it, plus half a unit for its rounding). t's own error moves ln_1p by |t| t.rel / v. The split and
 ### the logarithm are b128fx_log_split's, shared with log(w).
 secret routine b128fx_log1p_fixed(t: B128Fx) -> (Bool, Bool, U256, B64)
     # 1 + t exactly as the integer S in units of 2^t.e (t below 2^127 in magnitude, so 1 is a whole number of
@@ -582,7 +582,7 @@ secret routine b128fx_log_split(sv: U256, e: S64, tabs: B64) -> (Bool, Bool, U25
         mag = mag +% ci
     return (true, lneg, mag, err +! cu *! 0x1p-49)
 
-### log1p(t) for a B128Fx t > -1, or false: below 2^-20 in magnitude the series of b128_log1p_small, else
+### ln_1p(t) for a B128Fx t > -1, or false: below 2^-20 in magnitude the series of b128_log1p_small, else
 ### b128fx_log1p_fixed normalized.
 secret routine b128fx_log1p(t: B128Fx) -> (Bool, B128Fx)
     if t.e < -148
@@ -649,7 +649,7 @@ secret routine b128_arc_small(xf: B128Fx, atanh: Bool) -> B128Fx
     return B128Fx(neg: false, m: 0 -% d, e: -128, rel: 12.0 *! 0x1p-128)
 
 # ============================================================================
-# sinpi
+# sin_pi
 # ============================================================================
 
 ### sin(pi y) for a finite nonzero B128 y as a signed B128Fx, or false (y a multiple of 1/256, where the

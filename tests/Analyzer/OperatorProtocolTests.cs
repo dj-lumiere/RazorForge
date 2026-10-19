@@ -71,13 +71,13 @@ public class OperatorProtocolTests
 
                         protocol Comparable
                             @readonly
-                            routine Me.$cmp(you: Me) -> ComparisonSign
+                            routine Me.$compare(you: Me) -> ComparisonSign
 
                         record Score obeys Comparable
                             value: S32
 
                         @readonly
-                        routine Score.$cmp(you: Score) -> ComparisonSign
+                        routine Score.$compare(you: Score) -> ComparisonSign
                             if me.value < you.value
                                 return ME_SMALL
                             if me.value > you.value
@@ -185,7 +185,7 @@ public class OperatorProtocolTests
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for cmp without comparable and reports the expected error.
+    /// Verifies semantic analysis behavior for compare without comparable and reports the expected error.
     /// </summary>
     [Fact]
     public void Analyze_CmpWithoutComparable_ReportsError()
@@ -198,13 +198,13 @@ public class OperatorProtocolTests
 
                         protocol Comparable
                             @readonly
-                            routine Me.$cmp(you: Me) -> ComparisonSign
+                            routine Me.$compare(you: Me) -> ComparisonSign
 
                         record Score
                             value: S32
 
                         @readonly
-                        routine Score.$cmp(you: Score) -> ComparisonSign
+                        routine Score.$compare(you: Score) -> ComparisonSign
                             return SAME
                         """;
 
@@ -213,7 +213,7 @@ public class OperatorProtocolTests
             userMessage: "Expected error for missing Comparable protocol");
         Assert.Contains(collection: result.Errors,
             filter: e =>
-                e.Message.Contains(value: "$cmp",
+                e.Message.Contains(value: "$compare",
                     comparisonType: StringComparison.OrdinalIgnoreCase) &&
                 e.Message.Contains(value: "Comparable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));

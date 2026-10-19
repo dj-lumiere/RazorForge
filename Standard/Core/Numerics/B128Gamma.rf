@@ -1,19 +1,19 @@
 module Core
 
 # ============================================================================
-# The 128-bit fast phases of lgamma and tgamma of B128, for the D128 transcendentals (D128Fast.rf). B128.lgamma
-# and tgamma_unchecked themselves are Tessera's, through Ingrid.
+# The 128-bit fast phases of ln_gamma and gamma of B128, for the D128 transcendentals (D128Fast.rf). B128.ln_gamma
+# and gamma_unchecked themselves are Tessera's, through Ingrid.
 # ============================================================================
-# Below 24, x = 2 + z + n with |z| <= 1/2: lgamma(2 + z) = z Q(z) from its series in zeta values, and the
-# factors x - 1 .. x - n (or the divisions x, x (1 + x) below 3/2) are exact, so lgamma adds ln of their
-# product and tgamma multiplies e^(z Q) by it. From 24 on, Stirling's series with the sum in u = 24/x;
-# for tgamma the exponent (x - 1/2) ln x - x + ln(2 pi)/2 + sum reaches 11356, so it is formed in fixed
+# Below 24, x = 2 + z + n with |z| <= 1/2: ln_gamma(2 + z) = z Q(z) from its series in zeta values, and the
+# factors x - 1 .. x - n (or the divisions x, x (1 + x) below 3/2) are exact, so ln_gamma adds ln of their
+# product and gamma multiplies e^(z Q) by it. From 24 on, Stirling's series with the sum in u = 24/x;
+# for gamma the exponent (x - 1/2) ln x - x + ln(2 pi)/2 + sum reaches 11356, so it is formed in fixed
 # point from the whole 192-bit CORE-MATH logarithm, as in pow. Each result keeps a proven error bound
 # (B128Fx).
 
-# lgamma(2 + z) / z around the centres c = i/32 (i = -16 .. 16): Q(c + t) = sum_k q_k t^k for |t| <= 1/64,
+# ln_gamma(2 + z) / z around the centres c = i/32 (i = -16 .. 16): Q(c + t) = sum_k q_k t^k for |t| <= 1/64,
 # 19 coefficients per centre (the rest below 0.05 units), in units of 2^-126. They come from the Taylor
-# coefficients of lgamma at 2 + c, psi^(k-1)(2 + c) / k!, through c q_k + q_(k-1) = l_k.
+# coefficients of ln_gamma at 2 + c, psi^(k-1)(2 + c) / k!, through c q_k + q_(k-1) = l_k.
 secret preset B128_LGAMMA2_QC: Array[S128, 627] = [
     20550032852264248795699998935579470066, 34891618347371761443639498273052405310,
     -9740939656317793695607180620931324179, 4020194337046527156067804722469724709,
@@ -343,7 +343,7 @@ secret preset B128_STIRLING_E: Array[S128, 20] = [
 # ln(2 pi) / 2 in units of 2^-148 (hi, lo words).
 secret preset B128_HALF_LN_2PI_HI: U128 = 0x000000000000000000000000000EB3F8
 secret preset B128_HALF_LN_2PI_LO: U128 = 0xE4325F5A53494BC900144192023CFB09
-# Thresholds as B128 bit patterns: 1/2, 3/2, 5/2, 24, 2^20 and 1756 (beyond it tgamma overflows).
+# Thresholds as B128 bit patterns: 1/2, 3/2, 5/2, 24, 2^20 and 1756 (beyond it gamma overflows).
 secret preset B128_GAMMA_HALF: U128 = 0x3FFE0000000000000000000000000000
 secret preset B128_GAMMA_3HALF: U128 = 0x3FFF8000000000000000000000000000
 secret preset B128_GAMMA_5HALF: U128 = 0x40004000000000000000000000000000
@@ -355,7 +355,7 @@ secret preset B128_GAMMA_PI_M: U128 = 0xC90FDAA22168C234C4C6628B80DC1CD1
 secret preset B128_GAMMA_LNPI_M: U128 = 0x928682473D0DE85EAFCAB635421FA4CC
 
 ### ln(x) for a positive normal B128 x as a B128Fx: the CORE-MATH fixed-point value (12 units of 2^-148),
-### or log1p(x - 1) within 2^-21 of 1 (x - 1 is exact there).
+### or ln_1p(x - 1) within 2^-21 of 1 (x - 1 is exact there).
 secret routine b128_ln_fx(x: B128) -> (Bool, B128Fx)
     var (ok, hi, lo) = b128_log_scaled_ok(x: x)
     if ok
@@ -394,7 +394,7 @@ secret routine b128fx_exp_small(w: B128Fx, acc: Bool) -> (Bool, B128Fx)
     var r = b128fx_mul(a: ez, b: onep)
     return (true, B128Fx(neg: false, m: r.m, e: r.e, rel: r.rel +! 0x1p-190))
 
-### lgamma(2 + z) / z for an exact B128 z with |z| <= 1/2, as a B128Fx: the expansion around the nearest
+### ln_gamma(2 + z) / z for an exact B128 z with |z| <= 1/2, as a B128Fx: the expansion around the nearest
 ### centre i/32 in t = z - i/32 (|t| <= 1/64), 19 terms in units of 2^-126 by Horner. Each step adds at most
 ### 1.5 units and |t| <= 1/64 damps the earlier ones, so the sum is within 1.6 units, plus 0.05 for the rest
 ### and one for z's own truncation to 2^-126 (the sum's slope is below 1), against a value of at least 0.24.
@@ -461,7 +461,7 @@ secret routine b128_stirling_sum(x: B128) -> (Bool, S128)
         acc = B128_STIRLING_E[k] +% b128erf_smul(a: u2, b: acc)
     return (true, b128erf_smul(a: us, b: acc))
 
-### lgamma(x) for 24 <= x < 2^20 as a signed fixed-point value in units of 2^-148 (S256) and its error
+### ln_gamma(x) for 24 <= x < 2^20 as a signed fixed-point value in units of 2^-148 (S256) and its error
 ### bound in those units: (x - 1/2) ln x - x + ln(2 pi)/2 + the Stirling sum. The product (x - 1/2) ln x is
 ### formed from the whole 192-bit CORE-MATH logarithm (x - 1/2 is exact), only its lowest 64 bits dropped
 ### (as in pow), so it is within (x - 1/2) 12 units plus the truncations.
@@ -528,7 +528,7 @@ secret routine b128_gamma_shift(x: B128) -> (B128, B128Fx)
     var n = LLVM::int_truncate[U128, S64](m) -% 2
     return (z, B128Fx(neg: false, m: pm, e: pe, rel: n.to[B64]() *! 0x1p-127))
 
-### lgamma(x) for a positive finite x as a B128Fx, or false (also for x <= 0, and at 1 and 2, where the
+### ln_gamma(x) for a positive finite x as a B128Fx, or false (also for x <= 0, and at 1 and 2, where the
 ### value is exactly 0).
 secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
     var u = x.to_bits()
@@ -541,7 +541,7 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
         return (false, b128fx_one())
     var r = b128fx_one()
     if u < B128_GAMMA_HALF
-        # lgamma(x) = lgamma(2 + x) - ln x - ln(1 + x)
+        # ln_gamma(x) = ln_gamma(2 + x) - ln x - ln(1 + x)
         var g = b128fx_mul(a: b128fx_of(x: x), b: b128_lgamma2_q(z: x))
         var (ok1, lx) = b128_ln_fx(x: x)
         var (ok2, l1) = b128fx_log1p(t: b128fx_of(x: x))
@@ -553,7 +553,7 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
             return (false, b128fx_one())
         r = s
     elseif u < B128_GAMMA_3HALF
-        # lgamma(x) = lgamma(2 + z) - ln(1 + z), z = x - 1
+        # ln_gamma(x) = ln_gamma(2 + z) - ln(1 + z), z = x - 1
         var z = x -! one
         if z.is_zero()
             return (false, b128fx_one())
@@ -646,7 +646,7 @@ secret routine b128_lgamma_fx(x: B128) -> (Bool, B128Fx)
             r = e
     return (true, r)
 
-### tgamma(x) for a positive finite x as a B128Fx, or false (also for x <= 0 or at overflow, which the
+### gamma(x) for a positive finite x as a B128Fx, or false (also for x <= 0 or at overflow, which the
 ### caller settles), its exponentials from the fast phase or with acc the accurate one.
 secret routine b128_tgamma_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
     var u = x.to_bits()
@@ -769,10 +769,10 @@ secret routine b128_tgamma_neg_fx(x: B128, acc: Bool) -> (Bool, B128Fx)
     )
     return b128fx_div(a: B128Fx(neg: false, m: B128_GAMMA_PI_M, e: -126, rel: 0x1p-128), b: den)
 
-### lgamma(x) = ln|Gamma(x)| for a negative non-integer B128 x as a B128Fx, or false, by the forms of
+### ln_gamma(x) = ln|Gamma(x)| for a negative non-integer B128 x as a B128Fx, or false, by the forms of
 ### b128_tgamma_neg_fx taken in logarithms: x Q(x) - ln|x| - ln(1 + x) above -1/2, z Q(z) - ln|x| - ln z -
-### ln(1 + z) from -1 to -1/2, and ln(pi) - ln|sin(pi x)| - lgamma(1 - x) below -1 (which cancels near the zeros of
-### lgamma between the poles, where the band widens).
+### ln(1 + z) from -1 to -1/2, and ln(pi) - ln|sin(pi x)| - ln_gamma(1 - x) below -1 (which cancels near the zeros of
+### ln_gamma between the poles, where the band widens).
 secret routine b128_lgamma_neg_fx(x: B128) -> (Bool, B128Fx)
     var a = x.to_bits() & (1 << 127) -% 1
     if a == 0 or a >= (0x7FFF << 112)
@@ -806,7 +806,7 @@ secret routine b128_lgamma_neg_fx(x: B128) -> (Bool, B128Fx)
             return (false, xf)
         second = sz
     else
-        # lgamma(1 - x) = ln|x| + lgamma(|x|), |x| exact (1 - x itself may round)
+        # ln_gamma(1 - x) = ln|x| + ln_gamma(|x|), |x| exact (1 - x itself may round)
         var (oks, sn) = b128_sinpi_fx(y: x)
         var (okg0, lg0) = b128_lgamma_fx(x: ax)
         if not oks or not okg0
@@ -836,7 +836,7 @@ secret routine b128fx_widen(v: B128Fx, r: B64) -> B128Fx
 
 ### ln(w) for a positive B128Fx w in the normal B128 range as a B128Fx, or false: w is split into its B128
 ### truncation v and the rest c (below 2^-112 v), and ln w = ln v + c/v, the CORE-MATH logarithm of v
-### (at least 2^-21 away from 1, else log1p(w - 1) takes it) plus c times 1/v in B64 (ample for a term
+### (at least 2^-21 away from 1, else ln_1p(w - 1) takes it) plus c times 1/v in B64 (ample for a term
 ### below 2^-110 of the result), (c/v)^2/2 (below 2^-220) dropped.
 secret routine b128fx_ln(w: B128Fx) -> (Bool, B128Fx)
     var (okv, v) = b128fx_to_b128(v: w)

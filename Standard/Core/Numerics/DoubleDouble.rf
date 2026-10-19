@@ -138,7 +138,7 @@ routine DD.exp() -> DD
 
 ### e^me - 1. Near 0 the plain exp(me)-1 loses all significance to cancellation, so use the
 ### Maclaurin series sum_{n>=1} me^n/n! (exact leading term = me) for |me| <= 1/2.
-routine DD.expm1() -> DD
+routine DD.exp_m1() -> DD
     if LLVM::float_gt[B64](a: me.abs().hi, b: 0.5)
         return me.exp().sub(you: dd_of(x: 1.0))
     var term = me
@@ -162,16 +162,16 @@ routine DD.exp2() -> DD
 routine DD.exp10() -> DD
     return me.mul(you: dd_ln10()).exp()
 
-routine DD.log() -> DD
+routine DD.ln() -> DD
     var y0 = dd_of(x: LLVM::log[B64](value: me.hi))
     var t = me.mul(you: y0.neg().exp())
     return y0.add(you: t.sub(you: dd_of(x: 1.0)))
 
-### log(1+me). Near 0, log(1+me) rounds 1+me and loses precision, so use log1p(x) = 2*atanh(u)
+### log(1+me). Near 0, log(1+me) rounds 1+me and loses precision, so use ln_1p(x) = 2*atanh(u)
 ### with u = me/(2+me) (|u| small, fast odd-power series) for |me| <= 1/2.
-routine DD.log1p() -> DD
+routine DD.ln_1p() -> DD
     if LLVM::float_gt[B64](a: me.abs().hi, b: 0.5)
-        return me.add(you: dd_of(x: 1.0)).log()
+        return me.add(you: dd_of(x: 1.0)).ln()
     var u = me.div(you: me.add(you: dd_of(x: 2.0)))
     var u2 = u.mul(you: u)
     var term = u
@@ -184,13 +184,13 @@ routine DD.log1p() -> DD
     return s.ldexp(k: 1)
 
 routine DD.log2() -> DD
-    return me.log().mul(you: dd_inv_ln2())
+    return me.ln().mul(you: dd_inv_ln2())
 
 routine DD.log10() -> DD
-    return me.log().mul(you: dd_inv_ln10())
+    return me.ln().mul(you: dd_inv_ln10())
 
 routine DD.pow(you: DD) -> DD
-    return you.mul(you: me.abs().log()).exp()
+    return you.mul(you: me.abs().ln()).exp()
 
 ### Cube root (odd: cbrt(-x) = -cbrt(x)). Hardware b64 cbrt seed + one DD Newton step, mirroring
 ### `sqrt` — NOT exp(log(a)/3), which collapses to ~b64 precision (the 1/3 factor is only b64-exact
@@ -318,7 +318,7 @@ routine DD.asinh() -> DD
                 .add(you: dd_of(x: 1.0))
                 .sqrt(),
         )
-        .log()
+        .ln()
 
 routine DD.acosh() -> DD
     return me
@@ -328,13 +328,13 @@ routine DD.acosh() -> DD
                 .sub(you: dd_of(x: 1.0))
                 .sqrt(),
         )
-        .log()
+        .ln()
 
 routine DD.atanh() -> DD
     return dd_of(x: 1.0)
         .add(you: me)
         .div(you: dd_of(x: 1.0).sub(you: me))
-        .log()
+        .ln()
         .ldexp(k: -1)
 
 # ---- rounding / manipulation ----
@@ -396,7 +396,7 @@ routine DD.remainder(you: DD) -> DD
 routine DD.fma(b: DD, c: DD) -> DD
     return me.mul(you: b).add(you: c)
 
-# ---- error function / gamma (functional: erf via Taylor, tgamma via Lanczos) ----
+# ---- error function / gamma (functional: erf via Taylor, gamma via Lanczos) ----
 ### erfc(me) for me > 0 via the Lentz continued fraction erfc(x) = e^(-x²)/√π · 1/(x + (1/2)/(x +
 ### (2/2)/(x + (3/2)/(x + …)))), evaluated by backward recurrence. Converges fast for x >= ~2.
 routine DD.erfc_cf() -> DD
@@ -444,25 +444,25 @@ routine DD.erfc() -> DD
         return me.erfc_cf()
     return dd_of(x: 1.0).sub(you: me.erf())
 
-# tgamma via Lanczos (g=7, n=9) with b64 coefficients promoted to DD (functional ~1e-15).
-### gamma(me) = exp(lgamma) with the sign supplied by Euler reflection for me < 1/2 (where gamma
-### alternates sign). Reuses the accurate log-space lgamma, so no separate low-precision Lanczos and
+# gamma via Lanczos (g=7, n=9) with b64 coefficients promoted to DD (functional ~1e-15).
+### gamma(me) = exp(ln_gamma) with the sign supplied by Euler reflection for me < 1/2 (where gamma
+### alternates sign). Reuses the accurate log-space ln_gamma, so no separate low-precision Lanczos and
 ### no overflow-then-log path; large me naturally overflows to +inf (the correct IEEE result).
-routine DD.tgamma() -> DD
+routine DD.gamma() -> DD
     if LLVM::float_lt[B64](a: me.hi, b: 0.5)
         var one = dd_of(x: 1.0)
         return dd_pi().div(
             you: dd_pi()
                 .mul(you: me)
                 .sin()
-                .mul(you: one.sub(you: me).tgamma()),
+                .mul(you: one.sub(you: me).gamma()),
         )
-    return me.lgamma().exp()
+    return me.ln_gamma().exp()
 
 ### ln|gamma(me)| computed directly in log-space (never forming gamma, which overflows for large
 ### me). Negative/small me by Euler reflection; recurrence raises the argument to >= 10, then the
-### Stirling asymptotic series lgamma(x) = (x-1/2)ln x - x + (1/2)ln(2pi) + sum B_{2k}/(2k(2k-1)) x^{1-2k}.
-routine DD.lgamma() -> DD
+### Stirling asymptotic series ln_gamma(x) = (x-1/2)ln x - x + (1/2)ln(2pi) + sum B_{2k}/(2k(2k-1)) x^{1-2k}.
+routine DD.ln_gamma() -> DD
     if LLVM::float_lt[B64](a: me.hi, b: 0.5)
         var one = dd_of(x: 1.0)
         var spi = dd_pi()
@@ -470,15 +470,15 @@ routine DD.lgamma() -> DD
             .sin()
             .abs()
         return dd_pi()
-            .log()
-            .sub(you: spi.log())
-            .sub(you: one.sub(you: me).lgamma())
+            .ln()
+            .sub(you: spi.ln())
+            .sub(you: one.sub(you: me).ln_gamma())
     var x = me
     var corr = dd_of(x: 0.0)
     while LLVM::float_lt[B64](a: x.hi, b: 16.0)
-        corr = corr.add(you: x.log())
+        corr = corr.add(you: x.ln())
         x = x.add(you: dd_of(x: 1.0))
-    var lx = x.log()
+    var lx = x.ln()
     var r = x
         .sub(you: dd_of(x: 0.5))
         .mul(you: lx)

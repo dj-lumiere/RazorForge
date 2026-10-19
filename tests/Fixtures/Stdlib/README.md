@@ -82,7 +82,7 @@ Covered today (see `*.rf` files in this directory):
 - Math: `float_math` — sqrt/pow/exp/log/trig/rounding/clamp/classification
 - Integer methods: `integer_methods` — bit ops, classification, parse-from-text
 - Characters: `character` — codepoint, classification, case-conversion, multi-byte
-- Comparison ops: `comparison_ops` — user-derived $cmp + $lt/$le/$gt/$ge cascade
+- Comparison ops: `comparison_ops` — user-derived compare + lt/le/gt/ge cascade
 - Division semantics: `division_semantics` — floor div / modulo sign rules (Python-style)
 - Short-circuit: `bool_shortcircuit` — `and`/`or` lazy evaluation observable via probe
 - Loop control: `loop_control` — `break`/`continue` in for/while/loop
@@ -99,7 +99,7 @@ Covered today (see `*.rf` files in this directory):
   Text for CP throughput
 - Arithmetic operator family: `arithmetic_operators` — `+`/`+!`/`+%`/`+^` (checked/unchecked-UB/wrap/clamp) on each
   binary op + unary `-`
-- Decimal transcendentals: `decimal_math` — full sin…log1p/pow/cbrt/hypot surface on D32/D64/D128 (tiered TLFloat
+- Decimal transcendentals: `decimal_math` — full sin…ln_1p/pow/cbrt/hypot surface on D32/D64/D128 (tiered TLFloat
   routing: binary64/quad/octuple — correctly rounded, platform-identical)
 - Arbitrary-precision Decimal trig: `decimal_trig` — sin…tanh/atan2/pi/e on `Decimal` (precision-scaled;
   default 50 digits + a 100-digit pi)
