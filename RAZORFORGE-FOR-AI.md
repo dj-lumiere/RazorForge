@@ -436,6 +436,13 @@ var why: Check[S64] = check line.to()
 - Widening never fails. A value that does not fit `T`, or text that does not read as a `T`, crashes
   loudly (`IntegerOverflowError`, `InvalidValueError`, ...). Recover with `try` (→ `T?`) or `check`
   (→ `Check[T]`, holding the error).
+- A conversion to a narrower float crashes when a finite value rounds to an infinity
+  (`NumericOverflowError`): `B64.to[B32]()`, `to[B16]()`, `to[BF16]()`, `B32.to[B16]()` / `to[BF16]()`,
+  `B128.to[B64]()` / `to[B32]()` / `to[B16]()`, `D32`/`D64`/`D128` to a binary float whose range they pass
+  (`D64.to[B64]()`, `D32.to[B32]()`, ...), and the integers whose largest values pass a float's range
+  (`S32`..`U256` to `B16`, `U128`/`S256`/`U256` to `B32`). An infinity stays infinite and a NaN stays a NaN.
+  Each has `to_unchecked[T]()`, the raw rounded value (an infinity past the range); a value in range is the
+  same in both. `try big.to[B32]()` recovers. A conversion that can't overflow has only `to[T]()`.
 - `[T]` may be left out where the surrounding code says the type: a declared variable type, the
   routine's return type (`return count.to()`), a parameter (`takes(n: x.to())`), and through
   `try`/`check`. Where nothing gives it (`var n = count.to()`, mid-chain `count.to().add(1)`) it is

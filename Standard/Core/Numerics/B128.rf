@@ -1735,17 +1735,43 @@ routine b128_rshift_rne(sig: U128, amount: U64) -> U64
     return keep
 
 ### Narrows this quadruple-precision value to single precision.
-### :returns: The nearest representable `B32` value.
-routine B128.to[B32]() -> B32
+### Checked: a finite value past the `B32` range crashes. {B128.to_unchecked[B32]} gives the infinity instead. An
+### infinity stays infinite and a NaN stays a NaN.
+### :returns: The nearest `B32` value.
+### :throws: {NumericOverflowError} if a finite `me` rounds past the `B32` range.
+failable routine B128.to[B32]() -> B32
+    var r = me.to_unchecked[B32]()
+    if r.is_infinite() and me.is_finite()
+        throw NumericOverflowError(description: "overflow: out of the B32 range")
+    return r
+
+### Narrows this quadruple-precision value to single precision.
+### Unchecked: a value past the `B32` range gives an infinity, where {B128.to[B32]} crashes.
+### :returns: The nearest `B32` value.
+routine B128.to_unchecked[B32]() -> B32
     # B128 -> B64 (correctly rounded) -> B32 (native fptrunc). The wide B64 slack
     # makes the second rounding faithful for all but pathological double-round ties.
-    return LLVM::float_narrow[B64, B32](me.to[B64]())
+    return LLVM::float_narrow[B64, B32](me.to_unchecked[B64]())
 
 ### Narrows this quadruple-precision value to double precision (correctly rounded,
 ### pure bit surgery — B128 is an i128 carrier, so no LLVM `fptrunc` is available).
 ### Handles inf/NaN, overflow to ±inf, the B64 subnormal range, and underflow to ±0.
-### :returns: The nearest representable `B64` value (round-to-nearest-ties-to-even).
-routine B128.to[B64]() -> B64
+### Checked: a finite value past the `B64` range crashes. {B128.to_unchecked[B64]} gives the infinity instead. An
+### infinity stays infinite and a NaN stays a NaN.
+### :returns: The nearest `B64` value.
+### :throws: {NumericOverflowError} if a finite `me` rounds past the `B64` range.
+failable routine B128.to[B64]() -> B64
+    var r = me.to_unchecked[B64]()
+    if r.is_infinite() and me.is_finite()
+        throw NumericOverflowError(description: "overflow: out of the B64 range")
+    return r
+
+### Narrows this quadruple-precision value to double precision (correctly rounded,
+### pure bit surgery — B128 is an i128 carrier, so no LLVM `fptrunc` is available).
+### Handles inf/NaN, overflow to ±inf, the B64 subnormal range, and underflow to ±0.
+### Unchecked: a value past the `B64` range gives an infinity, where {B128.to[B64]} crashes.
+### :returns: The nearest `B64` value.
+routine B128.to_unchecked[B64]() -> B64
     var raw = me.to_bits()
     var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(raw, 127))
     var E = LLVM::int_truncate[U128, U64](

@@ -65,8 +65,21 @@ routine BF16.to_bytes_be() -> Array[Byte, 2]
 
 ### Narrows a single-precision float to bfloat16: the nearest value, ties to even (a value past the largest
 ### finite `BF16` becomes infinity, and a NaN stays a NaN, made quiet).
+### Checked: a finite value past the `BF16` range crashes. {B32.to_unchecked[BF16]} gives the infinity instead. An
+### infinity stays infinite and a NaN stays a NaN.
 ### :returns: The nearest `BF16` value.
-routine B32.to[BF16]() -> BF16
+### :throws: {NumericOverflowError} if a finite `me` rounds past the `BF16` range.
+failable routine B32.to[BF16]() -> BF16
+    var r = me.to_unchecked[BF16]()
+    if r.is_infinite() and me.is_finite()
+        throw NumericOverflowError(description: "overflow: out of the BF16 range")
+    return r
+
+### Narrows a single-precision float to bfloat16: the nearest value, ties to even (a value past the largest
+### finite `BF16` becomes infinity, and a NaN stays a NaN, made quiet).
+### Unchecked: a value past the `BF16` range gives an infinity, where {B32.to[BF16]} crashes.
+### :returns: The nearest `BF16` value.
+routine B32.to_unchecked[BF16]() -> BF16
     var u = me.to_bits()
     if (u & 0x7FFFFFFF) > 0x7F800000
         # a NaN keeps its sign and top payload bits, with the quiet bit set
@@ -80,8 +93,23 @@ routine B32.to[BF16]() -> BF16
 ### through `B32`, whose own rounding could land on a bfloat16 midpoint). Values below half the smallest
 ### subnormal `BF16` (2^-134) become a signed zero, values past the largest finite one infinity, and a NaN
 ### stays a NaN, made quiet.
+### Checked: a finite value past the `BF16` range crashes. {B64.to_unchecked[BF16]} gives the infinity instead. An
+### infinity stays infinite and a NaN stays a NaN.
 ### :returns: The nearest `BF16` value.
-routine B64.to[BF16]() -> BF16
+### :throws: {NumericOverflowError} if a finite `me` rounds past the `BF16` range.
+failable routine B64.to[BF16]() -> BF16
+    var r = me.to_unchecked[BF16]()
+    if r.is_infinite() and me.is_finite()
+        throw NumericOverflowError(description: "overflow: out of the BF16 range")
+    return r
+
+### Narrows a double-precision float to bfloat16 in one rounding, to the nearest value, ties to even (not
+### through `B32`, whose own rounding could land on a bfloat16 midpoint). Values below half the smallest
+### subnormal `BF16` (2^-134) become a signed zero, values past the largest finite one infinity, and a NaN
+### stays a NaN, made quiet.
+### Unchecked: a value past the `BF16` range gives an infinity, where {B64.to[BF16]} crashes.
+### :returns: The nearest `BF16` value.
+routine B64.to_unchecked[BF16]() -> BF16
     var u = me.to_bits()
     var sign = LLVM::int_truncate[U64, U16](u >>> 48) & 0x8000
     var ef = LLVM::reinterpret_bits[U64, S64]((u >>> 52) & 0x7FF)
@@ -221,7 +249,7 @@ failable routine Text.to[BF16]() -> BF16
 ### :returns: The result.
 @readonly
 routine BF16.add_unchecked(you: BF16) -> BF16
-    return me.to[B32]().add_unchecked(you.to[B32]()).to[BF16]()
+    return me.to[B32]().add_unchecked(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns `me + you`. Checked: crashes when the result isn't finite. Use `add_unchecked` for raw IEEE 754 results.
 ### :param you: The other operand.
@@ -242,7 +270,7 @@ failable routine BF16.add(you: BF16) -> BF16
 ### :returns: The result.
 @readonly
 routine BF16.sub_unchecked(you: BF16) -> BF16
-    return me.to[B32]().sub_unchecked(you.to[B32]()).to[BF16]()
+    return me.to[B32]().sub_unchecked(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns `me - you`. Checked: crashes when the result isn't finite. Use `sub_unchecked` for raw IEEE 754 results.
 ### :param you: The other operand.
@@ -263,7 +291,7 @@ failable routine BF16.sub(you: BF16) -> BF16
 ### :returns: The result.
 @readonly
 routine BF16.mul_unchecked(you: BF16) -> BF16
-    return me.to[B32]().mul_unchecked(you.to[B32]()).to[BF16]()
+    return me.to[B32]().mul_unchecked(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns `me * you`. Checked: crashes when the result isn't finite. Use `mul_unchecked` for raw IEEE 754 results.
 ### :param you: The other operand.
@@ -284,7 +312,7 @@ failable routine BF16.mul(you: BF16) -> BF16
 ### :returns: The result.
 @readonly
 routine BF16.truediv_unchecked(you: BF16) -> BF16
-    return me.to[B32]().truediv_unchecked(you.to[B32]()).to[BF16]()
+    return me.to[B32]().truediv_unchecked(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns `me / you`. Checked: crashes when the result isn't finite. Use `truediv_unchecked` for raw IEEE 754 results.
 ### :param you: The other operand.
@@ -303,7 +331,7 @@ failable routine BF16.truediv(you: BF16) -> BF16
 ### Returns the square root with raw IEEE 754 results (`sqrt` of a negative value is NaN), rounded once to BF16.
 ### :returns: The square root.
 routine BF16.sqrt_unchecked() -> BF16
-    return me.to[B32]().sqrt_unchecked().to[BF16]()
+    return me.to[B32]().sqrt_unchecked().to_unchecked[BF16]()
 
 ### Returns the square root. Checked: crashes when the result isn't finite. Use `sqrt_unchecked` for raw IEEE 754 results.
 ### :returns: The result.
@@ -348,145 +376,145 @@ routine BF16.copysign(sign: BF16) -> BF16
 ### Rounds down to a whole number.
 ### :returns: The result.
 routine BF16.floor() -> BF16
-    return me.to[B32]().floor().to[BF16]()
+    return me.to[B32]().floor().to_unchecked[BF16]()
 
 ### Rounds up to a whole number.
 ### :returns: The result.
 routine BF16.ceil() -> BF16
-    return me.to[B32]().ceil().to[BF16]()
+    return me.to[B32]().ceil().to_unchecked[BF16]()
 
 ### Rounds to the nearest whole number, halves away from zero.
 ### :returns: The result.
 routine BF16.round() -> BF16
-    return me.to[B32]().round().to[BF16]()
+    return me.to[B32]().round().to_unchecked[BF16]()
 
 ### Rounds to the nearest whole number, ties away from zero.
 ### :returns: The result.
 routine BF16.round_ties_away() -> BF16
-    return me.to[B32]().round_ties_away().to[BF16]()
+    return me.to[B32]().round_ties_away().to_unchecked[BF16]()
 
 ### Rounds to a whole number in the current rounding mode (to nearest, ties to even).
 ### :returns: The result.
 routine BF16.rint() -> BF16
-    return me.to[B32]().rint().to[BF16]()
+    return me.to[B32]().rint().to_unchecked[BF16]()
 
 ### Rounds toward zero to a whole number.
 ### :returns: The result.
 routine BF16.trunc() -> BF16
-    return me.to[B32]().trunc().to[BF16]()
+    return me.to[B32]().trunc().to_unchecked[BF16]()
 
 ### Rounds toward zero to a whole number.
 ### :returns: The result.
 routine BF16.int_truncate() -> BF16
-    return me.to[B32]().int_truncate().to[BF16]()
+    return me.to[B32]().int_truncate().to_unchecked[BF16]()
 
 ### Returns the fractional part, `me - me.trunc()`.
 ### :returns: The result.
 routine BF16.fract() -> BF16
-    return me.to[B32]().fract().to[BF16]()
+    return me.to[B32]().fract().to_unchecked[BF16]()
 
 ### Returns `1 / me`, rounded once to BF16.
 ### :returns: The result.
 routine BF16.recip() -> BF16
-    return me.to[B32]().recip().to[BF16]()
+    return me.to[B32]().recip().to_unchecked[BF16]()
 
 ### Converts radians to degrees.
 ### :returns: The result.
 routine BF16.to_degrees() -> BF16
-    return me.to[B32]().to_degrees().to[BF16]()
+    return me.to[B32]().to_degrees().to_unchecked[BF16]()
 
 ### Converts degrees to radians.
 ### :returns: The result.
 routine BF16.to_radians() -> BF16
-    return me.to[B32]().to_radians().to[BF16]()
+    return me.to[B32]().to_radians().to_unchecked[BF16]()
 
 ### Returns 1 for a positive value, -1 for a negative one, the value itself for a zero or NaN.
 ### :returns: The result.
 routine BF16.signum() -> BF16
-    return me.to[B32]().signum().to[BF16]()
+    return me.to[B32]().signum().to_unchecked[BF16]()
 
 ### Returns the exponent of this value as a float.
 ### :returns: The result.
 routine BF16.logb() -> BF16
-    return me.to[B32]().logb().to[BF16]()
+    return me.to[B32]().logb().to_unchecked[BF16]()
 
 ### Returns the value halfway between `me` and `you`.
 ### :param you: The other value.
 ### :returns: The result.
 routine BF16.midpoint(you: BF16) -> BF16
-    return me.to[B32]().midpoint(you.to[B32]()).to[BF16]()
+    return me.to[B32]().midpoint(you.to[B32]()).to_unchecked[BF16]()
 
 ### The smaller of `me` and `you`. If one operand is NaN, the other one.
 ### :param you: The value to compare with.
 ### :returns: The smaller value, the other operand when one is NaN, and NaN when both are.
 routine BF16.min(you: BF16) -> BF16
-    return me.to[B32]().min(you.to[B32]()).to[BF16]()
+    return me.to[B32]().min(you.to[B32]()).to_unchecked[BF16]()
 
 ### The larger of `me` and `you`. If one operand is NaN, the other one.
 ### :param you: The value to compare with.
 ### :returns: The larger value, the other operand when one is NaN, and NaN when both are.
 routine BF16.max(you: BF16) -> BF16
-    return me.to[B32]().max(you.to[B32]()).to[BF16]()
+    return me.to[B32]().max(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns the smaller value, the other one when one is NaN.
 ### :param you: The other value.
 ### :returns: The result.
 routine BF16.min_num(you: BF16) -> BF16
-    return me.to[B32]().min_num(you.to[B32]()).to[BF16]()
+    return me.to[B32]().min_num(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns the larger value, the other one when one is NaN.
 ### :param you: The other value.
 ### :returns: The result.
 routine BF16.max_num(you: BF16) -> BF16
-    return me.to[B32]().max_num(you.to[B32]()).to[BF16]()
+    return me.to[B32]().max_num(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns the smaller value, NaN when either is NaN, and -0 below +0.
 ### :param you: The other value.
 ### :returns: The result.
 routine BF16.minimum(you: BF16) -> BF16
-    return me.to[B32]().minimum(you.to[B32]()).to[BF16]()
+    return me.to[B32]().minimum(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns the larger value, NaN when either is NaN, and +0 above -0.
 ### :param you: The other value.
 ### :returns: The result.
 routine BF16.maximum(you: BF16) -> BF16
-    return me.to[B32]().maximum(you.to[B32]()).to[BF16]()
+    return me.to[B32]().maximum(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns `me - you` when it is positive, otherwise 0.
 ### :param you: The other value.
 ### :returns: The result.
 routine BF16.fdim(you: BF16) -> BF16
-    return me.to[B32]().fdim(you.to[B32]()).to[BF16]()
+    return me.to[B32]().fdim(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns the remainder of `me / you` truncated toward zero (C `fmod`).
 ### :param you: The other value.
 ### :returns: The result.
 routine BF16.mod_trunc(you: BF16) -> BF16
-    return me.to[B32]().mod_trunc(you.to[B32]()).to[BF16]()
+    return me.to[B32]().mod_trunc(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns the remainder of `me / you` rounded to nearest (C `remainder`).
 ### :param you: The other value.
 ### :returns: The result.
 routine BF16.rem(you: BF16) -> BF16
-    return me.to[B32]().rem(you.to[B32]()).to[BF16]()
+    return me.to[B32]().rem(you.to[B32]()).to_unchecked[BF16]()
 
 ### Returns `me * 2^n`, rounded once to BF16.
 ### :param n: The power of two.
 ### :returns: The result.
 routine BF16.scalbn(n: S64) -> BF16
-    return me.to[B32]().scalbn(n).to[BF16]()
+    return me.to[B32]().scalbn(n).to_unchecked[BF16]()
 
 ### Returns `me * 2^n`, rounded once to BF16.
 ### :param n: The power of two.
 ### :returns: The result.
 routine BF16.ldexp(n: S64) -> BF16
-    return me.to[B32]().ldexp(n).to[BF16]()
+    return me.to[B32]().ldexp(n).to_unchecked[BF16]()
 
 ### Returns `me * 2^n` with raw IEEE 754 results, rounded once to BF16.
 ### :param n: The power of two.
 ### :returns: The result.
 routine BF16.scaleb_unchecked(n: S64) -> BF16
-    return me.to[B32]().scaleb_unchecked(n).to[BF16]()
+    return me.to[B32]().scaleb_unchecked(n).to_unchecked[BF16]()
 
 ### Returns `me * 2^n`. Checked: crashes when the result isn't finite. Use `scaleb_unchecked` for raw IEEE 754 results.
 ### :param n: The power of two.
@@ -507,7 +535,7 @@ failable routine BF16.scaleb(n: S64) -> BF16
 ### :returns: The value, or the nearer bound.
 @positional
 routine BF16.clamp(min_val: BF16, max_val: BF16) -> BF16
-    return me.to[B32]().clamp(min_val.to[B32](), max_val.to[B32]()).to[BF16]()
+    return me.to[B32]().clamp(min_val.to[B32](), max_val.to[B32]()).to_unchecked[BF16]()
 
 ### Returns this value raised to an integer power, correctly rounded.
 ### :param n: The power.
@@ -546,7 +574,7 @@ routine BF16.modf() -> (BF16, BF16)
 ### :returns: `(fraction, exponent)` with `me = fraction * 2^exponent`.
 routine BF16.frexp() -> (BF16, S64)
     var parts = me.to[B32]().frexp()
-    return (parts.item0.to[BF16](), parts.item1)
+    return (parts.item0.to_unchecked[BF16](), parts.item1)
 
 ### Whether this value is above zero.
 ### :returns: True for a positive value, +infinity included.
@@ -607,7 +635,7 @@ routine BF16.next_down() -> BF16
 ### :returns: The next value, `you` when the two are equal, NaN when either is.
 routine BF16.nextafter(you: BF16) -> BF16
     if me.is_nan() or you.is_nan()
-        return me.to[B32]().add_unchecked(you.to[B32]()).to[BF16]()
+        return me.to[B32]().add_unchecked(you.to[B32]()).to_unchecked[BF16]()
     if me.to[B32]() == you.to[B32]()
         return you
     if me.to[B32]() < you.to[B32]()
