@@ -35,6 +35,8 @@ When unsure, consult ground truth in the repo/package:
    (a result that is not finite crashes) and unchecked `+! -! *! /! **!` = raw
    IEEE 754 (±infinity and NaN pass through; no `danger` block needed, unlike
    integers). Decimal and C64/C128/C256 have only `+ - * / **`.
+   `Simd.Vector[T, LANES]` is unchecked only: its lane-wise `+ - * /`, `sum`,
+   `dot` give the raw IEEE 754 lanes (a per-lane check would cost the SIMD gain).
    Division by zero crashes on every number type, arbitrary precision included.
    On the floats, `Decimal` and the complex types `x / 0` with `x` not
    zero throws `DivisionByZeroError` and `0 / 0` throws `NumericDomainError`
