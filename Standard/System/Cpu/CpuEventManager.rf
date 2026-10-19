@@ -1,0 +1,77 @@
+module System/Cpu
+
+import BuilderQuery
+
+# ============================================================================
+# The current process's events from the operating system.
+#
+# The operating system tells a process when someone asks it to stop. What the process does about each kind is a
+# setting the whole process has one of, so the CpuEventManager holds one handler per kind and hands back the one
+# before when a new one takes its place:
+#   - `when_terminated`: a request to end (SIGTERM on Linux and macOS, a console window closed, a logoff or a
+#     shutdown on Windows). When the handler returns, the process ends with the status `set_exit_code` stored last.
+#   - `when_interrupted`: an interrupt from the keyboard (SIGINT, Ctrl+C or Ctrl+Break on Windows). When the handler
+#     returns, the program goes on.
+# Without a handler the system ends the process. A handler runs on a thread of its own, so it may show, take locks
+# and allocate, and the state it touches is a `global` (an `Atomic` or a `Guarded`). An event of a kind whose
+# handler is still running takes the system's action: pressing Ctrl+C again ends a program whose handler is stuck.
+#
+# A forced end (SIGKILL, the OOM killer, Windows ending the program after a timeout) can't be caught: the process
+# ends before any handler runs.
+# ============================================================================
+
+### The process's events from the operating system: one handler per kind, held until its event comes. Its routines
+### are called on the type.
+### :see: {CpuEventManager.when_terminated}, {CpuEventManager.when_interrupted}
+record CpuEventManager
+    pass
+
+### Sets the handler of a request to end the process: SIGTERM on Linux and macOS, a console window closed, a logoff
+### or a shutdown on Windows. The handler runs on a thread of its own, and when it returns the process ends with the
+### status {set_exit_code} stored last. A second request while it runs ends the process at once.
+### :param handler: The handler, or `none` to let the system end the process.
+### :returns: The handler before, `none` for none: pass it back to put it back.
+@discardable
+common routine CpuEventManager.when_terminated(handler: Callable[(), None]?) -> Callable[(), None]?
+    return replace_handler(which: 1, handler)
+
+### Sets the handler of an interrupt from the keyboard: SIGINT, Ctrl+C or Ctrl+Break on Windows. The handler runs on a
+### thread of its own, and when it returns the program goes on. An interrupt that comes while it runs ends the
+### process, as it would without a handler.
+### :param handler: The handler, or `none` to let the system end the process.
+### :returns: The handler before, `none` for none: pass it back to put it back.
+@discardable
+common routine CpuEventManager.when_interrupted(handler: Callable[(), None]?) -> Callable[(), None]?
+    return replace_handler(which: 0, handler)
+
+### Puts a handler in one kind's slot.
+### :param which: 0 for interrupt, 1 for terminate.
+### :param handler: The handler, or `none` for the system's action.
+### :returns: The handler before, `none` for none.
+secret routine replace_handler(which: S32, handler: Callable[(), None]?) -> Callable[(), None]?
+    var cell: Address = 0
+    when handler
+        is None => pass
+        else as h =>
+            danger
+                cell = handler_cell(handler: h)
+    danger
+        var before = C::rf_cpu_event_replace(which, cell)
+        if before == 0
+            return none
+        return Hijacked[HandlerCell](before).peek().handler
+    return none
+
+### The heap cell a handler is kept in while it holds a slot: the routine value's two words, the routine and what it
+### captured (null for a named routine), which the runtime reads to call it.
+secret record HandlerCell
+    handler: Callable[(), None]
+
+### A routine value copied into a heap cell of its own. A cell that left its slot may still be running on the
+### handler's thread, so cells are never freed.
+### :param handler: The routine value.
+### :returns: The cell's address.
+secret dangerous routine handler_cell(handler: Callable[(), None]) -> Address
+    var cell = Hijacked[HandlerCell](rf_allocate_dynamic(size: HandlerCell.data_size()))
+    cell.poke(HandlerCell(handler))
+    return cell.address()

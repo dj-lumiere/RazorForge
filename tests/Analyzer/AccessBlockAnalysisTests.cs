@@ -316,6 +316,47 @@ public class AccessBlockAnalysisTests
     }
 
     [Fact]
+    public void Analyze_UnopenableTarget_NameStillKnownInBlock()
+    {
+        // The block can't open a ReadOnly Guarded with 'modifying' (RF-S651). Its 'as' name is still declared in the
+        // block, so the use of 'c' there is not a second error about an unknown identifier.
+        string source = Prelude + """
+                                  routine start()
+                                      var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
+                                      modifying s as c
+                                          show(f"{c.value}")
+                                      return
+                                  """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.AccessTargetNotOpenable);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
+        Assert.Single(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Analyze_UsingOnGuardedView_OnlySaysToOpenWithBlock()
+    {
+        // 'using log.view() as entries' on a Guarded is RF-S612, whose message says what to write. The same call is not
+        // also RF-S652 (an access call that isn't passed to a call).
+        string source = Prelude + """
+                                  routine start()
+                                      var log = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                      using log.view() as entries
+                                          show(f"{entries.value}")
+                                      return
+                                  """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.GuardAccessOutsideArgument);
+    }
+
+    [Fact]
     public void Analyze_TwoTokensOpenedTogether_MayChangeShapeWhileTheOtherIsWalked()
     {
         // Two tokens on the same kind of list may be the same list, unless one block opened both.

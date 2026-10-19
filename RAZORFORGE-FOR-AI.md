@@ -254,8 +254,8 @@ show(f"total = {total}")
 - Only the program's entry file may be a script. Loose statements in an imported
   file are an error (RF-S443) — they would start a second program.
 - A top-level `var` lives in the script's top-level scope, not the module:
-  routines in the file cannot see it (RF-S444). Pass it as an argument —
-  RazorForge has no module-level mutable state.
+  routines in the file cannot see it (RF-S444). Pass it as an argument. A
+  `global` is read-only, so state that changes goes in an `Atomic`/`Guarded` global.
 - Routines you define are still their own scopes and still end with `return`.
 
 `module <Path>` is optional. Without it the module path is derived from the file's
@@ -275,9 +275,10 @@ module is a build error. `System` is the base: the built-in types, `List` / `Dic
 the protocols and the errors, with `System/Numerics` (every number type and its math,
 `Integer`, `Decimal`), `System/Text` (`Text`, `Bytes`, formatting), `System/Memory` (the
 wrappers and controllers, `ByteSize`), `System/Temporal` (`Duration`, `Moment`, `Clock`),
-`System/Concurrency`, `System/Serialization` and `System/CSubSystem` (C types and strings).
+`System/Concurrency`, `System/Serialization`, `System/Cpu` (`CpuEventManager`) and `System/CSubSystem` (C types
+and strings).
 The rest takes an import: `Collections`, `IO/Console`, `IO/File`, `IterTools`, `Math3D`,
-`Random`, `Simd`, `Signals`, `Subprocess`, `BuilderQuery`, `BuilderExpansion`.
+`Random`, `Simd`, `Subprocess`, `BuilderQuery`, `BuilderExpansion`.
 `migrate --step modules` drops imports of `Core` and `Numerics` and rewrites `Core.X` to
 `System.X`.
 
@@ -328,7 +329,7 @@ RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows 
 - A field-by-field construction infers type arguments (`Pair(first: 1, second: "one")` is `Pair[S64, Text]`). A type
   obeying `Iterable[T]` gets its `Iter` from what its `iter()` returns (no `relates` needed), so IterTools adapters
   walk it. A bundle holding an entity moves with `steal` (no copy step). An element token from `each` converts like
-  its value (`w.to[S64]()`). `when_interrupted`/`when_terminated` link and run.
+  its value (`w.to[S64]()`). `CpuEventManager.when_interrupted`/`when_terminated` link and run.
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
   An empty flags value shows as `none`, a one-item tuple as `(1,)`. A global record's member can't be assigned
   (RF-S257, like the global itself). `try sv.to[List[S64]]()` recovers a bad element too. Every collection reads
@@ -1331,48 +1332,45 @@ each n in rx
 **Not implemented yet** (do not generate these — they do not exist): async networking
 (sockets/HTTP/WebSocket). It is on the roadmap, not in the language today.
 
-## 14b. Process signals (`Signals`)
+## 14b. Process events (`CpuEventManager`)
 
-`import Signals` to react to the OS asking the process to stop:
+`CpuEventManager` (System/Cpu, no import) holds one handler per kind of event the operating system sends when it
+asks the process to stop. Its routines are called on the type:
 
 ```razorforge
-import Signals
+import IO/Console
 
-routine on_stop()                    # a NAMED routine — lambdas are expression-only,
-    show("cleaning up")                # so a multi-statement handler cannot be a lambda
+global stop_requests: Atomic[U64] = Atomic[U64](initial: 0)
+
+routine on_stop()
+    show("stopping")
+    drop stop_requests.fetch_add(delta: 1)
     return
 
 routine start()
-    when_interrupted(handler: on_stop)   # Ctrl-C / SIGINT
-    when_terminated(handler: on_stop)    # SIGTERM / console-close
-    ...                                  # your own loop — see below
+    CpuEventManager.when_interrupted(on_stop)     # Ctrl+C, SIGINT
+    while stop_requests.load() == 0
+        waitfor(200ms)
+    show("cleaned up")
     return
 ```
 
-- **Registering a handler SUPPRESSES the default termination.** The process no longer
-  dies on Ctrl-C / SIGTERM; your handler decides. Registering does NOT keep the
-  program alive — it must run its own loop; the handler typically flips a flag the
-  loop checks, then the loop exits. (SIGKILL / OOM-killer cannot be caught.)
-- **The handler runs on a dedicated dispatch thread**, not the main thread — keep it
-  small (set a flag, log, save) and thread-aware. Multiple handlers per class all run,
-  in registration order.
-- The handler type is **`Callable[(), None]`** — a no-argument, no-return routine value.
-  (`()` is the empty parameter tuple; `None` is the void return. The parameter list is
-  always tuple-notation: `()`, `(T,)`, `(A, B)`.)
-- **Carrying state — the context overload.** Because the handler runs on another thread,
-  shared state it touches must be a thread-safe, storable handle: a `Guarded[T, TPolicy]`
-  (RazorForge multi-thread RC) or a `Roamed[T]`. Pass it with the copy verb and the
-  handler receives it back on every fire — no capture, no global:
-
-  ```razorforge
-  routine on_stop(box: Guarded[Flags, Exclusive])   # or Roamed[T]
-      ...
-  when_interrupted(handler: on_stop, context: flags)   # `=` gives the handler one more holder
-  ```
-
-  The registration retains the handle for the process lifetime (a `Roamed` context is
-  also promoted to its atomic escaped mode). One overload set accepts either handle
-  type — the builder picks by the argument type.
+- `CpuEventManager.when_terminated(h)`: a request to end (SIGTERM, a console window closed, a logoff or a shutdown
+  on Windows). When `h` returns, the process ends at once with the status `set_exit_code` stored last: the cleanup
+  that must happen is the handler's (other threads' `destroy` teardown does not run).
+- `CpuEventManager.when_interrupted(h)`: SIGINT, Ctrl+C or Ctrl+Break. When `h` returns, the program goes on.
+- The handler is a **`Callable[(), None]`** (a named routine or a lambda, taking nothing). It runs on a thread of
+  its own, so `show`, locks and allocation are fine in it. The state it changes is a `global` (`Atomic` /
+  `Guarded`): there is no context argument.
+- **One slot per kind.** Setting a handler returns the one before as `Callable[(), None]?`, `none` when the
+  system's action held the slot (the result may be dropped silently). Setting it again puts it back, and `none` gives
+  the event back to the system. A library that adds its own handling calls the one it got back from its handler.
+- An event of a kind whose handler is still running takes the system's action: a second Ctrl+C ends a program whose
+  handler is stuck.
+- A forced end (SIGKILL, the OOM killer, Windows ending the program after a timeout) can't be caught, and a fault
+  ends the program as a crash.
+- The `Signals` module is gone: `migrate --step cpu-events` drops `import Signals` and writes
+  `CpuEventManager.when_interrupted(h)`, and lists the calls that passed a `context:`.
 
 ## 15. Foreign functions and conditional compilation
 

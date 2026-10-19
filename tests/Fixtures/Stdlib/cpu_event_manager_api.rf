@@ -1,0 +1,37 @@
+module Tests/Stdlib/CpuEventManagerApi
+
+import IO/Console
+# CpuEventManager holds one handler per kind of event. Setting one hands back the handler before (`none` when the
+# system's action held the slot), which a library calls from its own handler to keep it running, and which puts the
+# old one back when it is set again.
+
+global calls: Atomic[U64] = Atomic[U64](initial: 0)
+
+routine first()
+    show("first handler")
+    drop calls.fetch_add(delta: 1)
+    return
+
+routine second()
+    show("second handler")
+    drop calls.fetch_add(delta: 1)
+    return
+
+routine describe(handler: Callable[(), None]?) -> Text
+    when handler
+        is None => return "none"
+        else as h =>
+            h()
+            return "a handler"
+
+routine start()
+    show(f"interrupt before: {describe(handler: CpuEventManager.when_interrupted(first))}")
+    var before = CpuEventManager.when_interrupted(second)
+    show(f"interrupt before second: {describe(handler: before)}")
+    show(f"put back: {describe(handler: CpuEventManager.when_interrupted(before))}")
+    show(f"system again: {describe(handler: CpuEventManager.when_interrupted(none))}")
+    show(f"now: {describe(handler: CpuEventManager.when_interrupted(none))}")
+    show(f"terminate before: {describe(handler: CpuEventManager.when_terminated(second))}")
+    show(f"terminate back: {describe(handler: CpuEventManager.when_terminated(none))}")
+    show(f"calls: {calls.load()}")
+    return
