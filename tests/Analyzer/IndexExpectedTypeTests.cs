@@ -18,10 +18,10 @@ public class IndexExpectedTypeTests
     public void IndexLiteral_RetypesToGetitemParamType_U64()
     {
         string source = """
-                        protocol Indexable
+                        protocol ViewingIndexable
                             @readonly
                             routine Me.$getitem(index: U64) -> S32
-                        entity Bin obeys Indexable
+                        entity Bin obeys ViewingIndexable
                             size: S32
                         @readonly
                         routine Bin.$getitem(index: U64) -> S32
@@ -42,10 +42,10 @@ public class IndexExpectedTypeTests
     public void IndexLiteral_RetypesToGetitemParamType_U32()
     {
         string source = """
-                        protocol Indexable
+                        protocol ViewingIndexable
                             @readonly
                             routine Me.$getitem(slot: U32) -> S32
-                        entity Reg obeys Indexable
+                        entity Reg obeys ViewingIndexable
                             size: S32
                         @readonly
                         routine Reg.$getitem(slot: U32) -> S32
@@ -66,10 +66,10 @@ public class IndexExpectedTypeTests
     public void IndexLiteralOverflow_OnU8Indexer_ReportsError()
     {
         string source = """
-                        protocol Indexable
+                        protocol ViewingIndexable
                             @readonly
                             routine Me.$getitem(slot: U8) -> S32
-                        entity Tiny obeys Indexable
+                        entity Tiny obeys ViewingIndexable
                             size: S32
                         @readonly
                         routine Tiny.$getitem(slot: U8) -> S32
@@ -89,10 +89,10 @@ public class IndexExpectedTypeTests
     public void IndexLiteral_ZeroLiteral_OnU64Indexer_NoError()
     {
         string source = """
-                        protocol Indexable
+                        protocol ViewingIndexable
                             @readonly
                             routine Me.$getitem(index: U64) -> S32
-                        entity Bin obeys Indexable
+                        entity Bin obeys ViewingIndexable
                             size: S32
                         @readonly
                         routine Bin.$getitem(index: U64) -> S32

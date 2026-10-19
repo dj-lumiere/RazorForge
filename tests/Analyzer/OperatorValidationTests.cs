@@ -13,16 +13,16 @@ public class OperatorValidationTests
     #region Index operator legality is governed by protocol conformance, not type kind
 
     /// <summary>
-    /// An entity that follows Indexable may define $getitem — no protocol-conformance error.
+    /// An entity that follows ViewingIndexable may define $getitem — no protocol-conformance error.
     /// </summary>
     [Fact]
     public void Analyze_IndexOperatorOnEntity_NoError()
     {
         string source = """
-                        protocol Indexable
+                        protocol ViewingIndexable
                             @readonly
                             routine Me.$getitem(index: S32) -> S32
-                        entity Grid obeys Indexable
+                        entity Grid obeys ViewingIndexable
                             size: S32
                         @readonly
                         routine Grid.$getitem(index: S32) -> S32
@@ -35,16 +35,16 @@ public class OperatorValidationTests
     }
     /// <summary>
     /// Records are indexable too (e.g. Array[T,N]/BitArray[N] are records), so a record that follows
-    /// Indexable may define $getitem with no error — legality follows the protocol, not the type kind.
+    /// ViewingIndexable may define $getitem with no error — legality follows the protocol, not the type kind.
     /// </summary>
     [Fact]
     public void Analyze_IndexOperatorOnRecord_NoError()
     {
         string source = """
-                        protocol Indexable
+                        protocol ViewingIndexable
                             @readonly
                             routine Me.$getitem(index: S32) -> S32
-                        record Pair obeys Indexable
+                        record Pair obeys ViewingIndexable
                             x: S32
                             y: S32
                         @readonly
@@ -58,7 +58,7 @@ public class OperatorValidationTests
     }
 
     /// <summary>
-    /// Defining $getitem WITHOUT following Indexable is the actual error — governed by protocol
+    /// Defining $getitem WITHOUT following ViewingIndexable is the actual error — governed by protocol
     /// conformance (RF-S411), independent of whether the owner is a record or an entity.
     /// </summary>
     [Fact]
