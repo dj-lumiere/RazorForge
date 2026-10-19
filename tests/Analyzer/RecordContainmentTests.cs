@@ -180,8 +180,8 @@ public class RecordContainmentTests
 
     /// <summary>
     /// Verifies a record MAY contain an entity-typed field. Entities are reference (pointer-shaped)
-    /// types, so the field stores a reference — only the scoped access tokens (Viewing/Modifying/
-    /// Consulting/Amending) are rejected as record members (see the token tests below).
+    /// types, so the field stores a reference — only the scoped access tokens (Viewing/Modifying)
+    /// are rejected as record members (see the token tests below).
     /// </summary>
     [Fact]
     public void Analyze_RecordWithEntityReferenceField_NoError()

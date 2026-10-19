@@ -308,60 +308,21 @@ failable routine hypot(x: B128, y: B128, z: B128) -> B128
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### The exact square of a finite nonzero B128 added to sum (see b128_exact_sum).
-secret routine b128_add_square(sum: B128Wx, x: B128) -> B128Wx
-    if x.is_zero()
-        return sum
-    var (m, e) = b128_int_parts(x: x)
-    var p = b128_trig_wmul(x: m, y: m)
-    var sq: (U128, U128, U128) = (0, p.item1, p.item0)
-    if wx_is_zero(w: sum)
-        return wx_make(neg: false, t: sq, e: 2 *% e -% 128, rel: 0.0)
-    return b128_exact_sum(
-        neg_a: false,
-        a: wx_t(w: sum),
-        ea: sum.e,
-        neg_b: false,
-        b: sq,
-        eb: 2 *% e -% 128,
-    )
-
-### `sqrt(x^2 + y^2 + z^2)`, correctly rounded, with raw IEEE (any inf -> +inf, any NaN -> qNaN). No crash.
-### The squares are exact and their sum exact up to a sticky bit; the root of its top 229 or 230 bits (an
-### even power of two left over) is an exact integer square root whose remainder joins the sticky bit.
+### sqrt(x^2 + y^2 + z^2), correctly rounded, with raw IEEE 754 results: overflow gives +infinity, an infinite leg
+### gives +infinity (also next to a quiet NaN), and a NaN leg otherwise gives a quiet NaN.
 ### :param x: First leg.
 ### :param y: Second leg.
 ### :param z: Third leg.
 routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
-    if x.is_infinite() or y.is_infinite() or z.is_infinite()
-        return B128.from_bits(bits: b128_inf(sign: 0))
-    if x.is_nan() or y.is_nan() or z.is_nan()
-        return B128.from_bits(bits: b128_qnan())
-    var sum = b128_add_square(
-        sum: b128_add_square(sum: b128_add_square(sum: wx_zero(rel: 0.0), x: x), x: y),
-        x: z,
+    var w = C::ingrid_b128_hypot3(
+        low: x.low_bits(),
+        high: x.high_bits(),
+        y_low: y.low_bits(),
+        y_high: y.high_bits(),
+        z_low: z.low_bits(),
+        z_high: z.high_bits(),
     )
-    if wx_is_zero(w: sum)
-        return B128.from_bits(bits: 0)
-    # sum = n * 2^s + rest with n its top 230 or 229 bits and s even
-    var s = sum.e +% 154
-    if (s & 1) != 0
-        s = s +% 1
-    var sh = s -% sum.e
-    var t = b128_trig_shr384(x: wx_t(w: sum), shift: sh)
-    var back = b128_trig_shl384(x: t, shift: sh)
-    var sticky = back.item0 != sum.m0 or back.item1 != sum.m1 or back.item2 != sum.m2
-    var n = (LLVM::zero_extend[U128, U256](t.item1) << 128) | LLVM::zero_extend[U128, U256](t.item0)
-    var root = b128_isqrt256(n: n)
-    if root *% root != n
-        sticky = true
-    # the root's 115 bits, two zero bits below them, and the sticky bit below those
-    var rt = LLVM::int_truncate[U256, U128](root) << 2
-    if sticky
-        rt = rt | 1
-    return wx_b128(
-        w: wx_make(neg: false, t: (0, 0, rt), e: (s >> 1) -% 258, rel: 0.0),
-    )
+    return b128_of_words(w: w)
 
 ### Returns `sin(pi*me)`: sin(pi*n) is ±0 with the sign of me.
 routine B128.sinpi() -> B128

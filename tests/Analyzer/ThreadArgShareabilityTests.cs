@@ -9,7 +9,7 @@ using static TestHelpers;
 /// Tests for the `agent` argument boundary (RF-S632). The work of an Agent may run on any thread in parallel with
 /// the code that made it, so each argument `f.to[Agent](...)` computes now must cross safely: `steal`-moved
 /// (exclusive transfer), trivially-copyable value data (passed BY VALUE), or a thread-shareable wrapper
-/// (Atomic/Guarded/Witnessed/Consulting/Amending, which carries its own synchronization). Anything else passed by
+/// (Atomic/Guarded/Witnessed, which carries its own synchronization, or a token a `using` over a Guarded's lock bound). Anything else passed by
 /// copy (a bare entity, or a record/tuple that transitively owns a single-threaded RC wrapper (Retained/Tracked) or
 /// single-threaded token (Viewing/Modifying)) would silently alias unsynchronized state and is rejected.
 /// </summary>
@@ -301,5 +301,25 @@ public class ThreadArgShareabilityTests
                                                return job
                                            """,
             expectedErrorSubstring: "stays in the block that made it");
+    }
+
+    [Fact]
+    public void Analyze_LockBackedTokenThreadArg_Ok()
+    {
+        // A token a `using` over a Guarded's lock bound is backed by that lock: judged by where it came from, it
+        // crosses like the Guarded itself.
+        string source = Prelude + """
+                                  routine work(n: Viewing[Node]) -> S64
+                                      return n.value
+
+                                  routine start()
+                                      var s = Guarded[Node, MultiRead](from: Node(value: 1))
+                                      using s.view() as v
+                                          var t = work.to[Agent](n: v)
+                                          drop t.retrieve()
+                                      return
+                                  """;
+
+        AssertAnalyzesSa(source: source);
     }
 }

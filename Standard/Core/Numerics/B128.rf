@@ -1166,33 +1166,6 @@ secret routine b128_floor_u256(v: B128) -> U256
         return LLVM::shift_left(value: mant, bits: U256.to_width(s: ve -% 112))
     return LLVM::shift_right_unsigned(mant, U256.to_width(s: 112 -% ve))
 
-### floor(sqrt(n)) for n below 2^240 (the callers stay below 2^238: B128 hypot of three, D128 sqrt and hypot). The
-### B128 square root of n truncated to 113 bits is within s 2^-111 + 1 of the root s (at most 2^9 units, 3 below
-### 2^226), one Newton step s + (n - s^2) / (2s), its quotient taken in B128, brings a larger error within a unit,
-### and s^2 <= n < (s + 1)^2 settles it. No wide division.
-### :param n: The radicand.
-### :returns: floor(sqrt(n)).
-routine b128_isqrt256(n: U256) -> U256
-    if n == 0
-        return 0
-    var x = b128_floor_u256(v: b128_of_u256_trunc(n: n).sqrt_unchecked())
-    if x == 0
-        x = 1
-    # the Newton step only when the root is more than 4 units off (|n - x^2| above 8x), past 2^113
-    var sq = x *% x
-    var eight = x << 3
-    if sq > n and sq -% n > eight
-        x = x -% b128_floor_u256(v: b128_of_u256_trunc(n: sq -% n) /! b128_of_u256_trunc(n: x *% 2))
-    elseif sq < n and n -% sq > eight
-        x = x +% b128_floor_u256(v: b128_of_u256_trunc(n: n -% sq) /! b128_of_u256_trunc(n: x *% 2))
-    while x *% x > n
-        x = x -% 1
-    var x1 = x +% 1
-    while x1 *% x1 <= n
-        x = x1
-        x1 = x1 +% 1
-    return x
-
 ### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` ->
 ### NaN).
 ### Use `sqrt_unchecked` for raw IEEE 754 propagation.

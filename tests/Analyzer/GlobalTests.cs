@@ -24,7 +24,7 @@ public class GlobalTests
 
                                  routine bump()
                                      hits.fetch_add(delta: 1)
-                                     using table.amend() as t
+                                     using table.modify() as t
                                          t.n += 1
                                      var copy = name
                                      return

@@ -24,8 +24,8 @@ import BuilderQuery
 ### |---|---|
 ### | `getitem!` | O(1) |
 ### | `with_set` / `with_flipped` | O(1) — returns a new copy |
-### | `count_ones` / `count_zeros` | O(N) |
-### | `any` / `all` / `none` | O(N) |
+### | `count_trues` / `count_falses` | O(N) |
+### | `is_any_true` / `is_all_true` / `is_none_true` | O(N) |
 ### | `contains` | O(N) |
 ###
 ### :typeparam BITS: The buildtime bit count, supplied as a `U64` literal.
@@ -180,7 +180,7 @@ routine BitArray[BITS].with_flipped(index: U64) -> BitArray[BITS]
 ### Returns the number of bits currently set to `true`.
 ### :returns: The count of one-bits in this array.
 @readonly
-routine BitArray[BITS].count_ones() -> U64
+routine BitArray[BITS].count_trues() -> U64
     var count: U64 = 0
     var i: U64 = 0
     while i < BITS
@@ -192,13 +192,13 @@ routine BitArray[BITS].count_ones() -> U64
 ### Returns the number of bits currently set to `false`.
 ### :returns: `BITS` minus the number of one-bits.
 @readonly
-routine BitArray[BITS].count_zeros() -> U64
-    return BITS -% me.count_ones()
+routine BitArray[BITS].count_falses() -> U64
+    return BITS -% me.count_trues()
 
 ### Returns true when at least one stored bit is `true`.
 ### :returns: `true` if any bit is set; `false` if all bits are clear.
 @readonly
-routine BitArray[BITS].any() -> Bool
+routine BitArray[BITS].is_any_true() -> Bool
     var i: U64 = 0
     while i < BITS
         if me[i]
@@ -210,7 +210,7 @@ routine BitArray[BITS].any() -> Bool
 ### Empty arrays (`BITS == 0`) vacuously return `true`.
 ### :returns: `true` if all bits are set; `false` if any bit is clear.
 @readonly
-routine BitArray[BITS].all() -> Bool
+routine BitArray[BITS].is_all_true() -> Bool
     var i: U64 = 0
     while i < BITS
         if not me[i]
@@ -221,18 +221,18 @@ routine BitArray[BITS].all() -> Bool
 ### Returns true when no stored bit is `true`.
 ### :returns: `true` if all bits are clear; `false` if any bit is set.
 @readonly
-routine BitArray[BITS].none() -> Bool
-    return not me.any()
+routine BitArray[BITS].is_none_true() -> Bool
+    return not me.is_any_true()
 
 ### Returns true if any stored bit equals `value`.
-### When `value` is `true`, equivalent to `any()`; when `false`, equivalent to `not all()`.
+### When `value` is `true`, equivalent to `is_any_true()`; when `false`, equivalent to `not is_all_true()`.
 ### :param value: The bit value to search for.
 ### :returns: `true` if at least one stored bit matches `value`.
 @readonly
 routine BitArray[BITS].has(value: Bool) -> Bool
     if value
-        return me.any()
-    return not me.all()
+        return me.is_any_true()
+    return not me.is_all_true()
 
 ### Returns whether `value` is not in this value: the opposite of `has`.
 ### :param value: The value to look for.
@@ -240,6 +240,62 @@ routine BitArray[BITS].has(value: Bool) -> Bool
 @readonly
 routine BitArray[BITS].lacks(value: Bool) -> Bool
     return not me.has(value)
+
+### Returns the position of the first `true` bit.
+### :returns: The lowest index whose bit is `true`.
+### :throws: {AbsentValueError} when no bit is `true`.
+@readonly
+failable routine BitArray[BITS].first_true() -> U64
+    var i: U64 = 0
+    while i < BITS
+        if me[i]
+            return i
+        i = i +% 1
+    throw AbsentValueError()
+
+### Returns the position of the next `true` bit after `after`.
+### :param after: The index to look past.
+### :returns: The lowest index above `after` whose bit is `true`.
+### :throws: {AbsentValueError} when no bit after `after` is `true`.
+@readonly
+failable routine BitArray[BITS].next_true(after: U64) -> U64
+    var start: U64 = after
+    if start >= BITS
+        throw AbsentValueError()
+    var i: U64 = start + 1
+    while i < BITS
+        if me[i]
+            return i
+        i = i +% 1
+    throw AbsentValueError()
+
+### Returns the position of the first `false` bit.
+### :returns: The lowest index whose bit is `false`.
+### :throws: {AbsentValueError} when no bit is `false`.
+@readonly
+failable routine BitArray[BITS].first_false() -> U64
+    var i: U64 = 0
+    while i < BITS
+        if not me[i]
+            return i
+        i = i +% 1
+    throw AbsentValueError()
+
+### Returns the position of the next `false` bit after `after`.
+### :param after: The index to look past.
+### :returns: The lowest index above `after` whose bit is `false`.
+### :throws: {AbsentValueError} when no bit after `after` is `false`.
+@readonly
+failable routine BitArray[BITS].next_false(after: U64) -> U64
+    var start: U64 = after
+    if start >= BITS
+        throw AbsentValueError()
+    var i: U64 = start + 1
+    while i < BITS
+        if not me[i]
+            return i
+        i = i +% 1
+    throw AbsentValueError()
 
 # ============================================================================
 # Display

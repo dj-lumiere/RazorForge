@@ -3,9 +3,8 @@ module Core
 ### Marker protocol for the access-synchronization discipline of a {Guarded[T, P]}.
 ###
 ### A policy carries the lock STATE (if any) and provides the acquire/release primitives that
-### `Guarded.consult()` / `Guarded.amend()` drive. The discipline ALSO determines, at build time,
-### which access tokens are legal — `ReadOnly` grants only `Consulting`, `Exclusive` only `Amending`,
-### `MultiRead` both — enforced statically by the readers-XOR-writer access discipline.
+### the `using` blocks of `Guarded.view()` / `Guarded.modify()` drive. The discipline ALSO determines, at build time,
+### which accesses are legal: `ReadOnly` admits only `view`, `Exclusive` only `modify`, `MultiRead` both.
 ###
 ### `P` is a type parameter of `Guarded`/`GuardManager`, so each discipline is selected by
 ### monomorphization (no runtime dispatch): the controller's `lock` field is laid out per `P`
@@ -21,7 +20,7 @@ protocol LockPolicy
     routine Me.remove_inspector()
 
     ### Admits the claimer (exclusive writer). At most one claimer, with no concurrent inspectors.
-    ### Blocking, not failing. `ReadOnly` has no legal claimer (the access discipline rejects `amend`
+    ### Blocking, not failing. `ReadOnly` has no legal claimer (the access discipline rejects `modify`
     ### on `ReadOnly`); the method exists only to complete the uniform interface.
     routine Me.add_claimer()
 
@@ -30,11 +29,11 @@ protocol LockPolicy
 
     ### Tries to admit an inspector WITHOUT blocking: returns `true` if the shared read hold was taken
     ### immediately, `false` if a writer holds it right now. The fallible counterpart to `add_inspector`,
-    ### driving `Guarded.try_consult`. `ReadOnly` always succeeds (immutable data).
+    ### driving `Guarded.try_view`. `ReadOnly` always succeeds (immutable data).
     routine Me.try_add_inspector() -> Bool
 
     ### Tries to admit the claimer WITHOUT blocking: returns `true` if the exclusive hold was taken
-    ### immediately, `false` if any reader or writer holds it right now. Drives `Guarded.try_amend`.
+    ### immediately, `false` if any reader or writer holds it right now. Drives `Guarded.try_modify`.
     routine Me.try_add_claimer() -> Bool
 
 ### Aborts the program for a re-entrant exclusive lock acquisition (the calling thread already

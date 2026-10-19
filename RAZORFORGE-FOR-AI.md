@@ -269,7 +269,7 @@ a type/routine/preset in module `Foo`). `Core` is auto-imported everywhere.
 initialized in dependency order when `start()` begins (a cycle is RF-S436, no `start()` is
 RF-S438), torn down at every exit of `start()`. Every thread reaches it, so the binding is
 never assigned again: shared changing state is an `Atomic` (`hits.fetch_add(delta: 1)`) or a
-`Guarded` (`using cache.amend() as c`), any other global is only read (writes are RF-S251 /
+`Guarded` (`using cache.modify() as c`), any other global is only read (writes are RF-S251 /
 RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows are `preset`.
 
 ## 3. Types
@@ -669,9 +669,8 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     `xs.view()` for `Viewing[T]` (a temporary works too), `grow(items: xs)` passes
     `xs.modify()` for `Modifying[T]`. A record value or a value of a type parameter
     is handed over as the address of the place it is in, and a handle or a wider
-    token over a `T` is narrowed the same way: `Retained[T]`, `Roamed[T]`, `Amending[T]`,
-    `Consulting[T]` or `Modifying[T]` to `Viewing[T]`, and `Retained[T]`, `Roamed[T]` or
-    `Amending[T]` to `Modifying[T]`. Pass the handle as it is: writing `.view()`/`.modify()`
+    token over a `T` is narrowed the same way: `Retained[T]`, `Roamed[T]` or `Modifying[T]`
+    to `Viewing[T]`, and `Retained[T]` or `Roamed[T]` to `Modifying[T]`. Pass the handle as it is: writing `.view()`/`.modify()`
     on it adds nothing.
   - A routine may return a token taken from `me` or from a parameter the caller
     keeps owning (a token parameter):
@@ -685,30 +684,37 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     list), and `boxes.view_at(index: 0)` when `boxes` is reached read-only (a
     `Viewing` parameter, a `@readonly` routine's `me`). Anything that can add to
     or remove from `boxes` ends it.
-  - The lock tokens (`Consulting`/`Amending`) are always opened with `using`.
-  - **`Viewing[T]` / `Modifying[T]`** — read / write intent on a directly-owned
-    entity. Produced by `a.view()` / `a.modify()`.
-  - **`Consulting[T]` / `Amending[T]`** — read / write intent on the inner value of
-    a `Guarded[T, TPolicy]`, lock-guarded by the policy `TPolicy`. Produced by `s.consult()` /
-    `s.amend()`, always via a `using` block; `s.try_amend()` is the NON-BLOCKING
-    acquire (a hand-written method returning the token, used with `using … fallback`
-    — NOT a recovery variant, so no `try` keyword). Two handles at once:
-    `using multiamend(first: xs[i], second: xs[j]) as (a, b)` (address-ordered holds, never nested `amend()`s;
-    the same entity twice is an `AliasedTokensError`). `using r as (a, b)` names the items of the tuple `r` gives.
+  - **`Viewing[T]` / `Modifying[T]`** — the only two tokens: read / write permission, wherever
+    they come from. `a.view()` / `a.modify()` on an entity give them directly.
+  - **A `Guarded` is opened with `using`**: `using g.view() as v` binds a `Viewing[T]`, `using g.modify() as m`
+    a `Modifying[T]`. Under a lock (`Exclusive`, `MultiRead`) entering the block takes the lock (the
+    `GuardManager` records the reader / the one writer) and every way out (end, `return`, `throw`, `break`)
+    releases it, so the lock lives exactly as long as the block. `view()` / `modify()` on a locking `Guarded`
+    anywhere else (bound to a `var`, passed, inline) is RF-S629. `view()` is for `MultiRead`/`ReadOnly`,
+    `modify()` for `Exclusive`/`MultiRead` (RF-S160 otherwise). `g.view()` on a `Guarded[T, ReadOnly]` takes no
+    lock and is an ordinary `Viewing[T]` (usable outside `using`). `try_view()` / `try_modify()` try the lock
+    once, without waiting, with `using … fallback` (hand-written routines, NOT recovery variants, so no `try`
+    keyword). A `using g.modify()` / `g.view()` inside a block already holding a conflicting hold on the same
+    handle is RF-S630. A token bound this way is lock-backed by where it came from: it may be passed to an
+    agent like the `Guarded` itself (RF-S632 does not apply), and passing the same write token twice in one
+    call is RF-S603.
+    `using r as (a, b)` names the items of the tuple `r` gives.
   - **Two tokens that may be the same entity.** Two token parameters (or shared handles) on the same kind of
     container may be the same container, so holding an element of one (`var p = x.modify_at(index: 0)`,
     `var b = xs[0]` on an entity element, to the end of its block) while the other changes shape is RF-S640.
     `using multimodify(first: x, second: y) as (a, b)` hands out two write tokens it checked to be different
     entities (the same one twice is an `AliasedTokensError`), and inside it holding an element of `a` while `b`
     grows is allowed. `multimodify(first: x, second: y)` with `y` a `Viewing` hands out a write token and a read
-    token (`each v in b { a.add(value: v) }` is then allowed). `multiamend` is the same for two `Guarded` handles.
+    token (`each v in b { a.add(value: v) }` is then allowed). On two `Guarded` handles (`using multimodify(first: xs[i], second:
+    xs[j]) as (a, b)`) it also takes both locks, in address order, for exactly the `using` block, and binds two
+    `Modifying` tokens.
     Handing one container to two parameters of one call when one of them is written
     (`extend(into: xs, from: xs)`) is RF-S623.
 - **RC wrappers** (managers for sharing an entity for longer, reference-counted):
   - **`Retained[T]`** — single-thread strong handle (`Retained(from: steal e)`, `=` makes one more holder);
     forwards direct access to the retained entity.
   - **`Guarded[T, TPolicy]`** — multi-thread strong handle (atomic, `=` makes one more holder);
-    reaching its inner value goes through a `Consulting`/`Amending` token (RF-S649 on the handle), except
+    reaching its inner value goes through `using g.view()` / `using g.modify()` (RF-S649 on the handle), except
     `Guarded[T, ReadOnly]`, which has no lock and is read directly (`g.name`, `g.label()`, reads only).
   - A binding from outside an `if`/`when`/loop is taken with `steal` on every path going on past it or on none
     (RF-S616); a loop turn may not take it and go on (only where the loop ends).
@@ -738,7 +744,7 @@ using c.modify() as m        # Modifying[Counter], write intent
 
 - **Identity comparison `===` / `!==`** — "are these two the SAME object?", distinct
   from value equality `==`. Valid only on reference-carrying operands: an `entity` or
-  a forwarding wrapper (`Viewing`/`Modifying`/`Consulting`/`Amending`/`Retained`/
+  a forwarding wrapper (`Viewing`/`Modifying`/`Retained`/
   `Guarded`/`Tracked`/`Witnessed`). A value type (record/scalar) is a build error
   (**RF-S440**) — values have no identity; use `==`. `Hijacked` is excluded (its `==`
   is already identity — you `peek` to see its value). It is a primitive pointer
@@ -1055,7 +1061,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
 | RF-S646      | no conversion between the two types (or to its own type) | convert to a type that has one, or drop the `.to` |
 | RF-S647      | `steal place as old` leaves a non-optional place empty | add `inject <new value>` |
-| RF-S649      | value of a locked `Guarded` reached on the handle | `using g.amend() as v` / `consult()`, or the `ReadOnly` policy |
+| RF-S649      | value of a locked `Guarded` reached on the handle | `using g.modify() as v` / `view()`, or the `ReadOnly` policy |
 | RF-S648      | `steal … as …` on something that is not a place | take from a variable, member variable or element |
 | RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |

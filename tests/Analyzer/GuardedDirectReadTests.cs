@@ -69,6 +69,6 @@ public class GuardedDirectReadTests
                                                var l = g.label()
                                                return
                                            """,
-            expectedErrorSubstring: "'using g.consult() as v' to read it");
+            expectedErrorSubstring: "'using g.view() as v' to read it");
     }
 }

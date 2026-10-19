@@ -143,18 +143,18 @@ public class AccessBlockTests
 
     #endregion
 
-    #region Consulting Block Tests (Multi-threaded Read)
+    #region Guarded View Block Tests (Multi-threaded Read)
 
     /// <summary>
-    /// Verifies that the parser accepts simple consulting.
+    /// Verifies that the parser accepts a simple Guarded view block.
     /// </summary>
     [Fact]
-    public void Parse_SimpleConsulting()
+    public void Parse_SimpleGuardedView()
     {
         string source = """
                         failable routine test()
                             var shared = data.share[MultiReadLock]()
-                            using shared.consult() as r
+                            using shared.view() as r
                                 show(r.value)
                             return
                         """;
@@ -162,16 +162,16 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts consulting multiple readers.
+    /// Verifies that the parser accepts nested Guarded view blocks (multiple readers).
     /// </summary>
     [Fact]
-    public void Parse_ConsultingMultipleReaders()
+    public void Parse_GuardedViewMultipleReaders()
     {
         string source = """
                         failable routine test()
                             var shared = data.share[MultiReadLock]()
-                            using shared.consult() as r1
-                                using shared.consult() as r2
+                            using shared.view() as r1
+                                using shared.view() as r2
                                     compare(r1, r2)
                             return
                         """;
@@ -192,7 +192,7 @@ public class AccessBlockTests
         string source = """
                         failable routine test()
                             var shared = data.share[Mutex]()
-                            using shared.amend() as w
+                            using shared.modify() as w
                                 w.value = 42
                             return
                         """;
@@ -208,7 +208,7 @@ public class AccessBlockTests
         string source = """
                         failable routine test()
                             var shared = counter.share[Mutex]()
-                            using shared.amend() as s
+                            using shared.modify() as s
                                 s.count += 1
                                 s.last_updated = now()
                                 s.notify_listeners()
@@ -226,7 +226,7 @@ public class AccessBlockTests
         string source = """
                         failable routine test()
                             var shared = data.share[MultiReadLock]()
-                            using shared.amend() as w
+                            using shared.modify() as w
                                 w.value = 42
                                 using w.view() as v
                                     show(v.value)
@@ -378,11 +378,11 @@ public class AccessBlockTests
                             var shared = remote.share[MultiReadLock]()
 
                             using local.view() as l
-                                using shared.amend() as s
+                                using shared.modify() as s
                                     each item in l.items
                                         s.add(item.clone())
 
-                            using shared.consult() as r
+                            using shared.view() as r
                                 verify(r.count() > 0, "Sync failed")
                             return
                         """;

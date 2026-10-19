@@ -5,8 +5,9 @@ module Core
 ### count mutations go through SeqCst atomic intrinsics driven on the live field address
 ### (`me.<field>.hijack()`), so cloning/dropping a handle is safe across threads.
 ###
-### Also holds the access-discipline lock `TPolicy` (a {LockPolicy}). The lock state lives here — at the one
-### address every handle references — so `consult()`/`amend()` (a later phase) synchronize correctly.
+### Also holds the access-discipline lock `TPolicy` (a {LockPolicy}) and, through it, who is using the entity right
+### now: the readers and the one writer. The lock state lives here, at the one address every handle references, so
+### `using g.view()` / `using g.modify()` synchronize correctly. A token itself carries only permission.
 ### Selected by monomorphization: `ReadOnly` is zero-sized (no overhead), `Exclusive`/`MultiRead` carry
 ### their atomic flags.
 ### :typeparam T: The exclusively owned entity type.
@@ -79,8 +80,8 @@ routine GuardManager[T, TPolicy].raw_data() -> Hijacked[T]
     return me.data
 
 # ============================================================================
-# Access-discipline lock — drives `Guarded.consult()` / `Guarded.amend()`. The lock state lives
-# here, at the single address every handle shares, so synchronization is correct across threads.
+# Access-discipline lock — taken and released by the `using` blocks `Guarded.view()` / `Guarded.modify()` open. The
+# lock state lives here, at the single address every handle shares, so synchronization is correct across threads.
 # Each call delegates to the monomorphized policy `TPolicy` (no runtime dispatch).
 # ============================================================================
 
@@ -104,12 +105,12 @@ routine GuardManager[T, TPolicy].remove_claimer()
     me.lock.remove_claimer()
     return
 
-### Non-blocking inspector admission through the lock (drives `Guarded.try_consult`).
+### Non-blocking inspector admission through the lock (drives `Guarded.try_view`).
 ### :returns: `true` if a read hold was taken without waiting.
 routine GuardManager[T, TPolicy].try_add_inspector() -> Bool
     return me.lock.try_add_inspector()
 
-### Non-blocking claimer admission through the lock (drives `Guarded.try_amend`).
+### Non-blocking claimer admission through the lock (drives `Guarded.try_modify`).
 ### :returns: `true` if the exclusive hold was taken without waiting.
 routine GuardManager[T, TPolicy].try_add_claimer() -> Bool
     return me.lock.try_add_claimer()

@@ -129,12 +129,12 @@ public class EnterableConformanceTests
 
                         routine start()
                             var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                            peek(s.consult())
+                            peek(s.view())
                             return
                         """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "must be opened with 'using'");
+            expectedErrorSubstring: "is written only as a 'using' resource");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MtTokenRequiresUsing);
     }
@@ -151,7 +151,7 @@ public class EnterableConformanceTests
 
                         routine start()
                             var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                            using s.consult() as v
+                            using s.view() as v
                                 show(f"{v.value}")
                             return
                         """;
@@ -172,7 +172,7 @@ public class EnterableConformanceTests
 
                         routine start()
                             var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                            var v = s.consult()
+                            var v = s.view()
                             return
                         """;
 
@@ -183,7 +183,7 @@ public class EnterableConformanceTests
 
     #endregion
 
-    #region Resources are using-CAPABLE, not using-required (only amend/consult are required)
+    #region Resources are using-CAPABLE, not using-required (only a Guarded's locking view/modify is required)
 
     /// <summary>A `using` target must OBEY Enterable, not merely define $enter/$exit by name.</summary>
     [Fact]

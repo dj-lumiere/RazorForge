@@ -1497,10 +1497,10 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             location: location);
     }
 
-    /// <summary>Whether a token only lets its holder read: <c>Viewing[T]</c>, or the lock-held <c>Consulting[T]</c>.</summary>
+    /// <summary>Whether a token only lets its holder read: <c>Viewing[T]</c>.</summary>
     private static bool IsReadToken(TypeSymbol? type)
     {
-        return type?.BareName is RuntimeContract.Viewing or RuntimeContract.Consulting;
+        return type?.BareName is RuntimeContract.Viewing;
     }
 
     /// <summary>
@@ -1519,7 +1519,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         }
 
         Dictionary<string, HashSet<string>> effects = CalleeEffects(callee: callee);
-        bool mintsWriteToken = callee.ReturnType?.BareName is RuntimeContract.Modifying or RuntimeContract.Amending;
+        bool mintsWriteToken = callee.ReturnType?.BareName is RuntimeContract.Modifying;
         if (TakesReceiver(callee: callee) && call.Callee is MemberExpression { Object: var receiver } &&
             (IsReadToken(type: receiver.ResolvedType) || isReadElement(arg: receiver)) &&
             (effects.ContainsKey(key: MeSlot) || mintsWriteToken))
@@ -1547,7 +1547,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             // write-token parameter was reported when the argument was matched to it.
             if (callee.Parameters.FirstOrDefault(predicate: p => p.Name == param) is { } declared &&
                 (IsReadToken(type: declared.Type) ||
-                 declared.Type?.BareName is RuntimeContract.Modifying or RuntimeContract.Amending))
+                 declared.Type?.BareName is RuntimeContract.Modifying))
             {
                 continue;
             }
