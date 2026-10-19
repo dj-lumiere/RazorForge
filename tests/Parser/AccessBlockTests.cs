@@ -18,7 +18,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             var data = SomeEntity()
-                            using data.view() as v
+                            viewing data as v
                                 show(v.value)
                             return
                         """;
@@ -34,7 +34,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             var node = Node(42)
-                            using node.view() as v
+                            viewing node as v
                                 var x = v.value
                                 var y = v.name
                                 process(x, y)
@@ -53,8 +53,8 @@ public class AccessBlockTests
                         routine test()
                             var a = EntityA()
                             var b = EntityB()
-                            using a.view() as va
-                                using b.view() as vb
+                            viewing a as va
+                                viewing b as vb
                                     compare(va, vb)
                             return
                         """;
@@ -70,7 +70,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             var user = User()
-                            using user.view() as v
+                            viewing user as v
                                 show(v.name)
                                 show(v.age)
                                 show(v.get_full_name())
@@ -93,7 +93,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             var data = SomeEntity()
-                            using data.modify() as h
+                            modifying data as h
                                 h.value = 42
                             return
                         """;
@@ -109,7 +109,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             var node = Node(42)
-                            using node.modify() as h
+                            modifying node as h
                                 h.value = 42
                                 h.name = "foo"
                                 process(h)
@@ -127,7 +127,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             var counter = Counter()
-                            using counter.modify() as c
+                            modifying counter as c
                                 if c.value < 100
                                     c.value += 1
                                 else
@@ -153,8 +153,8 @@ public class AccessBlockTests
     {
         string source = """
                         failable routine test()
-                            var shared = data.share[MultiReadLock]()
-                            using shared.view() as r
+                            var shared = data.share[MultiRead]()
+                            viewing shared as r
                                 show(r.value)
                             return
                         """;
@@ -169,9 +169,9 @@ public class AccessBlockTests
     {
         string source = """
                         failable routine test()
-                            var shared = data.share[MultiReadLock]()
-                            using shared.view() as r1
-                                using shared.view() as r2
+                            var shared = data.share[MultiRead]()
+                            viewing shared as r1
+                                viewing shared as r2
                                     compare(r1, r2)
                             return
                         """;
@@ -192,7 +192,7 @@ public class AccessBlockTests
         string source = """
                         failable routine test()
                             var shared = data.share[Mutex]()
-                            using shared.modify() as w
+                            modifying shared as w
                                 w.value = 42
                             return
                         """;
@@ -208,7 +208,7 @@ public class AccessBlockTests
         string source = """
                         failable routine test()
                             var shared = counter.share[Mutex]()
-                            using shared.modify() as s
+                            modifying shared as s
                                 s.count += 1
                                 s.last_updated = now()
                                 s.notify_listeners()
@@ -225,10 +225,10 @@ public class AccessBlockTests
     {
         string source = """
                         failable routine test()
-                            var shared = data.share[MultiReadLock]()
-                            using shared.modify() as w
+                            var shared = data.share[MultiRead]()
+                            modifying shared as w
                                 w.value = 42
-                                using w.view() as v
+                                viewing w as v
                                     show(v.value)
                             return
                         """;
@@ -338,10 +338,10 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             var data = SomeEntity()
-                            using data.view() as v
+                            viewing data as v
                                 if v.needs_update()
                                     pass
-                            using data.modify() as h
+                            modifying data as h
                                 h.update()
                             return
                         """;
@@ -359,7 +359,7 @@ public class AccessBlockTests
                             var cache = Cache()
                             using open_file("config.json") as file
                                 var config = parse_json(file.read_all())
-                                using cache.view() as c
+                                viewing cache as c
                                     apply_config(c, config)
                             return
                         """;
@@ -375,14 +375,14 @@ public class AccessBlockTests
         string source = """
                         failable routine sync_data()
                             var local = LocalData()
-                            var shared = remote.share[MultiReadLock]()
+                            var shared = remote.share[MultiRead]()
 
-                            using local.view() as l
-                                using shared.modify() as s
+                            viewing local as l
+                                modifying shared as s
                                     each item in l.items
                                         s.add(item.clone())
 
-                            using shared.view() as r
+                            viewing shared as r
                                 verify(r.count() > 0, "Sync failed")
                             return
                         """;
@@ -503,7 +503,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             var data = SomeEntity()
-                            var shared = data.share[MultiReadLock]()
+                            var shared = data.share[MultiRead]()
                             return
                         """;
 
@@ -538,6 +538,70 @@ public class AccessBlockTests
                         """;
 
         AssertParses(source: source);
+    }
+
+    #endregion
+
+    #region viewing / modifying blocks
+
+    /// <summary>A verb carries over to the targets after it, and each target takes its own `as`.</summary>
+    [Fact]
+    public void Parse_SeveralTargets()
+    {
+        string source = """
+                        routine test()
+                            viewing rates, modifying payer as from, payee
+                                pass
+                            return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    /// <summary>`try modifying` is followed by its `else` block.</summary>
+    [Fact]
+    public void Parse_TryWithElse()
+    {
+        string source = """
+                        routine test()
+                            try modifying seats as s, viewing rates
+                                pass
+                            else
+                                pass
+                            return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    /// <summary>A `try` block without its `else` is a grammar error.</summary>
+    [Fact]
+    public void Parse_TryWithoutElse_Errors()
+    {
+        string source = """
+                        routine test()
+                            try modifying seats as s
+                                pass
+                            return
+                        """;
+
+        AssertParseError(source: source);
+    }
+
+    /// <summary>The old `using ... fallback` is a grammar error that names the new form.</summary>
+    [Fact]
+    public void Parse_UsingFallback_Errors()
+    {
+        string source = """
+                        routine test()
+                            using seats.try_modify() as s
+                                pass
+                            fallback
+                                pass
+                            return
+                        """;
+
+        AssertParseError(source: source);
     }
 
     #endregion

@@ -266,10 +266,10 @@ public class FeatureCoverageTests
 
                               routine start()
                                   var nums: List[S64] = [10, 20, 30]
-                                  using nums.view() as g
+                                  viewing nums as g
                                       show(f"{in_set(items: g, target: 20)}")
                                   var words: List[Text] = ["a", "b"]
-                                  using words.view() as g
+                                  viewing words as g
                                       show(f"{in_set(items: g, target: "b")}")
                                   return
                               """;

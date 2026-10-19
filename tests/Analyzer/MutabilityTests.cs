@@ -260,8 +260,8 @@ public class MutabilityTests
 
                         routine test()
                             var parent = Parent(child: Child(value: 0))
-                            using parent.modify() as p
-                                using p.child.modify() as c
+                            modifying parent as p
+                                modifying p.child as c
                                     c.value = 10
                             return
                         """;

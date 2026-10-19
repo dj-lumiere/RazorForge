@@ -35,7 +35,7 @@ public class TokenSourceFreezeTests
         string source = Prelude + """
                                   routine start()
                                       var a = Box(n: 1)
-                                      using a.modify() as m
+                                      modifying a as m
                                           a = Box(n: 50)
                                           m.bump()
                                       return
@@ -53,7 +53,7 @@ public class TokenSourceFreezeTests
         string source = Prelude + """
                                   routine start()
                                       var a = Box(n: 1)
-                                      using a.view() as v
+                                      viewing a as v
                                           var b = steal a
                                           show(f"{v.n}")
                                       return
@@ -87,7 +87,7 @@ public class TokenSourceFreezeTests
         string source = Prelude + """
                                   routine start()
                                       var a = Box(n: 1)
-                                      using a.modify() as m
+                                      modifying a as m
                                           m.bump()
                                       a = Box(n: 50)
                                       show(f"{a.n}")
@@ -106,7 +106,7 @@ public class TokenSourceFreezeTests
                                   routine start()
                                       var a = Box(n: 1)
                                       var b = Box(n: 2)
-                                      using a.modify() as m
+                                      modifying a as m
                                           b = Box(n: 9)
                                           m.bump()
                                       show(f"{a.n} {b.n}")

@@ -230,14 +230,14 @@ public class RecordContainmentTests
                         entity Node
                             value: S32
                         record BadRecord
-                            modifying: Modifying[Node]
+                            writer: Modifying[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e =>
                 e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed &&
-                e.Message.Contains(value: "modifying"));
+                e.Message.Contains(value: "writer"));
     }
 
     #endregion

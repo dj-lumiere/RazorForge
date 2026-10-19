@@ -18,14 +18,14 @@ public class UsingStatementTests
     [Fact]
     public void Analyze_TokenUsing_BindsTokenType()
     {
-        // Token path: using with .view() binds to the Viewing token type
+        // A viewing block binds the Viewing token type
         string source = """
                         entity Point
                             x: S32
                             y: S32
 
                         routine test(p: Point)
-                            using p.view() as v
+                            viewing p as v
                                 var a: S32 = v.x
                             return
                         """;
@@ -227,7 +227,7 @@ public class UsingStatementTests
                             value: S32
 
                         routine test(d: Data)
-                            using d.view() as v
+                            viewing d as v
                                 show(v.value)
                             show(v.value)
                             return

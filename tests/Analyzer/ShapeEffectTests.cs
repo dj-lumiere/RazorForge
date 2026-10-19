@@ -296,7 +296,7 @@ public class ShapeEffectTests
     }
 
     [Fact]
-    public void Analyze_HeldElementWhileMultimodifyTokenGrows_Analyzes()
+    public void Analyze_HeldElementWhileOtherOpenedTokenGrows_Analyzes()
     {
         AssertAnalyzesSa(source: """
                                  import IO/Console
@@ -305,7 +305,7 @@ public class ShapeEffectTests
                                      x: S64
 
                                  routine grow_while_held(x: Modifying[List[Point]], y: Modifying[List[Point]])
-                                     using multimodify(first: x, second: y) as (a, b)
+                                     modifying x as a, y as b
                                          var p = a.modify_at(index: 0)
                                          b.add_last(value: Point(x: 1))
                                          p.x = 9
@@ -332,13 +332,13 @@ public class ShapeEffectTests
     }
 
     [Fact]
-    public void Analyze_LoopOverReadTokenFromMultimodify_Analyzes()
+    public void Analyze_LoopOverReadTokenOpenedWithWriteToken_Analyzes()
     {
         AssertAnalyzesSa(source: """
                                  routine merge_set(into: Modifying[Set[S64]], from: Viewing[Set[S64]])
-                                     using multimodify(first: into, second: from) as (a, b)
-                                         each v in b
-                                             a.add(value: v + 1)
+                                     modifying into, viewing from
+                                         each v in from
+                                             into.add(value: v + 1)
                                      return
 
                                  routine start()

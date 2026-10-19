@@ -8,7 +8,6 @@ import BuilderQuery
 ### :see: {Viewing[T]}, {Hijacked[T]}
 @llvm("ptr")
 record Modifying[T]
-obeys Enterable
     pass
 
 ### Produces a temporary unmanaged mutable view of `me`.
@@ -26,17 +25,17 @@ needs EntityType T
 # Users should NEVER create Modifying[T] values directly
 
 # ============================================================================
-# Resource management — enables `using entity.modify() as h`
+# A target of a block that opens several at once
 # ============================================================================
 
-### Called on entry to a `using` block; passes the modify through as the bound value (access is
-### already established by `.modify()`).
-### :returns: This modify token as `Modifying[T]`.
-routine Modifying[T].enter() -> Modifying[T]
-    return me
-
-### Called on exit from a `using` block; no-op for a modify (the builder handles scope cleanup).
-routine Modifying[T].exit()
+### Names this token's entity as one target of a `viewing` / `modifying` block that opens several at once
+### (`modifying into, viewing from`): nothing is taken, the block only checks that its targets are different
+### entities, and stops the program with `AliasedTokensError` when two are the same one.
+@readonly
+@untraced
+routine Modifying[T].enlist_identity()
+    danger
+        C::rf_access_enlist(access: CPtr(from: Hijacked[T](me).get_address()), kind: 0, mode: 2)
     return
 
 # ============================================================================

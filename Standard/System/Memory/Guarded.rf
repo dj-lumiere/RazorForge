@@ -5,18 +5,19 @@ import BuilderQuery
 ### {GuardManager[T, TPolicy]}. The atomic-refcount twin of {Retained[T]} — equivalent to `Arc[T]` in Rust.
 ### Cloning bumps the strong count atomically (`.share()`); dropping decrements it. Safe across threads.
 ###
-### The discipline `TPolicy` (a {LockPolicy}: {ReadOnly} / {Exclusive} / {MultiRead}) is part of the type, so
-### it is fixed at build time and selected by monomorphization — no runtime dispatch. Unlike
-### {Retained[T]}, the guarded value is reached only through a token: `using g.view() as v` binds a {Viewing[T]}
-### and `using g.modify() as m` a {Modifying[T]}. Under a lock (`Exclusive`, `MultiRead`) entering the `using` block
-### takes the lock and leaving it releases it. Which accesses a policy admits (`view` or `modify`) follows from `TPolicy`.
-### A `ReadOnly` value has no lock and is read directly.
+### The policy `TPolicy` (an {AccessPolicy}: {ReadOnly} / {Exclusive} / {MultiRead}) is part of the type, so it is
+### fixed at build time and selected by monomorphization — no runtime dispatch. Unlike {Retained[T]}, the guarded
+### value is reached only through a token: `viewing g as v` binds a {Viewing[T]} and `modifying g as m` a
+### {Modifying[T]} for the block, and `f(x: g.modify())` holds the access for that one call. Under `Exclusive` or
+### `MultiRead` the block takes the access when it starts (waiting while another agent holds it) and gives it up on
+### every way out. Which blocks a policy admits (`viewing` or `modifying`) follows from `TPolicy`. A `ReadOnly` value
+### is read directly.
 ### :typeparam T: The exclusively owned entity type.
-### :typeparam TPolicy: The access-discipline lock policy.
+### :typeparam TPolicy: The access policy.
 @llvm("ptr")
 record Guarded[T, TPolicy]
 needs EntityType T
-needs TPolicy obeys LockPolicy
+needs TPolicy obeys AccessPolicy
     pass
 
 # ============================================================================
@@ -26,7 +27,7 @@ needs TPolicy obeys LockPolicy
 ### `Guarded[T, TPolicy](from: n)`: the entity moves into the handle, which shares it across threads.
 routine Guarded[T, TPolicy](from: T) -> Guarded[T, TPolicy]
 needs EntityType T
-needs TPolicy obeys LockPolicy
+needs TPolicy obeys AccessPolicy
     danger
         var ctrl = GuardManager[T, TPolicy](data: from.hijack()).hijack()
         return Guarded[T, TPolicy](ctrl)
@@ -36,7 +37,7 @@ needs TPolicy obeys LockPolicy
 ### :returns: The absent `Guarded[T, TPolicy]`.
 routine guarded_none[T, TPolicy]() -> Guarded[T, TPolicy]
 needs EntityType T
-needs TPolicy obeys LockPolicy
+needs TPolicy obeys AccessPolicy
     danger
         var null_address: Address = 0
         return Guarded[T, TPolicy](Hijacked[GuardManager[T, TPolicy]](from: null_address))
@@ -66,59 +67,127 @@ routine Guarded[T, TPolicy].observe() -> Witnessed[T, TPolicy]
         return Witnessed[T, TPolicy](me)
 
 # ============================================================================
-# Access — read or change the guarded entity (opened with `using` under a lock)
+# Access — read or change the guarded entity. A `viewing` / `modifying` block or a `g.view()` / `g.modify()` argument
+# is lowered by the builder to these routines: the access is taken first (`open_*`, `try_*`, or for a block with
+# several targets `enlist_*` and then `access_open_enlisted`), the token is `view()` / `modify()`, and every way out
+# gives the access up (`close_*`).
 # ============================================================================
 
-### Opens read access to the value of a `Guarded` with the `MultiRead` policy: `using g.view() as v`. Entering the
-### `using` block takes a read hold on the lock (other readers may hold one at the same time, a writer waits) and binds
-### `v`, a {Viewing[T]}. Every way out of the block releases the hold. The hold lasts exactly as long as the block, so
-### `view()` on this policy is opened only by `using`.
-### :returns: What `using` opens: it takes the read hold and binds the {Viewing[T]}.
-@readonly
-routine Guarded[T, TPolicy].view() -> ViewingGuarded[T, TPolicy]
-needs TPolicy in [MultiRead]
-    danger
-        return ViewingGuarded[T, TPolicy](me)
-
-### Read access to the value of a `Guarded` with the `ReadOnly` policy, which has no lock to take: `g.name` and
-### `g.label()` read through it directly, and `using g.view() as v` binds the same {Viewing[T]}.
+### Read access to the value: `viewing g as v` in a block, or `f(x: g.view())` for one call. Under `MultiRead` the
+### builder takes the read access around the block or the call. A `Guarded[T, ReadOnly]` takes none, and `g.view()`
+### is an ordinary {Viewing[T]} anywhere.
 ### :returns: A read token on the guarded entity.
 @readonly
+@untraced
 routine Guarded[T, TPolicy].view() -> Viewing[T]
-needs TPolicy in [ReadOnly]
+needs TPolicy in [MultiRead, ReadOnly]
     danger
         return Viewing[T](Hijacked[GuardManager[T, TPolicy]](me).as_entity().raw_data())
 
-### Opens read access without waiting: `using g.try_view() as v` followed by a `fallback` branch. Entering the `using`
-### block tries the read hold once. When a writer holds the lock right now, the `fallback` branch runs instead and
-### nothing is held.
-### :returns: What `using` opens: it tries the read hold and binds the {Viewing[T]}.
+### Write access to the value: `modifying g as m` in a block, or `f(x: g.modify())` for one call. The builder takes
+### the write access around the block or the call, waiting until no other agent holds it.
+### :returns: A write token on the guarded entity.
 @readonly
-routine Guarded[T, TPolicy].try_view() -> ViewingGuarded[T, TPolicy]
+@untraced
+routine Guarded[T, TPolicy].modify() -> Modifying[T]
+needs TPolicy in [Exclusive, MultiRead]
+    danger
+        return Modifying[T](Hijacked[GuardManager[T, TPolicy]](me).as_entity().raw_data())
+
+### Takes read access, waiting while a writer holds it. The builder calls it where a `viewing` block or a `g.view()`
+### argument starts.
+@readonly
+@untraced
+routine Guarded[T, TPolicy].open_view()
 needs TPolicy in [MultiRead, ReadOnly]
     danger
-        return ViewingGuarded[T, TPolicy](me)
+        Hijacked[GuardManager[T, TPolicy]](me).as_entity().open(mode: 1)
+    return
 
-### Opens write access to the value of a `Guarded` with the `Exclusive` or `MultiRead` policy:
-### `using g.modify() as m`. Entering the `using` block takes the write hold on the lock (it waits until no reader and
-### no other writer holds it) and binds `m`, a {Modifying[T]}. Every way out of the block releases the hold. The hold
-### lasts exactly as long as the block, so `modify()` is opened only by `using`.
-### :returns: What `using` opens: it takes the write hold and binds the {Modifying[T]}.
+### Takes write access, waiting while anyone else holds it. The builder calls it where a `modifying` block or a
+### `g.modify()` argument starts.
 @readonly
-routine Guarded[T, TPolicy].modify() -> ModifyingGuarded[T, TPolicy]
+@untraced
+routine Guarded[T, TPolicy].open_modify()
 needs TPolicy in [Exclusive, MultiRead]
     danger
-        return ModifyingGuarded[T, TPolicy](me)
+        Hijacked[GuardManager[T, TPolicy]](me).as_entity().open(mode: 2)
+    return
 
-### Opens write access without waiting: `using g.try_modify() as m` followed by a `fallback` branch. Entering the
-### `using` block tries the write hold once. When any reader or writer holds the lock right now, the `fallback` branch
-### runs instead and nothing is held.
-### :returns: What `using` opens: it tries the write hold and binds the {Modifying[T]}.
+### Tries read access once, without waiting: what `try viewing g as v` starts with.
+### :returns: `true` when the access was taken (the block runs and gives it up), `false` when a writer holds it right
+###           now (the `else` block runs and nothing is held).
 @readonly
-routine Guarded[T, TPolicy].try_modify() -> ModifyingGuarded[T, TPolicy]
+@untraced
+routine Guarded[T, TPolicy].try_view() -> Bool
+needs TPolicy in [MultiRead]
+    danger
+        return Hijacked[GuardManager[T, TPolicy]](me).as_entity().try_open(mode: 1)
+
+### Tries write access once, without waiting: what `try modifying g as m` starts with.
+### :returns: `true` when the access was taken (the block runs and gives it up), `false` when anyone holds it right
+###           now (the `else` block runs and nothing is held).
+@readonly
+@untraced
+routine Guarded[T, TPolicy].try_modify() -> Bool
 needs TPolicy in [Exclusive, MultiRead]
     danger
-        return ModifyingGuarded[T, TPolicy](me)
+        return Hijacked[GuardManager[T, TPolicy]](me).as_entity().try_open(mode: 2)
+
+### Gives up read access on every way out of a `viewing` block or after a `g.view()` argument's call.
+@readonly
+@untraced
+routine Guarded[T, TPolicy].close_view()
+needs TPolicy in [MultiRead, ReadOnly]
+    danger
+        Hijacked[GuardManager[T, TPolicy]](me).as_entity().close(mode: 1)
+    return
+
+### Gives up write access on every way out of a `modifying` block or after a `g.modify()` argument's call.
+@readonly
+@untraced
+routine Guarded[T, TPolicy].close_modify()
+needs TPolicy in [Exclusive, MultiRead]
+    danger
+        Hijacked[GuardManager[T, TPolicy]](me).as_entity().close(mode: 2)
+    return
+
+### Names read access as one target of a block that opens several at once (`viewing rates, modifying payer`): the
+### block opens them together, in the order of their addresses, with {access_open_enlisted}.
+@readonly
+@untraced
+routine Guarded[T, TPolicy].enlist_view()
+needs TPolicy in [MultiRead, ReadOnly]
+    danger
+        Hijacked[GuardManager[T, TPolicy]](me).as_entity().enlist(mode: 1)
+    return
+
+### Names write access as one target of a block that opens several at once.
+@readonly
+@untraced
+routine Guarded[T, TPolicy].enlist_modify()
+needs TPolicy in [Exclusive, MultiRead]
+    danger
+        Hijacked[GuardManager[T, TPolicy]](me).as_entity().enlist(mode: 2)
+    return
+
+### Opens the targets a block named, the lowest address first, waiting for each. Two agents naming the same targets
+### in different orders take them in the same order, so they can't wait on each other.
+### :throws: Crashes with `AliasedTokensError` when two names of the block are the same entity.
+@untraced
+routine access_open_enlisted()
+    danger
+        C::rf_access_open_enlisted()
+    return
+
+### Opens the targets a block named only if every one is free right now, without waiting: what a `try` block with
+### several targets starts with.
+### :returns: `true` when it opened them all, `false` when one was taken (then none is open).
+### :throws: Crashes with `AliasedTokensError` when two names of the block are the same entity.
+@untraced
+routine access_try_open_enlisted() -> Bool
+    danger
+        return C::rf_access_try_open_enlisted() != 0
 
 # ============================================================================
 # Inspection

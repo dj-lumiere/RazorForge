@@ -5,30 +5,30 @@ module System/Memory
 ### count mutations go through SeqCst atomic intrinsics driven on the live field address
 ### (`me.<field>.hijack()`), so cloning/dropping a handle is safe across threads.
 ###
-### Also holds the access-discipline lock `TPolicy` (a {LockPolicy}) and, through it, who is using the entity right
-### now: the readers and the one writer. The lock state lives here, at the one address every handle references, so
-### `using g.view()` / `using g.modify()` synchronize correctly. A token itself carries only permission.
-### Selected by monomorphization: `ReadOnly` is zero-sized (no overhead), `Exclusive`/`MultiRead` carry
-### their atomic flags.
+### Also holds the state of the access policy `TPolicy` (an {AccessPolicy}): who is using the entity right now, the
+### readers and the one writer, and which agent holds it. The state lives here, at the one address every handle
+### references, so the `viewing` and `modifying` blocks of every agent meet at it. The runtime's AccessManager takes
+### and gives up the access, and finds agents that wait on each other. A token itself carries only permission.
+### Selected by monomorphization: `ReadOnly` is zero-sized (no overhead), `Exclusive`/`MultiRead` carry their state.
 ### :typeparam T: The exclusively owned entity type.
-### :typeparam TPolicy: The access-discipline lock policy.
+### :typeparam TPolicy: The access policy.
 entity GuardManager[T, TPolicy]
 needs EntityType T
-needs TPolicy obeys LockPolicy
+needs TPolicy obeys AccessPolicy
     ### Strong reference count (live `Guarded` handles). Atomic.
     secret strong_count: U64
     ### Weak reference count (live `Witnessed` handles). Atomic.
     secret weak_count: U64
     ### Raw pointer to the managed entity.
     secret data: Hijacked[T]
-    ### The access-discipline lock. Laid out per `TPolicy` by monomorphization.
-    secret lock: TPolicy
+    ### The access policy's state. Laid out per `TPolicy` by monomorphization.
+    secret access: TPolicy
 
-### Creates a new controller with one strong reference, no weak references, and a fresh lock.
+### Creates a new controller with one strong reference, no weak references, and a free access.
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `GuardManager[T, TPolicy]` value.
 dangerous routine GuardManager[T, TPolicy](data: Hijacked[T]) -> GuardManager[T, TPolicy]
-    return GuardManager[T, TPolicy](strong_count: 1, weak_count: 0, data: data, lock: TPolicy())
+    return GuardManager[T, TPolicy](strong_count: 1, weak_count: 0, data: data, access: TPolicy())
 
 ### Atomically increments the strong count when a `Guarded` handle is cloned.
 routine GuardManager[T, TPolicy].hold()
@@ -80,40 +80,61 @@ routine GuardManager[T, TPolicy].raw_data() -> Hijacked[T]
     return me.data
 
 # ============================================================================
-# Access-discipline lock — taken and released by the `using` blocks `Guarded.view()` / `Guarded.modify()` open. The
-# lock state lives here, at the single address every handle shares, so synchronization is correct across threads.
-# Each call delegates to the monomorphized policy `TPolicy` (no runtime dispatch).
+# Access: taken and given up by the `viewing` / `modifying` blocks and the `g.view()` / `g.modify()` arguments the
+# builder lowers to these calls. The state lives here, at the single address every handle shares, and the runtime's
+# AccessManager works on it. `mode` is 1 to read, 2 to write. A `ReadOnly` policy has no state: nothing is taken.
 # ============================================================================
 
-### Admits an inspector (shared reader) through the access-discipline lock.
-routine GuardManager[T, TPolicy].add_inspector()
-    me.lock.add_inspector()
+### The address of the access policy's state, as the runtime's AccessManager takes it.
+### :returns: The address.
+@untraced
+secret routine GuardManager[T, TPolicy].access_address() -> CPtr
+    danger
+        return CPtr(from: me.access.hijack().get_address())
+
+### Takes the access, waiting while another agent holds it.
+### :param mode: 1 to read, 2 to write.
+@untraced
+routine GuardManager[T, TPolicy].open(mode: U32)
+    var kind = me.access.access_kind()
+    if kind != 0
+        danger
+            C::rf_access_lock(access: me.access_address(), kind: kind, mode: mode)
     return
 
-### Removes an inspector through the access-discipline lock.
-routine GuardManager[T, TPolicy].remove_inspector()
-    me.lock.remove_inspector()
+### Takes the access if no agent holds it in a way that keeps this one out, without waiting.
+### :param mode: 1 to read, 2 to write.
+### :returns: `true` when it took the access.
+@untraced
+routine GuardManager[T, TPolicy].try_open(mode: U32) -> Bool
+    var kind = me.access.access_kind()
+    if kind == 0
+        return true
+    danger
+        return C::rf_access_try_lock(access: me.access_address(), kind: kind, mode: mode) != 0
+
+### Gives up the access this agent holds.
+### :param mode: 1 to read, 2 to write.
+@untraced
+routine GuardManager[T, TPolicy].close(mode: U32)
+    var kind = me.access.access_kind()
+    if kind != 0
+        danger
+            C::rf_access_unlock(access: me.access_address(), kind: kind, mode: mode)
     return
 
-### Admits the claimer (exclusive writer) through the access-discipline lock.
-routine GuardManager[T, TPolicy].add_claimer()
-    me.lock.add_claimer()
+### Names this access as one target of a block that opens several at once. A `ReadOnly` one is named by the
+### manager's own address, only to check that the block doesn't name it twice.
+### :param mode: 1 to read, 2 to write.
+@untraced
+routine GuardManager[T, TPolicy].enlist(mode: U32)
+    var kind = me.access.access_kind()
+    danger
+        if kind == 0
+            C::rf_access_enlist(access: CPtr(from: me.hijack().get_address()), kind: 0, mode: mode)
+            return
+        C::rf_access_enlist(access: me.access_address(), kind: kind, mode: mode)
     return
-
-### Removes the claimer through the access-discipline lock.
-routine GuardManager[T, TPolicy].remove_claimer()
-    me.lock.remove_claimer()
-    return
-
-### Non-blocking inspector admission through the lock (drives `Guarded.try_view`).
-### :returns: `true` if a read hold was taken without waiting.
-routine GuardManager[T, TPolicy].try_add_inspector() -> Bool
-    return me.lock.try_add_inspector()
-
-### Non-blocking claimer admission through the lock (drives `Guarded.try_modify`).
-### :returns: `true` if the exclusive hold was taken without waiting.
-routine GuardManager[T, TPolicy].try_add_claimer() -> Bool
-    return me.lock.try_add_claimer()
 
 ### Gives the managed entity up to the last strong handle, which is ending: the strong count drops to zero without
 ### tearing the entity down, and the controller is freed unless weak handles remain (they now see it gone).

@@ -8,7 +8,6 @@ import BuilderQuery
 ### :see: {Modifying[T]}, {Guarded[T, TPolicy]}
 @llvm("ptr")
 record Viewing[T]
-obeys Enterable
     pass
 
 ### Produces a temporary read-only view of `me`.
@@ -26,17 +25,17 @@ needs EntityType T
 # Users should NEVER create Viewing[T] values directly
 
 # ============================================================================
-# Resource management — enables `using entity.view() as v`
+# A target of a block that opens several at once
 # ============================================================================
 
-### Called on entry to a `using` block; passes the view through as the bound value (access is
-### already established by `.view()`).
-### :returns: This view as `Viewing[T]`.
-routine Viewing[T].enter() -> Viewing[T]
-    return me
-
-### Called on exit from a `using` block; no-op for a view (the builder handles scope cleanup).
-routine Viewing[T].exit()
+### Names this token's entity as one target of a `viewing` / `modifying` block that opens several at once
+### (`modifying into, viewing from`): nothing is taken, the block only checks that its targets are different
+### entities, and stops the program with `AliasedTokensError` when two are the same one.
+@readonly
+@untraced
+routine Viewing[T].enlist_identity()
+    danger
+        C::rf_access_enlist(access: CPtr(from: Hijacked[T](me).get_address()), kind: 0, mode: 1)
     return
 
 # ============================================================================

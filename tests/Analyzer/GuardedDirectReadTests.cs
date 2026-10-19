@@ -57,7 +57,7 @@ public class GuardedDirectReadTests
                                                var n = g.name
                                                return
                                            """,
-            expectedErrorSubstring: "reached only while its lock is held");
+            expectedErrorSubstring: "reached only while you hold its access");
     }
 
     [Fact]
@@ -69,6 +69,6 @@ public class GuardedDirectReadTests
                                                var l = g.label()
                                                return
                                            """,
-            expectedErrorSubstring: "'using g.view() as v' to read it");
+            expectedErrorSubstring: "'viewing g as v' to read it");
     }
 }

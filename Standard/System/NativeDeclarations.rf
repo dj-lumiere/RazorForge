@@ -151,9 +151,8 @@ dangerous routine C::rf_task_set_detached(task: Address)
 ### else the worker frees it. An Agent handle copy's `destruct` never calls this — so no double-free.
 dangerous routine C::rf_task_release(task: Address)
 
-### Opaque, stable identifier for the calling OS thread (lock re-entrancy detection). Safe: takes
-### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
-### the same thread.
+### Opaque, stable identifier for the calling OS thread. Safe: takes no pointers and only reads the OS thread id.
+### :returns: a per-thread id, equal across calls on the same thread.
 routine C::rf_current_thread_id() -> U64
 
 ### Identity of the current logical execution context — the coroutine if inside one (stable across
@@ -1570,6 +1569,37 @@ dangerous routine C::ingrid_integer_parse(
     scratch: Hijacked[U64],
     scratch_cap: U64,
 ) -> IngridWords
+
+# ============================================================================
+# The AccessManager (Ingrid/runtime-tessera/access.te)
+# ============================================================================
+# A Guarded's access is taken and given up here. `access` is the address of the policy's state, laid out as the
+# runtime's ExclusiveAccess (kind 1) or MultiReadAccess (kind 2), or for kind 0 an entity only checked to differ from
+# the other targets of a block. `mode` is 1 to read, 2 to write.
+
+### Takes the access, waiting while another agent holds it. :param access: the policy's state. :param kind: 1 or 2.
+### :param mode: 1 or 2. :throws: crashes with `ReenterDuringAccessError` when this agent holds it already, and with
+### `DeadlockError` (`[debug] deadlock-check`) when agents wait on each other.
+dangerous routine C::rf_access_lock(access: CPtr, kind: U32, mode: U32)
+
+### Takes the access if it is free, without waiting. :param access: the policy's state. :param kind: 1 or 2.
+### :param mode: 1 or 2. :returns: 1 when it took the access, else 0.
+dangerous routine C::rf_access_try_lock(access: CPtr, kind: U32, mode: U32) -> U8
+
+### Gives up the access this agent holds. :param access: the policy's state. :param kind: 1 or 2. :param mode: 1 or 2.
+dangerous routine C::rf_access_unlock(access: CPtr, kind: U32, mode: U32)
+
+### Names one target of a block that opens several at once. :param access: the policy's state, or the entity.
+### :param kind: 1, 2, or 0 for an entity only checked. :param mode: 1 or 2.
+dangerous routine C::rf_access_enlist(access: CPtr, kind: U32, mode: U32)
+
+### Opens the targets a block named, in the order of their addresses, waiting for each. :throws: crashes with
+### `AliasedTokensError` when two names are the same entity.
+dangerous routine C::rf_access_open_enlisted()
+
+### Opens the targets a block named only if every one is free right now. :returns: 1 when it opened them all, else 0
+### (then none is open).
+dangerous routine C::rf_access_try_open_enlisted() -> U8
 
 # ============================================================================
 # Roamed runtime (Ingrid/tessera/roam.te)

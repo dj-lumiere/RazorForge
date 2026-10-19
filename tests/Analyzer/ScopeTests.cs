@@ -344,7 +344,7 @@ public class ScopeTests
                             value: S32
 
                         routine test(data: Data)
-                            using data.view() as d
+                            viewing data as d
                                 show(d.value)
                             show(d.value)
                             return

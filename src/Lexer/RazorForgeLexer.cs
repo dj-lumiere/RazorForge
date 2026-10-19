@@ -219,6 +219,9 @@ public partial class RazorForgeLexer
 
             // Special keywords
             [key: "using"] = TokenType.Using,
+            // Access blocks: `viewing g as v`, `modifying a, b`, `try modifying g as m` ... `else`.
+            [key: "viewing"] = TokenType.Viewing,
+            [key: "modifying"] = TokenType.Modifying,
             [key: "as"] = TokenType.As,
             [key: "define"] = TokenType.Define,
             [key: "pass"] = TokenType.Pass,

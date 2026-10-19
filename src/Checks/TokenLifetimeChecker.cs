@@ -503,6 +503,14 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         case UsingStatement u when IsTrackedToken(type: u.Resource.ResolvedType):
                             Add(name: u.Name, value: u.Resource);
                             break;
+                        // A `viewing` / `modifying` block's token comes from its target: a Guarded, a token, an entity.
+                        case AccessStatement access:
+                            foreach (AccessTarget target in access.Targets)
+                            {
+                                Add(name: target.Name, value: target.Target);
+                            }
+
+                            break;
                         case AssignmentStatement { Target: IdentifierExpression t, Value: var value }
                             when IsTrackedToken(type: value.ResolvedType):
                             Add(name: t.Name, value: value);
@@ -1080,7 +1088,6 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 case UsingStatement usingStmt:
                 {
                     Expr(expr: usingStmt.Resource);
-                    State beforeBinding = _state.Clone();
                     _blockLocals.Push(item: []);
                     if (IsTrackedToken(type: usingStmt.Resource.ResolvedType))
                     {
@@ -1090,11 +1097,34 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     Statement(stmt: usingStmt.Body);
                     CloseBlock(at: usingStmt.Location);
                     _state?.Tokens.Remove(key: usingStmt.Name);
-                    if (usingStmt.FallbackBody is { } fallback)
+                    return;
+                }
+                case AccessStatement access:
+                {
+                    foreach (AccessTarget target in access.Targets)
+                    {
+                        Expr(expr: target.Target);
+                    }
+
+                    State? beforeTokens = _state?.Clone();
+                    _blockLocals.Push(item: []);
+                    foreach (AccessTarget target in access.Targets)
+                    {
+                        Bind(name: target.Name, value: target.Target, index: index);
+                    }
+
+                    Statement(stmt: access.Body);
+                    CloseBlock(at: access.Location);
+                    foreach (AccessTarget target in access.Targets)
+                    {
+                        _state?.Tokens.Remove(key: target.Name);
+                    }
+
+                    if (access.ElseBody is { } otherwise)
                     {
                         State? afterBody = _state;
-                        _state = beforeBinding;
-                        Statement(stmt: fallback);
+                        _state = beforeTokens;
+                        Statement(stmt: otherwise);
                         _state = State.Merge(a: afterBody, b: _state);
                     }
 

@@ -111,10 +111,10 @@ public class EnterableConformanceTests
 
     #endregion
 
-    #region using-required enforcement (MT access tokens)
+    #region A Guarded's access: passed to a call, or opened with a block
 
     [Fact]
-    public void Analyze_BareInspect_NotUsingBound_Errors()
+    public void Analyze_AccessPassedToCall_Ok()
     {
         string source = """
                         import IO/Console
@@ -129,18 +129,16 @@ public class EnterableConformanceTests
 
                         routine start()
                             var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                            peek(s.view())
+                            peek(c: s.view())
                             return
                         """;
 
-        AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "is written only as a 'using' resource");
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MtTokenRequiresUsing);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
     }
 
     [Fact]
-    public void Analyze_InspectOpenedWithUsing_Ok()
+    public void Analyze_InspectOpenedWithBlock_Ok()
     {
         string source = """
                         import IO/Console
@@ -151,7 +149,7 @@ public class EnterableConformanceTests
 
                         routine start()
                             var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
-                            using s.view() as v
+                            viewing s as v
                                 show(f"{v.value}")
                             return
                         """;
@@ -176,9 +174,9 @@ public class EnterableConformanceTests
                             return
                         """;
 
-        AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "using");
+        AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "isn't passed to a call");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MtTokenRequiresUsing);
+            filter: e => e.Code == SemanticDiagnosticCode.GuardAccessOutsideArgument);
     }
 
     #endregion
@@ -207,7 +205,7 @@ public class EnterableConformanceTests
                         """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "must obey 'Enterable'");
+            expectedErrorSubstring: "obeys 'Enterable'");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
     }

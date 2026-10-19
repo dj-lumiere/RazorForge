@@ -1,0 +1,51 @@
+module Tests/Stdlib/TryAccessApi
+
+import IO/Console
+# `try modifying` takes the access only when it is free right now, else runs `else` with nothing open. With several
+# targets the block opens them only when every one is free. An agent finds the access taken while `start()` holds it.
+
+entity Counter
+    value: S64
+
+routine Counter.bump(inc: S64)
+    me.value = me.value + inc
+    return
+
+routine try_access_bump(s: Guarded[Counter, Exclusive], other: Guarded[Counter, MultiRead]) -> Text
+    var outcome = "busy, skipped"
+    try modifying s, viewing other as o
+        s.bump(inc: o.value)
+        outcome = "bumped"
+    else
+        pass
+    return outcome
+
+routine start()
+    var s = Guarded[Counter, Exclusive](from: Counter(value: 10))
+    var r = Guarded[Counter, MultiRead](from: Counter(value: 1))
+
+    try modifying s as c
+        c.bump(inc: 5)
+        show("claimed")
+    else
+        show("contended-1")
+
+    # The access was given up at the previous block's end, so this one finds it free too.
+    try modifying s as c2
+        c2.bump(inc: 100)
+        show("claimed-again")
+    else
+        show("contended-2")
+
+    show(try_access_bump(s: s, other: r))
+    modifying r as held
+        var job = try_access_bump.to[Agent](s: s, other: r)
+        job.start_now()
+        show(job.retrieve())
+        held.value += 1
+
+    modifying s as c3
+        show(f"value: {c3.value}")
+
+    show("DONE")
+    return

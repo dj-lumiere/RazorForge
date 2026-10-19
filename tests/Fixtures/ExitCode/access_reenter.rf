@@ -1,0 +1,29 @@
+module Tests/ExitCode/AccessReenter
+
+import IO/Console
+# A routine called from inside a `modifying` block opens the same Guarded again: the agent would wait for its own
+# block to end. The program stops with ReenterDuringAccessError at the second open.
+
+entity Account
+    name: Text
+    balance: D128
+
+routine log_balances(payer: Guarded[Account, MultiRead], payee: Guarded[Account, MultiRead])
+    viewing payer, payee
+        show(f"{payer.name} {payer.balance}, {payee.name} {payee.balance}")
+    return
+
+routine transfer(payer: Guarded[Account, MultiRead], payee: Guarded[Account, MultiRead], amount: D128)
+    modifying payer as from_account, payee as to_account
+        from_account.balance -= amount
+        show("opened")
+        log_balances(payer: payer, payee: payee)
+        to_account.balance += amount
+    return
+
+routine start()
+    var ana = Guarded[Account, MultiRead](from: Account(name: "Ana", balance: 50.00))
+    var bo = Guarded[Account, MultiRead](from: Account(name: "Bo", balance: 20.00))
+    transfer(payer: ana, payee: bo, amount: 5.00)
+    show("not reached")
+    return

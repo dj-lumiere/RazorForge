@@ -82,10 +82,13 @@ public class ReceiverInheritedConstraintTests
     public void Analyze_ClaimOnReadOnly_Errors()
     {
         string source = LockPrelude + """
+                                      routine bump(c: Modifying[Counter])
+                                          c.value += 1
+                                          return
+
                                       routine start()
                                           var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
-                                          using s.modify() as c
-                                              show("nope")
+                                          bump(c: s.modify())
                                           return
                                       """;
 
@@ -99,10 +102,13 @@ public class ReceiverInheritedConstraintTests
     public void Analyze_InspectOnExclusive_Errors()
     {
         string source = LockPrelude + """
+                                      routine peek(c: Viewing[Counter])
+                                          show(f"{c.value}")
+                                          return
+
                                       routine start()
                                           var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
-                                          using s.view() as v
-                                              show("nope")
+                                          peek(c: s.view())
                                           return
                                       """;
 
@@ -120,9 +126,9 @@ public class ReceiverInheritedConstraintTests
 
                                       routine start()
                                           var s = Guarded[Counter, MultiRead](from: Counter(value: 10))
-                                          using s.view() as v
+                                          viewing s as v
                                               show(f"value: {v.value}")
-                                          using s.modify() as c
+                                          modifying s as c
                                               c.bump(inc: 5)
                                           return
                                       """;
@@ -141,7 +147,7 @@ public class ReceiverInheritedConstraintTests
 
                                       routine start()
                                           var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
-                                          using s.modify() as c
+                                          modifying s as c
                                               c.bump(inc: 1)
                                           return
                                       """;
@@ -156,7 +162,7 @@ public class ReceiverInheritedConstraintTests
         string source = LockPrelude + """
                                       routine start()
                                           var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
-                                          using s.view() as v
+                                          viewing s as v
                                               show(f"{v.value}")
                                           return
                                       """;

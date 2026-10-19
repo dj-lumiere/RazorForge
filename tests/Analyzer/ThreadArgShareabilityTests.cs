@@ -304,22 +304,22 @@ public class ThreadArgShareabilityTests
     }
 
     [Fact]
-    public void Analyze_LockBackedTokenThreadArg_Ok()
+    public void Analyze_BlockTokenThreadArg_Errors()
     {
-        // A token a `using` over a Guarded's lock bound is backed by that lock: judged by where it came from, it
-        // crosses like the Guarded itself.
+        // A token a `viewing` block opened on a Guarded lasts as long as the block, and the agent can run past it, so
+        // it is never handed to an agent: the agent takes the Guarded and opens its own access.
         string source = Prelude + """
                                   routine work(n: Viewing[Node]) -> S64
                                       return n.value
 
                                   routine start()
                                       var s = Guarded[Node, MultiRead](from: Node(value: 1))
-                                      using s.view() as v
+                                      viewing s as v
                                           var t = work.to[Agent](n: v)
                                           drop t.retrieve()
                                       return
                                   """;
 
-        AssertAnalyzesSa(source: source);
+        AssertHasErrorSa(source: source, expectedErrorSubstring: "the access ends with the block");
     }
 }

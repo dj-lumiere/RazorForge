@@ -1,0 +1,52 @@
+module Tests/Stdlib/AccessBlocksApi
+
+import IO/Console
+# `modifying` / `viewing` blocks over Guarded handles: one block opens several (in address order, whatever order the
+# block names them in), a verb carries over to the targets after it, a target without `as` keeps its own name, every
+# way out of a block gives its accesses up (a `return` computes its value first), and a block opens the same handles
+# again once the one before it ended.
+
+entity Account
+    name: Text
+    total: S64
+
+routine blocks_richer(a: Guarded[Account, MultiRead], b: Guarded[Account, MultiRead]) -> Text
+    viewing a, b
+        if a.total > b.total
+            return a.name
+        return b.name
+
+routine blocks_move(payer: Guarded[Account, MultiRead], payee: Guarded[Account, MultiRead], amount: S64)
+    modifying payer as from_account, payee as to_account
+        if from_account.total < amount
+            return
+        from_account.total -= amount
+        to_account.total += amount
+    return
+
+routine start()
+    var xs = List[Guarded[Account, Exclusive]]()
+    xs.add_last(value: Guarded[Account, Exclusive](from: Account(name: "x", total: 10)))
+    xs.add_last(value: Guarded[Account, Exclusive](from: Account(name: "y", total: 32)))
+    modifying xs[0] as a, xs[1] as b
+        a.total += b.total
+    modifying xs[1] as c, xs[0] as d
+        c.total += 1
+    modifying xs[0] as e
+        show(f"{e.total}")
+    modifying xs[1] as f
+        show(f"{f.total}")
+    var ana = Guarded[Account, MultiRead](from: Account(name: "Ana", total: 50))
+    var bo = Guarded[Account, MultiRead](from: Account(name: "Bo", total: 20))
+    blocks_move(payer: ana, payee: bo, amount: 40)
+    blocks_move(payer: ana, payee: bo, amount: 40)
+    show(blocks_richer(a: ana, b: bo))
+    each i in 0 til 3
+        modifying ana
+            if i == 1
+                continue
+            ana.total += 1
+    viewing ana, bo
+        show(f"{ana.name} {ana.total}, {bo.name} {bo.total}")
+    show("DONE")
+    return

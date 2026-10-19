@@ -294,7 +294,7 @@ public class ImplicitWrapperCopyVarDeclTests
                 e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>`using a.view() as v` is the supported form — accepted.</summary>
+    /// <summary>`viewing a as v` is the supported form: accepted.</summary>
     [Fact]
     public void Analyze_UsingBlock_ViewingFromCall_IsAccepted()
     {
@@ -306,7 +306,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                             var a = Node(value: 1)
-                            using a.view() as v
+                            viewing a as v
                                 show(f"{v.value}")
                             return
                         """;
