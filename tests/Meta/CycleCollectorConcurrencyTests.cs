@@ -103,7 +103,7 @@ public sealed partial class CycleCollectorConcurrencyTests
         using var p = Process.Start(startInfo: psi)!;
         Task<string> outTask = p.StandardOutput.ReadToEndAsync();
         Task<string> errTask = p.StandardError.ReadToEndAsync();
-        if (!p.WaitForExit(milliseconds: timeoutMs))
+        if (!p.WaitForExit(milliseconds: TestHelpers.ChildTimeoutMs(baseMs: timeoutMs)))
         {
             try { p.Kill(entireProcessTree: true); }
             catch

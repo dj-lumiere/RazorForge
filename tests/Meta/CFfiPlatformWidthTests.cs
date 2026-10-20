@@ -235,7 +235,7 @@ public sealed class CFfiPlatformWidthTests
         using var p = Process.Start(startInfo: psi)!;
         Task<string> outTask = p.StandardOutput.ReadToEndAsync();
         Task<string> errTask = p.StandardError.ReadToEndAsync();
-        const int timeoutMs = 120_000;
+        int timeoutMs = TestHelpers.ChildTimeoutMs(baseMs: 120_000);
         if (!p.WaitForExit(milliseconds: timeoutMs))
         {
             try { p.Kill(entireProcessTree: true); }

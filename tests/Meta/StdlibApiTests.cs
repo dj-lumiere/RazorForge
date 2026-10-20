@@ -376,7 +376,7 @@ public sealed partial class StdlibApiTests
         using var p = Process.Start(startInfo: psi)!;
         Task<string> outTask = p.StandardOutput.ReadToEndAsync();
         Task<string> errTask = p.StandardError.ReadToEndAsync();
-        const int timeoutMs = 300_000;
+        int timeoutMs = TestHelpers.ChildTimeoutMs(baseMs: 300_000);
         if (!p.WaitForExit(milliseconds: timeoutMs))
         {
             string hang = HangDiagnostics.Capture(root: p);
@@ -555,7 +555,7 @@ public sealed partial class StdlibApiTests
         using var p = Process.Start(startInfo: psi)!;
         Task<string> stdoutTask = p.StandardOutput.ReadToEndAsync();
         Task<string> stderrTask = p.StandardError.ReadToEndAsync();
-        const int timeoutMs = 60_000;
+        int timeoutMs = TestHelpers.ChildTimeoutMs(baseMs: 60_000);
         if (!p.WaitForExit(milliseconds: timeoutMs))
         {
             string hang = HangDiagnostics.Capture(root: p);

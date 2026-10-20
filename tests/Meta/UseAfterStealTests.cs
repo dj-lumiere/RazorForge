@@ -45,7 +45,7 @@ public sealed class UseAfterStealTests
         using var p = Process.Start(startInfo: psi)!;
         Task<string> outTask = p.StandardOutput.ReadToEndAsync();
         Task<string> errTask = p.StandardError.ReadToEndAsync();
-        if (!p.WaitForExit(milliseconds: 300_000))
+        if (!p.WaitForExit(milliseconds: TestHelpers.ChildTimeoutMs(baseMs: 300_000)))
         {
             try { p.Kill(entireProcessTree: true); }
             catch

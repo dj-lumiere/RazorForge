@@ -12,13 +12,16 @@ namespace RazorForge.Tests.Perf;
 
 /// <summary>
 /// Milestone-1 de-risk: measures the build-time ceiling when the stdlib is processed ONCE and
-/// reused via the registry snapshot, versus the cold path that reprocesses the stdlib every run.
-/// Not a correctness assertion — it prints timings via test output and always passes.
+/// reused via the registry snapshot, versus the cold path that reprocesses the stdlib every run. The timing test
+/// prints its numbers through the test output, the other tests check that a warm build emits what a cold one does.
 /// </summary>
 public sealed partial class WarmCompileBenchmark
 {
     [GeneratedRegex(pattern: @" !dbg ![0-9]+")]
     private static partial Regex DebugMetaRefPattern();
+
+    /// <summary>The xUnit category of tests that assert a wall-clock bound, which CI leaves out.</summary>
+    public const string TimingCategory = "Timing";
 
     private readonly ITestOutputHelper _out;
     public WarmCompileBenchmark(ITestOutputHelper output)
@@ -51,7 +54,13 @@ public sealed partial class WarmCompileBenchmark
         return sw.Elapsed.TotalMilliseconds;
     }
 
+    /// <summary>
+    /// Timing ceiling: a warm SA-only analyze must take under half the cold snapshot capture. A wall-clock bound
+    /// depends on the machine and on what else runs beside it, so it carries the <c>Timing</c> category, which CI
+    /// leaves out (<c>--filter "Category!=Timing"</c> in Anvila's workspace.yaml). A local <c>dotnet test</c> runs it.
+    /// </summary>
     [Fact]
+    [Trait(name: "Category", value: TimingCategory)]
     public void Ceiling_ColdVsWarm()
     {
         // COLD: full stdlib load + SA (this is what every CLI invocation pays today).

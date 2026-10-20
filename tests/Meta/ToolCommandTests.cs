@@ -309,7 +309,7 @@ public sealed class ToolCommandTests : IDisposable
         using Process p = Process.Start(startInfo: psi)!;
         Task<string> stdout = p.StandardOutput.ReadToEndAsync();
         Task<string> stderr = p.StandardError.ReadToEndAsync();
-        if (!p.WaitForExit(milliseconds: 600_000))
+        if (!p.WaitForExit(milliseconds: TestHelpers.ChildTimeoutMs(baseMs: 600_000)))
         {
             p.Kill(entireProcessTree: true);
             Assert.Fail(message: $"'{string.Join(separator: ' ', values: args)}' did not finish");
