@@ -2,8 +2,8 @@ module Tests/Stdlib/AddrApi
 
 import IO/Console
 # Addr: an address with no pointee type (LLVM `ptr`).
-# Two addresses are compared by identity (`===` / `!==`), an address moves by a signed byte count with
-# `offset(bytes:)`, and the distance between two is measured through `to[U64]()`.
+# Two addresses are compared by identity (`===` / `!==`). An address moves by a ByteSize with `+%` and `-%`, and
+# `b -% a` is the distance from `a` to `b`. All three wrap around and check no bounds.
 routine start()
     var u64_0x1000: U64 = 0x1000
     var a = u64_0x1000.to[Addr]()
@@ -13,18 +13,24 @@ routine start()
     show(f"a: {a}")
     show(f"b: {b}")
 
-    # Moving: offset(bytes:) forward and back
-    show(f"a.offset(bytes: 256): {a.offset(bytes: 256)}")
-    show(f"b.offset(bytes: -256): {b.offset(bytes: -256)}")
+    # Moving forward and back by a ByteSize
+    show(f"a +% 256b: {a +% 256b}")
+    show(f"b -% 256b: {b -% 256b}")
+    var step = ByteSize(bytes: 16)
+    show(f"a +% step * 2: {a +% step * 2}")
 
-    # Distance through to[U64]()
-    show(f"b - a in bytes: {b.to[U64]() - a.to[U64]()}")
+    # The distance between two addresses
+    var distance = b -% a
+    show(f"b -% a in bytes: {distance.byte_size()}")
+    show(f"a +% (b -% a) === b: {a +% distance === b}")
+
+    # Wrapping: back past the address 0 and forward again
+    show(f"a -% 8192b +% 8192b === a: {a -% 8192b +% 8192b === a}")
 
     # Identity
     show(f"a === a: {a === a}")
     show(f"a === b: {a === b}")
     show(f"a !== b: {a !== b}")
-    show(f"a.offset(bytes: 0x1000) === b: {a.offset(bytes: 0x1000) === b}")
 
     # The address 0
     show(f"Addr.hollow().is_hollow(): {Addr.hollow().is_hollow()}")

@@ -786,11 +786,13 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   internal buffer/pointer mechanism, used inside `danger`.
 - **`Addr`** — an address with no pointee type, LLVM `ptr` (C's `void*`): what the allocator and native code
   take and hand back. It names a place, so two compare with `===` / `!==` (`==` on an `Addr` is RF-S061 and
-  points there), `Addr.hollow()` is the address 0 (`is_hollow()` / `is_not_hollow()`), `a.offset(bytes: n)`
-  moves it by a signed byte count, and it has no ordering or other arithmetic: the distance between two is
-  `b.to[U64]() - a.to[U64]()`. `x.to[Addr]()` / `a.to[U64]()` convert, `Hijacked[T](from: a)` reads it as a
-  `T`. `Address` and `CPtr` are both `Addr` now (`migrate --step addr` renames them, rewrites `==` / `!=`
-  between known addresses to `===` / `!==`, and lists what it cannot type).
+  points there), `Addr.hollow()` is the address 0 (`is_hollow()` / `is_not_hollow()`). It moves by a
+  `ByteSize` with the wrapping operators only: `a +% 16b`, `a -% size`, and `b -% a` is the distance from `a` to
+  `b` as a `ByteSize` (all three wrap around and check no bounds, obeying `WrappingOffsetAddable` /
+  `WrappingOffsetSubtractable`). Plain `+` / `-` on an `Addr` are errors that point to `+%` / `-%`, and it has no
+  ordering. `x.to[Addr]()` / `a.to[U64]()` convert, `Hijacked[T](from: a)` reads it as a `T`. `Address` and
+  `CPtr` are both `Addr` now (`migrate --step addr` renames them, rewrites `==` / `!=` between known addresses to
+  `===` / `!==`, rewrites `a.offset(bytes: 8)` on a known address to `a +% 8b`, and lists what it cannot type).
 - Records never use tokens or `as_entity` — those are entity concepts.
 - `danger` blocks / `dangerous` routines mark **only** operations that can
   ACTUALLY cause memory-unsafety — UB, a memory race, use-after-free,

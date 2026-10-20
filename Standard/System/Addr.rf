@@ -4,12 +4,12 @@ module System
 ### runtime gives back, a callback's state. It says where, not what. Memory is read and written through a typed
 ### `Hijacked[T](from: a)`.
 ### Two addresses name the same place when `a === b` (`a !== b` when they differ). An address is not a number: it has no
-### ordering and no arithmetic besides moving it by a byte count with `offset(bytes:)`. To measure the distance between
-### two addresses, convert each with `to[U64]()` and subtract the numbers.
+### ordering, and its only arithmetic is moving it by a `ByteSize` with `+%` / `-%` (`a +% 16b`) and measuring two
+### with `-%` (`b -% a` is the bytes from `a` to `b`). Both wrap around and check no bounds.
 ### :see: {Hijacked[T]}, {ByteSize}
 @llvm("ptr")
 record Addr
-obeys ConstCompatible, Copyable
+obeys ConstCompatible, Copyable, WrappingOffsetAddable, WrappingOffsetSubtractable
     pass
 
 ### Returns the address 0, which names no memory.
@@ -23,8 +23,7 @@ common routine Addr.hollow() -> Addr
 routine U64.to[Addr]() -> Addr
     return LLVM::reinterpret_bits[U64, Addr](value: me)
 
-### Reads this address as a `U64`: `a.to[U64]()`. This is how two addresses are measured against each other:
-### `b.to[U64]() - a.to[U64]()` is the byte distance from `a` to `b`.
+### Reads this address as a `U64`: `a.to[U64]()`. The distance between two addresses is `b -% a`, a `ByteSize`.
 ### :returns: The address as a number.
 routine Addr.to[U64]() -> U64
     return LLVM::reinterpret_bits[Addr, U64](value: me)
@@ -77,13 +76,30 @@ routine Addr.is_not_hollow() -> Bool
 # Moving
 # ============================================================================
 
-### The address `bytes` bytes further on (back when `bytes` is negative). Nothing checks bounds: staying inside the
-### block is the caller's job.
-### :param bytes: The signed byte distance to move.
+### The address `you` bytes further on: `me +% you`. It wraps around the end of the address space, and nothing checks
+### bounds: staying inside the block is the caller's job.
+### :param you: How far to move.
 ### :returns: The moved address.
 @readonly
-routine Addr.offset(bytes: S64) -> Addr
-    return LLVM::byte_offset(base: me, bytes: bytes)
+routine Addr.add_wrap(you: ByteSize) -> Addr
+    return LLVM::byte_offset(base: me, bytes: LLVM::reinterpret_bits[ByteSize, S64](you))
+
+### The address `you` bytes back: `me -% you`. It wraps around the start of the address space, and nothing checks
+### bounds.
+### :param you: How far to move back.
+### :returns: The moved address.
+@readonly
+routine Addr.sub_wrap(you: ByteSize) -> Addr
+    var back: S64 = 0
+    return LLVM::byte_offset(base: me, bytes: back -% LLVM::reinterpret_bits[ByteSize, S64](you))
+
+### The distance in bytes from `you` to this address: `me -% you`. With `you` past this address it wraps around, so
+### the earlier address goes on the right.
+### :param you: The address to measure from.
+### :returns: The distance.
+@readonly
+routine Addr.sub_wrap(you: Addr) -> ByteSize
+    return LLVM::reinterpret_bits[U64, ByteSize](me.to[U64]() -% you.to[U64]())
 
 # ============================================================================
 # Text Representation and Parsing
