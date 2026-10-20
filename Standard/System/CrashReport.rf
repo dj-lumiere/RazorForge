@@ -71,15 +71,7 @@ routine crash_report_rethrown(type_name: Text, message: Text, error: Crashables,
     danger
         var depth = error.thrown_trace_depth()
         var frames = error.thrown_trace_frames()
-        if depth > 0
-            var first = frames.stride(count: LLVM::sign_extend[S32, S64](LLVM::bit_and(a: depth -% 1, b: 31))).peek()
-            crash_write(text: "at ")
-            crash_write_c_text(text: first.file)
-            crash_write(text: ":")
-            crash_write_number(value: first.line)
-            crash_write(text: ":")
-            crash_write_number(value: first.column)
-            crash_write(text: "\n")
+        crash_write_first_position(depth: depth, frames: frames)
         crash_write_frames(depth: depth, frames: frames)
     crash_write(text: "Thrown again at ")
     if line == 0 and crash_write_library_caller(library: file)
@@ -174,6 +166,32 @@ routine c_text_code_point_at(text: Address, at: U64, code: U32) -> U64
         k = k +% 1
     return count
 
+### Writes where a trace was raised: `at`, then the position of its most recent frame with a line (a library frame in
+### Suflae has none, and the program's call into the library names the place). Writes nothing when no frame has one.
+### :param depth: How many frames were pushed in all.
+### :param frames: The first of the 32 frames, a ring the depth indexes modulo 32.
+@untraced
+routine crash_write_first_position(depth: S32, frames: Hijacked[TraceFrame])
+    var shown = depth
+    if shown > 32
+        shown = 32
+    var i: S32 = 0
+    while i < shown
+        var index = LLVM::bit_and(a: depth -% 1 -% i, b: 31)
+        danger
+            var frame = frames.stride(count: LLVM::sign_extend[S32, S64](index)).peek()
+            if frame.line != 0
+                crash_write(text: "at ")
+                crash_write_c_text(text: frame.file)
+                crash_write(text: ":")
+                crash_write_number(value: frame.line)
+                crash_write(text: ":")
+                crash_write_number(value: frame.column)
+                crash_write(text: "\n")
+                return
+        i = i +% 1
+    return
+
 ### Writes the calling thread's crash trace, most recent frame first. Writes nothing when the build keeps no
 ### trace.
 @untraced
@@ -182,7 +200,8 @@ routine crash_write_trace()
     return
 
 ### Writes a crash trace, most recent frame first: the trace keeps the last 32 frames and says how many there
-### were in all when there were more. Writes nothing when the depth is 0 (a build that keeps no trace).
+### were in all when there were more. Of library frames named by the library (Suflae) it writes only the routine
+### the program called. Writes nothing when the depth is 0 (a build that keeps no trace).
 ### :param depth: How many frames were pushed in all.
 ### :param frames: The first of the 32 frames, a ring the depth indexes modulo 32.
 @untraced
@@ -194,24 +213,32 @@ routine crash_write_frames(depth: S32, frames: Hijacked[TraceFrame])
     if shown > 32
         shown = 32
     var i: S32 = 0
+    var written: S32 = 0
     while i < shown
         # The frames are a ring of 32: the most recent is at (depth - 1) mod 32.
         var index = LLVM::bit_and(a: depth -% 1 -% i, b: 31)
         danger
             var frame = frames.stride(count: LLVM::sign_extend[S32, S64](index)).peek()
-            crash_write(text: "  ")
-            crash_write_number(value: i)
-            crash_write(text: ": at ")
-            crash_write_c_text(text: frame.routine_name)
-            crash_write(text: " (")
-            crash_write_c_text(text: frame.file)
-            # A frame with no line names a place, not a file position (the standard library in Suflae).
-            if frame.line != 0
-                crash_write(text: ":")
-                crash_write_number(value: frame.line)
-                crash_write(text: ":")
-                crash_write_number(value: frame.column)
-            crash_write(text: ")\n")
+            # A frame with no line is a library frame named by the library, not by its file (Suflae). Of the library
+            # frames in a row only the oldest is written: the routine the program called, not the ones it called.
+            var hidden = false
+            if frame.line == 0 and i +% 1 < shown
+                var older = LLVM::bit_and(a: depth -% 2 -% i, b: 31)
+                hidden = frames.stride(count: LLVM::sign_extend[S32, S64](older)).peek().line == 0
+            if not hidden
+                crash_write(text: "  ")
+                crash_write_number(value: written)
+                crash_write(text: ": at ")
+                crash_write_c_text(text: frame.routine_name)
+                crash_write(text: " (")
+                crash_write_c_text(text: frame.file)
+                if frame.line != 0
+                    crash_write(text: ":")
+                    crash_write_number(value: frame.line)
+                    crash_write(text: ":")
+                    crash_write_number(value: frame.column)
+                crash_write(text: ")\n")
+                written = written +% 1
         i = i +% 1
     if depth > 32
         crash_write(text: "  ... (")
