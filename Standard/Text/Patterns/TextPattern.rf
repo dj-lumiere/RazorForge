@@ -1,0 +1,125 @@
+module Text/Patterns
+
+### A pattern over text, made once from pieces and then looked for in texts:
+###
+### ```razorforge
+### import Text/Patterns
+###
+### preset DATE: TextPattern = TextPattern.of([
+###     capture("year", digit.repeat(4)),
+###     text("-"),
+###     capture("month", digit.repeat(2)),
+###     text("-"),
+###     capture("day", digit.repeat(2)),
+### ])
+### ```
+###
+### A `preset` pattern is compiled when the program is built. A search takes time in proportion to the text's
+### length times the pattern's size, never by trying the text again and again: no pattern and no text make it blow
+### up. A match is the leftmost one, and from there every repetition takes as many rounds as it can and each either
+### chooses by its rule (`either_longer`, `either_shorter`).
+record TextPattern
+    ### The compiled program, as the engine reads it. Written by `of` and `from_regex`.
+    program: Text
+
+### A pattern of pieces matched one after another.
+### :param pieces: The pieces, in order.
+### :returns: The pattern.
+### :throws: {InvalidPatternError} The pieces don't make a pattern: two captures share a name.
+failable common routine TextPattern.of(pieces: List[TextPiece]) -> TextPattern
+    return TextPattern.of(pieces: pieces, ignore_case: false)
+
+### A pattern of pieces matched one after another, every letter in either case when `ignore_case` is true.
+### :param pieces: The pieces, in order.
+### :param ignore_case: Whether letters match in either case.
+### :returns: The pattern.
+### :throws: {InvalidPatternError} The pieces don't make a pattern: two captures share a name.
+failable common routine TextPattern.of(pieces: List[TextPiece], ignore_case: Bool) -> TextPattern
+    var codes = List[Text]()
+    each piece in pieces
+        codes.add_last(value: piece.code)
+    var tree = branches_code(kind: NODE_SEQUENCE, codes: codes)
+    if ignore_case
+        tree = word_text(word: NODE_IGNORE_CASE) + tree
+    return TextPattern(program: compile_code(code: tree, mode: MODE_TEXT))
+
+### A pattern from the usual regular expression syntax, for a pattern that comes from outside the program (a
+### setting, a user's input): `TextPattern.from_regex("(?<year>\\d{4})-(?<month>\\d{2})")`. Groups without a name
+### capture under "1", "2", ...; `|` takes the alternative that matches the longest text.
+### :param regex: The expression.
+### :returns: The pattern.
+### :throws: {PatternSyntaxError} The expression can't be read, or asks for what the patterns don't do: a
+###   backreference, lookahead or lookbehind, a shortest repetition (`*?`).
+failable common routine TextPattern.from_regex(regex: Text) -> TextPattern
+    return TextPattern(program: regex_code(regex: regex, mode: MODE_TEXT))
+
+### Whether all of `text` matches the pattern.
+### :param text: The text.
+### :returns: `true` when the whole text matches.
+@readonly
+routine TextPattern.matches(text: Text) -> Bool
+    var result = C::ingrid_pattern_matches_utf32(
+        program: me.program.data,
+        program_count: me.program.count(),
+        text: text.data,
+        text_count: text.count(),
+    )
+    if result < 0
+        pierce InvalidPatternError(message: "This TextPattern's program isn't a text pattern's.")
+    return result == 1
+
+### The leftmost place the pattern matches in `text`.
+### :param text: The text.
+### :returns: The match.
+### :throws: {AbsentValueError} The pattern matches nowhere in the text (`try p.find(t)` gives `none`).
+@readonly
+failable routine TextPattern.find(text: Text) -> TextMatch
+    var slots = find_text_slots(program: me.program, text: text, from: 0)
+    if slots.is_empty()
+        throw AbsentValueError()
+    return TextMatch(source: text, slots: slots, program: me.program)
+
+### Every place the pattern matches in `text`, in order and none overlapping: after a match the search goes on where
+### it ended (one character further after a match of no characters).
+### :param text: The text.
+### :returns: The matches.
+@readonly
+routine TextPattern.find_all(text: Text) -> List[TextMatch]
+    var found = List[TextMatch]()
+    var from: U64 = 0
+    while from <= text.count()
+        var slots = find_text_slots(program: me.program, text: text, from: from)
+        if slots.is_empty()
+            break
+        var start = slot_value(slots: slots, slot: 0)
+        var end = slot_value(slots: slots, slot: 1)
+        found.add_last(value: TextMatch(source: text, slots: slots, program: me.program))
+        from = if end > start then end else end + 1
+    return found
+
+### `text` with every match (as `find_all` finds them) replaced by `with`.
+### :param text: The text.
+### :param with: What each match becomes.
+### :returns: The new text.
+@readonly
+routine TextPattern.replace(text: Text, `with`: Text) -> Text
+    var result = ""
+    var copied: U64 = 0
+    each found in me.find_all(text: text)
+        result = result + text[copied til found.start()] + `with`
+        copied = found.end()
+    return result + text[copied til text.count()]
+
+### The parts of `text` between the matches (as `find_all` finds them), the part before the first match and the part
+### after the last included. A text with no match is one part.
+### :param text: The text.
+### :returns: The parts.
+@readonly
+routine TextPattern.split(text: Text) -> List[Text]
+    var parts = List[Text]()
+    var part: U64 = 0
+    each found in me.find_all(text: text)
+        parts.add_last(value: text[part til found.start()])
+        part = found.end()
+    parts.add_last(value: text[part til text.count()])
+    return parts

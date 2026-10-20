@@ -1,0 +1,414 @@
+module Text/Patterns
+
+# The words a pattern is made of, kept in a `Text` so a pattern is a value a preset can hold. A piece is a tree of
+# 32-bit words (its kind, its operands, then its children), and a compiled pattern is a program of words. Each word
+# is two characters: its high 16 bits plus 0x10000, then its low 16 bits plus 0x10000. The engine that compiles the
+# tree and runs the program is Ingrid's (`Ingrid/tessera/patterns.te`), one engine for every language.
+
+### A piece node: units in a row.
+secret preset NODE_LITERAL: U32 = 1
+### A piece node: one unit in (or outside) a list of ranges.
+secret preset NODE_RANGES: U32 = 2
+### A piece node: children one after another.
+secret preset NODE_SEQUENCE: U32 = 3
+### A piece node: the child that matches the longest text.
+secret preset NODE_EITHER_LONGER: U32 = 4
+### A piece node: the child that matches the shortest text.
+secret preset NODE_EITHER_SHORTER: U32 = 5
+### A piece node: the child repeated.
+secret preset NODE_REPEAT: U32 = 6
+### A piece node: the child's text kept under a name.
+secret preset NODE_CAPTURE: U32 = 7
+### A piece node: the child matched in either case.
+secret preset NODE_IGNORE_CASE: U32 = 9
+### A repetition's "no limit".
+secret preset REPEAT_UNBOUNDED: U32 = 4294967295
+### The mode of a text pattern.
+secret preset MODE_TEXT: U32 = 0
+### The mode of a bytes pattern.
+secret preset MODE_BYTES: U32 = 1
+
+### Compiles a piece tree into a program, from Ingrid's Tessera library (`Ingrid/tessera/patterns.te`).
+### :param code: The tree's characters.
+### :param code_count: How many there are.
+### :param mode: 0 for text, 1 for bytes.
+### :param out: Where the program's characters go.
+### :param out_count: How many fit there.
+### :returns: How many characters the program takes, or -1 when the tree doesn't compile.
+routine C::ingrid_pattern_compile(
+    code: Hijacked[Char],
+    code_count: U64,
+    mode: U32,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> S64
+
+### Why a piece tree doesn't compile, as characters.
+### :param code: The tree's characters.
+### :param code_count: How many there are.
+### :param mode: 0 for text, 1 for bytes.
+### :param out: Where the message goes.
+### :param out_count: How many characters fit there.
+### :returns: How many characters the message has.
+routine C::ingrid_pattern_compile_message(
+    code: Hijacked[Char],
+    code_count: U64,
+    mode: U32,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> U64
+
+### Reads a regular expression and compiles it.
+### :param regex: The expression's characters.
+### :param regex_count: How many there are.
+### :param mode: 0 for text, 1 for bytes.
+### :param out: Where the program's characters go.
+### :param out_count: How many fit there.
+### :returns: How many characters the program takes, or -1 when the expression can't be read.
+routine C::ingrid_pattern_from_regex(
+    regex: Hijacked[Char],
+    regex_count: U64,
+    mode: U32,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> S64
+
+### Why a regular expression can't be read, and where, as characters.
+### :param regex: The expression's characters.
+### :param regex_count: How many there are.
+### :param mode: 0 for text, 1 for bytes.
+### :param out: Where the message goes.
+### :param out_count: How many characters fit there.
+### :returns: How many characters the message has.
+routine C::ingrid_pattern_regex_message(
+    regex: Hijacked[Char],
+    regex_count: U64,
+    mode: U32,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> U64
+
+### How many capture slots a match of a program fills.
+### :param program: The program's characters.
+### :param program_count: How many there are.
+### :param mode: 0 for text, 1 for bytes.
+### :returns: The slot count, 0 when the characters aren't such a program.
+routine C::ingrid_pattern_slot_count(program: Hijacked[Char], program_count: U64, mode: U32) -> U64
+
+### The number of the capture with a name, from 1.
+### :param program: The program's characters.
+### :param program_count: How many there are.
+### :param mode: 0 for text, 1 for bytes.
+### :param name: The name's characters.
+### :param name_count: How many there are.
+### :returns: The capture's number, 0 when no capture has the name.
+routine C::ingrid_pattern_group_number(
+    program: Hijacked[Char],
+    program_count: U64,
+    mode: U32,
+    name: Hijacked[Char],
+    name_count: U64,
+) -> U64
+
+### The leftmost match of a text pattern at or after a position.
+### :param program: The program's characters.
+### :param program_count: How many there are.
+### :param text: The text's characters.
+### :param text_count: How many there are.
+### :param from: The first position a match may start at.
+### :param out: Where the slots go, four characters each.
+### :param out_count: How many characters fit there.
+### :returns: 1 when there is a match, 0 when there is none, -1 when the program isn't a text pattern's.
+routine C::ingrid_pattern_find_utf32(
+    program: Hijacked[Char],
+    program_count: U64,
+    text: Hijacked[Char],
+    text_count: U64,
+    from: U64,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> S64
+
+### The leftmost match of a bytes pattern at or after a position.
+### :param program: The program's characters.
+### :param program_count: How many there are.
+### :param bytes: The bytes.
+### :param bytes_count: How many there are.
+### :param from: The first position a match may start at.
+### :param out: Where the slots go, four characters each.
+### :param out_count: How many characters fit there.
+### :returns: 1 when there is a match, 0 when there is none, -1 when the program isn't a bytes pattern's.
+routine C::ingrid_pattern_find_bytes(
+    program: Hijacked[Char],
+    program_count: U64,
+    bytes: Hijacked[Byte],
+    bytes_count: U64,
+    from: U64,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> S64
+
+### Whether all of a text matches a text pattern.
+### :param program: The program's characters.
+### :param program_count: How many there are.
+### :param text: The text's characters.
+### :param text_count: How many there are.
+### :returns: 1 when it does, 0 when it doesn't, -1 when the program isn't a text pattern's.
+routine C::ingrid_pattern_matches_utf32(
+    program: Hijacked[Char],
+    program_count: U64,
+    text: Hijacked[Char],
+    text_count: U64,
+) -> S64
+
+### Whether all of some bytes match a bytes pattern.
+### :param program: The program's characters.
+### :param program_count: How many there are.
+### :param bytes: The bytes.
+### :param bytes_count: How many there are.
+### :returns: 1 when they do, 0 when they don't, -1 when the program isn't a bytes pattern's.
+routine C::ingrid_pattern_matches_bytes(
+    program: Hijacked[Char],
+    program_count: U64,
+    bytes: Hijacked[Byte],
+    bytes_count: U64,
+) -> S64
+
+### The two characters of one word.
+### :param word: The word.
+### :returns: Its characters.
+secret routine word_text(word: U32) -> Text
+    var high = ((word >>> 16) + 0x10000).to[Char]()
+    var low = ((word & 0xFFFF) + 0x10000).to[Char]()
+    return high.to[Text]() + low.to[Text]()
+
+### The characters of several words.
+### :param words: The words.
+### :returns: Their characters.
+secret routine words_text(words: List[U32]) -> Text
+    var chars = List[Char]()
+    each word in words
+        chars.add_last(value: ((word >>> 16) + 0x10000).to[Char]())
+        chars.add_last(value: ((word & 0xFFFF) + 0x10000).to[Char]())
+    return Text(from_list: steal chars)
+
+### A literal node of the code points of a text, as characters.
+### :param value: The text.
+### :returns: The node's characters.
+secret routine literal_code(value: Text) -> Text
+    var words = List[U32]()
+    words.add_last(value: NODE_LITERAL)
+    words.add_last(value: value.count().to[U32]())
+    each letter in value
+        words.add_last(value: letter.to[U32]())
+    return words_text(words: words)
+
+### A ranges node with one range per character of a text, as characters.
+### :param chars: The characters.
+### :param negated: Whether the characters outside them are meant.
+### :returns: The node's characters.
+secret routine set_code(chars: Text, negated: Bool) -> Text
+    var words = List[U32]()
+    words.add_last(value: NODE_RANGES)
+    words.add_last(value: if negated then 1 else 0)
+    words.add_last(value: chars.count().to[U32]())
+    each letter in chars
+        words.add_last(value: letter.to[U32]())
+        words.add_last(value: letter.to[U32]())
+    return words_text(words: words)
+
+### A repeat node over a piece's characters.
+### :param code: The piece's characters.
+### :param min: The fewest rounds.
+### :param max: The most rounds, `REPEAT_UNBOUNDED` for no limit.
+### :returns: The node's characters.
+secret routine repeat_code(code: Text, min: U32, max: U32) -> Text
+    return word_text(word: NODE_REPEAT) + word_text(word: min) + word_text(word: max) + code
+
+### The rounds a range of counts asks for, crashing when it can't be a repetition's.
+### :param range: The counts: `2 to 4`, `2 til 5`.
+### :returns: The fewest and the most rounds.
+### :throws: {InvalidPatternError} The range is empty, counts down, steps by more than 1, or goes past a pattern's
+###   limit.
+secret failable routine repeat_bounds(range: Range[U64]) -> (U32, U32)
+    if range.descending or range.get_step() != 1
+        throw InvalidPatternError(message: "A repetition's range counts up by 1: write 'repeat(2 to 4)'.")
+    var last = range.end
+    if not range.inclusive
+        if range.end == 0
+            throw InvalidPatternError(message: "A repetition's range holds no count.")
+        last = range.end - 1
+    if range.start > last
+        throw InvalidPatternError(message: "A repetition's range holds no count: its end is before its start.")
+    if last >= REPEAT_UNBOUNDED.to[U64]()
+        throw InvalidPatternError(message: "A repetition asks for more rounds than a pattern holds.")
+    return (range.start.to[U32](), last.to[U32]())
+
+### A node of several pieces' characters.
+### :param kind: The node's kind.
+### :param codes: The pieces' characters.
+### :returns: The node's characters.
+secret routine branches_code(kind: U32, codes: List[Text]) -> Text
+    var result = word_text(word: kind) + word_text(word: codes.count().to[U32]())
+    each code in codes
+        result = result + code
+    return result
+
+### A capture node over a piece's characters.
+### :param name: The capture's name.
+### :param code: The piece's characters.
+### :returns: The node's characters.
+secret routine capture_code(name: Text, code: Text) -> Text
+    var words = List[U32]()
+    words.add_last(value: NODE_CAPTURE)
+    words.add_last(value: name.count().to[U32]())
+    each letter in name
+        words.add_last(value: letter.to[U32]())
+    return words_text(words: words) + code
+
+### Compiles a piece tree into a program, throwing the compiler's reason when it doesn't compile.
+### :param code: The tree's characters.
+### :param mode: `MODE_TEXT` or `MODE_BYTES`.
+### :returns: The program's characters.
+### :throws: {InvalidPatternError} The pieces don't make a pattern (two captures with one name, ...).
+secret failable routine compile_code(code: Text, mode: U32) -> Text
+    var room = code.count() * 4 + 256
+    loop
+        var program = text_alloc(count: room)
+        var needed: S64 = C::ingrid_pattern_compile(
+            code: code.data,
+            code_count: code.count(),
+            mode: mode,
+            out: program.data,
+            out_count: room,
+        )
+        if needed < 0
+            throw InvalidPatternError(message: compile_message(code: code, mode: mode))
+        if needed.to[U64]() <= room
+            return program[0 til needed.to[U64]()]
+        room = needed.to[U64]()
+
+### Why a piece tree doesn't compile.
+### :param code: The tree's characters.
+### :param mode: `MODE_TEXT` or `MODE_BYTES`.
+### :returns: The message.
+secret routine compile_message(code: Text, mode: U32) -> Text
+    var message = text_alloc(count: 400)
+    var written: U64 = C::ingrid_pattern_compile_message(
+        code: code.data,
+        code_count: code.count(),
+        mode: mode,
+        out: message.data,
+        out_count: 400,
+    )
+    return message[0 til written.min(400)]
+
+### Reads a regular expression and compiles it, throwing the reader's reason and position when it can't.
+### :param regex: The expression.
+### :param mode: `MODE_TEXT` or `MODE_BYTES`.
+### :returns: The program's characters.
+### :throws: {PatternSyntaxError} The expression isn't one the patterns can match.
+secret failable routine regex_code(regex: Text, mode: U32) -> Text
+    var room = regex.count() * 64 + 256
+    loop
+        var program = text_alloc(count: room)
+        var needed: S64 = C::ingrid_pattern_from_regex(
+            regex: regex.data,
+            regex_count: regex.count(),
+            mode: mode,
+            out: program.data,
+            out_count: room,
+        )
+        if needed < 0
+            var message = text_alloc(count: 400)
+            var written: U64 = C::ingrid_pattern_regex_message(
+                regex: regex.data,
+                regex_count: regex.count(),
+                mode: mode,
+                out: message.data,
+                out_count: 400,
+            )
+            throw PatternSyntaxError(message: message[0 til written.min(400)])
+        if needed.to[U64]() <= room
+            return program[0 til needed.to[U64]()]
+        room = needed.to[U64]()
+
+### The value of one slot of a match.
+### :param slots: The slots' characters, four per slot.
+### :param slot: The slot.
+### :returns: The position, `U64_MAX` for a capture that took no part.
+secret routine slot_value(slots: Text, slot: U64) -> U64
+    var value: U64 = 0
+    each part in 0 til 4
+        var bits = (slots[slot * 4 + part.to[U64]()].to[U32]() - 0x10000).to[U64]()
+        value = (value << 16) | bits
+    return value
+
+### The capture slots of the leftmost match of a program at or after a position.
+### :param program: The program's characters.
+### :param text: The text.
+### :param from: The first position a match may start at.
+### :returns: The slots' characters, or an empty text when there is no match.
+secret routine find_text_slots(program: Text, text: Text, from: U64) -> Text
+    var count: U64 = C::ingrid_pattern_slot_count(
+        program: program.data,
+        program_count: program.count(),
+        mode: MODE_TEXT,
+    )
+    if count == 0
+        pierce InvalidPatternError(message: "This TextPattern's program isn't a text pattern's.")
+    var slots = text_alloc(count: count * 4)
+    var found: S64 = C::ingrid_pattern_find_utf32(
+        program: program.data,
+        program_count: program.count(),
+        text: text.data,
+        text_count: text.count(),
+        from: from,
+        out: slots.data,
+        out_count: count * 4,
+    )
+    if found < 0
+        pierce InvalidPatternError(message: "This TextPattern's program isn't a text pattern's.")
+    return if found == 1 then slots else ""
+
+### The capture slots of the leftmost match of a bytes program at or after a position.
+### :param program: The program's characters.
+### :param bytes: The bytes.
+### :param from: The first position a match may start at.
+### :returns: The slots' characters, or an empty text when there is no match.
+secret routine find_bytes_slots(program: Text, bytes: Bytes, from: U64) -> Text
+    var count: U64 = C::ingrid_pattern_slot_count(
+        program: program.data,
+        program_count: program.count(),
+        mode: MODE_BYTES,
+    )
+    if count == 0
+        pierce InvalidPatternError(message: "This BytesPattern's program isn't a bytes pattern's.")
+    var slots = text_alloc(count: count * 4)
+    var found: S64 = C::ingrid_pattern_find_bytes(
+        program: program.data,
+        program_count: program.count(),
+        bytes: bytes.data,
+        bytes_count: bytes.count(),
+        from: from,
+        out: slots.data,
+        out_count: count * 4,
+    )
+    if found < 0
+        pierce InvalidPatternError(message: "This BytesPattern's program isn't a bytes pattern's.")
+    return if found == 1 then slots else ""
+
+### The number of a program's capture named `name`.
+### :param program: The program's characters.
+### :param mode: `MODE_TEXT` or `MODE_BYTES`.
+### :param name: The name.
+### :returns: The capture's number, 0 when there is none.
+secret routine group_number(program: Text, mode: U32, name: Text) -> U64
+    var number: U64 = C::ingrid_pattern_group_number(
+        program: program.data,
+        program_count: program.count(),
+        mode: mode,
+        name: name.data,
+        name_count: name.count(),
+    )
+    return number

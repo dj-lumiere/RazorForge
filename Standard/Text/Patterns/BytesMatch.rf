@@ -1,0 +1,53 @@
+module Text/Patterns
+
+### Where a `BytesPattern` matched: its place in the bytes (`start()`, `end()`), the bytes it took (`bytes()`), and the
+### bytes each capture took (`group("name")`). Positions count bytes from 0, and `end()` is the position just past
+### the match.
+record BytesMatch
+    ### The bytes searched.
+    secret source: Bytes
+    ### The capture slots, four characters each: the match's start and end, then each capture's.
+    secret slots: Text
+    ### The pattern's program, for the capture names.
+    secret program: Text
+
+### Where the match starts.
+### :returns: The position of its first byte.
+@readonly
+routine BytesMatch.start() -> U64
+    return slot_value(slots: me.slots, slot: 0)
+
+### Where the match ends.
+### :returns: The position just past its last byte.
+@readonly
+routine BytesMatch.end() -> U64
+    return slot_value(slots: me.slots, slot: 1)
+
+### The bytes the match took.
+### :returns: The bytes.
+@readonly
+routine BytesMatch.bytes() -> Bytes
+    return me.source[me.start() til me.end()]
+
+### The bytes a capture took.
+### :param name: The capture's name.
+### :returns: The bytes.
+### :throws: {CaptureNameError} The pattern has no capture of that name.
+### :throws: {AbsentValueError} The capture took no part in the match.
+@readonly
+failable routine BytesMatch.group(name: Text) -> Bytes
+    var number = group_number(program: me.program, mode: MODE_BYTES, name: name)
+    if number == 0
+        throw CaptureNameError(name: name)
+    var start = slot_value(slots: me.slots, slot: number * 2)
+    var end = slot_value(slots: me.slots, slot: number * 2 + 1)
+    if start == U64_MAX or end == U64_MAX
+        throw AbsentValueError()
+    return me.source[start til end]
+
+### The match as its place and what it took: `0 til 10: 2026-10-20`.
+### :returns: The text.
+@readonly
+@override
+routine BytesMatch.represent() -> Text
+    return f"{me.start()} til {me.end()}: {me.bytes()}"

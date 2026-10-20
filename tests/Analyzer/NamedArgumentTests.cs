@@ -201,9 +201,9 @@ public class NamedArgumentTests
     /// Verifies semantic analysis behavior for two params all positional reports s510.
     /// </summary>
     [Fact]
-    public void Analyze_TwoParams_AllPositional_WarnsRecommended()
+    public void Analyze_TwoParams_AllPositional_NoWarning()
     {
-        // 2-param positional calls are allowed but emit the advisory W258 warning;
+        // 2-param positional calls are allowed with no warning;
         // only 3+ non-defaulted params is a hard S510 error.
         string source = """
                         routine add(a: S32, b: S32) -> S32
@@ -216,7 +216,7 @@ public class NamedArgumentTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
-        Assert.Contains(collection: result.Warnings,
+        Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NamedArgumentRecommended);
     }
     /// <summary>

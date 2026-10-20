@@ -1,0 +1,137 @@
+module Text/Patterns
+
+### Any one byte.
+preset any_byte: BytesPiece = BytesPiece(code: "\u010000\u01000A\u010000\u010004\u010000\u010000")
+### The beginning of the bytes. It matches none.
+preset start_of_bytes: BytesPiece = BytesPiece(code: "\u010000\u010008\u010000\u010000")
+### The end of the bytes. It matches none.
+preset end_of_bytes: BytesPiece = BytesPiece(code: "\u010000\u010008\u010000\u010001")
+
+### One piece of a bytes pattern: what it matches, written as a value. Pieces are put together into a
+### `BytesPattern` with `BytesPattern.of([...])`. A bytes piece matches bytes (`byte(0x89)`, `bytes(b"PNG")`,
+### `any_byte`, `byte_range(0x00 to 0x1F)`), a `TextPiece` characters, and the two never mix.
+record BytesPiece
+    ### What the piece matches, as the engine reads it. Written by the piece routines.
+    code: Text
+
+### One byte equal to `value`: `byte(0x89)`.
+### :param value: The byte.
+### :returns: The piece.
+routine byte(value: U8) -> BytesPiece
+    var words = List[U32]()
+    words.add_last(value: NODE_LITERAL)
+    words.add_last(value: 1)
+    words.add_last(value: value.to[U32]())
+    return BytesPiece(code: words_text(words: words))
+
+### The bytes of `value`, in a row: `bytes(b"PNG")`.
+### :param value: The bytes.
+### :returns: The piece.
+routine bytes(value: Bytes) -> BytesPiece
+    var words = List[U32]()
+    words.add_last(value: NODE_LITERAL)
+    words.add_last(value: value.count().to[U32]())
+    each one in value
+        words.add_last(value: one.to[U8]().to[U32]())
+    return BytesPiece(code: words_text(words: words))
+
+### One byte in a range: `byte_range(0x00 to 0x1F)`.
+### :param range: The bytes, `to` including its end and `til` leaving it out.
+### :returns: The piece.
+### :throws: {InvalidPatternError} The range holds no byte or doesn't count up by 1.
+failable routine byte_range(range: Range[U8]) -> BytesPiece
+    if range.descending or range.get_step() != 1
+        throw InvalidPatternError(message: "A byte range counts up by 1: write 'byte_range(0x00 to 0x1F)'.")
+    var last = range.end.to[U32]()
+    if not range.inclusive
+        if range.end == 0
+            throw InvalidPatternError(message: "A byte range holds no byte.")
+        last = last - 1
+    if range.start.to[U32]() > last
+        throw InvalidPatternError(message: "A byte range holds no byte: its end is before its start.")
+    var words = List[U32]()
+    words.add_last(value: NODE_RANGES)
+    words.add_last(value: 0)
+    words.add_last(value: 1)
+    words.add_last(value: range.start.to[U32]())
+    words.add_last(value: last)
+    return BytesPiece(code: words_text(words: words))
+
+### The piece exactly `count` times in a row.
+### :param count: How many times.
+### :returns: The new piece.
+routine BytesPiece.repeat(count: U64) -> BytesPiece
+    return BytesPiece(code: repeat_code(code: me.code, min: count.to[U32](), max: count.to[U32]()))
+
+### The piece a number of times in a row in a range, as many as it can.
+### :param range: The counts, `to` including its end and `til` leaving it out.
+### :returns: The new piece.
+### :throws: {InvalidPatternError} The range holds no count or doesn't count up by 1.
+failable routine BytesPiece.repeat(range: Range[U64]) -> BytesPiece
+    var (min, max) = repeat_bounds(range: range)
+    return BytesPiece(code: repeat_code(code: me.code, min: min, max: max))
+
+### The piece `count` times in a row or more, as many as it can.
+### :param count: The fewest times.
+### :returns: The new piece.
+routine BytesPiece.repeat_at_least(count: U64) -> BytesPiece
+    return BytesPiece(code: repeat_code(code: me.code, min: count.to[U32](), max: REPEAT_UNBOUNDED))
+
+### The piece once or not at all, once when it can.
+### :param piece: The piece.
+### :returns: The new piece.
+routine optional(piece: BytesPiece) -> BytesPiece
+    return BytesPiece(code: repeat_code(code: piece.code, min: 0, max: 1))
+
+### The piece any number of times in a row, none included, as many as it can.
+### :param piece: The piece.
+### :returns: The new piece.
+routine any_number_of(piece: BytesPiece) -> BytesPiece
+    return BytesPiece(code: repeat_code(code: piece.code, min: 0, max: REPEAT_UNBOUNDED))
+
+### The piece once or more in a row, as many as it can.
+### :param piece: The piece.
+### :returns: The new piece.
+routine one_or_more(piece: BytesPiece) -> BytesPiece
+    return BytesPiece(code: repeat_code(code: piece.code, min: 1, max: REPEAT_UNBOUNDED))
+
+### The piece, with the bytes it matches kept under `name`: a match's `group(name)` gives them.
+### :param name: The capture's name.
+### :param piece: The piece.
+### :returns: The new piece.
+routine capture(name: Text, piece: BytesPiece) -> BytesPiece
+    return BytesPiece(code: capture_code(name: name, code: piece.code))
+
+### The piece, with each ASCII letter byte matching in either case.
+### :param piece: The piece.
+### :returns: The new piece.
+routine ignoring_case(piece: BytesPiece) -> BytesPiece
+    return BytesPiece(code: word_text(word: NODE_IGNORE_CASE) + piece.code)
+
+### One of the pieces: the one that matches the most bytes at that place (the first one written, of those as long).
+### :param pieces: The alternatives.
+### :returns: The new piece.
+### :throws: {InvalidPatternError} The list is empty.
+failable routine either_longer(pieces: List[BytesPiece]) -> BytesPiece
+    return BytesPiece(code: bytes_branches(kind: NODE_EITHER_LONGER, pieces: pieces))
+
+### One of the pieces: the one that matches the fewest bytes at that place (the first one written, of those as
+### short).
+### :param pieces: The alternatives.
+### :returns: The new piece.
+### :throws: {InvalidPatternError} The list is empty.
+failable routine either_shorter(pieces: List[BytesPiece]) -> BytesPiece
+    return BytesPiece(code: bytes_branches(kind: NODE_EITHER_SHORTER, pieces: pieces))
+
+### A node of several bytes pieces.
+### :param kind: The node's kind.
+### :param pieces: The pieces.
+### :returns: The node's characters.
+### :throws: {InvalidPatternError} The list is empty.
+secret failable routine bytes_branches(kind: U32, pieces: List[BytesPiece]) -> Text
+    if pieces.count() == 0
+        throw InvalidPatternError(message: "An either needs at least one alternative.")
+    var codes = List[Text]()
+    each piece in pieces
+        codes.add_last(value: piece.code)
+    return branches_code(kind: kind, codes: codes)

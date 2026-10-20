@@ -1,0 +1,101 @@
+module Tests/Stdlib/TextPatternsApi
+
+import IO/Console
+import Text/Patterns
+# Text patterns: a preset pattern (compiled when the program is built), captures, either_longer and either_shorter,
+# ASCII and Unicode digits, ignored case on a piece and on the whole pattern, find_all, replace, split, text
+# between delimiters with none_of, from_regex and the expressions it refuses, a bytes pattern on a PNG header, and a
+# pattern whose backtracking search would take exponential time finishing at once on 10 000 characters.
+
+preset DATE: TextPattern = TextPattern.of(
+    [
+        capture("year", digit.repeat(4)), text("-"), capture("month", digit.repeat(2)), text("-"),
+        capture("day", digit.repeat(2)),
+    ],
+)
+
+routine show_find(label: Text, pattern: TextPattern, value: Text)
+    when try pattern.find(value)
+        is None => show(f"{label}: none")
+        else as found => show(f"{label}: {found}")
+    return
+
+routine show_regex(regex: Text)
+    when check TextPattern.from_regex(regex)
+        is TextPattern => show(f"{regex}: read")
+        is Crashables as e => show(f"{regex}: {e.crash_message()}")
+    return
+
+routine start()
+    var found = DATE.find("Due 2026-10-20, paid.")
+    show(f"year {found.group("year")}, month {found.group("month")}, day {found.group("day")}")
+    when check found.group("hour")
+        is Text as hour => show(hour)
+        is Crashables as e => show(e.crash_message())
+    show(f"matches: {DATE.matches("2026-10-20")} {DATE.matches("2026-10-2")}")
+    show(f"start {found.start()}, end {found.end()}")
+
+    show_find(
+        label: "either_longer",
+        pattern: TextPattern.of([either_longer([text("cat"), text("category")])]),
+        value: "category",
+    )
+    show_find(
+        label: "either_shorter",
+        pattern: TextPattern.of([either_shorter([text("category"), text("cat")])]),
+        value: "category",
+    )
+
+    show_find(label: "digit", pattern: TextPattern.of([one_or_more(digit)]), value: "x٤٢42")
+    show_find(
+        label: "unicode_digit",
+        pattern: TextPattern.of([one_or_more(unicode_digit)]),
+        value: "x٤٢42",
+    )
+
+    var hello = TextPattern.of([ignoring_case(text("hello")), text(" World")])
+    show_find(label: "ignoring_case", pattern: hello, value: "Say HeLLo World")
+    show_find(label: "ignoring_case keeps the rest", pattern: hello, value: "Say HeLLo world")
+    show_find(
+        label: "ignore_case",
+        pattern: TextPattern.of(pieces: [text("hello")], ignore_case: true),
+        value: "Say HELLO",
+    )
+
+    var number = TextPattern.of([one_or_more(digit)])
+    each m in number.find_all("a1 b22 c333")
+        show(f"number {m.text()} at {m.start()}")
+    show(number.replace(text: "a1 b22 c333", `with`: "#"))
+    show(TextPattern.of([text(","), any_number_of(space)]).split("red, green,blue"))
+
+    var bold = TextPattern.of(
+        [text("<b>"), capture("inner", any_number_of(none_of("<"))), text("</b>")],
+    )
+    each m in bold.find_all("<b>가</b><b>나</b>")
+        show(f"inner {m.group("inner")}")
+
+    var month = TextPattern.from_regex("(?<year>\\d{4})-(?<month>\\d{2})")
+    show(f"regex month {month.find("on 2026-10-20").group("month")}")
+    var mail = TextPattern.from_regex("(\\w+)@(\\w+)\\.com").find("mail lumi@example.com now")
+    show(f"regex groups {mail.group("1")} {mail.group("2")}")
+    show_regex("(a)\\1")
+    show_regex("(?<=a)b")
+    show_regex("a+?")
+    show_regex("(ab")
+
+    var png = BytesPattern.of([byte(0x89), bytes(b"PNG"), capture("ending", bytes(b"\r\n\x1A\n"))])
+    var header = png.find(b"\x89PNG\r\n\x1A\n\0\0")
+    show(f"png {header.start()} til {header.end()}, ending of {header.group("ending").count()} bytes")
+    show(f"control bytes: {BytesPattern.of([one_or_more(byte_range(0x00 to 0x1F))]).find(b"ab\x01\x02c").bytes()}")
+
+    var pathological = TextPattern.of(
+        [any_number_of(either_longer([text("a"), text("aa")])), text("b")],
+    )
+    var many = "a".repeat(times: 10000)
+    var started = Clock.monotonic()
+    when try pathological.find(many)
+        is None => show("pathological without b: none")
+        else as m => show(f"pathological without b: {m.start()}")
+    show(f"pathological with b: {pathological.find(many + "b").end()}")
+    show(f"finished within 2s: {Clock.monotonic() - started < 2s}")
+    return

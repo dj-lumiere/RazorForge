@@ -1,0 +1,54 @@
+module Text/Patterns
+
+### Where a `TextPattern` matched: its place in the text (`start()`, `end()`), the text it took (`text()`), and the
+### text each capture took (`group("year")`). Positions count characters from 0, and `end()` is the position just
+### past the match.
+record TextMatch
+    ### The text searched.
+    secret source: Text
+    ### The capture slots, four characters each: the match's start and end, then each capture's.
+    secret slots: Text
+    ### The pattern's program, for the capture names.
+    secret program: Text
+
+### Where the match starts.
+### :returns: The position of its first character.
+@readonly
+routine TextMatch.start() -> U64
+    return slot_value(slots: me.slots, slot: 0)
+
+### Where the match ends.
+### :returns: The position just past its last character.
+@readonly
+routine TextMatch.end() -> U64
+    return slot_value(slots: me.slots, slot: 1)
+
+### The text the match took.
+### :returns: The text.
+@readonly
+routine TextMatch.text() -> Text
+    return me.source[me.start() til me.end()]
+
+### The text a capture took.
+### :param name: The capture's name.
+### :returns: The text.
+### :throws: {CaptureNameError} The pattern has no capture of that name.
+### :throws: {AbsentValueError} The capture took no part in the match (it sits in an `optional` piece that matched
+###   nothing, or in an either's alternative that wasn't taken).
+@readonly
+failable routine TextMatch.group(name: Text) -> Text
+    var number = group_number(program: me.program, mode: MODE_TEXT, name: name)
+    if number == 0
+        throw CaptureNameError(name: name)
+    var start = slot_value(slots: me.slots, slot: number * 2)
+    var end = slot_value(slots: me.slots, slot: number * 2 + 1)
+    if start == U64_MAX or end == U64_MAX
+        throw AbsentValueError()
+    return me.source[start til end]
+
+### The match as its place and what it took: `0 til 10: 2026-10-20`.
+### :returns: The text.
+@readonly
+@override
+routine TextMatch.represent() -> Text
+    return f"{me.start()} til {me.end()}: {me.text()}"

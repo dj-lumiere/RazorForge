@@ -1,0 +1,118 @@
+module Text/Patterns
+
+### A pattern over bytes, for input that isn't UTF-8 text: a file's header, a packet, a log with broken characters.
+### It is made once from bytes pieces and then looked for in `Bytes`:
+###
+### ```razorforge
+### preset PNG: BytesPattern = BytesPattern.of([byte(0x89), bytes(b"PNG"), bytes(b"\r\n\x1A\n")])
+### ```
+###
+### It runs on the same engine as `TextPattern`, with the same rules: a `preset` pattern is compiled when the program
+### is built, a search takes time in proportion to the input's length times the pattern's size, and every
+### repetition takes as many rounds as it can.
+record BytesPattern
+    ### The compiled program, as the engine reads it. Written by `of` and `from_regex`.
+    program: Text
+
+### A pattern of bytes pieces matched one after another.
+### :param pieces: The pieces, in order.
+### :returns: The pattern.
+### :throws: {InvalidPatternError} The pieces don't make a pattern: two captures share a name.
+failable common routine BytesPattern.of(pieces: List[BytesPiece]) -> BytesPattern
+    return BytesPattern.of(pieces: pieces, ignore_case: false)
+
+### A pattern of bytes pieces matched one after another, every ASCII letter in either case when `ignore_case` is
+### true.
+### :param pieces: The pieces, in order.
+### :param ignore_case: Whether ASCII letters match in either case.
+### :returns: The pattern.
+### :throws: {InvalidPatternError} The pieces don't make a pattern: two captures share a name.
+failable common routine BytesPattern.of(pieces: List[BytesPiece], ignore_case: Bool) -> BytesPattern
+    var codes = List[Text]()
+    each piece in pieces
+        codes.add_last(value: piece.code)
+    var tree = branches_code(kind: NODE_SEQUENCE, codes: codes)
+    if ignore_case
+        tree = word_text(word: NODE_IGNORE_CASE) + tree
+    return BytesPattern(program: compile_code(code: tree, mode: MODE_BYTES))
+
+### A bytes pattern from the usual regular expression syntax: `BytesPattern.from_regex("\\x89PNG")`.
+### :param regex: The expression.
+### :returns: The pattern.
+### :throws: {PatternSyntaxError} The expression can't be read, or asks for what the patterns don't do.
+failable common routine BytesPattern.from_regex(regex: Text) -> BytesPattern
+    return BytesPattern(program: regex_code(regex: regex, mode: MODE_BYTES))
+
+### Whether all of `bytes` match the pattern.
+### :param bytes: The bytes.
+### :returns: `true` when all of them do.
+@readonly
+routine BytesPattern.matches(bytes: Bytes) -> Bool
+    var result = C::ingrid_pattern_matches_bytes(
+        program: me.program.data,
+        program_count: me.program.count(),
+        bytes: bytes.data,
+        bytes_count: bytes.count(),
+    )
+    if result < 0
+        pierce InvalidPatternError(message: "This BytesPattern's program isn't a bytes pattern's.")
+    return result == 1
+
+### The leftmost place the pattern matches in `bytes`.
+### :param bytes: The bytes.
+### :returns: The match.
+### :throws: {AbsentValueError} The pattern matches nowhere (`try p.find(b)` gives `none`).
+@readonly
+failable routine BytesPattern.find(bytes: Bytes) -> BytesMatch
+    var slots = find_bytes_slots(program: me.program, bytes: bytes, from: 0)
+    if slots.is_empty()
+        throw AbsentValueError()
+    return BytesMatch(source: bytes, slots: slots, program: me.program)
+
+### Every place the pattern matches in `bytes`, in order and none overlapping.
+### :param bytes: The bytes.
+### :returns: The matches.
+@readonly
+routine BytesPattern.find_all(bytes: Bytes) -> List[BytesMatch]
+    var found = List[BytesMatch]()
+    var from: U64 = 0
+    while from <= bytes.count()
+        var slots = find_bytes_slots(program: me.program, bytes: bytes, from: from)
+        if slots.is_empty()
+            break
+        var start = slot_value(slots: slots, slot: 0)
+        var end = slot_value(slots: slots, slot: 1)
+        found.add_last(value: BytesMatch(source: bytes, slots: slots, program: me.program))
+        from = if end > start then end else end + 1
+    return found
+
+### `bytes` with every match replaced by `with`.
+### :param bytes: The bytes.
+### :param with: What each match becomes.
+### :returns: The new bytes.
+@readonly
+routine BytesPattern.replace(bytes: Bytes, `with`: Bytes) -> Bytes
+    var result = List[Byte]()
+    var copied: U64 = 0
+    each found in me.find_all(bytes: bytes)
+        each i in copied til found.start()
+            result.add_last(value: bytes[i])
+        each one in `with`
+            result.add_last(value: one)
+        copied = found.end()
+    each j in copied til bytes.count()
+        result.add_last(value: bytes[j])
+    return Bytes(from_list: steal result)
+
+### The parts of `bytes` between the matches.
+### :param bytes: The bytes.
+### :returns: The parts.
+@readonly
+routine BytesPattern.split(bytes: Bytes) -> List[Bytes]
+    var parts = List[Bytes]()
+    var part: U64 = 0
+    each found in me.find_all(bytes: bytes)
+        parts.add_last(value: bytes[part til found.start()])
+        part = found.end()
+    parts.add_last(value: bytes[part til bytes.count()])
+    return parts

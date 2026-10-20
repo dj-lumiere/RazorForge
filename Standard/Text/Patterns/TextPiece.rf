@@ -1,0 +1,176 @@
+module Text/Patterns
+
+### One piece of a text pattern: what it matches, written as a value. Pieces are put together into a
+### `TextPattern` with `TextPattern.of([...])`, one piece after another:
+###
+### ```razorforge
+### preset DATE: TextPattern = TextPattern.of([
+###     capture("year", digit.repeat(4)),
+###     text("-"),
+###     capture("month", digit.repeat(2)),
+### ])
+### ```
+###
+### Build pieces with the routines and presets of this module (`digit`, `text("-")`, `p.repeat(4)`, `capture(...)`,
+### `either_longer([...])`). A text piece matches characters, a `BytesPiece` bytes, and the two never mix.
+record TextPiece
+    ### What the piece matches, as the engine reads it. Written by the piece routines.
+    code: Text
+
+### One ASCII digit, `0` to `9`. `unicode_digit` takes the digits of every script.
+preset digit: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010000\u010000\u010000")
+
+### One ASCII letter, `a` to `z` or `A` to `Z`. `unicode_letter` takes the letters of every script.
+preset letter: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010001\u010000\u010000")
+
+### One ASCII whitespace character: space, tab, line feed, vertical tab, form feed or carriage return.
+preset space: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010002\u010000\u010000")
+
+### One ASCII word character: a letter, a digit or `_`.
+preset word_char: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010003\u010000\u010000")
+
+### Any one character, a line feed included.
+preset any_char: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010004\u010000\u010000")
+
+### One Unicode decimal digit (category Nd): `7`, `٧`, `७`.
+preset unicode_digit: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010005\u010000\u010000")
+
+### One Unicode letter (category L): `a`, `é`, `한`.
+preset unicode_letter: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010006\u010000\u010000")
+
+### One Unicode whitespace character: the ASCII ones, no-break spaces, the line and paragraph separators.
+preset unicode_space: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010007\u010000\u010000")
+
+### One Unicode word character: a letter, a mark, a decimal digit or connector punctuation.
+preset unicode_word_char: TextPiece = TextPiece(code: "\u010000\u01000A\u010000\u010008\u010000\u010000")
+
+### The beginning of the text. It matches no characters.
+preset start_of_text: TextPiece = TextPiece(code: "\u010000\u010008\u010000\u010000")
+
+### The end of the text. It matches no characters.
+preset end_of_text: TextPiece = TextPiece(code: "\u010000\u010008\u010000\u010001")
+
+### The beginning of a line: the beginning of the text or the place after a line feed.
+preset start_of_line: TextPiece = TextPiece(code: "\u010000\u010008\u010000\u010002")
+
+### The end of a line: the end of the text or the place before a line feed.
+preset end_of_line: TextPiece = TextPiece(code: "\u010000\u010008\u010000\u010003")
+
+### A place between a word character and a character that isn't one, or the start or end of the text next to a
+### word character. It matches no characters.
+preset word_boundary: TextPiece = TextPiece(code: "\u010000\u010008\u010000\u010004")
+
+### The characters of `value`, in a row.
+### :param value: The text.
+### :returns: The piece.
+routine text(value: Text) -> TextPiece
+    return TextPiece(code: literal_code(value: value))
+
+### One character that is one of the characters of `chars`: `one_of("aeiou")`.
+### :param chars: The characters.
+### :returns: The piece.
+routine one_of(chars: Text) -> TextPiece
+    return TextPiece(code: set_code(chars: chars, negated: false))
+
+### One character that is none of the characters of `chars`: `none_of(",;")`.
+### :param chars: The characters.
+### :returns: The piece.
+routine none_of(chars: Text) -> TextPiece
+    return TextPiece(code: set_code(chars: chars, negated: true))
+
+### One character from `from` to `to`, both included: `char_range(from: 'a', to: 'z')`.
+### :param from: The first character.
+### :param to: The last character.
+### :returns: The piece.
+### :throws: {InvalidPatternError} `from` comes after `to`.
+failable routine char_range(from: Char, to: Char) -> TextPiece
+    if from.to[U32]() > to.to[U32]()
+        throw InvalidPatternError(message: "A character range runs from a later character to an earlier one.")
+    var words = List[U32]()
+    words.add_last(value: NODE_RANGES)
+    words.add_last(value: 0)
+    words.add_last(value: 1)
+    words.add_last(value: from.to[U32]())
+    words.add_last(value: to.to[U32]())
+    return TextPiece(code: words_text(words: words))
+
+### The piece exactly `count` times in a row.
+### :param count: How many times.
+### :returns: The new piece.
+routine TextPiece.repeat(count: U64) -> TextPiece
+    return TextPiece(code: repeat_code(code: me.code, min: count.to[U32](), max: count.to[U32]()))
+
+### The piece a number of times in a row in a range, as many as it can: `digit.repeat(2 to 4)`. Every repetition takes
+### as many rounds as it can.
+### :param range: The counts, `to` including its end and `til` leaving it out.
+### :returns: The new piece.
+### :throws: {InvalidPatternError} The range holds no count or doesn't count up by 1.
+failable routine TextPiece.repeat(range: Range[U64]) -> TextPiece
+    var (min, max) = repeat_bounds(range: range)
+    return TextPiece(code: repeat_code(code: me.code, min: min, max: max))
+
+### The piece `count` times in a row or more, as many as it can.
+### :param count: The fewest times.
+### :returns: The new piece.
+routine TextPiece.repeat_at_least(count: U64) -> TextPiece
+    return TextPiece(code: repeat_code(code: me.code, min: count.to[U32](), max: REPEAT_UNBOUNDED))
+
+### The piece once or not at all, once when it can.
+### :param piece: The piece.
+### :returns: The new piece.
+routine optional(piece: TextPiece) -> TextPiece
+    return TextPiece(code: repeat_code(code: piece.code, min: 0, max: 1))
+
+### The piece any number of times in a row, none included, as many as it can.
+### :param piece: The piece.
+### :returns: The new piece.
+routine any_number_of(piece: TextPiece) -> TextPiece
+    return TextPiece(code: repeat_code(code: piece.code, min: 0, max: REPEAT_UNBOUNDED))
+
+### The piece once or more in a row, as many as it can.
+### :param piece: The piece.
+### :returns: The new piece.
+routine one_or_more(piece: TextPiece) -> TextPiece
+    return TextPiece(code: repeat_code(code: piece.code, min: 1, max: REPEAT_UNBOUNDED))
+
+### The piece, with the text it matches kept under `name`: a match's `group(name)` gives it.
+### :param name: The capture's name.
+### :param piece: The piece.
+### :returns: The new piece.
+routine capture(name: Text, piece: TextPiece) -> TextPiece
+    return TextPiece(code: capture_code(name: name, code: piece.code))
+
+### The piece, with each letter matching in either case: `ignoring_case(text("hello"))` matches `HeLLo`.
+### :param piece: The piece.
+### :returns: The new piece.
+routine ignoring_case(piece: TextPiece) -> TextPiece
+    return TextPiece(code: word_text(word: NODE_IGNORE_CASE) + piece.code)
+
+### One of the pieces: the one that matches the longest text at that place (the first one written, of those as
+### long): `either_longer([text("cat"), text("category")])` takes "category" in "category".
+### :param pieces: The alternatives.
+### :returns: The new piece.
+### :throws: {InvalidPatternError} The list is empty.
+failable routine either_longer(pieces: List[TextPiece]) -> TextPiece
+    return TextPiece(code: text_branches(kind: NODE_EITHER_LONGER, pieces: pieces))
+
+### One of the pieces: the one that matches the shortest text at that place (the first one written, of those as
+### short): `either_shorter([text("category"), text("cat")])` takes "cat" in "category".
+### :param pieces: The alternatives.
+### :returns: The new piece.
+### :throws: {InvalidPatternError} The list is empty.
+failable routine either_shorter(pieces: List[TextPiece]) -> TextPiece
+    return TextPiece(code: text_branches(kind: NODE_EITHER_SHORTER, pieces: pieces))
+
+### A node of several text pieces.
+### :param kind: The node's kind.
+### :param pieces: The pieces.
+### :returns: The node's characters.
+### :throws: {InvalidPatternError} The list is empty.
+failable secret routine text_branches(kind: U32, pieces: List[TextPiece]) -> Text
+    if pieces.count() == 0
+        throw InvalidPatternError(message: "An either needs at least one alternative.")
+    var codes = List[Text]()
+    each piece in pieces
+        codes.add_last(value: piece.code)
+    return branches_code(kind: kind, codes: codes)

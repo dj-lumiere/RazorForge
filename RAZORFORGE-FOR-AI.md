@@ -278,7 +278,7 @@ wrappers and controllers, `ByteSize`), `System/Temporal` (`Duration`, `Moment`, 
 `System/Concurrency`, `System/Serialization`, `System/Cpu` (`CpuEventManager`) and `System/CSubSystem` (C types
 and strings).
 The rest takes an import: `Collections`, `IO/Console`, `IO/File`, `IterTools`, `Math3D`,
-`Random`, `Simd`, `Subprocess`, `BuilderQuery`, `BuilderExpansion`.
+`Random`, `Simd`, `Subprocess`, `Text/Patterns`, `BuilderQuery`, `BuilderExpansion`.
 `migrate --step modules` drops imports of `Core` and `Numerics` and rewrites `Core.X` to
 `System.X`.
 
@@ -932,6 +932,31 @@ sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
   It supports range slicing (`bs[a til b]`), sub-sequence `contains`/`find!`/
   `split`, and hex `to_hex`/`from_hex!`. Container `represent` quotes elements
   by type (Text/Bytes → `"…"`, Char/Byte → `'…'`).
+
+**Text patterns** (`import Text/Patterns`, one engine for RazorForge, Suflae and Tessera, in Ingrid). A pattern is
+built from named pieces, one after another: `preset DATE: TextPattern = TextPattern.of([capture("year",
+digit.repeat(4)), text("-"), capture("month", digit.repeat(2))])` (a `preset` pattern is compiled at build time).
+- Pieces (`TextPiece`): `text("-")`, `digit`/`letter`/`space`/`word_char` (ASCII), `unicode_digit`/`unicode_letter`/
+  `unicode_space`/`unicode_word_char`, `any_char` (line feed included), `one_of("aeiou")`, `none_of(",;")`,
+  `char_range(from: 'a', to: 'z')`, anchors `start_of_text`, `end_of_text`, `start_of_line`, `end_of_line`,
+  `word_boundary`. The bare ones are presets (no parentheses).
+- Repetition: `p.repeat(4)`, `p.repeat(2 to 4)` (`til` excludes the end), `p.repeat_at_least(1)`, `optional(p)`,
+  `any_number_of(p)`, `one_or_more(p)`. Every repetition is greedy (takes as many rounds as it can); there is no
+  shortest repetition. To take text up to a delimiter, repeat a piece that can't be it (`any_number_of(none_of("<"))`),
+  since `any_number_of(any_char)` runs to the last delimiter.
+- Alternatives name their rule, there is no default: `either_longer([...])` (the longest match there),
+  `either_shorter([...])` (the shortest), the first written winning a tie.
+- `capture("name", p)`, `ignoring_case(p)`, and `TextPattern.of(pieces: [...], ignore_case: true)`.
+- Searches: `p.matches(text)` (whole text), failable `p.find(text)` (`try p.find(t)` gives `none`), `p.find_all(text)`
+  (non-overlapping, `List[TextMatch]`), `p.replace(text: t, with: "#")`, `p.split(text)`. A `TextMatch` has `start()`,
+  `end()` (character positions, `U64`), `text()`, failable `group("name")` (`CaptureNameError` for an unknown name,
+  `AbsentValueError` for a capture that took no part).
+- `BytesPattern` over `Bytes`: `byte(0x89)`, `bytes(b"PNG")`, `any_byte`, `byte_range(0x00 to 0x1F)`, `start_of_bytes`,
+  `end_of_bytes`; `BytesMatch.bytes()`. Text and bytes pieces never mix (a type error).
+- Failable `TextPattern.from_regex(text)` / `BytesPattern.from_regex` read the usual regex syntax (unnamed groups
+  capture as `"1"`, `"2"`, `|` is the longest alternative, `(?i)` `(?m)` `(?s)` at the start). Backreferences,
+  lookaround, `*?` and `*+` throw `PatternSyntaxError` with the position; malformed pieces throw `InvalidPatternError`.
+- A search takes time linear in the text times the pattern size (no backtracking blow-up).
 
 ## 10. Collections quick reference
 
