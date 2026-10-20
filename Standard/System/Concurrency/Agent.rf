@@ -54,70 +54,70 @@ record AgentWork[T]
     ### The state cell: slot 0 the place (0 WAITING, 1 NOW, 2 HERE, 3 APART, 4 DONE), slot 1 the fiber
     ### (rf_coro*) for NOW and HERE, slot 2 the task control block that holds the produced value, slot 3 nonzero
     ### when cancellation was requested before a verb started the work, slot 4 how many Agents hold it.
-    secret cell: Address
+    secret cell: Addr
     ### The routine the fiber or thread runs, given the recipe.
-    secret entry: CPtr
+    secret entry: Addr
     ### The recipe: slot 0 holds the task, slot k the boxed k-th argument. The run routine reads the
     ### arguments out and frees it.
-    secret recipe: Address
+    secret recipe: Addr
 
-### The size of one recipe slot (an `Address`).
+### The size of one recipe slot (an `Addr`).
 ### :returns: the slot size.
 routine recipe_slot_size() -> ByteSize
-    return Address.data_size()
+    return Addr.data_size()
 
-### Allocates a recipe with `slots` Address slots (slot 0 is the task, the rest are the arguments).
+### Allocates a recipe with `slots` Addr slots (slot 0 is the task, the rest are the arguments).
 ### Builder plumbing for `agent` calls.
 ### :returns: the recipe's address.
-dangerous routine recipe_new(slots: U64) -> Address
+dangerous routine recipe_new(slots: U64) -> Addr
     return rf_allocate_dynamic(size: recipe_slot_size() * slots)
 
 ### Moves `value` into its own heap cell and stores the cell in recipe slot `slot` (like
 ### `List.add_last` storing an element). Builder plumbing for `agent` calls.
-dangerous routine recipe_put[T](recipe: Address, slot: U64, value: T)
+dangerous routine recipe_put[T](recipe: Addr, slot: U64, value: T)
     var cell = Hijacked[T](rf_allocate_dynamic(size: T.data_size()))
     cell.poke(value)
-    Hijacked[Address](recipe).poke_at_offset(at: recipe_slot_size() * slot, value: cell.address())
+    Hijacked[Addr](recipe).poke_at_offset(at: recipe_slot_size() * slot, value: cell.address())
     return
 
 ### Moves the value out of recipe slot `slot` and frees its cell (like `List.remove_last`). Builder
 ### plumbing for the routine that runs a recipe.
 ### :returns: the argument value.
-dangerous routine recipe_take[T](recipe: Address, slot: U64) -> T
-    var cell = Hijacked[Address](recipe).peek_at_offset(offset: recipe_slot_size() * slot)
+dangerous routine recipe_take[T](recipe: Addr, slot: U64) -> T
+    var cell = Hijacked[Addr](recipe).peek_at_offset(offset: recipe_slot_size() * slot)
     var value = Hijacked[T](cell).peek()
-    rf_invalidate(ptr: cell)
+    C::rf_invalidate(ptr: cell)
     return value
 
 ### Runs `entry(recipe)` for a call of a foreign routine marked `@blocking`: inside a coroutine on one of the
 ### runtime's I/O threads while the coroutine parks, so its worker goes on with other coroutines, anywhere else
 ### right here. Builder plumbing for `@blocking` routines.
-dangerous routine blocking_call(entry: CPtr, recipe: Address)
+dangerous routine blocking_call(entry: Addr, recipe: Addr)
     C::rf_blocking_call(entry: entry, arg: recipe)
     return
 
 ### The task block of a recipe (slot 0).
-### :returns: the rf_task* as an Address.
-dangerous routine recipe_task(recipe: Address) -> Address
-    return Hijacked[Address](recipe).peek()
+### :returns: the rf_task* as an Addr.
+dangerous routine recipe_task(recipe: Addr) -> Addr
+    return Hijacked[Addr](recipe).peek()
 
 ### Builds the Agent for an `agent` call: the recipe and the routine that runs it. Nothing runs until a verb.
 ### :returns: the Agent recipe.
-dangerous routine agent_recipe[T](entry: CPtr, recipe: Address) -> Agent[T]
+dangerous routine agent_recipe[T](entry: Addr, recipe: Addr) -> Agent[T]
     return Agent[T](work: agent_work[T](entry: entry, recipe: recipe), deadline: Duration(seconds: 0, nanoseconds: 0),
         has_deadline: false)
 
 ### Builds the work for an `agent` call, not started: a fresh state cell over the recipe and the routine that
 ### runs it.
 ### :returns: the work.
-dangerous routine agent_work[T](entry: CPtr, recipe: Address) -> AgentWork[T]
+dangerous routine agent_work[T](entry: Addr, recipe: Addr) -> AgentWork[T]
     var cell = rf_allocate_dynamic(size: recipe_slot_size() * 5)
-    var words = Hijacked[Address](cell)
-    words.poke_at_offset(at: recipe_slot_size() * 0, value: Address(0))
-    words.poke_at_offset(at: recipe_slot_size() * 1, value: Address(0))
-    words.poke_at_offset(at: recipe_slot_size() * 2, value: Address(0))
-    words.poke_at_offset(at: recipe_slot_size() * 3, value: Address(0))
-    words.poke_at_offset(at: recipe_slot_size() * 4, value: Address(1))
+    var words = Hijacked[U64](cell)
+    words.poke_at_offset(at: recipe_slot_size() * 0, value: 0)
+    words.poke_at_offset(at: recipe_slot_size() * 1, value: 0)
+    words.poke_at_offset(at: recipe_slot_size() * 2, value: 0)
+    words.poke_at_offset(at: recipe_slot_size() * 3, value: 0)
+    words.poke_at_offset(at: recipe_slot_size() * 4, value: 1)
     return AgentWork[T](cell: cell, entry: entry, recipe: recipe)
 
 ### Completes a recipe's task with what its work came to (the value, or the error it failed with) and frees the
@@ -125,9 +125,9 @@ dangerous routine agent_work[T](entry: CPtr, recipe: Address) -> AgentWork[T]
 ### the task's box: its bytes are copied, then its tag is cleared, so the caller's teardown of `outcome` frees
 ### nothing the box now holds (a caught error is one object, freed once). Builder plumbing for the routine that runs
 ### a recipe.
-dangerous routine agent_finish[T](recipe: Address, outcome: Hijacked[Check[T]])
+dangerous routine agent_finish[T](recipe: Addr, outcome: Hijacked[Check[T]])
     var task = recipe_task(recipe: recipe)
-    rf_invalidate(ptr: recipe)
+    C::rf_invalidate(ptr: recipe)
     var size = Check[T].data_size()
     var cell = rf_allocate_dynamic(size: size)
     rf_copy_bytes_at(dest: cell, src: outcome.address(), size: size)
@@ -135,14 +135,14 @@ dangerous routine agent_finish[T](recipe: Address, outcome: Hijacked[Check[T]])
     C::rf_task_complete_value(task: task, result: cell)
     return
 
-### Reads word `slot` of the shared cell.
+### Reads word `slot` of the shared cell. A slot that holds a handle holds its address as a number.
 ### :returns: the word.
-dangerous routine AgentWork[T].cell_word(slot: U64) -> Address
-    return Hijacked[Address](me.cell).peek_at_offset(offset: recipe_slot_size() * slot)
+dangerous routine AgentWork[T].cell_word(slot: U64) -> U64
+    return Hijacked[U64](me.cell).peek_at_offset(offset: recipe_slot_size() * slot)
 
 ### Writes word `slot` of the shared cell.
-dangerous routine AgentWork[T].set_cell_word(slot: U64, value: Address)
-    Hijacked[Address](me.cell).poke_at_offset(at: recipe_slot_size() * slot, value: value)
+dangerous routine AgentWork[T].set_cell_word(slot: U64, value: U64)
+    Hijacked[U64](me.cell).poke_at_offset(at: recipe_slot_size() * slot, value: value)
     return
 
 ### Where the work runs, or WAITING before a verb starts it.
@@ -150,41 +150,41 @@ dangerous routine AgentWork[T].set_cell_word(slot: U64, value: Address)
 routine AgentWork[T].place() -> AgentPlace
     danger
         var code = me.cell_word(slot: 0)
-        if code == Address(1)
+        if code == 1
             return AgentPlace.NOW
-        if code == Address(2)
+        if code == 2
             return AgentPlace.HERE
-        if code == Address(3)
+        if code == 3
             return AgentPlace.APART
-        if code == Address(4)
+        if code == 4
             return AgentPlace.DONE
     return AgentPlace.WAITING
 
 ### Records where the work runs.
 dangerous routine AgentWork[T].set_place(place: AgentPlace)
-    var code = Address(0)
+    var code: U64 = 0
     if place == AgentPlace.NOW
-        code = Address(1)
+        code = 1
     elseif place == AgentPlace.HERE
-        code = Address(2)
+        code = 2
     elseif place == AgentPlace.APART
-        code = Address(3)
+        code = 3
     elseif place == AgentPlace.DONE
-        code = Address(4)
+        code = 4
     me.set_cell_word(slot: 0, value: code)
     return
 
 ### The fiber handle (rf_coro*) for NOW and HERE, none before a verb starts the work.
 ### :returns: the fiber.
-routine AgentWork[T].coro() -> CPtr
+routine AgentWork[T].coro() -> Addr
     danger
-        return CPtr(from: me.cell_word(slot: 1))
+        return me.cell_word(slot: 1).to[Addr]()
 
 ### The task control block that holds the produced value, zero before a verb starts the work.
 ### :returns: the task.
-routine AgentWork[T].task() -> Address
+routine AgentWork[T].task() -> Addr
     danger
-        return me.cell_word(slot: 2)
+        return me.cell_word(slot: 2).to[Addr]()
 
 ### Starts the work at `place` if no verb started it yet: makes the task block (into recipe slot 0) and the fiber or
 ### thread that runs the recipe. Idempotent, so `retrieve`/`gather`/`race` call it on every Agent they drive.
@@ -194,23 +194,23 @@ dangerous routine AgentWork[T].start_at(place: AgentPlace) -> Bool
     if me.place() != AgentPlace.WAITING or me.cancelled()
         return true
     if place == AgentPlace.APART
-        me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 1))
-        Hijacked[Address](me.recipe).poke(value: me.task())
+        me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 1).to[U64]())
+        Hijacked[Addr](me.recipe).poke(value: me.task())
         me.set_place(place: AgentPlace.APART)
-        if me.cell_word(slot: 3) != Address(0)
+        if me.cell_word(slot: 3) != 0
             C::rf_task_request_cancel(task: me.task())
         return C::rf_task_spawn_threaded(task: me.task(), entry: me.entry, userdata: me.recipe) != 0
-    var here = cptr_none()
+    var here = Addr.hollow()
     if place == AgentPlace.HERE
         here = C::rf_sched_here()
-        if here.is_none()
+        if here.is_hollow()
             return false
-    me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 0))
-    Hijacked[Address](me.recipe).poke(value: me.task())
-    var coro = C::rf_coro_create(entry: me.entry, userdata: CPtr(from: me.recipe), stack_size: 0)
-    me.set_cell_word(slot: 1, value: coro.get_address())
+    me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 0).to[U64]())
+    Hijacked[Addr](me.recipe).poke(value: me.task())
+    var coro = C::rf_coro_create(entry: me.entry, userdata: me.recipe, stack_size: 0)
+    me.set_cell_word(slot: 1, value: coro.to[U64]())
     me.set_place(place: place)
-    if me.cell_word(slot: 3) != Address(0)
+    if me.cell_word(slot: 3) != 0
         C::rf_coro_request_cancel(coro: coro)
     if place == AgentPlace.HERE
         C::rf_sched_spawn(sched: here, coro: me.coro())
@@ -273,14 +273,14 @@ routine AgentWork[T].is_coro() -> Bool
     return me.place() != AgentPlace.APART
 
 ### The raw fiber handle (valid for NOW and HERE). Internal plumbing for `race!`.
-### :returns: the rf_coro* as a CPtr.
-routine AgentWork[T].coro_handle() -> CPtr
+### :returns: the rf_coro* as an Addr.
+routine AgentWork[T].coro_handle() -> Addr
     return me.coro()
 
 ### The raw task/result control block (fibers and threads both box their produced value here). Internal `race!`
 ### plumbing; also where the winner's value is read from.
-### :returns: the rf_task* as an Address.
-routine AgentWork[T].task_handle() -> Address
+### :returns: the rf_task* as an Addr.
+routine AgentWork[T].task_handle() -> Addr
     return me.task()
 
 ### Whether the work has finished (its value is ready to `retrieve!` without waiting). A racy snapshot
@@ -295,7 +295,7 @@ routine AgentWork[T].is_done() -> Bool
     if me.place() == AgentPlace.DONE
         return true
     if me.place() != AgentPlace.APART
-        if me.coro().is_none()
+        if me.coro().is_hollow()
             return true
         danger
             return C::rf_coro_status_get(coro: me.coro()) == 3
@@ -315,11 +315,11 @@ routine AgentWork[T].is_running() -> Bool
 dangerous routine AgentWork[T].request_cancel()
     if me.place() == AgentPlace.DONE
         return
-    me.set_cell_word(slot: 3, value: Address(1))
+    me.set_cell_word(slot: 3, value: 1)
     if me.place() == AgentPlace.WAITING
         return
     if me.place() != AgentPlace.APART
-        if not me.coro().is_none()
+        if not me.coro().is_hollow()
             C::rf_coro_request_cancel(coro: me.coro())
         return
     C::rf_task_request_cancel(task: me.task())
@@ -350,7 +350,7 @@ dangerous routine AgentWork[T].wind_down()
 dangerous routine AgentWork[T].take_outcome() -> Check[T]
     var payload = C::rf_task_result_payload(task: me.task())
     var outcome = Hijacked[Check[T]](from: payload).peek()
-    rf_invalidate(ptr: payload)
+    C::rf_invalidate(ptr: payload)
     return outcome
 
 ### Takes the outcome of finished work and frees what ran it, then gives its value: its error is rethrown here,
@@ -374,7 +374,7 @@ failable routine AgentWork[T].settle() -> T
 ### :returns: `true` once cancellation was requested.
 routine AgentWork[T].cancelled() -> Bool
     danger
-        return me.cell_word(slot: 3) != Address(0)
+        return me.cell_word(slot: 3) != 0
 
 ### Asks the work to stop. Work nothing started yet never runs. Running work sees the request at its next wait
 ### (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there. Retrieving a cancelled
@@ -475,7 +475,7 @@ dangerous routine AgentWork[T].reap()
     if me.place() == AgentPlace.WAITING or me.place() == AgentPlace.DONE
         return
     if me.place() != AgentPlace.APART
-        if not me.coro().is_none()
+        if not me.coro().is_hollow()
             var status = C::rf_coro_status_get(coro: me.coro())
             # Dispose race-free against the work-stealing workers. `rf_sched_dispose_default` detaches the
             # coroutine from the pool and, under the scheduler lock, decides whether WE may free it now (returns
@@ -496,37 +496,37 @@ dangerous routine AgentWork[T].reap()
             C::rf_task_destroy(task: me.task())
         # The fiber and task are freed: the cell forgets them, so a query on this Agent after it was consumed
         # (`is_done()` / `is_running()`) reports "done" instead of reading freed memory.
-        me.set_cell_word(slot: 1, value: Address(0))
-        me.set_cell_word(slot: 2, value: Address(0))
-        me.set_cell_word(slot: 0, value: Address(4))
+        me.set_cell_word(slot: 1, value: 0)
+        me.set_cell_word(slot: 2, value: 0)
+        me.set_cell_word(slot: 0, value: 4)
         return
 
     # Threaded: hand the free to the worker↔consumer rendezvous. A completed worker's block is freed here
     # or at the worker's exit (whichever is last); a still-running worker (deadline give-up / race loser)
     # frees its own block on exit — no join.
     C::rf_task_release(task: me.task())
-    me.set_cell_word(slot: 2, value: Address(0))
-    me.set_cell_word(slot: 0, value: Address(4))
+    me.set_cell_word(slot: 2, value: 0)
+    me.set_cell_word(slot: 0, value: 4)
     return
 
 ### Takes one more hold on the work, for one more Agent over it (Suflae's `waitfor` makes one).
 ### :returns: The same work.
 dangerous routine AgentWork[T].add_holder() -> AgentWork[T]
-    me.set_cell_word(slot: 4, value: me.cell_word(slot: 4).add_wrap(you: Address(1)))
+    me.set_cell_word(slot: 4, value: me.cell_word(slot: 4) +% 1)
     return me
 
 ### Lets go of one hold on the work. The last holder ends it: work that still runs is cancelled and waited for
 ### (what it came to is dropped), work nothing started never runs, and the state cell is freed. Work a verb consumed
 ### only frees its cell. Each owning Agent's teardown calls it once.
 dangerous routine AgentWork[T].dispose()
-    var holders = me.cell_word(slot: 4).sub_wrap(you: Address(1))
-    if holders != Address(0)
+    var holders = me.cell_word(slot: 4) -% 1
+    if holders != 0
         me.set_cell_word(slot: 4, value: holders)
         return
     if me.place() != AgentPlace.DONE
         me.request_cancel()
         me.wind_down()
-    rf_invalidate(ptr: me.cell)
+    C::rf_invalidate(ptr: me.cell)
     return
 
 ### Starts the work now on the runtime's pool of threads, where it may run beside its siblings on any thread.

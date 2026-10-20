@@ -8,7 +8,7 @@ import BuilderQuery
 ### lifetime, and its `destruct`. A `Hijacked[T]` is an unsanctioned *alias* into memory you do not
 ### own (hence `danger`) — the owner and the alias can both touch it — not a takeover of it.
 ### :typeparam T: The pointee type.
-### :see: {Address}, {Modifying[T]}, {Viewing[T]}
+### :see: {Addr}, {Modifying[T]}, {Viewing[T]}
 @llvm("ptr")
 record Hijacked[T]
 obeys Copyable
@@ -17,8 +17,8 @@ obeys Copyable
 ### Returns the raw address carried by this pointer.
 ### :returns: The raw address stored in this pointer.
 @readonly
-routine Hijacked[T].get_address() -> Address
-    return LLVM::pointer_to_int[T, Address](me)
+routine Hijacked[T].get_address() -> Addr
+    return LLVM::reinterpret_bits[Hijacked[T], Addr](me)
 
 ### Returns a bitwise duplicate of this raw pointer.
 ### `Hijacked[T]` is `@llvm("ptr")` so it does not auto-derive `Assignable`; this
@@ -45,28 +45,21 @@ routine Hijacked[T].duplicate() -> Hijacked[T]
 ###        storage directly. Calling on an rvalue (`make_rec().get_address()`) is a build
 ###        error. For entities, the receiver value (already a ptr) is reinterpreted.
 @readonly
-routine T.get_address() -> Address
-    return LLVM::pointer_to_int[T, Address](LLVM::reinterpret_bits[T, Hijacked[T]](me))
+routine T.get_address() -> Addr
+    return LLVM::reinterpret_bits[T, Addr](me)
 
-### Reinterprets a raw address as `Hijacked[T]`.
+### Reads a raw address as a `Hijacked[T]`, a pointer to the `T` there.
+### `Addr` and `Hijacked[T]` are both `@llvm("ptr")`, so this is the same pointer with a pointee type, no int
+### round-trip. Used at the runtime-allocator boundary, where `C::rf_allocate_dynamic*` return `Addr`
+### (see NativeDeclarations.rf).
 ### :param from: The address to wrap.
-### :returns: A `Hijacked[T]` pointer wrapping the given raw address.
-routine Hijacked[T](from: Address) -> Hijacked[T]
-    return LLVM::int_to_pointer[Address, T](from)
-
-### Reinterprets a raw C pointer as `Hijacked[T]`.
-### `CPtr` (the FFI/runtime opaque pointer) and `Hijacked[T]` are both `@llvm("ptr")`, so this is a
-### pure bit reinterpretation — no int round-trip. Used at the runtime-allocator boundary, where
-### `C::rf_allocate_dynamic*` return `CPtr` (see NativeDeclarations.rf): `Hijacked[U8](C::...)`
-### resolves here directly instead of forcing a `.get_address()` at every call site.
-### :param from: The C pointer to wrap.
 ### :returns: A `Hijacked[T]` pointer over the same address.
-routine Hijacked[T](from: CPtr) -> Hijacked[T]
-    return LLVM::reinterpret_bits[CPtr, Hijacked[T]](from)
+routine Hijacked[T](from: Addr) -> Hijacked[T]
+    return LLVM::reinterpret_bits[Addr, Hijacked[T]](from)
 
 ### Produces an unmanaged pointer alias of `me`.
 ### :returns: An unmanaged pointer alias of this value.
-### :note: For entities and `@llvm("ptr")` records (`Retained[T]`, `Tracked[T]`, `CPtr`, etc.)
+### :note: For entities and `@llvm("ptr")` records (`Retained[T]`, `Tracked[T]`, `Addr`, etc.)
 ###        the receiver's value is already a pointer and the body works as written. For
 ###        struct-shaped records, `me.get_address()` is intercepted at the call site to use
 ###        the caller's lvalue storage (see `T.get_address()`); the receiver must therefore
@@ -160,8 +153,8 @@ routine Hijacked[T].recast_as[TTarget]() -> Hijacked[TTarget]
 ### Returns the raw address of this pointer.
 ### :returns: The raw address stored in this pointer.
 @readonly
-routine Hijacked[T].address() -> Address
-    return LLVM::pointer_to_int[Hijacked[T], Address](me)
+routine Hijacked[T].address() -> Addr
+    return LLVM::reinterpret_bits[Hijacked[T], Addr](me)
 
 ### Steps this pointer forward by {count} elements (element-sized stride, may be negative).
 ### :param count: Number of elements to advance.
@@ -212,7 +205,7 @@ dangerous routine Hijacked[T].cyclic_trace_sparse_buffer(live: Hijacked[U8], use
 
 ### Deallocates the memory at this pointer's address.
 dangerous routine Hijacked[T].invalidate()
-    rf_invalidate(me.address())
+    C::rf_invalidate(ptr: me.address())
     return
 
 ### Cycle-collector TRACE hook for a raw pointer: a NO-OP. A `Hijacked` buffer cannot self-describe its
@@ -238,8 +231,7 @@ dangerous routine Hijacked[T].detonate()
 ### Returns a null `Hijacked[T]` pointer (address zero).
 ### :returns: A null pointer of type `Hijacked[T]`.
 routine hijacked_none[T]() -> Hijacked[T]
-    var null_address: Address = 0
-    return Hijacked[T](null_address)
+    return Hijacked[T](Addr.hollow())
 
 ### Constructs a {Hijacked[T]} from a raw address. Use this instead of
 ### `Hijacked[T](addr)` directly when T is a parent-scope generic param,
@@ -247,7 +239,7 @@ routine hijacked_none[T]() -> Hijacked[T]
 ### type refs.
 ### :param addr: The raw address to wrap.
 ### :returns: A `Hijacked[T]` wrapping the given raw address.
-routine hijacked_from[T](addr: Address) -> Hijacked[T]
+routine hijacked_from[T](addr: Addr) -> Hijacked[T]
     return Hijacked[T](addr)
 
 ### Returns `true` if this pointer is null (address zero).
@@ -260,8 +252,7 @@ routine Hijacked[T].is_none() -> Bool
 ### :param bytes: The byte distance to advance.
 ### :returns: This pointer shifted forward by the given number of bytes.
 routine Hijacked[T].offset(bytes: ByteSize) -> Hijacked[T]
-    var addr = LLVM::pointer_to_int[T, Address](me)
-    return Hijacked[T](addr + bytes)
+    return Hijacked[T](me.address().offset(bytes: bytes.byte_size().to[S64]()))
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
@@ -274,7 +265,7 @@ routine Hijacked[T].eq(you: Hijacked[T]) -> Bool
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine Hijacked[T].compare(you: Hijacked[T]) -> ComparisonSign
-    return me.address().compare(you: you.address())
+    return me.address().to[U64]().compare(you: you.address().to[U64]())
 
 ### Returns a SipHash-2-4 keyed hash of this pointer's address.
 ### :param k0: The first 64-bit key word.

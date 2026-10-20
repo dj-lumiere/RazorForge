@@ -55,21 +55,20 @@ needs EntityType T
 routine roamed_none[T]() -> Roamed[T]
 needs EntityType T
     danger
-        var null_address: Address = 0
-        return Roamed[T](Hijacked[RoamManager[T]](from: null_address))
+        return Roamed[T](Hijacked[RoamManager[T]](from: Addr.hollow()))
 
 ### Whether this is the absent handle (owns nothing). :returns: `true` if none.
 @readonly
 routine Roamed[T].is_none() -> Bool
     danger
-        return me.controller_address() == 0
+        return me.controller_address().is_hollow()
 
 ### Reinterprets a raw {RoamManager[T]} address as a `Roamed[T]` handle WITHOUT retaining — a
 ### low-level plumbing / test hatch (Stage-1 cyclic-graph construction). The caller is responsible for
 ### the reference count: the returned handle does not add a strong ref.
 ### :param addr: The controller address (0 for the absent handle).
 ### :returns: The `Roamed[T]` viewing that controller.
-dangerous routine roamed_from_addr[T](addr: Address) -> Roamed[T]
+dangerous routine roamed_from_addr[T](addr: Addr) -> Roamed[T]
 needs EntityType T
     return Roamed[T](Hijacked[RoamManager[T]](from: addr))
 
@@ -80,7 +79,7 @@ needs EntityType T
 @override
 secret routine Roamed[T].share() -> Roamed[T]
     danger
-        if me.controller_address() != 0
+        if me.controller_address().is_not_hollow()
             var ctrl = Hijacked[RoamManager[T]](me).as_entity()
             ctrl.hold()
     return me
@@ -127,7 +126,7 @@ failable routine Roamed[T].require_shape_free()
 failable dangerous routine Roamed[T].release_inner() -> T
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     var data = ctrl.release_inner()
-    if data.is_none()
+    if data.is_hollow()
         throw SharedEntityHandOffError(creating: T.type_name())
     return Hijacked[T](from: data).as_entity()
 
@@ -173,7 +172,7 @@ routine Roamed[T].strong_count() -> U64
 ### :returns: A `Watched[T]` observing this entity's controller.
 routine Roamed[T].watch() -> Watched[T]
     danger
-        if me.controller_address() == 0
+        if me.controller_address().is_hollow()
             return Watched[T](ctrl: 0)
         var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         ctrl.observe()
@@ -185,8 +184,8 @@ routine Roamed[T].watch() -> Watched[T]
 ### synthesized trace, so no `danger` here.
 @override
 dangerous routine Roamed[T].cyclic_visit()
-    if me.controller_address() != 0
-        C::ingrid_cyclic_visit_child(child: CPtr(from: me.controller_address()))
+    if me.controller_address().is_not_hollow()
+        C::ingrid_cyclic_visit_child(child: me.controller_address())
     return
 
 ### Cycle-collector TRACE hook: a `Roamed` handle IS a strong edge, so report its controller to the
@@ -209,7 +208,7 @@ dangerous routine Roamed[T].roam_free()
 ### pure reinterpretation, no load.
 ### :returns: The controller address.
 @readonly
-routine Roamed[T].controller_address() -> Address
+routine Roamed[T].controller_address() -> Addr
     return Hijacked[RoamManager[T]](me).get_address()
 
 ### The inner entity as a raw reference. Real access is lock-wrapped by the builder's lock-bracket
@@ -274,7 +273,7 @@ routine Roamed[T].modify() -> Modifying[T]
 @override
 routine Roamed[T].destruct()
     danger
-        if me.controller_address() == 0
+        if me.controller_address().is_hollow()
             return
         var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         ctrl.unhold()

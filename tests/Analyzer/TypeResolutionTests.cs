@@ -700,10 +700,10 @@ public class TypeResolutionTests
         // Integer types implement ConstCompatible and should be valid
         string source = """
                         entity Buffer[T, N]
-                        needs N is Address
+                        needs N is U64
                             data: T
 
-                        routine test(buf: Buffer[U8, Address])
+                        routine test(buf: Buffer[U8, U64])
                             return
                         """;
 
@@ -790,7 +790,7 @@ public class TypeResolutionTests
         // Type argument doesn't match required const type
         string source = """
                         entity Buffer[T, N]
-                        needs Address N
+                        needs U64 N
                             data: T
 
                         routine test(buf: Buffer[U8, S32])
@@ -809,10 +809,10 @@ public class TypeResolutionTests
     public void Analyze_ConstGeneric_PresetLiteral_NoError()
     {
         string source = """
-                        preset WIDTH: Address = 16
+                        preset WIDTH: U64 = 16
 
                         entity Buffer[T, N]
-                        needs N is Address
+                        needs N is U64
                             data: T
 
                         routine test(buf: Buffer[U8, WIDTH])
@@ -833,11 +833,11 @@ public class TypeResolutionTests
     public void Analyze_ConstGeneric_PresetAlias_NoError()
     {
         string source = """
-                        preset BASE_WIDTH: Address = 16
-                        preset WIDTH: Address = BASE_WIDTH
+                        preset BASE_WIDTH: U64 = 16
+                        preset WIDTH: U64 = BASE_WIDTH
 
                         entity Buffer[T, N]
-                        needs N is Address
+                        needs N is U64
                             data: T
 
                         routine test(buf: Buffer[U8, WIDTH])

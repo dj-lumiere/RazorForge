@@ -162,7 +162,7 @@ public class TypeDeclarationTests
     public void Parse_Record_FollowsMultipleProtocols_AcrossLines()
     {
         string source = """
-                        record Address
+                        record Word
                         obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable,
                         WrappingMultiplicable, FloorDivisible
                             pass

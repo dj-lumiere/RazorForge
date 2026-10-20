@@ -49,7 +49,7 @@ common routine CpuEventManager.when_interrupted(handler: Callable[(), None]?) ->
 ### :param handler: The handler, or `none` for the system's action.
 ### :returns: The handler before, `none` for none.
 secret routine replace_handler(which: S32, handler: Callable[(), None]?) -> Callable[(), None]?
-    var cell: Address = 0
+    var cell = Addr.hollow()
     when handler
         is None => pass
         else as h =>
@@ -57,7 +57,7 @@ secret routine replace_handler(which: S32, handler: Callable[(), None]?) -> Call
                 cell = handler_cell(handler: h)
     danger
         var before = C::rf_cpu_event_replace(which, cell)
-        if before == 0
+        if before.is_hollow()
             return none
         return Hijacked[HandlerCell](before).peek().handler
     return none
@@ -71,7 +71,7 @@ secret record HandlerCell
 ### handler's thread, so cells are never freed.
 ### :param handler: The routine value.
 ### :returns: The cell's address.
-secret dangerous routine handler_cell(handler: Callable[(), None]) -> Address
+secret dangerous routine handler_cell(handler: Callable[(), None]) -> Addr
     var cell = Hijacked[HandlerCell](rf_allocate_dynamic(size: HandlerCell.data_size()))
     cell.poke(HandlerCell(handler))
     return cell.address()

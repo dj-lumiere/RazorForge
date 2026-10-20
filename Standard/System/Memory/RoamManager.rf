@@ -61,16 +61,16 @@ needs EntityType T
     ### `true` while this controller sits in the collector's roots buffer — dedups `mark_cycle_candidate`.
     secret buffered: Bool
     ### Address of the builder-generated per-type trace function for `T` (visits `T`'s `Roamed`
-    ### fields). `cptr_none()` = no trace wired yet / `T` has no `Roamed` fields (cannot form a cycle).
+    ### fields). `Addr.hollow()` = no trace wired yet / `T` has no `Roamed` fields (cannot form a cycle).
     ### Called as `fn(controller_address)`; reinterprets and reports each `Roamed` field through `ingrid_cyclic_visit_child`.
-    secret trace_hook: CPtr
+    secret trace_hook: Addr
     ### Address of the builder-generated per-type free function for `T`. Called as
     ### `fn(controller_address)` when the collector reaps a GARBAGE node: runs the managed
-    ### entity's `destruct` (type-correct) then frees the controller. `cptr_none()` until wired.
-    secret free_hook: CPtr
+    ### entity's `destruct` (type-correct) then frees the controller. `Addr.hollow()` until wired.
+    secret free_hook: Addr
     ### Address of the managed entity type's own `destruct`, run by the last strong release. Ingrid's Roamed
     ### runtime (`Ingrid/tessera/roam.te`) cannot name `T`, so it calls the entity's teardown through this.
-    secret drop_hook: CPtr
+    secret drop_hook: Addr
     ### How many `each` loops and in-place element accesses are using the entity's element positions right now
     ### (Suflae's shape use). Every name of the entity shares this controller, so a change made through any of
     ### them sees the use. Kept by the builder through `Roamed.begin_shape_use`/`end_shape_use`.
@@ -78,21 +78,21 @@ needs EntityType T
 
 ### Builder intrinsic: yields a closure over this type's synthesized `roam_trace` cycle-collector
 ### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
-### routine-value reference to that hook; the `cptr_none()` body is a never-used fallback (NOT `@innate`
+### routine-value reference to that hook, and the `Addr.hollow()` body is a never-used fallback (NOT `@innate`
 ### — an unrecognized `@innate` T-method is folded to a default before the rewrite runs).
 ### See internal-wiki/v0.4.x-cycle-collector.md §9.3.
-routine T.roam_trace_ref() -> CPtr
-    return cptr_none()
+routine T.roam_trace_ref() -> Addr
+    return Addr.hollow()
 
 ### Builder intrinsic: yields a closure over this type's synthesized `roam_free` hook (tears down
-### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass; `cptr_none()` fallback.
-routine T.roam_free_ref() -> CPtr
-    return cptr_none()
+### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass, `Addr.hollow()` fallback.
+routine T.roam_free_ref() -> Addr
+    return Addr.hollow()
 
 ### Builder intrinsic: yields this type's `destruct` as a native code address (RoamHookRefLoweringPass), the
-### drop hook the last strong release runs. `cptr_none()` fallback.
-routine T.roam_drop_ref() -> CPtr
-    return cptr_none()
+### drop hook the last strong release runs. `Addr.hollow()` fallback.
+routine T.roam_drop_ref() -> Addr
+    return Addr.hollow()
 
 ### Creates a controller with one strong reference in LOCAL mode (unlocked, non-atomic).
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
@@ -121,9 +121,9 @@ dangerous routine RoamManager[T](data: Hijacked[T]) -> RoamManager[T]
 # ============================================================================
 
 ### This controller's address, as Ingrid's Roamed routines take it (their `RoamHeader` repeats this layout).
-secret routine RoamManager[T].header() -> CPtr
+secret routine RoamManager[T].header() -> Addr
     danger
-        return CPtr(from: me.hijack().get_address())
+        return me.hijack().get_address()
 
 ### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED. The count mutation is bracketed
 ### in the collector's SHARED stop-the-world lock so a concurrent cycle-collection pass (which trial-
@@ -147,7 +147,7 @@ routine RoamManager[T].unhold()
 ### Takes the entity out of this controller when one strong handle and no weak observer reach it, freeing the
 ### controller. Anything more leaves the entity where it is.
 ### :returns: The entity's address, or the none address when something else still reaches it.
-dangerous routine RoamManager[T].release_inner() -> CPtr
+dangerous routine RoamManager[T].release_inner() -> Addr
     return C::ingrid_roam_release_inner(header: me.header())
 
 ### Returns the current strong count. Snapshot only.

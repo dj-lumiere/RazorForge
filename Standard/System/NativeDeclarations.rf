@@ -34,55 +34,46 @@ dangerous routine C::rf_udivrem_128_64_pre(
 ) -> U64
 
 ### Allocates zero-initialized dynamic memory.
-### The C boundary returns `CPtr` (a real `void*`) rather than an `Address` (i64) so the pointer
-### keeps its `ptr` type across the RF↔runtime seam — that lets the dev-loop LTO step inline the
-### allocator and expose libc `calloc` to LLVM (see src/BuildSystem/NativeToolchain.cs).
+### The C boundary returns a real `void*`, so the dev-loop LTO step can inline the allocator and expose
+### libc `calloc` to LLVM (see src/BuildSystem/NativeToolchain.cs).
 ### :param size: The number of bytes to allocate.
-### :returns: The resulting `CPtr` value.
-dangerous routine C::rf_allocate_dynamic(size: U64) -> CPtr
+### :returns: The resulting `Addr` value.
+dangerous routine C::rf_allocate_dynamic(size: U64) -> Addr
 
 ### Allocates zero-initialized dynamic memory.
 ### :param size: The number of bytes to allocate.
-### :returns: The resulting `Address` value.
-dangerous routine rf_allocate_dynamic(size: ByteSize) -> Address
-    return C::rf_allocate_dynamic(size: size.byte_size()).get_address()
+### :returns: The resulting `Addr` value.
+dangerous routine rf_allocate_dynamic(size: ByteSize) -> Addr
+    return C::rf_allocate_dynamic(size: size.byte_size())
 
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
-### :returns: The resulting `CPtr` value.
-dangerous routine C::rf_allocate_dynamic_uninit(size: U64) -> CPtr
+### :returns: The resulting `Addr` value.
+dangerous routine C::rf_allocate_dynamic_uninit(size: U64) -> Addr
 
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
-### :returns: The resulting `Address` value.
-dangerous routine rf_allocate_dynamic_uninit(size: ByteSize) -> Address
-    return C::rf_allocate_dynamic_uninit(size: size.byte_size()).get_address()
+### :returns: The resulting `Addr` value.
+dangerous routine rf_allocate_dynamic_uninit(size: ByteSize) -> Addr
+    return C::rf_allocate_dynamic_uninit(size: size.byte_size())
 
 ### Reallocates a dynamic memory block to a new size.
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size in bytes.
-### :returns: The resulting `CPtr` value.
-dangerous routine C::rf_reallocate_dynamic(ptr: CPtr, size: U64) -> CPtr
+### :returns: The resulting `Addr` value.
+dangerous routine C::rf_reallocate_dynamic(ptr: Addr, size: U64) -> Addr
 
 ### Reallocates a dynamic memory block to a new size.
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size.
-### :returns: The resulting `Address` value.
-dangerous routine rf_reallocate_dynamic(ptr: Address, size: ByteSize) -> Address
-    return C::rf_reallocate_dynamic(ptr: CPtr(from: ptr), size: size.byte_size()).get_address()
+### :returns: The resulting `Addr` value.
+dangerous routine rf_reallocate_dynamic(ptr: Addr, size: ByteSize) -> Addr
+    return C::rf_reallocate_dynamic(ptr: ptr, size: size.byte_size())
 
 ### Frees a dynamic memory block previously returned by the runtime allocator.
-### The C boundary takes `CPtr` (a real `void*`) so `free` matches its C signature under LTO.
+### The C boundary takes a real `void*`, so `free` matches its C signature under LTO.
 ### :param ptr: The allocation to release.
-dangerous routine C::rf_invalidate(ptr: CPtr)
-
-### Frees a dynamic memory block, given its raw `Address`. Thin `Address`→`CPtr` adapter over
-### `C::rf_invalidate` so the many address-holding call sites (collection rehash, Agent payload
-### teardown, ...) need no per-site conversion.
-### :param ptr: The allocation to release.
-dangerous routine rf_invalidate(ptr: Address)
-    C::rf_invalidate(ptr: CPtr(from: ptr))
-    return
+dangerous routine C::rf_invalidate(ptr: Addr)
 
 ### Returns the current top of this thread's scratch region. Every block allocated with
 ### `C::rf_region_alloc` after this mark is freed by `C::rf_region_release(mark:)`. Marks nest in
@@ -93,8 +84,8 @@ dangerous routine C::rf_region_mark() -> U64
 ### Allocates zero-initialized scratch memory in this thread's region. It is freed in bulk by the
 ### enclosing `C::rf_region_release`, never individually.
 ### :param bytes: The number of bytes to allocate.
-### :returns: The resulting `CPtr` value.
-dangerous routine C::rf_region_alloc(bytes: U64) -> CPtr
+### :returns: The resulting `Addr` value.
+dangerous routine C::rf_region_alloc(bytes: U64) -> Addr
 
 ### Frees every scratch block allocated since `mark` was taken.
 ### :param mark: A mark returned by `C::rf_region_mark`.
@@ -105,51 +96,51 @@ dangerous routine C::rf_region_release(mark: U64)
 # ============================================================================
 
 ### Creates a task control block. `kind` is 1 for an OS thread (RF_TASK_THREADED).
-### :returns: The `rf_task*` handle as an `Address` (null on allocation failure).
-dangerous routine C::rf_task_create(kind: U32) -> Address
+### :returns: The `rf_task*` handle as an `Addr` (null on allocation failure).
+dangerous routine C::rf_task_create(kind: U32) -> Addr
 
 ### Spawns an OS thread running `entry(task, userdata)`. Idempotent: a task that was already spawned is
 ### left running and reported as spawned again.
 ### :returns: 1 on success, 0 on failure.
-dangerous routine C::rf_task_spawn_threaded(task: Address, entry: CPtr, userdata: Address) -> S32
+dangerous routine C::rf_task_spawn_threaded(task: Addr, entry: Addr, userdata: Addr) -> S32
 
 ### Runs `entry(arg)`: inside a coroutine on one of the runtime's I/O threads while the coroutine parks, anywhere
 ### else right here. For a foreign routine marked `@blocking`.
-dangerous routine C::rf_blocking_call(entry: CPtr, arg: Address)
+dangerous routine C::rf_blocking_call(entry: Addr, arg: Addr)
 
 ### Completes a task with its boxed result (`result` is the result cell, or 0 for no value). A
 ### detached task frees itself and the box here.
-dangerous routine C::rf_task_complete_value(task: Address, result: Address)
+dangerous routine C::rf_task_complete_value(task: Addr, result: Addr)
 
 ### Whether a task is detached: its result has no reader.
 ### :returns: 1 when detached, 0 otherwise.
-dangerous routine C::rf_task_is_detached(task: Address) -> U8
+dangerous routine C::rf_task_is_detached(task: Addr) -> U8
 
 ### Blocks until the task completes. :returns: the completion kind (1 = value).
-dangerous routine C::rf_task_wait(task: Address) -> S32
+dangerous routine C::rf_task_wait(task: Addr) -> S32
 
 ### Blocks until the task completes or the deadline elapses.
 ### :returns: the completion kind (1 = value, 4 = timeout).
-dangerous routine C::rf_task_wait_within(task: Address, secs: S64, ns: U32) -> S32
+dangerous routine C::rf_task_wait_within(task: Addr, secs: S64, ns: U32) -> S32
 
 ### :returns: the boxed result payload pointer set by the task's entry thunk.
-dangerous routine C::rf_task_result_payload(task: Address) -> Address
+dangerous routine C::rf_task_result_payload(task: Addr) -> Addr
 
 ### Reads a task's status (0 new, 1 ready, 2 running, 3 parked, 4 completed). Used by Agent[T].destroy
 ### to decide between freeing a completed worker and joining one still in flight.
-dangerous routine C::rf_task_status_get(task: Address) -> U32
+dangerous routine C::rf_task_status_get(task: Addr) -> U32
 
 ### Releases a task control block.
-dangerous routine C::rf_task_destroy(task: Address)
+dangerous routine C::rf_task_destroy(task: Addr)
 
 ### Marks a result task as detached: its completion self-frees the task + result box, no consumer.
 ### Set before the coroutine/thread runs.
-dangerous routine C::rf_task_set_detached(task: Address)
+dangerous routine C::rf_task_set_detached(task: Addr)
 
 ### Consumer side of the thread task self-reap rendezvous: called once by the driving `retrieve!`
 ### (after reading the value, or on a deadline give-up). Frees the task iff the worker already exited;
 ### else the worker frees it. An Agent handle copy's `destruct` never calls this — so no double-free.
-dangerous routine C::rf_task_release(task: Address)
+dangerous routine C::rf_task_release(task: Addr)
 
 ### Opaque, stable identifier for the calling OS thread. Safe: takes no pointers and only reads the OS thread id.
 ### :returns: a per-thread id, equal across calls on the same thread.
@@ -172,31 +163,31 @@ routine C::rf_monotonic_now_ns() -> U64
 # ============================================================================
 
 ### Allocates a coroutine running `entry(userdata)`. `entry` is a C function pointer — a
-### non-capturing routine coerces to `CPtr`. `stack_size` of 0 picks a default.
-### :returns: an opaque coroutine handle as a `CPtr` (null on failure). Does not start it.
-dangerous routine C::rf_coro_create(entry: CPtr, userdata: CPtr, stack_size: U64) -> CPtr
+### non-capturing routine coerces to `Addr`. `stack_size` of 0 picks a default.
+### :returns: an opaque coroutine handle as an `Addr` (null on failure). Does not start it.
+dangerous routine C::rf_coro_create(entry: Addr, userdata: Addr, stack_size: U64) -> Addr
 
 ### Switches into the coroutine, blocking the caller until it parks or finishes.
 ### :returns: the resulting status (2 = parked, 3 = completed).
-dangerous routine C::rf_coro_resume(coro: CPtr) -> U32
+dangerous routine C::rf_coro_resume(coro: Addr) -> U32
 
 ### Parks the coroutine currently running on this OS thread, switching back to its resumer.
 ### Safe: takes no pointers; a no-op outside a coroutine. THIS is the suspend point.
 routine C::rf_coro_yield()
 
 ### Reads a coroutine's status (0 new, 1 running, 2 parked, 3 completed, 4 cancelled).
-dangerous routine C::rf_coro_status_get(coro: CPtr) -> U32
+dangerous routine C::rf_coro_status_get(coro: Addr) -> U32
 
 ### Marks a coroutine as detached: the completing worker frees it, no consumer.
 ### Call before rf_sched_spawn_default so it is published before any worker runs it.
-dangerous routine C::rf_coro_set_detached(coro: CPtr)
+dangerous routine C::rf_coro_set_detached(coro: Addr)
 
 ### Abandons a parked (or never-started) coroutine: walks its cancellation shadow stack
 ### innermost-first, runs each teardown thunk once, then frees the coroutine and its stack.
-dangerous routine C::rf_coro_abandon(coro: CPtr)
+dangerous routine C::rf_coro_abandon(coro: Addr)
 
 ### Frees a completed (or never-started) coroutine and its stack. Use rf_coro_abandon for a parked one.
-dangerous routine C::rf_coro_delete(coro: CPtr)
+dangerous routine C::rf_coro_delete(coro: Addr)
 
 ### Blocks the calling thread for the given duration. The synchronous-sleep backing for the
 ### `waitfor` routine outside a fiber (inside one it parks on a timer instead).
@@ -212,11 +203,11 @@ dangerous routine C::rf_waitfor_duration(secs: S64, ns: U32)
 ### Requests cooperative cancellation of a coroutine-backed agent. Sets a flag; the coroutine
 ### observes it at its next suspend point (waitfor returns early) or via a poll, and returns on
 ### its own. Never frees.
-dangerous routine C::rf_coro_request_cancel(coro: CPtr)
+dangerous routine C::rf_coro_request_cancel(coro: Addr)
 
 ### Requests cooperative cancellation of a thread-backed agent. Sets a flag the worker polls. Never
 ### frees — destroy still joins the worker at teardown.
-dangerous routine C::rf_task_request_cancel(task: Address)
+dangerous routine C::rf_task_request_cancel(task: Addr)
 
 ### Whether cancellation has been requested for the agent (coroutine OR worker thread) running on
 ### THIS thread. The backing for the `cancellation_requested()` free routine. Reads only
@@ -228,14 +219,14 @@ routine C::rf_cancel_requested() -> U32
 # OS thread; a parked coroutine waits without blocking the thread.
 # ============================================================================
 
-### Creates a scheduler. :returns: an opaque `rf_sched*` handle as a `CPtr`.
-dangerous routine C::rf_sched_create() -> CPtr
+### Creates a scheduler. :returns: an opaque `rf_sched*` handle as an `Addr`.
+dangerous routine C::rf_sched_create() -> Addr
 
 ### Frees a scheduler.
-dangerous routine C::rf_sched_destroy(sched: CPtr)
+dangerous routine C::rf_sched_destroy(sched: Addr)
 
 ### Queues a NEW coroutine to run on the scheduler (starts on its first resume by the run loop).
-dangerous routine C::rf_sched_spawn(sched: CPtr, coro: CPtr)
+dangerous routine C::rf_sched_spawn(sched: Addr, coro: Addr)
 
 ### Parks the coroutine currently running under the loop for `delay_ns`, then resumes it. Called
 ### from inside a coroutine (e.g. by waitfor). A no-op outside a running scheduler/coroutine.
@@ -247,32 +238,32 @@ routine C::rf_sched_park_external()
 
 ### Makes a parked coroutine runnable again. Safe to call from ANY thread — the bridge a worker
 ### thread uses to hand a result back to a coroutine awaiting it on the scheduler thread.
-dangerous routine C::rf_sched_wake(sched: CPtr, coro: CPtr)
+dangerous routine C::rf_sched_wake(sched: Addr, coro: Addr)
 
 ### Drives all spawned coroutines to completion on this thread (returns when none remain).
-dangerous routine C::rf_sched_run(sched: CPtr)
+dangerous routine C::rf_sched_run(sched: Addr)
 
 ### Spawns a NEW coroutine onto the process pool (made on first use): how `start_now()` starts a job.
-dangerous routine C::rf_sched_spawn_default(coro: CPtr)
+dangerous routine C::rf_sched_spawn_default(coro: Addr)
 
 ### This thread's own one-worker scheduler, made on first use and driven by this thread whenever it waits: how
 ### `start_here()` starts a job. Null inside a `start_now()` job, which can move between threads.
-dangerous routine C::rf_sched_here() -> CPtr
+dangerous routine C::rf_sched_here() -> Addr
 
 ### Waits for `coro` to finish on the scheduler it was spawned on: parks inside a coroutine, blocks on a plain
 ### thread, or drives this thread's own scheduler when `coro` is a `start_here()` job. The engine behind
 ### Agent[T].retrieve().
-dangerous routine C::rf_sched_run_until_default(coro: CPtr)
+dangerous routine C::rf_sched_run_until_default(coro: Addr)
 
 ### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
 ### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
-dangerous routine C::rf_sched_unschedule_default(coro: CPtr) -> U32
+dangerous routine C::rf_sched_unschedule_default(coro: Addr) -> U32
 
 ### Race-free owner-side disposal for an Agent handle's destroy. Detaches `coro` from the pool and,
 ### under the scheduler lock, decides whether the OWNER may free it now (returns 1) or the free was
 ### DEFERRED (returns 0) because a worker still holds it (RUNNING / mid-pop) and will free it on
 ### completion. Prevents the owner from freeing a coroutine a worker is about to resume (the M:N UAF).
-dangerous routine C::rf_sched_dispose_default(coro: CPtr) -> U32
+dangerous routine C::rf_sched_dispose_default(coro: Addr) -> U32
 
 ### Number of worker threads driving the process pool (fixed host-core-count, min 1). Creates the pool
 ### on first call. Coroutine migration across workers can only occur when this is > 1.
@@ -281,12 +272,12 @@ routine C::rf_sched_worker_count() -> U64
 ### Registers the current scheduler-driven coroutine as `task`'s awaiter. Returns 1 if the task is
 ### already complete (read the result, don't park), 0 if registered (park via rf_sched_park_external;
 ### the worker wakes you on completion). Outside a scheduler-driven coroutine returns 1 (block-wait).
-dangerous routine C::rf_task_await_coro(task: Address) -> U32
+dangerous routine C::rf_task_await_coro(task: Addr) -> U32
 
 ### Timed variant: parks (deadline timer + externally wakeable) until the task completes or
 ### `timeout_ns` elapses. Returns 1 if completed (read the result), 0 if it timed out, 2 if not on a
 ### scheduler-driven coroutine (the caller should block-wait with the deadline instead).
-dangerous routine C::rf_task_await_coro_deadline(task: Address, timeout_ns: U64) -> U32
+dangerous routine C::rf_task_await_coro_deadline(task: Addr, timeout_ns: U64) -> U32
 
 ### Returns 1 when running inside a scheduler-driven coroutine (so a park suspends), else 0.
 ### Safe: reads only thread-local scheduler state. Lets `waitfor` be uncolored.
@@ -301,45 +292,45 @@ routine C::rf_in_coroutine() -> U32
 
 ### Creates a channel. `capacity` = buffered slots; 0 = rendezvous. Starts with one producer ref +
 ### one consumer ref. Throws OutOfMemoryError on a capacity*slot overflow or allocation failure.
-### :returns: an opaque `rf_channel*` handle as a `CPtr`.
-dangerous routine C::rf_channel_create(capacity: U64) -> CPtr
+### :returns: an opaque `rf_channel*` handle as an `Addr`.
+dangerous routine C::rf_channel_create(capacity: U64) -> Addr
 
 ### Adds a producer (Sender) reference.
-dangerous routine C::rf_channel_add_feeder(chan: CPtr)
+dangerous routine C::rf_channel_add_feeder(chan: Addr)
 
 ### Drops a producer reference. The last Sender dropping auto-closes the channel.
-dangerous routine C::rf_channel_drop_feeder(chan: CPtr)
+dangerous routine C::rf_channel_drop_feeder(chan: Addr)
 
 ### Adds a consumer (Receiver / SharedReceiver) reference.
-dangerous routine C::rf_channel_add_consumer(chan: CPtr)
+dangerous routine C::rf_channel_add_consumer(chan: Addr)
 
 ### Drops a consumer reference. The struct frees once both producer and consumer refs reach 0.
-dangerous routine C::rf_channel_drop_consumer(chan: CPtr)
+dangerous routine C::rf_channel_drop_consumer(chan: Addr)
 
 ### Sends one payload pointer. Returns 1 on success, 0 if the channel is closed or has no consumers.
 ### Blocks/parks while the buffer is full (backpressure); for a rendezvous channel additionally waits
 ### until a consumer takes the item.
-dangerous routine C::rf_channel_feed(chan: CPtr, payload: Address) -> U32
+dangerous routine C::rf_channel_feed(chan: Addr, payload: Addr) -> U32
 
 ### Sends one payload pointer only when there is room for it now, never waiting. Returns 1 when sent, 2 when
 ### the channel is full, 0 if the channel is closed or has no consumers.
-dangerous routine C::rf_channel_offer(chan: CPtr, payload: Address) -> U32
+dangerous routine C::rf_channel_offer(chan: Addr, payload: Addr) -> U32
 
-### Receives one payload pointer, or null (Address 0) when the channel is closed AND drained. Parks
+### Receives one payload pointer, or the hollow address when the channel is closed AND drained. Parks
 ### while the buffer is empty.
-dangerous routine C::rf_channel_next(chan: CPtr) -> Address
+dangerous routine C::rf_channel_next(chan: Addr) -> Addr
 
 ### Explicit early close (drop auto-closes too). Not dangerous semantically; double-close is a no-op.
-dangerous routine C::rf_channel_close(chan: CPtr)
+dangerous routine C::rf_channel_close(chan: Addr)
 
 ### Buffered item count — diagnostic snapshot only, not a synchronization primitive.
-dangerous routine C::rf_channel_count(chan: CPtr) -> U64
+dangerous routine C::rf_channel_count(chan: Addr) -> U64
 
 ### 1 if the channel is closed (may still hold buffered items to drain). Introspection snapshot.
-dangerous routine C::rf_channel_is_closed(chan: CPtr) -> U32
+dangerous routine C::rf_channel_is_closed(chan: Addr) -> U32
 
 ### The buffered capacity the channel was created with (0 = rendezvous). Introspection.
-dangerous routine C::rf_channel_capacity(chan: CPtr) -> U64
+dangerous routine C::rf_channel_capacity(chan: Addr) -> U64
 
 # ============================================================================
 # SignalCaster (v0.3.0). A condition-variable monitor: internal mutex + wait set.
@@ -348,34 +339,34 @@ dangerous routine C::rf_channel_capacity(chan: CPtr) -> U64
 # the stdlib `SignalCaster` (Concurrency/SignalCaster.rf).
 # ============================================================================
 
-### Creates a monitor (refcount 1). :returns: an opaque `rf_signal*` handle as a `CPtr`.
-dangerous routine C::rf_signal_create() -> CPtr
+### Creates a monitor (refcount 1). :returns: an opaque `rf_signal*` handle as an `Addr`.
+dangerous routine C::rf_signal_create() -> Addr
 
 ### Adds a handle reference (for clone).
-dangerous routine C::rf_signal_add_ref(sig: CPtr)
+dangerous routine C::rf_signal_add_ref(sig: Addr)
 
 ### Drops a handle reference; the monitor frees at 0.
-dangerous routine C::rf_signal_drop(sig: CPtr)
+dangerous routine C::rf_signal_drop(sig: Addr)
 
 ### Acquires the monitor lock that guards the caller's shared predicate.
-dangerous routine C::rf_signal_lock(sig: CPtr)
+dangerous routine C::rf_signal_lock(sig: Addr)
 
 ### Releases the monitor lock.
-dangerous routine C::rf_signal_unlock(sig: CPtr)
+dangerous routine C::rf_signal_unlock(sig: Addr)
 
 ### Waits for a cast — MUST hold the monitor lock. Drops the lock, parks (coroutine) or blocks
 ### (thread), and re-acquires the lock before returning. Re-check the predicate in a loop.
-dangerous routine C::rf_signal_wait(sig: CPtr)
+dangerous routine C::rf_signal_wait(sig: Addr)
 
 ### Timed wait. Returns 1 if woken before the deadline (re-check the predicate), 0 if it timed out.
 ### MUST hold the lock; releases/re-acquires it around the suspend.
-dangerous routine C::rf_signal_wait_deadline(sig: CPtr, timeout_ns: U64) -> U32
+dangerous routine C::rf_signal_wait_deadline(sig: Addr, timeout_ns: U64) -> U32
 
 ### Wakes one waiter. Call after updating the predicate (not while holding the lock).
-dangerous routine C::rf_signal_cast_one(sig: CPtr)
+dangerous routine C::rf_signal_cast_one(sig: Addr)
 
 ### Wakes all waiters. Call after updating the predicate (not while holding the lock).
-dangerous routine C::rf_signal_cast_all(sig: CPtr)
+dangerous routine C::rf_signal_cast_all(sig: Addr)
 
 # ============================================================================
 # race! competitor set (v0.2.0). Built one entry per Agent in List order, then
@@ -383,34 +374,34 @@ dangerous routine C::rf_signal_cast_all(sig: CPtr)
 # Underlies the stdlib `race[T](of: List[Agent[T]])`.
 # ============================================================================
 
-### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as a `CPtr`.
-dangerous routine C::rf_race_begin() -> CPtr
+### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as an `Addr`.
+dangerous routine C::rf_race_begin() -> Addr
 
 ### Appends a fiber competitor (an Agent started with `start_now()`/`start_here()`), preserving add (List)
 ### order.
-dangerous routine C::rf_race_add_coro(race: CPtr, coro: CPtr)
+dangerous routine C::rf_race_add_coro(race: Addr, coro: Addr)
 
 ### Appends a thread competitor (an Agent started with `start_apart()`), preserving add (List) order.
-dangerous routine C::rf_race_add_task(race: CPtr, task: Address)
+dangerous routine C::rf_race_add_task(race: Addr, task: Addr)
 
 ### Drives the scheduler until one competitor completes; :returns: its index in add (List) order, or
 ### -1 if the set is empty. Thread competitors' completions wake the loop; no wake can be lost.
-dangerous routine C::rf_race_wait(race: CPtr) -> S64
+dangerous routine C::rf_race_wait(race: Addr) -> S64
 
 ### Frees the competitor set. Does NOT touch the Agents themselves (the caller still owns them).
-dangerous routine C::rf_race_end(race: CPtr)
+dangerous routine C::rf_race_end(race: Addr)
 
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
 ### :param size: The number of bytes to copy.
-dangerous routine C::rf_copy_bytes_at(dest: Address, src: Address, size: U64)
+dangerous routine C::rf_copy_bytes_at(dest: Addr, src: Addr, size: U64)
 
 ### Copies `size` bytes from `src` to `dest`.
 ### :param dest: The destination location.
 ### :param src: The source location.
 ### :param size: The number of bytes to copy.
-dangerous routine rf_copy_bytes_at(dest: Address, src: Address, size: ByteSize)
+dangerous routine rf_copy_bytes_at(dest: Addr, src: Addr, size: ByteSize)
     C::rf_copy_bytes_at(dest: dest, src: src, size: size.byte_size())
     return
 
@@ -418,13 +409,13 @@ dangerous routine rf_copy_bytes_at(dest: Address, src: Address, size: ByteSize)
 ### :param dest: The destination location.
 ### :param value: The byte value to write.
 ### :param size: The number of bytes to set.
-dangerous routine C::rf_set_bytes_at(dest: Address, value: U8, size: U64)
+dangerous routine C::rf_set_bytes_at(dest: Addr, value: U8, size: U64)
 
 ### Fills `size` bytes at `dest` with `value`.
 ### :param dest: The destination location.
 ### :param value: The byte value to write.
 ### :param size: The number of bytes to set.
-dangerous routine rf_set_bytes_at(dest: Address, value: U8, size: ByteSize)
+dangerous routine rf_set_bytes_at(dest: Addr, value: U8, size: ByteSize)
     C::rf_set_bytes_at(dest: dest, value: value, size: size.byte_size())
     return
 
@@ -1580,18 +1571,18 @@ dangerous routine C::ingrid_integer_parse(
 ### Takes the access, waiting while another agent holds it. :param access: the policy's state. :param kind: 1 or 2.
 ### :param mode: 1 or 2. :throws: crashes with `ReenterDuringAccessError` when this agent holds it already, and with
 ### `DeadlockError` (`[debug] deadlock-check`) when agents wait on each other.
-dangerous routine C::rf_access_lock(access: CPtr, kind: U32, mode: U32)
+dangerous routine C::rf_access_lock(access: Addr, kind: U32, mode: U32)
 
 ### Takes the access if it is free, without waiting. :param access: the policy's state. :param kind: 1 or 2.
 ### :param mode: 1 or 2. :returns: 1 when it took the access, else 0.
-dangerous routine C::rf_access_try_lock(access: CPtr, kind: U32, mode: U32) -> U8
+dangerous routine C::rf_access_try_lock(access: Addr, kind: U32, mode: U32) -> U8
 
 ### Gives up the access this agent holds. :param access: the policy's state. :param kind: 1 or 2. :param mode: 1 or 2.
-dangerous routine C::rf_access_unlock(access: CPtr, kind: U32, mode: U32)
+dangerous routine C::rf_access_unlock(access: Addr, kind: U32, mode: U32)
 
 ### Names one target of a block that opens several at once. :param access: the policy's state, or the entity.
 ### :param kind: 1, 2, or 0 for an entity only checked. :param mode: 1 or 2.
-dangerous routine C::rf_access_enlist(access: CPtr, kind: U32, mode: U32)
+dangerous routine C::rf_access_enlist(access: Addr, kind: U32, mode: U32)
 
 ### Opens the targets a block named, in the order of their addresses, waiting for each. :throws: crashes with
 ### `AliasedTokensError` when two names are the same entity.
@@ -1608,43 +1599,43 @@ dangerous routine C::rf_access_try_open_enlisted() -> U8
 # The bodies are llvm-linked into every module, and the hot ones (hold, unhold, the lock) inline.
 
 ### Adds a strong handle. :param header: the controller.
-dangerous routine C::ingrid_roam_hold(header: CPtr)
+dangerous routine C::ingrid_roam_hold(header: Addr)
 
 ### Drops a strong handle. The last one destroys the entity and frees the controller unless a weak observer
 ### remains; any other release reports the entity to the cycle collector. :param header: the controller.
-dangerous routine C::ingrid_roam_unhold(header: CPtr)
+dangerous routine C::ingrid_roam_unhold(header: Addr)
 
 ### The strong count, a snapshot. :param header: the controller. :returns: the count.
-dangerous routine C::ingrid_roam_strong_count(header: CPtr) -> U64
+dangerous routine C::ingrid_roam_strong_count(header: Addr) -> U64
 
 ### Takes the entity out of its only handle, freeing the controller. :param header: the controller.
 ### :returns: the entity's address, or null when another handle or a weak observer still reaches it.
-dangerous routine C::ingrid_roam_release_inner(header: CPtr) -> CPtr
+dangerous routine C::ingrid_roam_release_inner(header: Addr) -> Addr
 
 ### Adds a weak observer. :param header: the controller.
-dangerous routine C::ingrid_roam_observe(header: CPtr)
+dangerous routine C::ingrid_roam_observe(header: Addr)
 
 ### Drops a weak observer, freeing a dead controller with the last one. :param header: the controller.
-dangerous routine C::ingrid_roam_unobserve(header: CPtr)
+dangerous routine C::ingrid_roam_unobserve(header: Addr)
 
 ### Whether the entity's data has been freed. :param header: the controller. :returns: true once it is gone.
-dangerous routine C::ingrid_roam_is_destroyed(header: CPtr) -> Bool
+dangerous routine C::ingrid_roam_is_destroyed(header: Addr) -> Bool
 
 ### Whether the entity has escaped to another task. :param header: the controller. :returns: true if escaped.
-dangerous routine C::ingrid_roam_is_escaped(header: CPtr) -> Bool
+dangerous routine C::ingrid_roam_is_escaped(header: Addr) -> Bool
 
 ### Promotes the entity and everything it reaches through Roamed fields to escaped. :param header: the controller.
-dangerous routine C::ingrid_roam_promote(header: CPtr)
+dangerous routine C::ingrid_roam_promote(header: Addr)
 
 ### Enters the task-keyed reentrant lock when escaped. :param header: the controller.
-dangerous routine C::ingrid_roam_lock_enter(header: CPtr)
+dangerous routine C::ingrid_roam_lock_enter(header: Addr)
 
 ### Leaves one level of the lock when escaped. :param header: the controller.
-dangerous routine C::ingrid_roam_lock_exit(header: CPtr)
+dangerous routine C::ingrid_roam_lock_exit(header: Addr)
 
 ### Called by a type's synthesized trace routine for each of the entity's `Roamed` fields: records that field's
 ### controller as a child for the cycle collector (Ingrid/tessera/cycle.te). :param child: the child controller.
-dangerous routine C::ingrid_cyclic_visit_child(child: CPtr)
+dangerous routine C::ingrid_cyclic_visit_child(child: Addr)
 
 ### Runs one cycle-collection pass (Bacon-Rajan trial deletion, stop-the-world) and frees the cyclic garbage.
 ### :returns: how many entities it freed.
@@ -1877,20 +1868,20 @@ routine C::rf_proc_errors_len() -> U64
 ### :param file: The executable to run.
 ### :param file_len: The file length in bytes.
 ### :returns: An opaque builder handle for `rf_proc_add_arg`/`rf_proc_set_cwd`/`rf_proc_run_built`.
-routine C::rf_proc_begin(file: CStrView, file_len: S32) -> CPtr
+routine C::rf_proc_begin(file: CStrView, file_len: S32) -> Addr
 
 ### Appends an argument to a subprocess builder.
-routine C::rf_proc_add_arg(builder: CPtr, arg: CStrView, arg_len: S32)
+routine C::rf_proc_add_arg(builder: Addr, arg: CStrView, arg_len: S32)
 
 ### Sets the working directory for a subprocess builder (empty = inherit the parent's).
-routine C::rf_proc_set_cwd(builder: CPtr, cwd: CStrView, cwd_len: S32)
+routine C::rf_proc_set_cwd(builder: Addr, cwd: CStrView, cwd_len: S32)
 
 ### Adds an environment override (KEY=VALUE), merged into the parent environment at launch.
-routine C::rf_proc_add_env(builder: CPtr, key: CStrView, key_len: S32, val: CStrView, val_len: S32)
+routine C::rf_proc_add_env(builder: Addr, key: CStrView, key_len: S32, val: CStrView, val_len: S32)
 
 ### Launches a built subprocess (no shell), capturing stdout/stderr like `rf_proc_run`, and consumes
 ### the builder. Parks the calling coroutine while it runs. Returns the exit code, or -1 on failure.
-routine C::rf_proc_run_built(builder: CPtr) -> S64
+routine C::rf_proc_run_built(builder: Addr) -> S64
 
 # ============================================================================
 # The current process's events (System/Cpu CpuEventManager). One handler slot per kind. A handler runs on a
@@ -1901,7 +1892,7 @@ routine C::rf_proc_run_built(builder: CPtr) -> S64
 ### the value's two words (the routine, then what it captured or null), or zero to give the event back to the system.
 ### which: 0 = interrupt (SIGINT, Ctrl+C), 1 = terminate (SIGTERM, the console closing).
 ### Returns the cell that held the slot before, zero for none.
-dangerous routine C::rf_cpu_event_replace(which: S32, handler: Address) -> Address
+dangerous routine C::rf_cpu_event_replace(which: S32, handler: Addr) -> Addr
 
 ### Reads up to `count` bytes from a file into a runtime-managed buffer.
 ### :param fd: The file descriptor to read from.

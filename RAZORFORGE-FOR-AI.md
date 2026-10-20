@@ -426,8 +426,8 @@ declare their own `i`.
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
   idiom is `try x.abs()!!`
 - Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
-  compares whether two references are the SAME object (entities / access-token /
-  RC-wrapper operands only — RF-S440 on value types). See §7.
+  compares whether two references are the SAME object (entities, handles, and `Addr`
+  only — RF-S440 on value types and access tokens). See §7.
 
 **Conversions: `x.to[T]()`, the one way to convert.**
 
@@ -435,7 +435,7 @@ declare their own `i`.
 var small = count.to[U8]()        # number to number
 var big = count.to[Integer]()      # Integer/Decimal convert on to B32/B64 (nearest value)
 var n = "42".to[S64]()             # text parsing (also Integer, Decimal, B64, ...)
-var code = c.to[U32]()             # a Char's codepoint (b.to[U8]() for a Byte, a.to[U64]() for an Address)
+var code = c.to[U32]()             # a Char's codepoint (b.to[U8]() for a Byte, a.to[U64]() for an Addr)
 var letter = code.to[Char]()       # 'A' when code is a U32 of 65, and 'x'.to[Text]() makes one-character text
 var byte = bits.to[Byte]()         # the same bits as a Byte, from a U8
 var raw = status.to[S32]()         # a choice's value (also to[S64]()), perms.to[U64]() a flags bitmask
@@ -606,7 +606,7 @@ failable routine get_text(n: S64) -> Text      # can throw
         == 0 => throw DivisionByZeroError()
         else => return "ok"
 
-dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
+dangerous routine raw_poke(p: Addr)     # callable only inside danger blocks
     ...
     return
 ```
@@ -784,6 +784,13 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
 - **`Hijacked[T]`** — a raw handle that manages nothing (no-op destruct); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
+- **`Addr`** — an address with no pointee type, LLVM `ptr` (C's `void*`): what the allocator and native code
+  take and hand back. It names a place, so two compare with `===` / `!==` (`==` on an `Addr` is RF-S061 and
+  points there), `Addr.hollow()` is the address 0 (`is_hollow()` / `is_not_hollow()`), `a.offset(bytes: n)`
+  moves it by a signed byte count, and it has no ordering or other arithmetic: the distance between two is
+  `b.to[U64]() - a.to[U64]()`. `x.to[Addr]()` / `a.to[U64]()` convert, `Hijacked[T](from: a)` reads it as a
+  `T`. `Address` and `CPtr` are both `Addr` now (`migrate --step addr` renames them, rewrites `==` / `!=`
+  between known addresses to `===` / `!==`, and lists what it cannot type).
 - Records never use tokens or `as_entity` — those are entity concepts.
 - `danger` blocks / `dangerous` routines mark **only** operations that can
   ACTUALLY cause memory-unsafety — UB, a memory race, use-after-free,
@@ -809,14 +816,13 @@ else
 ```
 
 - **Identity comparison `===` / `!==`** — "are these two the SAME object?", distinct
-  from value equality `==`. Valid only on reference-carrying operands: an `entity` or
-  a forwarding wrapper (`Viewing`/`Modifying`/`Retained`/
-  `Guarded`/`Tracked`/`Witnessed`). A value type (record/scalar) is a build error
-  (**RF-S440**) — values have no identity; use `==`. `Hijacked` is excluded (its `==`
-  is already identity — you `peek` to see its value). It is a primitive pointer
-  compare, never a `.eq()` call, so it is not overloadable. For bare entities (each kept in one place)
-  `a === b` is trivially `false` between distinct bindings; it earns its keep where
-  aliasing exists — two `Retained[T]` (or two `Viewing`/`Modifying` tokens) that may
+  from value equality `==`. Valid only on reference-carrying operands: an `entity`, a
+  handle (`Retained`/`Guarded`/`Tracked`/`Witnessed`/`Watched`/`Hijacked`), or an `Addr`.
+  A value type (record/scalar) is a build error (**RF-S440**) — values have no identity;
+  use `==`. An access token (`Viewing`/`Modifying`) is RF-S440 too: compare the entities
+  it came from. It is a primitive pointer compare, never a `.eq()` call, so it is not overloadable.
+  For bare entities (each kept in one place) `a === b` is trivially `false` between distinct
+  bindings; it earns its keep where aliasing exists — two `Retained[T]` handles that may
   point at the same entity.
 
 ```razorforge

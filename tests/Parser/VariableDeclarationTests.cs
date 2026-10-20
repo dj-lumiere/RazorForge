@@ -379,7 +379,7 @@ public class VariableDeclarationTests
     [InlineData("1.5_b32", "B32", 16)]
     [InlineData("10n", "Integer", 15)]
     [InlineData("2.5dn", "Decimal", 16)]
-    [InlineData("0_addr", "Address", 14)]
+    [InlineData("0_addr", "Addr", 14)]
     public void Tokenize_TypeNamingSuffix_IsAnError(string number, string typeName, int column)
     {
         string source = $"routine test()\n    var x = {number}\n    return\n";

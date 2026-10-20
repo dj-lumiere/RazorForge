@@ -79,7 +79,7 @@ public partial class RazorForgeLexer
         [key: "u64"] = "U64",
         [key: "u128"] = "U128",
         [key: "u256"] = "U256",
-        [key: "addr"] = "Address",
+        [key: "addr"] = "Addr",
         [key: "b16"] = "B16",
         [key: "b32"] = "B32",
         [key: "b64"] = "B64",

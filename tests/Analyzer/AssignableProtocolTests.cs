@@ -15,7 +15,7 @@ using static TestHelpers;
 ///     Assignable for free; ownership-bearing wrappers do not.
 ///   * Choice / Flags auto-derive Assignable unconditionally (scalar layout).
 ///   * Tuples cascade — Assignable iff every element is Assignable.
-///   * Raw-pointer wrappers (Hijacked[T], CPtr) opt in with a one-line assign body.
+///   * Raw-pointer wrappers (Hijacked[T], Addr) opt in with a one-line assign body.
 /// </summary>
 public class AssignableProtocolTests
 {
@@ -210,11 +210,11 @@ public class AssignableProtocolTests
     }
 
     [Fact]
-    public void Analyze_CPtrIsAssignable_VarCopyAccepted()
+    public void Analyze_AddrIsAssignable_VarCopyAccepted()
     {
         string source = """
                         routine start()
-                            var a = cptr_none()
+                            var a = Addr.hollow()
                             var b = a
                             return
                         """;

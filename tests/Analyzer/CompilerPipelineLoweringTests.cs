@@ -609,7 +609,7 @@ public class CompilerPipelineLoweringTests
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies
             });
 
-        // The allocator now returns a CPtr (`ptr`) so it matches its C `void*` signature under
+        // The allocator returns an Addr (`ptr`) so it matches its C `void*` signature under
         // dev-loop LTO; the test's concern is unchanged — the ByteSize argument is passed as a
         // scalar `i64`, never as a `{ i64 }` aggregate or a `%Record.System.ByteSize` by-value struct.
         string llvmIr = generator.Generate();
@@ -932,7 +932,7 @@ public class CompilerPipelineLoweringTests
             actualString: llvmIr);
         Assert.Contains(
             expectedSubstring:
-            "define ptr @\"[independent] System.hijacked_from(S64)(addr: System.Address)\"(i64 %addr)",
+            "define ptr @\"[independent] System.hijacked_from(S64)(addr: System.Addr)\"(ptr %addr)",
             actualString: llvmIr);
     }
 
@@ -1344,11 +1344,11 @@ public class CompilerPipelineLoweringTests
     public void LlvmEmitter_ConstGenericPresetTypeArgument_UsesResolvedTypeExpressionMetadata()
     {
         string source = """
-                        preset WIDTH: Address = 16
+                        preset WIDTH: U64 = 16
 
                         entity Buffer[T, N]
                         needs RecordType T
-                        needs Address N
+                        needs U64 N
                             data: T
 
                         routine Buffer[T, N].first() -> T
@@ -1380,7 +1380,7 @@ public class CompilerPipelineLoweringTests
         ConstGenericValueTypeSymbol resolvedWidth =
             Assert.IsType<ConstGenericValueTypeSymbol>(@object: widthArg.ResolvedType);
         Assert.Equal(expected: 16, actual: resolvedWidth.Value);
-        Assert.Equal(expected: "Address", actual: resolvedWidth.ExplicitTypeName);
+        Assert.Equal(expected: "U64", actual: resolvedWidth.ExplicitTypeName);
 
         var generator = new LlvmEmitter(program: program,
             registry: result.Registry,
@@ -1442,7 +1442,7 @@ public class CompilerPipelineLoweringTests
     public void LlvmEmitter_MonomorphizedGenericBody_EmitsStandaloneGenericHelperDefinition()
     {
         string source = """
-                        dangerous routine wrap_addr[T](addr: Address) -> Hijacked[T]
+                        dangerous routine wrap_addr[T](addr: Addr) -> Hijacked[T]
                             return hijacked_from[T](addr)
 
                         dangerous routine start() -> Hijacked[S64]
@@ -1467,11 +1467,11 @@ public class CompilerPipelineLoweringTests
         string llvmIr = generator.Generate();
         Assert.Contains(
             expectedSubstring:
-            "define ptr @\"[dangerous, independent] wrap_addr(S64)(addr: System.Address)\"(i64 %addr)",
+            "define ptr @\"[dangerous, independent] wrap_addr(S64)(addr: System.Addr)\"(ptr %addr)",
             actualString: llvmIr);
         Assert.Contains(
             expectedSubstring:
-            "define ptr @\"[independent] System.hijacked_from(S64)(addr: System.Address)\"(i64 %addr)",
+            "define ptr @\"[independent] System.hijacked_from(S64)(addr: System.Addr)\"(ptr %addr)",
             actualString: llvmIr);
     }
 

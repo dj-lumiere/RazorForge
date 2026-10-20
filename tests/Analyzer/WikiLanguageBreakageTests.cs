@@ -67,7 +67,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         record NativeShape
-                            external handle: Address
+                            external handle: Addr
                         """;
 
         AssertParseError(source: source);
