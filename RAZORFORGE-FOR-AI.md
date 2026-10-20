@@ -101,7 +101,18 @@ When unsure, consult ground truth in the repo/package:
    it writes its own. There is no `Crashable` protocol. `Crashables` (plural) is the
    stdlib record for "any caught error": `crash_title()`, `crash_message()`,
    `represent()`, `diagnose()` and `crash_type_id()` on it reach the actual
-   crashable's own routines.
+   crashable's own routines. **A crashable holds a few values** (numbers, a `Text`):
+   at most 64 bytes, a bigger one is RF-S711. A caught error is held IN the carrier
+   (a `Crashables` is the crashable's type id, the number that says where it was first
+   thrown, and the crashable itself), so a `Check` takes no memory of its own, and a call
+   on a `Crashables` is a switch the builder writes on the type id over the crashables
+   the program throws: nothing about it is looked up at run time.
+   **The list a routine throws** is collected by the builder (its own `throw`s and those
+   of the failable routines it calls). `@throws([NotFoundError, ParseError])` above a
+   failable routine fixes it, for a routine others build on: a crashable the routine can
+   throw that the list leaves out is RF-S712, and the annotation on a routine that isn't
+   failable (or naming a type that isn't a crashable) is RF-S713. The language server marks
+   a bare call of a failable routine with a `may stop` hint.
    **Matching a carrier.** `Check[T]` is the variant `T | Crashables`. A `when` on one MUST have the `T` arm (build error
    otherwise). `is Crashables as e` takes any error; `is NopeError as e` takes only that
    crashable and binds it as a `NopeError` (fields readable); `x is NopeError` works
@@ -1185,6 +1196,8 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S510/S512 | positional args in a multi-param call | name every argument                                |
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
 | RF-S753      | failable call left unhandled          | recover with `try`/`check` + `when`                 |
+| RF-S711      | crashable bigger than 64 bytes        | keep a few values in it                            |
+| RF-S712      | `@throws` leaves out a crashable the routine throws | add it to the list, or recover it inside |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-G010      | a number names its type (`5_u8`)      | `var x: U8 = 5`, or let the place it goes type it  |
 | RF-W007      | ignored result                        | `drop expr`                                        |

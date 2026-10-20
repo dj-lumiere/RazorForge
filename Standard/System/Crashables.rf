@@ -1,13 +1,18 @@
 module System
 
 ### Any crashable: the error a `check` caught, whatever its type. `is Crashables e` on a `Check`
-### binds it. It is the address of the heap object the error lives in, whose mold names the crashable's
-### own routines, so `crash_title`, `crash_message`, `represent` and `diagnose` reach that crashable's. The carrier
-### that caught the error owns the object and frees it; a `Crashables` read out of it is valid while the carrier
-### holds the error.
+### binds it. It holds the crashable itself, in a fixed room every crashable fits in, with the crashable's type id in
+### front, so `crash_title`, `crash_message`, `represent` and `diagnose` reach that crashable's own: the builder
+### chooses the routine by the type id, among the crashables the program throws. The carrier that caught the error
+### owns what the crashable holds (a `Text` field), and a `Crashables` read out of it is valid while the carrier holds
+### the error.
 record Crashables
-    ### The address of the heap object the caught error lives in.
-    secret object: Addr
+    ### The type id of the crashable it holds.
+    secret type_id: U64
+    ### The number of the failure, which says where it was first thrown (0 when the build keeps no trace).
+    secret failure: U64
+    ### The crashable itself: every crashable takes at most these 64 bytes.
+    secret data: Array[U64, 8]
 
 ### The caught error's title: its type's name in sentence case, unless the crashable writes its own.
 ### :returns: The title.
@@ -41,22 +46,20 @@ routine Crashables.diagnose() -> Text
 @innate
 routine Crashables.crash_type_id() -> U64
 
-### Frees the caught error and the object it lives in. Only the carrier that owns the error calls this.
+### Gives back what the caught error holds (its `Text` fields). Only the carrier that owns the error calls this.
 @innate
 dangerous routine Crashables.free()
 
-# The object a caught error lives in starts with one address-sized word (the builder's), then the crash trace the
-# error was first thrown with: the 32 frames of the thrower's trace ring as they were, then its depth. The builder
-# copies them when it puts the error in the object, so a report of the error thrown again can show where it began.
-
-### The first of the 32 frames the error was first thrown with, a ring its depth indexes modulo 32.
+### The first of the 32 frames of the trace the error was first thrown with, a ring its depth indexes modulo 32, or
+### null when the thread no longer remembers it (made on another thread, or later failures took its place).
 ### :returns: The address of frame 0.
 @untraced
 dangerous routine Crashables.thrown_trace_frames() -> Hijacked[TraceFrame]
-    return Hijacked[Addr](me.object).stride(count: 1).recast_as[TraceFrame]()
+    return LLVM::failure_trace_frames(seq: me.failure)
 
-### How many frames the trace had when the error was first thrown (0 when the build keeps no trace).
+### How many frames the trace had when the error was first thrown (0 when the build keeps no trace, or the thread no
+### longer remembers it).
 ### :returns: The depth.
 @untraced
 dangerous routine Crashables.thrown_trace_depth() -> S32
-    return me.thrown_trace_frames().stride(count: 32).recast_as[S32]().peek()
+    return LLVM::failure_trace_depth(seq: me.failure)
