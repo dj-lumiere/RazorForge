@@ -1745,71 +1745,50 @@ routine C::rf_file_read_all(fd: S32) -> Hijacked[Byte]
 ### :returns: A pointer to the captured byte buffer.
 routine C::rf_file_read_line(fd: S32) -> Hijacked[Byte]
 
-### RF-only: memory-maps a file read-only and returns the mapped base pointer
-### (`rf_get_result_len()` yields the mapped size); none on failure (missing / non-regular /
-### zero-length file). The view stays valid until `rf_file_unmap`.
+### Memory-maps a whole file for a storage: for reading and writing when the file can be written, for reading only
+### otherwise ({rf_file_map_writable} tells which). Returns the mapped base (`rf_get_result_len()` gives the size),
+### the empty-map marker for an empty file, or none on a failure ({rf_fs_last_error} tells why). The view stays valid
+### until `rf_file_unmap`.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
-### :returns: A pointer to the mapped read-only byte view.
-dangerous routine C::rf_file_map_path(path: CStrView, path_len: S32) -> Hijacked[Byte]
+### :returns: A pointer to the mapped bytes.
+routine C::rf_file_map_storage(path: CStrView, path_len: S32) -> Hijacked[Byte]
 
-### RF-only: releases a mapping created by `rf_file_map_path`.
+### Releases a mapping created by `rf_file_map_storage` or `rf_file_map_storage_range`.
 ### :param ptr: The mapped base pointer.
 ### :param len: The mapped size in bytes.
 dangerous routine C::rf_file_unmap(ptr: Hijacked[Byte], len: U64)
 
-### RF-only: memory-maps a file read/write, SHARED (writes are flushed back to the file) and returns
-### the mapped base pointer (`rf_get_result_len()` yields the mapped size); none on failure (missing /
-### non-regular / zero-length file). The view stays valid until `rf_file_unmap`, which flushes dirty
-### pages back to the file. The mapping cannot grow the file.
-### :param path: The null-terminated file path.
-### :param path_len: The path length in bytes.
-### :returns: A pointer to the mapped read/write byte view.
-dangerous routine C::rf_file_map_path_rw(path: CStrView, path_len: S32) -> Hijacked[Byte]
-
-### RF-only: forces dirty pages of a read/write mapping to be written back to the file (msync /
+### Forces dirty pages of a read/write mapping to be written back to the file (msync /
 ### FlushViewOfFile). A null pointer is a no-op.
 ### :param ptr: The mapped base pointer.
 ### :param len: The mapped size in bytes.
 dangerous routine C::rf_file_map_flush(ptr: Hijacked[Byte], len: U64)
 
-### RF-only: memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file read-only, clamped
-### to the file end. Returns the mapping BASE (rounded down to the platform mapping granularity); add
-### `rf_file_map_delta()` to reach the requested offset, and `rf_get_result_len()` gives the clamped
-### caller-visible byte length. None on failure; the empty-map sentinel (len 0) when the window is
-### empty. Release with `rf_file_unmap(base, delta + result_len)`.
+### Memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file for a storage, clamped to the file end:
+### for reading and writing when the file can be written, for reading only otherwise ({rf_file_map_writable} tells
+### which). Returns the mapping BASE (rounded down to the platform mapping granularity), add `rf_file_map_delta()` to
+### reach the requested offset, and `rf_get_result_len()` gives the clamped length. None on a failure
+### ({rf_fs_last_error} tells why), the empty-map marker (length 0) when the window is empty. Release with
+### `rf_file_unmap(base, delta + result_len)`.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
 ### :param offset: The starting byte offset within the file.
 ### :param length: The requested window length in bytes (clamped to the file end).
 ### :returns: A pointer to the mapped window base.
-dangerous routine C::rf_file_map_path_range(
+routine C::rf_file_map_storage_range(
     path: CStrView,
     path_len: S32,
     offset: U64,
     length: U64,
 ) -> Hijacked[Byte]
 
-### RF-only: memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file READ/WRITE, SHARED
-### (writes land in the file), clamped to the file end — the read/write dual of `rf_file_map_path_range`.
-### Size the file first (`rf_file_set_size`); the mapping cannot grow it. Returns the mapping BASE
-### (rounded down to the platform mapping granularity); add `rf_file_map_delta()` to reach the requested
-### offset, and `rf_get_result_len()` gives the clamped caller-visible byte length. None on failure; the
-### empty-map sentinel (len 0) when the window is empty. Release with `rf_file_unmap(base, delta + result_len)`.
-### :param path: The null-terminated file path.
-### :param path_len: The path length in bytes.
-### :param offset: The starting byte offset within the file.
-### :param length: The requested window length in bytes (clamped to the file end).
-### :returns: A pointer to the mapped window base.
-dangerous routine C::rf_file_map_path_range_rw(
-    path: CStrView,
-    path_len: S32,
-    offset: U64,
-    length: U64,
-) -> Hijacked[Byte]
+### Whether this thread's last `rf_file_map_storage` or `rf_file_map_storage_range` mapped the file for writing.
+### :returns: True for a writable mapping.
+routine C::rf_file_map_writable() -> Bool
 
-### RF-only: the byte offset from a range mapping's base to the caller-requested offset (see
-### `rf_file_map_path_range`). Zero for a whole-file mapping.
+### The byte offset from a range mapping's base to the caller-requested offset (see
+### `rf_file_map_storage_range`). Zero for a whole-file mapping.
 ### :returns: The delta in bytes.
 routine C::rf_file_map_delta() -> U64
 
@@ -1970,21 +1949,65 @@ routine C::rf_fs_remove_all(path: CStrView, len: S32) -> S32
 ### :returns: A runtime status code.
 routine C::rf_fs_copy(src: CStrView, src_len: S32, dst: CStrView, dst_len: S32) -> S32
 
-### Moves or renames a filesystem object from `src` to `dst`.
-### :param src: The null-terminated source path.
-### :param src_len: The source path length in bytes.
-### :param dst: The null-terminated destination path.
-### :param dst_len: The destination path length in bytes.
-### :returns: A runtime status code.
-routine C::rf_fs_move(src: CStrView, src_len: S32, dst: CStrView, dst_len: S32) -> S32
+### Gives the path the name `name`, in the same directory.
+### :param path: The null-terminated path.
+### :param path_len: The path length in bytes.
+### :param name: The new name.
+### :param name_len: The name length in bytes.
+### :param replacing: Whether something already called `name` there is replaced.
+### :returns: `0` when renamed, `1` when something there has that name (and `replacing` is false), `2` when the name
+###     is not a name (empty, `.`, `..`, or holding a separator), `-1` on another error ({rf_fs_last_error}).
+routine C::rf_fs_rename(path: CStrView, path_len: S32, name: CStrView, name_len: S32, replacing: Bool) -> S32
 
-### Moves an entry without overwriting an existing destination.
-### :param src: The null-terminated source path.
-### :param src_len: The source path length in bytes.
-### :param dst: The null-terminated destination path.
-### :param dst_len: The destination path length in bytes.
-### :returns: `0` when moved, `1` when the destination already exists, `-1` on error.
-routine C::rf_fs_move_no_replace(src: CStrView, src_len: S32, dst: CStrView, dst_len: S32) -> S32
+### Puts the path into the directory `into`, keeping its name: the OS renames it on the same partition, otherwise
+### it is copied into `into` and then deleted.
+### :param path: The null-terminated path.
+### :param path_len: The path length in bytes.
+### :param into: The null-terminated directory path.
+### :param into_len: The directory path length in bytes.
+### :param replacing: Whether something of the same name in `into` is replaced.
+### :returns: `0` when moved, `1` when something of that name is there (and `replacing` is false), `-2` when the copy
+###     was made but the original couldn't be deleted, `-1` on another error ({rf_fs_last_error} tells why for both).
+routine C::rf_fs_move_into(path: CStrView, path_len: S32, into: CStrView, into_len: S32, replacing: Bool) -> S32
+
+### Why this thread's last file system call failed: `0` it didn't, `1` another reason, `2` nothing is there, `3` not
+### allowed, `4` the device is full, `5` the device failed to read or write, `6` something is already there, `7` the
+### path or name isn't one the OS takes.
+### :returns: The reason code.
+routine C::rf_fs_last_error() -> S32
+
+### The storage devices the OS reports, one per line: name, a tab, and the size in bytes (0 when unknown).
+### :returns: A runtime-managed byte buffer (length via `rf_get_result_len`), empty when the OS reports none.
+routine C::rf_storage_list() -> Hijacked[Byte]
+
+### The partitions the OS has mounted, one per line: name, device, root, file system and size, separated by tabs.
+### :returns: A runtime-managed byte buffer (length via `rf_get_result_len`), empty when the OS reports none.
+routine C::rf_partition_list() -> Hijacked[Byte]
+
+### The partition a path is on, as one line of `rf_partition_list`.
+### :param path: The null-terminated path.
+### :param len: The path length in bytes.
+### :returns: A runtime-managed byte buffer, or none on a failure ({rf_fs_last_error} tells why).
+routine C::rf_partition_of(path: CStrView, len: S32) -> Hijacked[Byte]
+
+### The number of arguments the program was started with, its own name not counted.
+### :returns: The count.
+routine C::rf_env_argument_count() -> U64
+
+### One argument the program was started with (`0` is the first after its own name), UTF-8.
+### :param index: The argument's position.
+### :returns: A runtime-managed byte buffer (length via `rf_get_result_len`), empty past the last one.
+routine C::rf_env_argument(index: U64) -> Hijacked[Byte]
+
+### The value of an environment variable, asked of the OS (on Windows the name's case doesn't matter).
+### :param name: The null-terminated name.
+### :param len: The name length in bytes.
+### :returns: A runtime-managed byte buffer (length via `rf_get_result_len`), or none when it isn't set.
+routine C::rf_env_variable(name: CStrView, len: S32) -> Hijacked[Byte]
+
+### The environment, as the OS has it now: each name and value followed by a NUL.
+### :returns: A runtime-managed byte buffer (length via `rf_get_result_len`), empty for no variables.
+routine C::rf_env_snapshot() -> Hijacked[Byte]
 
 ### Returns the file size for a regular file path.
 ### :param path: The null-terminated path to inspect.
@@ -2106,12 +2129,6 @@ routine C::rf_fs_list_dir_typed(path: CStrView, len: S32) -> Hijacked[Byte]
 ### Returns the current working directory of the process.
 ### :returns: A runtime-managed byte buffer containing the working directory path.
 routine C::rf_fs_current_dir() -> Hijacked[Byte]
-
-### Sets the current working directory of the process.
-### :param path: The null-terminated directory path to switch to.
-### :param len: The path length in bytes.
-### :returns: `0` on success, or `-1` on error.
-routine C::rf_fs_set_current_dir(path: CStrView, len: S32) -> S32
 
 ### Returns the platform temporary directory (TMPDIR/TEMP, falling back to a default).
 ### :returns: A runtime-managed byte buffer containing the temp directory path.

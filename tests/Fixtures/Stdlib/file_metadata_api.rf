@@ -1,28 +1,30 @@
 module Tests/Stdlib/FileMetadataApi
 
 import IO/Console
+import IO/Environment
 import IO/Errors
 import IO/File
-# FileManager end to end on a known directory under the temp directory, so the output is deterministic:
-# making, writing, reading, metadata, listing, moving, copying, and the failures a missing or existing file gives.
+# OsFileManager end to end on a known directory under the temp directory, so the output is deterministic:
+# making, writing, reading, metadata, listing, renaming, moving, copying, and the failures a missing or existing
+# file gives.
 routine start()
-    var root = FileManager.temp_directory().subdir(name: "rf_fixture_file_metadata_api")
-    if FileManager.exists(at: root)
-        FileManager.delete_all(at: root)
-    drop FileManager.make_directory(at: root, parents: true)
+    var root = OsEnvironment.temp_directory().go_to(name: "rf_fixture_file_metadata_api")
+    if OsFileManager.exists(at: root)
+        OsFileManager.delete_all(at: root)
+    drop OsFileManager.make_directory(at: root, parents: true)
 
-    var f = FileManager.make_file(at: root.file(name: "hello.txt"))
-    FileManager.write_text(at: f, content: "hello")
-    FileManager.append_text(at: f, content: "!")
-    show(f"read: {FileManager.read_text(at: f)}")
-    drop FileManager.make_directory(at: root.subdir(name: "inner"))
+    var f = OsFileManager.make_file(at: root.file(name: "hello.txt"))
+    OsFileManager.write_text(at: f, content: "hello")
+    OsFileManager.append_text(at: f, content: "!")
+    show(f"read: {OsFileManager.read_text(at: f)}")
+    var inner = OsFileManager.make_directory(at: root.go_to(name: "inner"))
 
-    var m = FileManager.metadata(at: f)
+    var m = OsFileManager.metadata(at: f)
     show(f"size: {m.size}")
     show(f"file is_directory: {m.is_directory}")
-    show(f"dir is_directory: {FileManager.metadata(at: root).is_directory}")
+    show(f"dir is_directory: {OsFileManager.metadata(at: root).is_directory}")
 
-    var entries = FileManager.entries(at: root)
+    var entries = OsFileManager.entries(at: root)
     show(f"entries: {entries.count()}")
     var dirs: U64 = 0
     var hello_seen = false
@@ -36,26 +38,43 @@ routine start()
 
     # A missing file can't be read or written, and an existing one can't be made again.
     var missing = root.file(name: "missing.txt")
-    show(f"read missing: {try FileManager.read_text(at: missing)}")
-    when check FileManager.write_text(at: missing, content: "x")
+    show(f"read missing: {try OsFileManager.read_text(at: missing)}")
+    when check OsFileManager.write_text(at: missing, content: "x")
         is None => show("write missing: written")
-        is IOError => show("write missing: IOError")
-    when check FileManager.make_file(at: f)
+        is NotFoundError => show("write missing: NotFoundError")
+    when check OsFileManager.make_file(at: f)
         is File => show("make existing: made")
         is IOError => show("make existing: IOError")
-    drop FileManager.make_file(at: f, replacing: true)
-    show(f"replaced size: {FileManager.size(at: f)}")
+    drop OsFileManager.make_file(at: f, replacing: true)
+    show(f"replaced size: {OsFileManager.size(at: f)}")
 
-    # Move and copy refuse an existing destination unless replacing.
+    # Copy refuses an existing destination unless replacing.
     var twin = root.file(name: "copy.txt")
-    FileManager.copy(from: f, to: twin)
-    when check FileManager.copy(from: f, to: twin)
+    OsFileManager.copy(from: f, to: twin)
+    when check OsFileManager.copy(from: f, to: twin)
         is None => show("copy again: copied")
         is IOError => show("copy again: IOError")
-    var moved = root.file(name: "moved.txt")
-    FileManager.move(from: twin, to: moved)
-    show(f"moved: {FileManager.exists(at: moved)} {FileManager.exists(at: twin)}")
 
-    FileManager.delete_all(at: root)
-    show(f"cleaned: {not FileManager.exists(at: root)}")
+    # Rename changes only the name, move puts a file into another directory under its own name.
+    var renamed = OsFileManager.rename(at: twin, to: "renamed.txt")
+    show(f"renamed: {renamed.name()} {OsFileManager.exists(at: renamed)} {OsFileManager.exists(at: twin)}")
+    when check OsFileManager.rename(at: renamed, to: "inner/x.txt")
+        is File => show("rename with a separator: renamed")
+        is IOError => show("rename with a separator: IOError")
+    var moved = OsFileManager.move(at: renamed, into: inner)
+    show(f"moved: {moved.parent().name()} {OsFileManager.exists(at: moved)} {OsFileManager.exists(at: renamed)}")
+    drop OsFileManager.make_file(at: root.file(name: "renamed.txt"))
+    when check OsFileManager.move(at: root.file(name: "renamed.txt"), into: inner)
+        is File => show("move onto an existing file: moved")
+        is IOError => show("move onto an existing file: IOError")
+    OsFileManager.move(at: root.file(name: "renamed.txt"), into: inner, replacing: true)
+    show(f"move replacing: {OsFileManager.exists(at: root.file(name: "renamed.txt"))}")
+    var outer = OsFileManager.rename(at: inner, to: "outer")
+    show(f"directory renamed: {outer.name()} {OsFileManager.exists(at: outer.file(name: "renamed.txt"))}")
+    when check OsFileManager.move(at: root.file(name: "gone.txt"), into: outer)
+        is File => show("move missing: moved")
+        is NotFoundError => show("move missing: NotFoundError")
+
+    OsFileManager.delete_all(at: root)
+    show(f"cleaned: {not OsFileManager.exists(at: root)}")
     return

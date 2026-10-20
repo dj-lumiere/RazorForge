@@ -1,0 +1,94 @@
+module IO/Environment
+
+import IO/Errors
+import IO/File
+
+# What the operating system gives the program when it starts and keeps for it: the arguments it was started with,
+# the environment variables, and the working, home and temporary directories. All of it is read here, nothing is
+# changed: a different working directory or environment goes to a child process through
+# a child process. On a target without an operating system there are no
+# arguments and no variables.
+
+### The operating system's environment of this program: its arguments, its environment variables, and its working,
+### home and temporary directories. Its routines are called on the type (`OsEnvironment.arguments()`), and they only
+### read.
+record OsEnvironment
+    pass
+
+### The runtime byte buffer of `len` bytes as text.
+### :param ptr: The buffer.
+### :param len: Its length.
+### :returns: The text.
+secret routine environment_text(ptr: Hijacked[Byte], len: U64) -> Text
+    if ptr.is_none() or len == 0
+        return ""
+    return Bytes(ptr: ptr, count: len).decode_as_utf8_lossy()
+
+### The arguments the program was started with, its own name left out.
+### :returns: The arguments, in order.
+common routine OsEnvironment.arguments() -> List[Text]
+    var result = List[Text]()
+    each i in 0 til C::rf_env_argument_count()
+        var ptr = C::rf_env_argument(index: i)
+        result.add_last(value: environment_text(ptr: ptr, len: C::rf_get_result_len()))
+    return result
+
+### The value of the environment variable `name`, asked of the operating system now (on Windows the name's case
+### doesn't matter).
+### :param name: The variable's name.
+### :returns: Its value.
+### :throws: {AbsentValueError} when it isn't set (`try OsEnvironment.variable(name:)` gives a `Maybe`).
+failable common routine OsEnvironment.variable(name: Text) -> Text
+    var cstr = name.to[CStr]()
+    var ptr = C::rf_env_variable(name: cstr, len: cstr.count().to[S32]())
+    if ptr.is_none()
+        throw AbsentValueError()
+    return environment_text(ptr: ptr, len: C::rf_get_result_len())
+
+### Every environment variable as the operating system has them now: each name followed by its value.
+### :returns: The names and values, in pairs.
+secret routine environment_parts() -> List[Text]
+    var ptr = C::rf_env_snapshot()
+    var parts = environment_text(ptr: ptr, len: C::rf_get_result_len()).split(separator: '\0')
+    # The last variable's value ends with a NUL too, which leaves one empty part after it.
+    if parts.count() % 2 == 1
+        drop parts.remove_last()
+    return parts
+
+### Every environment variable with its value, as the operating system has them now: a copy, which changes nothing
+### when it changes.
+### :returns: The variables by name.
+common routine OsEnvironment.to[Dict[Text, Text]]() -> Dict[Text, Text]
+    var parts = environment_parts()
+    var result = Dict[Text, Text]()
+    var i: U64 = 0
+    while i + 1 < parts.count()
+        result[parts[i]] = parts[i + 1]
+        i += 2
+    return result
+
+### The program's working directory, which relative paths start from.
+### :returns: The resulting `Directory`.
+### :throws: {IOError} when the working directory cannot be read.
+failable common routine OsEnvironment.working_directory() -> Directory
+    var ptr = C::rf_fs_current_dir()
+    var len = C::rf_get_result_len()
+    if ptr.is_none()
+        throw IOError(description: "Cannot read the working directory")
+    return Directory(at: environment_text(ptr: ptr, len: len))
+
+### The current user's home directory.
+### :returns: The resulting `Directory`.
+### :throws: {NotFoundError} when the home directory cannot be told.
+failable common routine OsEnvironment.home_directory() -> Directory
+    var ptr = C::rf_fs_home_dir()
+    var len = C::rf_get_result_len()
+    if ptr.is_none()
+        throw NotFoundError(description: "Cannot tell the home directory")
+    return Directory(at: environment_text(ptr: ptr, len: len))
+
+### The platform's temporary directory. Honors the usual environment variables, never fails.
+### :returns: The resulting `Directory`.
+common routine OsEnvironment.temp_directory() -> Directory
+    var ptr = C::rf_fs_temp_dir()
+    return Directory(at: environment_text(ptr: ptr, len: C::rf_get_result_len()))

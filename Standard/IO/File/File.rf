@@ -3,94 +3,80 @@ module IO/File
 import IO/Errors
 import IO/Stream
 
-# Everything that touches the disk goes through `FileManager`: making, reading, writing, opening, mapping,
-# deleting, moving, copying, asking about and listing files and directories. A `File` or a `Directory` only says
+# Everything that touches the disk goes through a file manager: making, reading, writing, opening, mapping, deleting,
+# renaming, moving, copying, asking about and listing files and directories. A `File` or a `Directory` only says
 # where, so building one touches nothing.
+#
+# Storage comes in three layers. A {StorageManager} is one storage device (a disk, an SD card) and its partition
+# table. A {PartitionManager} is one partition of it. A {FileManager} is the file system on one partition: its file
+# table, the space it gives files, and every read and write. A partition has exactly one file manager. With an
+# operating system the OS plays all three, and {OsFileManager} is the file manager a program calls: it reaches every
+# partition the OS has mounted, one OS file manager per partition.
 
 # ============================================================================
 # File — named, persistent, format-blind byte content
 # ============================================================================
 
 ### A `File` names persistent byte content in the filesystem — the data-at-rest itself, NOT an open
-### handle. It is a cheap value (just the path); constructing one opens nothing. {FileManager} opens one of
-### four sessions over its content:
-###   * `FileManager.expose[T](at:)` / `wield[T](at:)` — a SPATIAL, random-access view ({Exposed} / {Wielded}),
-###     indexed with `peek`/`poke`, no cursor;
-###   * `FileManager.open_read(at:)` — a sequential {Source} (consume forward with `load`);
-###   * `FileManager.open_write(at:)` / `open_append(at:)` — a sequential {Sink} (emit forward with `store`).
+### handle. It is a cheap value (just the path), constructing one opens nothing. {OsFileManager} opens one of
+### three sessions over its content:
+###   * `OsFileManager.open_storage[T](at:)` — a random-access {FileStorage} of fixed-size cells, no cursor,
+###   * `OsFileManager.open_read(at:)` — a sequential {Source} (consume forward with `load`),
+###   * `OsFileManager.open_write(at:)` / `open_append(at:)` — a sequential {Sink} (emit forward with `store`).
 ### The content outlives every session (closing a session leaves the file intact — criterion: a file
 ### persists beyond the program). Things that are NOT files — a socket, pipe, or console — have no such
 ### content layer: they are born as {Source}/{Sink} with nothing addressable underneath, so they can
-### never be exposed or wielded.
+### never be opened as storage.
 record File
     ### The path naming this file's content.
     at: Text
 
-# To PRODUCE output through a mapping (mmap cannot grow a file), make and size the file first, then wield it:
-#   var f = FileManager.make_file(at: File(at: out), replacing: true)
-#   FileManager.set_size(at: f, bytes: count *% T.data_size().byte_size())
-#   using FileManager.wield[T](at: f) as w
-#     ...
-# For output larger than the address space, size the file, then wield one window at a time with
-# `wield_range[T](start:, count:)` — the write-side dual of `expose_range`.
-# (A `wield[T](count:)` convenience overload is intentionally omitted: two same-name method-generic
-# overloads currently defeat GenericCallLoweringPass, and keeping `set_size!` explicit is truer to the
-# fact that a writable mapping cannot resize its own file.)
+# To PRODUCE output through a storage (a mapping cannot grow a file), make and size the file first, then open it:
+#   var f = OsFileManager.make_file(at: File(at: out), replacing: true)
+#   OsFileManager.set_size(at: f, bytes: count)
+#   var storage = OsFileManager.open_storage[Byte](at: f)
+#   modifying storage as s
+#       ...
+# For a file larger than the address space, open one window at a time with `open_storage_range[T](at:, start:,
+# count:)`.
 
 # ============================================================================
-# Exposed[T] — spatial, read-only, random-access view of a file's bytes
+# FileStorage[T] — a file seen as fixed-size cells of T, random access
 # ============================================================================
 
-### A read-only, element-addressable view of a file's bytes reinterpreted as a sequence of `T` —
-### RazorForge-only. Zero-copy: the bytes are NOT read into a heap buffer but faulted in on access
-### (demand paging), so `FileManager.expose` is near-instant with no large allocation. `using`-required (obeys
-### {Enterable}) so the view's lifetime is lexically bound and released at scope exit. Read elements
-### with `peek(i)` (bounds-checked) or, for hot bounds-check-free scanning, the `dangerous`
-### `raw_buffer()`. Unlike a {Source}, an `Exposed[T]` has NO cursor — it is a live window onto the
-### bytes, indexed directly. Suflae never sees this: `FileManager.expose`/`raw_buffer` are `dangerous`, and
-### Suflae has no `danger` block.
-entity Exposed[T]
-obeys Enterable
-    ### The exposed read-only buffer, typed as `T`, at the caller-facing element 0 (non-owning; the OS
-    ### releases it on `exit`).
+### A file seen as fixed-size cells of `T`, read and written in place by index, with no cursor: what the OS's file
+### mapping gives (CreateFileMapping / MapViewOfFile, mmap). `FileStorage[Byte]` is one byte per cell.
+### `FileStorage[Char]` is one Unicode scalar per cell, four bytes each, UTF-32LE on disk (a UTF-8 text file is not
+### one: read it as `Text`, or as `FileStorage[Byte]`). Zero-copy: the cells are not read into memory up front but
+### brought in on access.
+###
+### A cell is read with `storage[i]` and written with `storage[i] = value`: through a `viewing storage as s` block
+### (or any read-only token) for reading and a `modifying storage as s` block for writing. A storage is opened for writing when the file can be written, otherwise for
+### reading only, and writing a cell of one opened for reading only fails with {NotEnoughPermissionError}. A
+### storage cannot grow its file: size the file first with `OsFileManager.set_size`. Writes land in the file,
+### flushed lazily by the OS, on `flush()`, and when the storage ends at the end of its scope.
+entity FileStorage[T]
+needs T obeys StorageCell
+    ### The first cell asked for (non-owning, released when the storage ends).
     secret buf: Hijacked[T]
-    ### The exposed size in bytes; the element count is `byte_len // T.data_size()`.
+    ### The size of the cells in bytes, the cell count is `byte_len // T.data_size()`.
     secret byte_len: U64
-    ### Bytes from the real mapping base to `buf` — nonzero only for a `expose_range` window whose start
-    ### was rounded down to the mapping granularity. `exit` strides back by this to unmap the true base.
+    ### Bytes from the real mapping base to `buf`: nonzero only for a range whose start was rounded down to the
+    ### mapping granularity. Releasing the storage strides back by this to unmap the true base.
     secret map_delta: U64
-
-# ============================================================================
-# Wielded[T] — spatial, read/write, random-access view of a file's bytes
-# ============================================================================
-
-### A read/write, element-addressable view of a file's bytes as a sequence of `T` — RazorForge-only.
-### Like {Exposed} but writable: `poke(i, v)` overwrites element `i` in place, and the write lands in
-### the file (SHARED — flushed lazily, on `flush()`, or on scope exit). The view CANNOT grow the file:
-### `poke!` is bounds-checked to `count()`, so it overwrites but never appends. `using`-required (obeys
-### {Enterable}); `exit` flushes dirty pages back to the file and releases the view. Unlike a {Sink}, a
-### `Wielded[T]` has NO cursor — it is a live, shared, mutable window, indexed directly. Suflae never
-### sees this: `FileManager.wield`/`raw_buffer` are `dangerous`, and Suflae has no `danger` block.
-entity Wielded[T]
-obeys Enterable
-    ### The wielded read/write buffer, typed as `T`, at the caller-facing element 0 (non-owning; the OS
-    ### releases it on `exit`).
-    secret buf: Hijacked[T]
-    ### The wielded size in bytes; the element count is `byte_len // T.data_size()`.
-    secret byte_len: U64
-    ### Bytes from the real mapping base to `buf` — nonzero only for a `wield_range` window whose start
-    ### was rounded down to the mapping granularity. `exit` strides back by this to flush and unmap the
-    ### true base.
-    secret map_delta: U64
+    ### Whether the file was opened for writing.
+    secret writable: Bool
+    ### Whether the mapping has been released. Guards `close()` so it runs once.
+    secret is_closed: Bool
 
 # ============================================================================
 # FileSource — a File-backed sequential read stream (obeys Source)
 # ============================================================================
 
-### A sequential read session over a {File}'s content. Owns a unique OS descriptor with a `close`
-### teardown, so it is an `entity` (single owner, no implicit copy — preventing double-close). Consume
-### it forward with `load`; there is no length, index, or seek — the file's spatial extent lives on
-### {Exposed}, not here.
+### A sequential read session over a {File}'s content. It holds one OS descriptor with a `close`
+### teardown, so it is an `entity` (never copied, so the descriptor is never closed twice). Consume
+### it forward with `load`, there is no length, index, or seek — the file's spatial extent lives on
+### {FileStorage}, not here.
 entity FileSource
 obeys Source, Enterable
     ### The native file descriptor.
@@ -103,8 +89,8 @@ obeys Source, Enterable
 # ============================================================================
 
 ### A sequential write session over a {File}'s content (truncating via `open_write`, or appending via
-### `open_append`). Owns a unique OS descriptor with a `close` teardown, so it is an `entity`. Emit into
-### it forward with `store`; there is no length, index, or seek.
+### `open_append`). It holds one OS descriptor with a `close` teardown, so it is an `entity`. Emit into
+### it forward with `store`, there is no length, index, or seek.
 entity FileSink
 obeys Sink, Enterable
     ### The native file descriptor.
@@ -117,9 +103,9 @@ obeys Sink, Enterable
 # ============================================================================
 
 ### A `Directory` names a directory in the filesystem — a container of entries, NOT byte content (that
-### is what {File} is). Like `File` it is a cheap value (just the path); constructing one creates
-### nothing. It builds the paths of the things inside it (`file(name:)` → a {File}, `subdir(name:)` → a
-### nested `Directory`). {FileManager} makes, lists and removes it.
+### is what {File} is). Like `File` it is a cheap value (just the path), constructing one creates
+### nothing. It builds the paths of the things inside it (`file(name:)` → a {File}, `go_to(name:)` → a
+### nested `Directory`). {OsFileManager} makes, lists and removes it.
 record Directory
     ### The path naming this directory.
     at: Text
@@ -138,9 +124,66 @@ record FileMetadata
     is_directory: Bool  # Whether the path is a directory
     readonly: Bool  # Whether the path is marked readonly
 
-### The one place that does file system work. Its routines are called on the type (`FileManager.read_text(at:)`),
-### and every one that touches the disk is here.
-record FileManager
+# ============================================================================
+# The storage layers
+# ============================================================================
+
+### One storage device (a disk, an SD card), as the operating system reports it: its blocks and its partition table.
+### With an OS the OS manages it, and this is what the program can ask about it.
+record StorageManager
+    ### The OS's name for the device (`/dev/sda`, `\\.\PhysicalDrive0`).
+    name: Text
+    ### Its size in bytes, 0 when the OS doesn't say.
+    size: U64
+
+### One partition, a slice of a storage device, as the operating system reports it. A partition with a file system
+### has exactly one file manager: with an OS that is the OS's, reached through {OsFileManager}.
+record PartitionManager
+    ### The OS's name for the partition (`/dev/sda1`, `C:\`).
+    name: Text
+    ### The name of the {StorageManager} it is on, empty when the OS doesn't say.
+    storage: Text
+    ### Where its files are reached (a mount point, a drive's root).
+    root: Directory
+    ### The file system on it (`ext4`, `NTFS`, `apfs`).
+    file_system: Text
+    ### Its size in bytes, 0 when the OS doesn't say.
+    size: U64
+
+### The role of a file manager: the file system on one partition, keeping its file table, giving files space, and
+### doing every read and write. A partition has exactly one, and making a second one over a partition that has one
+### fails. {OsFileManager} is the operating system's, the one a program calls with an OS.
+protocol FileManager
+    ### Reads a whole file.
+    ### :param at: The file.
+    ### :returns: Its contents.
+    failable common routine Me.read_bytes(at: File) -> Bytes
+
+    ### Writes `content` to an existing file, replacing what it held.
+    ### :param at: The file.
+    ### :param content: The bytes to write.
+    failable common routine Me.write_bytes(at: File, content: Bytes)
+
+    ### The direct entries of a directory.
+    ### :param at: The directory.
+    ### :returns: The entries.
+    failable common routine Me.entries(at: Directory) -> List[DirEntry]
+
+    ### Removes a file.
+    ### :param at: The file.
+    failable common routine Me.delete(at: File)
+
+    ### The partition a directory is on.
+    ### :param at: The directory.
+    ### :returns: The partition.
+    failable common routine Me.partition(at: Directory) -> PartitionManager
+
+### The operating system's file manager: the one place a program with an OS does file system work. Its routines are
+### called on the type (`OsFileManager.read_text(at:)`), and every one that touches the disk is here. The OS keeps
+### one file manager per mounted partition, and `OsFileManager` reaches all of them: `partition(at:)` tells which
+### partition a path is on.
+record OsFileManager
+obeys FileManager
     pass
 
 # ============================================================================
@@ -257,65 +300,172 @@ routine Directory.parent() -> Directory
 routine Directory.file(name: Text) -> File
     return File(at: join_path(a: me.at, b: name))
 
-### The sub-directory named `name` directly inside this directory.
+### The directory named `name` directly inside this directory: going to it by name, as a path. Nothing on disk is
+### touched.
 ### :param name: The child directory's final component.
 ### :returns: A `Directory` at `<this>/<name>`.
 @readonly
-routine Directory.subdir(name: Text) -> Directory
+routine Directory.go_to(name: Text) -> Directory
     return Directory(at: join_path(a: me.at, b: name))
 
 # ============================================================================
-# FileManager — asking about a path
+# Why a file system call failed
+# ============================================================================
+
+### Throws the crashable for why the last file system call on this thread failed: {NotFoundError},
+### {NotEnoughPermissionError}, {NotEnoughSpaceError}, {StorageFaultError}, or {IOError} for any other reason.
+### :param action: What was being done, as the start of the message (`Cannot read 'notes.txt'`).
+### :param path: The path the call worked on.
+### :throws: Always, the crashable for the reason.
+secret failable routine fail_io(action: Text, path: Text)
+    var reason = C::rf_fs_last_error()
+    if reason == 2
+        throw NotFoundError(description: f"{action}: nothing is there")
+    if reason == 3
+        throw NotEnoughPermissionError(description: f"{action}: this program is not allowed to")
+    if reason == 4
+        throw NotEnoughSpaceError(description: f"{action}: the storage device is full")
+    if reason == 5
+        throw StorageFaultError(description: f"{action}: this storage device failed to read or write at '{path}'")
+    throw IOError(description: action)
+
+# ============================================================================
+# The storage layers — asking the OS
+# ============================================================================
+
+### A {PartitionManager} from one line of the runtime's partition listing: name, device, root, file system and size,
+### separated by tabs.
+### :param line: The line.
+### :returns: The partition.
+secret routine partition_of_line(line: Text) -> PartitionManager
+    var fields = line.split(separator: '\t')
+    while fields.count() < 5
+        fields.add_last(value: "")
+    return PartitionManager(
+        name: fields[0],
+        storage: fields[1],
+        root: Directory(at: fields[2]),
+        file_system: fields[3],
+        size: try fields[4].to[U64]() ?? 0,
+    )
+
+### The lines of a runtime listing, none for an empty or a failed one.
+### :param ptr: The listing.
+### :param len: Its length.
+### :returns: The lines.
+secret routine listing_lines(ptr: Hijacked[Byte], len: U64) -> List[Text]
+    if ptr.is_none() or len == 0
+        return List[Text]()
+    return path_text(ptr: ptr, len: len).split(separator: '\n')
+
+### The storage devices the operating system reports, none where it reports none.
+### :returns: The devices.
+common routine StorageManager.all() -> List[StorageManager]
+    var ptr = C::rf_storage_list()
+    var result = List[StorageManager]()
+    each line in listing_lines(ptr: ptr, len: C::rf_get_result_len())
+        var fields = line.split(separator: '\t')
+        if fields.count() >= 2
+            result.add_last(value: StorageManager(name: fields[0], size: try fields[1].to[U64]() ?? 0))
+    return result
+
+### The partitions on this device the operating system reports.
+### :returns: The partitions.
+@readonly
+routine StorageManager.partitions() -> List[PartitionManager]
+    var result = List[PartitionManager]()
+    each partition in PartitionManager.all()
+        if partition.storage == me.name
+            result.add_last(value: partition)
+    return result
+
+### The partitions the operating system has mounted, none where it reports none.
+### :returns: The partitions.
+common routine PartitionManager.all() -> List[PartitionManager]
+    var ptr = C::rf_partition_list()
+    var result = List[PartitionManager]()
+    each line in listing_lines(ptr: ptr, len: C::rf_get_result_len())
+        result.add_last(value: partition_of_line(line: line))
+    return result
+
+### The partition the text `path` is on.
+### :param path: The path.
+### :returns: The partition.
+### :throws: {NotFoundError} when nothing is at the path, {IOError} when the OS can't tell.
+secret failable routine partition_at(path: Text) -> PartitionManager
+    var cstr = path.to[CStr]()
+    var ptr = C::rf_partition_of(path: cstr, len: cstr.count().to[S32]())
+    var len = C::rf_get_result_len()
+    if ptr.is_none() or len == 0
+        fail_io(action: f"Cannot tell the partition of '{path}'", path: path)
+    return partition_of_line(line: path_text(ptr: ptr, len: len))
+
+### The partition the directory is on: its file manager is the OS's file manager for that partition.
+### :param at: The directory.
+### :returns: The partition.
+### :throws: {NotFoundError} when nothing is at the path, {IOError} when the OS can't tell.
+failable common routine OsFileManager.partition(at: Directory) -> PartitionManager
+    return partition_at(path: at.at)
+
+### The partition the file is on: its file manager is the OS's file manager for that partition.
+### :param at: The file.
+### :returns: The partition.
+### :throws: {NotFoundError} when nothing is at the path, {IOError} when the OS can't tell.
+failable common routine OsFileManager.partition(at: File) -> PartitionManager
+    return partition_at(path: at.at)
+
+# ============================================================================
+# OsFileManager — asking about a path
 # ============================================================================
 
 ### Whether something exists at this file's path.
 ### :param at: The file.
 ### :returns: `true` when the path exists.
-common routine FileManager.exists(at: File) -> Bool
+common routine OsFileManager.exists(at: File) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_exists(path: cstr, len: cstr.count().to[S32]())
 
 ### Whether something exists at this directory's path.
 ### :param at: The directory.
 ### :returns: `true` when the path exists.
-common routine FileManager.exists(at: Directory) -> Bool
+common routine OsFileManager.exists(at: Directory) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_exists(path: cstr, len: cstr.count().to[S32]())
 
 ### Whether the path names a regular file. A missing path gives `false`.
 ### :param at: The file.
 ### :returns: `true` when the path is a regular file.
-common routine FileManager.is_file(at: File) -> Bool
+common routine OsFileManager.is_file(at: File) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_is_file(path: cstr, len: cstr.count().to[S32]())
 
 ### Whether the path names a directory. A missing path gives `false`.
 ### :param at: The directory.
 ### :returns: `true` when the path is a directory.
-common routine FileManager.is_directory(at: Directory) -> Bool
+common routine OsFileManager.is_directory(at: Directory) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_is_directory(path: cstr, len: cstr.count().to[S32]())
 
 ### The size of a file in bytes.
 ### :param at: The file.
 ### :returns: The size in bytes.
-### :throws: {IOError} when the file cannot be inspected.
-failable common routine FileManager.size(at: File) -> S64
+### :throws: {NotFoundError} when nothing is there, {IOError} when the file cannot be inspected.
+failable common routine OsFileManager.size(at: File) -> S64
     var cstr = at.at.to[CStr]()
     var size = C::rf_fs_file_size(path: cstr, len: cstr.count().to[S32]())
     if size == -1
-        throw IOError(description: f"Cannot read the size of '{at.at}'")
+        fail_io(action: f"Cannot read the size of '{at.at}'", path: at.at)
     return size
 
 ### The metadata of the path, captured in a single stat.
 ### :param path: The path.
 ### :returns: The resulting {FileMetadata}.
-### :throws: {IOError} when the path cannot be inspected.
+### :throws: {NotFoundError} when nothing is there, {IOError} when the path cannot be inspected.
 secret failable routine metadata_of(path: Text) -> FileMetadata
     var cstr = path.to[CStr]()
     var status = C::rf_fs_metadata(path: cstr, len: cstr.count().to[S32]())
     if status == -1
-        throw IOError(description: f"Cannot read the metadata of '{path}'")
+        fail_io(action: f"Cannot read the metadata of '{path}'", path: path)
     return FileMetadata(
         size: C::rf_fs_meta_size(),
         modified: Moment.from_timestamp(seconds: C::rf_fs_meta_modified()),
@@ -327,56 +477,56 @@ secret failable routine metadata_of(path: Text) -> FileMetadata
 ### A file's metadata, captured in a single stat.
 ### :param at: The file.
 ### :returns: The resulting {FileMetadata}.
-### :throws: {IOError} when the file cannot be inspected.
-failable common routine FileManager.metadata(at: File) -> FileMetadata
+### :throws: {NotFoundError} when nothing is there, {IOError} when the file cannot be inspected.
+failable common routine OsFileManager.metadata(at: File) -> FileMetadata
     return metadata_of(path: at.at)
 
 ### A directory's metadata, captured in a single stat.
 ### :param at: The directory.
 ### :returns: The resulting {FileMetadata}.
-### :throws: {IOError} when the directory cannot be inspected.
-failable common routine FileManager.metadata(at: Directory) -> FileMetadata
+### :throws: {NotFoundError} when nothing is there, {IOError} when the directory cannot be inspected.
+failable common routine OsFileManager.metadata(at: Directory) -> FileMetadata
     return metadata_of(path: at.at)
 
 ### Whether this process can read the path.
 ### :param at: The file.
 ### :returns: The resulting `Bool` value.
-common routine FileManager.can_read(at: File) -> Bool
+common routine OsFileManager.can_read(at: File) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_can_read(path: cstr, len: cstr.count().to[S32]())
 
 ### Whether this process can read the directory.
 ### :param at: The directory.
 ### :returns: The resulting `Bool` value.
-common routine FileManager.can_read(at: Directory) -> Bool
+common routine OsFileManager.can_read(at: Directory) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_can_read(path: cstr, len: cstr.count().to[S32]())
 
 ### Whether this process can write to the path.
 ### :param at: The file.
 ### :returns: The resulting `Bool` value.
-common routine FileManager.can_write(at: File) -> Bool
+common routine OsFileManager.can_write(at: File) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_can_write(path: cstr, len: cstr.count().to[S32]())
 
 ### Whether this process can write to the directory.
 ### :param at: The directory.
 ### :returns: The resulting `Bool` value.
-common routine FileManager.can_write(at: Directory) -> Bool
+common routine OsFileManager.can_write(at: Directory) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_can_write(path: cstr, len: cstr.count().to[S32]())
 
 ### Whether this process can execute the file.
 ### :param at: The file.
 ### :returns: The resulting `Bool` value.
-common routine FileManager.can_execute(at: File) -> Bool
+common routine OsFileManager.can_execute(at: File) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_can_execute(path: cstr, len: cstr.count().to[S32]())
 
 ### Whether this process can enter the directory.
 ### :param at: The directory.
 ### :returns: The resulting `Bool` value.
-common routine FileManager.can_execute(at: Directory) -> Bool
+common routine OsFileManager.can_execute(at: Directory) -> Bool
     var cstr = at.at.to[CStr]()
     return C::rf_fs_can_execute(path: cstr, len: cstr.count().to[S32]())
 
@@ -389,51 +539,51 @@ secret failable routine absolute_path(path: Text) -> Text
     var ptr = C::rf_fs_absolute_path(path: cstr, len: cstr.count().to[S32]())
     var len = C::rf_get_result_len()
     if ptr.is_none()
-        throw IOError(description: f"Cannot resolve the absolute path of '{path}'")
+        fail_io(action: f"Cannot resolve the absolute path of '{path}'", path: path)
     return path_text(ptr: ptr, len: len)
 
 ### The canonical path of the text `path` (casing normalized, links and relative segments resolved).
 ### :param path: The path.
 ### :returns: The canonical path.
-### :throws: {IOError} when the path cannot be resolved.
+### :throws: {NotFoundError} when nothing is there, {IOError} when the path cannot be resolved.
 secret failable routine canonical_path(path: Text) -> Text
     var cstr = path.to[CStr]()
     var ptr = C::rf_fs_canonical_path(path: cstr, len: cstr.count().to[S32]())
     var len = C::rf_get_result_len()
     if ptr.is_none()
-        throw IOError(description: f"Cannot resolve the canonical path of '{path}'")
+        fail_io(action: f"Cannot resolve the canonical path of '{path}'", path: path)
     return path_text(ptr: ptr, len: len)
 
 ### The file at its absolute path (symlinks and other non-canonical components kept).
 ### :param at: The file.
 ### :returns: A new `File` naming the absolute path.
 ### :throws: {IOError} when the path cannot be resolved.
-failable common routine FileManager.absolute(at: File) -> File
+failable common routine OsFileManager.absolute(at: File) -> File
     return File(at: absolute_path(path: at.at))
 
 ### The directory at its absolute path (symlinks and other non-canonical components kept).
 ### :param at: The directory.
 ### :returns: A new `Directory` naming the absolute path.
 ### :throws: {IOError} when the path cannot be resolved.
-failable common routine FileManager.absolute(at: Directory) -> Directory
+failable common routine OsFileManager.absolute(at: Directory) -> Directory
     return Directory(at: absolute_path(path: at.at))
 
 ### The file at its canonical location (casing normalized, links and relative segments resolved).
 ### :param at: The file.
 ### :returns: A new `File` naming the canonical path.
-### :throws: {IOError} when the path cannot be resolved.
-failable common routine FileManager.canonical(at: File) -> File
+### :throws: {NotFoundError} when nothing is there, {IOError} when the path cannot be resolved.
+failable common routine OsFileManager.canonical(at: File) -> File
     return File(at: canonical_path(path: at.at))
 
 ### The directory at its canonical location (casing normalized, links and relative segments resolved).
 ### :param at: The directory.
 ### :returns: A new `Directory` naming the canonical path.
-### :throws: {IOError} when the path cannot be resolved.
-failable common routine FileManager.canonical(at: Directory) -> Directory
+### :throws: {NotFoundError} when nothing is there, {IOError} when the path cannot be resolved.
+failable common routine OsFileManager.canonical(at: Directory) -> Directory
     return Directory(at: canonical_path(path: at.at))
 
 # ============================================================================
-# FileManager — making, removing, moving, copying
+# OsFileManager — making, removing, renaming, moving, copying
 # ============================================================================
 
 ### Makes the file. Its directory must exist. An existing file is an error, unless `replacing` is true: then it
@@ -441,14 +591,15 @@ failable common routine FileManager.canonical(at: Directory) -> Directory
 ### :param at: The file to make.
 ### :param replacing: Whether an existing file is emptied instead of being an error.
 ### :returns: The file, made.
-### :throws: {IOError} when it already exists (and `replacing` is false) or cannot be made.
-failable common routine FileManager.make_file(at: File, replacing: Bool = false) -> File
+### :throws: {IOError} when it already exists (and `replacing` is false), {NotFoundError} when its directory is
+###     missing, {NotEnoughPermissionError}, {NotEnoughSpaceError} or {StorageFaultError} for those reasons.
+failable common routine OsFileManager.make_file(at: File, replacing: Bool = false) -> File
     var cstr = at.at.to[CStr]()
     var result = C::rf_fs_make_file(path: cstr, len: cstr.count().to[S32](), replacing: replacing)
     if result == 1
         throw IOError(description: f"Cannot make '{at.at}': it already exists. Pass 'replacing: true' to empty it")
     if result == -1
-        throw IOError(description: f"Cannot make '{at.at}'")
+        fail_io(action: f"Cannot make '{at.at}'", path: at.at)
     return at
 
 ### Makes the directory. An existing directory is an error. With `parents`, missing directories above it are made
@@ -456,8 +607,8 @@ failable common routine FileManager.make_file(at: File, replacing: Bool = false)
 ### :param at: The directory to make.
 ### :param parents: Whether missing directories above it are made too.
 ### :returns: The directory, made.
-### :throws: {IOError} when the directory cannot be made.
-failable common routine FileManager.make_directory(at: Directory, parents: Bool = false) -> Directory
+### :throws: {IOError} when the directory cannot be made, or the crashable for the reason.
+failable common routine OsFileManager.make_directory(at: Directory, parents: Bool = false) -> Directory
     var cstr = at.at.to[CStr]()
     var result: S32 = 0
     if parents
@@ -465,79 +616,147 @@ failable common routine FileManager.make_directory(at: Directory, parents: Bool 
     else
         result = C::rf_fs_create_dir(path: cstr, len: cstr.count().to[S32]())
     if result == -1
-        throw IOError(description: f"Cannot make the directory '{at.at}'")
+        fail_io(action: f"Cannot make the directory '{at.at}'", path: at.at)
     return at
 
 ### Removes the file.
 ### :param at: The file.
-### :throws: {IOError} when the file cannot be removed.
-failable common routine FileManager.delete(at: File)
+### :throws: {NotFoundError} when nothing is there, {IOError} when the file cannot be removed.
+failable common routine OsFileManager.delete(at: File)
     var cstr = at.at.to[CStr]()
     if C::rf_fs_remove(path: cstr, len: cstr.count().to[S32]()) == -1
-        throw IOError(description: f"Cannot remove '{at.at}'")
+        fail_io(action: f"Cannot remove '{at.at}'", path: at.at)
     return
 
 ### Removes the directory, which must be empty. `delete_all` removes one with contents.
 ### :param at: The directory.
-### :throws: {IOError} when the directory cannot be removed.
-failable common routine FileManager.delete(at: Directory)
+### :throws: {NotFoundError} when nothing is there, {IOError} when the directory cannot be removed.
+failable common routine OsFileManager.delete(at: Directory)
     var cstr = at.at.to[CStr]()
     if C::rf_fs_remove(path: cstr, len: cstr.count().to[S32]()) == -1
-        throw IOError(description: f"Cannot remove the directory '{at.at}'")
+        fail_io(action: f"Cannot remove the directory '{at.at}'", path: at.at)
     return
 
 ### Removes the directory and everything in it.
 ### :param at: The directory.
-### :throws: {IOError} when the tree cannot be removed.
-failable common routine FileManager.delete_all(at: Directory)
+### :throws: {NotFoundError} when nothing is there, {IOError} when the tree cannot be removed.
+failable common routine OsFileManager.delete_all(at: Directory)
     var cstr = at.at.to[CStr]()
     if C::rf_fs_remove_all(path: cstr, len: cstr.count().to[S32]()) == -1
-        throw IOError(description: f"Cannot remove the directory tree '{at.at}'")
+        fail_io(action: f"Cannot remove the directory tree '{at.at}'", path: at.at)
     return
 
-### Moves (renames) the path `from` to `to`, across file systems too.
-### :param from: The source path.
-### :param to: The destination path.
-### :param replacing: Whether an existing destination is replaced.
-### :throws: {IOError} when the destination exists (and `replacing` is false) or the move fails.
-secret failable routine move_path(from: Text, to: Text, replacing: Bool)
-    var src = from.to[CStr]()
-    var dst = to.to[CStr]()
-    var result: S32 = 0
-    if replacing
-        result = C::rf_fs_move(src, src.count().to[S32](), dst, dst.count().to[S32]())
-    else
-        result = C::rf_fs_move_no_replace(src, src.count().to[S32](), dst, dst.count().to[S32]())
+### Gives the path `path` the name `name`, in the same directory.
+### :param path: The path.
+### :param name: The new name.
+### :param replacing: Whether something already called `name` there is replaced.
+### :returns: The new path.
+### :throws: {IOError} when the name holds a separator or is taken, or the crashable for the reason.
+secret failable routine rename_path(path: Text, name: Text, replacing: Bool) -> Text
+    var src = path.to[CStr]()
+    var new_name = name.to[CStr]()
+    var result = C::rf_fs_rename(
+        path: src,
+        path_len: src.count().to[S32](),
+        name: new_name,
+        name_len: new_name.count().to[S32](),
+        replacing: replacing,
+    )
     if result == 1
-        throw IOError(description: f"Cannot move '{from}' to '{to}': it already exists. Pass 'replacing: true' to replace it")
+        throw IOError(description: f"Cannot rename '{path}' to '{name}': something there has that name. Pass 'replacing: true' to replace it")
+    if result == 2
+        throw IOError(description: f"Cannot rename '{path}' to '{name}': a name holds no separator, put it in another directory with 'move'")
     if result == -1
-        throw IOError(description: f"Cannot move '{from}' to '{to}'")
-    return
+        fail_io(action: f"Cannot rename '{path}' to '{name}'", path: path)
+    var dir = parent_path(path: path)
+    return if dir.is_empty() then name else join_path(a: dir, b: name)
 
-### Moves (renames) the file. An existing destination is an error unless `replacing` is true.
-### :param from: The file to move.
-### :param to: Where it goes.
-### :param replacing: Whether an existing destination is replaced.
-### :throws: {IOError} when the destination exists (and `replacing` is false) or the move fails.
-failable common routine FileManager.move(from: File, to: File, replacing: Bool = false)
-    move_path(from: from.at, to: to.at, replacing: replacing)
-    return
+### Changes the file's name, in the directory it is in. Only the name changes: `to` is a name, not a path, and one
+### with a separator in it fails (put the file in another directory with `move`).
+### :param at: The file.
+### :param to: Its new name.
+### :param replacing: Whether a file already called `to` there is replaced.
+### :returns: The file under its new name.
+### :throws: {IOError} when the name holds a separator or is taken (and `replacing` is false), {NotFoundError} when
+###     nothing is at `at`, or the crashable for another reason.
+@discardable
+failable common routine OsFileManager.rename(at: File, to: Text, replacing: Bool = false) -> File
+    return File(at: rename_path(path: at.at, name: to, replacing: replacing))
 
-### Moves (renames) the directory. An existing destination is an error unless `replacing` is true.
-### :param from: The directory to move.
-### :param to: Where it goes.
-### :param replacing: Whether an existing destination is replaced.
-### :throws: {IOError} when the destination exists (and `replacing` is false) or the move fails.
-failable common routine FileManager.move(from: Directory, to: Directory, replacing: Bool = false)
-    move_path(from: from.at, to: to.at, replacing: replacing)
-    return
+### Changes the directory's name, in the directory it is in. Only the name changes: `to` is a name, not a path, and
+### one with a separator in it fails (put the directory in another one with `move`).
+### :param at: The directory.
+### :param to: Its new name.
+### :param replacing: Whether an empty directory already called `to` there is replaced.
+### :returns: The directory under its new name.
+### :throws: {IOError} when the name holds a separator or is taken (and `replacing` is false), {NotFoundError} when
+###     nothing is at `at`, or the crashable for another reason.
+@discardable
+failable common routine OsFileManager.rename(at: Directory, to: Text, replacing: Bool = false) -> Directory
+    return Directory(at: rename_path(path: at.at, name: to, replacing: replacing))
+
+### Puts the path `path` into the directory `into`, keeping its name: a copy into `into` and then a delete of the
+### original. On the same partition the OS renames it instead, which gives the same result.
+### :param path: The path.
+### :param into: The directory it goes into.
+### :param replacing: Whether something of the same name in `into` is replaced.
+### :returns: The new path.
+### :throws: {IOError} when something of that name is there (and `replacing` is false) or when the copy was made but
+###     the original couldn't be deleted (both are there then), or the crashable for the reason.
+secret failable routine move_path(path: Text, into: Text, replacing: Bool) -> Text
+    var src = path.to[CStr]()
+    var dir = into.to[CStr]()
+    var result = C::rf_fs_move_into(
+        path: src,
+        path_len: src.count().to[S32](),
+        into: dir,
+        into_len: dir.count().to[S32](),
+        replacing: replacing,
+    )
+    if result == 1
+        throw IOError(description: f"Cannot move '{path}' into '{into}': something there has its name. Pass 'replacing: true' to replace it")
+    if result == -2
+        fail_io(action: f"Moved a copy of '{path}' into '{into}', but cannot delete the original, so both are there", path: path)
+    if result == -1
+        fail_io(action: f"Cannot move '{path}' into '{into}'", path: path)
+    return join_path(a: into, b: last_component(path: path))
+
+### Puts the file into the directory `into`, keeping its name. A move is a copy into `into` and then a delete of the
+### original, and it is not atomic: if the copy fails nothing is deleted, and if the delete fails both are there and
+### the error says so. On the same partition the OS renames the file instead, which gives the same result.
+### :param at: The file.
+### :param into: The directory it goes into, which must exist.
+### :param replacing: Whether a file of the same name in `into` is replaced.
+### :returns: The file in its new directory.
+### :throws: {IOError} when a file of that name is there (and `replacing` is false) or when the original couldn't be
+###     deleted after the copy, {NotFoundError} when nothing is at `at` or `into` is missing, or the crashable for
+###     another reason.
+@discardable
+failable common routine OsFileManager.move(at: File, into: Directory, replacing: Bool = false) -> File
+    return File(at: move_path(path: at.at, into: into.at, replacing: replacing))
+
+### Puts the directory, with everything in it, into the directory `into`, keeping its name. A move is a copy into
+### `into` and then a delete of the original, and it is not atomic: if the copy fails nothing is deleted, and if the
+### delete fails both are there and the error says so. On the same partition the OS renames the directory instead,
+### which gives the same result.
+### :param at: The directory.
+### :param into: The directory it goes into, which must exist.
+### :param replacing: Whether an empty directory of the same name in `into` is replaced.
+### :returns: The directory in its new place.
+### :throws: {IOError} when a directory of that name is there (and `replacing` is false) or when the original
+###     couldn't be deleted after the copy, {NotFoundError} when nothing is at `at` or `into` is missing, or the
+###     crashable for another reason.
+@discardable
+failable common routine OsFileManager.move(at: Directory, into: Directory, replacing: Bool = false) -> Directory
+    return Directory(at: move_path(path: at.at, into: into.at, replacing: replacing))
 
 ### Copies the file. An existing destination is an error unless `replacing` is true.
 ### :param from: The file to copy.
 ### :param to: Where the copy goes.
 ### :param replacing: Whether an existing destination is replaced.
-### :throws: {IOError} when the destination exists (and `replacing` is false) or the copy fails.
-failable common routine FileManager.copy(from: File, to: File, replacing: Bool = false)
+### :throws: {IOError} when the destination exists (and `replacing` is false), or the crashable for why the copy
+###     failed.
+failable common routine OsFileManager.copy(from: File, to: File, replacing: Bool = false)
     var src = from.at.to[CStr]()
     var dst = to.at.to[CStr]()
     var result: S32 = 0
@@ -548,7 +767,7 @@ failable common routine FileManager.copy(from: File, to: File, replacing: Bool =
     if result == 1
         throw IOError(description: f"Cannot copy '{from.at}' to '{to.at}': it already exists. Pass 'replacing: true' to replace it")
     if result == -1
-        throw IOError(description: f"Cannot copy '{from.at}' to '{to.at}'")
+        fail_io(action: f"Cannot copy '{from.at}' to '{to.at}'", path: from.at)
     return
 
 ### Copies the directory and everything in it. Symbolic links are not followed. An existing destination is an
@@ -556,53 +775,54 @@ failable common routine FileManager.copy(from: File, to: File, replacing: Bool =
 ### :param from: The directory to copy.
 ### :param to: Where the copy goes.
 ### :param replacing: Whether an existing destination is copied into.
-### :throws: {IOError} when the destination exists (and `replacing` is false) or any entry cannot be copied.
-failable common routine FileManager.copy(from: Directory, to: Directory, replacing: Bool = false)
-    if FileManager.exists(at: to)
+### :throws: {IOError} when the destination exists (and `replacing` is false), or the crashable for why an entry
+###     could not be copied.
+failable common routine OsFileManager.copy(from: Directory, to: Directory, replacing: Bool = false)
+    if OsFileManager.exists(at: to)
         if not replacing
             throw IOError(description: f"Cannot copy '{from.at}' to '{to.at}': it already exists. Pass 'replacing: true' to copy into it")
     else
-        drop FileManager.make_directory(at: to, parents: true)
-    each entry in FileManager.entries(at: from)
+        drop OsFileManager.make_directory(at: to, parents: true)
+    each entry in OsFileManager.entries(at: from)
         if entry.is_directory
-            FileManager.copy(from: from.subdir(name: entry.name), to: to.subdir(name: entry.name), replacing: true)
+            OsFileManager.copy(from: from.go_to(name: entry.name), to: to.go_to(name: entry.name), replacing: true)
         else
-            FileManager.copy(from: from.file(name: entry.name), to: to.file(name: entry.name), replacing: true)
+            OsFileManager.copy(from: from.file(name: entry.name), to: to.file(name: entry.name), replacing: true)
     return
 
 ### Sets the readonly attribute of the file (file system metadata).
 ### :param at: The file.
 ### :param readonly: `true` to make it readonly, `false` to clear it.
-### :throws: {IOError} when the attribute cannot be set.
-failable common routine FileManager.set_readonly(at: File, readonly: Bool = true)
+### :throws: {NotFoundError} when nothing is there, or the crashable for why the attribute cannot be set.
+failable common routine OsFileManager.set_readonly(at: File, readonly: Bool = true)
     var cstr = at.at.to[CStr]()
     if C::rf_fs_set_readonly(cstr, cstr.count().to[S32](), readonly) == -1
-        throw IOError(description: f"Cannot set readonly on '{at.at}'")
+        fail_io(action: f"Cannot set readonly on '{at.at}'", path: at.at)
     return
 
 ### Sets the readonly attribute of the directory (file system metadata).
 ### :param at: The directory.
 ### :param readonly: `true` to make it readonly, `false` to clear it.
-### :throws: {IOError} when the attribute cannot be set.
-failable common routine FileManager.set_readonly(at: Directory, readonly: Bool = true)
+### :throws: {NotFoundError} when nothing is there, or the crashable for why the attribute cannot be set.
+failable common routine OsFileManager.set_readonly(at: Directory, readonly: Bool = true)
     var cstr = at.at.to[CStr]()
     if C::rf_fs_set_readonly(cstr, cstr.count().to[S32](), readonly) == -1
-        throw IOError(description: f"Cannot set readonly on '{at.at}'")
+        fail_io(action: f"Cannot set readonly on '{at.at}'", path: at.at)
     return
 
 ### Sets an existing file's size to exactly `bytes` (extending with zero bytes or truncating). Size a file before
-### wielding it to produce output through a mapping.
+### opening it as storage to produce output through it.
 ### :param at: The file.
 ### :param bytes: The exact size in bytes.
-### :throws: {IOError} when the file doesn't exist or its size cannot be set.
-failable common routine FileManager.set_size(at: File, bytes: U64)
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why its size cannot be set.
+failable common routine OsFileManager.set_size(at: File, bytes: U64)
     var cstr = at.at.to[CStr]()
     if C::rf_fs_set_size(path: cstr, len: cstr.count().to[S32](), size: bytes) == -1
-        throw IOError(description: f"Cannot set the size of '{at.at}'")
+        fail_io(action: f"Cannot set the size of '{at.at}'", path: at.at)
     return
 
 # ============================================================================
-# FileManager — whole-file reads and writes
+# OsFileManager — whole-file reads and writes
 # ============================================================================
 
 ### Reads a whole file as text (UTF-8, lossy). UNCOLORED, like `waitfor`: inside work an Agent runs as a fiber
@@ -610,27 +830,27 @@ failable common routine FileManager.set_size(at: File, bytes: U64)
 ### progressing), anywhere else it reads inline. This is the way to read a whole file from such work.
 ### :param at: The file.
 ### :returns: Its contents as `Text`.
-### :throws: {IOError} when the file doesn't exist or can't be read.
-failable common routine FileManager.read_text(at: File) -> Text
-    return FileManager.read_bytes(at: at).decode_as_utf8_lossy()
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be read.
+failable common routine OsFileManager.read_text(at: File) -> Text
+    return OsFileManager.read_bytes(at: at).decode_as_utf8_lossy()
 
 ### Reads a whole file. UNCOLORED, like `read_text`.
 ### :param at: The file.
 ### :returns: Its contents.
-### :throws: {IOError} when the file doesn't exist or can't be read.
-failable common routine FileManager.read_bytes(at: File) -> Bytes
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be read.
+failable common routine OsFileManager.read_bytes(at: File) -> Bytes
     var cstr = at.at.to[CStr]()
     var ptr = C::rf_io_read_file_all(cstr, cstr.count().to[S32]())
     if C::rf_io_last_failed()
-        throw IOError(description: f"Cannot read '{at.at}': it doesn't exist or can't be read")
+        fail_io(action: f"Cannot read '{at.at}'", path: at.at)
     return Bytes(ptr: ptr, count: C::rf_io_get_result_len())
 
 ### Writes `content` to an existing file, replacing what it held. UNCOLORED, like `read_text`. The text is encoded as
 ### UTF-8.
 ### :param at: The file, which must exist (make it with `make_file`).
 ### :param content: The text to write.
-### :throws: {IOError} when the file doesn't exist or can't be written.
-failable common routine FileManager.write_text(at: File, content: Text)
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be written.
+failable common routine OsFileManager.write_text(at: File, content: Text)
     var data = content.to[CStr]()
     write_all(path: at.at, data: data.view().ptr(), count: data.count())
     return
@@ -638,8 +858,8 @@ failable common routine FileManager.write_text(at: File, content: Text)
 ### Writes `content` to an existing file, replacing what it held. UNCOLORED, like `read_text`.
 ### :param at: The file, which must exist (make it with `make_file`).
 ### :param content: The bytes to write.
-### :throws: {IOError} when the file doesn't exist or can't be written.
-failable common routine FileManager.write_bytes(at: File, content: Bytes)
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be written.
+failable common routine OsFileManager.write_bytes(at: File, content: Bytes)
     danger
         write_all(path: at.at, data: content.raw_buffer(), count: content.count())
     return
@@ -648,7 +868,7 @@ failable common routine FileManager.write_bytes(at: File, content: Bytes)
 ### :param path: The file's path.
 ### :param data: The bytes.
 ### :param count: How many.
-### :throws: {IOError} when the file doesn't exist or can't be written.
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be written.
 secret failable routine write_all(path: Text, data: Hijacked[Byte], count: U64)
     var cstr = path.to[CStr]()
     drop C::rf_io_write_file_all(
@@ -658,142 +878,125 @@ secret failable routine write_all(path: Text, data: Hijacked[Byte], count: U64)
         data_len: count.to[S64](),
     )
     if C::rf_io_last_failed()
-        throw IOError(description: f"Cannot write '{path}': it doesn't exist or can't be written. Make it with 'FileManager.make_file'")
+        fail_io(action: f"Cannot write '{path}'. Make it with 'OsFileManager.make_file' first", path: path)
     return
 
 ### Adds `content` at the end of an existing file. The text is encoded as UTF-8.
 ### :param at: The file, which must exist (make it with `make_file`).
 ### :param content: The text to add.
-### :throws: {IOError} when the file doesn't exist or can't be written.
-failable common routine FileManager.append_text(at: File, content: Text)
-    using FileManager.open_append(at: at) as sink
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be written.
+failable common routine OsFileManager.append_text(at: File, content: Text)
+    using OsFileManager.open_append(at: at) as sink
         drop sink.store(data: content.encode_as_utf8())
     return
 
 # ============================================================================
-# FileManager — sessions over a file's content
+# OsFileManager — sessions over a file's content
 # ============================================================================
 
 ### Opens the file for sequential reading, giving a {Source} consumed forward with `load`.
 ### :param at: The file.
 ### :returns: A {FileSource} over the file's content, to be bound by `using`.
-### :throws: {IOError} when the file doesn't exist or can't be opened for reading.
-failable common routine FileManager.open_read(at: File) -> FileSource
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened for reading.
+failable common routine OsFileManager.open_read(at: File) -> FileSource
     var cstr = at.at.to[CStr]()
     var fd = C::rf_file_open(cstr, cstr.count().to[S32](), 0)
     if fd == -1
-        throw IOError(description: f"Cannot open '{at.at}' for reading")
+        fail_io(action: f"Cannot open '{at.at}' for reading", path: at.at)
     return FileSource(fd: fd, is_closed: false)
 
 ### Opens an existing file for sequential writing, EMPTYING it first, giving a {Sink} filled with `store`.
 ### :param at: The file, which must exist (make it with `make_file`).
 ### :returns: A {FileSink} over the file's content, to be bound by `using`.
-### :throws: {IOError} when the file doesn't exist or can't be opened for writing.
-failable common routine FileManager.open_write(at: File) -> FileSink
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened for writing.
+failable common routine OsFileManager.open_write(at: File) -> FileSink
     var cstr = at.at.to[CStr]()
     var fd = C::rf_file_open(cstr, cstr.count().to[S32](), 1)
     if fd == -1
-        throw IOError(description: f"Cannot open '{at.at}' for writing: it doesn't exist or can't be written")
+        fail_io(action: f"Cannot open '{at.at}' for writing", path: at.at)
     return FileSink(fd: fd, is_closed: false)
 
 ### Opens an existing file for sequential appending (writes land after its contents), giving a {Sink}.
 ### :param at: The file, which must exist (make it with `make_file`).
 ### :returns: A {FileSink} over the file's content, to be bound by `using`.
-### :throws: {IOError} when the file doesn't exist or can't be opened for appending.
-failable common routine FileManager.open_append(at: File) -> FileSink
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened for appending.
+failable common routine OsFileManager.open_append(at: File) -> FileSink
     var cstr = at.at.to[CStr]()
     var fd = C::rf_file_open(cstr, cstr.count().to[S32](), 2)
     if fd == -1
-        throw IOError(description: f"Cannot open '{at.at}' for appending: it doesn't exist or can't be written")
+        fail_io(action: f"Cannot open '{at.at}' for appending", path: at.at)
     return FileSink(fd: fd, is_closed: false)
 
-### Exposes the file's bytes as a read-only sequence of `T` in the virtual address space. RazorForge-only
-### (`dangerous`: it reinterprets raw file bytes as `T` — the builder cannot prove they form a valid `T`
-### — and the caller must keep the view within its `using` scope; the pointer dangles after `exit`).
-### `T` must be a plain-layout value (no entity/managed leaf, whose bytes are not valid handles).
+### Opens the whole file as a {FileStorage} of `T` cells (`Byte` or `Char`): for reading and writing when the file
+### can be written, for reading only otherwise. An empty file gives a storage of no cells. Bytes past the last whole
+### cell are not part of it.
 ### :param at: The file.
-### :returns: The resulting {Exposed} view, to be bound by `using`.
-### :throws: {IOError} when the file cannot be exposed (missing or non-regular; an empty file yields an
-###   empty view, `count() == 0`, rather than throwing).
-failable common dangerous routine FileManager.expose[T](at: File) -> Exposed[T]
+### :returns: The storage, ended at the end of its scope.
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened.
+failable common routine OsFileManager.open_storage[T](at: File) -> FileStorage[T]
+needs T obeys StorageCell
     var cstr = at.at.to[CStr]()
-    var buf = C::rf_file_map_path(cstr, cstr.count().to[S32]())
+    var buf = C::rf_file_map_storage(path: cstr, path_len: cstr.count().to[S32]())
     if buf.is_none()
-        throw IOError(description: f"Cannot expose '{at.at}'")
+        fail_io(action: f"Cannot open '{at.at}' as storage", path: at.at)
     var byte_len = C::rf_get_result_len()
-    return Exposed[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0)
+    var esize = T.data_size().byte_size()
+    return FileStorage[T](
+        buf: buf.recast_as[T](),
+        byte_len: byte_len - byte_len % esize,
+        map_delta: 0,
+        writable: C::rf_file_map_writable(),
+        is_closed: false,
+    )
 
-### Exposes a WINDOW of the file's bytes as a read-only sequence of `T`: `count` elements starting at
-### element `start`, clamped to the file end. This is the windowing path for files larger than the
-### address space. The window's own `count()` may be smaller than `count` when it reaches EOF, and a `start`
-### at/after EOF yields an empty view. RazorForge-only, `dangerous` (see `expose`).
+### Opens a WINDOW of the file as a {FileStorage} of `T` cells: `count` cells starting at cell `start`, clamped to
+### the file's end, for reading and writing when the file can be written. This is the way through a file larger
+### than the address space. The window's own `count()` may be smaller than `count` when it reaches the end, and a
+### `start` at or past the end gives a storage of no cells.
 ### :param at: The file.
-### :param start: The starting element index.
-### :param count: The number of `T` elements to map (clamped to the file end).
-### :returns: The resulting {Exposed} window, to be bound by `using`.
-### :throws: {IOError} when the file cannot be mapped.
-failable common dangerous routine FileManager.expose_range[T](at: File, start: U64, count: U64) -> Exposed[T]
+### :param start: The first cell.
+### :param count: The number of cells (clamped to the file's end).
+### :returns: The storage, ended at the end of its scope.
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened.
+failable common routine OsFileManager.open_storage_range[T](at: File, start: U64, count: U64) -> FileStorage[T]
+needs T obeys StorageCell
     var cstr = at.at.to[CStr]()
     var esize = T.data_size().byte_size()
-    var buf = C::rf_file_map_path_range(cstr, cstr.count().to[S32](), start *% esize, count *% esize)
+    var buf = C::rf_file_map_storage_range(
+        path: cstr,
+        path_len: cstr.count().to[S32](),
+        offset: start *% esize,
+        length: count *% esize,
+    )
     if buf.is_none()
-        throw IOError(description: f"Cannot expose a range of '{at.at}'")
+        fail_io(action: f"Cannot open a range of '{at.at}' as storage", path: at.at)
     var user_len = C::rf_get_result_len()
     var delta = C::rf_file_map_delta()
+    var writable = C::rf_file_map_writable()
     var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
-    return Exposed[T](buf: user, byte_len: user_len, map_delta: delta)
-
-### Wields the file's bytes as a read/write sequence of `T` in the virtual address space (SHARED: writes
-### land in the file). RazorForge-only (`dangerous`: it reinterprets raw file bytes as `T`, and the
-### caller must keep the view within its `using` scope; the pointer dangles after `exit`). `T` must be a
-### plain-layout value (no entity/managed leaf).
-### :param at: The file.
-### :returns: The resulting {Wielded} view, to be bound by `using`.
-### :throws: {IOError} when the file cannot be wielded (missing or non-regular; an empty file yields an
-###   empty view rather than throwing).
-failable common dangerous routine FileManager.wield[T](at: File) -> Wielded[T]
-    var cstr = at.at.to[CStr]()
-    var buf = C::rf_file_map_path_rw(cstr, cstr.count().to[S32]())
-    if buf.is_none()
-        throw IOError(description: f"Cannot wield '{at.at}'")
-    var byte_len = C::rf_get_result_len()
-    return Wielded[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0)
-
-### Wields a WINDOW of the file's bytes as a read/write sequence of `T` (SHARED: writes land in the
-### file): `count` elements starting at element `start`, clamped to the file end. The write-side dual of
-### `expose_range`: size the file first (`set_size`), then wield and fill one window at a time. The mapping
-### CANNOT grow the file. RazorForge-only, `dangerous` (see `wield`).
-### :param at: The file.
-### :param start: The starting element index.
-### :param count: The number of `T` elements to map (clamped to the file end).
-### :returns: The resulting {Wielded} window, to be bound by `using`.
-### :throws: {IOError} when the file cannot be mapped.
-failable common dangerous routine FileManager.wield_range[T](at: File, start: U64, count: U64) -> Wielded[T]
-    var cstr = at.at.to[CStr]()
-    var esize = T.data_size().byte_size()
-    var buf = C::rf_file_map_path_range_rw(cstr, cstr.count().to[S32](), start *% esize, count *% esize)
-    if buf.is_none()
-        throw IOError(description: f"Cannot wield a range of '{at.at}'")
-    var user_len = C::rf_get_result_len()
-    var delta = C::rf_file_map_delta()
-    var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
-    return Wielded[T](buf: user, byte_len: user_len, map_delta: delta)
+    return FileStorage[T](
+        buf: user,
+        byte_len: user_len - user_len % esize,
+        map_delta: delta,
+        writable: writable,
+        is_closed: false,
+    )
 
 # ============================================================================
-# FileManager — listing directories
+# OsFileManager — listing directories
 # ============================================================================
 
 ### The direct entries of the directory as bare names (`.` and `..` left out), in the platform's order. Use
-### `Directory.file(name:)` / `subdir(name:)` to turn one into a path.
+### `Directory.file(name:)` / `go_to(name:)` to turn one into a path.
 ### :param at: The directory.
 ### :returns: The entry names.
-### :throws: {IOError} when the directory cannot be listed.
-failable common routine FileManager.list(at: Directory) -> List[Text]
+### :throws: {NotFoundError} when the directory doesn't exist, or the crashable for why it cannot be listed.
+failable common routine OsFileManager.list(at: Directory) -> List[Text]
     var cstr = at.at.to[CStr]()
     var ptr = C::rf_fs_list_dir(path: cstr, len: cstr.count().to[S32]())
     var len = C::rf_get_result_len()
     if ptr.is_none()
-        throw IOError(description: f"Cannot list '{at.at}'")
+        fail_io(action: f"Cannot list '{at.at}'", path: at.at)
     if len == 0
         return List[Text]()
     return path_text(ptr: ptr, len: len).split(separator: '\n')
@@ -804,13 +1007,13 @@ failable common routine FileManager.list(at: Directory) -> List[Text]
 ### stat per entry for the mtime). `.` and `..` are left out.
 ### :param at: The directory.
 ### :returns: The entries.
-### :throws: {IOError} when the directory cannot be listed.
-failable common routine FileManager.entries(at: Directory) -> List[DirEntry]
+### :throws: {NotFoundError} when the directory doesn't exist, or the crashable for why it cannot be listed.
+failable common routine OsFileManager.entries(at: Directory) -> List[DirEntry]
     var cstr = at.at.to[CStr]()
     var ptr = C::rf_fs_list_dir_typed(path: cstr, len: cstr.count().to[S32]())
     var len = C::rf_get_result_len()
     if ptr.is_none()
-        throw IOError(description: f"Cannot list '{at.at}'")
+        fail_io(action: f"Cannot list '{at.at}'", path: at.at)
     var result = List[DirEntry]()
     if len == 0
         return result
@@ -836,163 +1039,96 @@ failable common routine FileManager.entries(at: Directory) -> List[DirEntry]
 ### followed.
 ### :param at: The directory.
 ### :returns: The full paths.
-### :throws: {IOError} when any directory in the tree cannot be listed.
-failable common routine FileManager.walk(at: Directory) -> List[Text]
+### :throws: {NotFoundError} when the directory doesn't exist, or the crashable for why a directory in the tree
+###     cannot be listed.
+failable common routine OsFileManager.walk(at: Directory) -> List[Text]
     var result = List[Text]()
-    each entry in FileManager.entries(at: at)
+    each entry in OsFileManager.entries(at: at)
         result.add_last(value: join_path(a: at.at, b: entry.name))
         if entry.is_directory
-            each descendant in FileManager.walk(at: at.subdir(name: entry.name))
+            each descendant in OsFileManager.walk(at: at.go_to(name: entry.name))
                 result.add_last(value: descendant)
     return result
 
 # ============================================================================
-# FileManager — the process's directories
+# Sessions and storages: their own routines
 # ============================================================================
 
-### The process's current working directory.
-### :returns: The resulting `Directory`.
-### :throws: {IOError} when the working directory cannot be read.
-failable common routine FileManager.current_directory() -> Directory
-    var ptr = C::rf_fs_current_dir()
-    var len = C::rf_get_result_len()
-    if ptr.is_none()
-        throw IOError(description: "Cannot read the current working directory")
-    return Directory(at: path_text(ptr: ptr, len: len))
-
-### Changes the process's current working directory.
-### :param to: The directory to switch to.
-### :throws: {IOError} when the directory cannot be entered.
-failable common routine FileManager.set_current_directory(to: Directory)
-    var cstr = to.at.to[CStr]()
-    if C::rf_fs_set_current_dir(path: cstr, len: cstr.count().to[S32]()) == -1
-        throw IOError(description: f"Cannot change the working directory to '{to.at}'")
-    return
-
-### The platform's temporary directory. Honors the usual environment variables, never fails.
-### :returns: The resulting `Directory`.
-common routine FileManager.temp_directory() -> Directory
-    var ptr = C::rf_fs_temp_dir()
-    return Directory(at: path_text(ptr: ptr, len: C::rf_get_result_len()))
-
-### The current user's home directory.
-### :returns: The resulting `Directory`.
-### :throws: {IOError} when the home directory cannot be determined.
-failable common routine FileManager.home_directory() -> Directory
-    var ptr = C::rf_fs_home_dir()
-    var len = C::rf_get_result_len()
-    if ptr.is_none()
-        throw IOError(description: "Cannot determine the home directory")
-    return Directory(at: path_text(ptr: ptr, len: len))
-
-# ============================================================================
-# Sessions and views: their own routines
-# ============================================================================
-
-### Pass-through entry: the view was already acquired by `FileManager.expose`.
-### :returns: This `Exposed[T]`.
-failable routine Exposed[T].enter() -> Exposed[T]
-    return me
-
-### Releases the view on scope exit, unmapping from the true mapping base (`buf` minus `map_delta`) for
-### the full mapped length. A null/empty buffer is a runtime no-op, and `using` guarantees a single
-### `exit`, so the view is released exactly once.
-routine Exposed[T].exit()
-    danger
-        var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
-        C::rf_file_unmap(base, me.byte_len +% me.map_delta)
-    return
-
-### The number of `T` elements in the exposed view (`byte_len // T.data_size()`).
+### The number of `T` cells in the storage.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Exposed[T].count() -> U64
+routine FileStorage[T].count() -> U64
     return me.byte_len // T.data_size().byte_size()
 
-### Returns the `T` at element `index`.
-### :param index: The zero-based element position to read.
-### :returns: The `T` at that position.
-### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+### Whether the storage was opened for writing (the file could be written).
+### :returns: The resulting `Bool` value.
 @readonly
-failable routine Exposed[T].peek(index: U64) -> T
+routine FileStorage[T].is_writable() -> Bool
+    return me.writable
+
+### The `T` in cell `index`.
+### :param index: The zero-based cell.
+### :returns: The value in that cell.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`, {InvalidValueError} when the cell doesn't hold a valid
+###     `T` (a `Char` cell that isn't a Unicode scalar).
+@readonly
+failable routine FileStorage[T].getitem(index: U64) -> T
     var n = me.count()
     if index >= n
         throw IndexOutOfBoundsError(index: index, count: n)
     danger
-        return me.buf.stride(count: index.to[S64]()).peek()
+        var value = me.buf.stride(count: index.to[S64]()).peek()
+        if value.is_valid_cell()
+            return value
+    throw InvalidValueError(input: f"cell {index} of the storage", target: "a Unicode scalar (Char)")
 
-### Hands out the raw view pointer for hot, bounds-check-free scanning. `dangerous`: the caller
-### must keep this `Exposed[T]` in scope for as long as the handle (or any slice `stride`d from it)
-### is used — the pointer dangles after `exit`.
-### :returns: A non-owning `Hijacked[T]` positioned at element 0 of the view.
-@readonly
-dangerous routine Exposed[T].raw_buffer() -> Hijacked[T]
-    return me.buf
-
-### Pass-through entry: the view was already acquired by `FileManager.wield`.
-### :returns: This `Wielded[T]`.
-failable routine Wielded[T].enter() -> Wielded[T]
-    return me
-
-### Flushes pending writes to the file and releases the view on scope exit, unmapping from the true
-### mapping base (`buf` minus `map_delta`) for the full mapped length. A null/empty buffer is a runtime
-### no-op, and `using` guarantees a single `exit`, so the view is flushed and released exactly once.
-routine Wielded[T].exit()
-    me.flush()
-    danger
-        var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
-        C::rf_file_unmap(base, me.byte_len +% me.map_delta)
-    return
-
-### The number of `T` elements in the wielded view (`byte_len // T.data_size()`).
-### :returns: The resulting `U64` value.
-@readonly
-routine Wielded[T].count() -> U64
-    return me.byte_len // T.data_size().byte_size()
-
-### Returns the `T` at element `index`.
-### :param index: The zero-based element position to read.
-### :returns: The `T` at that position.
-### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-@readonly
-failable routine Wielded[T].peek(index: U64) -> T
+### Writes `value` into cell `index`. The write lands in the file (flushed lazily, on `flush()`, or when the storage
+### ends). A storage cannot grow its file: writing past the end is an error.
+### :param index: The zero-based cell.
+### :param value: The value to store there.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`, {NotEnoughPermissionError} when the storage was opened
+###     for reading only, {InvalidValueError} when `value` isn't a valid `T` for a cell.
+failable routine FileStorage[T].setitem(index: U64, value: T)
     var n = me.count()
     if index >= n
         throw IndexOutOfBoundsError(index: index, count: n)
-    danger
-        return me.buf.stride(count: index.to[S64]()).peek()
-
-### Overwrites the `T` at element `index` with `value`. The write lands in the file (flushed lazily, on
-### `flush()`, or on scope exit). Cannot grow the file — writing past the end is an error.
-### :param index: The zero-based element position to overwrite.
-### :param value: The `T` to store at that position.
-### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-failable routine Wielded[T].poke(index: U64, value: T)
-    var n = me.count()
-    if index >= n
-        throw IndexOutOfBoundsError(index: index, count: n)
+    if not me.writable
+        throw NotEnoughPermissionError(description: f"Cannot write cell {index}: this storage was opened for reading only, since its file can't be written")
+    if not value.is_valid_cell()
+        throw InvalidValueError(input: f"the value for cell {index}", target: "a Unicode scalar (Char)")
     danger
         me.buf.stride(count: index.to[S64]()).poke(value: value)
     return
 
-### Forces pending writes to be written back to the file now (a durability checkpoint). Writes are
-### otherwise flushed lazily by the OS, and always on `exit`. Flushes from the true mapping base (`buf`
-### minus `map_delta`) for the full mapped length.
-routine Wielded[T].flush()
+### Forces pending writes back to the file now (a durability checkpoint). Writes are otherwise flushed lazily by
+### the OS, and always when the storage ends.
+routine FileStorage[T].flush()
+    if me.is_closed or not me.writable
+        return
     danger
         var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
         C::rf_file_map_flush(base, me.byte_len +% me.map_delta)
     return
 
-### Hands out the raw view pointer for hot, bounds-check-free scanning or bulk writes. `dangerous`: the
-### caller must keep this `Wielded[T]` in scope for as long as the handle (or any slice `stride`d from
-### it) is used — the pointer dangles after `exit`.
-### :returns: A non-owning `Hijacked[T]` positioned at element 0 of the view.
-@readonly
-dangerous routine Wielded[T].raw_buffer() -> Hijacked[T]
-    return me.buf
+### Flushes pending writes and releases the mapping, from the true mapping base (`buf` minus `map_delta`) for the
+### whole mapped length. Runs once: the storage's end calls it, and later calls do nothing.
+routine FileStorage[T].close()
+    if me.is_closed
+        return
+    me.flush()
+    danger
+        var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
+        C::rf_file_unmap(base, me.byte_len +% me.map_delta)
+    me.is_closed = true
+    return
 
-### Loads up to `max` bytes from the current position. Returns fewer when end-of-file is reached first;
+### Releases the mapping when the storage ends at the end of its scope.
+@override
+routine FileStorage[T].destruct()
+    me.close()
+    return
+
+### Loads up to `max` bytes from the current position. Returns fewer when end-of-file is reached first,
 ### an empty `Bytes` signals EOF.
 ### :param max: The maximum byte count to load.
 ### :returns: The bytes loaded.
@@ -1010,7 +1146,7 @@ routine FileSource.close()
     me.is_closed = true
     return
 
-### Pass-through entry: the descriptor was already acquired by `FileManager.open_read`.
+### Pass-through entry: the descriptor was already acquired by `OsFileManager.open_read`.
 ### :returns: This `FileSource`.
 failable routine FileSource.enter() -> FileSource
     return me
@@ -1048,7 +1184,7 @@ routine FileSink.close()
     me.is_closed = true
     return
 
-### Pass-through entry: the descriptor was already acquired by `FileManager.open_write`/`open_append`.
+### Pass-through entry: the descriptor was already acquired by `OsFileManager.open_write`/`open_append`.
 ### :returns: This `FileSink`.
 failable routine FileSink.enter() -> FileSink
     return me
