@@ -243,26 +243,50 @@ routine Decimal.eq(you: Decimal) -> Bool
     return dec_to_d128(x: me).eq(you: dec_to_d128(x: you))
 
 # ============================================================================
-# Arithmetic — delegate to D128's CHECKED operators, which crash on a non-finite
-# result (inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 ->
-# DivisionByZeroError). Inputs are always finite, so the only crash paths are a
-# genuine out-of-range / undefined result. Failability is inferred from the body.
+# Arithmetic. `+ - *` are exact: a result that needs more than 34 significant digits (or an exponent below the
+# smallest one) stops with NumericOverflowError instead of rounding, the way an integer that overflows does.
+# Division rounds to the nearest 34-digit value, since a quotient is rarely exact in any number of digits. Every
+# operator crashes on a result out of range (NumericOverflowError) or with no value (NumericDomainError,
+# DivisionByZeroError). Failability is inferred from the body.
 # ============================================================================
 
-### Returns `me * you`.
+### The value of an exact `+ - *` from Ingrid: the 34-digit result, or a crash when that lost a digit.
+### :param w: The result words, `w2` 1 when rounding lost a digit.
+### :param what: The result's name for the crash message (`sum`, `difference`, `product`).
+### :returns: The exact result.
+### :throws: {NumericOverflowError} when the exact result needs more than 34 significant digits, or is out of range.
+secret failable routine dec_exact(w: IngridWords, what: Text) -> Decimal
+    if w.w2 != 0
+        throw NumericOverflowError(
+            description: f"the exact {what} has more significant digits than a Decimal holds (34)")
+    return dec_of_d128_finite(d: D128.from_words(low: w.w0, high: w.w1))
+
+### Returns `me * you`, exactly.
+### :throws: {NumericOverflowError} when the exact product needs more than 34 significant digits.
 @readonly
 failable routine Decimal.mul(you: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).mul(you: dec_to_d128(x: you)))
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_exact(w: C::ingrid_d128_mul_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
+        b_low: d128_low(v: b), b_high: d128_high(v: b)), what: "product")
 
-### Returns `me + you`.
+### Returns `me + you`, exactly.
+### :throws: {NumericOverflowError} when the exact sum needs more than 34 significant digits.
 @readonly
 failable routine Decimal.add(you: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).add(you: dec_to_d128(x: you)))
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_exact(w: C::ingrid_d128_add_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
+        b_low: d128_low(v: b), b_high: d128_high(v: b)), what: "sum")
 
-### Returns `me - you`.
+### Returns `me - you`, exactly.
+### :throws: {NumericOverflowError} when the exact difference needs more than 34 significant digits.
 @readonly
 failable routine Decimal.sub(you: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).sub(you: dec_to_d128(x: you)))
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_exact(w: C::ingrid_d128_sub_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
+        b_low: d128_low(v: b), b_high: d128_high(v: b)), what: "difference")
 
 ### Returns `me / you`.
 @readonly
@@ -305,27 +329,28 @@ routine Decimal.clamp(min_val: Decimal, max_val: Decimal) -> Decimal
 routine Decimal.recip() -> Decimal
     return DECIMAL_ONE.truediv(me)
 
-### Returns `me` raised to the integer power `n` via exponentiation by squaring.
-### A negative `n` inverts the result. A non-finite intermediate crashes, as for all `Decimal`
-### arithmetic.
+### Returns `me` raised to the integer power `n` via exponentiation by squaring, each step rounded to the nearest
+### 34-digit value (a power is rarely exact in 34 digits). A negative `n` inverts the result. A non-finite
+### intermediate crashes, as for all `Decimal` arithmetic.
 ### :param n: The integer exponent.
 ### :returns: `me ** n`.
 routine Decimal.powi(n: S32) -> Decimal
-    var base = if n < 0 then DECIMAL_ONE.truediv(me) else me
+    var base = dec_to_d128(x: if n < 0 then DECIMAL_ONE.truediv(me) else me)
     var count = n.unsigned_abs()
-    var result = DECIMAL_ONE
+    var result = dec_to_d128(x: DECIMAL_ONE)
     while count > 0
         if count.bitand(1) == 1
             result = result.mul(base)
         base = base.mul(base)
         count = count.logical_shift_right(1)
-    return result
+    return dec_of_d128_finite(d: result)
 
-### Returns `(me + you) / 2`. A non-finite intermediate crashes, as for all `Decimal` arithmetic.
+### Returns `(me + you) / 2`, rounded to the nearest 34-digit value like any quotient. A non-finite intermediate
+### crashes, as for all `Decimal` arithmetic.
 ### :param you: The other value.
 ### :returns: The arithmetic midpoint of `me` and `you`.
 routine Decimal.midpoint(you: Decimal) -> Decimal
-    return me.add(you).truediv(2)
+    return dec_of_d128_finite(d: dec_to_d128(x: me).add(you: dec_to_d128(x: you))).truediv(2)
 
 # ============================================================================
 # Formatting — canonical decimal text (fractional trailing zeros stripped)
