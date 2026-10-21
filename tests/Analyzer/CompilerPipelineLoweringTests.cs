@@ -143,8 +143,8 @@ public class CompilerPipelineLoweringTests
     public void Analyze_GenericFreeRoutine_LowersUsingResolvedRoutine()
     {
         string source = """
-                        routine test()
-                            var ptr = hijacked_from[S32](addr: Addr.hollow())
+                        routine test(at: Addr)
+                            var ptr = hijacked_from[S32](addr: at)
                             return
                         """;
 
