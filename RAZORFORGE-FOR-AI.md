@@ -1278,8 +1278,7 @@ routine start()
 
 - The routine is named, not called (like `f.to[Callable]()`), and the conversion takes the routine's own
   arguments. Only that routine is the work: `f.to[Agent](x).retrieve()` makes the Agent and collects it at once,
-  and in `p.twice().total.to[Agent]()` the receiver `p.twice()` is computed now. `agent f(x)` is the old spelling
-  (RF-G220, `migrate --step agent`).
+  and in `p.twice().total.to[Agent]()` the receiver `p.twice()` is computed now. `agent` is an ordinary name.
 - **Recovery is where the Agent is collected:** `try job.retrieve()` / `check job.retrieve()`. To recover inside
   the work, write a routine that uses `try` and make an Agent of it.
 - An Agent of a routine that returns nothing is `Agent[None]`. The type can be inferred:
