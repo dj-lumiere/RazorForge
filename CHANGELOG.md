@@ -76,16 +76,26 @@ the build error says what to write instead.
   `dangerous`).
 - `discard` is `drop` (default `migrate`). A dropped result needs `drop` (RF-W007) unless its routine is
   `@discardable`.
+- The flags value with no member on is `none` (`var marks: CellMarks = none`, also in presets and record presets).
+  `all_off()` is gone, and its build error names `none`.
+- A local handed over inside a `return` (`return Shelf(book: book)`) moves without `steal`. `steal` there is a
+  warning, RF-W259, whose quick fix removes it (`migrate --step return-steal`).
+- The same routine declared twice in one standard library or program file is a build error (RF-S406).
 
 **Sharing and access**
 - `Assignable` is gone. `=` copies a record, and copying a handle makes one more handle to the same entity. Default
   `migrate` removes `.share()` calls.
 - `Accessing` and `Controlling`, with their `access()` and `control()` verbs, are gone. Use the handle directly, or
   `view()` / `modify()`.
-- A `Guarded` value is opened with an access block: `viewing g as v` to read and `modifying g as m` to write.
-  `consult()`, `amend()`, `try_consult()`, `try_amend()`, `Consulting`, `Amending` and `multiamend` are gone.
-  `using g.view() as v` is RF-S612 (`migrate --step access` rewrites the `view()` / `modify()` forms, change
-  `consult` / `amend` by hand). `multimodify` takes two different `Guarded` values.
+- A `Guarded` value is opened with an access block: `viewing g as v` to read and `modifying g as m` to write. The
+  block calls the target's `view_enter()` / `modify_enter()` before it (the token they give is the `as` name) and
+  `view_exit()` / `modify_exit()` on every way out, so any type with those pairs is a block target (`Guarded`,
+  `FileStorage`, a type of your own). Using the block on a `Retained`, a `Roamed` or a weak handle is RF-S651 (use it
+  directly, or `hold()` first). `try viewing g as v` gives `v` as a `Maybe` of the token, which the body takes apart
+  with `when`, and the block takes no `else` (RF-G226). `modifying a, b` enters in the written order and leaves in
+  the reverse one. `consult()`, `amend()`, `try_consult()`, `try_amend()`, `Consulting`, `Amending`, `multiamend`
+  and `Guarded`'s `open_*` / `try_*` / `close_*` routines are gone. `using g.view() as v` is RF-S612
+  (`migrate --step access` rewrites the old forms, `try ... else` included).
 - `LockPolicy` is `AccessPolicy`, `ReentrantLockError` is `ReenterDuringAccessError` (`migrate --step access`),
   and the `[debug]` switches are `access-order` and `deadlock-check`.
 - `RetainController`, `GuardController` and `RoamController` are `RetainManager`, `GuardManager` and
@@ -157,7 +167,8 @@ the build error says what to write instead.
 - `bundle`: a generic group whose kind is chosen per instance.
 - Loops carry values: `until c with total: S64 = 0`, `continue with total: v`, and `then` sees them.
 - A `when` that gives a value ends a block arm with `becomes value`. One arm can match several values
-  (`== 4, 6, 9, 11 =>`).
+  (`== 4, 6, 9, 11 =>`). An arm can be `throw ...` in a `failable` routine (RF-S750 elsewhere, with a quick fix that
+  writes `failable`).
 - Backtick names (`` `check` ``, `` `total count` ``), tuple swap `(a, b) = (b, a)`, record patterns, inline
   variants `A | B`, `define` type aliases, generic variants, `@infix` routines.
 - Named and short arguments can mix: `area(width, height: 4)`.
@@ -217,6 +228,10 @@ the build error says what to write instead.
 - A crash inside the standard library points to the caller's line.
 - Two or more recovered calls inside one generic routine no longer stop the build.
 - A user type named like a generic parameter (`record T`) no longer breaks that generic.
+- `flags.lacks(A and B)` answered "not all of them on" instead of "none of them on".
+- A byte literal with a hex escape (`b'\x07'`) read as the backslash.
+- A syntax error inside a value `when` no longer reports the rest of the routine as top-level statements.
+- A preset made by a construction builds on the Tessera backend.
 
 ### Removed
 - `Assignable`, `FrozenController`, `Accessing`, `Controlling`, `Consulting`, `Amending`, `multiamend`,
@@ -231,6 +246,7 @@ the build error says what to write instead.
 - `F256`, `F512`, `U192`, `U384` and the other in-between widths.
 - Number type suffixes, `inf_bNN`, the `B*_INFINITY` / `B*_NAN` presets.
 - `blank[T]()`.
+- Flags' `all_off()` (write `none`), `guarded_none()` (write `Guarded[T, P].hollow()`).
 
 ## [0.4.0] — 2026-08-28 · RazorForge 0.4.0 · Suflae 0.1.0
 
