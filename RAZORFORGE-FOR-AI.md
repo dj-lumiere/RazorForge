@@ -66,7 +66,7 @@ When unsure, consult ground truth in the repo/package:
    stdlib crashable: `throw AbsentValueError()`. To tell "not found" apart from
    other failures, match it by type: `is AbsentValueError => ...` on a `check`.
    **With a keyword in front, every failure beneath it is recovered, at any depth;
-   only `pierce` still crashes.** That covers a `throw` in the called
+   only `pierce` and a failure inside a `destruct` still crash.** That covers a `throw` in the called
    routine and in every routine it calls, bare calls included (failable or not:
    `try f()` also recovers a division by zero inside a plain helper `f` calls); a
    checked operator (`try a + b` recovers the overflow, `check a // b` the
@@ -84,7 +84,8 @@ When unsure, consult ground truth in the repo/package:
    lambda ends only when its source ends: a failure inside the lambda is the
    loop's failure, recovered by a keyword above the loop or crashing without one.
    Not covered: a crash inside a library routine not declared `failable` (other
-   than in a routine value you handed it) stays a crash, and native runtime
+   than in a routine value you handed it) stays a crash, a failure inside a `destruct` (a `destruct` is never
+   `failable`, RF-S815, and runs at a scope's end where nothing takes a failure) crashes even under `try`/`check`, and native runtime
    fatal errors, out of memory and running out of stack are fatal everywhere.
    **`pierce`** is the failure that must NOT be recovered: `pierce NopeError()`
    crashes like an unrecovered `throw` (status 82), and it crashes the same way
@@ -312,7 +313,9 @@ initialized in dependency order when `start()` begins (a cycle is RF-S436, no `s
 RF-S438), torn down at every exit of `start()`. Every thread reaches it, so the binding is
 never assigned again: shared changing state is an `Atomic` (`hits.fetch_add(delta: 1)`) or a
 `Guarded` (`modifying cache as c`), any other global is only read (writes are RF-S251 /
-RF-S256). A module-level `var` is an error (RF-S435). Constants the build knows are `preset`.
+RF-S256, `modifying G` on a global entity that is not a `Guarded` is RF-S256, `steal G` in any routine is
+RF-S421). A global never holds a token (RF-S601) or a single-thread handle (`Retained`, `Tracked`, at any depth:
+RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows are `preset`.
 
 ## 3. Types
 
@@ -708,7 +711,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
 - A `return` ends the routine's own variables: a local handed over inside the returned value moves without
   `steal` (`return Shelf(book: book)`, `return (a, b)`, `return xs`). `steal` on such a local there is RF-W259 (quick
   fix and `migrate --step return-steal` remove it). A parameter handed over in a `return` still takes `steal`.
-- A written `destruct` (a plain `routine T.destruct()`, never `dangerous`: RF-S807) tears down what the entity
+- A written `destruct` (a plain `routine T.destruct()`, never `dangerous`: RF-S807, never `failable`: RF-S815) tears down what the entity
   owns (its member variables, buffers it holds) and nothing else: the builder gives back the entity's own box
   before each of its returns, so one `destruct` call still ends the entity. Do not write
   `me.hijack().invalidate()` in it. A step that handles raw memory sits in a `danger` block inside the body.
@@ -737,7 +740,10 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     `var m = a.modify()`, re-pointable to another object of the same type), or
     open it for a block with `viewing a as v` / `modifying a as m`. A token is never part of another value: a field,
     a variant branch, or a type argument (`List[Viewing[T]]`, `Maybe[Viewing[T]]`, a tuple holding one, a generic type
-    given one, `var xs = [a.view()]`) is RF-S601, written or inferred. The one value that carries a token for a moment
+    given one, `var xs = [a.view()]`, a variant written in place `Viewing[Cell] | S64`, a global) is RF-S601, written
+    or inferred. A generic routine whose type parameter a call makes a token (`same(x: l.view())` with
+    `routine same[T](x: T)`) is RF-S601 too: pass what you need from the token, or give the routine a
+    `Viewing[T]` parameter and pass the entity. The one value that carries a token for a moment
     is what `try` gives on a routine returning a token (`try xs.view_at(index: i)`, an `each` step, `enumerate`'s
     `(index, token)` pair): unpack it with `when` right there. Binding that `Maybe` to a name is RF-S601. A lambda
     never captures a token (RF-S606).
@@ -874,7 +880,10 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   double-free, or a memory leak. Ordinary code (arithmetic, collection ops,
   channels, failable calls) is **never** wrapped in `danger`; it is not a
   catch-all for "risky" or "advanced". A `dangerous` routine can only be called
-  inside a `danger` block.
+  inside a `danger` block (RF-S609). That holds for every way of reaching it: it is never a routine value
+  (`var f = raw` is RF-S609, inside `danger` too), a lambda's body is outside the `danger` block the lambda is
+  written in, and an operator, a compound assignment or an f-text insertion whose routine is `dangerous`
+  (`p + q` on a dangerous `add`, `f"{p}"` on a dangerous `represent`) is written inside `danger` like the call.
 - No lifetime syntax; safety comes from the one-legitimate-version rule (an entity lives in one place), marked
   hand-overs (`steal`), scope-bound access tokens and managers.
 
@@ -934,7 +943,8 @@ place, is never copied by `=`, and has `duplicate()` only when every member is C
 otherwise). A bundle needs type parameters (**RF-S445**) and cannot contain itself (**RF-S446**; a recursive
 structure is an entity, as for records, RF-S960).
 In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
-it (`var y = x`, `return me.value`, a tuple of it) is RF-S413 on the template's own line: `steal` it, keep the
+it (`var y = x`, `return me.value`, a tuple of it, handing it to a parameter of a type parameter as in
+`xs.add_last(value: x)`) is RF-S413 on the template's own line: `steal` it, keep the
 parameter to values (`needs RecordType T`), or work on it in place.
 `needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
 kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
@@ -1107,7 +1117,8 @@ next element. Finish the loop, then mutate. A map's `d[k] = v` (and `d[k] += 1`)
 so it is banned inside `each` over `d` even when the key is already there. A list's `xs[i] = v` only replaces
 an element and stays allowed.
 The ban also covers a mutation hidden behind a call
-(`each x in xs { grow(xs: xs.modify()) }`): the builder works out which
+(`each x in xs { grow(xs: xs.modify()) }`) and a loop over an adapter of the collection
+(`each x in xs.where(...)` walks `xs` itself): the builder works out which
 parameters each routine can add to or remove from, following its calls, and
 rejects handing `xs` to one. Handing `xs` to a routine value, or changing another
 token, `Retained` or `Tracked` handle to the same kind of container
@@ -1368,8 +1379,8 @@ routine start()
     return
 ```
 
-- The routine is named, not called (like `f.to[Callable]()`), and the conversion takes the routine's own
-  arguments. Only that routine is the work: `f.to[Agent](x).retrieve()` makes the Agent and collects it at once,
+- The routine is named, not called (as when it is a routine value, `var f = work`), and the conversion takes the
+  routine's own arguments. Only that routine is the work: `f.to[Agent](x).retrieve()` makes the Agent and collects it at once,
   and in `p.twice().total.to[Agent]()` the receiver `p.twice()` is computed now. `agent` is an ordinary name.
 - **Recovery is where the Agent is collected:** `try job.retrieve()` / `check job.retrieve()`. To recover inside
   the work, write a routine that uses `try` and make an Agent of it.
@@ -1391,6 +1402,9 @@ Verbs (methods on `Agent[T]`, all failable):
   rethrows it (bare, it crashes loudly there like any failure), `check job.retrieve()` /
   `try job.retrieve()` recover it. The crash report's trace ends with
   `agent in start()` (the line that made the Agent) and `Thrown again at` names the `retrieve()` line.
+- **An Agent nobody retrieves** is cancelled and waited for where it is dropped (`drop job`, or the end of the
+  scope that holds it, RF-W009 warns). A failure its work came to crashes the program there with the failure's
+  message. Call `job.cancel()` first to throw away what it comes to, a failure included.
 - `cancel()` — asks the work to stop. Work nothing started yet never runs. Running work sees the request at
   its next wait (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there
   (a thread of its own cannot be stopped from outside). Retrieving a cancelled Agent waits for it to stop,
@@ -1461,7 +1475,11 @@ routine start()
 hand to work that may run on another thread: a `steal`-moved bare entity, trivially copyable value data,
 or a shareable manager handle (`Atomic`, `Guarded`, `Witnessed`). A `Roamed`
 handle is promoted. Anything else (a bare entity by copy, a record owning `Retained`/`Tracked`/
-`Viewing`/`Modifying`) is rejected. An `Atomic[T]` parameter is always by reference, so a routine taking
+`Viewing`/`Modifying`) is rejected. The check follows everything the value reaches: an entity's member
+variables, a collection's elements (`List[Retained[Cell]]`), a channel end's items (`Receiver[Retained[Cell]]`),
+and the `given` names of a lambda (written in the call or bound to a variable first). A value holding a
+`Retained`, `Tracked` or token at any depth makes an Agent of one thread: it starts with `start_here()`, and
+`start_now()` / `start_apart()` (or a `retrieve()` that starts it) is RF-S632. An `Atomic[T]` parameter is always by reference, so a routine taking
 one works on the caller's cell, and sharing one counter across agents just works:
 
 ```razorforge

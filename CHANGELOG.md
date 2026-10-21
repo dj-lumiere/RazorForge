@@ -122,6 +122,18 @@ file only once its other old spellings are gone.
   holding one, written or inferred (`var xs = [a.view()]`), is RF-S601. What `try` gives on a routine that returns a
   token is unpacked with `when` where it is made. A lambda capturing a token is RF-S606, and `steal` on a token is
   RF-S604 (both were not reported before).
+- More paths are build errors. A token in a variant written in place (`Viewing[Cell] | S64`), a global of a token
+  type, and a generic routine whose type parameter a call makes a token (`same(x: l.view())`) are RF-S601. In a
+  generic body, handing a value of a type parameter to a parameter of a type parameter (`xs.add_last(value: x)`)
+  takes `steal` (RF-S413). RF-S632 follows an agent's argument into an entity's member variables, a collection's
+  elements, a channel end's items and a lambda's captures, and a global holding `Retained` or `Tracked` is RF-S632.
+  `modifying G` on a global entity that is not a `Guarded` is RF-S256, `steal G` is RF-S421. An `each` over an
+  adapter (`xs.where(...)`) guards `xs` against reshaping (RF-S625). A dangerous routine is never a routine value,
+  a lambda body is outside the `danger` block it is written in, and an operator or f-text insertion whose routine
+  is dangerous needs `danger` (RF-S609). A binding taken in a loop turn that reaches `continue` is RF-S616. A
+  `failable` `destruct` is RF-S815.
+- A started Agent nobody retrieves is cancelled where it is dropped, and a failure its work came to crashes the
+  program there. `job.cancel()` throws the failure away.
 
 **Types and the C boundary**
 - `Address` and `CPtr` are `Addr`. Two addresses compare with `===`, and an address moves by a `ByteSize` with
@@ -233,6 +245,10 @@ file only once its other old spellings are gone.
   file whose numbers still have type suffixes, and leave the suffixes for `--step suffix`.
 
 ### Fixed
+
+- A `try` / `check` on a failable routine returning `B16` or `B32` with `return -inf` no longer emits the literal as a
+  `B64`.
+- `modifying a.x as p, a.y as q` no longer reports RF-S643 for a write through `p`.
 - A write to a value element (`m[i][j] = v`, `pts[k].x = v`) changed a temporary copy.
 - A variant's payload was not zero-filled, so optimized builds could lose the arm's value.
 - The cycle collector skipped the effects of a written `destroy`.

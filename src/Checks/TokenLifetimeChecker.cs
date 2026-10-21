@@ -1135,6 +1135,16 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                             continue;
                         }
 
+                        // A member path target (`modifying bank.a as x`) is the token's source: a write through the
+                        // token (`x.n = 2`) changes a part of `bank.a` and ends only tokens taken from that part.
+                        if (target.Target is MemberExpression && _state != null &&
+                            owner.PathsOf(expr: target.Target, tokenOrigins: Held) is { Count: > 0 } targetPaths)
+                        {
+                            _state.Tokens[key: target.Name] = new TokenState(Origins: targetPaths, EndedBy: null,
+                                EndedAt: null);
+                            continue;
+                        }
+
                         Bind(name: target.Name, value: target.Target, index: index);
                     }
 

@@ -147,6 +147,7 @@ public class GenericParamCollisionTests
                                    item: T
 
                                routine List[Box[T]].items() -> List[T]
+                               needs RecordType T
                                    var out = List[T]()
                                    each b in me
                                        out.add_last(value: b.item)

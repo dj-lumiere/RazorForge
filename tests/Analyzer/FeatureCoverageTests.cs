@@ -258,6 +258,7 @@ public class FeatureCoverageTests
                               import IO/Console
 
                               routine in_set[T](items: Viewing[List[T]], target: T) -> Bool
+                              needs RecordType T
                               needs T obeys Equatable, Hashable
                                   var s: Set[T] = Set[T]()
                                   each x in items

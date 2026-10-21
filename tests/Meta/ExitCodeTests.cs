@@ -200,6 +200,47 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "agent_crash_report.rf:16:13", actualString: report);
     }
 
+    /// <summary>A started Agent nobody retrieves is cancelled and waited for at the end of its scope. A failure its
+    /// work came to crashes there with status 82 and the failure's message (safety matrix C45, rf-fail-agent-dropped):
+    /// it used to vanish with only RF-W009.</summary>
+    [Fact]
+    public void DroppedAgentFailure_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "agent_dropped_failure.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "starting", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "Verification failed error", actualString: stdout + stderr);
+    }
+
+    /// <summary>An Agent the program cancelled before dropping it throws away what it came to, a failure included.</summary>
+    [Fact]
+    public void CancelledAgentDrop_DropsItsFailure()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "agent_cancelled_drop.rf");
+
+        Assert.True(condition: exit == 0,
+            userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "after the cancelled agent", actualString: stdout);
+    }
+
+    /// <summary><c>destruct</c> is never failable, so a failure inside it crashes with status 82 even beneath
+    /// <c>check</c> (safety matrix C45, rf-fail-destruct-callee).</summary>
+    [Fact]
+    public void FailureInsideDestruct_CrashesEvenUnderCheck()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "destruct_failure_under_check.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "making", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "recovered", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "Verification failed error", actualString: stdout + stderr);
+    }
+
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
         string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ExitCode", fixture]);

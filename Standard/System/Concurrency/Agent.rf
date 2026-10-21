@@ -326,8 +326,11 @@ dangerous routine AgentWork[T].request_cancel()
     return
 
 ### Waits for cancelled work to stop and frees what ran it, dropping what it came to. Work nothing started is
-### only marked done. Plumbing for `cancel_all`.
-dangerous routine AgentWork[T].wind_down()
+### only marked done. Plumbing for `cancel_all` and for the teardown of an Agent nobody retrieved.
+### :param reports_failure: Whether a failure the work came to (other than stopping on the cancel request) crashes
+###     here instead of being dropped: true for an Agent dropped without `cancel()`, whose failure nothing else would
+###     see.
+dangerous routine AgentWork[T].wind_down(reports_failure: Bool)
     if me.place() == AgentPlace.DONE
         return
     if me.place() == AgentPlace.WAITING
@@ -340,10 +343,27 @@ dangerous routine AgentWork[T].wind_down()
             C::rf_sched_park_external()
     else
         drop C::rf_task_wait(task: me.task())
-    # The outcome is dropped: its scope's teardown frees it.
+    # The outcome is dropped: its scope's teardown frees it. A failure of an Agent nobody retrieved or cancelled is
+    # not lost: the bare call to the failable `crash_unretrieved` crashes with it.
     var outcome = me.take_outcome()
     me.reap()
+    if reports_failure
+        me.crash_unretrieved(outcome: outcome)
     return
+
+### Throws the failure in `outcome`, if it holds one other than {CancelRequested}. Called bare where an Agent nobody
+### retrieved is dropped, so its failure crashes the program with the failure's own message.
+### :param outcome: What the work came to.
+### :throws: The failure the work came to.
+@readonly
+failable routine AgentWork[T].crash_unretrieved(outcome: Check[T])
+    when outcome
+        is CancelRequested =>
+            return
+        is Crashables as error =>
+            throw error
+        is T =>
+            return
 
 ### Moves the finished work's outcome out of its task block and frees the block.
 ### :returns: what the work came to.
@@ -524,8 +544,11 @@ dangerous routine AgentWork[T].dispose()
         me.set_cell_word(slot: 4, value: holders)
         return
     if me.place() != AgentPlace.DONE
+        # Work the program cancelled itself drops its outcome. Otherwise nobody took what it came to, and a failure
+        # in it crashes here instead of vanishing.
+        var reports_failure = not me.cancelled()
         me.request_cancel()
-        me.wind_down()
+        me.wind_down(reports_failure: reports_failure)
     C::rf_invalidate(ptr: me.cell)
     return
 
@@ -696,7 +719,7 @@ routine List[Agent[T]].cancel_all()
             i = i + 1
         i = 0
         until i >= n
-            me[i].work.wind_down()
+            me[i].work.wind_down(reports_failure: false)
             i = i + 1
     return
 
