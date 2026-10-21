@@ -12,16 +12,19 @@ skips files whose `config.toml` already says `razorforge-version = "0.5.0"`, and
 The named steps (`razorforge migrate --step <name> <folder>`) run one rewrite on any source. Where no step exists,
 the build error says what to write instead.
 
-`migrate` reads sources as 0.5 code, so indent 0.4 sources in steps of 4 spaces before you run it
-(see the first item below).
+`migrate` first indents a 0.4 file in steps of 4 spaces and renames `razorforge.toml` to `config.toml`, then
+rewrites it. Run the named steps after it and `--step suffix` last: the suffix step needs analysis, which reads a
+file only once its other old spellings are gone.
 
 ### Breaking changes
 
 **Source layout and tools**
-- Indentation is a multiple of 4 spaces. Any other indent is RF-G053. 0.4 sources used 2 spaces: double the
-  leading spaces of each line before running `migrate`.
-- The project manifest is `config.toml` (it was `razorforge.toml`). Settings that were environment variables
-  (`RAZORFORGE_*`, `RF_*`, `RF_DEADLOCK_DETECT`) are `[target]` and `[debug]` keys in it.
+- Indentation is a multiple of 4 spaces. Any other indent is RF-G053. 0.4 sources used 2 spaces: default `migrate`
+  doubles the leading spaces of each line of such a file first (`migrate --step indent` does only that, and leaves
+  the lines inside a text literal as they are).
+- The project manifest is `config.toml` (it was `razorforge.toml`). A `razorforge.toml` with no `config.toml` next
+  to it is a build error, and default `migrate` renames the file. `RF_DEADLOCK_DETECT` is `deadlock-check` under
+  `[debug]`: when the variable is still set, every command prints a warning that names the key.
 - The commands are `check`, `build`, `run`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`. A bare file
   name is not a command: the error shows `razorforge run <file>`.
 - Every runtime crash exits with code 82.
@@ -31,9 +34,10 @@ the build error says what to write instead.
 - A routine that can fail says so on its declaration: `failable routine parse(...)`. `routine parse!(...)` is
   RF-G222 (`migrate --step failable`). A call never writes `!`: `f!(x)` and `agent.retrieve!()` are RF-G211.
 - Recovery is a keyword at the call: `try f(x)` gives a `Maybe[T]`, `check f(x)` gives a `Check[T]`. The generated
-  `try_f` / `check_f` / `lookup_f` routines are gone. Write `try f(x)` for `try_f(x)` and `check f(x)` for
-  `check_f(x)` and `lookup_f(x)`.
-- `Result[T]` is `Check[T]`. `Lookup[T]` is gone.
+  `try_f` / `check_f` / `lookup_f` routines are gone. Default `migrate` writes `try f(x)` for `try_f(x)` (and
+  `try r.f(x)` for `r.try_f(x)`) and `check f(x)` for `check_f(x)` and `lookup_f(x)`, and the build error on an old
+  name names the keyword.
+- `Result[T]` is `Check[T]`. `Lookup[T]` is gone. The build errors say so.
 - `absent` is gone: a routine with nothing to give throws, `throw AbsentValueError()` (default `migrate`).
 - The `Crashable` protocol is the `Crashables` record. Every crashable writes its own `crash_message()` (RF-S704).
   A crashable larger than 64 bytes is a build error.
@@ -49,7 +53,9 @@ the build error says what to write instead.
   the `B*_INFINITY` / `B*_NAN` presets are gone.
 - Binary floats are `B16`, `B32`, `B64`, `B128` (the build error names the `B` type for an `F` name). Complex types
   are named by their total bits: 0.4's `C64` is `C128` and 0.4's `C128` is `C256`, and `C64` is now two `B32`
-  parts. Change these by hand: the old names still build. Quaternions are `Q128` and `Q256`.
+  parts. Default `migrate` renames them in a project it moves (a file with no `config.toml` above it gets them
+  listed instead, because the old names still build). Quaternions are `Q128` and `Q256` (the build error on `Q32`
+  / `Q64` names them).
 - Containment is a call on the container: `xs.has(x)`, `xs.lacks(x)`, `d.has_key(k)`, `d.lacks_key(k)`,
   `perms.has_any(...)`. The `have` / `lack` operators are gone (`migrate --step have`), `contains` /
   `notcontains` are `has` / `lacks` (default `migrate`), `x in xs` as a test is RF-G212, and `notin` is gone.
@@ -60,12 +66,15 @@ the build error says what to write instead.
 - `Character` is `Char` and `Routine[...]` is `Callable[...]` (default `migrate`).
 - Operator levels: `and` and `or` share one level, and so do the bitwise operators, so mixing them needs
   parentheses (RF-G216). A range binds looser than arithmetic and tighter than comparisons. `**` binds tighter than
-  a leading `-`: `-2 ** 2` is `-4`. Check every `-x ** n` by hand.
+  a leading `-`: `-2 ** 2` is `-4`. Default `migrate` writes `(-x) ** n` for each `-x ** n`, which keeps what the
+  line computed in 0.4, and lists each one.
 - A range counts down only with a negative step: `10 to 1` is empty, write `10 to 1 by -1`. Default `migrate` adds
-  the step where both ends are literals. Check the other ranges by hand.
+  the step where both ends are literals and lists the ranges whose start is not a literal.
 - A chained comparison goes one way. `!=` or `<=>` after another comparison is a parse error.
 - There is no `<<<`: `<<` fills with zeros.
 - A constructor is `routine T(...)`. `routine T.create(...)` declares an ordinary member routine named `create`.
+  Default `migrate` rewrites it to `routine T(...)` (and a call `T.create(...)` to `T(...)`), and a member routine
+  `create` that gives back its own type is warning RF-W104.
 - A `var` that hides a parameter or an outer local is RF-S008. An unknown annotation is RF-G221.
 - A memberwise construction that sets `secret` or `posted` member variables works only inside their module
   (RF-S403, RF-S404).
@@ -86,7 +95,7 @@ the build error says what to write instead.
 - `Assignable` is gone. `=` copies a record, and copying a handle makes one more handle to the same entity. Default
   `migrate` removes `.share()` calls.
 - `Accessing` and `Controlling`, with their `access()` and `control()` verbs, are gone. Use the handle directly, or
-  `view()` / `modify()`.
+  `view()` / `modify()`. The build errors on the old names say so.
 - A `Guarded` value is opened with an access block: `viewing g as v` to read and `modifying g as m` to write. The
   block calls the target's `view_enter()` / `modify_enter()` before it (the token they give is the `as` name) and
   `view_exit()` / `modify_exit()` on every way out, so any type with those pairs is a block target (`Guarded`,
@@ -136,12 +145,15 @@ the build error says what to write instead.
   `to_unchecked`).
 - A conversion is `x.to[T]()`: `S32(from: x)` and `x.S32()` are rewritten by default `migrate`, and a missing
   conversion is RF-S458.
-- `Indexable` is `ViewingIndexable` and `MutableIndexable` is `ModifyingIndexable`.
+- `Indexable` is `ViewingIndexable` and `MutableIndexable` is `ModifyingIndexable` (the build error names the new
+  name, and so does the one on `RetainController`, `GuardController`, `PQEntry`, `Moment.now`, `blank`, `hollow`,
+  `gather` and `race`).
 - `Signals` is `CpuEventManager` in `System/Cpu`, with one handler slot per event kind (`migrate --step
   cpu-events`, a call that passed a context is listed).
 - The time is read with `Clock.now()`, `Clock.monotonic()` and `CpuClock.now()` (they replace `Moment.now` and
-  `LocalMoment.now_utc`).
-- `FileManager` does every file system task, and `IO/FileSystem` is gone. Reading or writing a missing file fails,
+  `LocalMoment.now_utc`). A `Moment` is written with two digits for each part after the year:
+  `2026-01-15 12:30:00` (0.4 wrote `2026-1-15 12:30:0`).
+- `FileManager` does every file system task, and `IO/FileSystem` is gone (the import error names `FileManager`). Reading or writing a missing file fails,
   `make_file` fails on an existing file unless you pass `replacing: true`, and there is no `touch`. The working,
   temporary and home directories and the environment variables are `Environment`'s, random bytes are `Entropy`'s.
 - `ask_line` and `ask_word` fail with `EndOfInputError` at the end of input.
@@ -217,6 +229,8 @@ the build error says what to write instead.
 - `[target] backend = "tessera"` (opt-in).
 - Windows trace builds write CodeView and PDB files.
 - Diagnostics are written in the second person and point to the new spelling of a retired word.
+- `migrate --step indent` (indent in steps of 4 spaces). Default `migrate` and the `have` and `until` steps read a
+  file whose numbers still have type suffixes, and leave the suffixes for `--step suffix`.
 
 ### Fixed
 - A write to a value element (`m[i][j] = v`, `pts[k].x = v`) changed a temporary copy.

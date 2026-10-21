@@ -1262,6 +1262,17 @@ show-build-stages = false   # optional: print build/check stage banners
 With no entry file argument, the CLI walks up from the cwd to find
 `config.toml` — `cd` into a project and `razorforge run` works.
 
+**Moving 0.4 code:** `razorforge migrate <folder>` first indents a file written in steps of 2 spaces in steps of 4
+(`migrate --step indent` does only that, text literals keep their lines), renames `razorforge.toml` to
+`config.toml` (a `razorforge.toml` alone is a build error that names `config.toml`, and a set `RF_DEADLOCK_DETECT`
+prints a warning that names `deadlock-check` under `[debug]`), and then rewrites the old spellings: `try_f(x)` →
+`try f(x)`, `check_f(x)` / `lookup_f(x)` → `check f(x)`, `routine T.create(...)` → `routine T(...)` (a member
+routine `create` that gives back its own type is RF-W104), `-x ** n` → `(-x) ** n` (the old meaning), and `C64` /
+`C128` → `C128` / `C256` in a project with a manifest. It lists what it cannot decide (a range whose start is not a
+literal may have counted down). Run the named steps after it and `--step suffix` last. A build error on an old name
+(`Result`, `Lookup`, `Indexable`, `RetainController`, `Accessing`, `try_f`, `gather`, `blank`, `IO/FileSystem`,
+`Moment.now`, ...) names what is written now.
+
 ## 12. Reading build errors
 
 Format: `error[RF-S###]: file:line:col: message` plus a source excerpt with a

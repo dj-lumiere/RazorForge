@@ -173,4 +173,159 @@ public sealed class ProgramCliTests : IDisposable
         (int code, _) = RunMain("check", bad);
         Assert.NotEqual(expected: 0, actual: code);
     }
+
+    /// <summary>A previous-release project in its own folder: <paramref name="files"/> by name, and a manifest
+    /// named <c>razorforge.toml</c> when <paramref name="oldManifest"/>.</summary>
+    private string OldProject(string name, bool oldManifest, params (string File, string Text)[] files)
+    {
+        string dir = Path.Combine(path1: _dir, path2: name);
+        Directory.CreateDirectory(path: dir);
+        foreach ((string file, string text) in files)
+        {
+            File.WriteAllText(path: Path.Combine(path1: dir, path2: file), contents: text);
+        }
+
+        if (oldManifest)
+        {
+            File.WriteAllText(path: Path.Combine(path1: dir, path2: "razorforge.toml"),
+                contents: "[package]\nname = \"old\"\nversion = \"0.0.1\"\n\n[target]\nmode = \"debug\"\n");
+        }
+
+        return dir;
+    }
+
+    [Fact]
+    public void MigrateIndent_DoublesTwoSpaceIndent_LeavesTextLiteralLines()
+    {
+        string dir = OldProject(name: "indent", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/Indent\n" +
+                "routine start()\n" +
+                "  var t = \"first\n" +
+                "  second\"\n" +
+                "  if true\n" +
+                "    # a comment\n" +
+                "    var x = (1,\n" +
+                "       2)\n" +
+                "  return\n"),
+            ("new.rf", "module Test/Indented\nroutine start()\n    return\n")
+        ]);
+
+        (int code, string output) = RunMain("migrate", "--step", "indent", dir);
+        Assert.Equal(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
+        Assert.Equal(
+            expected: "module Test/Indent\n" +
+                      "routine start()\n" +
+                      "    var t = \"first\n" +
+                      "  second\"\n" +
+                      "    if true\n" +
+                      "        # a comment\n" +
+                      "        var x = (1,\n" +
+                      "              2)\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+        Assert.Equal(expected: "module Test/Indented\nroutine start()\n    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf")));
+    }
+
+    [Fact]
+    public void MigrateDefault_IndentsFirst_RewritesReleaseSpellings_RenamesManifest()
+    {
+        string dir = OldProject(name: "release", oldManifest: true, files:
+        [
+            ("old.rf",
+                "module Test/Release\n" +
+                "record Pt\n" +
+                "  x: S64\n" +
+                "\n" +
+                "routine Pt.create(x: S64) -> Pt\n" +
+                "  return Pt(x: x)\n" +
+                "\n" +
+                "failable routine halve(n: S64) -> S64\n" +
+                "  return n // 2\n" +
+                "\n" +
+                "routine spin(z: C64) -> C128\n" +
+                "  return z\n" +
+                "\n" +
+                "routine start()\n" +
+                "  var p = Pt.create(x: 1)\n" +
+                "  var h = try_halve(n: 4)\n" +
+                "  var c = p.check_size()\n" +
+                "  var w = -p.x ** 2\n" +
+                "  var n = 5_s64 + -2_s64 ** 2\n" +
+                "  each i in n to 1\n" +
+                "    nothing\n" +
+                "  return\n")
+        ]);
+
+        (_, string output) = RunMain("migrate", dir);
+        Assert.Equal(
+            expected: "module Test/Release\n" +
+                      "record Pt\n" +
+                      "    x: S64\n" +
+                      "\n" +
+                      "routine Pt(x: S64) -> Pt\n" +
+                      "    return Pt(x: x)\n" +
+                      "\n" +
+                      "failable routine halve(n: S64) -> S64\n" +
+                      "    return n // 2\n" +
+                      "\n" +
+                      "routine spin(z: C128) -> C256\n" +
+                      "    return z\n" +
+                      "\n" +
+                      "routine start()\n" +
+                      "    var p = Pt(x: 1)\n" +
+                      "    var h = try halve(n: 4)\n" +
+                      "    var c = check p.size()\n" +
+                      "    var w = (-p.x) ** 2\n" +
+                      "    var n = 5_s64 + (-2_s64) ** 2\n" +
+                      "    each i in n to 1\n" +
+                      "        nothing\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+        Assert.Contains(expectedSubstring: "a range counts up only now", actualString: output);
+        Assert.Contains(expectedSubstring: "run migrate --step suffix", actualString: output);
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: dir, path2: "razorforge.toml")));
+        Assert.Contains(expectedSubstring: "razorforge-version = \"0.5.0\"",
+            actualString: File.ReadAllText(path: Path.Combine(path1: dir, path2: "config.toml")));
+    }
+
+    [Fact]
+    public void MigrateDefault_WithoutManifest_ListsComplexNames_KeepsDeclaredPrefixedRoutines()
+    {
+        string dir = OldProject(name: "nomanifest", oldManifest: false, files:
+        [
+            ("new.rf",
+                "module Test/NoManifest\n" +
+                "routine try_hard(n: S64) -> S64\n" +
+                "    return n\n" +
+                "\n" +
+                "routine spin(z: C64) -> C64\n" +
+                "    return z\n" +
+                "\n" +
+                "routine start()\n" +
+                "    var a = try_hard(n: 1)\n" +
+                "    return\n")
+        ]);
+
+        string before = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf"));
+        (_, string output) = RunMain("migrate", dir);
+        Assert.Equal(expected: before, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf")));
+        Assert.Contains(expectedSubstring: "'C64' is two B32 parts now", actualString: output);
+    }
+
+    [Fact]
+    public void Check_OldManifestName_IsABuildErrorNamingConfigToml()
+    {
+        string dir = OldProject(name: "oldmanifest", oldManifest: true, files:
+        [
+            ("main.rf", "module Test/OldManifest\nroutine start()\n    return\n")
+        ]);
+
+        (int code, string output) = RunMain("check", Path.Combine(path1: dir, path2: "main.rf"));
+        Assert.NotEqual(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "named config.toml now", actualString: output);
+    }
 }
