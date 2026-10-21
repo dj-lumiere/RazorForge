@@ -83,7 +83,7 @@ routine Bytes.duplicate() -> Bytes
 secret routine bytes_over(data: Hijacked[Byte], count: U64) -> Bytes
     danger
         var bytes = List[Byte](over: data, count: count)
-        return Bytes(data: data, count: count, owner: Guarded[List[Byte], ReadOnly](from: steal bytes))
+        return Bytes(data: data, count: count, owner: Guarded[List[Byte], ReadOnly](from: bytes))
 
 ### Creates an empty byte sequence.
 ### :returns: The resulting `Bytes` value.
@@ -233,7 +233,7 @@ routine Bytes.getitem(range: Range[U64]) -> Bytes
         each i in range
             if i < me.count
                 result.add_last(me.data.stride(count: i.to[S64]()).peek())
-    return Bytes(from_list: steal result)
+    return Bytes(from_list: result)
 
 # String operations
 
@@ -442,7 +442,7 @@ routine Bytes.split(separator: Byte) -> List[Bytes]
         else
             current.add_last(me[i])
     parts.add_last(Bytes(from_list: steal current))
-    return steal parts
+    return parts
 
 ### Splits this value on a multi-byte separator sub-sequence.
 ### Separator bytes are not included in the returned segments. An empty separator
@@ -454,7 +454,7 @@ routine Bytes.split(separator: Bytes) -> List[Bytes]
     var parts = List[Bytes]()
     if separator.is_empty()
         parts.add_last(me)
-        return steal parts
+        return parts
     var sc = separator.count
     var current = List[Byte]()
     var i: U64 = 0
@@ -474,7 +474,7 @@ routine Bytes.split(separator: Bytes) -> List[Bytes]
             current.add_last(me[i])
             i += 1
     parts.add_last(Bytes(from_list: steal current))
-    return steal parts
+    return parts
 
 # Transform
 
@@ -490,7 +490,7 @@ routine Bytes.reverse() -> Bytes
             break
         i -= 1
         result.add_last(me[i])
-    return Bytes(from_list: steal result)
+    return Bytes(from_list: result)
 
 ### Returns a repeated copy of this value.
 ### This is the binary-sequence equivalent of text repetition.
@@ -533,7 +533,7 @@ routine Byte.to_hex() -> Text
     var out = List[Char]()
     out.add_last(__nibble_to_hex_char(nibble: (v >> 4) & 0xF))
     out.add_last(__nibble_to_hex_char(nibble: v & 0xF))
-    return Text(from_list: steal out)
+    return Text(from_list: out)
 
 ### Returns the lowercase hexadecimal encoding of this sequence.
 ### Each byte becomes exactly two hex digits (high nibble first), so the result is
@@ -546,7 +546,7 @@ routine Bytes.to_hex() -> Text
         var v = me[i].value().to[U32]()
         out.add_last(__nibble_to_hex_char(nibble: (v >> 4) & 0xF))
         out.add_last(__nibble_to_hex_char(nibble: v & 0xF))
-    return Text(from_list: steal out)
+    return Text(from_list: out)
 
 ### Decodes a hexadecimal string into bytes.
 ### Accepts upper- or lowercase digits. The inverse of `to_hex`.
@@ -570,7 +570,7 @@ failable routine Bytes.from_hex(hex: Text) -> Bytes
         var lo = lo_c.to_byte().hex_value()
         out.add_last(Byte(hi * 16 + lo))
         i += 2
-    return Bytes(from_list: steal out)
+    return Bytes(from_list: out)
 
 # Conversion to modifiable list
 
@@ -586,7 +586,7 @@ routine List[Byte](source: Bytes) -> List[Byte]
         danger
             result.add_last(source.data.stride(count: i.to[S64]()).peek())
         i += 1
-    return steal result
+    return result
 
 ### Returns an iterator over this byte sequence.
 ### The iterator starts at byte index `0`.
@@ -629,7 +629,7 @@ routine Bytes.represent() -> Text
             result.add_last(byte_text[j])
             j += 1
         i += 1
-    return Text(from_list: steal result)
+    return Text(from_list: result)
 
 ### Returns the diagnostic form of this byte sequence.
 ### The diagnostic form includes both the byte count and the escaped payload.
@@ -667,7 +667,7 @@ routine Text.encode_as_utf8() -> Bytes
                 result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80 | ((codepoint >> 12) & 0x3F))))
                 result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80 | ((codepoint >> 6) & 0x3F))))
                 result.add_last(Byte(LLVM::int_truncate[U32, U8](0x80 | (codepoint & 0x3F))))
-    return Bytes(from_list: steal result)
+    return Bytes(from_list: result)
 
 ### Decodes this byte sequence as UTF-8, replacing malformed subsequences with
 ### the Unicode replacement character.
@@ -744,7 +744,7 @@ routine Bytes.decode_as_utf8_lossy() -> Text
                 codepoint = 0xFFFD
                 i += 1
         result.add_last(Char(codepoint))
-    return Text(from_list: steal result)
+    return Text(from_list: result)
 
 ### Decodes this byte sequence as UTF-8.
 ### Malformed input causes a `MalformedUtf8Error` instead of lossy replacement.
@@ -809,7 +809,7 @@ failable routine Bytes.decode_as_utf8() -> Text
             else =>
                 throw MalformedUtf8Error(index: i, reason: "invalid leading byte")
         result.add_last(Char(codepoint))
-    return Text(from_list: steal result)
+    return Text(from_list: result)
 
 ### Returns a strict lazy UTF-8 view over this byte sequence.
 ### The bytes are validated eagerly so subsequent iteration is guaranteed to
@@ -1041,7 +1041,7 @@ routine Text.encode_as_utf16() -> List[U16]
             result.add_last(((cp >> 10) + 0xD800).to[U16]())
             result.add_last(((cp & 0x3FF) + 0xDC00).to[U16]())
         i += 1
-    return steal result
+    return result
 
 ### Decodes a list of UTF-16 code units into `Text`.
 ### Invalid surrogate structure is replaced with the Unicode replacement
@@ -1070,7 +1070,7 @@ routine List[U16].decode_as_utf16() -> Text
         else
             result.add_last('\u00FFFD')
             i += 1
-    return Text(from_list: steal result)
+    return Text(from_list: result)
 
 # ============================================================================
 # Hashing for BytesUtf8View / BytesUtf8Emittable

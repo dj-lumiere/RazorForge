@@ -205,6 +205,9 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   A flags value combines with `and`, tests with `has` / `has_any` / `lacks` / `==` (`perms.has(READ and WRITE)`
   is all of them, `perms.has_any(READ and WRITE)` at least one, `perms.lacks(READ and WRITE)` none), and drops
   members with `without` (`perms.without(WRITE)`: where a value of the flags type goes, its members are named bare).
+  The flags value with no member on is `none` where the flags type is expected (`var marks: CellMarks = none`,
+  `marks == none`, a preset or record preset). A `CellMarks?` slot takes `none` as the absent Maybe. There is no
+  `all_off()`.
   A `choice` auto-provides `Equatable`/`Comparable`/`Hashable` — no `obeys` and no
   method bodies needed.
 - **`Me` (capital) = the receiver's TYPE (the Self type); `me` (lowercase) = the
@@ -629,6 +632,9 @@ when terrain
 A `when` that gives a value (`var label = when …`) takes one expression per arm,
 or a block arm that ends with `becomes value` (its lines run, then `value` is the
 arm's value). A block arm without `becomes` is RF-S307, `becomes` elsewhere RF-S308.
+An arm may also be `throw ...` (`else => throw InvalidValueError(message: word)`): it gives no value, so the other
+arms decide the type, and it is allowed only in a `failable` routine (otherwise RF-S750, whose quick fix writes
+`failable` on the declaration). `try` / `check` / `lookup` at the call take that failure like any other.
 
 ## 6. Routines
 
@@ -699,6 +705,9 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
 
 - A container, a member variable or a manager that holds an entity is where it is kept; `steal` marks each
   hand-over to such a place.
+- A `return` ends the routine's own variables: a local handed over inside the returned value moves without
+  `steal` (`return Shelf(book: book)`, `return (a, b)`, `return xs`). `steal` on such a local there is RF-W259 (quick
+  fix and `migrate --step return-steal` remove it). A parameter handed over in a `return` still takes `steal`.
 - A written `destruct` (a plain `routine T.destruct()`, never `dangerous`: RF-S807) tears down what the entity
   owns (its member variables, buffers it holds) and nothing else: the builder gives back the entity's own box
   before each of its returns, so one `destruct` call still ends the entity. Do not write

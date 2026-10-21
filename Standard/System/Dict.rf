@@ -109,7 +109,7 @@ routine Dict[TKey, TValue](key: SecureHashKey) -> Dict[TKey, TValue]
         dict.keys = hijacked_from[TKey](rf_allocate_dynamic_uninit(TKey.data_size() * ecap))
         dict.vals = hijacked_from[TValue](rf_allocate_dynamic_uninit(TValue.data_size() * ecap))
         dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
-        return steal dict
+        return dict
 
 routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TValue]
     var cap = DICT_INITIAL_CAPACITY
@@ -143,7 +143,7 @@ routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TVal
         dict.keys = hijacked_from[TKey](rf_allocate_dynamic_uninit(TKey.data_size() * ecap))
         dict.vals = hijacked_from[TValue](rf_allocate_dynamic_uninit(TValue.data_size() * ecap))
         dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
-        return steal dict
+        return dict
 
 ### Frees the heap buffers owned by this dictionary. The element/key/value contents are
 ### not recursed into — only the backing arrays are released.
@@ -525,7 +525,7 @@ routine Dict[TKey, TValue].keys() -> List[TKey]
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 result.add_last(me.keys.offset(TKey.data_size() * i).peek())
         i = i +% 1
-    return steal result
+    return result
 
 ### Returns all live values in insertion order.
 ### :returns: A {List[TValue]} of every value; order matches the corresponding `keys()` call.
@@ -538,7 +538,7 @@ routine Dict[TKey, TValue].values() -> List[TValue]
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 result.add_last(me.vals.offset(TValue.data_size() * i).peek())
         i = i +% 1
-    return steal result
+    return result
 
 ### Returns every key and value as a pair, in insertion order: `each (k, v) in d.items()`.
 ### :returns: A {List} of `(key, value)` tuples; order matches the sequence in which the keys were first added.
@@ -553,7 +553,7 @@ needs RecordType TValue
                 result.add_last(value: (me.keys.offset(TKey.data_size() * i).peek(),
                     me.vals.offset(TValue.data_size() * i).peek()))
         i = i +% 1
-    return steal result
+    return result
 
 # ============================================================================
 # Iteration
@@ -596,7 +596,7 @@ needs RecordType TValue
     var result = Dict[TKey, TValue]()
     each entry in me
         result[entry.key] = entry.value
-    return steal result
+    return result
 
 # ============================================================================
 # Display
@@ -615,7 +615,7 @@ routine Dict[TKey, TValue].represent() -> Text
         result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
         first = false
     result = result + "}"
-    return steal result
+    return result
 
 @readonly
 @override
@@ -628,7 +628,7 @@ routine Dict[TKey, TValue].diagnose() -> Text
         result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
         first = false
     result = result + "})"
-    return steal result
+    return result
 
 # ============================================================================
 # Comparison
@@ -663,4 +663,4 @@ routine Dict[TKey, TValue].serialize() -> SerialValue
     var __sv = Dict[Text, SerialValue]()
     each __e in me
         __sv[__e.key.represent()] = __e.value.serialize()
-    return SerialValue(steal __sv)
+    return SerialValue(__sv)
