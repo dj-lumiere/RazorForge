@@ -50,6 +50,10 @@ When unsure, consult ground truth in the repo/package:
    tokens, the builder checks them) or through a manager for longer (`Retained`, `Guarded`, ...). Keeping the
    same entity in a second place with neither is RF-S413 ("would share one entity between two places with no
    manager", `var s = obj.field_entity`). `steal` hands it to what keeps it from now on: `consume(r: steal b)`.
+   A manager type (`FileManager`, `PartitionManager`, `StorageManager`, `CpuEventManager`) is always an `entity`
+   (a copy would keep its own record and diverge), a service (`Clock`, `CpuClock`, `Environment`, `Entropy`) a
+   `record` with no member variables (body `nothing`, routines `common`, called on the type). The console is the
+   free routines `show` / `ask` / `alert`. The builder does not check this by name: the stdlib follows it.
 7. **A routine that can fail is declared `failable`** (`failable routine parse(...)`, and
    `failable dangerous routine` / `failable common routine`: `failable` goes first, after a visibility).
    `routine parse!(...)` is RF-G222 (fix and `migrate --step failable` write the keyword), and call sites never
