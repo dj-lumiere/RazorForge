@@ -1,0 +1,36 @@
+module Tests/Stdlib/WhenThrowArmApi
+
+import IO/Console
+
+# An arm of a `when` that gives a value may be `throw ...` in a failable routine. The arm gives no value, so the other
+# arms decide the type, and a recovery keyword at the call takes the thrown error.
+
+crashable BadWordError
+    word: Text
+
+routine BadWordError.crash_message() -> Text
+    return f"bad word: {me.word}"
+
+failable routine score(word: Text) -> S64
+    var n = when word
+        == "one" => 1
+        == "two" => 2
+        else => throw BadWordError(word: word)
+    return n * 10
+
+failable routine label(n: S64) -> Text
+    return when
+        n < 0 => throw BadWordError(word: n.represent())
+        n == 0 => "zero"
+        else => "many"
+
+routine start()
+    show(f"score(one): {score(word: "one")}")
+    show(f"try score(three): {try score(word: "three") ?? -1}")
+    when check score(word: "four")
+        is S64 as value => show(f"value {value}")
+        is Crashables as failure => show(f"caught: {failure.crash_message()}")
+    show(f"label(0): {label(n: 0)}")
+    show(f"label(5): {label(n: 5)}")
+    show(f"try label(-3): {try label(n: -3) ?? "none"}")
+    return

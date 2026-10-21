@@ -164,10 +164,11 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
     }
     /// <summary>
-    /// Verifies flags validation behavior for all on all off without unexpected diagnostics.
+    /// Verifies that `all_on()` and the `none` literal give a flags value, and `none` stays the absent `Maybe` in a
+    /// `Permissions?` slot.
     /// </summary>
     [Fact]
-    public void Flags_AllOnAllOff_NoErrors()
+    public void Flags_AllOnAndNone_NoErrors()
     {
         string source = """
                         flags Permissions
@@ -177,13 +178,35 @@ public class FlagsValidationTests
 
                         routine test()
                             var all = Permissions.all_on()
-                            var none = Permissions.all_off()
+                            var empty: Permissions = none
+                            var maybe: Permissions? = none
+                            var same = empty == none
+                            empty = none
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MemberRoutineNotFound);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>
+    /// Verifies that the removed <c>all_off()</c> points to <c>none</c>.
+    /// </summary>
+    [Fact]
+    public void Flags_AllOff_PointsToNone()
+    {
+        string source = """
+                        flags Permissions
+                            READ
+                            WRITE
+
+                        routine test()
+                            var empty = Permissions.all_off()
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors, filter: e => e.Message.Contains(value: "'none'"));
     }
 
     #endregion

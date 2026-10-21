@@ -29,8 +29,8 @@ needs AnyType T
         is B64 => return b64_literal(value: me)
         is Decimal => return me.represent()
         is Text => return text_literal(text: me)
-        is Char => return "'" + code_point_escape(code: me.to[U32]()) + "'"
-        is Byte => return "b'\\x" + hex_digits(value: me.to[U8]().to[U64](), count: 2) + "'"
+        is Char => return "'" + code_point_escape(code: me.codepoint()) + "'"
+        is Byte => return "b'\\x" + hex_digits(value: me.value().to[U64](), count: 2) + "'"
         else =>
             var result = me.type_name() + "("
             var first = true
@@ -64,13 +64,23 @@ routine T.preset_literal() -> Text
 needs ChoiceType T
     return me.type_name() + "." + me.represent()
 
-### A flags value has no spelling made of literals here.
-### :returns: `!` and the type name.
+### A flags value as its members joined with `and` (`Perms.READ and Perms.WRITE`), or `none` when no member is on.
+### :returns: The source text.
 @readonly
 @override
 routine T.preset_literal() -> Text
 needs FlagsType T
-    return "!" + me.type_name()
+    var result = ""
+    var first = true
+    expand c in caseof(T)
+        if (LLVM::reinterpret_bits[T, U64](me) & $valueof(c)) != 0
+            if not first
+                result = result + " and "
+            result = result + me.type_name() + "." + nameof(c)
+            first = false
+    if first
+        result = "none"
+    return result
 
 ### A variant has no spelling made of literals here.
 ### :returns: `!` and the type name.

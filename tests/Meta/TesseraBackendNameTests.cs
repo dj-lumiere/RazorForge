@@ -6,7 +6,8 @@ namespace RazorForge.Tests.Meta;
 /// <summary>
 /// The Tessera backend writes a value whose name is a Tessera keyword (<c>block</c>, <c>claim</c>, <c>local</c>,
 /// <c>branch</c>) between backticks: a member variable, a parameter and a local. Builds and runs
-/// <c>tests/Fixtures/TesseraBackendNames</c>, whose <c>config.toml</c> picks <c>backend = "tessera"</c>.
+/// <c>tests/Fixtures/TesseraBackendNames</c>, whose <c>config.toml</c> picks <c>backend = "tessera"</c>, and
+/// <c>tests/Fixtures/TesseraBackendPresets</c> (presets made by a construction, and globals) the same way.
 /// </summary>
 public sealed class TesseraBackendNameTests
 {
@@ -15,7 +16,23 @@ public sealed class TesseraBackendNameTests
     [Fact]
     public void KeywordNames_BuildAndRunOnTheTesseraBackend()
     {
-        string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "TesseraBackendNames", "main.rf"]);
+        Assert.Equal(expected: "2 3 9", actual: BuildAndRun(fixture: "TesseraBackendNames"));
+    }
+
+    /// <summary>
+    /// A preset made by a construction (<c>preset ORIGIN: Point = Point(x: 0, y: 0)</c>) and a <c>global</c>, read
+    /// in <c>start()</c> and in another routine: each is a module-level cell <c>start()</c> fills first.
+    /// </summary>
+    [Fact]
+    public void ConstructedPresetsAndGlobals_BuildAndRunOnTheTesseraBackend()
+    {
+        Assert.Equal(expected: "0 0 12 home 2", actual: BuildAndRun(fixture: "TesseraBackendPresets"));
+    }
+
+    /// <summary>Builds and runs <c>tests/Fixtures/{fixture}/main.rf</c> and returns what it printed.</summary>
+    private static string BuildAndRun(string fixture)
+    {
+        string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", fixture, "main.rf"]);
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
@@ -48,7 +65,7 @@ public sealed class TesseraBackendNameTests
         string stdout = outTask.Result;
         Assert.True(condition: p.ExitCode == 0,
             userMessage: $"exit {p.ExitCode}\n--- stdout ---\n{stdout}\n--- stderr ---\n{errTask.Result}");
-        Assert.Equal(expected: "2 3 9", actual: stdout.Trim());
+        return stdout.Trim();
     }
 
     private static string LocateRepoRoot()

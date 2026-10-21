@@ -582,4 +582,55 @@ public class ParserErrorTests
     }
 
     #endregion
+
+    #region Value when
+
+    /// <summary>
+    /// Verifies that an arm of a value <c>when</c> may be <c>throw ...</c>.
+    /// </summary>
+    [Fact]
+    public void Parse_ValueWhen_ThrowArm_Parses()
+    {
+        string source = """
+                        failable routine pick(word: Text) -> S64
+                            var n = when word
+                                == "a" => 1
+                                else => throw InvalidValueError(message: word)
+                            return n
+                        """;
+
+        Program program = AssertParses(source: source);
+        var routine = (RoutineDeclaration)program.Declarations[index: 0];
+        var body = (BlockStatement)routine.Body;
+        var declaration = (VariableDeclaration)((DeclarationStatement)body.Statements[index: 0]).Declaration;
+        var when = (WhenExpression)declaration.Initializer!;
+        Assert.IsType<ThrowStatement>(@object: when.Clauses[index: 1].Body);
+    }
+
+    /// <summary>
+    /// Verifies that a syntax error in an arm of a value <c>when</c> is the only error: the lines after it stay in
+    /// the routine instead of being read as top-level statements.
+    /// </summary>
+    [Fact]
+    public void Parse_ValueWhen_BrokenArm_DoesNotCascade()
+    {
+        string source = """
+                        routine pick(word: Text) -> S64
+                            var n = when word
+                                == "a" => 1
+                                else => )
+                            var doubled = n * 2
+                            return doubled
+
+                        routine start()
+                            return
+                        """;
+
+        (Program program, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
+        Assert.Single(collection: parser.GetStructuredErrors());
+        var routine = (RoutineDeclaration)program.Declarations[index: 0];
+        Assert.Equal(expected: 2, actual: ((BlockStatement)routine.Body).Statements.Count);
+    }
+
+    #endregion
 }
