@@ -337,7 +337,7 @@ public class OperatorProtocolTests
                             handle: S32
 
                         routine Resource.destruct()
-                            pass
+                            nothing
                             return
                         """;
 

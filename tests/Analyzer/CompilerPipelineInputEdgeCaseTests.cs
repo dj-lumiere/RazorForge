@@ -197,7 +197,7 @@ public class CompilerPipelineInputEdgeCaseTests
             lines.Add(item: $"{new string(c: ' ', count: (depth + 1) * 4)}if true");
         }
 
-        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 4)}pass");
+        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 4)}nothing");
         lines.Add(item: "    return");
 
         return string.Join(separator: "\n", values: lines);

@@ -171,7 +171,7 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine process(data: Text?)
-                            pass
+                            nothing
                             return
                         """;
 

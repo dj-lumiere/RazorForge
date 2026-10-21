@@ -95,7 +95,7 @@ public class RoutineDeclarationTests
     {
         string source = """
                         routine do_work()
-                            pass
+                            nothing
                             return
                         """;
 

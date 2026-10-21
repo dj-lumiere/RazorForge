@@ -23,7 +23,7 @@ public class PatternValidationTests
                             var x: S32 = 5
                             when x
                                 is S32 as x => show(x)
-                                else => pass
+                                else => nothing
                             return
                         """;
 
@@ -61,7 +61,7 @@ public class PatternValidationTests
                             var x: S32 = 5
                             when x
                                 is S32 as n => show(n)
-                                else => pass
+                                else => nothing
                             return
                         """;
 
@@ -128,8 +128,8 @@ public class PatternValidationTests
                         routine test() -> S32
                             var x: S32 = 5
                             when x
-                                is S32 as n => pass
-                                else => pass
+                                is S32 as n => nothing
+                                else => nothing
                             return n
                         """;
 
@@ -174,7 +174,7 @@ public class PatternValidationTests
                             var x: S32 = 5
                             when x
                                 is S32 as n => show(n)
-                                else => pass
+                                else => nothing
                             return
                         """;
 
@@ -196,8 +196,8 @@ public class PatternValidationTests
                         routine test()
                             var f = Foo(x: 1)
                             when f
-                                is Bar as b => pass
-                                else => pass
+                                is Bar as b => nothing
+                                else => nothing
                             return
                         """;
 

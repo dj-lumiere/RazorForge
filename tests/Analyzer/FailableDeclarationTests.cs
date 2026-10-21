@@ -63,9 +63,9 @@ public class FailableDeclarationTests
                         routine start()
                             var x = 10
                             if (0 to 10).has(x)
-                                pass
+                                nothing
                             if (0 til 10).lacks(x)
-                                pass
+                                nothing
                             return
                         """;
         AssertAnalyzesSa(source: source);

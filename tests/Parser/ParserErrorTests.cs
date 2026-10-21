@@ -450,7 +450,7 @@ public class ParserErrorTests
         string source = """
                         routine outer()
                             routine inner()
-                                pass
+                                nothing
                             return
                         """;
 
@@ -467,7 +467,7 @@ public class ParserErrorTests
                         routine outer()
                             if true
                                 routine inner()
-                                    pass
+                                    nothing
                             return
                         """;
 
@@ -510,7 +510,7 @@ public class ParserErrorTests
         // parser always accepts the name regardless.
         string source = """
                         routine try_something()
-                            pass
+                            nothing
                             return
                         """;
 
@@ -525,7 +525,7 @@ public class ParserErrorTests
     {
         string source = """
                         routine check_something()
-                            pass
+                            nothing
                             return
                         """;
 
@@ -540,7 +540,7 @@ public class ParserErrorTests
     {
         string source = """
                         routine find_something()
-                            pass
+                            nothing
                             return
                         """;
 

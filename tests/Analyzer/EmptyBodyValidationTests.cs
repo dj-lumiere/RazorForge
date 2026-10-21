@@ -22,13 +22,13 @@ public class EmptyBodyValidationTests
     {
         string source = """
                         routine do_nothing()
-                            pass
+                            nothing
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutNothing);
     }
 
     #endregion
@@ -43,12 +43,12 @@ public class EmptyBodyValidationTests
     {
         string source = """
                         protocol Marker
-                            pass
+                            nothing
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutNothing);
     }
 
     #endregion
@@ -62,11 +62,11 @@ public class EmptyBodyValidationTests
     public void Analyze_EmptyRecordBody_ReportsError()
     {
         // record with no body (no indent after header) -> followed by another decl to ensure valid parse
-        string source = "record Empty\nrecord Other\n    pass\n";
+        string source = "record Empty\nrecord Other\n    nothing\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutNothing);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for record with pass without unexpected diagnostics.
@@ -76,12 +76,12 @@ public class EmptyBodyValidationTests
     {
         string source = """
                         record Empty
-                            pass
+                            nothing
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutNothing);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for empty entity body and reports the expected error.
@@ -90,11 +90,11 @@ public class EmptyBodyValidationTests
     public void Analyze_EmptyEntityBody_ReportsError()
     {
         // entity with no body (no indent after header)
-        string source = "entity Empty\nentity Other\n    pass\n";
+        string source = "entity Empty\nentity Other\n    nothing\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutNothing);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for entity with pass without unexpected diagnostics.
@@ -104,12 +104,12 @@ public class EmptyBodyValidationTests
     {
         string source = """
                         entity Empty
-                            pass
+                            nothing
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutNothing);
     }
 
     #endregion

@@ -124,7 +124,7 @@ public class AccessBlockAnalysisTests
                                   routine start()
                                       var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                       modifying s, viewing s as again
-                                          pass
+                                          nothing
                                       return
                                   """;
 
@@ -142,7 +142,7 @@ public class AccessBlockAnalysisTests
                                     routine start()
                                         var s = Guarded[Counter, {{policy}}](from: Counter(value: 1))
                                         {{verb}} s as c
-                                            pass
+                                            nothing
                                         return
                                     """;
 
@@ -158,7 +158,7 @@ public class AccessBlockAnalysisTests
                                   routine start()
                                       var xs = List[Guarded[Counter, Exclusive]]()
                                       modifying xs[0]
-                                          pass
+                                          nothing
                                       return
                                   """;
 
@@ -175,7 +175,7 @@ public class AccessBlockAnalysisTests
                                       try modifying c
                                           c.value += 1
                                       else
-                                          pass
+                                          nothing
                                       return
                                   """;
 

@@ -260,7 +260,7 @@ public class CompoundAssignmentTests
                             bits: S32
 
                         routine Flags.$ibitand(from: Flags) -> None
-                            pass
+                            nothing
 
                         routine test()
                             var f = Flags(bits: 255)
@@ -317,9 +317,9 @@ public class CompoundAssignmentTests
                             bits: S32
 
                         routine Mask.$ibitand(from: Mask) -> None
-                            pass
+                            nothing
                         routine Mask.$ibitor(from: Mask) -> None
-                            pass
+                            nothing
 
                         routine test()
                             var m = Mask(bits: 0)
@@ -346,9 +346,9 @@ public class CompoundAssignmentTests
                             size: S32
 
                         routine Bucket.$ifloordiv(from: Bucket) -> None
-                            pass
+                            nothing
                         routine Bucket.$imod(from: Bucket) -> None
-                            pass
+                            nothing
 
                         routine test()
                             var b = Bucket(size: 10)
@@ -372,7 +372,7 @@ public class CompoundAssignmentTests
                             x: S32
 
                         routine Vector.$iadd(from: Vector) -> None
-                            pass
+                            nothing
 
                         @readonly
                         routine Vector.$add(you: Vector) -> Vector

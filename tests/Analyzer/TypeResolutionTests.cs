@@ -612,7 +612,7 @@ public class TypeResolutionTests
     {
         string source = """
                         routine foo() -> Maybe[S32]
-                            pass
+                            nothing
                             return
                         """;
 
@@ -678,7 +678,7 @@ public class TypeResolutionTests
 
                         @readonly
                         routine Point.foo() -> Maybe[B32]
-                            pass
+                            nothing
                             return
                         """;
 

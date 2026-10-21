@@ -86,7 +86,7 @@ public class DiscardTests
     {
         string source = """
                         routine do_something()
-                            pass
+                            nothing
                             return
 
                         routine test()
@@ -341,7 +341,7 @@ public class DiscardTests
                             count: S32
 
                         routine Logger.log(message: Text)
-                            pass
+                            nothing
                             return
 
                         routine test()

@@ -90,7 +90,7 @@ When unsure, consult ground truth in the repo/package:
    **`todo`** is a statement for code not written yet (`routine parse(bytes: Bytes) -> Header` with the body
    `todo`): running it crashes with `NotImplementedError` naming the routine, like `pierce`. It does not make
    the routine failable and ends its path, so a body that is only `todo` needs no `return`. The build warns
-   once per routine that still has one (RF-W303). `pass` is an empty body on purpose, a different thing.
+   once per routine that still has one (RF-W303). `nothing` is an empty body on purpose, a different thing.
    The keyword takes the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
    a trailing `!!` applies to the recovery result. There is no `try_foo` name form —
    recovery is a keyword at the call site, not a mangled variant name. There are no
@@ -590,7 +590,7 @@ when cell                                     # record patterns, written like co
     is Chest(item: is Weapon as w) => equip(w)
     is Monster(hp: 0) as m => remove(m)       # a value it must equal, a name for the whole
     is Monster(hp: < 5, name) => flee(from: name)   # `name` alone = `name: as name`
-    is Monster => pass                        # an arm testing a member variable doesn't cover the type
+    is Monster => nothing                        # an arm testing a member variable doesn't cover the type
 ```
 
 The same record pattern works after `if`: `if cell is Monster(hp: 0) as m`.
@@ -1249,6 +1249,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S648      | `steal … as …` on something that is not a place | take from a variable, member variable or element |
 | RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
 | RF-G224      | a loop written `while c`              | `until` with the condition that ends it, or `loop` (`migrate --step until`) |
+| RF-G225      | a line written `pass`                 | `nothing`, the line with no work (`migrate --step nothing`) |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 
@@ -1535,7 +1536,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
   `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes`
 - **Iteration / range / hand-over**: `in` (loops only) `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
-- **Other statements**: `using` `as` `define` `pass` `given` `drop`
+- **Other statements**: `using` `as` `define` `nothing` `given` `drop`
 - **Access blocks**: `viewing` `modifying` (and `try viewing` / `try modifying` with `else`)
 - **Logical operators**: `and` `or` `not`
 - **Literals**: `true` `false` `None` `none`

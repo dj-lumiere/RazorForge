@@ -569,29 +569,54 @@ public class ControlFlowTests
     #region Pass Statement Tests
 
     /// <summary>
-    /// Verifies that the parser accepts pass statement.
+    /// Verifies that the parser accepts the nothing line.
     /// </summary>
     [Fact]
-    public void Parse_PassStatement()
+    public void Parse_NothingStatement()
     {
         string source = """
                         routine empty()
-                            pass
+                            nothing
                             return
                         """;
 
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts pass in if branch.
+    /// The old <c>pass</c> line is RF-G225 with the quick fix <c>nothing</c>, and the parser reads it as
+    /// <c>nothing</c>, so the rest of the file is still checked.
     /// </summary>
     [Fact]
-    public void Parse_PassInIfBranch()
+    public void Parse_PassLineIsG225WithNothingFix()
+    {
+        string source = """
+                        routine empty(x: S64)
+                            when x
+                                == 0 => pass
+                                else => pass
+                            return
+                        """;
+
+        (Program _, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
+        IReadOnlyList<GrammarException> errors = parser.GetStructuredErrors();
+        Assert.Equal(expected: 2, actual: errors.Count);
+        Assert.All(collection: errors, action: e =>
+        {
+            Assert.Equal(expected: GrammarDiagnosticCode.PassLine, actual: e.Code);
+            Assert.Equal(expected: "nothing", actual: e.Fix?.Edits[index: 0].NewText);
+        });
+    }
+
+    /// <summary>
+    /// Verifies that the parser accepts nothing in an if branch.
+    /// </summary>
+    [Fact]
+    public void Parse_NothingInIfBranch()
     {
         string source = """
                         routine test()
                             if condition
-                                pass
+                                nothing
                             else
                                 do_something()
                             return

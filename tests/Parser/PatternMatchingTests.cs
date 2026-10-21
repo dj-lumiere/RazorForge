@@ -695,7 +695,7 @@ public class PatternMatchingTests
                                     else
                                         handle_key(code)
                                 else =>
-                                    pass
+                                    nothing
                             return
                         """;
 

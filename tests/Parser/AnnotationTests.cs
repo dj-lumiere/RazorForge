@@ -56,7 +56,7 @@ public class AttributeTests
         string source = """
                         @prelude
                         routine show(msg: Text)
-                            pass
+                            nothing
                             return
                         """;
 
@@ -108,7 +108,7 @@ public class AttributeTests
         string source = """
                         @deprecated(message: "Use new_function instead")
                         routine old_function()
-                            pass
+                            nothing
                             return
                         """;
 

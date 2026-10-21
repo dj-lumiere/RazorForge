@@ -340,7 +340,7 @@ public class AccessBlockTests
                             var data = SomeEntity()
                             viewing data as v
                                 if v.needs_update()
-                                    pass
+                                    nothing
                             modifying data as h
                                 h.update()
                             return
@@ -551,7 +551,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             viewing rates, modifying payer as from, payee
-                                pass
+                                nothing
                             return
                         """;
 
@@ -565,9 +565,9 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             try modifying seats as s, viewing rates
-                                pass
+                                nothing
                             else
-                                pass
+                                nothing
                             return
                         """;
 
@@ -581,7 +581,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             try modifying seats as s
-                                pass
+                                nothing
                             return
                         """;
 
@@ -595,9 +595,9 @@ public class AccessBlockTests
         string source = """
                         routine test()
                             using seats.try_modify() as s
-                                pass
+                                nothing
                             fallback
-                                pass
+                                nothing
                             return
                         """;
 

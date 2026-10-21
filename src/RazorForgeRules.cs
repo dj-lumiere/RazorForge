@@ -46,7 +46,7 @@ public sealed class RazorForgeRules : LanguageRules
     }
 
     public override bool AllowsUnsafeCode => true;
-    public override bool HasPassStatement => true;
+    public override bool HasNothingStatement => true;
     public override bool HasModuleGlobals => true;
     public override bool HasTargetDirectives => true;
     public override bool DefaultsToArbitraryPrecision => false;

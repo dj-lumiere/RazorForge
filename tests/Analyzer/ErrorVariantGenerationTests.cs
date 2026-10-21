@@ -333,7 +333,7 @@ public class ErrorVariantGenerationTests
                             name: Text
 
                         routine handle_result(result: Check[User])
-                            pass
+                            nothing
                             return
                         """;
 
@@ -359,7 +359,7 @@ public class ErrorVariantGenerationTests
                             name: Text
 
                         routine handle_lookup(result: Check[User])
-                            pass
+                            nothing
                             return
                         """;
 

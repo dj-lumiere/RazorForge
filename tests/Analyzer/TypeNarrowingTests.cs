@@ -166,7 +166,7 @@ public class TypeNarrowingTests
         string source = """
                         routine process(value: S32?) -> S32
                             if value isnot None
-                                pass
+                                nothing
                             return value
                         """;
 

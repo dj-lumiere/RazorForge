@@ -66,7 +66,7 @@ public class ErrorHandlingPatternTests
     {
         string source = """
                         crashable NopeError
-                            pass
+                            nothing
 
                         routine NopeError.crash_message() -> Text
                             return "nope"
@@ -78,7 +78,7 @@ public class ErrorHandlingPatternTests
 
                         routine start()
                             when check fails(n: 1)
-                                is Crashables as e => pass
+                                is Crashables as e => nothing
                             return
                         """;
 
@@ -93,7 +93,7 @@ public class ErrorHandlingPatternTests
     {
         string source = """
                         crashable NopeError
-                            pass
+                            nothing
 
                         routine NopeError.crash_message() -> Text
                             return "nope"
@@ -110,7 +110,7 @@ public class ErrorHandlingPatternTests
 
                         routine start()
                             when check fails(n: 1)
-                                is S64 as v => pass
+                                is S64 as v => nothing
                             return
                         """;
 
@@ -127,8 +127,8 @@ public class ErrorHandlingPatternTests
         string source = """
                         routine test(value: Check[S32])
                             when value
-                                is None => pass
-                                else => pass
+                                is None => nothing
+                                else => nothing
                             return
                         """;
 
@@ -146,8 +146,8 @@ public class ErrorHandlingPatternTests
         string source = """
                         routine test(value: Check[None])
                             when value
-                                is Crashables as err => pass
-                                is None => pass
+                                is Crashables as err => nothing
+                                is None => nothing
                             return
                         """;
 

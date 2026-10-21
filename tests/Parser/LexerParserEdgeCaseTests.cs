@@ -226,7 +226,7 @@ public class LexerParserEdgeCaseTests
             lines.Add(item: $"{new string(c: ' ', count: (depth + 1) * 4)}if true");
         }
 
-        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 4)}pass");
+        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 4)}nothing");
         lines.Add(item: ReturnStatement);
 
         string source = string.Join(separator: "\n", values: lines);
@@ -473,7 +473,7 @@ public class LexerParserEdgeCaseTests
         string source = """
                         routine test()
                         routine other()
-                            pass
+                            nothing
                             return
                         """;
 
@@ -489,13 +489,13 @@ public class LexerParserEdgeCaseTests
         string source = """
                         record Empty
                         record Other
-                            pass
+                            nothing
                         """;
 
         AnalysisResult result = Analyze(source: source);
 
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutNothing);
     }
 
     private static GrammarException AssertInvalidCharacter(string source)
@@ -515,7 +515,7 @@ public class LexerParserEdgeCaseTests
             lines.Add(item: $"{new string(c: ' ', count: (depth + 1) * 4)}if true");
         }
 
-        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 4)}pass");
+        lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 4)}nothing");
         lines.Add(item: ReturnStatement);
 
         return string.Join(separator: "\n", values: lines);

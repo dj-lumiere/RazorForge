@@ -21,7 +21,7 @@ public class TypeProhibitionTests
         // None? desugars to Maybe[None] ≡ Bool (carrier None-collapse)
         string source = """
                         routine foo(x: None?)
-                            pass
+                            nothing
                             return
                         """;
 
@@ -58,7 +58,7 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine foo(x: S32?)
-                            pass
+                            nothing
                             return
                         """;
 
@@ -75,7 +75,7 @@ public class TypeProhibitionTests
         // None as a direct type (not wrapped in a generic) is fine
         string source = """
                         routine foo() -> None
-                            pass
+                            nothing
                             return
                         """;
 
@@ -92,7 +92,7 @@ public class TypeProhibitionTests
         // Result<None> is allowed for failable void routines
         string source = """
                         routine foo(x: Check[None])
-                            pass
+                            nothing
                             return
                         """;
 
@@ -112,7 +112,7 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine test(x: Maybe[Maybe[S32]])
-                            pass
+                            nothing
                             return
                         """;
 
@@ -128,7 +128,7 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine test(x: S32?)
-                            pass
+                            nothing
                             return
                         """;
 
@@ -167,7 +167,7 @@ public class TypeProhibitionTests
     {
         string source = """
                         routine test(x: Maybe[S32?])
-                            pass
+                            nothing
                             return
                         """;
 

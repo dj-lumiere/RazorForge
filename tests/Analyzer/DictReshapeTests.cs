@@ -62,7 +62,7 @@ public class DictReshapeTests
                                                       each x in xs
                                                           xs[0] = 5
                                                       each entry in stock
-                                                          pass
+                                                          nothing
                                                       stock["after"] = 2
                                                       return
                                                   """);

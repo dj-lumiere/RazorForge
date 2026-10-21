@@ -165,7 +165,7 @@ public class TypeDeclarationTests
                         record Word
                         obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable,
                         WrappingMultiplicable, FloorDivisible
-                            pass
+                            nothing
                         """;
 
         Program program = AssertParses(source: source);

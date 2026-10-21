@@ -223,8 +223,8 @@ public class LayoutGrammarTests
                                  routine start()
                                      var value: S32 = 2
                                      when value
-                                         n and 0 <= n <= 3 => pass
-                                         else => pass
+                                         n and 0 <= n <= 3 => nothing
+                                         else => nothing
                                      return
                                  """);
     }

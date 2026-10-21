@@ -301,7 +301,7 @@ public class ScopeTests
                         routine handle(r: Result)
                             when r
                                 is SUCCESS as value => show(value)
-                                is ERROR as msg => pass
+                                is ERROR as msg => nothing
                             show(value)
                             return
                         """;

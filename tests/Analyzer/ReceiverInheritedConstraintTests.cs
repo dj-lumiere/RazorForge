@@ -22,14 +22,14 @@ public class ReceiverInheritedConstraintTests
 
     private const string GeneralPrelude = """
                                           record Alpha
-                                              pass
+                                              nothing
                                           record Beta
-                                              pass
+                                              nothing
                                           record Gamma
-                                              pass
+                                              nothing
 
                                           record Box[T]
-                                              pass
+                                              nothing
 
                                           routine Box[T].only_ab()
                                           needs T in [Alpha, Beta]

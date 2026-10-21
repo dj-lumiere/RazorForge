@@ -129,8 +129,8 @@ public class DropBindingTests
                                                                        var kept = work.to[Agent]()
                                                                        kept.start_now()
                                                                        when check kept.retrieve()
-                                                                           is S64 as v => pass
-                                                                           else => pass
+                                                                           is S64 as v => nothing
+                                                                           else => nothing
                                                                        var stopped = work.to[Agent]()
                                                                        stopped.start_now()
                                                                        drop stopped
