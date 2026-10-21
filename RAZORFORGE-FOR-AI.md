@@ -1037,6 +1037,10 @@ that differ from other languages:
   (`SortedSet`, `CircularList`, `Array`, `BitArray`, `BitList`, `PriorityQueue`, …)
   takes the same literal when the variable names its type
   (`var s: SortedSet[S64] = {3, 1, 2}`, `var pq: PriorityQueue[S32, Text] = {1: "high"}`).
+  A literal takes its element types from where it goes, as a number does: `bytes.add_range(you: [3, 4])` on a
+  `List[U8]` builds a `List[U8]`, `total(xs: [5, 6])` for `xs: Iterable[U8]` builds a `List[U8]`, and
+  `{1: "a"}` given to an `Iterable[DictEntry[U16, Text]]` builds a `Dict[U16, Text]`. With nothing to go by,
+  `[1, 2]` is a `List[S64]`.
   An `Array` is also built from its elements: `Array[3](1, 2, 3)`.
 - Tuple fields are accessed as `t.item0`, `t.item1`, … (NOT `t.0`/`t.first`);
   destructure with `var (q, r) = pair`. `(a, b) = (b, a)` swaps places (locals, member variables, entities
