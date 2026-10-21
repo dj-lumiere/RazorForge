@@ -584,14 +584,14 @@ common routine B32.signaling_nan() -> B32
 routine B32.represent() -> Text
     if me.is_signaling()
         return "snan"
-    return format_binary_shortest(raw: LLVM::zero_extend[U32, U64](me.to_bits()), fmt: 1)
+    return float_text(low: LLVM::zero_extend[U32, U64](me.to_bits()), high: 0, format: 1, style: 0, digits: 0)
 
 ### Renders this value to `sig_digits` significant decimal digits with C `%g`
-### layout (pure-RF exact-rational conversion; widens to B64 exactly first).
+### layout, rounded half to even from the exact value (Ingrid's text, widened to B64 exactly first).
 ### :param sig_digits: The number of significant decimal digits (>= 1).
 ### :returns: The resulting `Text` value.
 routine B32.to_text(sig_digits: U64) -> Text
-    return format_binary(value: me.to[B64](), sig: sig_digits)
+    return float_text(low: me.to[B64]().to_bits(), high: 0, format: 0, style: 1, digits: sig_digits)
 
 ### Renders this value with exactly `places` digits after the point, rounded half to even from its
 ### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
@@ -600,7 +600,7 @@ routine B32.to_text(sig_digits: U64) -> Text
 ### :returns: The rendered `Text`.
 @readonly
 routine B32.fixed(places: U64) -> Text
-    return format_binary_fixed(value: me.to[B64](), places: places)
+    return float_text(low: me.to[B64]().to_bits(), high: 0, format: 0, style: 2, digits: places)
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -608,26 +608,18 @@ routine B32.fixed(places: U64) -> Text
 routine B32.diagnose() -> Text
     if me.is_signaling()
         return "B32(snan)"
-    return format_binary_shortest_wrapped(
-        raw: LLVM::zero_extend[U32, U64](me.to_bits()),
-        fmt: 1,
-        wrap: "B32",
-    )
+    return float_text(low: LLVM::zero_extend[U32, U64](me.to_bits()), high: 0, format: 1, style: 3, digits: 0)
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `B32` value.
 ### :throws: May throw {InvalidValueError}.
 failable routine Text.to[B32]() -> B32
-    var pc = parse_float_components(from_text: me, target: "B32")
-    if pc.kind == 3
+    var w = float_parse(text: me, format: 1)
+    if w.w0 == 3
         throw InvalidValueError(input: me, target: "B32")
-    if pc.kind == 1
+    if w.w0 == 1
         return nan
-    if pc.kind == 2
-        if pc.is_neg
-            return -inf
-        return inf
-    return b32_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
+    return B32.from_bits(bits: LLVM::int_truncate[U64, U32](w.w1))
 
 # ============================================================================
 # Hashing
@@ -857,34 +849,11 @@ failable routine B32.mul_add(b: B32, c: B32) -> B32
 routine B32.mul_add_unchecked(b: B32, c: B32) -> B32
     return LLVM::fma[B32](a: me, b: b, c: c)
 
-### Floating-point remainder of me/you (C fmod), exact. Taken in B64 without a division instruction's remainder:
-### |me| is reduced by |you| 2^k (k keeping the quotient below 2^29) with q = trunc(|me| / (|you| 2^k)), whose
-### product with the divisor has at most 53 bits and so is exact, as is the difference (a multiple of the
-### divisor's B32 grid below twice it); q off by one from the division's rounding is corrected, and each round
-### takes up to 28 bits of exponent difference. (LLVM narrows a widened frem back to the C runtime's fmodf,
-### several times slower than this.) Special cases take the frem.
+### Floating-point remainder of me/you (C fmod), exact (Ingrid's). The NaN cases take the frem.
 routine B32.mod_trunc(you: B32) -> B32
-    var x = me.to[B64]()
-    var y = you.to[B64]()
-    if x.is_nan() or y.is_nan() or x.is_infinite() or y.is_zero()
+    if me.is_nan() or you.is_nan() or me.is_infinite() or you.is_zero()
         return LLVM::float_rem[B32](a: me, b: you)
-    var ax = x.abs()
-    var ay = y.abs()
-    if y.is_infinite() or ax < ay
-        return me
-    until not (ax >= ay)
-        var yk = ay
-        var k = b64_exponent(x: ax) -% b64_exponent(x: ay) -% 28
-        if k > 0
-            yk = ay *! B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](k +% 1023) << 52)
-        var q = LLVM::float_truncate[B64](ax /! yk)
-        var r = ax -! q *! yk
-        if r < 0.0
-            r = r +! yk
-        elseif r >= yk
-            r = r -! yk
-        ax = r
-    return ax.copysign(sign: x).to_unchecked[B32]()
+    return B32.from_bits(bits: C::ingrid_b32_mod_trunc(x: me.to_bits(), y: you.to_bits()))
 
 ### IEEE remainder of me/you (C remainder).
 routine B32.rem(you: B32) -> B32
@@ -1304,9 +1273,3 @@ routine B32.tan_pi() -> B32
 ### :returns: The correctly rounded gamma function.
 routine B32.gamma_unchecked() -> B32
     return C::ingrid_b32_gamma(x: me)
-
-### The unbiased binary exponent of a finite nonzero B64, -2000 for zero.
-@inline
-secret routine b64_exponent(x: B64) -> S64
-    var be = LLVM::reinterpret_bits[U64, S64]((x.to_bits() >>> 52) & 0x7FF)
-    return if be == 0 then -2000 else be -% 1023

@@ -529,6 +529,7 @@ routine B64.signum() -> B64
 
 ### Reinterprets this float as its raw IEEE 754 bit pattern.
 ### :returns: The underlying `U64` encoding of this value.
+@readonly
 routine B64.to_bits() -> U64
     return LLVM::reinterpret_bits[B64, U64](me)
 
@@ -555,14 +556,14 @@ common routine B64.signaling_nan() -> B64
 routine B64.represent() -> Text
     if me.is_signaling()
         return "snan"
-    return format_binary_shortest(raw: me.to_bits(), fmt: 0)
+    return float_text(low: me.to_bits(), high: 0, format: 0, style: 0, digits: 0)
 
 ### Renders this value to `sig_digits` significant decimal digits with C `%g`
-### layout (pure-RF exact-rational conversion).
+### layout, rounded half to even from the exact value (Ingrid's text).
 ### :param sig_digits: The number of significant decimal digits (>= 1).
 ### :returns: The resulting `Text` value.
 routine B64.to_text(sig_digits: U64) -> Text
-    return format_binary(value: me, sig: sig_digits)
+    return float_text(low: me.to_bits(), high: 0, format: 0, style: 1, digits: sig_digits)
 
 ### Renders this value with exactly `places` digits after the point, rounded half to even from its
 ### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
@@ -571,7 +572,7 @@ routine B64.to_text(sig_digits: U64) -> Text
 ### :returns: The rendered `Text`.
 @readonly
 routine B64.fixed(places: U64) -> Text
-    return format_binary_fixed(value: me, places: places)
+    return float_text(low: me.to_bits(), high: 0, format: 0, style: 2, digits: places)
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -579,7 +580,7 @@ routine B64.fixed(places: U64) -> Text
 routine B64.diagnose() -> Text
     if me.is_signaling()
         return "B64(snan)"
-    return format_binary_shortest_wrapped(raw: me.to_bits(), fmt: 0, wrap: "B64")
+    return float_text(low: me.to_bits(), high: 0, format: 0, style: 3, digits: 0)
 
 ### Parses a decimal float literal into an `B64`.
 ###   the special values `nan`, `inf`, and `infinity` (case-insensitive, with
@@ -587,16 +588,12 @@ routine B64.diagnose() -> Text
 ### :returns: The `B64` value parsed from the input.
 ### :throws: {InvalidValueError} if the text is not a valid float literal.
 failable routine Text.to[B64]() -> B64
-    var pc = parse_float_components(from_text: me, target: "B64")
-    if pc.kind == 3
+    var w = float_parse(text: me, format: 0)
+    if w.w0 == 3
         throw InvalidValueError(input: me, target: "B64")
-    if pc.kind == 1
+    if w.w0 == 1
         return nan
-    if pc.kind == 2
-        if pc.is_neg
-            return -inf
-        return inf
-    return b64_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
+    return B64.from_bits(bits: w.w1)
 
 # ============================================================================
 # Hashing

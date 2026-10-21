@@ -591,14 +591,14 @@ common routine B16.signaling_nan() -> B16
 routine B16.represent() -> Text
     if me.is_signaling()
         return "snan"
-    return format_binary_shortest(raw: LLVM::zero_extend[U16, U64](me.to_bits()), fmt: 2)
+    return float_text(low: LLVM::zero_extend[U16, U64](me.to_bits()), high: 0, format: 2, style: 0, digits: 0)
 
 ### Renders this value to `sig_digits` significant decimal digits with C `%g`
-### layout (pure-RF exact-rational conversion; widens to B64 exactly first).
+### layout, rounded half to even from the exact value (Ingrid's text, widened to B64 exactly first).
 ### :param sig_digits: The number of significant decimal digits (>= 1).
 ### :returns: The resulting `Text` value.
 routine B16.to_text(sig_digits: U64) -> Text
-    return format_binary(value: me.to[B32]().to[B64](), sig: sig_digits)
+    return float_text(low: me.to[B32]().to[B64]().to_bits(), high: 0, format: 0, style: 1, digits: sig_digits)
 
 ### Renders this value with exactly `places` digits after the point, rounded half to even from its
 ### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
@@ -607,7 +607,7 @@ routine B16.to_text(sig_digits: U64) -> Text
 ### :returns: The rendered `Text`.
 @readonly
 routine B16.fixed(places: U64) -> Text
-    return format_binary_fixed(value: me.to[B32]().to[B64](), places: places)
+    return float_text(low: me.to[B32]().to[B64]().to_bits(), high: 0, format: 0, style: 2, digits: places)
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -615,26 +615,18 @@ routine B16.fixed(places: U64) -> Text
 routine B16.diagnose() -> Text
     if me.is_signaling()
         return "B16(snan)"
-    return format_binary_shortest_wrapped(
-        raw: LLVM::zero_extend[U16, U64](me.to_bits()),
-        fmt: 2,
-        wrap: "B16",
-    )
+    return float_text(low: LLVM::zero_extend[U16, U64](me.to_bits()), high: 0, format: 2, style: 3, digits: 0)
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `B16` value.
 ### :throws: May throw {InvalidValueError}.
 failable routine Text.to[B16]() -> B16
-    var pc = parse_float_components(from_text: me, target: "B16")
-    if pc.kind == 3
+    var w = float_parse(text: me, format: 2)
+    if w.w0 == 3
         throw InvalidValueError(input: me, target: "B16")
-    if pc.kind == 1
+    if w.w0 == 1
         return nan
-    if pc.kind == 2
-        if pc.is_neg
-            return -inf
-        return inf
-    return b16_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
+    return B16.from_bits(bits: LLVM::int_truncate[U64, U16](w.w1))
 
 # ============================================================================
 # Hashing
@@ -871,27 +863,12 @@ failable routine B16.mul_add(b: B16, c: B16) -> B16
     throw NumericOverflowError(description: "overflow: out of range")
 
 ### Fused multiply-add me*b + c with raw IEEE 754 propagation, correctly rounded (one rounding to
-### nearest, ties to even).
+### nearest, ties to even), Ingrid's. An infinite or NaN operand takes the binary64 path (exact product, then
+### the sum), whose NaN is the hardware's.
 routine B16.mul_add_unchecked(b: B16, c: B16) -> B16
-    # me*b has at most 22 significant bits, so it is exact in binary64 and p + c is the only inexact step.
-    # TwoSum recovers that step's error exactly, which turns the binary64 sum into a round-to-odd result.
-    # Rounding it to nearest binary16 is then a single correct rounding (going through binary32 instead
-    # would round twice and miss ties).
-    var p = me.to[B64]() *! b.to[B64]()
-    var cd = c.to[B64]()
-    var s = p +! cd
-    if s.is_finite()
-        var bv = s -! p
-        var err = p -! (s -! bv) +! (cd -! bv)
-        var sb = s.to_bits()
-        if err != 0.0 and (sb & 1) == 0
-            # step one ulp toward the exact sum, the truncated value, whose last bit is odd
-            if (err > 0.0) == (s > 0.0)
-                sb = sb +% 1
-            else
-                sb = sb -% 1
-            s = B64.from_bits(bits: sb)
-    return s.to_unchecked[B16]()
+    if not (me.is_finite() and b.is_finite() and c.is_finite())
+        return (me.to[B64]() *! b.to[B64]() +! c.to[B64]()).to_unchecked[B16]()
+    return B16.from_bits(bits: C::ingrid_b16_mul_add(x: me.to_bits(), y: b.to_bits(), z: c.to_bits()))
 
 ### Floating-point remainder (C fmod).
 routine B16.mod_trunc(you: B16) -> B16

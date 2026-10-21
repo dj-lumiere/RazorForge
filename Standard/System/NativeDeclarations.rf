@@ -845,6 +845,44 @@ routine C::ingrid_b128_hypot(low: U64, high: U64, y_low: U64, y_high: U64) -> In
 routine C::ingrid_b128_hypot3(low: U64, high: U64, y_low: U64, y_high: U64, z_low: U64, z_high: U64) -> IngridWords
 routine C::ingrid_b128_mul_add(low: U64, high: U64, y_low: U64, y_high: U64, z_low: U64, z_high: U64) -> IngridWords
 
+# B128 arithmetic and conversions, and the B16 / B32 / BF16 operations that are not one builder operation
+# (Ingrid/tessera/binfloat_ops.te): each is Tessera's software routine, raw IEEE (no crash).
+routine C::ingrid_b128_add(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+routine C::ingrid_b128_sub(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+routine C::ingrid_b128_mul(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+routine C::ingrid_b128_div(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+routine C::ingrid_b128_mod_trunc(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+routine C::ingrid_b128_rem(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+### `mode`: 0 toward zero, 1 down, 2 up, 3 to nearest with ties away from zero, 4 to nearest with ties to even.
+routine C::ingrid_b128_round_int(low: U64, high: U64, mode: U32) -> IngridWords
+routine C::ingrid_b128_scalbn(low: U64, high: U64, n: S64) -> IngridWords
+routine C::ingrid_b128_from_u128(low: U64, high: U64) -> IngridWords
+routine C::ingrid_b128_from_u256(w0: U64, w1: U64, w2: U64, w3: U64) -> IngridWords
+routine C::ingrid_b128_from_b64(x: U64) -> IngridWords
+routine C::ingrid_b128_to_b64(low: U64, high: U64) -> U64
+routine C::ingrid_b16_mul_add(x: U16, y: U16, z: U16) -> U16
+routine C::ingrid_b32_mod_trunc(x: U32, y: U32) -> U32
+routine C::ingrid_b32_to_bf16(x: U32) -> U16
+routine C::ingrid_b64_to_bf16(x: U64) -> U16
+
+# Text of the binary floats (Ingrid/tessera/floattext.te). A text routine writes up to `out_count` characters at
+# `out` and returns how many the text has: when that is more, the caller asks again with that much room.
+### The text of a binary float's bits (`high` 0 below B128). `format`: 0 B64, 1 B32, 2 B16, 3 BF16, 4 B128. `style`:
+### 0 the shortest decimal that reads back as the value, 1 `digits` significant digits (B64), 2 exactly `digits`
+### digits after the point (B64, B128), 3 the `diagnose` text (the type name, the shortest decimal in parentheses).
+routine C::ingrid_float_text_utf32(
+    low: U64,
+    high: U64,
+    format: U32,
+    style: U32,
+    digits: U64,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> U64
+### Reads decimal text as a float of `format`, rounded to nearest (ties to even). w0: 0 a number, 1 a NaN, 2 an
+### infinity, 3 not a number. w1 and w2: the bits' low and high 64 for a number or an infinity.
+routine C::ingrid_float_parse_utf32(chars: Hijacked[Char], count: U64, format: U32) -> IngridWords
+
 # ============================================================================
 # Decimal floats (Ingrid/tessera/decimal/)
 # ============================================================================
@@ -1064,6 +1102,28 @@ routine C::ingrid_d128_to_binary(x_low: U64, x_high: U64, which: U32) -> IngridW
 
 ### A D32 as a D128 (exact).
 routine C::ingrid_d128_from_d32(x: U32) -> IngridWords
+
+### The text of a decimal given its fields (`special`: 0 finite, 1 an infinity, 2 a quiet NaN, 3 a signaling NaN).
+### `style`: 0 the scientific text of D32 / D64 / D128, 1 the same with fractional trailing zeros dropped (Decimal),
+### 2 exactly `places` digits after the point, 3 the `diagnose` text (`places` 32, 64, 128 for D32, D64, D128, 0 for
+### Decimal). Writes up to `out_count` characters at `out` and returns how many the text has
+### (Ingrid/tessera/decimal/dec_text.te).
+routine C::ingrid_decimal_text_utf32(
+    sign: U32,
+    special: U32,
+    exp: S64,
+    c_low: U64,
+    c_high: U64,
+    style: U32,
+    places: U64,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> U64
+
+### Reads decimal text into its fields without rounding. w0: 1 when it is not a number, else the sign in bits 8 and
+### up and the special kind (0 finite, 1 an infinity, 2 a NaN) in bits 16 and up. w1 and w2: the coefficient's low
+### and high 64 bits. w3: the exponent's bits.
+routine C::ingrid_decimal_scan_utf32(chars: Hijacked[Char], count: U64) -> IngridWords
 
 ### A D64 as a D128 (exact).
 routine C::ingrid_d128_from_d64(x: U64) -> IngridWords

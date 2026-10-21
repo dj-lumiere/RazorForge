@@ -3,8 +3,7 @@ module System/Numerics
 # ============================================================================
 # B128 library functions. Each is one call to Ingrid's export (Ingrid/tessera/binfloat.te), which is Tessera's
 # correctly rounded B128 routine: the CORE-MATH port where CORE-MATH has the binary128 function, Tessera's own
-# correctly rounded one elsewhere. The checked forms (`!`) crash here, in RazorForge, on a result that is not
-# finite. Only the three-leg hypot is computed here (exact integer arithmetic, one rounding): Tessera has none.
+# correctly rounded one elsewhere. The checked forms crash here, in RazorForge, on a result that is not finite.
 # ============================================================================
 
 ### Returns `e^me`.
@@ -197,72 +196,8 @@ routine B128.tan() -> B128
     return b128_of_words(w: C::ingrid_b128_tan(low: me.low_bits(), high: me.high_bits()))
 
 # ============================================================================
-# fma, and the three-leg hypot: exact integer arithmetic, one rounding
+# fma and hypot, rounded once
 # ============================================================================
-
-### A finite nonzero B128 as its integer significand (113 bits, fewer when subnormal) and the exponent of
-### its last bit.
-secret routine b128_int_parts(x: B128) -> (U128, S64)
-    var bits = x.to_bits()
-    var be = LLVM::int_truncate[U128, S64]((bits >>> 112) & 0x7FFF)
-    var f = bits & (1 << 112) -% 1
-    if be == 0
-        return (f, -16494)
-    return (f | (1 << 112), be -% 16495)
-
-### a + b for exact values a * 2^ea and b * 2^eb (384-bit integers, signs neg_a / neg_b): the smaller is
-### aligned below the larger one's top and its bits that fall out of the 384-bit window become a sticky bit
-### jammed into bit 0. Bits fall out only when the smaller is below 2^-150 of the larger (the addends here
-### have at most 226 significant bits), so the sum keeps its top within one bit of the larger one's and the
-### sticky bit sits far below any rounding place. A subtraction that drops bits takes one more unit off: the
-### true value then lies strictly between that and the next unit up.
-secret routine b128_exact_sum(
-    neg_a: Bool,
-    a: (U128, U128, U128),
-    ea: S64,
-    neg_b: Bool,
-    b: (U128, U128, U128),
-    eb: S64,
-) -> B128Wx
-    var wa = wx_make(neg: neg_a, t: a, e: ea, rel: 0.0)
-    var wb = wx_make(neg: neg_b, t: b, e: eb, rel: 0.0)
-    if wx_is_zero(w: wb)
-        return wa
-    if wx_is_zero(w: wa)
-        return wb
-    var x = wa
-    var y = wb
-    if wb.e > wa.e or (wb.e == wa.e and wx_t_gt(a: wx_t(w: wb), b: wx_t(w: wa)))
-        x = wb
-        y = wa
-    var d = x.e -% y.e
-    var yt = wx_t(w: y)
-    var ys = b128_trig_shr384(x: yt, shift: d)
-    var sticky = false
-    if d >= 384
-        sticky = true
-    elseif d > 0
-        var back = b128_trig_shl384(x: ys, shift: d)
-        sticky = back.item0 != yt.item0 or back.item1 != yt.item1 or back.item2 != yt.item2
-    var xt = wx_t(w: x)
-    var e = x.e
-    var s = xt
-    if x.neg == y.neg
-        s = b128_trig_add384(a: xt, b: ys)
-        if wx_t_gt(a: xt, b: s)
-            if (s.item0 & 1) != 0
-                sticky = true
-            var h = b128_trig_shr384(x: s, shift: 1)
-            s = (h.item0, h.item1, h.item2 | (1 << 127))
-            e = e +% 1
-    else
-        s = b128_trig_sub384(a: xt, b: ys)
-        if sticky
-            s = b128_trig_sub384(a: s, b: (1, 0, 0))
-    var r = wx_make(neg: x.neg, t: s, e: e, rel: 0.0)
-    if sticky
-        return B128Wx(neg: r.neg, m2: r.m2, m1: r.m1, m0: r.m0 | 1, e: r.e, rel: 0.0)
-    return r
 
 ### Returns the fused multiply-add `me*b + c` with a single rounding.
 failable routine B128.mul_add(b: B128, c: B128) -> B128

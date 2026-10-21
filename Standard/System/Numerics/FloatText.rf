@@ -1,0 +1,114 @@
+module System/Numerics
+
+# ============================================================================
+# The text of the binary floats and the decimals: each is Ingrid's (Ingrid/tessera/floattext.te and
+# Ingrid/tessera/decimal/dec_text.te), which writes the characters into a buffer this side hands it.
+# A short text fits the stack buffer, and a longer one is asked for again with room for all of it.
+# ============================================================================
+
+### The room of the stack buffer a text is first written into.
+preset FLOAT_TEXT_ROOM: U64 = 64
+
+### The text of a binary float's bits (`high` 0 below B128) as Ingrid writes it.
+### :param low: The low 64 bits.
+### :param high: The high 64 bits.
+### :param format: 0 B64, 1 B32, 2 B16, 3 BF16, 4 B128.
+### :param style: 0 the shortest decimal, 1 `digits` significant digits, 2 `digits` digits after the point, 3 the
+###     `diagnose` text (the type name, then the shortest decimal in parentheses).
+### :param digits: The significant digits or the digits after the point.
+### :returns: The text.
+secret routine float_text(low: U64, high: U64, format: U32, style: U32, digits: U64) -> Text
+    var buf = Array[Char, 64]()
+    var count: U64 = 0
+    danger
+        var p = LLVM::reinterpret_bits[Hijacked[Array[Char, 64]], Hijacked[Char]](buf.hijack())
+        count = C::ingrid_float_text_utf32(
+            low: low,
+            high: high,
+            format: format,
+            style: style,
+            digits: digits,
+            out: p,
+            out_count: FLOAT_TEXT_ROOM,
+        )
+        if count <= FLOAT_TEXT_ROOM
+            return Text(from_span: p, count: count)
+    var result = text_alloc(count: count)
+    drop C::ingrid_float_text_utf32(
+        low: low,
+        high: high,
+        format: format,
+        style: style,
+        digits: digits,
+        out: result.data,
+        out_count: count,
+    )
+    return result
+
+### Reads decimal text as a binary float of `format` (Ingrid's reader).
+### :param text: The text.
+### :param format: 0 B64, 1 B32, 2 B16, 3 BF16, 4 B128.
+### :returns: w0: 0 a number, 1 a NaN, 2 an infinity, 3 not a number. w1 and w2: the bits' low and high 64.
+secret routine float_parse(text: Text, format: U32) -> IngridWords
+    return C::ingrid_float_parse_utf32(chars: text.data, count: text.count, format: format)
+
+### The text of decoded decimal parts as Ingrid writes it.
+### :param p: The parts.
+### :param style: 0 the scientific text, 1 the same with fractional trailing zeros dropped, 2 `places` digits after
+###     the point, 3 the `diagnose` text (the type name, then the text in parentheses).
+### :param places: The digits after the point for style 2, for style 3 the type: 32, 64, or 128 for D32, D64, or D128
+###     (the scientific text) and 0 for Decimal (the text without fractional trailing zeros).
+### :returns: The text.
+secret routine decimal_text(p: D128Parts, style: U32, places: U64) -> Text
+    var sign: U32 = 0
+    if p.sign
+        sign = 1
+    var special = LLVM::int_truncate[U64, U32](p.special)
+    var c_low = LLVM::int_truncate[U128, U64](p.coeff)
+    var c_high = LLVM::int_truncate[U128, U64](p.coeff >>> 64)
+    var buf = Array[Char, 64]()
+    var count: U64 = 0
+    danger
+        var o = LLVM::reinterpret_bits[Hijacked[Array[Char, 64]], Hijacked[Char]](buf.hijack())
+        count = C::ingrid_decimal_text_utf32(
+            sign: sign,
+            special: special,
+            exp: p.exp,
+            c_low: c_low,
+            c_high: c_high,
+            style: style,
+            places: places,
+            out: o,
+            out_count: FLOAT_TEXT_ROOM,
+        )
+        if count <= FLOAT_TEXT_ROOM
+            return Text(from_span: o, count: count)
+    var result = text_alloc(count: count)
+    drop C::ingrid_decimal_text_utf32(
+        sign: sign,
+        special: special,
+        exp: p.exp,
+        c_low: c_low,
+        c_high: c_high,
+        style: style,
+        places: places,
+        out: result.data,
+        out_count: count,
+    )
+    return result
+
+### Scans decimal text into its parts (sign, special, coefficient, base-10 exponent) without rounding: the shared
+### front end of the decimal parsers (Ingrid's scanner). An optional sign, an integer and fraction mantissa, an
+### optional `e`/`E` exponent, and the special values `inf`/`infinity`/`nan` (any case). A mantissa longer than 38
+### digits keeps its first 38 and folds the rest into a sticky last digit, and an exponent beyond ±10^9 saturates.
+### :throws: {InvalidValueError} on malformed input.
+failable routine scan_decimal_parts(from_text: Text) -> D128Parts
+    var w = C::ingrid_decimal_scan_utf32(chars: from_text.data, count: from_text.count)
+    if (w.w0 & 0xFF) != 0
+        throw InvalidValueError(input: from_text, target: "decimal number")
+    return D128Parts(
+        sign: ((w.w0 >>> 8) & 0xFF) != 0,
+        special: w.w0 >>> 16,
+        exp: LLVM::reinterpret_bits[U64, S64](w.w3),
+        coeff: (w.w2.to[U128]() << 64) | w.w1.to[U128](),
+    )

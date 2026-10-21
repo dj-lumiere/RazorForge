@@ -250,6 +250,9 @@ file only once its other old spellings are gone.
 - A byte literal with a hex escape (`b'\x07'`) read as the backslash.
 - A syntax error inside a value `when` no longer reports the rest of the routine as top-level statements.
 - A preset made by a construction builds on the Tessera backend.
+- `S128_MIN.to[B128]()` and `S256_MIN.to[B128]()` crashed. `B128.rem` crashed on operands near the top of the
+  range.
+- `try` / `check` around `text.to[B16]()` or `text.to[B32]()` failed to build.
 
 ### Removed
 - `Assignable`, `FrozenController`, `Accessing`, `Controlling`, `Consulting`, `Amending`, `multiamend`,

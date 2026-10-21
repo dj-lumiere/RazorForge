@@ -1,0 +1,74 @@
+module Tests/Stdlib/FloatTextEdgesApi
+
+import IO/Console
+# Covers the edges of the binary-float and decimal text and of the B128 arithmetic: halfway cases of fixed and
+# significant-digit rounding, specials, the smallest subnormals of every format, texts read back at the ends of
+# their ranges, the B128 rounding modes and invalid operations, and Decimal scale and precision.
+
+routine start()
+    # fixed(places:) and to_text(sig_digits:) round half to even from the exact value
+    var a: B64 = 2.675
+    var b: B64 = 0.125
+    var c: B64 = 0.375
+    show(f"fixed: {a.fixed(places: 2)} {b.fixed(places: 2)} {c.fixed(places: 2)} {b.fixed(places: 0)} {(2.5).fixed(places: 0)}")
+    show(f"sig: {(0.0995).to_text(sig_digits: 2)} {(9.95).to_text(sig_digits: 2)} {(123456.0).to_text(sig_digits: 3)} {(0.00012345).to_text(sig_digits: 2)}")
+    var neg_zero: B64 = -0.0
+    show(f"zero: {neg_zero} {neg_zero.fixed(places: 2)} {neg_zero.to_text(sig_digits: 3)}")
+    var minus_tiny: B64 = -0.001
+    show(f"rounds to zero: {minus_tiny.fixed(places: 2)}")
+
+    # specials
+    var pinf: B64 = inf
+    var ninf: B32 = -inf
+    var q: B16 = nan
+    show(f"specials: {pinf} {ninf} {q.is_nan()} {pinf.fixed(places: 3)} {pinf.diagnose()} {ninf.diagnose()}")
+
+    # smallest subnormals and largest finite values
+    var b16_min = B16.from_bits(bits: 1)
+    var b32_min = B32.from_bits(bits: 1)
+    var b64_min = B64.from_bits(bits: 1)
+    var b128_min = B128.from_bits(bits: 1)
+    var bf16_min = BF16.from_bits(bits: 1)
+    show(f"subnormal: {b16_min} {bf16_min} {b32_min} {b64_min} {b128_min}")
+    show(f"max: {B16.from_bits(bits: 0x7BFF)} {B32.from_bits(bits: 0x7F7FFFFF)} {B64.from_bits(bits: 0x7FEFFFFFFFFFFFFF)}")
+    show(f"b128 max: {B128.from_bits(bits: 0x7FFEFFFFFFFFFFFFFFFFFFFFFFFFFFFF)}")
+
+    # reading text at the ends of the ranges (bits)
+    show(f"read b64: {"2.4703282292062327e-324".to[B64]().to_bits().hex()} {"2.4703282292062328e-324".to[B64]().to_bits().hex()} {"1.7976931348623158e308".to[B64]().to_bits().hex()} {"1.7976931348623159e308".to[B64]().to_bits().hex()}")
+    show(f"read b32: {"7.006492321624085e-46".to[B32]().to_bits().hex()} {"7.006492321624086e-46".to[B32]().to_bits().hex()} {"3.4028236e38".to[B32]().to_bits().hex()}")
+    show(f"read b16: {"65519.99".to[B16]().to_bits().hex()} {"65520".to[B16]().to_bits().hex()} {"2.98023223876953125e-8".to[B16]().to_bits().hex()} {"2.98023223876953126e-8".to[B16]().to_bits().hex()}")
+    show(f"read b128: {"3.2375875597190125554622194791138232e-4966".to[B128]().to_bits().hex()} {"3.2375875597190125554622194791138233e-4966".to[B128]().to_bits().hex()} {"1e1000000".to[B128]().to_bits().hex()}")
+    show(f"read words: {"-INFINITY".to[B64]()} {"Infinity".to[BF16]()} {"1.e5".to[B32]()} {".5".to[B16]()}")
+    var bad = try "1e".to[B64]()
+    show(f"read bad: {bad is None}")
+
+    # B128 rounding modes, remainders and invalid operations
+    var half = "2.5".to[B128]()
+    var mhalf = "-0.5".to[B128]()
+    show(f"b128 round: {half.trunc()} {half.floor()} {half.ceil()} {half.round()} {half.rint()} {mhalf.ceil().to_bits().hex()} {mhalf.rint().to_bits().hex()}")
+    var seven = "7".to[B128]()
+    var two = "2".to[B128]()
+    show(f"b128 rem: {seven.mod_trunc(two)} {seven.rem(two)} {"-7".to[B128]().rem(two)} {seven.scalbn(n: -3)}")
+    var bi = B128.from_bits(bits: 0x7FFF0000000000000000000000000000)
+    var bz = B128.from_bits(bits: 0)
+    show(f"b128 invalid: {bi.sub_unchecked(bi).to_bits().hex()} {bz.truediv_unchecked(bz).to_bits().hex()} {bi.mod_trunc(two).to_bits().hex()}")
+    var third = "1".to[B128]().truediv_unchecked("3".to[B128]())
+    show(f"b128 narrow: {third.to_unchecked[B64]().to_bits().hex()} {third.to_unchecked[B32]().to_bits().hex()} {bi.to_unchecked[B64]()}")
+    var u256_top: U256 = 1 << 255
+    show(f"b128 from ints: {(u256_top +% 1).to[B128]()} {U128_MAX.to[B128]()} {S128_MIN.to[B128]()}")
+
+    # Decimal scale and precision
+    var d1: Decimal = 2.50
+    var d2: Decimal = 1.230
+    var d3: Decimal = 100
+    show(f"decimal text: {d1} {d2} {d3} {d1.diagnose()} {d1.fixed(places: 0)} {d2.fixed(places: 1)} {"2.25".to[Decimal]().fixed(places: 1)}")
+    show(f"decimal 34 digits: {"1.2345678901234567890123456789012345".to[Decimal]()} {"1.2345678901234567890123456789012355".to[Decimal]()}")
+    show(f"decimal small: {"0.000001".to[Decimal]()} {"0.0000001".to[Decimal]()} {"1e-6176".to[D128]()} {"1e-6177".to[D128]().is_zero()}")
+    var p: D128 = 2.50
+    var e: D64 = 1.230
+    var f: D32 = 0.0000001
+    show(f"ieee decimal text: {p} {e} {f} {p.diagnose()} {e.diagnose()} {f.diagnose()} {e.fixed(places: 5)}")
+    show(f"decimal specials: {D128.infinity(sign: true)} {D64.quiet_nan()} {D32.signaling_nan()} {D128.infinity(sign: false).fixed(places: 2)}")
+    var big = "9.9999999999999999999999999999999995e6144".to[D128]()
+    show(f"decimal ends: {big} {"9.999999999999999999999999999999999e6144".to[D128]()}")
+    return
