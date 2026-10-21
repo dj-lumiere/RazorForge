@@ -1,8 +1,10 @@
 module Tests/Stdlib/TryAccessApi
 
 import IO/Console
-# `try modifying` takes the access only when it is free right now, else runs `else` with nothing open. With several
-# targets the block opens them only when every one is free. An agent finds the access taken while `start()` holds it.
+# `try modifying g as m` is `try g.modify_enter()`: inside the block `m` is a Maybe of the token, present when the
+# block entered `g`, and `when` branches on it. Entering fails when this agent has `g` open already (a routine called
+# from inside a block that opened it), so `try` gives none there. Only an entered target is given up at the block's
+# end. With several targets each name is a Maybe of its own.
 
 entity Counter
     value: S64
@@ -11,41 +13,44 @@ routine Counter.bump(inc: S64)
     me.value = me.value + inc
     return
 
-routine try_access_bump(s: Guarded[Counter, Exclusive], other: Guarded[Counter, MultiRead]) -> Text
-    var outcome = "busy, skipped"
-    try modifying s, viewing other as o
-        s.bump(inc: o.value)
-        outcome = "bumped"
-    else
-        nothing
-    return outcome
+routine try_bump(s: Guarded[Counter, Exclusive]) -> Text
+    try modifying s as entered
+        when entered
+            is None => return "already open"
+            else as c =>
+                c.bump(inc: 1)
+                return "bumped"
+    return "unreachable"
+
+routine try_both(s: Guarded[Counter, Exclusive], r: Guarded[Counter, MultiRead]) -> Text
+    try modifying s as first, viewing r as second
+        when first
+            is None => return "not both"
+            else as a =>
+                when second
+                    is None => return "not both"
+                    else as b =>
+                        a.bump(inc: b.value)
+                        return "both"
+    return "unreachable"
 
 routine start()
     var s = Guarded[Counter, Exclusive](from: Counter(value: 10))
     var r = Guarded[Counter, MultiRead](from: Counter(value: 1))
 
-    try modifying s as c
-        c.bump(inc: 5)
-        show("claimed")
-    else
-        show("contended-1")
+    show(try_bump(s: s))
+    modifying s as held
+        held.bump(inc: 5)
+        show(try_bump(s: s))
+    # The access was given up at the block's end, so this one enters again.
+    show(try_bump(s: s))
 
-    # The access was given up at the previous block's end, so this one finds it free too.
-    try modifying s as c2
-        c2.bump(inc: 100)
-        show("claimed-again")
-    else
-        show("contended-2")
+    show(try_both(s: s, r: r))
+    modifying s as held
+        show(try_both(s: s, r: r))
 
-    show(try_access_bump(s: s, other: r))
-    modifying r as held
-        var job = try_access_bump.to[Agent](s: s, other: r)
-        job.start_now()
-        show(job.retrieve())
-        held.value += 1
-
-    modifying s as c3
-        show(f"value: {c3.value}")
+    modifying s as c
+        show(f"value: {c.value}")
 
     show("DONE")
     return

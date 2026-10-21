@@ -1582,24 +1582,20 @@ dangerous routine C::ingrid_integer_parse(
 ### `DeadlockError` (`[debug] deadlock-check`) when agents wait on each other.
 dangerous routine C::rf_access_lock(access: Addr, kind: U32, mode: U32)
 
-### Takes the access if it is free, without waiting. :param access: the policy's state. :param kind: 1 or 2.
-### :param mode: 1 or 2. :returns: 1 when it took the access, else 0.
-dangerous routine C::rf_access_try_lock(access: Addr, kind: U32, mode: U32) -> U8
+### Whether this agent holds the access already. :param access: the policy's state. :returns: 1 when it does, else 0.
+dangerous routine C::rf_access_holds(access: Addr) -> U8
 
 ### Gives up the access this agent holds. :param access: the policy's state. :param kind: 1 or 2. :param mode: 1 or 2.
 dangerous routine C::rf_access_unlock(access: Addr, kind: U32, mode: U32)
 
-### Names one target of a block that opens several at once. :param access: the policy's state, or the entity.
+### Names one target of a block that opens several at once, only checked to differ from the others. :param access:
+### the entity.
 ### :param kind: 1, 2, or 0 for an entity only checked. :param mode: 1 or 2.
 dangerous routine C::rf_access_enlist(access: Addr, kind: U32, mode: U32)
 
 ### Opens the targets a block named, in the order of their addresses, waiting for each. :throws: crashes with
 ### `AliasedTokensError` when two names are the same entity.
 dangerous routine C::rf_access_open_enlisted()
-
-### Opens the targets a block named only if every one is free right now. :returns: 1 when it opened them all, else 0
-### (then none is open).
-dangerous routine C::rf_access_try_open_enlisted() -> U8
 
 # ============================================================================
 # Roamed runtime (Ingrid/tessera/roam.te)
@@ -1754,16 +1750,7 @@ routine C::rf_file_read_all(fd: S32) -> Hijacked[Byte]
 ### :returns: A pointer to the captured byte buffer.
 routine C::rf_file_read_line(fd: S32) -> Hijacked[Byte]
 
-### Memory-maps a whole file for a storage: for reading and writing when the file can be written, for reading only
-### otherwise ({rf_file_map_writable} tells which). Returns the mapped base (`rf_get_result_len()` gives the size),
-### the empty-map marker for an empty file, or none on a failure ({rf_fs_last_error} tells why). The view stays valid
-### until `rf_file_unmap`.
-### :param path: The null-terminated file path.
-### :param path_len: The path length in bytes.
-### :returns: A pointer to the mapped bytes.
-routine C::rf_file_map_storage(path: CStrView, path_len: S32) -> Hijacked[Byte]
-
-### Releases a mapping created by `rf_file_map_storage` or `rf_file_map_storage_range`.
+### Releases a mapping created by `rf_file_map`.
 ### :param ptr: The mapped base pointer.
 ### :param len: The mapped size in bytes.
 dangerous routine C::rf_file_unmap(ptr: Hijacked[Byte], len: U64)
@@ -1774,30 +1761,22 @@ dangerous routine C::rf_file_unmap(ptr: Hijacked[Byte], len: U64)
 ### :param len: The mapped size in bytes.
 dangerous routine C::rf_file_map_flush(ptr: Hijacked[Byte], len: U64)
 
-### Memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file for a storage, clamped to the file end:
-### for reading and writing when the file can be written, for reading only otherwise ({rf_file_map_writable} tells
-### which). Returns the mapping BASE (rounded down to the platform mapping granularity), add `rf_file_map_delta()` to
-### reach the requested offset, and `rf_get_result_len()` gives the clamped length. None on a failure
-### ({rf_fs_last_error} tells why), the empty-map marker (length 0) when the window is empty. Release with
-### `rf_file_unmap(base, delta + result_len)`.
+### Memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file for a storage a block enters, clamped to the
+### file end: for writing when `write` is 1, for reading only when it is 0. Returns the mapping BASE (rounded down to
+### the platform mapping granularity), add `rf_file_map_delta()` to reach the requested offset, and
+### `rf_get_result_len()` gives the clamped length. None on a failure ({rf_fs_last_error} tells why: a file that can't
+### be written, mapped for writing, is "not allowed"), the empty-map marker (length 0) when the window is empty.
+### Release with `rf_file_unmap(base, delta + result_len)`.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
 ### :param offset: The starting byte offset within the file.
-### :param length: The requested window length in bytes (clamped to the file end).
+### :param length: The requested window length in bytes (clamped to the file end), `U64_MAX` for the rest of it.
+### :param write: 1 to map for writing, 0 for reading only.
 ### :returns: A pointer to the mapped window base.
-routine C::rf_file_map_storage_range(
-    path: CStrView,
-    path_len: S32,
-    offset: U64,
-    length: U64,
-) -> Hijacked[Byte]
+routine C::rf_file_map(path: CStrView, path_len: S32, offset: U64, length: U64, write: U8) -> Hijacked[Byte]
 
-### Whether this thread's last `rf_file_map_storage` or `rf_file_map_storage_range` mapped the file for writing.
-### :returns: True for a writable mapping.
-routine C::rf_file_map_writable() -> Bool
-
-### The byte offset from a range mapping's base to the caller-requested offset (see
-### `rf_file_map_storage_range`). Zero for a whole-file mapping.
+### The byte offset from a mapping's base to the caller-requested offset (see `rf_file_map`). Zero for a mapping
+### from the file's start.
 ### :returns: The delta in bytes.
 routine C::rf_file_map_delta() -> U64
 

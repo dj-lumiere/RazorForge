@@ -47,32 +47,16 @@ needs EntityType T
         var ctrl = RoamManager[T](data: from.hijack()).hijack()
         return Roamed[T](ctrl)
 
-### The absent `Roamed[T]` — a null handle owning nothing. Lets an entity with a `Roamed[T]` field be
-### constructed before the field's target exists (e.g. building a cyclic graph): initialize the field
-### with `roamed_none()`, then assign the real handle once it is available. Retaining, releasing, and
-### tracing all no-op on a none handle.
-### :returns: The absent `Roamed[T]`.
-routine roamed_none[T]() -> Roamed[T]
-needs EntityType T
-    danger
-        return Roamed[T](Hijacked[RoamManager[T]](from: Addr.hollow()))
-
-### Whether this is the absent handle (owns nothing). :returns: `true` if none.
-@readonly
-routine Roamed[T].is_none() -> Bool
-    danger
-        return me.controller_address().is_hollow()
-
 ### Reinterprets a raw {RoamManager[T]} address as a `Roamed[T]` handle WITHOUT retaining — a
 ### low-level plumbing / test hatch (Stage-1 cyclic-graph construction). The caller is responsible for
 ### the reference count: the returned handle does not add a strong ref.
-### :param addr: The controller address (0 for the absent handle).
+### :param addr: The controller address (0 for the hollow handle).
 ### :returns: The `Roamed[T]` viewing that controller.
 dangerous routine roamed_from_addr[T](addr: Addr) -> Roamed[T]
 needs EntityType T
     return Roamed[T](Hijacked[RoamManager[T]](from: addr))
 
-### Returns a new alias to the same object (biased retain), or the absent handle unchanged. This is
+### Returns a new alias to the same object (biased retain), or the hollow handle unchanged. This is
 ### what `b = a` lowers to.
 ### :returns: A new handle sharing the same underlying entity.
 @readonly
@@ -170,7 +154,7 @@ routine Roamed[T].strong_count() -> U64
 
 ### Mints a NON-PINNING weak observation of this entity — ObjectHacker's `watch`. The returned
 ### {Watched[T]} does NOT keep the entity alive, but survives its death as a tombstone view so
-### `is_alive()`/`is_destroyed()` stay answerable. The absent handle yields an absent observation.
+### `is_alive()`/`is_destroyed()` stay answerable. The hollow handle yields a hollow observation.
 ### :returns: A `Watched[T]` observing this entity's controller.
 routine Roamed[T].watch() -> Watched[T]
     danger
@@ -182,7 +166,7 @@ routine Roamed[T].watch() -> Watched[T]
 
 ### Reports this handle's controller to the collector as a traced child. The builder-synthesized
 ### `roam_trace` calls this for each `Roamed` field of an entity, so the collector sees the
-### object graph's strong edges. A none handle owns no edge and is skipped. Runs inside the (dangerous)
+### object graph's strong edges. A hollow handle owns no edge and is skipped. Runs inside the (dangerous)
 ### synthesized trace, so no `danger` here.
 @override
 dangerous routine Roamed[T].cyclic_visit()
@@ -269,7 +253,7 @@ routine Roamed[T].modify() -> Modifying[T]
 # to the INNER value's display routine (never showing "Roamed[...]"). Declaring them here would shadow
 # the inner and reintroduce the opaque-wrapper rendering.
 
-### Decrements the biased count, tearing down the entity at zero. A no-op on the absent handle. This IS
+### Decrements the biased count, tearing down the entity at zero. A no-op on the hollow handle. This IS
 ### the decrement — no separate `release` verb; `destruct` is the teardown (calls the RoamManager's
 ### own `release` count primitive, a different type — no recursion).
 @override

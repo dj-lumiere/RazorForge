@@ -558,15 +558,13 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
 
-    /// <summary>`try modifying` is followed by its `else` block.</summary>
+    /// <summary>A `try` block has no `else`: its names are Maybes the body branches on.</summary>
     [Fact]
-    public void Parse_TryWithElse()
+    public void Parse_TryWithoutElse()
     {
         string source = """
                         routine test()
                             try modifying seats as s, viewing rates
-                                nothing
-                            else
                                 nothing
                             return
                         """;
@@ -574,13 +572,15 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
 
-    /// <summary>A `try` block without its `else` is a grammar error.</summary>
+    /// <summary>An `else` after a `try` block is a grammar error that names the `when` form.</summary>
     [Fact]
-    public void Parse_TryWithoutElse_Errors()
+    public void Parse_TryWithElse_Errors()
     {
         string source = """
                         routine test()
                             try modifying seats as s
+                                nothing
+                            else
                                 nothing
                             return
                         """;

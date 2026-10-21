@@ -173,13 +173,11 @@ public class AccessBlockAnalysisTests
         string source = Prelude + """
                                   routine bump(c: Modifying[Counter])
                                       try modifying c
-                                          c.value += 1
-                                      else
                                           nothing
                                       return
                                   """;
 
-        AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "opening it never waits");
+        AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "opening it never fails");
         Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.TryAccessOnUntryable);
     }
 
@@ -367,6 +365,81 @@ public class AccessBlockAnalysisTests
                                     into.add_last(value: v)
                             return
                         """;
+
+        Assert.Empty(collection: AnalyzeSa(source: source).Errors);
+    }
+
+    /// <summary>A Retained has nothing to open: a block on it points to using it directly.</summary>
+    [Fact]
+    public void Analyze_BlockOnRetained_Errors()
+    {
+        string source = Prelude + """
+                                  routine start()
+                                      var r = Retained(from: Counter(value: 1))
+                                      viewing r as v
+                                          show(v.value)
+                                      return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "use it directly");
+        Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.AccessTargetNotOpenable);
+    }
+
+    /// <summary>A weak handle is held first: a block on a Tracked points to hold().</summary>
+    [Fact]
+    public void Analyze_BlockOnTracked_Errors()
+    {
+        string source = Prelude + """
+                                  routine start()
+                                      var r = Retained(from: Counter(value: 1))
+                                      var t = r.observe()
+                                      viewing t as v
+                                          show(v.value)
+                                      return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "hold()");
+        Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.AccessTargetNotOpenable);
+    }
+
+    /// <summary>A view_enter that gives no Viewing token is RF-S654.</summary>
+    [Fact]
+    public void Analyze_EnterWithoutToken_Errors()
+    {
+        string source = Prelude + """
+                                  entity Door
+                                      inner: Counter
+
+                                  routine Door.view_enter() -> S64
+                                      return 1
+
+                                  routine Door.view_exit()
+                                      return
+
+                                  routine start()
+                                      var d = Door(inner: Counter(value: 1))
+                                      viewing d as v
+                                          show(v)
+                                      return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "returns a 'Viewing[...]'");
+        Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.AccessEnterWithoutToken);
+    }
+
+    /// <summary>In a try block the name is a Maybe of the token, branched with when.</summary>
+    [Fact]
+    public void Analyze_TryBlockNameIsMaybe()
+    {
+        string source = Prelude + """
+                                  routine start()
+                                      var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
+                                      try modifying s as entered
+                                          when entered
+                                              is None => show("busy")
+                                              else as m => m.value += 1
+                                      return
+                                  """;
 
         Assert.Empty(collection: AnalyzeSa(source: source).Errors);
     }

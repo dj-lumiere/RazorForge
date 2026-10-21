@@ -21,25 +21,14 @@ obeys ConstCompatible, Comparable, Copyable, StorageCell
 
 # Creators
 
-### Reads a byte value (0 to 255) as the character with that codepoint: `65u8.to[Char]()` is `'A'`.
+### The character whose codepoint is `n`: `Char.from_codepoint(n: 0x41)` is `'A'`.
+### :param n: The codepoint.
 ### :returns: The character.
-routine U8.to[Char]() -> Char
-    return LLVM::reinterpret_bits[U32, Char](value: LLVM::zero_extend[U8, U32](me))
-
-### Reads this character's codepoint as a `U32`: `c.to[U32]()`.
-### :returns: The codepoint.
-routine Char.to[U32]() -> U32
-    return LLVM::reinterpret_bits[Char, U32](value: me)
-
-### Widens this character's codepoint to a `U64`: `c.to[U64]()`.
-### :returns: The codepoint as a `U64`.
-routine Char.to[U64]() -> U64
-    return LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[Char, U32](value: me))
-
-### Reads a Unicode code point as the character with that codepoint: `0x41u32.to[Char]()` is `'A'`.
-### :returns: The character.
-routine U32.to[Char]() -> Char
-    return LLVM::reinterpret_bits[U32, Char](value: me)
+### :throws: Throws {InvalidValueError} when `n` is no Unicode scalar: a surrogate (0xD800 to 0xDFFF) or above 0x10FFFF.
+failable common routine Char.from_codepoint(n: U32) -> Char
+    if n > 0x10FFFF or CHARACTER_SURROGATE_START <= n <= CHARACTER_SURROGATE_END
+        throw InvalidValueError(input: n.represent(), target: "Char")
+    return LLVM::reinterpret_bits[U32, Char](value: n)
 
 ### Builds the character a character literal (`'A'`) stands for from its codepoint.
 ### :param from: The codepoint.
@@ -51,11 +40,12 @@ secret routine Char(from: U32) -> Char
 # Char protocol implementation
 # ============================================================================
 
-### Returns the Unicode scalar value stored by this character.
-### :returns: The resulting `U32` value.
+### Returns the Unicode scalar value stored by this character: `'A'.codepoint()` is 0x41. Another integer type is
+### converted from it: `c.codepoint().to[U64]()`.
+### :returns: The codepoint as a `U32`.
 @readonly
 routine Char.codepoint() -> U32
-    return me.to[U32]()
+    return LLVM::reinterpret_bits[Char, U32](value: me)
 
 ### Whether this character can be kept in a storage cell: whether it is a Unicode scalar (`is_valid()`).
 ### :returns: The resulting `Bool` value.
@@ -68,7 +58,7 @@ routine Char.is_valid_cell() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_valid() -> Bool
-    var cp = me.to[U32]()
+    var cp = me.codepoint()
     # Valid if within Unicode range and not a surrogate
     return cp <= 0x10FFFF and not (CHARACTER_SURROGATE_START <= cp <= CHARACTER_SURROGATE_END)
 
@@ -76,14 +66,14 @@ routine Char.is_valid() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_ascii() -> Bool
-    return me.to[U32]() <= 0x007F
+    return me.codepoint() <= 0x007F
 
 ### Returns `true` when this character falls in the supported alphabetic ranges.
 ### This implementation currently focuses on ASCII and common Latin blocks.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_alphabetic() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     var is_ascii_upper = 0x0041 <= v <= 0x005A
     var is_ascii_lower = 0x0061 <= v <= 0x007A
     var is_latin_ext = 0x00C0 <= v <= 0x00FF
@@ -95,7 +85,7 @@ routine Char.is_alphabetic() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_numeric() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     return 0x0030 <= v <= 0x0039  # 0-9
 
 ### Returns `true` when this character is alphabetic or numeric.
@@ -108,7 +98,7 @@ routine Char.is_alphanumeric() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_uppercase() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     if v < 0x80
         return 0x0041 <= v <= 0x005A
     return unicode_is_uppercase(cp: v.to[S64]())
@@ -117,7 +107,7 @@ routine Char.is_uppercase() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_lowercase() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     if v < 0x80
         return 0x0061 <= v <= 0x007A
     return unicode_is_lowercase(cp: v.to[S64]())
@@ -127,7 +117,7 @@ routine Char.is_lowercase() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_whitespace() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     var is_space = v == 0x0020
     var is_tab = v == 0x0009
     var is_lf = v == 0x000A
@@ -153,7 +143,7 @@ routine Char.is_whitespace() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_control() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     return v <= 0x001F or 0x007F <= v <= 0x009F
 
 ### Returns this character's uppercase form by the Unicode simple case mapping (`é` gives `É`, `σ` gives `Σ`), or
@@ -161,7 +151,7 @@ routine Char.is_control() -> Bool
 ### :returns: The resulting `Char` value.
 @readonly
 routine Char.to_uppercase() -> Char
-    var v = me.to[U32]()
+    var v = me.codepoint()
     if v < 0x80
         return if 0x0061 <= v <= 0x007A then Char(v - 32) else me
     return Char(unicode_uppercase(cp: v.to[S64]()).to[U32]())
@@ -171,7 +161,7 @@ routine Char.to_uppercase() -> Char
 ### :returns: The resulting `Char` value.
 @readonly
 routine Char.to_lowercase() -> Char
-    var v = me.to[U32]()
+    var v = me.codepoint()
     if v < 0x80
         return if 0x0041 <= v <= 0x005A then Char(v + 32) else me
     return Char(unicode_lowercase(cp: v.to[S64]()).to[U32]())
@@ -185,27 +175,28 @@ routine Char.to_lowercase() -> Char
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.eq(you: Char) -> Bool
-    return me.to[U32]() == you.to[U32]()
+    return me.codepoint() == you.codepoint()
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Char.compare(you: Char) -> ComparisonSign
-    return me.to[U32]() <=> you.to[U32]()
+    return me.codepoint() <=> you.codepoint()
 
 # ============================================================================
 # Type conversions
 # ============================================================================
 
-### Converts this value to byte.
-### This is only meaningful for characters in the ASCII range and currently
-### truncates to the low 7 bits.
-### :returns: The resulting `Byte` value.
+### The byte an ASCII character is in UTF-8: `'A'.to_byte()` is `b'A'`.
+### :returns: The byte.
+### :throws: Throws {InvalidValueError} when this character is not ASCII: its UTF-8 form is more than one byte.
 @readonly
-routine Char.to_byte() -> Byte
-    # Only valid for ASCII range - truncates
-    return Byte((me.to[U32]() & 0x7F).to[U8]())
+failable routine Char.to_byte() -> Byte
+    var cp = me.codepoint()
+    if cp > 0x7F
+        throw InvalidValueError(input: me.represent(), target: "Byte")
+    return Byte(cp.to[U8]())
 
 # ============================================================================
 # Display — shows the character itself
@@ -228,7 +219,7 @@ routine Char.represent() -> Text
 @readonly
 @override
 routine Char.diagnose() -> Text
-    return "Char(" + me.represent() + ", " + me.to[U32]().represent() + ")"
+    return "Char(" + me.represent() + ", " + me.codepoint().represent() + ")"
 
 # ============================================================================
 # Utility methods
@@ -241,14 +232,25 @@ routine Char.diagnose() -> Text
 routine Char.is_digit() -> Bool
     return me.is_numeric()
 
-### Returns the numeric value of an ASCII decimal digit.
-### Returns `-1` when the character is not a supported digit.
-### :returns: The resulting `S32` value.
+### The value of this character as an ASCII digit: `'7'.digit_value()` is 7. Only `0` to `9` are digits, and with
+### `base: 16` also `a` to `f` and `A` to `F` (10 to 15). A digit must be below `base`: `'9'.digit_value(base: 8)`
+### throws.
+### :param base: The base the digit is read in, 2 to 16.
+### :returns: The digit's value.
+### :throws: Throws {InvalidDigitError} when this character is not a digit of `base`.
 @readonly
-routine Char.digit_value() -> S32
-    if me.is_numeric()
-        return (me.to[U32]() - 0x0030).to[S32]()
-    return -1
+failable routine Char.digit_value(base: U8 = 10) -> U8
+    var cp = me.codepoint()
+    var value: U32 = 16
+    if 0x30 <= cp <= 0x39
+        value = cp - 0x30
+    elseif 0x61 <= cp <= 0x66
+        value = cp - 0x57
+    elseif 0x41 <= cp <= 0x46
+        value = cp - 0x37
+    if base < 2 or base > 16 or value >= base.to[U32]()
+        throw InvalidDigitError()
+    return value.to[U8]()
 
 ### Returns `true` when this character is valid and not a control code.
 ### :returns: The resulting `Bool` value.
@@ -261,8 +263,8 @@ routine Char.is_printable() -> Bool
 @readonly
 routine Char.is_bmp() -> Bool
     # Basic Multilingual Plane: U+0000 to U+FFFF (excluding surrogates)
-    return me.to[U32]() <= 0xFFFF
-        and not (CHARACTER_SURROGATE_START <= me.to[U32]() <= CHARACTER_SURROGATE_END)
+    return me.codepoint() <= 0xFFFF
+        and not (CHARACTER_SURROGATE_START <= me.codepoint() <= CHARACTER_SURROGATE_END)
 
 ### Returns `true` when this character is in one of the Unicode supplementary
 ### planes.
@@ -270,13 +272,13 @@ routine Char.is_bmp() -> Bool
 @readonly
 routine Char.is_supplementary() -> Bool
     # Supplementary planes: U+10000 to U+10FFFF
-    return 0x10000 <= me.to[U32]() <= 0x10FFFF
+    return 0x10000 <= me.codepoint() <= 0x10FFFF
 
 ### Returns `true` when this character falls in the supported CJK ranges.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_cjk() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     var is_unified = 0x4E00 <= v <= 0x9FFF
     var is_ext_a = 0x3400 <= v <= 0x4DBF
     var is_ext_b = 0x20000 <= v <= 0x2A6DF
@@ -287,7 +289,7 @@ routine Char.is_cjk() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_latin() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     var is_basic = 0x0000 <= v <= 0x007F
     var is_supplement = 0x0080 <= v <= 0x00FF
     var is_ext_a = 0x0100 <= v <= 0x017F
@@ -299,7 +301,7 @@ routine Char.is_latin() -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Char.is_emoji() -> Bool
-    var v = me.to[U32]()
+    var v = me.codepoint()
     var is_emoticons = 0x1F600 <= v <= 0x1F64F
     var is_misc = 0x1F300 <= v <= 0x1F5FF
     var is_transport = 0x1F680 <= v <= 0x1F6FF
@@ -310,12 +312,12 @@ routine Char.is_emoji() -> Bool
 # Codepoint offset
 # ============================================================================
 
-### Returns a character offset by `delta` code points.
-### This is a low-level helper and does not validate that the resulting value is
-### still a valid Unicode scalar.
+### Returns the character `delta` code points away from this one.
 ### :param delta: The amount to add or subtract.
 ### :returns: The resulting `Char` value.
+### :throws: Throws {InvalidValueError} when the result is no Unicode scalar, and {IntegerOverflowError} when it is
+###     below 0.
 @readonly
 failable routine Char.offset(delta: S64) -> Char
-    var new_value = me.to[U32]().to[S64]() + delta
-    return Char(new_value.to[U32]())
+    var new_value = me.codepoint().to[S64]() + delta
+    return Char.from_codepoint(n: new_value.to[U32]())

@@ -1,0 +1,77 @@
+module Tests/Stdlib/AccessEnterExitApi
+
+import IO/Console
+# A block enters any type that declares `view_enter()` / `view_exit()` (and `modify_enter()` / `modify_exit()`): the
+# enter gives the block's token and the exit runs on every way out. `modifying a, b` enters `a` then `b` and gives them
+# up in the opposite order. A `g.modify()` argument enters the Guarded around its statement. A Watched gives a Roamed
+# with `hold()` while its entity lives.
+
+entity Counter
+    value: S64
+
+### A door that records when a block goes through it.
+entity Door
+    name: Text
+    log: List[Text]
+    inner: Counter
+
+routine Door.view_enter() -> Viewing[Counter]
+    me.log.add_last(value: f"enter {me.name}")
+    return me.inner.view()
+
+routine Door.view_exit()
+    me.log.add_last(value: f"exit {me.name}")
+    return
+
+routine Door.modify_enter() -> Modifying[Counter]
+    me.log.add_last(value: f"enter {me.name} to write")
+    return me.inner.modify()
+
+routine Door.modify_exit()
+    me.log.add_last(value: f"exit {me.name}")
+    return
+
+routine first_positive(g: Guarded[Counter, MultiRead]) -> S64
+    viewing g as c
+        if c.value > 0
+            return c.value
+    return 0
+
+routine add_one(c: Modifying[Counter])
+    c.value = c.value + 1
+    return
+
+routine start()
+    var a = Door(name: "a", log: [], inner: Counter(value: 1))
+    var b = Door(name: "b", log: [], inner: Counter(value: 2))
+    viewing a as x
+        show(f"a: {x.value}")
+    modifying a as x, b as y
+        x.value = x.value + y.value
+    each i in 0 til 3
+        viewing a as x
+            if i == 1
+                break
+    show(a.log)
+    show(b.log)
+
+    var shared = Guarded[Counter, MultiRead](from: Counter(value: 3))
+    show(f"returned: {first_positive(g: shared)}")
+    modifying shared as c
+        c.value = 4
+    show(f"after: {first_positive(g: shared)}")
+
+    var g = Guarded[Counter, Exclusive](from: Counter(value: 40))
+    add_one(c: g.modify())
+    add_one(c: g.modify())
+    modifying g as c
+        show(f"guarded: {c.value}")
+
+    danger
+        var node = Roamed(from: Counter(value: 7))
+        var watcher = node.watch()
+        when try watcher.hold()
+            is None => show("gone")
+            else as strong => show(f"held: {strong.raw_inner().value}")
+    show("DONE")
+    return

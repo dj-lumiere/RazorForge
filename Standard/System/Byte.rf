@@ -11,20 +11,15 @@ preset BYTE_TAB: Byte = b'\t'
 ### always uses an escaped hexadecimal representation.
 @llvm("i8")
 record Byte
-obeys ConstCompatible, Copyable, StorageCell
+obeys ConstCompatible, Copyable, StorageCell, Bitwiseable, Invertible
     nothing
 
 # Creators
 
-### Reads an unsigned 8-bit integer as a `Byte` with the same bits: `0x41u8.to[Byte]()`.
-### :returns: The byte.
-routine U8.to[Byte]() -> Byte
-    return LLVM::reinterpret_bits[U8, Byte](value: me)
-
-### Builds the byte a byte literal (`b'A'`) stands for from its value.
+### Makes the byte whose value is `from`: `Byte(0x41)`. Every `U8` is a byte, so this never fails.
 ### :param from: The value.
 ### :returns: The byte.
-secret routine Byte(from: U8) -> Byte
+routine Byte(from: U8) -> Byte
     return LLVM::reinterpret_bits[U8, Byte](value: from)
 
 ### Whether this byte can be kept in a storage cell: every byte can.
@@ -33,57 +28,75 @@ secret routine Byte(from: U8) -> Byte
 routine Byte.is_valid_cell() -> Bool
     return true
 
-### Reads this byte's bits as a `U8`: `b.to[U8]()`.
-### :returns: The same bits as a `U8`.
-routine Byte.to[U8]() -> U8
+### This byte's value, 0 to 255: `b.value()`. Another integer type is converted from it: `b.value().to[S64]()`.
+### :returns: The value as a `U8`.
+@readonly
+routine Byte.value() -> U8
     return LLVM::reinterpret_bits[Byte, U8](value: me)
 
-### Widens this byte to a `U32`: `b.to[U32]()`.
-### :returns: The byte's value as a `U32`.
-routine Byte.to[U32]() -> U32
-    return LLVM::zero_extend[U8, U32](LLVM::reinterpret_bits[Byte, U8](value: me))
+# ============================================================================
+# Bit operations (&, |, ^, ~, <<, >>>)
+# A byte is eight bits with no sign and no arithmetic: arithmetic is done on its value (`Byte(b.value() + 1)`).
+# ============================================================================
 
-### Widens this byte to a `U16`: `b.to[U16]()`.
-### :returns: The byte's value as a `U16`.
-routine Byte.to[U16]() -> U16
-    return LLVM::zero_extend[U8, U16](LLVM::reinterpret_bits[Byte, U8](value: me))
+### Returns the bitwise AND of this byte and `you`.
+### :param you: The other byte.
+### :returns: `me & you`.
+@readonly
+routine Byte.bitand(you: Byte) -> Byte
+    return Byte(LLVM::bit_and(a: me.value(), b: you.value()))
 
-### Widens this byte to a `U64`: `b.to[U64]()`.
-### :returns: The byte's value as a `U64`.
-routine Byte.to[U64]() -> U64
-    return LLVM::zero_extend[U8, U64](LLVM::reinterpret_bits[Byte, U8](value: me))
+### Returns the bitwise OR of this byte and `you`.
+### :param you: The other byte.
+### :returns: `me | you`.
+@readonly
+routine Byte.bitor(you: Byte) -> Byte
+    return Byte(LLVM::bit_or(a: me.value(), b: you.value()))
+
+### Returns the bitwise XOR of this byte and `you`.
+### :param you: The other byte.
+### :returns: `me ^ you`.
+@readonly
+routine Byte.bitxor(you: Byte) -> Byte
+    return Byte(LLVM::bit_xor(a: me.value(), b: you.value()))
+
+### Returns this byte with every bit flipped.
+### :returns: `~me`.
+@readonly
+routine Byte.bitnot() -> Byte
+    return Byte(LLVM::bit_xor(a: me.value(), b: U8_MAX))
+
+### Left-shifts this byte by `bits` positions, filling vacated bits with zero. Shifting by 8 or more gives 0.
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+@readonly
+routine Byte.shift_left(bits: U32) -> Byte
+    return Byte(me.value().shift_left(bits))
+
+### Right-shifts this byte by `bits` positions, filling vacated bits with zero. Shifting by 8 or more gives 0.
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >>> bits`.
+@readonly
+routine Byte.logical_shift_right(bits: U32) -> Byte
+    return Byte(me.value().logical_shift_right(bits))
 
 # ============================================================================
 # Comparison operations
 # ============================================================================
-
-### Returns this character's value as a raw byte.
-### This helper is available only for values that are already representable in
-### one byte.
-### :returns: The resulting `U8` value.
-@readonly
-routine Char.byte_value() -> U8
-    return me.to[U32]().to[U8]()
-
-### Returns this byte as an unsigned numeric code value.
-### :returns: The resulting `U32` value.
-@readonly
-routine Byte.codepoint() -> U32
-    return me.to[U8]().to[U32]()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.eq(you: Byte) -> Bool
-    return me.to[U8]() == you.to[U8]()
+    return me.value() == you.value()
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Byte.compare(you: Byte) -> ComparisonSign
-    return me.to[U8]() <=> you.to[U8]()
+    return me.value() <=> you.value()
 
 # ============================================================================
 # Range check
@@ -96,7 +109,7 @@ routine Byte.compare(you: Byte) -> ComparisonSign
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.in_range(low: U8, high: U8) -> Bool
-    return low <= me.to[U8]() <= high
+    return low <= me.value() <= high
 
 # ============================================================================
 # Parsing helpers (useful for binary protocols)
@@ -106,13 +119,13 @@ routine Byte.in_range(low: U8, high: U8) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.is_ascii() -> Bool
-    return me.to[U8]() <= 0x7F
+    return me.value() <= 0x7F
 
 ### Returns `true` when this byte is the ASCII encoding of `0` through `9`.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.is_digit() -> Bool
-    return 0x30 <= me.to[U8]() <= 0x39  # ASCII 0-9
+    return 0x30 <= me.value() <= 0x39  # ASCII 0-9
 
 ### Returns the numeric value of an ASCII digit byte.
 ### :returns: The resulting `U8` value.
@@ -121,14 +134,14 @@ routine Byte.is_digit() -> Bool
 failable routine Byte.digit_value() -> U8
     if not me.is_digit()
         throw InvalidDigitError()
-    return me.to[U8]() - 0x30
+    return me.value() - 0x30
 
 ### Returns `true` when this byte is an ASCII hexadecimal digit.
 ### Accepted digits are `0-9`, `A-F`, and `a-f`.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.is_hex_digit() -> Bool
-    var v = me.to[U8]()
+    var v = me.value()
     var is_digit = 0x30 <= v <= 0x39
     var is_upper_hex = 0x41 <= v <= 0x46
     var is_lower_hex = 0x61 <= v <= 0x66
@@ -139,7 +152,7 @@ routine Byte.is_hex_digit() -> Bool
 ### :throws: May throw {InvalidHexDigitError}.
 @readonly
 failable routine Byte.hex_value() -> U8
-    var v = me.to[U8]()
+    var v = me.value()
     when
         0x30 <= v <= 0x39 => return v - 0x30  # 0-9
         0x41 <= v <= 0x46 => return v - 0x37  # A-F (10-15)
@@ -160,7 +173,7 @@ routine Byte.represent() -> Text
     var digits = List[Char]()
     digits.add_last('\\')  # \
     digits.add_last('x')  # x
-    var v = me.to[U8]().to[U32]()
+    var v = me.value().to[U32]()
     var high = (v >> 4) & 0x0F
     var low = v & 0x0F
     if high < 10
@@ -180,7 +193,7 @@ routine Byte.represent() -> Text
 @readonly
 @override
 routine Byte.diagnose() -> Text
-    return "Byte(" + me.to[U8]().represent() + ", " + me.represent() + ")"
+    return "Byte(" + me.value().represent() + ", " + me.represent() + ")"
 
 # ============================================================================
 # Hashing

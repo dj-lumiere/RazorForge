@@ -34,6 +34,19 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
     /// variant): any change ends it.</summary>
     private const string UnknownOrigin = "**";
 
+    /// <summary>Whether a block's target is a value made in its head (a call, not a name or a member path): the block
+    /// holds it alone, so its token comes from nothing outside the block.</summary>
+    private static bool MadeInHead(AccessTarget target)
+    {
+        Expression e = target.Target;
+        while (e is MemberExpression member)
+        {
+            e = member.Object;
+        }
+
+        return e is not IdentifierExpression;
+    }
+
     /// <summary>The suffix for "somewhere inside": <c>h.*</c> is any part of <c>h</c> below it.</summary>
     private const string Inside = ".*";
 
@@ -507,7 +520,8 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         case AccessStatement access:
                             foreach (AccessTarget target in access.Targets)
                             {
-                                Add(name: target.Name, value: target.Target);
+                                // A target made in the head (a call) is held by the block alone.
+                                Add(name: target.Name, value: MadeInHead(target: target) ? null : target.Target);
                             }
 
                             break;
@@ -1106,10 +1120,21 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         Expr(expr: target.Target);
                     }
 
-                    State? beforeTokens = _state?.Clone();
                     _blockLocals.Push(item: []);
                     foreach (AccessTarget target in access.Targets)
                     {
+                        // A target made in the head (a call) is held by the block alone: its token comes from there.
+                        if (MadeInHead(target: target))
+                        {
+                            if (_state != null)
+                            {
+                                _state.Tokens[key: target.Name] = new TokenState(Origins: [$"~block{index}.{target.Name}"],
+                                    EndedBy: null, EndedAt: null);
+                            }
+
+                            continue;
+                        }
+
                         Bind(name: target.Name, value: target.Target, index: index);
                     }
 
@@ -1118,14 +1143,6 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     foreach (AccessTarget target in access.Targets)
                     {
                         _state?.Tokens.Remove(key: target.Name);
-                    }
-
-                    if (access.ElseBody is { } otherwise)
-                    {
-                        State? afterBody = _state;
-                        _state = beforeTokens;
-                        Statement(stmt: otherwise);
-                        _state = State.Merge(a: afterBody, b: _state);
                     }
 
                     return;

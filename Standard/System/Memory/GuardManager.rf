@@ -80,8 +80,8 @@ routine GuardManager[T, TPolicy].raw_data() -> Hijacked[T]
     return me.data
 
 # ============================================================================
-# Access: taken and given up by the `viewing` / `modifying` blocks and the `g.view()` / `g.modify()` arguments the
-# builder lowers to these calls. The state lives here, at the single address every handle shares, and the runtime's
+# Access: taken and given up by the Guarded's `view_enter` / `modify_enter` and `view_exit` / `modify_exit`, which the
+# `viewing` / `modifying` blocks and the `g.view()` / `g.modify()` arguments call. The state lives here, at the single address every handle shares, and the runtime's
 # AccessManager works on it. `mode` is 1 to read, 2 to write. A `ReadOnly` policy has no state: nothing is taken.
 # ============================================================================
 
@@ -102,16 +102,15 @@ routine GuardManager[T, TPolicy].open(mode: U32)
             C::rf_access_lock(access: me.access_address(), kind: kind, mode: mode)
     return
 
-### Takes the access if no agent holds it in a way that keeps this one out, without waiting.
-### :param mode: 1 to read, 2 to write.
-### :returns: `true` when it took the access.
+### Whether this agent holds the access already, for reading or for writing.
+### :returns: `true` when it does (a `ReadOnly` policy has nothing to hold: `false`).
 @untraced
-routine GuardManager[T, TPolicy].try_open(mode: U32) -> Bool
+routine GuardManager[T, TPolicy].held_here() -> Bool
     var kind = me.access.access_kind()
     if kind == 0
-        return true
+        return false
     danger
-        return C::rf_access_try_lock(access: me.access_address(), kind: kind, mode: mode) != 0
+        return C::rf_access_holds(access: me.access_address()) != 0
 
 ### Gives up the access this agent holds.
 ### :param mode: 1 to read, 2 to write.
@@ -121,19 +120,6 @@ routine GuardManager[T, TPolicy].close(mode: U32)
     if kind != 0
         danger
             C::rf_access_unlock(access: me.access_address(), kind: kind, mode: mode)
-    return
-
-### Names this access as one target of a block that opens several at once. A `ReadOnly` one is named by the
-### manager's own address, only to check that the block doesn't name it twice.
-### :param mode: 1 to read, 2 to write.
-@untraced
-routine GuardManager[T, TPolicy].enlist(mode: U32)
-    var kind = me.access.access_kind()
-    danger
-        if kind == 0
-            C::rf_access_enlist(access: me.hijack().get_address(), kind: 0, mode: mode)
-            return
-        C::rf_access_enlist(access: me.access_address(), kind: kind, mode: mode)
     return
 
 ### Gives the managed entity up to the last strong handle, which is ending: the strong count drops to zero without

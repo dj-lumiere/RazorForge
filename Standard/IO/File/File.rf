@@ -20,7 +20,8 @@ import IO/Stream
 ### A `File` names persistent byte content in the filesystem — the data-at-rest itself, NOT an open
 ### handle. It is a cheap value (just the path), constructing one opens nothing. {FileManager} opens one of
 ### three sessions over its content:
-###   * `FileManager.open_storage[T](at:)` — a random-access {FileStorage} of fixed-size cells, no cursor,
+###   * `FileManager.storage[T](at:)` — a random-access {FileStorage} of fixed-size cells, no cursor, mapped while a
+###     `viewing` / `modifying` block has it open,
 ###   * `FileManager.open_read(at:)` — a sequential {Source} (consume forward with `pull`),
 ###   * `FileManager.open_write(at:)` / `open_append(at:)` — a sequential {Sink} (emit forward with `push`).
 ### The content outlives every session (closing a session leaves the file intact — criterion: a file
@@ -34,11 +35,9 @@ record File
 # To PRODUCE output through a storage (a mapping cannot grow a file), make and size the file first, then open it:
 #   var f = FileManager.make_file(at: File(at: out), replacing: true)
 #   FileManager.set_size(at: f, bytes: count)
-#   var storage = FileManager.open_storage[Byte](at: f)
-#   modifying storage as s
+#   modifying FileManager.storage[Byte](at: f) as s
 #       ...
-# For a file larger than the address space, open one window at a time with `open_storage_range[T](at:, start:,
-# count:)`.
+# For a file larger than the address space, open one window at a time with `storage[T](at:, start:, count:)`.
 
 # ============================================================================
 # FileStorage[T] — a file seen as fixed-size cells of T, random access
@@ -50,24 +49,29 @@ record File
 ### one: read it as `Text`, or as `FileStorage[Byte]`). Zero-copy: the cells are not read into memory up front but
 ### brought in on access.
 ###
-### A cell is read with `storage[i]` and written with `storage[i] = value`: through a `viewing storage as s` block
-### (or any read-only token) for reading and a `modifying storage as s` block for writing. A storage is opened for writing when the file can be written, otherwise for
-### reading only, and writing a cell of one opened for reading only fails with {NotEnoughPermissionError}. A
-### storage cannot grow its file: size the file first with `FileManager.set_size`. Writes land in the file,
-### flushed lazily by the OS, on `flush()`, and when the storage ends at the end of its scope.
+### `FileManager.storage[T](at:)` names the file and maps nothing. A block maps it: `viewing FileManager.storage[Byte]
+### (at: f) as v` maps it for reading only, `modifying ... as m` for writing (a file that can't be written fails there
+### with {NotEnoughPermissionError}), and the block's end unmaps it. A cell is read with `v[i]` and written with
+### `m[i] = value` through the token. A storage cannot grow its file: size the file first with `FileManager.set_size`.
+### Writes land in the file, flushed lazily by the OS, on `flush()`, and when the block ends.
 entity FileStorage[T]
 needs T obeys StorageCell
-    ### The first cell asked for (non-owning, released when the storage ends).
+    ### The file.
+    secret file: File
+    ### The first cell of the window.
+    secret start: U64
+    ### How many cells the window asks for, `U64_MAX` for the rest of the file.
+    secret wanted: U64
+    ### The first cell mapped (non-owning, released when the block ends), hollow while nothing is mapped.
     secret buf: Hijacked[T]
-    ### The size of the cells in bytes, the cell count is `byte_len // T.data_size()`.
+    ### The size of the mapped cells in bytes, the cell count is `byte_len // T.data_size()`. 0 while nothing is mapped.
     secret byte_len: U64
-    ### Bytes from the real mapping base to `buf`: nonzero only for a range whose start was rounded down to the
-    ### mapping granularity. Releasing the storage strides back by this to unmap the true base.
+    ### Bytes from the real mapping base to `buf`: nonzero only for a window whose start was rounded down to the
+    ### mapping granularity. Unmapping strides back by this to unmap the true base.
     secret map_delta: U64
-    ### Whether the file was opened for writing.
-    secret writable: Bool
-    ### Whether the mapping has been released. Guards `close()` so it runs once.
-    secret is_closed: Bool
+    ### Whether the file is mapped right now, and for writing.
+    secret mapped: Bool
+    secret mapped_for_writing: Bool
 
 # ============================================================================
 # FileSource — a File-backed sequential read stream (obeys Source)
@@ -898,60 +902,95 @@ failable common routine FileManager.open_append(at: File) -> FileSink
         fail_io(action: f"Cannot open '{at.at}' for appending", path: at.at)
     return FileSink(fd: fd, is_closed: false)
 
-### Opens the whole file as a {FileStorage} of `T` cells (`Byte` or `Char`): for reading and writing when the file
-### can be written, for reading only otherwise. An empty file gives a storage of no cells. Bytes past the last whole
-### cell are not part of it.
+### The whole file as a {FileStorage} of `T` cells (`Byte` or `Char`), mapped by the `viewing` / `modifying` block
+### that opens it: `viewing FileManager.storage[Byte](at: f) as v`. Bytes past the last whole cell are not part of it.
 ### :param at: The file.
-### :returns: The storage, ended at the end of its scope.
-### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened.
-failable common routine FileManager.open_storage[T](at: File) -> FileStorage[T]
+### :returns: The storage, not mapped yet.
+common routine FileManager.storage[T](at: File) -> FileStorage[T]
 needs T obeys StorageCell
-    var cstr = at.at.to[CStr]()
-    var buf = C::rf_file_map_storage(path: cstr, path_len: cstr.count().to[S32]())
-    if buf.is_hollow()
-        fail_io(action: f"Cannot open '{at.at}' as storage", path: at.at)
-    var byte_len = C::rf_get_result_len()
-    var esize = T.data_size().byte_size()
-    return FileStorage[T](
-        buf: buf.recast_as[T](),
-        byte_len: byte_len - byte_len % esize,
-        map_delta: 0,
-        writable: C::rf_file_map_writable(),
-        is_closed: false,
-    )
+    danger
+        return FileStorage[T](file: at, start: 0, wanted: U64_MAX, buf: Hijacked[T].hollow(), byte_len: 0,
+            map_delta: 0, mapped: false, mapped_for_writing: false)
 
-### Opens a WINDOW of the file as a {FileStorage} of `T` cells: `count` cells starting at cell `start`, clamped to
-### the file's end, for reading and writing when the file can be written. This is the way through a file larger
-### than the address space. The window's own `count()` may be smaller than `count` when it reaches the end, and a
-### `start` at or past the end gives a storage of no cells.
+### A window of the file as a {FileStorage} of `T` cells: `count` cells from cell `start`, clamped to the file's end.
+### This is the way through a file larger than the address space. The window's own `count()` may be smaller than
+### `count` when it reaches the end, and a `start` at or past the end gives a storage of no cells.
 ### :param at: The file.
 ### :param start: The first cell.
 ### :param count: The number of cells (clamped to the file's end).
-### :returns: The storage, ended at the end of its scope.
-### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened.
-failable common routine FileManager.open_storage_range[T](at: File, start: U64, count: U64) -> FileStorage[T]
+### :returns: The storage, not mapped yet.
+common routine FileManager.storage[T](at: File, start: U64, count: U64) -> FileStorage[T]
 needs T obeys StorageCell
-    var cstr = at.at.to[CStr]()
+    danger
+        return FileStorage[T](file: at, start: start, wanted: count, buf: Hijacked[T].hollow(), byte_len: 0,
+            map_delta: 0, mapped: false, mapped_for_writing: false)
+
+### Maps the storage's window, for writing or for reading only.
+### :param write: Whether to map it for writing.
+### :throws: {NotFoundError} when the file doesn't exist, {NotEnoughPermissionError} when it can't be mapped that way,
+###     or the crashable for why it can't be mapped.
+secret failable routine FileStorage[T].map(write: Bool)
+    var cstr = me.file.at.to[CStr]()
     var esize = T.data_size().byte_size()
-    var buf = C::rf_file_map_storage_range(
-        path: cstr,
-        path_len: cstr.count().to[S32](),
-        offset: start *% esize,
-        length: count *% esize,
-    )
-    if buf.is_hollow()
-        fail_io(action: f"Cannot open a range of '{at.at}' as storage", path: at.at)
-    var user_len = C::rf_get_result_len()
+    var length = U64_MAX
+    if me.wanted != U64_MAX
+        length = me.wanted *% esize
+    var mode: U8 = 0
+    if write
+        mode = 1
+    var base = C::rf_file_map(path: cstr, path_len: cstr.count().to[S32](), offset: me.start *% esize,
+        length: length, write: mode)
+    if base.is_hollow()
+        fail_io(action: f"Cannot map '{me.file.at}' as storage", path: me.file.at)
+    var mapped_len = C::rf_get_result_len()
     var delta = C::rf_file_map_delta()
-    var writable = C::rf_file_map_writable()
-    var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
-    return FileStorage[T](
-        buf: user,
-        byte_len: user_len - user_len % esize,
-        map_delta: delta,
-        writable: writable,
-        is_closed: false,
-    )
+    me.buf = base.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
+    me.byte_len = mapped_len - mapped_len % esize
+    me.map_delta = delta
+    me.mapped = true
+    me.mapped_for_writing = write
+    return
+
+### Flushes pending writes and releases the mapping, from the true mapping base (`buf` minus `map_delta`) for the
+### whole mapped length.
+secret routine FileStorage[T].unmap()
+    if not me.mapped
+        return
+    me.flush()
+    danger
+        var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
+        C::rf_file_unmap(base, me.byte_len +% me.map_delta)
+        me.buf = Hijacked[T].hollow()
+    me.byte_len = 0
+    me.map_delta = 0
+    me.mapped = false
+    me.mapped_for_writing = false
+    return
+
+### Maps the file for reading only: what `viewing storage as v` starts with.
+### :returns: A read token on the storage, the block's `v`.
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be mapped.
+failable routine FileStorage[T].view_enter() -> Viewing[FileStorage[T]]
+    me.map(write: false)
+    return me.view()
+
+### Maps the file for writing: what `modifying storage as m` starts with.
+### :returns: A write token on the storage, the block's `m`.
+### :throws: {NotEnoughPermissionError} when the file can't be written, {NotFoundError} when it doesn't exist, or the
+###     crashable for why it can't be mapped.
+failable routine FileStorage[T].modify_enter() -> Modifying[FileStorage[T]]
+    me.map(write: true)
+    return me.modify()
+
+### Unmaps the file on every way out of a `viewing` block.
+routine FileStorage[T].view_exit()
+    me.unmap()
+    return
+
+### Writes the cells back and unmaps the file on every way out of a `modifying` block.
+routine FileStorage[T].modify_exit()
+    me.unmap()
+    return
 
 # ============================================================================
 # FileManager — listing directories
@@ -1025,17 +1064,11 @@ failable common routine FileManager.walk(at: Directory) -> List[Text]
 # Sessions and storages: their own routines
 # ============================================================================
 
-### The number of `T` cells in the storage.
+### The number of `T` cells in the storage, 0 while nothing is mapped.
 ### :returns: The resulting `U64` value.
 @readonly
 routine FileStorage[T].count() -> U64
     return me.byte_len // T.data_size().byte_size()
-
-### Whether the storage was opened for writing (the file could be written).
-### :returns: The resulting `Bool` value.
-@readonly
-routine FileStorage[T].is_writable() -> Bool
-    return me.writable
 
 ### The `T` in cell `index`.
 ### :param index: The zero-based cell.
@@ -1053,18 +1086,16 @@ failable routine FileStorage[T].getitem(index: U64) -> T
             return value
     throw InvalidValueError(input: f"cell {index} of the storage", target: "a Unicode scalar (Char)")
 
-### Writes `value` into cell `index`. The write lands in the file (flushed lazily, on `flush()`, or when the storage
+### Writes `value` into cell `index`. The write lands in the file (flushed lazily, on `flush()`, or when the block
 ### ends). A storage cannot grow its file: writing past the end is an error.
 ### :param index: The zero-based cell.
 ### :param value: The value to store there.
-### :throws: {IndexOutOfBoundsError} if `index >= count()`, {NotEnoughPermissionError} when the storage was opened
-###     for reading only, {InvalidValueError} when `value` isn't a valid `T` for a cell.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`, {InvalidValueError} when `value` isn't a valid `T` for a
+###     cell.
 failable routine FileStorage[T].setitem(index: U64, value: T)
     var n = me.count()
     if index >= n
         throw IndexOutOfBoundsError(index: index, count: n)
-    if not me.writable
-        throw NotEnoughPermissionError(description: f"Cannot write cell {index}: this storage was opened for reading only, since its file can't be written")
     if not value.is_valid_cell()
         throw InvalidValueError(input: f"the value for cell {index}", target: "a Unicode scalar (Char)")
     danger
@@ -1072,31 +1103,19 @@ failable routine FileStorage[T].setitem(index: U64, value: T)
     return
 
 ### Forces pending writes back to the file now (a durability checkpoint). Writes are otherwise flushed lazily by
-### the OS, and always when the storage ends.
+### the OS, and always when the block ends.
 routine FileStorage[T].flush()
-    if me.is_closed or not me.writable
+    if not me.mapped_for_writing
         return
     danger
         var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
         C::rf_file_map_flush(base, me.byte_len +% me.map_delta)
     return
 
-### Flushes pending writes and releases the mapping, from the true mapping base (`buf` minus `map_delta`) for the
-### whole mapped length. Runs once: the storage's end calls it, and later calls do nothing.
-routine FileStorage[T].close()
-    if me.is_closed
-        return
-    me.flush()
-    danger
-        var base = me.buf.recast_as[Byte]().stride(count: 0 -% me.map_delta.to[S64]())
-        C::rf_file_unmap(base, me.byte_len +% me.map_delta)
-    me.is_closed = true
-    return
-
-### Releases the mapping when the storage ends at the end of its scope.
+### Releases the mapping a block left open, when the storage ends.
 @override
 routine FileStorage[T].destruct()
-    me.close()
+    me.unmap()
     return
 
 ### Pulls up to `max` bytes from the current position. Returns fewer when end-of-file is reached first,

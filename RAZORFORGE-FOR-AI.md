@@ -457,9 +457,7 @@ declare their own `i`.
 var small = count.to[U8]()        # number to number
 var big = count.to[Integer]()      # Integer/Decimal convert on to B32/B64 (nearest value)
 var n = "42".to[S64]()             # text parsing (also Integer, Decimal, B64, ...)
-var code = c.to[U32]()             # a Char's codepoint (b.to[U8]() for a Byte, a.to[U64]() for an Addr)
-var letter = code.to[Char]()       # 'A' when code is a U32 of 65, and 'x'.to[Text]() makes one-character text
-var byte = bits.to[Byte]()         # the same bits as a Byte, from a U8
+var address = a.to[U64]()          # an Addr's number, and 'x'.to[Text]() makes one-character text
 var raw = status.to[S32]()         # a choice's value (also to[S64]()), perms.to[U64]() a flags bitmask
 var wide: U64 = count.to()         # T left out: the declared type gives it
 var fits: U8? = try count.to()     # none when it does not fit
@@ -467,6 +465,19 @@ var low = count.to_wrap[U8]()      # the low 8 bits (300 -> 44), never fails
 var near = count.to_clamp[U8]()    # the nearest U8 (300 -> 255), never fails
 var why: Check[S64] = check line.to()
 ```
+
+**A byte's and a character's numbers are named routines, not conversions.** `b.value()` is a `Byte`'s `U8`
+(`b.value().to[S64]()` for another type), `Byte(v)` makes one from a `U8` (never fails). `c.codepoint()` is a
+`Char`'s `U32`, `Char.from_codepoint(n: v)` (a `failable common routine`, takes a `U32`) fails on a surrogate
+(0xD800..0xDFFF) or above 0x10FFFF. `c.to_byte()` is an ASCII character's byte (failable, throws for non-ASCII).
+`c.digit_value()` (`base: 10` default, `base: 16` also takes `a-f`/`A-F`) is a failable `U8`, ASCII only, throws
+`InvalidDigitError` for a character that is no digit of the base. `b.to[U8]()`, `c.to[U32]()`, `v.to[Byte]()`,
+`n.to[Char]()` are build errors (RF-S646) naming these. A `Byte` is eight bits with no arithmetic: it obeys
+`Bitwiseable` (`&`, `|`, `^`, `~`, result `Byte`) and has `<<` and `>>>`. `>>` on a `Byte` is a build error
+pointing to `>>>`, `b + 1` points to `Byte(b.value() + 1)`. A bare number where a `Byte` goes is a `Byte`
+(`b & 0x7F`, `b == 0x41`), outside 0..255 a build error. `migrate --step bytes` rewrites `v.to[Byte]()` to
+`Byte(v)` and `c.byte_value()` to `c.codepoint().to[U8]()`, and lists `n.to[Char]()` and `digit_value()` compared
+with -1.
 
 - Widening never fails. A value that does not fit `T`, or text that does not read as a `T`, crashes
   loudly (`IntegerOverflowError`, `InvalidValueError`, ...). Recover with `try` (→ `T?`) or `check`
@@ -745,41 +756,57 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     or remove from `boxes` ends it.
   - **`Viewing[T]` / `Modifying[T]`** — the only two tokens: read / write permission, wherever
     they come from. `a.view()` / `a.modify()` on an entity give them directly.
-  - **Access blocks: `viewing` / `modifying`** (keywords, RF only). `viewing g as v` binds a `Viewing[T]` and
-    `modifying g as m` a `Modifying[T]` for the block. Several targets in one block: `viewing rates, modifying
-    payer, payee` (a verb carries over to the targets after it until another verb comes, each target takes its own
-    `as`, and a target without `as` keeps its own name inside the block, where that name is the token; a target
-    with no name of its own, `xs[0]`, needs `as`). A target is a `Guarded` (its access is taken), an access token
-    (`modifying into, viewing from`: only checked to differ from the other targets, `viewing` narrows a write
-    token), or an entity variable of the routine. The block opens its targets in the order of their addresses (two
-    agents naming the same pair in opposite orders can't wait on each other), and when two names turn out to be the
-    same entity it crashes with `AliasedTokensError` before opening anything. Every way out of the block (its end,
-    `return` (whose value is computed first), `throw`, `break`, `continue`) gives the accesses up. Naming one target
-    twice in a block is RF-S650, a target the block can't open that way RF-S651 (`viewing` an `Exclusive`,
-    `modifying` a `ReadOnly` or a `Viewing`, an entity inside another, a non-entity). Inside a block the targets'
-    tokens are known to be different entities, so holding an element of one while another grows, or walking one
-    while another grows, is allowed (RF-S640 / RF-S625 otherwise point here).
-  - **`try viewing` / `try modifying` ... `else`**: takes the access only if every target is free right now, else
-    runs `else` with none open (`else` is required). Only on a `Guarded` with an `Exclusive` / `MultiRead` policy
-    (RF-S611 otherwise). `using ... fallback` is gone (a grammar error that names this form).
+  - **Access blocks: `viewing` / `modifying`** (keywords, RF only). `viewing x as v` calls `x.view_enter()` before
+    the block, binds the `Viewing[...]` it returns to `v`, and calls `x.view_exit()` on every way out (its end,
+    `return` (whose value is computed first), `throw`, `break`, `continue`); `modifying` is `modify_enter()` /
+    `modify_exit()` and a `Modifying[...]`. Any type with the pair is a target: `Guarded` (takes the access: waits
+    while another agent holds it), `FileStorage` (maps the file), a type of your own. `view_enter()` must return a
+    `Viewing[...]` and `modify_enter()` a `Modifying[...]`, with the matching exit (RF-S654 otherwise). An access
+    token (`modifying into, viewing from`: only checked to differ from the other tokens and entities, `viewing`
+    narrows a write token) or an entity variable of the routine without the pair is a target the builder handles
+    itself (its token, `AliasedTokensError` when two names are one entity). `Retained` / `Roamed` have no pair: as a
+    target they are RF-S651 (use them directly, they go where a token goes). A weak handle (`Tracked`, `Witnessed`,
+    `Watched`) is RF-S651 too: take a strong one with `hold()` first (failable, `AbsentValueError` when the entity is
+    gone): `Tracked.hold()` → `Retained`, `Witnessed.hold()` → `Guarded` (then open it), `Watched.hold()` → `Roamed`.
+    Several targets: `viewing rates, modifying payer, payee` (a verb carries over to the targets after it until
+    another verb comes, each target takes its own `as`, a target without `as` keeps its own name inside the block,
+    where that name is the token; a target with no name of its own, `xs[0]`, or a call, needs `as`). `modifying a, b`
+    is `modifying a` with `modifying b` inside: entered in the order written, exited in the opposite order. Two
+    blocks naming the same Guardeds in opposite orders can wait on each other: `[debug] deadlock-check` reports it.
+    A target made in the head (a call, `viewing FileManager.storage[Byte](at: f) as v`) is made once for the block.
+    Naming one target twice in a block is RF-S650, a target the block can't open that way RF-S651 (`viewing` an
+    `Exclusive`, `modifying` a `ReadOnly` or a `Viewing`, an entity inside another, a type without the pair). Inside
+    a block the targets' tokens are known to be different entities, so holding an element of one while another
+    grows, or walking one while another grows, is allowed (RF-S640 / RF-S625 otherwise point here).
+  - **`try viewing` / `try modifying`**: `try viewing x as v` is `try x.view_enter()`: inside the block `v` is a
+    `Maybe` of the token, present when the block entered `x`, and the body branches with `when v` (`is None => ...`,
+    `else as t => ...`). Only an entered target is exited. A block has no `else` (RF-G226). With several targets each
+    name is its own `Maybe`. A Guarded's enter fails with `ReenterDuringAccessError` when this agent has the access
+    open already (a routine called from inside the block that opened it), so `try` gives none there and a plain
+    block crashes. `try` on a target the block doesn't enter (a token, an entity without the pair) is RF-S611.
+    `using ... fallback` is gone (a grammar error that names this form).
   - **A Guarded's access for one call**: `g.view()` / `g.modify()` written as a call argument (or the receiver of a
-    member call, `g.view().count()`, or a member variable read through it, `g.view().total`) holds the access for
-    that statement: `record_into(entries: log.modify())`. Several in one statement are taken together, in address
-    order. Anywhere else (kept in a variable, inside a condition or a loop head) is RF-S652. `view()` is for
-    `MultiRead`/`ReadOnly`, `modify()` for `Exclusive`/`MultiRead` (RF-S160 otherwise). `g.view()` on a
-    `Guarded[T, ReadOnly]` takes nothing and is an ordinary `Viewing[T]` anywhere.
+    member call, `g.view().count()`, or a member variable read through it, `g.view().total`) enters `g` for that
+    statement (`view_enter()` / `modify_enter()` before, the exit after): `record_into(entries: log.modify())`.
+    Several in one statement are entered in the order written. Anywhere else (kept in a variable, inside a condition
+    or a loop head) is RF-S652. `view()` is for `MultiRead`/`ReadOnly`, `modify()` for `Exclusive`/`MultiRead`
+    (RF-S160 otherwise). `g.view()` on a `Guarded[T, ReadOnly]` takes nothing and is an ordinary `Viewing[T]`
+    anywhere.
   - **Opening it again.** Opening a `Guarded` (or an alias of it) inside a block of the same routine that has it
     open is RF-S630, for reading and for writing alike (waiting would never end, going in would see the block's work
-    half done): pass the token instead. Opened again from a called routine, the program crashes with
-    `ReenterDuringAccessError` (the runtime knows which agent holds which access). The token a block opens on a
+    half done): pass the token instead. Opened again from a called routine, the enter fails with
+    `ReenterDuringAccessError` (the runtime knows which agent holds which access): a crash, or none under `try`. The token a block opens on a
     `Guarded` never goes to an agent (RF-S632): hand the agent the `Guarded`. Passing the same write token twice in
     one call is RF-S603.
   - **`using` is for resources only** (types obeying `Enterable`). `using x.view() as v` is RF-S612, and
     `migrate --step access` rewrites the old forms: `using g.modify() as m` into `modifying g as m`,
-    `using a.view() as x, b.modify() as y` into one block, `using g.try_modify() as m` + `fallback` into
-    `try modifying g as m` + `else`, `using multimodify(first: a, second: b) as (x, y)` into
-    `modifying a as x, b as y` (listed for a look: a second argument that is read only is written `viewing`), and
-    `LockPolicy` / `ReentrantLockError` into `AccessPolicy` / `ReenterDuringAccessError`.
+    `using a.view() as x, b.modify() as y` into one block, `using g.try_modify() as m` + `fallback` (and
+    `try modifying g as m` + `else`) into `try modifying g as m_entered` with `when m_entered` / `is None =>` (the old
+    `else`) / `else as m =>` (the old body), `using multimodify(first: a, second: b) as (x, y)` into
+    `modifying a as x, b as y` (listed for a look: a second argument that is read only is written `viewing`), a
+    Guarded's old `consult()` / `amend()` and `Consulting` / `Amending` into `view()` / `modify()` and `Viewing` /
+    `Modifying`, and `LockPolicy` / `ReentrantLockError` into `AccessPolicy` / `ReenterDuringAccessError`. A `try`
+    block with several targets is listed to rewrite by hand.
   - **The AccessManager** (the runtime's, shared with Suflae and Tessera) knows which agent holds which access and
     which one waits for what. A `Guarded`'s `GuardManager` keeps its own entity's readers and writer and turns to
     the AccessManager only when an agent has to wait. `[debug] deadlock-check` (on in a `debug` build, off in the
@@ -842,13 +869,15 @@ viewing c as v               # Viewing[Counter], read-only, dead at block end
     show(f"count = {v.value}")
 modifying c as m             # Modifying[Counter], write intent
     m.increment()
-modifying payer, payee       # two at once, in address order: the names are the tokens
+modifying payer, payee       # payer entered first, then payee: the names are the tokens
     payer.balance -= amount
     payee.balance += amount
-try modifying seats as s     # only if free right now
-    s.take(seat: n)
-else
-    show("busy")
+try modifying seats as s_entered     # a Maybe: none when this agent has seats open already
+    when s_entered
+        is None =>
+            show("busy")
+        else as s =>
+            s.take(seat: n)
 ```
 
 - **Identity comparison `===` / `!==`** — "are these two the SAME object?", distinct
@@ -1122,8 +1151,8 @@ operator (`/` is division).
   `with_extension(ext:)`, `with_name(name:)`. `Directory`: `name`, `parent`, `file(name:)` (→ `File`),
   `go_to(name:)` (→ `Directory`, was `subdir`).
 - **A file must exist before it is read, written or opened.** `read_text`/`read_bytes`, `write_text`/
-  `write_bytes`/`append_text`, `open_read`/`open_write`/`open_append`, `set_size` and `open_storage` fail with
-  `NotFoundError` on a missing file. Nothing creates a file silently.
+  `write_bytes`/`append_text`, `open_read`/`open_write`/`open_append`, `set_size` and a block opening a `storage` fail
+  with `NotFoundError` on a missing file. Nothing creates a file silently.
 - **Errors (`IO/Errors`):** `NotFoundError` (nothing at the path), `NotEnoughPermissionError` (the OS refuses, a
   read-only file system too), `NotEnoughSpaceError` (the device is full), `StorageFaultError` (the device failed to
   read or write, "this storage device failed to read or write at ..."), and `IOError` for every other reason
@@ -1157,13 +1186,15 @@ operator (`/` is division).
   source or sink, the channel `send` / `send_if_room`, and `Sender`.
 - **Storage (`FileStorage[T]`):** what a file manager hands out for random access: a mapped file (mmap /
   MapViewOfFile) seen as fixed-size cells of `T`, `T` = `Byte` (one byte per cell) or `Char` (one Unicode scalar per
-  cell, 4 bytes, UTF-32LE on disk, a UTF-8 file is NOT one). NOT `dangerous`. `var s = FileManager.open_storage[Byte](at: f)`,
-  `open_storage_range[T](at:, start:, count:)` (a window, in cells). Read `s[i]`, write `s[i] = v`, through
-  `viewing s as v` / `modifying s as m` blocks (or `Viewing[FileStorage[Byte]]` / `Modifying[...]` parameters).
-  `count()`, `is_writable()`, `flush()`, `close()` (also at scope end). It is opened for writing when the file can be
-  written, else for reading only (writing a cell then is `NotEnoughPermissionError`). It cannot grow the file: size it
+  cell, 4 bytes, UTF-32LE on disk, a UTF-8 file is NOT one). NOT `dangerous`. `FileManager.storage[T](at: f)` (the
+  whole file) and `storage[T](at:, start:, count:)` (a window, in cells) name the file and map nothing: a block maps
+  it. `viewing FileManager.storage[Byte](at: f) as v` maps it for reading only, `modifying ... as m` for writing (a
+  file that can't be written fails there with `NotEnoughPermissionError`, a missing one with `NotFoundError`: `try`
+  gives none), and the block's end unmaps it. Read `v[i]`, write `m[i] = x` through the token (or
+  `Viewing[FileStorage[Byte]]` / `Modifying[...]` parameters). `count()`, `flush()`. It cannot grow the file: size it
   with `set_size` first. An index past the end is `IndexOutOfBoundsError`, a `Char` cell that isn't a scalar
   `InvalidValueError`. `T` is limited by the `StorageCell` protocol (only `Byte` and `Char` obey it).
+  `migrate --step files` renames `open_storage` / `open_storage_range` to `storage` and lists the lines.
 - **The environment (`import IO/Environment`):** `Environment` reads what the OS gives the program, nothing is set:
   `arguments()` (→ `List[Text]`, the program's own name left out), `variable(name:)` (failable, `AbsentValueError`
   when unset, asked of the OS so Windows names are case-insensitive), `to[Dict[Text, Text]]()` (a snapshot),
@@ -1175,7 +1206,7 @@ operator (`/` is division).
   `Random.from_entropy()` (`Random`) seeds a generator with it.
 - **migrate:** `migrate --step files` rewrites `OsFileManager` / `OsEnvironment` / `OsEntropy` → `FileManager` /
   `Environment` / `Entropy`, the directory routines →
-  `Environment` (import added), `subdir` → `go_to`, `expose`/`wield` → `open_storage` and `Exposed`/`Wielded` →
+  `Environment` (import added), `subdir` → `go_to`, `expose`/`wield`/`open_storage` → `storage` and `Exposed`/`Wielded` →
   `FileStorage` (listing those lines), and lists `set_current_directory`.
 
 Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
@@ -1239,7 +1270,8 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S632      | `to[Agent]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
 | RF-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or open both with `modifying x, y` |
-| RF-S611      | `try viewing` / `try modifying` on a target that can't be tried | remove `try` and `else` |
+| RF-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
+| RF-S654      | a `view_enter` / `modify_enter` that gives no `Viewing` / `Modifying`, or has no matching exit | return the token, declare the exit |
 | RF-S612      | `using` given a non-`Enterable` (also `using g.view()`) | `viewing g as v` / `modifying g as m` |
 | RF-S630      | a `Guarded` opened again inside a block of the same routine that has it open | use the outer block's token |
 | RF-S650      | one block names a target (or a token name) twice | name it once |
@@ -1541,7 +1573,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Iteration / range / hand-over**: `in` (loops only) `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `nothing` `given` `drop`
-- **Access blocks**: `viewing` `modifying` (and `try viewing` / `try modifying` with `else`)
+- **Access blocks**: `viewing` `modifying` (and `try viewing` / `try modifying`, whose names are Maybes)
 - **Logical operators**: `and` `or` `not`
 - **Literals**: `true` `false` `None` `none`
 - **Concurrency**: `f.to[Agent](args)`

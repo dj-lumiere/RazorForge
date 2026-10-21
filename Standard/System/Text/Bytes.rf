@@ -529,7 +529,7 @@ routine __nibble_to_hex_char(nibble: U32) -> Char
 ### :returns: The two-digit hexadecimal `Text`.
 @readonly
 routine Byte.to_hex() -> Text
-    var v = me.codepoint()
+    var v = me.value().to[U32]()
     var out = List[Char]()
     out.add_last(__nibble_to_hex_char(nibble: (v >> 4) & 0xF))
     out.add_last(__nibble_to_hex_char(nibble: v & 0xF))
@@ -543,7 +543,7 @@ routine Byte.to_hex() -> Text
 routine Bytes.to_hex() -> Text
     var out = List[Char]()
     each i in 0 til me.count
-        var v = me[i].codepoint()
+        var v = me[i].value().to[U32]()
         out.add_last(__nibble_to_hex_char(nibble: (v >> 4) & 0xF))
         out.add_last(__nibble_to_hex_char(nibble: v & 0xF))
     return Text(from_list: steal out)
@@ -566,9 +566,9 @@ failable routine Bytes.from_hex(hex: Text) -> Bytes
         var lo_c = hex[i + 1]
         if hi_c.codepoint() > 0x7F or lo_c.codepoint() > 0x7F
             throw InvalidValueError(input: hex, target: "Bytes.from_hex")
-        var hi = hi_c.codepoint().to[U8]().to[Byte]().hex_value()
-        var lo = lo_c.codepoint().to[U8]().to[Byte]().hex_value()
-        out.add_last((hi * 16 + lo).to[Byte]())
+        var hi = hi_c.to_byte().hex_value()
+        var lo = lo_c.to_byte().hex_value()
+        out.add_last(Byte(hi * 16 + lo))
         i += 2
     return Bytes(from_list: steal out)
 
@@ -680,7 +680,7 @@ routine Bytes.decode_as_utf8_lossy() -> Text
     loop
         if i >= len
             break
-        var b0 = me[i].codepoint()
+        var b0 = me[i].value().to[U32]()
         var codepoint: U32 = 0
         when
             (b0 & 0x80) == 0 =>
@@ -688,7 +688,7 @@ routine Bytes.decode_as_utf8_lossy() -> Text
                 i += 1
             (b0 & 0xE0) == 0xC0 =>
                 if i + 1 < len
-                    var b1 = me[i + 1].codepoint()
+                    var b1 = me[i + 1].value().to[U32]()
                     if (b1 & 0xC0) == 0x80 and b0 >= 0xC2
                         codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
                         i += 2
@@ -700,8 +700,8 @@ routine Bytes.decode_as_utf8_lossy() -> Text
                     i += 1
             (b0 & 0xF0) == 0xE0 =>
                 if i + 2 < len
-                    var b1 = me[i + 1].codepoint()
-                    var b2 = me[i + 2].codepoint()
+                    var b1 = me[i + 1].value().to[U32]()
+                    var b2 = me[i + 2].value().to[U32]()
                     var is_valid = (b1 & 0xC0) == 0x80 and (b2 & 0xC0) == 0x80
                     if is_valid
                         var candidate = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
@@ -720,9 +720,9 @@ routine Bytes.decode_as_utf8_lossy() -> Text
                     i += 1
             (b0 & 0xF8) == 0xF0 =>
                 if i + 3 < len
-                    var b1 = me[i + 1].codepoint()
-                    var b2 = me[i + 2].codepoint()
-                    var b3 = me[i + 3].codepoint()
+                    var b1 = me[i + 1].value().to[U32]()
+                    var b2 = me[i + 2].value().to[U32]()
+                    var b3 = me[i + 3].value().to[U32]()
                     var is_valid = (b1 & 0xC0) == 0x80
                         and (b2 & 0xC0) == 0x80
                         and (b3 & 0xC0) == 0x80
@@ -758,7 +758,7 @@ failable routine Bytes.decode_as_utf8() -> Text
     loop
         if i >= len
             break
-        var b0 = me[i].codepoint()
+        var b0 = me[i].value().to[U32]()
         var codepoint: U32 = 0
         when
             (b0 & 0x80) == 0 =>
@@ -767,7 +767,7 @@ failable routine Bytes.decode_as_utf8() -> Text
             (b0 & 0xE0) == 0xC0 =>
                 if i + 1 >= len
                     throw MalformedUtf8Error(index: i, reason: "truncated 2-byte sequence")
-                var b1 = me[i + 1].codepoint()
+                var b1 = me[i + 1].value().to[U32]()
                 if (b1 & 0xC0) != 0x80
                     throw MalformedUtf8Error(index: i, reason: "invalid continuation byte")
                 if b0 < 0xC2
@@ -777,8 +777,8 @@ failable routine Bytes.decode_as_utf8() -> Text
             (b0 & 0xF0) == 0xE0 =>
                 if i + 2 >= len
                     throw MalformedUtf8Error(index: i, reason: "truncated 3-byte sequence")
-                var b1 = me[i + 1].codepoint()
-                var b2 = me[i + 2].codepoint()
+                var b1 = me[i + 1].value().to[U32]()
+                var b2 = me[i + 2].value().to[U32]()
                 if (b1 & 0xC0) != 0x80 or (b2 & 0xC0) != 0x80
                     throw MalformedUtf8Error(index: i, reason: "invalid continuation byte")
                 codepoint = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
@@ -793,9 +793,9 @@ failable routine Bytes.decode_as_utf8() -> Text
             (b0 & 0xF8) == 0xF0 =>
                 if i + 3 >= len
                     throw MalformedUtf8Error(index: i, reason: "truncated 4-byte sequence")
-                var b1 = me[i + 1].codepoint()
-                var b2 = me[i + 2].codepoint()
-                var b3 = me[i + 3].codepoint()
+                var b1 = me[i + 1].value().to[U32]()
+                var b2 = me[i + 2].value().to[U32]()
+                var b3 = me[i + 3].value().to[U32]()
                 if (b1 & 0xC0) != 0x80
                     or (b2 & 0xC0) != 0x80
                     or (b3 & 0xC0) != 0x80
@@ -854,7 +854,7 @@ failable routine BytesUtf8Emittable.emit() -> Char
         var b0 = me.data
             .stride(count: me.index.to[S64]())
             .peek()
-            .codepoint()
+            .value().to[U32]()
         var codepoint: U32 = 0
 
         when
@@ -867,7 +867,7 @@ failable routine BytesUtf8Emittable.emit() -> Char
                 var b1 = me.data
                     .stride(count: (me.index + 1).to[S64]())
                     .peek()
-                    .codepoint()
+                    .value().to[U32]()
                 if (b1 & 0xC0) != 0x80 or b0 < 0xC2
                     throw MalformedUtf8Error(index: me.index, reason: "invalid 2-byte sequence")
                 codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
@@ -878,11 +878,11 @@ failable routine BytesUtf8Emittable.emit() -> Char
                 var b1 = me.data
                     .stride(count: (me.index + 1).to[S64]())
                     .peek()
-                    .codepoint()
+                    .value().to[U32]()
                 var b2 = me.data
                     .stride(count: (me.index + 2).to[S64]())
                     .peek()
-                    .codepoint()
+                    .value().to[U32]()
                 if (b1 & 0xC0) != 0x80 or (b2 & 0xC0) != 0x80
                     throw MalformedUtf8Error(index: me.index, reason: "invalid 3-byte sequence")
                 var candidate = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
@@ -899,15 +899,15 @@ failable routine BytesUtf8Emittable.emit() -> Char
                 var b1 = me.data
                     .stride(count: (me.index + 1).to[S64]())
                     .peek()
-                    .codepoint()
+                    .value().to[U32]()
                 var b2 = me.data
                     .stride(count: (me.index + 2).to[S64]())
                     .peek()
-                    .codepoint()
+                    .value().to[U32]()
                 var b3 = me.data
                     .stride(count: (me.index + 3).to[S64]())
                     .peek()
-                    .codepoint()
+                    .value().to[U32]()
                 if (b1 & 0xC0) != 0x80
                     or (b2 & 0xC0) != 0x80
                     or (b3 & 0xC0) != 0x80
@@ -934,7 +934,7 @@ failable routine BytesUtf8LossyEmittable.emit() -> Char
         var b0 = me.data
             .stride(count: me.index.to[S64]())
             .peek()
-            .codepoint()
+            .value().to[U32]()
         var codepoint: U32 = 0
 
         when
@@ -946,7 +946,7 @@ failable routine BytesUtf8LossyEmittable.emit() -> Char
                     var b1 = me.data
                         .stride(count: (me.index + 1).to[S64]())
                         .peek()
-                        .codepoint()
+                        .value().to[U32]()
                     if (b1 & 0xC0) == 0x80 and b0 >= 0xC2
                         codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
                         me.index += 2
@@ -961,11 +961,11 @@ failable routine BytesUtf8LossyEmittable.emit() -> Char
                     var b1 = me.data
                         .stride(count: (me.index + 1).to[S64]())
                         .peek()
-                        .codepoint()
+                        .value().to[U32]()
                     var b2 = me.data
                         .stride(count: (me.index + 2).to[S64]())
                         .peek()
-                        .codepoint()
+                        .value().to[U32]()
                     var is_valid = (b1 & 0xC0) == 0x80 and (b2 & 0xC0) == 0x80
                     if is_valid
                         var candidate = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
@@ -987,15 +987,15 @@ failable routine BytesUtf8LossyEmittable.emit() -> Char
                     var b1 = me.data
                         .stride(count: (me.index + 1).to[S64]())
                         .peek()
-                        .codepoint()
+                        .value().to[U32]()
                     var b2 = me.data
                         .stride(count: (me.index + 2).to[S64]())
                         .peek()
-                        .codepoint()
+                        .value().to[U32]()
                     var b3 = me.data
                         .stride(count: (me.index + 3).to[S64]())
                         .peek()
-                        .codepoint()
+                        .value().to[U32]()
                     var is_valid = (b1 & 0xC0) == 0x80
                         and (b2 & 0xC0) == 0x80
                         and (b3 & 0xC0) == 0x80

@@ -133,8 +133,8 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "access_deadlock.rf:12", actualString: stdout + stderr);
     }
 
-    /// <summary>A block whose two targets are the same <c>Guarded</c> under two names crashes with
-    /// <c>AliasedTokensError</c> (status 82) before it opens anything.</summary>
+    /// <summary>A block whose two targets are the same <c>Guarded</c> under two names enters the first, and entering
+    /// the second crashes with <c>ReenterDuringAccessError</c> (status 82) instead of waiting for itself.</summary>
     [Fact]
     public void AccessAliased_CrashesLoudly()
     {
@@ -144,7 +144,7 @@ public sealed class ExitCodeTests
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "moved", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "Aliased tokens error", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Reenter during access error", actualString: stdout + stderr);
     }
 
     /// <summary><c>steal</c> on a handle that another strong handle still shares crashes with status 82.</summary>
