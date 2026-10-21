@@ -816,6 +816,13 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   ordering. `x.to[Addr]()` / `a.to[U64]()` convert, `Hijacked[T](from: a)` reads it as a `T`. `Address` and
   `CPtr` are both `Addr` now (`migrate --step addr` renames them, rewrites `==` / `!=` between known addresses to
   `===` / `!==`, rewrites `a.offset(bytes: 8)` on a known address to `a +% 8b`, and lists what it cannot type).
+- **`T.hollow()`** — every type has it (builder-made): the value with every bit zero (`0`, `false`, a choice's first
+  member, an empty handle; for an entity a new entity whose member variables are all zero, a collection with no
+  memory). It is `dangerous` (only inside `danger`): the zero value can break the type's promise. `Addr.hollow()` is
+  its own routine and is NOT dangerous. `is_hollow()` exists only on the nine handle types (`Retained`, `Tracked`,
+  `Guarded`, `Witnessed`, `Roamed`, `Watched`, `Hijacked`, `Viewing`, `Modifying`) and `Addr`, never dangerous.
+  Every `destruct` leaves a hollow value alone (an entity's `destruct` returns at once on a zero reference). The old
+  free `hollow[T]()` is `T.hollow()`. Not in Suflae (SF-S447).
 - Records never use tokens or `as_entity` — those are entity concepts.
 - `danger` blocks / `dangerous` routines mark **only** operations that can
   ACTUALLY cause memory-unsafety — UB, a memory race, use-after-free,
