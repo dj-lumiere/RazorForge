@@ -1,8 +1,236 @@
 # Changelog
 
-All notable changes to RazorForge and Suflae are documented here. This project follows
-[Keep a Changelog](https://keepachangelog.com/) conventions; RazorForge and Suflae version
-independently (`RazorForgeVersion` / `SuflaeVersion` in the project manifest).
+All notable changes to RazorForge are documented here. This project follows
+[Keep a Changelog](https://keepachangelog.com/) conventions. Suflae and Tessera keep their own changelogs.
+
+## [0.5.0] — unreleased
+
+0.5 changes the language surface in many places. Read **Breaking changes** before you move a 0.4 project.
+
+To move a project, run `razorforge migrate <folder>` first. It applies every default rewrite listed below,
+skips files whose `config.toml` already says `razorforge-version = "0.5.0"`, and marks the manifest when it is done.
+The named steps (`razorforge migrate --step <name> <folder>`) run one rewrite on any source. Where no step exists,
+the build error says what to write instead.
+
+`migrate` reads sources as 0.5 code, so indent 0.4 sources in steps of 4 spaces before you run it
+(see the first item below).
+
+### Breaking changes
+
+**Source layout and tools**
+- Indentation is a multiple of 4 spaces. Any other indent is RF-G053. 0.4 sources used 2 spaces: double the
+  leading spaces of each line before running `migrate`.
+- The project manifest is `config.toml` (it was `razorforge.toml`). Settings that were environment variables
+  (`RAZORFORGE_*`, `RF_*`, `RF_DEADLOCK_DETECT`) are `[target]` and `[debug]` keys in it.
+- The commands are `check`, `build`, `run`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`. A bare file
+  name is not a command: the error shows `razorforge run <file>`.
+- Every runtime crash exits with code 82.
+- x86-64 programs target x86-64-v3.
+
+**Failure and recovery**
+- A routine that can fail says so on its declaration: `failable routine parse(...)`. `routine parse!(...)` is
+  RF-G222 (`migrate --step failable`). A call never writes `!`: `f!(x)` and `agent.retrieve!()` are RF-G211.
+- Recovery is a keyword at the call: `try f(x)` gives a `Maybe[T]`, `check f(x)` gives a `Check[T]`. The generated
+  `try_f` / `check_f` / `lookup_f` routines are gone. Write `try f(x)` for `try_f(x)` and `check f(x)` for
+  `check_f(x)` and `lookup_f(x)`.
+- `Result[T]` is `Check[T]`. `Lookup[T]` is gone.
+- `absent` is gone: a routine with nothing to give throws, `throw AbsentValueError()` (default `migrate`).
+- The `Crashable` protocol is the `Crashables` record. Every crashable writes its own `crash_message()` (RF-S704).
+  A crashable larger than 64 bytes is a build error.
+
+**Syntax**
+- A loop is `until c` (it stops when `c` becomes true) or `loop` (it ends only with `break`, `return` or `throw`).
+  `while` is not a keyword: `while c` is RF-G224 (`migrate --step until` turns integer comparisons around and lists
+  the rest). A loop takes no `else` (RF-G219). A loop's `then` block runs after `break` too.
+- A line with no work is `nothing`. `pass` is RF-G225 (`migrate --step nothing`). A type declaration with an empty
+  body is RF-S211 (write `nothing` under the header).
+- A number takes its type from where it goes or from its declaration (`var x: U8 = 5`). Type suffixes (`0_s64`,
+  `1.5f32`, `10n`, `2.5dn`) are RF-G010 (`migrate --step suffix`). `inf` and `nan` are literals, so `inf_b64` and
+  the `B*_INFINITY` / `B*_NAN` presets are gone.
+- Binary floats are `B16`, `B32`, `B64`, `B128` (the build error names the `B` type for an `F` name). Complex types
+  are named by their total bits: 0.4's `C64` is `C128` and 0.4's `C128` is `C256`, and `C64` is now two `B32`
+  parts. Change these by hand: the old names still build. Quaternions are `Q128` and `Q256`.
+- Containment is a call on the container: `xs.has(x)`, `xs.lacks(x)`, `d.has_key(k)`, `d.lacks_key(k)`,
+  `perms.has_any(...)`. The `have` / `lack` operators are gone (`migrate --step have`), `contains` /
+  `notcontains` are `has` / `lacks` (default `migrate`), `x in xs` as a test is RF-G212, and `notin` is gone.
+- `x but y` is `x.without(y)`, `unless c` is `if not (c)` (default `migrate`). `disobeys` is gone: write
+  `not (x obeys P)`.
+- A pattern binds with `as`: `is T as x`, `else as p` (default `migrate`). `else as x` needs exactly one type left
+  (RF-S359).
+- `Character` is `Char` and `Routine[...]` is `Callable[...]` (default `migrate`).
+- Operator levels: `and` and `or` share one level, and so do the bitwise operators, so mixing them needs
+  parentheses (RF-G216). A range binds looser than arithmetic and tighter than comparisons. `**` binds tighter than
+  a leading `-`: `-2 ** 2` is `-4`. Check every `-x ** n` by hand.
+- A range counts down only with a negative step: `10 to 1` is empty, write `10 to 1 by -1`. Default `migrate` adds
+  the step where both ends are literals. Check the other ranges by hand.
+- A chained comparison goes one way. `!=` or `<=>` after another comparison is a parse error.
+- There is no `<<<`: `<<` fills with zeros.
+- A constructor is `routine T(...)`. `routine T.create(...)` declares an ordinary member routine named `create`.
+- A `var` that hides a parameter or an outer local is RF-S008. An unknown annotation is RF-G221.
+- A memberwise construction that sets `secret` or `posted` member variables works only inside their module
+  (RF-S403, RF-S404).
+- The right side of a compound assignment is checked like a binary expression (`Integer += S64` is RF-S502).
+- `===` and `!==` take entities and handles only (RF-S440).
+- `destroy` is `destruct` (default `migrate`). The builder calls it: a program that calls `x.destruct()` gets
+  RF-S812, which points to `drop x`. `dangerous routine T.destruct` is RF-S807 (default `migrate` removes
+  `dangerous`).
+- `discard` is `drop` (default `migrate`). A dropped result needs `drop` (RF-W007) unless its routine is
+  `@discardable`.
+
+**Sharing and access**
+- `Assignable` is gone. `=` copies a record, and copying a handle makes one more handle to the same entity. Default
+  `migrate` removes `.share()` calls.
+- `Accessing` and `Controlling`, with their `access()` and `control()` verbs, are gone. Use the handle directly, or
+  `view()` / `modify()`.
+- A `Guarded` value is opened with an access block: `viewing g as v` to read and `modifying g as m` to write.
+  `consult()`, `amend()`, `try_consult()`, `try_amend()`, `Consulting`, `Amending` and `multiamend` are gone.
+  `using g.view() as v` is RF-S612 (`migrate --step access` rewrites the `view()` / `modify()` forms, change
+  `consult` / `amend` by hand). `multimodify` takes two different `Guarded` values.
+- `LockPolicy` is `AccessPolicy`, `ReentrantLockError` is `ReenterDuringAccessError` (`migrate --step access`),
+  and the `[debug]` switches are `access-order` and `deadlock-check`.
+- `RetainController`, `GuardController` and `RoamController` are `RetainManager`, `GuardManager` and
+  `RoamManager`. `FrozenController` is gone.
+- A `Guarded[T, ReadOnly]` is read directly. Reaching a locking `Guarded` without an access block is RF-S649.
+- Keeping an entity in a second place without a manager is RF-S413. Hand it over with `steal`, on every path or on
+  none (RF-S616).
+- Changing a container's shape while an `each` loop or an element statement uses it is a build error (RF-S625,
+  RF-S639), and so is holding an element while another token changes a container of the same kind (RF-S640) or
+  passing one container twice in a call (RF-S623).
+- `Array[T, N]()` with a `T` that has no zero value is RF-S641.
+- A lazy adapter is used in the statement that makes it. The elements of a loop over a read token are read-only.
+- An agent that receives a token or a `Retained` starts with `start_here()` (RF-S632).
+
+**Types and the C boundary**
+- `Address` and `CPtr` are `Addr`. Two addresses compare with `===`, and an address moves by a `ByteSize` with
+  `+%` / `-%` (`migrate --step addr`).
+- `CStr` and `CWStr` are C strings RazorForge made, cleaned up at scope exit. A pointer from C is a `CStrView` /
+  `CWStrView`. `CStr` at the C boundary is RF-S814.
+- `blank[T]()` is gone and `hollow[T]()` is `T.hollow()`, a `dangerous` routine every type has. The handle types and
+  `Addr` have `is_hollow()`.
+- `Byte.to_hex()` writes two digits. The widest signed integer is `S256`. `Vector[T, N]` arithmetic does not check
+  for overflow.
+
+**Standard library**
+- A module is its folder. The base module is `System` (it was `Core`) and every file sees it and the modules under
+  it (`System/Numerics`, `System/Text`, `System/Memory`, `System/Concurrency`, `System/Cpu`, ...) without an import.
+  Importing a parent does not import its children (`migrate --step modules`).
+- Math routines use the shared names: `ln`, `exp_m1`, `sin_pi`, `recip_sqrt`, `ln_gamma`, `mul_add`, `mod_trunc`,
+  `rem`, `fract`, `compare`, `floordiv`, `shift_left`, `arith_shift_right`, `total_compare`, `is_sign_negative`
+  (`migrate --step names`).
+- Float operations and math routines crash on an inf or NaN result. The raw result is `+! -! *! /! **!` and the
+  `_unchecked` routines. A narrowing float conversion that would turn a finite value infinite fails (raw:
+  `to_unchecked`).
+- A conversion is `x.to[T]()`: `S32(from: x)` and `x.S32()` are rewritten by default `migrate`, and a missing
+  conversion is RF-S458.
+- `Indexable` is `ViewingIndexable` and `MutableIndexable` is `ModifyingIndexable`.
+- `Signals` is `CpuEventManager` in `System/Cpu`, with one handler slot per event kind (`migrate --step
+  cpu-events`, a call that passed a context is listed).
+- The time is read with `Clock.now()`, `Clock.monotonic()` and `CpuClock.now()` (they replace `Moment.now` and
+  `LocalMoment.now_utc`).
+- `FileManager` does every file system task, and `IO/FileSystem` is gone. Reading or writing a missing file fails,
+  `make_file` fails on an existing file unless you pass `replacing: true`, and there is no `touch`. The working,
+  temporary and home directories and the environment variables are `Environment`'s, random bytes are `Entropy`'s.
+- `ask_line` and `ask_word` fail with `EndOfInputError` at the end of input.
+- `Dict.items()` gives `(key, value)` tuples: `each (k, v) in d.items()` (default `migrate` lists the `entries()`
+  loops). `d[k] = v` adds a missing key, and `d.add(key:, value:)` is rewritten to it.
+- `PriorityQueue` holds `(priority, element)` tuples and has `unordered`, `ordered` and `drain`. `PQEntry` is
+  gone.
+- `Duration` `//` and `%` follow the integer rules, and overflow or division by zero crashes.
+- `Decimal` is a decimal128 (34 significant digits). `+`, `-` and `*` are exact or crash with
+  `NumericOverflowError`. `/` and the math routines round to 34 digits.
+- Concurrency: `suspended` and `threaded` are gone. Any routine runs concurrently through `f.to[Agent](args)`
+  (default `migrate` adds `.to[Agent]` to the calls). Start an agent with `start_now()`, `start_here()` or
+  `start_apart()`. `execute()` is gone (default `migrate` writes `start_now()`). `gather()` and `race()` are
+  routines on the agent list: `agents.gather()`. When the last holder of an agent lets it go, the work is
+  cancelled and waited for.
+- Channels: `Sender[T]` is `Transmitter[T]`, `send` is `transmit` and `send_if_room` is `transmit_if_room`
+  (`migrate --step verbs`).
+- `FileManager`, `PartitionManager`, `StorageManager` and `CpuEventManager` are entities.
+
+### Added
+
+**Language**
+- Script mode: the loose statements of the entry file are its `start()`. Loose statements in an imported file are
+  RF-S443.
+- `global`: module-level state, initialized in order before `start()` runs and torn down at its end. A global
+  binding is read-only, so state that changes is an `Atomic` or a `Guarded`.
+- `bundle`: a generic group whose kind is chosen per instance.
+- Loops carry values: `until c with total: S64 = 0`, `continue with total: v`, and `then` sees them.
+- A `when` that gives a value ends a block arm with `becomes value`. One arm can match several values
+  (`== 4, 6, 9, 11 =>`).
+- Backtick names (`` `check` ``, `` `total count` ``), tuple swap `(a, b) = (b, a)`, record patterns, inline
+  variants `A | B`, `define` type aliases, generic variants, `@infix` routines.
+- Named and short arguments can mix: `area(width, height: 4)`.
+- `todo` statement.
+- Presets are computed at buildtime, including presets that call routines.
+- Hex float literals (`0x1.8p3`) for binary floats.
+- `@throws([...])` lists what a routine throws and the builder checks it.
+- Kind constraints `needs RecordType T` and `needs EntityType T`.
+- A file without a `module` header takes its module path from its place under `module_paths`.
+- Collection literals take their element type from the expected type, like numbers do.
+- `T.hollow()` for every type, inside `danger`.
+
+**Standard library**
+- `AccessManager`: `viewing` / `modifying` blocks, deadlock detection (`[debug] deadlock-check`, on in debug
+  builds) and `access-order`.
+- `TextPattern` and `BytesPattern`: patterns built from named pieces, matched in time linear in the input, with
+  `from_regex`, `matches`, `find`, `find_all`, `replace` and `split`.
+- `FileManager` with `FileStorage[T]` (a mapped file), `rename`, `move`, `go_to`, and I/O errors by reason.
+  `Environment` (arguments, environment variables, directories) and `Entropy`.
+- `Clock`, `CpuClock`, `CpuEventManager`, `ThreadLocalManager`, `Watched` handles.
+- `@test` routines and the `test` command, with `@case`, `@skip`, `@time_limit` and `@memory_limit`.
+- `ask[T]()`, `set_exit_code`, `to_wrap[T]()`, `to_clamp[T]()`, `to_text(radix:)`, `hex()`, `bin()`, `oct()`,
+  `fixed(places)`.
+- `T(from: SerialValue)` construction and collections read from serial values.
+- Agents: `cancel()`, `next_finished`, `gather_all`, `take_finished`, `cancel_all`. A failure stays inside its
+  agent until it is retrieved.
+- `List.take_each`, `List.swap`, `CircularList.add_range`, `lacks` beside every `has`, `KeyContainer`.
+- `eq` and `cmp` between different types. The builder writes `ne` for each `eq` and `lacks` for each `has`.
+- B16, B32, B64 and B128 math routines are correctly rounded on every platform, and printed floats are the
+  shortest decimal that reads back to the same bits. `BF16` does arithmetic.
+- `Char` case mapping follows Unicode 17.0.
+- A shift amount or an index can be any integer type. A negative one crashes (`NegativeIndexError`).
+- C interop: routine values for C callbacks, `@layout(C)` / `@layout(packed)` / `@layout(align)`, `@link` with
+  automatic DLL placement, and `@blocking` for `C::` routines.
+
+**Tools**
+- A resident build daemon and a JIT mode for the edit loop: `[target] mode = "debug-jit"`, `use-daemon` and
+  `incremental`.
+- `new`, `migrate`, `docs`, `fmt`, `lint`, `test`, `lsp` and `check --json`.
+- The language server: diagnostics, formatting, hover, go to definition, rename and quick fixes.
+- Rider plugin and VS Code extension.
+- `[target] backend = "tessera"` (opt-in).
+- Windows trace builds write CodeView and PDB files.
+- Diagnostics are written in the second person and point to the new spelling of a retired word.
+
+### Fixed
+- A write to a value element (`m[i][j] = v`, `pts[k].x = v`) changed a temporary copy.
+- A variant's payload was not zero-filled, so optimized builds could lose the arm's value.
+- The cycle collector skipped the effects of a written `destroy`.
+- B64 to B16 narrowing gave wrong values on Windows.
+- `Text(from: CStr)` turns invalid UTF-8 into U+FFFD. Integer parsing reports `IntegerOverflowError` before it
+  overflows.
+- A channel that waits on itself, or waits with no agent left to send, is reported as a deadlock.
+- A plain value passed to a `T?` parameter is wrapped as present.
+- Decimal arithmetic matches IEEE 754 bit for bit, and `fmod` / `remainder` on D32, D64 and D128 are exact.
+- A stack overflow crashes with exit code 82 and reports the call depth and stack size.
+- A crash inside the standard library points to the caller's line.
+- Two or more recovered calls inside one generic routine no longer stop the build.
+- A user type named like a generic parameter (`record T`) no longer breaks that generic.
+
+### Removed
+- `Assignable`, `FrozenController`, `Accessing`, `Controlling`, `Consulting`, `Amending`, `multiamend`,
+  `LockPolicy`, `ReentrantLockError`.
+- `Address` and `CPtr` (now `Addr`).
+- `using` access blocks (`using g.view()`), `using ... fallback`.
+- `Result[T]`, `Lookup[T]`, `Crashable`, `absent`, `discard`, and the `try_` / `check_` / `lookup_` routines.
+- `unless`, `but`, `disobeys`, `notin`, `have`, `lack`, `while`, `pass`, `suspended`, `threaded`.
+- `Agent.execute()`.
+- The `Signals` module and `IO/FileSystem`.
+- Arbitrary-precision `Real` and `Complex`, the `?.` operator.
+- `F256`, `F512`, `U192`, `U384` and the other in-between widths.
+- Number type suffixes, `inf_bNN`, the `B*_INFINITY` / `B*_NAN` presets.
+- `blank[T]()`.
 
 ## [0.4.0] — 2026-08-28 · RazorForge 0.4.0 · Suflae 0.1.0
 
