@@ -46,13 +46,14 @@ secret routine integer_zero() -> Integer
 
 # The `Integer` with magnitude `mag` below 2^64, negative when `neg` (zero stays non-negative).
 secret routine integer_small(neg: Bool, mag: U64) -> Integer
-    return Integer(
-        owner: guarded_none[List[U64], ReadOnly](),
-        small: mag,
-        data: hijacked_none[U64](),
-        count: 0,
-        neg: neg and mag != 0,
-    )
+    danger
+        return Integer(
+            owner: guarded_none[List[U64], ReadOnly](),
+            small: mag,
+            data: Hijacked[U64].hollow(),
+            count: 0,
+            neg: neg and mag != 0,
+        )
 
 # The `Integer` over `len` limbs (at least 2) in `tab`, a buffer from `limb_buffer` it takes over, negative when `neg`.
 secret dangerous routine integer_over_limbs(neg: Bool, tab: Hijacked[U64], len: U64) -> Integer
@@ -78,7 +79,7 @@ secret dangerous routine limb_view(v: Integer) -> IntegerLimbView
     if v.count != 0
         return IntegerLimbView(len: v.count, tab: v.data, temp: false)
     if v.small == 0
-        return IntegerLimbView(len: 0, tab: hijacked_none[U64](), temp: false)
+        return IntegerLimbView(len: 0, tab: Hijacked[U64].hollow(), temp: false)
     var tab = limb_buffer(n: 1)
     tab.poke(value: v.small)
     return IntegerLimbView(len: 1, tab: tab, temp: true)
@@ -101,12 +102,12 @@ secret dangerous routine limb_view_free(view: IntegerLimbView)
 # A buffer of `n` limbs for one Ingrid call (none when `n` is 0).
 secret dangerous routine limb_buffer(n: U64) -> Hijacked[U64]
     if n == 0
-        return hijacked_none[U64]()
+        return Hijacked[U64].hollow()
     return Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8 *% n))
 
 # Frees a buffer from `limb_buffer`.
 secret dangerous routine limb_free(p: Hijacked[U64])
-    if not p.is_none()
+    if not p.is_hollow()
         p.invalidate()
     return
 

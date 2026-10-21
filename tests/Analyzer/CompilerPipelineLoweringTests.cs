@@ -144,7 +144,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                            var ptr = hijacked_none[S32]()
+                            var ptr = hijacked_from[S32](addr: Addr.hollow())
                             return
                         """;
 
@@ -156,7 +156,7 @@ public class CompilerPipelineLoweringTests
         CallExpression call = GetVariableInitializerCall(program: program, variableName: "ptr");
         Assert.Equal(expected: CallLoweringKind.DirectRoutine, actual: call.LoweringKind);
         Assert.NotNull(@object: call.ResolvedRoutine);
-        Assert.Equal(expected: "hijacked_none", actual: call.ResolvedRoutine!.Name);
+        Assert.Equal(expected: "hijacked_from", actual: call.ResolvedRoutine!.Name);
         Assert.False(condition: call.ResolvedRoutine.IsGenericDefinition);
         Assert.NotNull(@object: call.ResolvedRepr);
         Assert.Equal(expected: BackendReprKind.WrapperRef, actual: call.ResolvedRepr!.Kind);
