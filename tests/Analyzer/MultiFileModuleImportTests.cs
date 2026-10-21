@@ -269,6 +269,38 @@ public sealed class MultiFileModuleImportTests
     }
 
     /// <summary>
+    /// A sibling declaring the SAME module but with an entry of its own (a draft of the program next to it) is
+    /// another program, not a part of this one: it is not gathered, so a parse error in it is not this build's.
+    /// </summary>
+    [Fact]
+    public void EntryModuleFile_DoesNotGatherSiblingWithItsOwnEntry_NoErrors()
+    {
+        var files = new List<(string RelPath, string Source)>(collection: SameModuleSiblingFiles)
+        {
+            ("SameMod/Main.next.rf", """
+                                     module SameMod
+
+                                     routine start()
+                                         var a = Aaa(value:
+                                     """)
+        };
+
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             module SameMod
+                                                             import IO/Console
+
+                                                             routine start()
+                                                                 var a = Aaa(value: 5)
+                                                                 show(f"{a.combined()}")
+                                                                 return
+                                                             """,
+            moduleFiles: files,
+            entryRelPath: "SameMod/Main.rf");
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+    }
+
+    /// <summary>
     /// Writes the entry file plus the module files to a fresh temp directory and runs the multi-file
     /// build pipeline (mirrors the <c>check</c> verb in Program.cs), returning all reported errors.
     /// </summary>

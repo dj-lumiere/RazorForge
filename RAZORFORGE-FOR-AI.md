@@ -206,7 +206,8 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
 - **`Me` (capital) = the receiver's TYPE (the Self type); `me` (lowercase) = the
   receiver INSTANCE.** Do not conflate them.
 - The generic-constraint keyword is **`needs`** (e.g. `needs T obeys P`), **not
-  `where`** — `where` is not RF syntax.
+  `where`** — `where` is not RF syntax. A constraint's protocol type arguments are
+  checked too: a `List[Text]` given where `Iterable[S64]` is taken is RF-S150.
 - **Generic parameter names.** A type parameter is `T` alone only when it is the
   only one and its role is obvious (`List[T]`, `Maybe[T]`, `Array[T, COUNT]`).
   Otherwise every type parameter is `T` + a PascalCase role (`Dict[TKey, TValue]`,
@@ -273,6 +274,12 @@ show(f"total = {total}")
 location relative to `config.toml`: each folder and the file name are PascalCased and
 joined with `/` (`tools/text utils.rf` → `Tools/TextUtils`). Declare `module` to
 override that. Imports use `/` separators.
+
+Files in one folder that declare the same `module` are one module and build together, with no
+import between them. A file there with its own entry (`routine start()` or top-level statements)
+is another program and is not built with yours, so a draft that does not build yet can sit next
+to the program. Only files that are part of the build report their errors. A failed `build` keeps
+the last executable that built.
 
 **Two import forms, distinct meaning:** `import Foo/Bar` is a **module** import
 (`Bar` is a submodule of `Foo`). `import Foo.bar` is a **member** import (`bar` is
