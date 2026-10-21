@@ -109,6 +109,10 @@ the build error says what to write instead.
 - `Array[T, N]()` with a `T` that has no zero value is RF-S641.
 - A lazy adapter is used in the statement that makes it. The elements of a loop over a read token are read-only.
 - An agent that receives a token or a `Retained` starts with `start_here()` (RF-S632).
+- A token is never a type argument: `List[Viewing[T]]`, `Maybe[Viewing[T]]` kept in a name, a tuple or a generic type
+  holding one, written or inferred (`var xs = [a.view()]`), is RF-S601. What `try` gives on a routine that returns a
+  token is unpacked with `when` where it is made. A lambda capturing a token is RF-S606, and `steal` on a token is
+  RF-S604 (both were not reported before).
 
 **Types and the C boundary**
 - `Address` and `CPtr` are `Addr`. Two addresses compare with `===`, and an address moves by a `ByteSize` with

@@ -735,7 +735,12 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   checked at build time:
   - Use one inline, keep it in a variable (`var v = a.view()`,
     `var m = a.modify()`, re-pointable to another object of the same type), or
-    open it for a block with `viewing a as v` / `modifying a as m`. Tokens are never stored in fields or variants.
+    open it for a block with `viewing a as v` / `modifying a as m`. A token is never part of another value: a field,
+    a variant branch, or a type argument (`List[Viewing[T]]`, `Maybe[Viewing[T]]`, a tuple holding one, a generic type
+    given one, `var xs = [a.view()]`) is RF-S601, written or inferred. The one value that carries a token for a moment
+    is what `try` gives on a routine returning a token (`try xs.view_at(index: i)`, an `each` step, `enumerate`'s
+    `(index, token)` pair): unpack it with `when` right there. Binding that `Maybe` to a name is RF-S601. A lambda
+    never captures a token (RF-S606).
   - The source is free to change. Replacing it (`a = …`, `h.inner = …`), moving
     it out (`steal a`), leaving its scope, or calling a routine that replaces it
     (`h.reset()` whose body assigns `me.inner`, followed through its calls) ENDS
@@ -1276,6 +1281,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-W009      | a started Agent nothing collects      | `retrieve()` it, or `drop job` to stop it          |
+| RF-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Maybe[...]` kept in a name, a tuple) | keep the entity or a manager's handle, unpack `try` of a token with `when` at once |
 | RF-S632      | `to[Agent]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
 | RF-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or open both with `modifying x, y` |
