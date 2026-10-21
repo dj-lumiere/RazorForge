@@ -60,8 +60,7 @@ routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64, vrec: U64
         qhat = dr.q
         rhat = dr.r
     # D3 correction: while qhat*vn0 > (rhat:ujn2), decrement qhat (and grow rhat by vn1).
-    var keep = true
-    while keep
+    loop
         var lhs = LLVM::mul(
             a: LLVM::zero_extend[U64, U128](qhat),
             b: LLVM::zero_extend[U64, U128](vn0),
@@ -74,11 +73,11 @@ routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64, vrec: U64
             qhat = LLVM::sub(a: qhat, b: 1)
             var rnew = LLVM::add(a: rhat, b: vn1)
             if LLVM::unsigned_lt(a: rnew, b: rhat)
-                keep = false
+                break
             else
                 rhat = rnew
         else
-            keep = false
+            break
     # D4: un[j..j+2] -= qhat * vn, S128 borrow k
     var k = LLVM::zero_extend[U64, S128](0)
     var p0 = LLVM::mul(a: LLVM::zero_extend[U64, U128](qhat), b: LLVM::zero_extend[U64, U128](vn0))
@@ -703,7 +702,7 @@ routine U256.pow_with_overflow(exp: U256) -> (U256, Bool)
     var base: U256 = me
     var e: U32 = exp.to[U32]()
     var overflow = false
-    while e > 0
+    until e == 0
         if (e & 1) == 1
             var mul_result = result.mul_with_overflow(base)
             result = mul_result.item0
@@ -732,7 +731,7 @@ routine U256.pow_wrap(exp: U256) -> U256
     var result: U256 = 1
     var base: U256 = me
     var e: U32 = exp.to[U32]()
-    while e > 0
+    until e == 0
         if (e & 1) == 1
             result = result.mul_wrap(base)
         e = e >> 1
@@ -748,7 +747,7 @@ routine U256.pow_clamp(exp: U256) -> U256
     var result: U256 = 1
     var base: U256 = me
     var e: U32 = exp.to[U32]()
-    while e > 0
+    until e == 0
         if (e & 1) == 1
             result = result.mul_clamp(base)
         base = base.mul_clamp(base)
@@ -933,7 +932,7 @@ routine U256.rotate_right(bits: U32) -> U256
 routine U256.to_bytes_le() -> Array[Byte, 32]
     var result = Array[Byte, 32]()
     var i: U64 = 0
-    while i < 32
+    until i >= 32
         var b = LLVM::int_truncate[U256, U8](LLVM::shift_right_unsigned(me, (i * 8).to[U256]()))
         result = LLVM::set_byte_at(array: result, index: i, value: b)
         i = i + 1
@@ -947,7 +946,7 @@ routine U256.to_bytes_be() -> Array[Byte, 32]
 common routine U256.from_bytes_le(bytes: Array[Byte, 32]) -> U256
     var result: U256 = 0
     var i: U64 = 0
-    while i < 32
+    until i >= 32
         var part = LLVM::shift_left(
             LLVM::zero_extend[U8, U256](LLVM::byte_at(array: bytes, index: i)),
             (i * 8).to[U256](),
@@ -1004,7 +1003,7 @@ failable routine Text.to[U256]() -> U256
         throw InvalidValueError(input: me, target: "U256")
     var result: U256 = 0
     var i: U64 = 0
-    while i < me.count()
+    until i >= me.count()
         var ch = me[i]
         if ch.is_numeric()
             var digit = ch.digit_value().to[U256]()
@@ -1048,9 +1047,9 @@ routine U256.sqrtrem() -> (U256, U256)
     var x = me
     var result: U256 = 0
     var bit: U256 = 1 << 254
-    while bit > x
+    until bit <= x
         bit = bit.logical_shift_right(2)
-    while bit != 0
+    until bit == 0
         var next = result.add_wrap(bit)
         if x >= next
             x = x.sub_wrap(next)
@@ -1079,7 +1078,7 @@ routine wide_dec9(c: U64) -> Text
     var s = ""
     var x = c
     var i = 0
-    while LLVM::signed_lt(a: i, b: 9)
+    until LLVM::signed_ge(a: i, b: 9)
         s = f"{LLVM::unsigned_rem(a: x, b: 10)}" + s
         x = LLVM::unsigned_div(a: x, b: 10)
         i = LLVM::add(a: i, b: 1)
@@ -1089,7 +1088,7 @@ routine wide_dec9(c: U64) -> Text
 routine wide_dec_head(c: U64) -> Text
     var s = ""
     var x = c
-    while LLVM::int_ne(a: x, b: 0)
+    until LLVM::int_eq(a: x, b: 0)
         s = f"{LLVM::unsigned_rem(a: x, b: 10)}" + s
         x = LLVM::unsigned_div(a: x, b: 10)
     return s
@@ -1111,7 +1110,7 @@ needs T obeys FloorDivisible
     var q = x // ten9
     var chunk = LLVM::int_truncate[T, U64](LLVM::sub(a: x, b: LLVM::mul(a: q, b: ten9)))
     x = q
-    while LLVM::int_ne(a: x, b: LLVM::zero_extend[U64, T](0))
+    until LLVM::int_eq(a: x, b: LLVM::zero_extend[U64, T](0))
         out = wide_dec9(c: chunk) + out
         q = x // ten9
         chunk = LLVM::int_truncate[T, U64](LLVM::sub(a: x, b: LLVM::mul(a: q, b: ten9)))

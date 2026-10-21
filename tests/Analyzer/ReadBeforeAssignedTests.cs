@@ -35,7 +35,7 @@ public class ReadBeforeAssignedTests
                                  routine scan() -> S64
                                      lateinit var found: S64
                                      var i: S64 = 0
-                                     while true
+                                     loop
                                          i += 1
                                          if i == 3
                                              found = i
@@ -82,13 +82,13 @@ public class ReadBeforeAssignedTests
     }
 
     [Fact]
-    public void Analyze_AssignedOnlyInsideAWhile_IsRejected()
+    public void Analyze_AssignedOnlyInsideAnUntil_IsRejected()
     {
         AssertHasErrorSa(source: """
                          routine first(n: S64) -> S64
                              lateinit var v: S64
                              var i: S64 = 0
-                             while i < n
+                             until i >= n
                                  v = i
                                  i += 1
                              return v

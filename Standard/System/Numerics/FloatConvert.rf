@@ -433,7 +433,7 @@ routine binary_float_digits(m: U64, e2: S64, sig: U64) -> FloatDigits
     var dd = Integer.zero()
     var guard = 0
     var done = false
-    while not done
+    until done
         var pp = sigm1 - ee
         var n2 = num
         var d2 = den
@@ -462,7 +462,7 @@ routine binary_float_digits(m: U64, e2: S64, sig: U64) -> FloatDigits
 routine zeros_text(n: U64) -> Text
     var r = Text()
     var i: U64 = 0
-    while i < n
+    until i >= n
         r = r + "0"
         i = i + 1
     return r
@@ -471,7 +471,7 @@ routine zeros_text(n: U64) -> Text
 ### string, `E` the exponent of the leading digit (value ≈ d0.d1… × 10^E).
 routine assemble_decimal(neg: Bool, digits: Text, ee: S64, sig: U64) -> Text
     var k = digits.count()
-    while k > 1 and digits[k - 1] == '0'
+    until k <= 1 or digits[k - 1] != '0'
         k = k - 1
     var s = digits[0 til k]
     var sigi = LLVM::reinterpret_bits[U64, S64](sig)
@@ -599,7 +599,7 @@ routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatD
         m_plus = m_plus.mul(other: scale)
         m_minus = m_minus.mul(other: scale)
     var settled = false
-    while not settled
+    until settled
         var top = r.add(other: m_plus).compare(you: s)
         if top == ME_LARGE or (inclusive and top == SAME)
             s = s.mul(other: ten)
@@ -620,7 +620,7 @@ routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatD
     # the interval.
     var digits = Text()
     var done = false
-    while not done
+    until done
         r = r.mul(other: ten)
         m_plus = m_plus.mul(other: ten)
         m_minus = m_minus.mul(other: ten)
@@ -749,23 +749,23 @@ routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: T
             var hq = f // 10000000000000000000
             hi = LLVM::int_truncate[U128, U64](hq)
             lo = LLVM::int_truncate[U128, U64](f -% hq *% 10000000000000000000)
-            while nraw < 19
+            until nraw >= 19
                 raw[LLVM::reinterpret_bits[S64, U64](nraw)] = 0x30 +% LLVM::int_truncate[U64, U32](lo % 10)
                 lo = lo // 10
                 nraw = nraw +% 1
             lo = hi
-        while lo != 0
+        until lo == 0
             raw[LLVM::reinterpret_bits[S64, U64](nraw)] = 0x30 +% LLVM::int_truncate[U64, U32](lo % 10)
             lo = lo // 10
             nraw = nraw +% 1
         # drop the trailing zeros (the lowest digits)
         var z = 0
-        while raw[LLVM::reinterpret_bits[S64, U64](z)] == 0x30
+        until raw[LLVM::reinterpret_bits[S64, U64](z)] != 0x30
             z = z +% 1
         ee = ee +% z
         var dig = Array[U32, 40]()
         var k = 0
-        while z +% k < nraw
+        until z +% k >= nraw
             dig[LLVM::reinterpret_bits[S64, U64](k)] = raw[LLVM::reinterpret_bits[S64, U64](z +% k)]
             k = k +% 1
         var pe = ee +% k -% 1
@@ -774,7 +774,7 @@ routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: T
         var n = 0
         var wn = LLVM::reinterpret_bits[U64, S64](wrap.count())
         if wn > 0
-            while n < wn
+            until n >= wn
                 p.stride(count: n).poke(value: wrap[LLVM::reinterpret_bits[S64, U64](n)])
                 n = n +% 1
             p.stride(count: n).poke(value: '(')
@@ -792,7 +792,7 @@ routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: T
                 p.stride(count: n).poke(value: '.')
                 n = n +% 1
                 var i = k -% 2
-                while i >= 0
+                until i < 0
                     p
                         .stride(count: n)
                         .poke(value: Char(dig[LLVM::reinterpret_bits[S64, U64](i)]))
@@ -814,7 +814,7 @@ routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: T
             elseif ea >= 100
                 nd = 3
             var j = nd -% 1
-            while j >= 0
+            until j < 0
                 p
                     .stride(count: n +% j)
                     .poke(value: Char(0x30 +% LLVM::int_truncate[S64, U32](ea % 10)))
@@ -825,7 +825,7 @@ routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: T
             # the integer part, then the fraction if any digits are left
             var i = k -% 1
             var pos = 0
-            while pos <= pe
+            until pos > pe
                 var c: U32 = 0x30
                 if i >= 0
                     c = dig[LLVM::reinterpret_bits[S64, U64](i)]
@@ -836,7 +836,7 @@ routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: T
             if i >= 0
                 p.stride(count: n).poke(value: '.')
                 n = n +% 1
-                while i >= 0
+                until i < 0
                     p
                         .stride(count: n)
                         .poke(value: Char(dig[LLVM::reinterpret_bits[S64, U64](i)]))
@@ -848,12 +848,12 @@ routine shortest_decimal_text(neg: Bool, f: U128, e: S64, sci_from: U64, wrap: T
             p.stride(count: n +% 1).poke(value: '.')
             n = n +% 2
             var pad = 0
-            while pad < 0 -% pe -% 1
+            until pad >= 0 -% pe -% 1
                 p.stride(count: n).poke(value: '0')
                 n = n +% 1
                 pad = pad +% 1
             var i = k -% 1
-            while i >= 0
+            until i < 0
                 p.stride(count: n).poke(value: Char(dig[LLVM::reinterpret_bits[S64, U64](i)]))
                 n = n +% 1
                 i = i -% 1
@@ -1101,7 +1101,7 @@ routine decimal_fixed_fast(p: D128Parts, places: U64) -> (Bool, Text)
     if sh >= 0
         # n * 10^sh must stay below 10^37
         var j = 0
-        while j < sh
+        until j >= sh
             if n >= 1000000000000000000000000000000000000
                 return (false, "")
             n = n *% 10
@@ -1109,7 +1109,7 @@ routine decimal_fixed_fast(p: D128Parts, places: U64) -> (Bool, Text)
     elseif sh > -39
         var d: U128 = 1
         var j2 = 0
-        while j2 < 0 -% sh
+        until j2 >= 0 -% sh
             d = d *% 10
             j2 = j2 +% 1
         var q = n // d
@@ -1173,9 +1173,9 @@ routine round_and_pack(neg: Bool, num_in: Integer, den_in: Integer, fmt: S32) ->
     var den = den_in
     # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
     var ee = LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length()) - 1
-    while ratio_ge_pow2(num: num, den: den, k: ee + 1)
+    until not ratio_ge_pow2(num: num, den: den, k: ee + 1)
         ee = ee + 1
-    while not ratio_ge_pow2(num: num, den: den, k: ee)
+    until ratio_ge_pow2(num: num, den: den, k: ee)
         ee = ee - 1
     var lsb = ee - (p - 1)
     if lsb < min_lsb
@@ -1268,7 +1268,7 @@ routine parse_float_components(from_text: Text, target: Text) -> FloatParsed
     var exp_val = 0
     var exp_neg = false
     var exp_has_digit = false
-    while i < len
+    until i >= len
         var ch = from_text[i]
         if ch.is_numeric()
             if has_exp
@@ -1451,9 +1451,9 @@ routine b128_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B128
         den = pow10_int(k: 0 - dec_exp)
     # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
     var ee = LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length()) - 1
-    while ratio_ge_pow2(num: num, den: den, k: ee + 1)
+    until not ratio_ge_pow2(num: num, den: den, k: ee + 1)
         ee = ee + 1
-    while not ratio_ge_pow2(num: num, den: den, k: ee)
+    until ratio_ge_pow2(num: num, den: den, k: ee)
         ee = ee - 1
     var lsb = ee - 112
     if lsb < -16494

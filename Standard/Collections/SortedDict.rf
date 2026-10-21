@@ -200,14 +200,14 @@ routine BTreeDictNode[TKey, TValue].destruct()
     danger
         if not me.is_leaf
             var ci: U64 = 0
-            while ci < me.child_count
+            until ci >= me.child_count
                 me
                     .children_get(ci)
                     .as_entity()
                     .destruct()
                 ci = ci + 1
         var ki: U64 = 0
-        while ki < me.key_count
+        until ki >= me.key_count
             me.key_get(ki).destruct()
             me.value_get(ki).destruct()
             ki = ki + 1
@@ -220,14 +220,14 @@ routine BTreeDictNode[TKey, TValue].destruct()
 dangerous routine BTreeDictNode[TKey, TValue].roam_trace()
     if not me.is_leaf
         var ci: U64 = 0
-        while ci < me.child_count
+        until ci >= me.child_count
             me
                 .children_get(ci)
                 .as_entity()
                 .roam_trace()
             ci = ci + 1
     var ki: U64 = 0
-    while ki < me.key_count
+    until ki >= me.key_count
         me.key_get(ki).cyclic_visit()
         me.value_get(ki).cyclic_visit()
         ki = ki + 1
@@ -239,7 +239,7 @@ dangerous routine BTreeDictNode[TKey, TValue].roam_trace()
 dangerous routine BTreeDictNode[TKey, TValue].roam_free()
     if not me.is_leaf
         var ci: U64 = 0
-        while ci < me.child_count
+        until ci >= me.child_count
             me
                 .children_get(ci)
                 .as_entity()
@@ -491,7 +491,7 @@ needs TKey obeys Comparable
     var i: U64 = 0
     # Each pair is read in place: `add` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
-    while i < pairs.count()
+    until i >= pairs.count()
         drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
         i = i +% 1
     return result
@@ -532,7 +532,7 @@ routine SortedDict[TKey, TValue].clear()
 secret routine SortedDict[TKey, TValue].lower_bound(node: Viewing[BTreeDictNode[TKey, TValue]], key: TKey) -> U64
     var lo: U64 = 0
     var hi = node.keys_count()
-    while lo < hi
+    until lo >= hi
         var mid = lo +% LLVM::unsigned_div(hi -% lo, 2)
         if node.key_get(mid) < key
             lo = mid +% 1
@@ -768,13 +768,13 @@ secret routine SortedDict[TKey, TValue].split_child(parent_node: Modifying[BTree
         else
             var left_size = child.keys_count()
             var i: U64 = 0
-            while i < child.children_count()
+            until i >= child.children_count()
                 left_size = left_size +% child.children_get(i).as_entity().subtree_size
                 i = i +% 1
             child.subtree_size = left_size
             var right_size = new_node.keys_count()
             i = 0
-            while i < new_node.children_count()
+            until i >= new_node.children_count()
                 right_size = right_size +% new_node.children_get(i).as_entity().subtree_size
                 i = i +% 1
             new_node.subtree_size = right_size
@@ -869,7 +869,7 @@ secret routine SortedDict[TKey, TValue].get_predecessor(
 ) -> DictEntry[TKey, TValue]
     danger
         var current = node.children_get(idx).as_entity()
-        while not current.is_leaf
+        until current.is_leaf
             current = current.children_get(current.children_count() -% 1).as_entity()
         var last = current.keys_count() -% 1
         return current.entry_get(last)
@@ -885,7 +885,7 @@ secret routine SortedDict[TKey, TValue].get_successor(
 ) -> DictEntry[TKey, TValue]
     danger
         var current = node.children_get(idx +% 1).as_entity()
-        while not current.is_leaf
+        until current.is_leaf
             current = current.children_get(0).as_entity()
         return current.entry_get(0)
 
@@ -1010,7 +1010,7 @@ secret routine SortedDict[TKey, TValue].update_subtree_size(node: Modifying[BTre
         else
             var size = node.keys_count()
             var i: U64 = 0
-            while i < node.children_count()
+            until i >= node.children_count()
                 size = size +% node.children_get(i).as_entity().subtree_size
                 i = i +% 1
             node.subtree_size = size
@@ -1048,7 +1048,7 @@ secret routine SortedDict[TKey, TValue].get_by_rank_node(
 
         var remaining = rank
         var i: U64 = 0
-        while i < node.children_count()
+        until i >= node.children_count()
             var child_size = node.children_get(i).as_entity().subtree_size
             if remaining < child_size
                 return me.get_by_rank_node(node: node.children_get(i).as_entity(), rank: remaining)
@@ -1108,7 +1108,7 @@ failable routine SortedDict[TKey, TValue].min() -> DictEntry[TKey, TValue]
         throw AbsentValueError()
     danger
         var node = me.root!!.as_entity()
-        while not node.is_leaf
+        until node.is_leaf
             node = node.children_get(0).as_entity()
         return node.entry_get(0)
 
@@ -1121,7 +1121,7 @@ failable routine SortedDict[TKey, TValue].max() -> DictEntry[TKey, TValue]
         throw AbsentValueError()
     danger
         var node = me.root!!.as_entity()
-        while not node.is_leaf
+        until node.is_leaf
             node = node.children_get(node.children_count() -% 1).as_entity()
         var last = node.keys_count() -% 1
         return node.entry_get(last)
@@ -1167,7 +1167,7 @@ secret routine SortedDict[TKey, TValue].collect_keys(
 )
     danger
         var i: U64 = 0
-        while i < node.keys_count()
+        until i >= node.keys_count()
             if not node.is_leaf
                 me.collect_keys(node: node.children_get(i).as_entity(), result: result)
             result.add_last(node.key_get(i))
@@ -1202,7 +1202,7 @@ secret routine SortedDict[TKey, TValue].collect_values(
 )
     danger
         var i: U64 = 0
-        while i < node.keys_count()
+        until i >= node.keys_count()
             if not node.is_leaf
                 me.collect_values(node: node.children_get(i).as_entity(), result: result)
             result.add_last(node.value_get(i))
@@ -1233,7 +1233,7 @@ secret routine SortedDict[TKey, TValue].get_by_rank(
 
         var remaining = rank
         var i: U64 = 0
-        while i < node.children_count()
+        until i >= node.children_count()
             var child_size = node.children_get(i).as_entity().subtree_size
             if remaining < child_size
                 return me.get_by_rank(node: node.children_get(i).as_entity(), rank: remaining)
@@ -1276,7 +1276,7 @@ secret routine SortedDict[TKey, TValue].collect_inorder(
 )
     danger
         var i: U64 = 0
-        while i < node.keys_count()
+        until i >= node.keys_count()
             if not node.is_leaf
                 me.collect_inorder(node: node.children_get(i).as_entity(), result: result)
             result.add_last(node.entry_get(i))

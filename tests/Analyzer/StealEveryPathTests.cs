@@ -67,7 +67,7 @@ public class StealEveryPathTests
                                            routine start()
                                                var n = Node(value: 1)
                                                var i = 0
-                                               while i < 3
+                                               until i >= 3
                                                    var v = consume(n: steal n)
                                                    i += 1
                                                return

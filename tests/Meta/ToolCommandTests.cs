@@ -149,9 +149,8 @@ public sealed class ToolCommandTests : IDisposable
             @time_limit(200ms)
             routine endless()
                 var n: S64 = 0
-                while true
+                loop
                     n +%= 1
-                return
             """);
 
         (int exit, string stdout, _) = Tool("test", program);
@@ -216,7 +215,7 @@ public sealed class ToolCommandTests : IDisposable
                     t0 = C::rf_monotonic_now_ns()
                 var agents = List[Agent[S64]]()
                 var i = 0
-                while i < 4
+                until i >= 4
                     agents.add_last(value: nap.to[Agent](id: i))
                     i += 1
                 show(f"results {agents.gather()}")

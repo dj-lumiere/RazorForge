@@ -73,7 +73,7 @@ needs TKey obeys Hashable, Equatable
     var i: U64 = 0
     # Each pair is read in place: `put` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
-    while i < pairs.count()
+    until i >= pairs.count()
         drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
         i = i +% 1
     return result
@@ -113,10 +113,10 @@ routine Dict[TKey, TValue](key: SecureHashKey) -> Dict[TKey, TValue]
 
 routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TValue]
     var cap = DICT_INITIAL_CAPACITY
-    while cap < capacity
+    until cap >= capacity
         cap = cap *% 2
     var ecap = DICT_INITIAL_ENTRIES
-    while ecap < capacity
+    until ecap >= capacity
         ecap = ecap *% 2
     var dict = Dict[TKey, TValue](
         ctrl: hijacked_none[U8](),
@@ -153,7 +153,7 @@ routine Dict[TKey, TValue].destruct()
         # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
         # in DictEmittable.emit!). No-op for value types; frees owned entity keys/values.
         var p: U64 = 0
-        while p < me.entries_used
+        until p >= me.entries_used
             if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
                 me.keys
                     .offset(TKey.data_size() * p)
@@ -308,7 +308,7 @@ routine Dict[TKey, TValue].rehash()
     me.entries_used = 0
 
     var i: U64 = 0
-    while i < old_entries_used
+    until i >= old_entries_used
         danger
             var live = old_entry_live.offset(ByteSize(bytes: i)).peek()
             if live == ENTRY_LIVE
@@ -520,7 +520,7 @@ needs EntityType TValue
 routine Dict[TKey, TValue].keys() -> List[TKey]
     var result = List[TKey](me.count)
     var i: U64 = 0
-    while i < me.entries_used
+    until i >= me.entries_used
         danger
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 result.add_last(me.keys.offset(TKey.data_size() * i).peek())
@@ -533,7 +533,7 @@ routine Dict[TKey, TValue].keys() -> List[TKey]
 routine Dict[TKey, TValue].values() -> List[TValue]
     var result = List[TValue](me.count)
     var i: U64 = 0
-    while i < me.entries_used
+    until i >= me.entries_used
         danger
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 result.add_last(me.vals.offset(TValue.data_size() * i).peek())
@@ -547,7 +547,7 @@ routine Dict[TKey, TValue].items() -> List[(TKey, TValue)]
 needs RecordType TValue
     var result = List[Tuple[TKey, TValue]](capacity: me.count)
     var i: U64 = 0
-    while i < me.entries_used
+    until i >= me.entries_used
         danger
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 result.add_last(value: (me.keys.offset(TKey.data_size() * i).peek(),
@@ -572,7 +572,7 @@ routine Dict[TKey, TValue].iter() -> DictEmittable[TKey, TValue]
 
 failable routine DictEmittable[TKey, TValue].emit() -> DictEntry[TKey, TValue]
     danger
-        while me.pos < me.entries_used
+        until me.pos >= me.entries_used
             var p = me.pos
             me.pos = me.pos + 1
             if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
@@ -640,7 +640,7 @@ needs TValue obeys Equatable
     if me.count != you.count
         return false
     var i: U64 = 0
-    while i < me.entries_used
+    until i >= me.entries_used
         danger
             if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
                 var k = me.keys.offset(TKey.data_size() * i).peek()

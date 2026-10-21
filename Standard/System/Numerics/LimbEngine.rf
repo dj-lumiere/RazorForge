@@ -44,7 +44,7 @@ secret dangerous routine limbs_add(
 ) -> U64
     var k = carry.to[U128]()
     var i: U64 = 0
-    while i < n
+    until i >= n
         var a = limb(tab: op1, i: i).to[U128]() +% limb(tab: op2, i: i).to[U128]() +% k
         set_limb(tab: res, i: i, value: u128_lo(t: a))
         k = a >> 64
@@ -55,7 +55,7 @@ secret dangerous routine limbs_add(
 secret dangerous routine limbs_add_word(tab: Hijacked[U64], b: U64, n: U64) -> U64
     var k = b.to[U128]()
     var i: U64 = 0
-    while i < n
+    until i >= n
         if k == 0
             return 0
         var a = limb(tab: tab, i: i).to[U128]() +% k
@@ -74,7 +74,7 @@ secret dangerous routine limbs_sub(
 ) -> U64
     var borrow = borrow_in.to[S128]()
     var i: U64 = 0
-    while i < n
+    until i >= n
         var d = limb(tab: op1, i: i).to[S128]() -% limb(tab: op2, i: i).to[S128]() -% borrow
         if d < 0
             d = d +% 18446744073709551616
@@ -95,7 +95,7 @@ secret dangerous routine limbs_mul_word(
 ) -> U64
     var carry = l.to[U128]()
     var i: U64 = 0
-    while i < n
+    until i >= n
         var t = limb(tab: taba, i: i).to[U128]() *% b.to[U128]() +% carry
         set_limb(tab: tabr, i: i, value: u128_lo(t: t))
         carry = t >> 64
@@ -111,7 +111,7 @@ secret dangerous routine limbs_addmul_word(
 ) -> U64
     var l: U128 = 0
     var i: U64 = 0
-    while i < n
+    until i >= n
         var t = limb(tab: taba, i: i).to[U128]() *% b.to[U128]() +% l +% limb(tab: tabr, i: i).to[U128]()
         set_limb(tab: tabr, i: i, value: u128_lo(t: t))
         l = t >> 64
@@ -122,7 +122,7 @@ secret dangerous routine limbs_addmul_word(
 secret dangerous routine limbs_sub_word(tab: Hijacked[U64], b: U64, n: U64) -> U64
     var k = b
     var i: U64 = 0
-    while i < n
+    until i >= n
         var v = limb(tab: tab, i: i)
         var a = v -% k
         k = if a > v then 1 else 0
@@ -143,7 +143,7 @@ secret dangerous routine limbs_shr(
 ) -> U64
     var l = high
     var i = n
-    while i > 0
+    until i == 0
         i = i -% 1
         var a = limb(tab: tab, i: i)
         set_limb(tab: tab_r, i: i, value: (a >> shift) | (l << 64 -% shift))
@@ -159,7 +159,7 @@ secret dangerous routine limbs_submul_word(
 ) -> U64
     var l: U64 = 0
     var i: U64 = 0
-    while i < n
+    until i >= n
         var t = limb(tab: tabr, i: i).to[U128]() -% limb(tab: taba, i: i).to[U128]() *% b.to[U128]() -% l.to[U128]()
         set_limb(tab: tabr, i: i, value: u128_lo(t: t))
         l = 0 -% u128_lo(t: t >> 64)
@@ -187,7 +187,7 @@ secret dangerous routine limbs_mul_schoolbook(
         ),
     )
     var i: U64 = 1
-    while i < op2_size
+    until i >= op2_size
         var r = limbs_addmul_word(
             tabr: result.stride(count: i.to[S64]()),
             taba: op1,
@@ -275,7 +275,7 @@ secret routine mul_mod_fast3(a: U64, b: U64, m: U64, b_inv: U64) -> U64
 # Zero n limbs.
 secret dangerous routine zero_limbs(tab: Hijacked[U64], n: U64)
     var i: U64 = 0
-    while i < n
+    until i >= n
         set_limb(tab: tab, i: i, value: 0)
         i = i +% 1
     return
@@ -286,7 +286,7 @@ secret routine ceil_log2(a: U64) -> U64
         return 0
     var v = a -% 1
     var n: U64 = 0
-    while v > 0
+    until v == 0
         v = v >> 1
         n = n +% 1
     return n
@@ -391,13 +391,13 @@ secret routine bf_get_fft_size(len: U64) -> (U64, U64, U64)
     var nb_mods_found: U64 = 4
     var fft_len_log2_found: U64 = 0
     var nb_mods: U64 = 3
-    while nb_mods <= 5
+    until nb_mods > 5
         var int_bits = ntt_int_bits(idx: 5 -% nb_mods)
         var cap: U64 = 2 *% 64 +% 2 *% 61 -% 62  # 2*LIMB_BITS + 2*MIN - MAX = 188
         var half = (int_bits -% 4) // 2
         var dpl = if half < cap then half else cap
         var brk = false
-        while not brk
+        until brk
             var fll = ceil_log2(a: (len *% 64 +% dpl -% 1) // dpl)
             if fll > 51  # NTT_PROOT_2EXP
                 brk = true
@@ -437,7 +437,7 @@ secret dangerous routine limb_to_ntt(
     var ndig = (a_len *% 64 +% dpl -% 1) // dpl
     var n = if fft_len < ndig then fft_len else ndig
     var i: U64 = 0
-    while i < n
+    until i >= n
         var a0 = get_bits(tab: taba, len: a_len, pos: i *% dpl)
         var a: U128 = 0
         if dpl <= 64
@@ -456,7 +456,7 @@ secret dangerous routine limb_to_ntt(
                 a = (a0 >> 63).to[U128]() | (a1.to[U128]() << 1) | (a2.to[U128]() << 65)
                 a0 = a0 & (1 << 63) -% 1
         var j: U64 = 0
-        while j < nb_mods
+        until j >= nb_mods
             var m = ntt_mod(idx: first_m_idx +% j)
             var m_inv = ntt_mod_div(idx: first_m_idx +% j)
             var r = mod_fast(r: a, m: m, m_inv: m_inv)
@@ -491,9 +491,9 @@ secret dangerous routine ntt_to_limb(
     var ndig = (r_len *% 64 +% dpl -% 1) // dpl
     var len = if fft_len < ndig then fft_len else ndig
     var i: U64 = 0
-    while i < len
+    until i >= len
         var j0: U64 = 0
-        while j0 < nb_mods
+        until j0 >= nb_mods
             var mj = ntt_mod(idx: base_idx +% j0)
             set_limb(
                 tab: y,
@@ -504,9 +504,9 @@ secret dangerous routine ntt_to_limb(
         # CRT to mixed-radix
         var l: U64 = 0
         var jj: U64 = 0
-        while jj < nb_mods -% 1
+        until jj >= nb_mods -% 1
             var kk = jj +% 1
-            while kk < nb_mods
+            until kk >= nb_mods
                 var m = ntt_mod(idx: base_idx +% kk)
                 var diff = limb(tab: y, i: kk) -% limb(tab: y, i: jj) +% m
                 set_limb(
@@ -526,11 +526,11 @@ secret dangerous routine ntt_to_limb(
         set_limb(tab: u, i: 0, value: limb(tab: y, i: nb_mods -% 1))
         var ll: U64 = 1
         var jd = nb_mods -% 2
-        while jd >= 1
+        until jd < 1
             var r = limb(tab: y, i: jd)
             var mjd = ntt_mod(idx: base_idx +% jd)
             var k2: U64 = 0
-            while k2 < ll
+            until k2 >= ll
                 var t = limb(tab: u, i: k2).to[U128]() *% mjd.to[U128]() +% r.to[U128]()
                 r = u128_hi(t: t)
                 set_limb(tab: u, i: k2, value: u128_lo(t: t))
@@ -542,7 +542,7 @@ secret dangerous routine ntt_to_limb(
         var r2 = limb(tab: y, i: 0)
         var m0 = ntt_mod(idx: base_idx)
         var k3: U64 = 0
-        while k3 < ll
+        until k3 >= ll
             var t2 = limb(tab: u, i: k3).to[U128]() *% m0.to[U128]() +% r2.to[U128]() +% limb(tab: carry, i: k3).to[U128]()
             r2 = u128_hi(t: t2)
             set_limb(tab: u, i: k3, value: u128_lo(t: t2))
@@ -551,7 +551,7 @@ secret dangerous routine ntt_to_limb(
         # write dpl bits of the reconstructed digit
         var pos = i *% dpl
         var jw: U64 = 0
-        while jw < n_limb1
+        until jw >= n_limb1
             put_bits(tab: tabr, len: r_len, pos: pos, val: limb(tab: u, i: jw))
             pos = pos +% 64
             jw = jw +% 1
@@ -559,12 +559,12 @@ secret dangerous routine ntt_to_limb(
         # shift out dpl digits into the carry for the next position
         if shift == 0
             var jc = n_limb1 +% 1
-            while jc < nb_mods
+            until jc >= nb_mods
                 set_limb(tab: carry, i: jc -% (n_limb1 +% 1), value: limb(tab: u, i: jc))
                 jc = jc +% 1
         else
             var jc2 = n_limb1
-            while jc2 < nb_mods -% 1
+            until jc2 >= nb_mods -% 1
                 set_limb(
                     tab: carry,
                     i: jc2 -% n_limb1,
@@ -612,7 +612,7 @@ secret routine ntt_proot_pow(j: U64, inverse: U64, k: U64) -> U64
         var c = ntt_proot(inverse: inverse, j: j)
         var e = 51 -% k
         var i: U64 = 0
-        while i < e
+        until i >= e
             c = mul_mod_fast(a: c, b: c, m: m, m_inv: m_inv)
             i = i +% 1
         return c
@@ -632,7 +632,7 @@ secret routine ntt_len_inv0(j: U64, k: U64) -> U64
         var half = (m +% 1) // 2
         var c: U64 = 1
         var i: U64 = 0
-        while i < k
+        until i >= k
             c = mul_mod_fast(a: c, b: half, m: m, m_inv: m_inv)
             i = i +% 1
         return c
@@ -651,7 +651,7 @@ secret dangerous routine get_trig(k: U64, inverse: U64, m_idx: U64) -> Hijacked[
     var c_mul = ntt_proot_pow(j: m_idx, inverse: inverse, k: k)
     var c_mul_inv = ntt_proot_pow_inv(j: m_idx, inverse: inverse, k: k)
     var i: U64 = 0
-    while i < n2
+    until i >= n2
         set_limb(tab: tab, i: 2 *% i, value: c)
         set_limb(tab: tab, i: 2 *% i +% 1, value: init_mul_mod_fast2(b: c, m: m))
         c = mul_mod_fast2(a: c, b: c_mul, m: m, b_inv: c_mul_inv)
@@ -677,17 +677,17 @@ secret dangerous routine ntt_fft(
     var tab_in = in_buf
     var tab_out = tmp_buf
     var l = fft_len_log2
-    while nb_blocks != 2
+    until nb_blocks == 2
         nb_blocks = nb_blocks >> 1
         var p: U64 = 0
         var kk: U64 = 0
         var trig = get_trig(k: l, inverse: inverse, m_idx: m_idx)
         var i: U64 = 0
-        while i < nb_blocks
+        until i >= nb_blocks
             var c = limb(tab: trig, i: 2 *% i)
             var c_inv = limb(tab: trig, i: 2 *% i +% 1)
             var jb: U64 = 0
-            while jb < fft_per_block
+            until jb >= fft_per_block
                 var a0 = limb(tab: tab_in, i: kk +% jb)
                 var a1 = limb(tab: tab_in, i: kk +% jb +% stride_in)
                 var b0 = add_mod(a: a0, b: a1, m: m2)
@@ -707,7 +707,7 @@ secret dangerous routine ntt_fft(
     # last butterfly level (no twiddle) writes to out_buf
     tab_out = out_buf
     var k2: U64 = 0
-    while k2 < stride_in
+    until k2 >= stride_in
         var a0 = limb(tab: tab_in, i: k2)
         var a1 = limb(tab: tab_in, i: k2 +% stride_in)
         set_limb(tab: tab_out, i: k2, value: add_mod(a: a0, b: a1, m: m2))
@@ -729,7 +729,7 @@ secret dangerous routine ntt_vec_mul(
     var norm_inv = ntt_len_inv1(j: m_idx, k: k_tot)
     var n: U64 = 1 << fft_len_log2.to[U32]()
     var i: U64 = 0
-    while i < n
+    until i >= n
         var a = limb(tab: tab1, i: i)
         if a >= m
             a = a -% m
@@ -744,7 +744,7 @@ secret dangerous routine mul_trig(buf: Hijacked[U64], n: U64, c_mul: U64, m: U64
     var c0: U64 = 1
     var c_mul_inv = init_mul_mod_fast2(b: c_mul, m: m)
     var i: U64 = 0
-    while i < n
+    until i >= n
         set_limb(
             tab: buf,
             i: i,
@@ -783,16 +783,16 @@ secret dangerous routine ntt_fft_partial(
     var c0 = ntt_proot_pow(j: m_idx, inverse: inverse, k: k1 +% k2)
     var c_mul: U64 = 1
     var j: U64 = 0
-    while j < n2
+    until j >= n2
         var i: U64 = 0
-        while i < n1
+        until i >= n1
             var l: U64 = 0
-            while l < strip_len
+            until l >= strip_len
                 set_limb(tab: buf2, i: i +% l *% n1, value: limb(tab: buf1, i: i *% n2 +% (j +% l)))
                 l = l +% 1
             i = i +% 1
         var l2: U64 = 0
-        while l2 < strip_len
+        until l2 >= strip_len
             if inverse != 0
                 mul_trig(
                     buf: buf2.stride(count: (l2 *% n1).to[S64]()),
@@ -820,9 +820,9 @@ secret dangerous routine ntt_fft_partial(
             c_mul = mul_mod_fast(a: c_mul, b: c0, m: m, m_inv: m_inv)
             l2 = l2 +% 1
         var i2: U64 = 0
-        while i2 < n1
+        until i2 >= n1
             var l3: U64 = 0
-            while l3 < strip_len
+            until l3 >= strip_len
                 set_limb(
                     tab: buf1,
                     i: i2 *% n2 +% (j +% l3),
@@ -857,7 +857,7 @@ secret dangerous routine ntt_conv(
         ntt_vec_mul(tab1: buf1, tab2: buf2, fft_len_log2: k, k_tot: k_tot, m_idx: m_idx)
     else
         var i: U64 = 0
-        while i < n1
+        until i >= n1
             ntt_conv(
                 buf1: buf1.stride(count: (i *% n2).to[S64]()),
                 buf2: buf2.stride(count: (i *% n2).to[S64]()),
@@ -907,7 +907,7 @@ secret dangerous routine limbs_mul_ntt(
         nb_mods: nb_mods,
     )
     var j: U64 = 0
-    while j < nb_mods
+    until j >= nb_mods
         ntt_conv(
             buf1: buf1.stride(count: (fft_len *% j).to[S64]()),
             buf2: buf2.stride(count: (fft_len *% j).to[S64]()),
@@ -998,7 +998,7 @@ secret dangerous routine limbs_neg(
 ) -> U64
     var k = carry
     var i: U64 = 0
-    while i < n
+    until i >= n
         var v: U64 = 0
         var a = v -% limb(tab: op2, i: i)
         var k1: U64 = if a > v then 1 else 0
@@ -1012,7 +1012,7 @@ secret dangerous routine limbs_neg(
 # 1 if any of tab[0..n) is nonzero, else 0. (libbf mp_scan_nz)
 secret dangerous routine limbs_any_nonzero(tab: Hijacked[U64], n: U64) -> U64
     var i: U64 = 0
-    while i < n
+    until i >= n
         if limb(tab: tab, i: i) != 0
             return 1
         i = i +% 1
@@ -1021,7 +1021,7 @@ secret dangerous routine limbs_any_nonzero(tab: Hijacked[U64], n: U64) -> U64
 # -1 / 0 / 1 comparing two n-limb magnitudes. (libbf mp_cmp)
 secret dangerous routine limbs_cmp(a: Hijacked[U64], b: Hijacked[U64], n: U64) -> S64
     var i = n
-    while i > 0
+    until i == 0
         i = i -% 1
         var av = limb(tab: a, i: i)
         var bv = limb(tab: b, i: i)
@@ -1041,7 +1041,7 @@ secret dangerous routine limbs_divmod_word(
     var r = r0
     var b_inv = reciprocal_word(d: b)
     var i = n
-    while i > 0
+    until i == 0
         i = i -% 1
         var qr = div2by1(u1: r, u0: limb(tab: taba, i: i), d: b, v: b_inv)
         set_limb(tab: tabr, i: i, value: qr.q)
@@ -1058,7 +1058,7 @@ secret dangerous routine limbs_reciprocal(tabr: Hijacked[U64], taba: Hijacked[U6
         set_limb(tab: tabu, i: 2 *% n, value: 1)
         limbs_divmod_norm(tabq: tabt, taba: tabu, na: 2 *% n +% 1, tabb: taba, nb: n)
         var i: U64 = 0
-        while i < n +% 1
+        until i >= n +% 1
             set_limb(tab: tabr, i: i, value: limb(tab: tabt, i: i))
             i = i +% 1
         if limbs_any_nonzero(tab: tabu, n: n) == 0
@@ -1071,7 +1071,7 @@ secret dangerous routine limbs_reciprocal(tabr: Hijacked[U64], taba: Hijacked[U6
     var tabxh = tabr.stride(count: l.to[S64]())
     limbs_reciprocal(tabr: tabxh, taba: taba.stride(count: l.to[S64]()), n: h)
     limbs_mul(result: tabt, op1: taba, op1_size: n, op2: tabxh, op2_size: h +% 1)
-    while limb(tab: tabt, i: n +% h) != 0
+    until limb(tab: tabt, i: n +% h) == 0
         drop limbs_sub_word(tab: tabxh, b: 1, n: h +% 1)
         var c = limbs_sub(res: tabt, op1: tabt, op2: taba, n: n, borrow_in: 0)
         drop limbs_sub_word(tab: tabt.stride(count: n.to[S64]()), b: c, n: h +% 1)
@@ -1087,7 +1087,7 @@ secret dangerous routine limbs_reciprocal(tabr: Hijacked[U64], taba: Hijacked[U6
     )
     var k = 2 *% h -% l
     var i2: U64 = 0
-    while i2 < l
+    until i2 >= l
         set_limb(tab: tabr, i: i2, value: limb(tab: tabu, i: i2 +% k))
         i2 = i2 +% 1
     drop limbs_add(
@@ -1117,16 +1117,16 @@ secret dangerous routine limbs_divmod_newton(
     var did_recip = false
     if n >= nb
         var i: U64 = 0
-        while i < n -% nb
+        until i >= n -% nb
             set_limb(tab: tabt, i: i, value: 0)
             i = i +% 1
         var i2: U64 = 0
-        while i2 < nb
+        until i2 >= nb
             set_limb(tab: tabt, i: i2 +% n -% nb, value: limb(tab: tabb, i: i2))
             i2 = i2 +% 1
     else
         var i: U64 = 0
-        while i < n
+        until i >= n
             set_limb(tab: tabt, i: i, value: limb(tab: tabb, i: i +% nb -% n))
             i = i +% 1
         if limbs_add_word(tab: tabt, b: 1, n: n) != 0
@@ -1144,7 +1144,7 @@ secret dangerous routine limbs_divmod_newton(
         op2_size: n +% 1,
     )
     var iq: U64 = 0
-    while iq < nq +% 1
+    until iq >= nq +% 1
         set_limb(
             tab: tabq,
             i: iq,
@@ -1156,10 +1156,9 @@ secret dangerous routine limbs_divmod_newton(
     limbs_mul(result: tabt2, op1: tabq, op1_size: nq +% 1, op2: tabb, op2_size: nb)
     drop limbs_sub(res: taba, op1: taba, op2: tabt2, n: nb +% 1, borrow_in: 0)
     # the approximate quotient is <= exact, so increment while the remainder is still >= B
-    var going = true
-    while going
+    loop
         if limb(tab: taba, i: nb) == 0 and limbs_cmp(a: taba, b: tabb, n: nb) < 0
-            going = false
+            break
         else
             var bw = limbs_sub(res: taba, op1: taba, op2: tabb, n: nb, borrow_in: 0)
             set_limb(tab: taba, i: nb, value: limb(tab: taba, i: nb) -% bw)
@@ -1194,7 +1193,7 @@ secret dangerous routine limbs_divmod_norm(
     # first quotient limb is 0 or 1
     var q: U64 = 1
     var j = nb
-    while j > 0
+    until j == 0
         j = j -% 1
         if limb(tab: taba, i: n +% j) != limb(tab: tabb, i: j)
             if limb(tab: taba, i: n +% j) < limb(tab: tabb, i: j)
@@ -1212,7 +1211,7 @@ secret dangerous routine limbs_divmod_norm(
             borrow_in: 0,
         )
     var i = n
-    while i > 0
+    until i == 0
         i = i -% 1
         var qq: U64 = 0
         if limb(tab: taba, i: i +% nb) >= b1
@@ -1231,8 +1230,7 @@ secret dangerous routine limbs_divmod_norm(
         var c: U64 = if a > v then 1 else 0
         set_limb(tab: taba, i: i +% nb, value: a)
         if c != 0
-            var neg = true
-            while neg
+            loop
                 qq = qq -% 1
                 var cc = limbs_add(
                     res: taba.stride(count: i.to[S64]()),
@@ -1245,7 +1243,7 @@ secret dangerous routine limbs_divmod_norm(
                     var t = limb(tab: taba, i: i +% nb) +% 1
                     set_limb(tab: taba, i: i +% nb, value: t)
                     if t == 0
-                        neg = false
+                        break
         set_limb(tab: tabq, i: i, value: qq)
     return
 
@@ -1253,7 +1251,7 @@ secret dangerous routine limbs_divmod_norm(
 # floor(sqrt(x)) for x < 2^16 (seeds mp_sqrtrem1, replacing libbf's 192-entry sqrt_table).
 secret routine isqrt_small(x: U64) -> U64
     var s: U64 = 0
-    while (s +% 1) *% (s +% 1) <= x
+    until (s +% 1) *% (s +% 1) > x
         s = s +% 1
     return s
 
@@ -1347,7 +1345,7 @@ secret dangerous routine limbs_sqrt_rec(
     )
     qh = qh +% limb(tab: tmp_buf, i: l)
     var i: U64 = 0
-    while i < l
+    until i >= l
         set_limb(tab: tabs, i: i, value: limb(tab: tmp_buf, i: i))
         i = i +% 1
     var ql = limbs_shr(tab_r: tabs, tab: tabs, n: l, shift: 1, high: qh & 1)
@@ -1406,14 +1404,14 @@ secret dangerous routine limbs_shl(
 ) -> U64
     if shift == 0
         var i0: U64 = 0
-        while i0 < n
+        until i0 >= n
             set_limb(tab: dst, i: i0, value: limb(tab: src, i: i0))
             i0 = i0 +% 1
         return 0
     var sh = shift.to[U32]()
     var carry: U64 = 0
     var i: U64 = 0
-    while i < n
+    until i >= n
         var v = limb(tab: src, i: i)
         set_limb(tab: dst, i: i, value: (v << sh) | carry)
         carry = v >> 64 -% sh
@@ -1438,12 +1436,12 @@ secret dangerous routine limbs_divmod(
     var qq = alloc_limbs(n: na +% 2 -% nb)
     limbs_divmod_norm(tabq: qq, taba: an, na: na +% 1, tabb: bn, nb: nb)
     var qi: U64 = 0
-    while qi < na +% 1 -% nb
+    until qi >= na +% 1 -% nb
         set_limb(tab: q, i: qi, value: limb(tab: qq, i: qi))
         qi = qi +% 1
     if shift == 0
         var ri: U64 = 0
-        while ri < nb
+        until ri >= nb
             set_limb(tab: r, i: ri, value: limb(tab: an, i: ri))
             ri = ri +% 1
     else

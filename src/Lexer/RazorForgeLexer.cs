@@ -201,7 +201,6 @@ public partial class RazorForgeLexer
             [key: "when"] = TokenType.When,
             [key: "is"] = TokenType.Is,
             [key: "loop"] = TokenType.Loop,
-            [key: "while"] = TokenType.While,
             [key: "each"] = TokenType.Each,
             [key: "break"] = TokenType.Break,
             [key: "continue"] = TokenType.Continue,

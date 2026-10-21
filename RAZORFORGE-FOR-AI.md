@@ -155,8 +155,8 @@ When unsure, consult ground truth in the repo/package:
    the name like `steal x` (RF-S615 after, RF-S616 on some paths only, tokens from it end, RF-S643); a member
    variable, a token, `me` or a global is RF-S421.
    **Notes and fixes (RF and SF).** A NOTE is a likely slip that builds as written: `check`, `lint` (SF files) and
-   the language server show it (`note[RF-W###]`), a build never does. `while true` / `until false` get RF-W304 with
-   the fix "Write 'loop'". The body of `while false` / `until true` gets RF-W057 and, like the code after an
+   the language server show it (`note[RF-W###]`), a build never does. `until false` gets RF-W304 with the fix
+   "Write 'loop'". The body of `until true` gets RF-W057 and, like the code after an
    unconditional `return`/`break` (RF-S786, still an error), is shown FADED (LSP `Unnecessary` tag, range through its
    last line). Diagnostics carry an optional `Fix` (title + 1-based `TextEdit`s): the language server offers it as a
    quick fix (sent in `diagnostic.data`), and `check --json` writes every error/warning/note as a JSON array (`file`,
@@ -526,22 +526,27 @@ each x in 1 to 5          # range iteration
         break
     show(f"x={x}")
 
-while i < 10
+until i >= 10             # stops when i >= 10, tested before each round
     i = i + 1
 
-loop                      # infinite loop, exit with break
+loop                      # doesn't end by itself: break, return or throw leaves it
     n = n + 1
     if n >= 3
         break
 ```
 
-`until c` loops while `c` is false (`while not (c)`). A `while`, `until`, `each` or `loop` may end
-with a `then` block. It runs once whenever the loop is left for the line after it: when the loop ends by itself
+Loops are `until c` and `loop` (plus `each` and `expand`). `until c` stops when `c` becomes true, tested before each
+round: write the condition that ends the loop. `loop` doesn't end by itself: only a `break`, `return` or `throw`
+leaves it, so the lines after a `loop` without a `break` never run (RF-S786) and a routine whose last statement is
+such a loop needs no `return` after it. `while` is not a keyword: a loop written with it is RF-G224, and
+`migrate --step until` rewrites it (`while true` → `loop`, `while not c` → `until c`, an integer comparison turned
+around, `while i < n` → `until i >= n`, a float comparison and anything else → `until not (c)`, listed). An `until`,
+`each` or `loop` may end with a `then` block. It runs once whenever the loop is left for the line after it: when the loop ends by itself
 and after its own `break` (a `break` of a loop inside only leaves that loop). A `return` or `throw` leaves the
 routine and skips it. A loop whose `then` ends in `return` always returns, so the routine needs nothing after it.
 Loops have no `else` (RF-G219): the case where the loop would not run even once is an `if` before the loop.
-A loop may carry values from one round to the next: `while n > 1 with n: U64 = start, steps: U64 = 0`
-(`each x in xs with sum: S64 = 0` too). Each carried value is bound anew every round, from what the round's
+A loop may carry values from one round to the next: `until n <= 1 with n: U64 = start, steps: U64 = 0`
+(`each x in xs with sum: S64 = 0` and `loop with i: S64 = 0` too). Each carried value is bound anew every round, from what the round's
 `continue with n: after, steps: steps + 1` passes (every carried name once, in any order, all computed before
 any is stored, so `continue with x: y, y: x % y` swaps). The names are visible in the condition, the body and
 the `then` block, and nowhere after the loop. A body that carries values must not run off its end: every path
@@ -551,7 +556,7 @@ loop changes:
 
 ```razorforge
 routine collatz_steps(start: U64) -> U64
-    while n > 1 with n: U64 = start, steps: U64 = 0
+    until n <= 1 with n: U64 = start, steps: U64 = 0
         var after = if n % 2 == 0 then n // 2 else 3 * n + 1
         continue with n: after, steps: steps + 1
     then
@@ -1220,6 +1225,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S649      | value of a `MultiRead`/`Exclusive` `Guarded` reached on the handle | `modifying g as v` / `viewing g as v`, or the `ReadOnly` policy |
 | RF-S648      | `steal … as …` on something that is not a place | take from a variable, member variable or element |
 | RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
+| RF-G224      | a loop written `while c`              | `until` with the condition that ends it, or `loop` (`migrate --step until`) |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 
@@ -1340,7 +1346,7 @@ routine relay(n: S64) -> S64
 
 routine slow(n: S64) -> S64
     var i = 0
-    while i < 2000
+    until i >= 2000
         if cancellation_requested()
             return -1
         waitfor(1ms)
@@ -1432,7 +1438,7 @@ routine on_stop()
 
 routine start()
     CpuEventManager.when_interrupted(on_stop)     # Ctrl+C, SIGINT
-    while stop_requests.load() == 0
+    until stop_requests.load() != 0
         waitfor(200ms)
     show("cleaned up")
     return
@@ -1502,8 +1508,8 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Visibility / receiver**: `secret` `posted` `common`
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
-- **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `loop` `with`
-  `while` `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes` `until`
+- **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `until` `loop` `with`
+  `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes`
 - **Iteration / range / hand-over**: `in` (loops only) `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `pass` `given` `drop`

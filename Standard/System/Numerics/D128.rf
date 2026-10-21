@@ -281,7 +281,7 @@ failable routine d128_int_magnitude(coeff: U128, exp: S64) -> U256
             return 0
         var c = coeff
         var k = exp
-        while k < 0
+        until k >= 0
             c = u128_floordiv(a: c, b: 10)
             k = k +% 1
         return LLVM::zero_extend[U128, U256](c)
@@ -289,7 +289,7 @@ failable routine d128_int_magnitude(coeff: U128, exp: S64) -> U256
         throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
     var m = LLVM::zero_extend[U128, U256](coeff)
     var i = 0
-    while i < exp
+    until i >= exp
         var prod = LLVM::unsigned_mul_checked[U256](m, 10)
         if prod.item1
             throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
@@ -548,7 +548,7 @@ routine d128_represent_wrapped(p: D128Parts, wrap: Text, strip: Bool) -> Text
         var e = p.exp
         var lo = 0
         if strip and p.coeff != 0
-            while e < 0 and dp.stride(count: lo).peek() == 0x30
+            until e >= 0 or dp.stride(count: lo).peek() != 0x30
                 lo = lo +% 1
                 e = e +% 1
         # the digits dp[lo .. nd - 1], most significant at nd - 1
@@ -559,7 +559,7 @@ routine d128_represent_wrapped(p: D128Parts, wrap: Text, strip: Bool) -> Text
         var n = 0
         var wn = LLVM::reinterpret_bits[U64, S64](wrap.count())
         if wn > 0
-            while n < wn
+            until n >= wn
                 o.stride(count: n).poke(value: wrap[LLVM::reinterpret_bits[S64, U64](n)])
                 n = n +% 1
             o.stride(count: n).poke(value: '(')
@@ -575,13 +575,13 @@ routine d128_represent_wrapped(p: D128Parts, wrap: Text, strip: Bool) -> Text
                 o.stride(count: n +% 1).poke(value: '.')
                 n = n +% 2
                 var z = 0
-                while z < 0 -% point
+                until z >= 0 -% point
                     o.stride(count: n).poke(value: '0')
                     n = n +% 1
                     z = z +% 1
             var i = k -% 1
             var written = 0
-            while i >= 0
+            until i < 0
                 if point > 0 and written == point and e != 0
                     o.stride(count: n).poke(value: '.')
                     n = n +% 1
@@ -597,7 +597,7 @@ routine d128_represent_wrapped(p: D128Parts, wrap: Text, strip: Bool) -> Text
                 o.stride(count: n).poke(value: '.')
                 n = n +% 1
                 var j = k -% 2
-                while j >= 0
+                until j < 0
                     o.stride(count: n).poke(value: Char(dp.stride(count: lo +% j).peek()))
                     n = n +% 1
                     j = j -% 1
@@ -620,7 +620,7 @@ routine d128_represent_wrapped(p: D128Parts, wrap: Text, strip: Bool) -> Text
                 edp.poke(value: 0x30)
                 en = 1
             var t = en -% 1
-            while t >= 0
+            until t < 0
                 o.stride(count: n).poke(value: Char(edp.stride(count: t).peek()))
                 n = n +% 1
                 t = t -% 1
@@ -686,7 +686,7 @@ routine D128.powi(n: S32) -> D128
     var base = if n < 0 then D128_ONE.truediv_unchecked(me) else me
     var count = n.unsigned_abs()
     var result = D128_ONE
-    while count > 0
+    until count == 0
         if count.bitand(1) == 1
             result = result.mul_unchecked(base)
         base = base.mul_unchecked(base)
@@ -852,7 +852,7 @@ failable routine scan_decimal_parts(from_text: Text) -> D128Parts
     var exp10 = 0
     var seen_dot = false
     var has_digit = false
-    while i < len
+    until i >= len
         var ch = from_text[i]
         if ch.is_numeric()
             var d = LLVM::zero_extend[U32, U128](LLVM::reinterpret_bits[S32, U32](ch.digit_value()))
@@ -882,7 +882,7 @@ failable routine scan_decimal_parts(from_text: Text) -> D128Parts
                 i = i + 1
             var eval = 0
             var has_edigit = false
-            while i < len
+            until i >= len
                 var ec = from_text[i]
                 if not ec.is_numeric()
                     throw InvalidValueError(input: from_text, target: "decimal number")
@@ -929,7 +929,7 @@ routine D128.to_bytes_le() -> Array[Byte, 16]
     var raw = me.to_bits()
     var result = Array[Byte, 16]()
     var i: U64 = 0
-    while LLVM::unsigned_lt(a: i, b: 16)
+    until LLVM::unsigned_ge(a: i, b: 16)
         var b = LLVM::int_truncate[U128, U8](
             LLVM::shift_right_unsigned(
                 raw,
@@ -945,7 +945,7 @@ routine D128.to_bytes_be() -> Array[Byte, 16]
     var raw = me.to_bits()
     var result = Array[Byte, 16]()
     var i: U64 = 0
-    while LLVM::unsigned_lt(a: i, b: 16)
+    until LLVM::unsigned_ge(a: i, b: 16)
         var b = LLVM::int_truncate[U128, U8](
             LLVM::shift_right_unsigned(
                 raw,

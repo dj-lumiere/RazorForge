@@ -143,14 +143,14 @@ routine BTreeSetNode[T].destruct()
     danger
         if not me.is_leaf
             var ci: U64 = 0
-            while ci < me.child_count
+            until ci >= me.child_count
                 me
                     .children_get(ci)
                     .as_entity()
                     .destruct()
                 ci = ci + 1
         var ki: U64 = 0
-        while ki < me.key_count
+        until ki >= me.key_count
             me.keys_get(ki).destruct()
             ki = ki + 1
         return
@@ -161,14 +161,14 @@ routine BTreeSetNode[T].destruct()
 dangerous routine BTreeSetNode[T].roam_trace()
     if not me.is_leaf
         var ci: U64 = 0
-        while ci < me.child_count
+        until ci >= me.child_count
             me
                 .children_get(ci)
                 .as_entity()
                 .roam_trace()
             ci = ci + 1
     var ki: U64 = 0
-    while ki < me.key_count
+    until ki >= me.key_count
         me.keys_get(ki).cyclic_visit()
         ki = ki + 1
     return
@@ -179,7 +179,7 @@ dangerous routine BTreeSetNode[T].roam_trace()
 dangerous routine BTreeSetNode[T].roam_free()
     if not me.is_leaf
         var ci: U64 = 0
-        while ci < me.child_count
+        until ci >= me.child_count
             me
                 .children_get(ci)
                 .as_entity()
@@ -401,7 +401,7 @@ common routine SortedSet[T].from_literal(elements...: T) -> SortedSet[T]
 needs T obeys Comparable
     var result = SortedSet[T]()
     var i: U64 = 0
-    while i < elements.count()
+    until i >= elements.count()
         drop result.add(value: elements.get_raw(index: i))
         i = i +% 1
     return result
@@ -494,7 +494,7 @@ secret routine SortedSet[T].lower_bound(node: Viewing[BTreeSetNode[T]], value: T
     var hi = node.keys_count()
     # Invariant: all keys[0..lo) < value, all keys[hi..count) >= value.
     # We narrow [lo, hi) until lo == hi, which is the answer.
-    while lo < hi
+    until lo >= hi
         var mid = lo +% LLVM::unsigned_div(hi -% lo, 2)
         if node.keys_get(mid) < value
             # keys[mid] is too small, so the answer is at least mid+1.
@@ -643,13 +643,13 @@ secret routine SortedSet[T].split_child(parent_node: Modifying[BTreeSetNode[T]],
         else
             var left_size = child.keys_count()
             var i: U64 = 0
-            while i < child.children_count()
+            until i >= child.children_count()
                 left_size = left_size +% child.children_get(i).as_entity().subtree_size
                 i = i +% 1
             child.subtree_size = left_size
             var right_size = new_node.keys_count()
             i = 0
-            while i < new_node.children_count()
+            until i >= new_node.children_count()
                 right_size = right_size +% new_node.children_get(i).as_entity().subtree_size
                 i = i +% 1
             new_node.subtree_size = right_size
@@ -779,7 +779,7 @@ secret routine SortedSet[T].remove_from_node(node: Modifying[BTreeSetNode[T]], v
 secret routine SortedSet[T].get_predecessor(node: Viewing[BTreeSetNode[T]], idx: U64) -> T
     danger
         var current = node.children_get(idx).as_entity()
-        while not current.is_leaf
+        until current.is_leaf
             current = current.children_get(current.children_count() -% 1).as_entity()
         return current.keys_get(current.keys_count() -% 1)
 
@@ -792,7 +792,7 @@ secret routine SortedSet[T].get_predecessor(node: Viewing[BTreeSetNode[T]], idx:
 secret routine SortedSet[T].get_successor(node: Viewing[BTreeSetNode[T]], idx: U64) -> T
     danger
         var current = node.children_get(idx +% 1).as_entity()
-        while not current.is_leaf
+        until current.is_leaf
             current = current.children_get(0).as_entity()
         return current.keys_get(0)
 
@@ -947,7 +947,7 @@ secret routine SortedSet[T].update_subtree_size(node: Modifying[BTreeSetNode[T]]
         else
             var size = node.keys_count()
             var i: U64 = 0
-            while i < node.children_count()
+            until i >= node.children_count()
                 size = size +% node.children_get(i).as_entity().subtree_size
                 i = i +% 1
             node.subtree_size = size
@@ -985,7 +985,7 @@ secret routine SortedSet[T].get_at_subtree_rank(node: Viewing[BTreeSetNode[T]], 
         var remaining = rank
         var i: U64 = 0
 
-        while i < node.children_count()
+        until i >= node.children_count()
             var child_size = node.children_get(i).as_entity().subtree_size
 
             if remaining < child_size
@@ -1041,7 +1041,7 @@ secret routine SortedSet[T].range_collect(
     danger
         var i: U64 = 0
 
-        while i < node.keys_count()
+        until i >= node.keys_count()
             if not node.is_leaf and (i == 0 or node.keys_get(i -% 1) >= min_val)
                 me.range_collect(
                     node: node.children_get(i).as_entity(),
@@ -1078,7 +1078,7 @@ failable routine SortedSet[T].min() -> T
         throw AbsentValueError()
     danger
         var node = me.root!!.as_entity()
-        while not node.is_leaf
+        until node.is_leaf
             node = node.children_get(0).as_entity()
         return node.keys_get(0)
 
@@ -1091,7 +1091,7 @@ failable routine SortedSet[T].max() -> T
         throw AbsentValueError()
     danger
         var node = me.root!!.as_entity()
-        while not node.is_leaf
+        until node.is_leaf
             node = node.children_get(node.children_count() -% 1).as_entity()
         return node.keys_get(node.keys_count() -% 1)
 
@@ -1140,7 +1140,7 @@ routine SortedSet[T].to[List[T]]() -> List[T]
 secret routine SortedSet[T].collect_inorder(node: Viewing[BTreeSetNode[T]], result: Modifying[List[T]])
     danger
         var i: U64 = 0
-        while i < node.keys_count()
+        until i >= node.keys_count()
             if not node.is_leaf
                 me.collect_inorder(node: node.children_get(i).as_entity(), result: result)
             result.add_last(node.keys_get(i))
@@ -1204,7 +1204,7 @@ routine SortedSet[T].eq(you: Viewing[SortedSet[T]]) -> Bool
     if me.count != you.count
         return false
     var i: U64 = 0
-    while i < me.count
+    until i >= me.count
         if (try me.get_by_rank(rank: i))!! != try you.get_by_rank(rank: i)!!
             return false
         i = i +% 1

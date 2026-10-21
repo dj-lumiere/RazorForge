@@ -1,3 +1,4 @@
+using Builder.Diagnostics;
 using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
@@ -285,17 +286,17 @@ public class ControlFlowTests
 
     #endregion
 
-    #region While Loop Tests
+    #region Until and Loop Tests
 
     /// <summary>
-    /// Verifies that the parser accepts simple while.
+    /// Verifies that the parser accepts a simple until loop, kept as a loop that runs while its condition is false.
     /// </summary>
     [Fact]
-    public void Parse_SimpleWhile()
+    public void Parse_SimpleUntil()
     {
         string source = """
                         routine test()
-                            while condition
+                            until done
                                 process()
                             return
                         """;
@@ -304,21 +305,22 @@ public class ControlFlowTests
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         var body = routine.Body as BlockStatement;
         Assert.NotNull(@object: body);
-        WhileStatement? whileStmt = body.Statements
+        WhileStatement? untilStmt = body.Statements
                                         .OfType<WhileStatement>()
                                         .FirstOrDefault();
-        Assert.NotNull(@object: whileStmt);
+        Assert.NotNull(@object: untilStmt);
+        Assert.True(condition: untilStmt.IsUntil);
     }
     /// <summary>
-    /// Verifies that the parser accepts while with counter.
+    /// Verifies that the parser accepts until with counter.
     /// </summary>
     [Fact]
-    public void Parse_WhileWithCounter()
+    public void Parse_UntilWithCounter()
     {
         string source = """
                         routine count_up()
                             var count = 0
-                            while count < 10
+                            until count >= 10
                                 show(count)
                                 count += 1
                             return
@@ -327,14 +329,14 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts while with break.
+    /// Verifies that the parser accepts until with break.
     /// </summary>
     [Fact]
-    public void Parse_WhileWithBreak()
+    public void Parse_UntilWithBreak()
     {
         string source = """
                         routine search()
-                            while has_more()
+                            until at_end()
                                 if found_target()
                                     break
                                 advance()
@@ -344,22 +346,43 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts while with continue.
+    /// Verifies that the parser accepts loop with carried values.
     /// </summary>
     [Fact]
-    public void Parse_WhileWithContinue()
+    public void Parse_LoopWithCarriedValues()
     {
         string source = """
                         routine process_items()
-                            while has_items()
-                                var item = next_item()
-                                if item.skip()
-                                    continue
-                                process(item)
+                            loop with i: S64 = 0
+                                if i > 9
+                                    break
+                                process(i)
+                                continue with i: i + 1
                             return
                         """;
 
-        AssertParses(source: source);
+        Program program = AssertParses(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+        LoopStatement? loop = (routine.Body as BlockStatement)!.Statements.OfType<LoopStatement>().FirstOrDefault();
+        Assert.NotNull(@object: loop);
+        Assert.Single(collection: loop.With!);
+    }
+    /// <summary>
+    /// Verifies that a loop written with while is a grammar error pointing to until and loop.
+    /// </summary>
+    [Fact]
+    public void Parse_While_IsGrammarError()
+    {
+        string source = """
+                        routine test()
+                            while has_more()
+                                advance()
+                            return
+                        """;
+
+        (Program _, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
+        GrammarException error = Assert.Single(collection: parser.GetStructuredErrors());
+        Assert.Equal(expected: GrammarDiagnosticCode.WhileLoop, actual: error.Code);
     }
 
     #endregion
@@ -673,7 +696,7 @@ public class ControlFlowTests
                                         continue
                                     if cell > 100
                                         break
-                                    while cell > 0
+                                    until cell <= 0
                                         cell -= 1
                             return
                         """;

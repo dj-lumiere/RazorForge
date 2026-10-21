@@ -165,15 +165,15 @@ public class ScopeTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for while loop variable in scope.
+    /// Verifies semantic analysis behavior for until loop variable in scope.
     /// </summary>
     [Fact]
-    public void Analyze_WhileLoopVariable_InScope()
+    public void Analyze_UntilLoopVariable_InScope()
     {
         string source = """
                         routine test()
                             var i = 0
-                            while i < 10
+                            until i >= 10
                                 show(i)
                                 i += 1
                             return

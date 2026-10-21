@@ -30,21 +30,51 @@ public class NoticeTests
     }
 
     [Fact]
-    public void Analyze_WhileTrue_NoticeProposesLoop()
+    public void Analyze_UntilFalse_NoticeProposesLoop()
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
                                                       var n: S64 = 0
-                                                      while true
+                                                      until false
                                                           n += 1
                                                           if n > 3
                                                               break
                                                       return
                                                   """);
         SemanticWarning notice = Assert.Single(collection: result.Notices,
-            predicate: n => n.Code == SemanticWarningCode.InfiniteLoopAsWhile);
+            predicate: n => n.Code == SemanticWarningCode.EndlessUntil);
         TextEdit edit = Assert.Single(collection: notice.Fix!.Edits);
-        Assert.Equal(expected: ("loop", 3, 5, 15), actual: (edit.NewText, edit.StartLine, edit.StartColumn, edit.EndColumn));
+        Assert.Equal(expected: ("loop", 3, 5, 16), actual: (edit.NewText, edit.StartLine, edit.StartColumn, edit.EndColumn));
+    }
+
+    [Fact]
+    public void Analyze_CodeAfterLoopWithoutBreak_NeverRuns()
+    {
+        AnalysisResult result = AnalyzeSa(source: """
+                                                  routine test(n: S64) -> S64
+                                                      var i: S64 = 0
+                                                      loop
+                                                          if i > n
+                                                              return i
+                                                          i += 1
+                                                      return 0
+                                                  """);
+        SemanticError error = Assert.Single(collection: result.Errors,
+            predicate: e => e.Code == SemanticDiagnosticCode.UnreachableStatement);
+        Assert.Equal(expected: 7, actual: error.Location.Line);
+    }
+
+    [Fact]
+    public void Analyze_LoopOnlyLeftByReturn_NeedsNoReturnAfter()
+    {
+        AnalysisResult result = AnalyzeSa(source: """
+                                                  routine test(n: S64) -> S64
+                                                      loop with i: S64 = 0
+                                                          if i > n
+                                                              return i
+                                                          continue with i: i + 1
+                                                  """);
+        Assert.Empty(collection: result.Errors);
     }
 
     [Fact]
@@ -69,9 +99,9 @@ public class NoticeTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
-                                                      var going = true
-                                                      while going
-                                                          going = false
+                                                      var done = false
+                                                      until done
+                                                          done = true
                                                       return
                                                   """);
         Assert.Empty(collection: result.Notices);

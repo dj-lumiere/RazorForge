@@ -401,7 +401,7 @@ public class LexerParserEdgeCaseTests
         string source = """
                         routine test(items: List[S32]) -> S32
                             if true
-                                while true
+                                loop
                                     each item in items
                                         when item
                                             == 0 => return 0

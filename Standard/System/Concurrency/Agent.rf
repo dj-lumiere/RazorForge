@@ -336,7 +336,7 @@ dangerous routine AgentWork[T].wind_down()
     if me.place() != AgentPlace.APART
         C::rf_sched_run_until_default(coro: me.coro())
     elseif C::rf_in_coroutine() != 0
-        while C::rf_task_await_coro(task: me.task()) == 0
+        until C::rf_task_await_coro(task: me.task()) != 0
             C::rf_sched_park_external()
     else
         drop C::rf_task_wait(task: me.task())
@@ -455,7 +455,7 @@ failable routine AgentWork[T].retrieve(deadline: Duration, has_deadline: Bool) -
                 # Inside a scheduler-driven coroutine: park instead of blocking. Register as the task's
                 # awaiter and yield; the worker wakes us (cross-thread) on completion. The loop re-checks
                 # under the lock so no wake is lost, and tolerates spurious wakes.
-                while C::rf_task_await_coro(task: me.task()) == 0
+                until C::rf_task_await_coro(task: me.task()) != 0
                     C::rf_sched_park_external()
             else
                 drop C::rf_task_wait(task: me.task())
@@ -631,7 +631,7 @@ failable routine List[Agent[T]].race() -> T
 
         var race = C::rf_race_begin()
         var i: U64 = 0
-        while i < n
+        until i >= n
             # Launch each recipe so the whole set runs CONCURRENTLY, then race.
             if not me[i].work.launch()
                 throw TaskSpawnError()
@@ -650,7 +650,7 @@ failable routine List[Agent[T]].race() -> T
         # here (a still-running loser's worker frees its own block on exit, non-blocking), then settle the
         # winner, which reaps it. The List's own teardown then only frees each Agent's cell.
         var k: U64 = 0
-        while k < n
+        until k >= n
             if k != w
                 me[k].work.reap()
             k = k + 1
@@ -671,13 +671,13 @@ failable routine List[Agent[T]].gather() -> List[T]
         # one-by-one would serialize the children into N× the wall-clock. Launching is idempotent, so
         # retrieve!'s own launch below is a no-op on these already-started recipes.
         var i: U64 = 0
-        while i < n
+        until i >= n
             if not me[i].work.launch()
                 throw TaskSpawnError()
             i = i + 1
         var results = List[T]()
         i = 0
-        while i < n
+        until i >= n
             var value = me[i].retrieve()
             results.add_last(value: value)
             i = i + 1
@@ -691,11 +691,11 @@ routine List[Agent[T]].cancel_all()
     danger
         var n = me.count()
         var i: U64 = 0
-        while i < n
+        until i >= n
             me[i].work.request_cancel()
             i = i + 1
         i = 0
-        while i < n
+        until i >= n
             me[i].work.wind_down()
             i = i + 1
     return
@@ -712,7 +712,7 @@ failable routine List[Agent[T]].next_finished() -> Agent[T]
             throw TaskSpawnError()
         var race = C::rf_race_begin()
         var i: U64 = 0
-        while i < n
+        until i >= n
             if not me[i].work.launch()
                 throw TaskSpawnError()
             if me[i].work.is_coro()
@@ -731,7 +731,7 @@ routine List[Agent[T]].gather_all() -> List[Check[T]]
     danger
         var n = me.count()
         var i: U64 = 0
-        while i < n
+        until i >= n
             drop me[i].work.launch()
             i = i + 1
         var results = List[Check[T]]()
@@ -747,7 +747,7 @@ routine List[Agent[T]].gather_all() -> List[Check[T]]
 routine List[Agent[T]].take_finished() -> List[Agent[T]]
     var finished = List[Agent[T]]()
     var i: U64 = 0
-    while i < me.count()
+    until i >= me.count()
         if me[i].is_done()
             finished.add_last(value: me.remove_at(index: i))
         else
@@ -761,7 +761,7 @@ routine List[Agent[T]].take_finished() -> List[Agent[T]]
 ### :param duration: How long to wait.
 routine waitfor(duration: Duration)
     # Interruptible: once cancellation has been requested for this agent, waitfor is a no-op so a
-    # cooperative loop (`while ...: waitfor(...); if cancellation_requested(): return`) exits promptly
+    # cooperative loop (`until ...: waitfor(...); if cancellation_requested(): return`) exits promptly
     # instead of sleeping out the full duration.
     if C::rf_cancel_requested() != 0
         return
