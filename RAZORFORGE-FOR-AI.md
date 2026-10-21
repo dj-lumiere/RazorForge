@@ -1076,15 +1076,15 @@ token, and passing an entity element to an owning parameter
 (`keep(c: cells[1])`) is still RF-S413 even when Copyable: write
 `keep(c: cells[1].duplicate())`.
 
-## 10b. Files and directories (`IO/File`, `OsFileManager`), the environment (`IO/Environment`)
+## 10b. Files and directories (`IO/File`, `FileManager`), the environment (`IO/Environment`)
 
 **Storage has three layers, in all three languages.** `StorageManager` is one storage device (blocks, partition
-table), `PartitionManager` one partition of it, and `FileManager` the file system on one partition (its file table,
+table), `PartitionManager` one partition of it, and a file manager the file system on one partition (its file table,
 giving files space, every read and write). A partition has exactly ONE file manager (a second one over the same
-partition fails loudly). `FileManager` is a ROLE (a protocol), and **`OsFileManager` is the operating system's file
-manager, the one a program calls**: its routines are `common routine`s called on the type
-(`OsFileManager.read_text(at: f)`). On an OS it reaches every mounted partition (one OS file manager per partition):
-`OsFileManager.partition(at: dir)` (→ `PartitionManager`: `name`, `storage`, `root`, `file_system`, `size`),
+partition fails loudly). **`FileManager` is the operating system's file manager, the one a program calls** (a
+`record`, no protocol): its routines are `common routine`s called on the type
+(`FileManager.read_text(at: f)`). It reaches every mounted partition (one OS file manager per partition):
+`FileManager.partition(at: dir)` (→ `PartitionManager`: `name`, `storage`, `root`, `file_system`, `size`),
 `PartitionManager.all()`, `StorageManager.all()` (`name`, `size`), `storage.partitions()` are read-only queries.
 Making partitions and formatting are not in 0.5 (they will be `failable`, not `dangerous`). `File(at:)` and
 `Directory(at:)` (in `import IO/File`) only say where: cheap values wrapping a path (`at: Text`), constructing one
@@ -1102,9 +1102,9 @@ operator (`/` is division).
   read or write, "this storage device failed to read or write at ..."), and `IOError` for every other reason
   ("already exists", a name with a separator, ...). Each is its own crashable (crashables are flat, so `is IOError`
   does NOT take the other four, `is Crashables` takes them all).
-- **Making:** `OsFileManager.make_file(at: File, replacing: Bool = false) -> File`: an existing file is an `IOError`
+- **Making:** `FileManager.make_file(at: File, replacing: Bool = false) -> File`: an existing file is an `IOError`
   ("already exists") unless `replacing: true`, which empties it (the "write a fresh file every run" case:
-  `OsFileManager.write_text(at: OsFileManager.make_file(at: f, replacing: true), content: x)`).
+  `FileManager.write_text(at: FileManager.make_file(at: f, replacing: true), content: x)`).
   `make_directory(at: Directory, parents: Bool = false) -> Directory`. There is no `touch`.
 - **Asking:** `exists(at:)` (File or Directory), `is_file`, `is_directory`, `size`, `metadata` (→ `FileMetadata`),
   `can_read`/`can_write`/`can_execute`, `absolute`/`canonical` (→ the same kind).
@@ -1125,24 +1125,25 @@ operator (`/` is division).
   `using`.
 - **Storage (`FileStorage[T]`):** what a file manager hands out for random access: a mapped file (mmap /
   MapViewOfFile) seen as fixed-size cells of `T`, `T` = `Byte` (one byte per cell) or `Char` (one Unicode scalar per
-  cell, 4 bytes, UTF-32LE on disk, a UTF-8 file is NOT one). NOT `dangerous`. `var s = OsFileManager.open_storage[Byte](at: f)`,
+  cell, 4 bytes, UTF-32LE on disk, a UTF-8 file is NOT one). NOT `dangerous`. `var s = FileManager.open_storage[Byte](at: f)`,
   `open_storage_range[T](at:, start:, count:)` (a window, in cells). Read `s[i]`, write `s[i] = v`, through
   `viewing s as v` / `modifying s as m` blocks (or `Viewing[FileStorage[Byte]]` / `Modifying[...]` parameters).
   `count()`, `is_writable()`, `flush()`, `close()` (also at scope end). It is opened for writing when the file can be
   written, else for reading only (writing a cell then is `NotEnoughPermissionError`). It cannot grow the file: size it
   with `set_size` first. An index past the end is `IndexOutOfBoundsError`, a `Char` cell that isn't a scalar
   `InvalidValueError`. `T` is limited by the `StorageCell` protocol (only `Byte` and `Char` obey it).
-- **The environment (`import IO/Environment`):** `OsEnvironment` reads what the OS gives the program, nothing is set:
+- **The environment (`import IO/Environment`):** `Environment` reads what the OS gives the program, nothing is set:
   `arguments()` (→ `List[Text]`, the program's own name left out), `variable(name:)` (failable, `AbsentValueError`
   when unset, asked of the OS so Windows names are case-insensitive), `to[Dict[Text, Text]]()` (a snapshot),
   `working_directory()`, `home_directory()`, `temp_directory()` (never fails). On a target without an OS: no
   arguments, no variables. There is no way to change the working directory (`set_current_directory` is gone): keep
   a `Directory` and build paths from it, and a child process gets its own through
   `run_program(file:, args:, working_directory: Directory, env:)` (`Subprocess`).
-- **Randomness (`System`):** `OsEntropy.next_u64()` is the OS's random source (hash keys come from it),
+- **Randomness (`System`):** `Entropy.next_u64()` is the OS's random source (hash keys come from it),
   `Random.from_entropy()` (`Random`) seeds a generator with it.
-- **migrate:** `migrate --step files` rewrites `FileManager.x` → `OsFileManager.x`, the directory routines →
-  `OsEnvironment` (import added), `subdir` → `go_to`, `expose`/`wield` → `open_storage` and `Exposed`/`Wielded` →
+- **migrate:** `migrate --step files` rewrites `OsFileManager` / `OsEnvironment` / `OsEntropy` → `FileManager` /
+  `Environment` / `Entropy`, the directory routines →
+  `Environment` (import added), `subdir` → `go_to`, `expose`/`wield` → `open_storage` and `Exposed`/`Wielded` →
   `FileStorage` (listing those lines), and lists `set_current_directory`.
 
 Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
@@ -1387,7 +1388,7 @@ routine start()
 ```
 
 Async file I/O (parks a job while waiting, blocks elsewhere), in `IO/File`:
-`OsFileManager.read_text(at: File) -> Text` and `OsFileManager.write_text(at: File, content: Text)`. Prefer these to
+`FileManager.read_text(at: File) -> Text` and `FileManager.write_text(at: File, content: Text)`. Prefer these to
 opening a `FileSource`/`FileSink` inside a job.
 
 **Channels** (`System`, no import) — typed producer/consumer queues:

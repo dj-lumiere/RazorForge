@@ -215,12 +215,12 @@ public class EnterableConformanceTests
     public void Analyze_FileHandleVarBound_NotUsingRequired_Ok()
     {
         // FileHandle obeys Enterable but is NOT using-required (only the MT lock tokens are). A bare
-        // `var f = OsFileManager.open_write(...)` is legal — RAII `$destroy` closes it at scope exit.
+        // `var f = FileManager.open_write(...)` is legal — RAII `$destroy` closes it at scope exit.
         string source = """
                         import IO/File
 
                         failable routine start()
-                            var f = OsFileManager.open_write(at: File(at: "x.txt"))
+                            var f = FileManager.open_write(at: File(at: "x.txt"))
                             f.flush()
                             return
                         """;

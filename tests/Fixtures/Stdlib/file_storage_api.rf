@@ -13,14 +13,14 @@ routine stamp(storage: Modifying[FileStorage[Byte]], at: U64, value: Byte)
 # A file seen as cells: bytes read and written in place through `viewing` / `modifying`, a window of it, Unicode
 # scalars in four-byte cells, and the failures an index past the end or a cell that isn't a scalar gives.
 routine start()
-    var root = OsEnvironment.temp_directory().go_to(name: "rf_fixture_file_storage_api")
-    if OsFileManager.exists(at: root)
-        OsFileManager.delete_all(at: root)
-    drop OsFileManager.make_directory(at: root, parents: true)
+    var root = Environment.temp_directory().go_to(name: "rf_fixture_file_storage_api")
+    if FileManager.exists(at: root)
+        FileManager.delete_all(at: root)
+    drop FileManager.make_directory(at: root, parents: true)
 
-    var f = OsFileManager.make_file(at: root.file(name: "cells.bin"))
-    OsFileManager.write_text(at: f, content: "abcdef")
-    var bytes = OsFileManager.open_storage[Byte](at: f)
+    var f = FileManager.make_file(at: root.file(name: "cells.bin"))
+    FileManager.write_text(at: f, content: "abcdef")
+    var bytes = FileManager.open_storage[Byte](at: f)
     show(f"count: {bytes.count()}")
     show(f"writable: {bytes.is_writable()}")
     viewing bytes as v
@@ -30,34 +30,34 @@ routine start()
         stamp(storage: m, at: 5, value: b'F')
     show(f"past the end: {try bytes[6]}")
     bytes.close()
-    show(f"written: {OsFileManager.read_text(at: f)}")
+    show(f"written: {FileManager.read_text(at: f)}")
 
-    var window = OsFileManager.open_storage_range[Byte](at: f, start: 2, count: 10)
+    var window = FileManager.open_storage_range[Byte](at: f, start: 2, count: 10)
     show(f"window: {window.count()} {window[0].to[U8]()}")
     window.close()
 
-    var g = OsFileManager.make_file(at: root.file(name: "letters.utf32"))
-    OsFileManager.set_size(at: g, bytes: 12)
-    var letters = OsFileManager.open_storage[Char](at: g)
+    var g = FileManager.make_file(at: root.file(name: "letters.utf32"))
+    FileManager.set_size(at: g, bytes: 12)
+    var letters = FileManager.open_storage[Char](at: g)
     modifying letters as m
         m[0] = 'h'
         m[1] = 'é'
         m[2] = '한'
     show(f"letters: {letters.count()} {letters[0]}{letters[1]}{letters[2]}")
     letters.close()
-    show(f"utf-32 size: {OsFileManager.size(at: g)}")
+    show(f"utf-32 size: {FileManager.size(at: g)}")
 
-    var bad = OsFileManager.make_file(at: root.file(name: "bad.utf32"))
-    OsFileManager.write_text(at: bad, content: "ÿFFÿFFÿFFÿFF")
-    var broken = OsFileManager.open_storage[Char](at: bad)
+    var bad = FileManager.make_file(at: root.file(name: "bad.utf32"))
+    FileManager.write_text(at: bad, content: "ÿFFÿFFÿFFÿFF")
+    var broken = FileManager.open_storage[Char](at: bad)
     when check broken[0]
         is Char => show("bad cell: read")
         is InvalidValueError => show("bad cell: InvalidValueError")
     broken.close()
 
-    when check OsFileManager.open_storage[Byte](at: root.file(name: "missing.bin"))
+    when check FileManager.open_storage[Byte](at: root.file(name: "missing.bin"))
         is FileStorage[Byte] => show("missing: opened")
         is NotFoundError => show("missing: NotFoundError")
 
-    OsFileManager.delete_all(at: root)
+    FileManager.delete_all(at: root)
     return

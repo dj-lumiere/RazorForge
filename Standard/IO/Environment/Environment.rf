@@ -10,9 +10,9 @@ import IO/File
 # arguments and no variables.
 
 ### The operating system's environment of this program: its arguments, its environment variables, and its working,
-### home and temporary directories. Its routines are called on the type (`OsEnvironment.arguments()`), and they only
+### home and temporary directories. Its routines are called on the type (`Environment.arguments()`), and they only
 ### read.
-record OsEnvironment
+record Environment
     pass
 
 ### The runtime byte buffer of `len` bytes as text.
@@ -26,7 +26,7 @@ secret routine environment_text(ptr: Hijacked[Byte], len: U64) -> Text
 
 ### The arguments the program was started with, its own name left out.
 ### :returns: The arguments, in order.
-common routine OsEnvironment.arguments() -> List[Text]
+common routine Environment.arguments() -> List[Text]
     var result = List[Text]()
     each i in 0 til C::rf_env_argument_count()
         var ptr = C::rf_env_argument(index: i)
@@ -37,8 +37,8 @@ common routine OsEnvironment.arguments() -> List[Text]
 ### doesn't matter).
 ### :param name: The variable's name.
 ### :returns: Its value.
-### :throws: {AbsentValueError} when it isn't set (`try OsEnvironment.variable(name:)` gives a `Maybe`).
-failable common routine OsEnvironment.variable(name: Text) -> Text
+### :throws: {AbsentValueError} when it isn't set (`try Environment.variable(name:)` gives a `Maybe`).
+failable common routine Environment.variable(name: Text) -> Text
     var cstr = name.to[CStr]()
     var ptr = C::rf_env_variable(name: cstr, len: cstr.count().to[S32]())
     if ptr.is_none()
@@ -58,7 +58,7 @@ secret routine environment_parts() -> List[Text]
 ### Every environment variable with its value, as the operating system has them now: a copy, which changes nothing
 ### when it changes.
 ### :returns: The variables by name.
-common routine OsEnvironment.to[Dict[Text, Text]]() -> Dict[Text, Text]
+common routine Environment.to[Dict[Text, Text]]() -> Dict[Text, Text]
     var parts = environment_parts()
     var result = Dict[Text, Text]()
     var i: U64 = 0
@@ -70,7 +70,7 @@ common routine OsEnvironment.to[Dict[Text, Text]]() -> Dict[Text, Text]
 ### The program's working directory, which relative paths start from.
 ### :returns: The resulting `Directory`.
 ### :throws: {IOError} when the working directory cannot be read.
-failable common routine OsEnvironment.working_directory() -> Directory
+failable common routine Environment.working_directory() -> Directory
     var ptr = C::rf_fs_current_dir()
     var len = C::rf_get_result_len()
     if ptr.is_none()
@@ -80,7 +80,7 @@ failable common routine OsEnvironment.working_directory() -> Directory
 ### The current user's home directory.
 ### :returns: The resulting `Directory`.
 ### :throws: {NotFoundError} when the home directory cannot be told.
-failable common routine OsEnvironment.home_directory() -> Directory
+failable common routine Environment.home_directory() -> Directory
     var ptr = C::rf_fs_home_dir()
     var len = C::rf_get_result_len()
     if ptr.is_none()
@@ -89,6 +89,6 @@ failable common routine OsEnvironment.home_directory() -> Directory
 
 ### The platform's temporary directory. Honors the usual environment variables, never fails.
 ### :returns: The resulting `Directory`.
-common routine OsEnvironment.temp_directory() -> Directory
+common routine Environment.temp_directory() -> Directory
     var ptr = C::rf_fs_temp_dir()
     return Directory(at: environment_text(ptr: ptr, len: C::rf_get_result_len()))
