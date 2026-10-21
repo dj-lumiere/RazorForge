@@ -1137,8 +1137,13 @@ operator (`/` is division).
 - **Listing:** `list(at:)` (→ `List[Text]` bare names), `entries(at:)` (→ `List[DirEntry]` with
   `name`/`is_directory`/`modified` in ONE read, no per-entry stat on Windows), `walk(at:)` (→ full descendant paths,
   recursive, symlink-safe).
-- **Sessions:** `open_read` (→ `FileSource`, `load`), `open_write`/`open_append` (→ `FileSink`, `store`), bound by
+- **Sessions:** `open_read` (→ `FileSource`, `pull(max:)`), `open_write`/`open_append` (→ `FileSink`, `push(data:)`), bound by
   `using`.
+- **Verbs by job:** `load` / `store` read and write a PLACE (`Memory`, `Box`, `Atomic`: reading again gives the same
+  value). `pull` / `push` move bytes through a FLOW (the `Source` / `Sink` protocols: `FileSource`, `FileSink`,
+  `stdin()`, `stdout()`, subprocess pipes). `transmit` / `receive` move one message at a time (channels:
+  `Transmitter[T].transmit`, `transmit_if_room`). `migrate --step verbs` rewrites the old `load` / `store` on a
+  source or sink, the channel `send` / `send_if_room`, and `Sender`.
 - **Storage (`FileStorage[T]`):** what a file manager hands out for random access: a mapped file (mmap /
   MapViewOfFile) seen as fixed-size cells of `T`, `T` = `Byte` (one byte per cell) or `Char` (one Unicode scalar per
   cell, 4 bytes, UTF-32LE on disk, a UTF-8 file is NOT one). NOT `dangerous`. `var s = FileManager.open_storage[Byte](at: f)`,
@@ -1408,22 +1413,22 @@ Async file I/O (parks a job while waiting, blocks elsewhere), in `IO/File`:
 opening a `FileSource`/`FileSink` inside a job.
 
 **Channels** (`System`, no import) — typed producer/consumer queues:
-- `make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])` — single consumer. `capacity` 0 =
-  rendezvous (send waits for a taker); N = bounded buffer (send blocks when full = backpressure).
-- `make_shared_channel[T](capacity: U64) -> (Sender[T], SharedReceiver[T])` — multiple consumers
+- `make_channel[T](capacity: U64) -> (Transmitter[T], Receiver[T])` — single consumer. `capacity` 0 =
+  rendezvous (transmit waits for a taker); N = bounded buffer (transmit blocks when full = backpressure).
+- `make_shared_channel[T](capacity: U64) -> (Transmitter[T], SharedReceiver[T])` — multiple consumers
   COMPETE for each item (fan-out, not broadcast).
-- `sender.send(item: x)` hands `x` over; FAILABLE (`ChannelClosedError` if closed / no consumers).
-  `sender.send_if_room(item: x) -> Bool` never waits: `true` when it went in, `false` when the channel was full
-  (the item is destroyed), `ChannelClosedError` like `send`.
-  `sender.duplicate()` clones a producer for fan-in; `sender.close()` / `is_closed()`.
+- `transmitter.transmit(item: x)` hands `x` over; FAILABLE (`ChannelClosedError` if closed / no consumers).
+  `transmitter.transmit_if_room(item: x) -> Bool` never waits: `true` when it went in, `false` when the channel was full
+  (the item is destroyed), `ChannelClosedError` like `transmit`.
+  `transmitter.duplicate()` clones a producer for fan-in; `transmitter.close()` / `is_closed()`.
 - `Receiver`/`SharedReceiver` are `Iterable[T]` — drain with `each x in rx` (ends when closed + empty).
-  `rx.close()` closes from the receiving side: buffered items are destroyed unreceived, a later `send` throws
-  `ChannelClosedError`, and a sender waiting for room wakes with it (an early stop travels up a pipeline).
+  `rx.close()` closes from the receiving side: buffered items are destroyed unreceived, a later `transmit` throws
+  `ChannelClosedError`, and a transmitter waiting for room wakes with it (an early stop travels up a pipeline).
 
 ```razorforge
 var (tx, rx) = make_channel[S64](capacity: 4)
-tx.send(item: 10)
-tx.send(item: 20)
+tx.transmit(item: 10)
+tx.transmit(item: 20)
 tx.close()
 each n in rx
     show(f"{n}")

@@ -1,11 +1,11 @@
 module System/Concurrency
 
 import BuilderQuery
-# ---- Sending end --------------------------------------------------------------------------------
+# ---- Transmitting end --------------------------------------------------------------------------------
 
-### The sending end of a channel. Clone it for multiple producers; the last one dropping (or an
+### The transmitting end of a channel. Clone it for multiple producers; the last one dropping (or an
 ### explicit `close`) closes the channel.
-entity Sender[T]
+entity Transmitter[T]
     ### The shared native channel handle (rf_channel*).
     secret chan: Addr
 
@@ -41,43 +41,43 @@ obeys Emittable[T]
 # Channels — `Receiver[T]` (single consumer) / `SharedReceiver[T]` (multi consumer) message passing.
 #
 # A channel is a typed conduit carrying a STREAM of values between concurrent agents (the streaming
-# counterpart to Agent's one-shot result). The sending end is a `Sender[T]` (cloneable for multiple
+# counterpart to Agent's one-shot result). The transmitting end is a `Transmitter[T]` (cloneable for multiple
 # producers); the receiving end is a `Receiver[T]` (one owner) or, for multiple consumers, a `SharedReceiver[T]`
 # (clone one per consumer). Receiving == iterating: both receivers obey `Iterable[T]`, so `for x in`,
 # IterTools, and explicit iteration all work — there is no separate receive verb.
 #
-# `send!` and receive park the calling coroutine when the buffer is full / empty (woken cross-thread
+# `transmit` and receive park the calling coroutine when the buffer is full / empty (woken cross-thread
 # by the counterpart op) or block a plain thread — uncolored, like `retrieve!`/`waitfor`. The native
-# refcounted ring buffer (Ingrid's runtime-tessera/channel.te) backs all of this; the last `Sender`
+# refcounted ring buffer (Ingrid's runtime-tessera/channel.te) backs all of this; the last `Transmitter`
 # dropping auto-closes the channel, after which receivers drain the buffer then end.
 
 # ---- Creation -----------------------------------------------------------------------------------
 
-### Creates a single-consumer channel and returns its `(Sender, Receiver)` pair. `capacity` is the
-### buffered depth: 0 = rendezvous (send waits for a taker), N = a bounded buffer (send blocks when
-### full = backpressure). Clone the `Sender` for multiple producers (fan-in).
+### Creates a single-consumer channel and returns its `(Transmitter, Receiver)` pair. `capacity` is the
+### buffered depth: 0 = rendezvous (transmit waits for a taker), N = a bounded buffer (transmit blocks when
+### full = backpressure). Clone the `Transmitter` for multiple producers (fan-in).
 ### :param capacity: The buffer depth (0 = rendezvous).
-### :returns: A `(Sender[T], Receiver[T])` tuple sharing one channel.
-routine make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])
+### :returns: A `(Transmitter[T], Receiver[T])` tuple sharing one channel.
+routine make_channel[T](capacity: U64) -> (Transmitter[T], Receiver[T])
     danger
         var chan = C::rf_channel_create(capacity: capacity)
-        return (Sender[T](chan: chan), Receiver[T](chan: chan))
+        return (Transmitter[T](chan: chan), Receiver[T](chan: chan))
 
-### Creates a multi-consumer channel and returns its `(Sender, SharedReceiver)` pair. Clone the
+### Creates a multi-consumer channel and returns its `(Transmitter, SharedReceiver)` pair. Clone the
 ### `SharedReceiver` (one per consumer) for a worker pool — any free worker takes the next item (consumer
 ### fan-out, not broadcast). `capacity` as in `make_channel`.
 ### :param capacity: The buffer depth (0 = rendezvous).
-### :returns: A `(Sender[T], SharedReceiver[T])` tuple sharing one channel.
-routine make_shared_channel[T](capacity: U64) -> (Sender[T], SharedReceiver[T])
+### :returns: A `(Transmitter[T], SharedReceiver[T])` tuple sharing one channel.
+routine make_shared_channel[T](capacity: U64) -> (Transmitter[T], SharedReceiver[T])
     danger
         var chan = C::rf_channel_create(capacity: capacity)
-        return (Sender[T](chan: chan), SharedReceiver[T](chan: chan))
+        return (Transmitter[T](chan: chan), SharedReceiver[T](chan: chan))
 
-### Sends one item, moving its ownership into the channel. Blocks/parks while the buffer is full
+### Transmits one item, moving its ownership into the channel. Blocks/parks while the buffer is full
 ### (backpressure); for a rendezvous channel waits until a consumer takes it. FAILABLE: throws
 ### {ChannelClosedError} if the channel is already closed or has no consumers left.
-### :param item: The value to send (ownership transfers in).
-failable routine Sender[T].send(item: T)
+### :param item: The value to transmit (ownership transfers in).
+failable routine Transmitter[T].transmit(item: T)
     danger
         var box = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size()))
         box.poke(value: item)
@@ -89,13 +89,13 @@ failable routine Sender[T].send(item: T)
             throw ChannelClosedError()
     return
 
-### Sends one item only when the channel has room for it now, never waiting: the step a broadcast takes per
+### Transmits one item only when the channel has room for it now, never waiting: the step a broadcast takes per
 ### subscriber, where waiting on one full subscriber would hold up the rest. On a rendezvous channel there is room
-### while no item waits in it, and the sender does not wait for the taker.
-### :param item: The value to send (ownership transfers in when it is sent, and it is destroyed when it is not).
+### while no item waits in it, and the transmitter does not wait for the taker.
+### :param item: The value to transmit (ownership transfers in when it is sent, and it is destroyed when it is not).
 ### :returns: `true` when the item went in, `false` when the channel was full.
 ### :throws: {ChannelClosedError} if the channel is already closed or has no consumers left.
-failable routine Sender[T].send_if_room(item: T) -> Bool
+failable routine Transmitter[T].transmit_if_room(item: T) -> Bool
     danger
         var box = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size()))
         box.poke(value: item)
@@ -109,30 +109,30 @@ failable routine Sender[T].send_if_room(item: T) -> Bool
             throw ChannelClosedError()
         return false
 
-### Produces another sending handle on the same channel (fan-in: more producers).
-### :returns: A new `Sender[T]` on the same channel.
-routine Sender[T].duplicate() -> Sender[T]
+### Produces another transmitting handle on the same channel (fan-in: more producers).
+### :returns: A new `Transmitter[T]` on the same channel.
+routine Transmitter[T].duplicate() -> Transmitter[T]
     danger
         C::rf_channel_add_feeder(chan: me.chan)
-        return Sender[T](chan: me.chan)
+        return Transmitter[T](chan: me.chan)
 
-### Closes the channel early (dropping the last Sender also closes it). Receivers drain the buffer
+### Closes the channel early (dropping the last Transmitter also closes it). Receivers drain the buffer
 ### then finish. Not dangerous — closing is the normal end-of-stream signal; double-close is a no-op.
-routine Sender[T].close()
+routine Transmitter[T].close()
     danger
         C::rf_channel_close(chan: me.chan)
     return
 
-### Whether the channel has been closed (a subsequent `send!` would throw). Racy: another agent could
-### close it the instant after you check, so prefer handling `send!`'s failure to gating on this.
+### Whether the channel has been closed (a subsequent `transmit` would throw). Racy: another agent could
+### close it the instant after you check, so prefer handling `transmit`'s failure to gating on this.
 ### :returns: `true` if the channel is closed.
-routine Sender[T].is_closed() -> Bool
+routine Transmitter[T].is_closed() -> Bool
     danger
         return C::rf_channel_is_closed(chan: me.chan) != 0
 
 ### Drops this producer reference; the last one closes the channel.
 @override
-routine Sender[T].destruct()
+routine Transmitter[T].destruct()
     danger
         C::rf_channel_drop_feeder(chan: me.chan)
         return
@@ -180,8 +180,8 @@ routine Receiver[T].capacity() -> U64
         return C::rf_channel_capacity(chan: me.chan)
 
 ### Closes the channel from the receiving side, for a consumer that wants no more items. What is still buffered is
-### destroyed without being received, a later `send` throws {ChannelClosedError}, and a sender waiting for room wakes
-### with that error. The stage feeding this channel then ends on its failed `send`, so an early stop travels up a
+### destroyed without being received, a later `transmit` throws {ChannelClosedError}, and a transmitter waiting for room wakes
+### with that error. The stage feeding this channel then ends on its failed `transmit`, so an early stop travels up a
 ### pipeline. Closing twice does nothing.
 routine Receiver[T].close()
     danger
@@ -232,8 +232,8 @@ routine SharedReceiver[T].capacity() -> U64
         return C::rf_channel_capacity(chan: me.chan)
 
 ### Closes the channel from the receiving side, for a consumer that wants no more items. What is still buffered is
-### destroyed without being received, a later `send` throws {ChannelClosedError}, and a sender waiting for room wakes
-### with that error. The stage feeding this channel then ends on its failed `send`, so an early stop travels up a
+### destroyed without being received, a later `transmit` throws {ChannelClosedError}, and a transmitter waiting for room wakes
+### with that error. The stage feeding this channel then ends on its failed `transmit`, so an early stop travels up a
 ### pipeline. Closing twice does nothing.
 routine SharedReceiver[T].close()
     danger

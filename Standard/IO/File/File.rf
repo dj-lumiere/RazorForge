@@ -21,8 +21,8 @@ import IO/Stream
 ### handle. It is a cheap value (just the path), constructing one opens nothing. {FileManager} opens one of
 ### three sessions over its content:
 ###   * `FileManager.open_storage[T](at:)` — a random-access {FileStorage} of fixed-size cells, no cursor,
-###   * `FileManager.open_read(at:)` — a sequential {Source} (consume forward with `load`),
-###   * `FileManager.open_write(at:)` / `open_append(at:)` — a sequential {Sink} (emit forward with `store`).
+###   * `FileManager.open_read(at:)` — a sequential {Source} (consume forward with `pull`),
+###   * `FileManager.open_write(at:)` / `open_append(at:)` — a sequential {Sink} (emit forward with `push`).
 ### The content outlives every session (closing a session leaves the file intact — criterion: a file
 ### persists beyond the program). Things that are NOT files — a socket, pipe, or console — have no such
 ### content layer: they are born as {Source}/{Sink} with nothing addressable underneath, so they can
@@ -75,7 +75,7 @@ needs T obeys StorageCell
 
 ### A sequential read session over a {File}'s content. It holds one OS descriptor with a `close`
 ### teardown, so it is an `entity` (never copied, so the descriptor is never closed twice). Consume
-### it forward with `load`, there is no length, index, or seek — the file's spatial extent lives on
+### it forward with `pull`, there is no length, index, or seek — the file's spatial extent lives on
 ### {FileStorage}, not here.
 entity FileSource
 obeys Source, Enterable
@@ -90,7 +90,7 @@ obeys Source, Enterable
 
 ### A sequential write session over a {File}'s content (truncating via `open_write`, or appending via
 ### `open_append`). It holds one OS descriptor with a `close` teardown, so it is an `entity`. Emit into
-### it forward with `store`, there is no length, index, or seek.
+### it forward with `push`, there is no length, index, or seek.
 entity FileSink
 obeys Sink, Enterable
     ### The native file descriptor.
@@ -858,14 +858,14 @@ secret failable routine write_all(path: Text, data: Hijacked[Byte], count: U64)
 ### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be written.
 failable common routine FileManager.append_text(at: File, content: Text)
     using FileManager.open_append(at: at) as sink
-        drop sink.store(data: content.encode_as_utf8())
+        drop sink.push(data: content.encode_as_utf8())
     return
 
 # ============================================================================
 # FileManager — sessions over a file's content
 # ============================================================================
 
-### Opens the file for sequential reading, giving a {Source} consumed forward with `load`.
+### Opens the file for sequential reading, giving a {Source} consumed forward with `pull`.
 ### :param at: The file.
 ### :returns: A {FileSource} over the file's content, to be bound by `using`.
 ### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened for reading.
@@ -876,7 +876,7 @@ failable common routine FileManager.open_read(at: File) -> FileSource
         fail_io(action: f"Cannot open '{at.at}' for reading", path: at.at)
     return FileSource(fd: fd, is_closed: false)
 
-### Opens an existing file for sequential writing, EMPTYING it first, giving a {Sink} filled with `store`.
+### Opens an existing file for sequential writing, EMPTYING it first, giving a {Sink} filled with `push`.
 ### :param at: The file, which must exist (make it with `make_file`).
 ### :returns: A {FileSink} over the file's content, to be bound by `using`.
 ### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be opened for writing.
@@ -1099,11 +1099,11 @@ routine FileStorage[T].destruct()
     me.close()
     return
 
-### Loads up to `max` bytes from the current position. Returns fewer when end-of-file is reached first,
+### Pulls up to `max` bytes from the current position. Returns fewer when end-of-file is reached first,
 ### an empty `Bytes` signals EOF.
-### :param max: The maximum byte count to load.
-### :returns: The bytes loaded.
-routine FileSource.load(max: U64) -> Bytes
+### :param max: The maximum byte count to pull.
+### :returns: The bytes pulled.
+routine FileSource.pull(max: U64) -> Bytes
     var ptr = C::rf_file_read_bytes(me.fd, max)
     var len = C::rf_get_result_len()
     return Bytes(ptr: ptr, count: len)
@@ -1134,10 +1134,10 @@ routine FileSource.destruct()
     me.close()
     return
 
-### Stores `data` at the current position, returning the number of bytes accepted.
-### :param data: The bytes to store.
+### Pushes `data` at the current position, returning the number of bytes accepted.
+### :param data: The bytes to push.
 ### :returns: The number of bytes accepted.
-routine FileSink.store(data: Bytes) -> U64
+routine FileSink.push(data: Bytes) -> U64
     danger
         return C::rf_file_write(me.fd, data.raw_buffer(), data.count())
 
