@@ -11,11 +11,8 @@ namespace RazorForge.Tests.Execution;
 /// process, so a JIT'd program's runtime threads and exit never touch the test host. The three tests cover the three
 /// ways the dev loop runs a program: one whole module, the incremental lazy JIT with its per-routine IR cache, and the
 /// warm daemon's base/delta split (the stdlib compiled once to an object, only the program's delta JIT'd).
-/// <para>
-/// On macOS the libLLVM the builder carries (the libLLVM.runtime.osx-arm64 package) loads only next to Homebrew's z3
-/// 4.16 and zstd, so the JIT can't start there: the builder says why and falls back to an AOT build, which still runs
-/// the program. The tests check that fallback on macOS and the JIT everywhere else.
-/// </para>
+/// The JIT has to start on every platform, macOS included: the build makes the macOS libLLVM load without Homebrew's
+/// z3 and zstd (Anvila/PatchMacLibLlvm.targets), so a run that falls back to an AOT build fails these tests.
 /// </summary>
 public sealed partial class DebugJitRunTests
 {
@@ -42,9 +39,6 @@ public sealed partial class DebugJitRunTests
 
     private const string ExpectedLine = "jit total 55 names 3 has one true";
 
-    /// <summary>Whether the in-process JIT can start on this platform (see the class summary for macOS).</summary>
-    private static readonly bool JitRuns = !OperatingSystem.IsMacOS();
-
     [GeneratedRegex(pattern: @"incremental JIT \(cache: (\d+) reused, (\d+) fresh")]
     private static partial Regex IncrementalCacheRegex();
 
@@ -59,10 +53,7 @@ public sealed partial class DebugJitRunTests
         Run run = project.BuildAndRun();
 
         AssertRan(run: run);
-        if (JitRuns)
-        {
-            Assert.Contains(expectedSubstring: "[timing] JIT compile + run:", actualString: run.Stderr);
-        }
+        Assert.Contains(expectedSubstring: "[timing] JIT compile + run:", actualString: run.Stderr);
     }
 
     /// <summary>With <c>incremental</c> and no daemon, each routine is built when the running program first reaches
@@ -75,11 +66,6 @@ public sealed partial class DebugJitRunTests
         AssertRan(run: first);
         Run second = project.BuildAndRun();
         AssertRan(run: second);
-        if (!JitRuns)
-        {
-            return;
-        }
-
         Assert.Matches(expectedRegex: IncrementalCacheRegex(), actualString: first.Stderr);
         Match counts = IncrementalCacheRegex().Match(input: second.Stderr);
         Assert.True(condition: counts.Success, userMessage: $"no cache line in the second run\n{second.Stderr}");
@@ -102,11 +88,6 @@ public sealed partial class DebugJitRunTests
             AssertRan(run: first);
             Run second = project.BuildAndRun();
             AssertRan(run: second);
-            if (!JitRuns)
-            {
-                return;
-            }
-
             Assert.Contains(expectedSubstring: "(daemon IR, base/delta)", actualString: first.Stderr);
             Assert.DoesNotContain(expectedSubstring: "resident-JIT base seed", actualString: first.Stderr);
             Assert.Contains(expectedSubstring: "(daemon IR, base/delta)", actualString: second.Stderr);
@@ -123,15 +104,7 @@ public sealed partial class DebugJitRunTests
         string all = $"exit {run.Exit}\n--- stdout ---\n{run.Stdout}\n--- stderr ---\n{run.Stderr}";
         Assert.True(condition: run.Exit == 0, userMessage: all);
         Assert.Contains(expectedSubstring: ExpectedLine, actualString: run.Stdout);
-        if (JitRuns)
-        {
-            Assert.DoesNotContain(expectedSubstring: "falling back to AOT", actualString: run.Stderr);
-        }
-        else
-        {
-            Assert.Contains(expectedSubstring: "[jit] unavailable (", actualString: run.Stderr);
-            Assert.Contains(expectedSubstring: "falling back to AOT", actualString: run.Stderr);
-        }
+        Assert.DoesNotContain(expectedSubstring: "falling back to AOT", actualString: run.Stderr);
     }
 
     private sealed record Run(int Exit, string Stdout, string Stderr);
