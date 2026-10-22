@@ -128,7 +128,7 @@ public sealed class ExitCodeTests
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "starting", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "Deadlock error: These agents wait on each other for access",
+        Assert.Contains(expectedSubstring: "Deadlock error: These pieces of work wait on each other for access",
             actualString: stdout + stderr);
         Assert.Contains(expectedSubstring: "access_deadlock.rf:12", actualString: stdout + stderr);
     }
