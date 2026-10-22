@@ -5,10 +5,8 @@ using SyntaxTree;
 using TypeModel.Enums;
 using Builder.Verification;
 using Builder.Verification.Results;
-using System.Text.RegularExpressions;
 using Xunit.Abstractions;
 
-#pragma warning disable xUnit1004
 namespace RazorForge.Tests.Perf;
 
 /// <summary>
@@ -18,11 +16,8 @@ namespace RazorForge.Tests.Perf;
 /// only ever emits an extern <c>declare</c> for a symbol it doesn't define, so every such symbol MUST be
 /// present in the base or JIT-link fails with an undefined symbol.
 /// </summary>
-public sealed partial class BaseEmissionTests
+public sealed class BaseEmissionTests
 {
-    [GeneratedRegex(pattern: @",? ?\d+")]
-    private static partial Regex ArityDigitsRegex();
-
     private readonly ITestOutputHelper _out;
     public BaseEmissionTests(ITestOutputHelper output)
     {
@@ -37,24 +32,24 @@ public sealed partial class BaseEmissionTests
                                        return
                                    """;
 
+    /// <summary>Parses <paramref name="src"/> and fails the test on any grammar error, so a source the parser
+    /// recovered from (and dropped statements of) never reaches the analysis as if it were whole.</summary>
     private static Program Parse(string src, string file)
     {
-        return new Builder.Parser.Parser(
+        var parser = new Builder.Parser.Parser(
             tokens: Lexers.Tokenize(source: src, fileName: file, language: Language.RazorForge),
             language: Language.RazorForge,
-            fileName: file).Parse();
+            fileName: file) { PrintsErrors = false };
+        Program program = parser.Parse();
+        Assert.False(condition: parser.HasErrors,
+            userMessage: $"{file} did not parse: {string.Join(separator: "\n", values: parser.GetErrors())}");
+        return program;
     }
 
     /// <summary>The mangled symbol defined by each `define ...` line (the first <c>@"..."</c>/<c>@ident</c>).</summary>
     private static HashSet<string> DefinedSymbols(string ll)
     {
         return SymbolsOnLinesStartingWith(ll: ll, prefix: "define ");
-    }
-
-    /// <summary>The mangled symbol referenced by each `declare ...` line (an extern reference).</summary>
-    private static HashSet<string> DeclaredSymbols(string ll)
-    {
-        return SymbolsOnLinesStartingWith(ll: ll, prefix: "declare ");
     }
 
     private static HashSet<string> SymbolsOnLinesStartingWith(string ll, string prefix)
@@ -273,98 +268,8 @@ public sealed partial class BaseEmissionTests
     }
 
     /// <summary>
-    /// Phase 0a (a') JIT-COMPLETENESS oracle (see RESIDENT-JIT-INCREMENTAL-V0.5.md ★ MAJOR FINDING): the
-    /// non-pruned base PARSES clean (bugs #1/#2/#3 fixed) yet still fails to JIT because it DECLARES far more
-    /// than it DEFINES — a large transitive tail of instantiations/variants/derives the empty-program analyze
-    /// never materialized. The coverage test misses this (it only checks base∪delta ⊇ the small PRUNED set).
-    /// This oracle measures <c>declared − defined</c> directly, split into RF-mangled symbols (quoted — MUST
-    /// be defined by the base or JIT-materialization fails) vs bare runtime externs (rf_/llvm./__/lowercase C
-    /// — legitimately resolved from the runtime DLL, NOT the base's job to define). Drive the RF-mangled gap
-    /// to zero to make the non-pruned base JIT-complete. Pure string analysis — no libLLVM, runs in CI.
-    /// Skip'd until the (a') closure-materialization work lands (currently ~782 RF-mangled gap, dominated by
-    /// const-generic Array[T,N]/from_literal variadic machinery + UnpackedFloat[U,UN] per-width transcendentals
-    /// — generic instantiations the empty-program analyze never monomorphized). Run locally to measure the gap.
-    /// With SeedAllStdlibRoutines + the LiveBackendType fix + removing dead list-BuilderQuery reflection
-    /// routines, the gap is currently ~317 (down from 782). The remaining tail is a scattered set of real
-    /// generic instantiations (const-generic Array[U&lt;w&gt;,N] trace-buffer support, List[enum].from_literal
-    /// data tables, add_range, Maybe[BTreeNode].destroy) referenced by concrete stdlib bodies but not yet
-    /// materialized — the genuine (a') closure tail, now free of BuilderQuery artifacts.
-    /// </summary>
-    [Fact(Skip =
-        "WIP resident-JIT base define-completeness oracle. Base BUILDS at gap=102/defined=12309 (was 695). ISOLATED-BUILD primitive (GenericClosurePass.RunIsolatedTail, post-fixpoint, build-one-no-drain) closes: entity self-free tail (call-driven closure) + all per-type LIFECYCLE HOOKS (destroy/roam_free/roam_trace) built on every registered concrete+wrapper instance (bounded, self-contained; the call-driven closure discovers the leaf callees field.destroy/cyclic_visit/Hijacked.cyclic_trace_buffer; skip unfolded-buildtime Array[U8,${...}] carriers). Remaining 102 = represent(98)+serialize: represent is a force-seeded display closure that does NOT converge (its callees escape the registry — adding it took gap 140->367); needs delta-definition or codegen-materialize. base+delta coverage proven by GenerateBase_And_Delta_CoverPrunedBuild_WithTinyDelta. See .claude-memory/base-completeness-const-generic-array-gap.md.")]
-    public void GenerateBase_Standalone_DefineCompleteness()
-    {
-        var baseSa =
-            new SemanticVerifier(language: Language.RazorForge) { SeedAllStdlibRoutines = true };
-        AnalysisResult baseR =
-            baseSa.Analyze(program: Parse(src: "module Base\nroutine start()\n    return",
-                file: "base.rf"));
-        Assert.Empty(collection: baseR.Errors);
-        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
-            programs: baseR.Registry.UserPrograms,
-            instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys);
-
-        var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
-            registry: baseR.Registry,
-            options: new LlvmEmitterOptions
-            {
-                StdlibPrograms = baseR.Registry.StdlibPrograms,
-                SynthesizedBodies = baseR.SynthesizedBodies,
-                InstantiatedGenericBodies = baseR.InstantiatedGenericBodies
-            });
-        (string baseIr, _) = baseGen.GenerateBase();
-        File.WriteAllText(path: Path.Combine(path1: Path.GetTempPath(), path2: "rf_base.ll"),
-            contents: baseIr);
-
-        HashSet<string> defined = DefinedSymbols(ll: baseIr);
-        HashSet<string> declared = DeclaredSymbols(ll: baseIr);
-        // gap = referenced-but-not-defined. A quoted symbol ("[member] ...", "$...") is RF-emitted code that
-        // the base OWNS (must define); a bare ident is a runtime extern resolved from the runtime DLL.
-        var gap = declared.Except(second: defined)
-                          .OrderBy(keySelector: s => s)
-                          .ToList();
-        var rfGap = gap.Where(predicate: s => s.StartsWith(value: '"'))
-                       .ToList();
-        var externGap = gap.Where(predicate: s => !s.StartsWith(value: '"'))
-                           .ToList();
-
-        _out.WriteLine(
-            message:
-            $"base: defined={defined.Count} declared={declared.Count} gap={gap.Count} (rf-mangled={rfGap.Count}, bare-extern={externGap.Count})");
-        // Category histogram: collapse arity/type args so we see the SHAPE of the gap, not 700 near-dupes.
-        var byShape = rfGap.Select(selector: s => ArityDigitsRegex()
-                               .Replace(input: s, replacement: "N"))
-                           .GroupBy(keySelector: s => s)
-                           .Select(selector: g => (Shape: g.Key, Count: g.Count()))
-                           .OrderByDescending(keySelector: g => g.Count)
-                           .ToList();
-        _out.WriteLine(message: $"RF-MANGLED GAP by shape ({byShape.Count} distinct shapes):\n  " +
-                                string.Join(separator: "\n  ",
-                                    values: byShape.Take(count: 60)
-                                                   .Select(
-                                                        selector: g =>
-                                                            $"{g.Count,4}  {g.Shape}")));
-        _out.WriteLine(message: "RF-MANGLED GAP (raw, first 60):\n  " +
-                                string.Join(separator: "\n  ", values: rfGap.Take(count: 60)));
-        _out.WriteLine(message: "BARE-EXTERN GAP (runtime DLL resolves these — expected):\n  " +
-                                string.Join(separator: "\n  ", values: externGap.Take(count: 40)));
-
-        Assert.True(condition: rfGap.Count == 0,
-            userMessage:
-            $"{rfGap.Count} RF-mangled symbol(s) referenced but never defined by the non-pruned base " +
-            $"(JIT would 'Failed to materialize' these): {string.Join(separator: ", ", values: rfGap.Take(count: 12))}");
-    }
-
-    /// <summary>
-    /// Phase 0a (a') hardening harness: build a STANDALONE stdlib base (empty user program, so its
-    /// instantiations are stdlib-internal only — no user-triggered pollution) and PARSE-validate the base
-    /// IR. No native execution, so this isolates genuine malformed-emission bugs in non-pruned stdlib
-    /// routines. NEEDS libLLVM staged next to the test binary (parse is an LLVM call) → Skip'd in CI.
-    /// </summary>
-    /// <summary>
     /// AOT the standalone base IR to a native object via <see cref="BaseObjectCache"/> (opt + clang -c).
-    /// clang runs as an EXTERNAL tool (no in-process libLLVM), so this is NOT Skip'd — it validates the
+    /// clang runs as an EXTERNAL tool (no in-process libLLVM). It validates the
     /// base-object AOT primitive AND, on failure, clang's stderr pinpoints the exact malformed base IR
     /// (the (a') latent stdlib-internal codegen tail). clang -c tolerates undefined symbols (the ~102
     /// represent/serialize gap is resolved by the delta at JIT-link), so only genuinely malformed IR fails.
@@ -414,361 +319,5 @@ public sealed partial class BaseEmissionTests
         Assert.NotNull(@object: obj);
         Assert.True(condition: new FileInfo(fileName: obj!).Length > 0,
             userMessage: "base object file is empty");
-    }
-
-    [Fact(Skip =
-        "Local Phase 0a (a') hardening harness: needs libLLVM staged next to the test binary (parse is an LLVM call). Currently FAILS — non-pruned base surfaces a genuine stdlib-internal monomorphization gap: List[Bytes].duplicate() calls abstract System.Copyable.duplicate() (ptr) instead of concrete Bytes.duplicate(). See RESIDENT-JIT doc Phase 0a finding.")]
-    public void GenerateBase_Standalone_ParsesValid()
-    {
-        AnalysisResult baseR = new SemanticVerifier(language: Language.RazorForge).Analyze(
-            program: Parse(src: "module Base\nroutine start()\n    return", file: "base.rf"));
-        Assert.Empty(collection: baseR.Errors);
-        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
-            programs: baseR.Registry.UserPrograms,
-            instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys);
-
-        var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
-            registry: baseR.Registry,
-            options: new LlvmEmitterOptions
-            {
-                StdlibPrograms = baseR.Registry.StdlibPrograms,
-                SynthesizedBodies = baseR.SynthesizedBodies,
-                InstantiatedGenericBodies = baseR.InstantiatedGenericBodies
-            });
-        (string baseIr, IReadOnlyCollection<string> baseSyms) = baseGen.GenerateBase();
-
-        bool ok = Builder.Execution.OrcJitExecutor.TryParseIr(llvmIr: baseIr, error: out string? err);
-        _out.WriteLine(
-            message:
-            $"standalone base: syms={baseSyms.Count} chars={baseIr.Length} parse={(ok ? "OK" : err)}");
-        Assert.True(condition: ok, userMessage: $"standalone base IR failed to parse: {err}");
-    }
-
-    /// <summary>
-    /// Phase 0a step 3: actually JIT-and-run the base+delta split (single dylib, option-3 disposable
-    /// client) and assert <c>@main</c> runs to a 0 exit. NEEDS <c>libLLVM.dll</c> staged next to the test
-    /// binary AND runs the native RF runtime IN-PROCESS (scheduler threads, process-global runtime state),
-    /// so it is Skip'd in CI/suite — run locally to validate execution.
-    /// </summary>
-    [Fact(Skip =
-        "Local ORC-JIT run: base+delta JIT now PARSES clean (root declare fix); blocked on base DEFINE-completeness — main transitively needs the ~65 declared-but-undefined base symbols. See RESIDENT-JIT-INCREMENTAL-V0.5.md.")]
-    public void JitAndRunSplit_BasePlusDelta_RunsMain()
-    {
-        // BASE: a full-closure analyze (SeedAllStdlibRoutines) so the resident base is JIT-complete —
-        // it must DEFINE every stdlib symbol the delta will mark resident (extern-declare).
-        var baseSa = new SemanticVerifier(language: Language.RazorForge);
-        AnalysisResult baseR =
-            baseSa.Analyze(program: Parse(src: "module Base\nroutine start()\n    return",
-                file: "base.rf"));
-        Assert.Empty(collection: baseR.Errors);
-        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
-            programs: baseR.Registry.UserPrograms,
-            instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys);
-        var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
-            registry: baseR.Registry,
-            options: new LlvmEmitterOptions
-            {
-                StdlibPrograms = baseR.Registry.StdlibPrograms,
-                SynthesizedBodies = baseR.SynthesizedBodies,
-                InstantiatedGenericBodies = baseR.InstantiatedGenericBodies
-            });
-        (string baseIr, IReadOnlyCollection<string> baseSyms) = baseGen.GenerateBase();
-
-        // DELTA: the actual user program, with the base's symbols marked resident (⇒ extern declare).
-        AnalysisResult r =
-            new SemanticVerifier(language: Language.RazorForge).Analyze(
-                program: Parse(src: Trivial, file: "bench.rf"));
-        Assert.Empty(collection: r.Errors);
-        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
-            programs: r.Registry.UserPrograms,
-            instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys);
-        string deltaIr = DeltaBuild(r: r, residentSymbols: baseSyms);
-
-        int rc = Builder.Execution.OrcJitExecutor.JitAndRunSplit(baseIr: baseIr,
-            deltaIr: deltaIr,
-            programName: "test",
-            programArgs: Array.Empty<string>());
-        _out.WriteLine(message: $"JitAndRunSplit exit code = {rc}");
-        Assert.Equal(expected: 0, actual: rc);
-    }
-
-    /// <summary>
-    /// Step 2 validation: base/delta split with a DISK-OBJECT base (the real win — base AOT'd once to a
-    /// cached <c>.o</c>, only the delta JIT'd per run). AOTs the base via <see cref="BaseObjectCache"/>, then
-    /// <see cref="OrcJitExecutor.JitAndRunSplitWithBaseObject"/> loads that object + JITs only the delta +
-    /// runs <c>@main</c>. NEEDS libLLVM staged + runs the native runtime in-process, so Skip'd (run locally).
-    /// Shares the base DEFINE-completeness tail with <see cref="JitAndRunSplit_BasePlusDelta_RunsMain"/>: the
-    /// base object leaves the ~represent gap as undefined externs, which the DELTA must define (residentSymbols
-    /// = base's DEFINED syms, so main's reached represents fall to the delta) — that closure is Step 3's job.
-    /// </summary>
-    [Fact(Skip =
-        "Local ORC-JIT run: needs libLLVM staged next to the test binary + runs the native runtime in-process. Shares the base define-completeness tail — full closure is Step 3 (wire into the daemon/client dev-loop).")]
-    public void JitAndRunSplitWithBaseObject_RunsMain()
-    {
-        var baseSa =
-            new SemanticVerifier(language: Language.RazorForge) { SeedAllStdlibRoutines = true };
-        AnalysisResult baseR = baseSa.Analyze(
-            program: Parse(src: "module Base\nroutine start()\n    return", file: "base.rf"));
-        Assert.Empty(collection: baseR.Errors);
-        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
-            programs: baseR.Registry.UserPrograms,
-            instantiatedBodies: baseR.InstantiatedGenericBodies,
-            maySuspendKeys: baseR.MaySuspendRoutineKeys);
-        var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
-            registry: baseR.Registry,
-            options: new LlvmEmitterOptions
-            {
-                StdlibPrograms = baseR.Registry.StdlibPrograms,
-                SynthesizedBodies = baseR.SynthesizedBodies,
-                InstantiatedGenericBodies = baseR.InstantiatedGenericBodies
-            });
-        (string baseIr, IReadOnlyCollection<string> baseSyms) = baseGen.GenerateBase();
-
-        var cache = new Builder.Execution.BaseObjectCache(
-            dir: Path.Combine(path1: Path.GetTempPath(), path2: "rf_base_cache_test"));
-        string fp = "split-" + baseIr.Length;
-        File.Delete(path: cache.ObjectPath(fingerprint: fp));
-        string? baseObj = cache.GetOrBuild(fingerprint: fp,
-            baseIr: baseIr,
-            buildMode: Builder.Targeting.RfBuildMode.Debug,
-            wasCached: out _);
-        Assert.NotNull(@object: baseObj);
-
-        AnalysisResult r = new SemanticVerifier(language: Language.RazorForge).Analyze(
-            program: Parse(src: Trivial, file: "bench.rf"));
-        Assert.Empty(collection: r.Errors);
-        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
-            programs: r.Registry.UserPrograms,
-            instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys);
-        string deltaIr = DeltaBuild(r: r, residentSymbols: baseSyms);
-
-        int rc = Builder.Execution.OrcJitExecutor.JitAndRunSplitWithBaseObject(
-            baseObjectPath: baseObj!,
-            deltaIr: deltaIr,
-            programName: "test",
-            programArgs: Array.Empty<string>());
-        _out.WriteLine(message: $"JitAndRunSplitWithBaseObject exit code = {rc}");
-        Assert.Equal(expected: 0, actual: rc);
-    }
-
-    /// <summary>
-    /// Resident-JIT incremental (B) FULLY-LAZY on-demand M2a — proves `show("hi")` runs with NO pruning pass,
-    /// NO base, and NO caller-side closure walk: a MAIN module (@main + user routines + trace globals; every
-    /// stdlib callee an extern declare) plus an ORC custom definition generator that codegens each unresolved
-    /// RF symbol's external-linkage one-routine module ON DEMAND as ORC resolves it. demand == liveness (only
-    /// what runs is built — even fewer than the declare-closure). NEEDS libLLVM staged + runs the native
-    /// runtime in-process → Skip'd in CI.
-    /// </summary>
-    [Fact(Skip =
-        "Local ORC-JIT fully-lazy run: needs libLLVM staged + runs the native RF runtime in-process. PASSES locally — the ORC custom definition generator materializes each unresolved RF symbol's external-linkage one-routine module on demand; `show(\"hi\")` runs materializing only ~71 of ~360 routines (call-time lazy, no caller closure). See .claude-memory/resident-jit-pruned-base-works.md M2a.")]
-    public void JitAndRunLazy_OnDemand_RunsMain()
-    {
-        AnalysisResult r =
-            new SemanticVerifier(language: Language.RazorForge).Analyze(
-                program: Parse(src: Trivial, file: "bench.rf"));
-        Assert.Empty(collection: r.Errors);
-        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
-            programs: r.Registry.UserPrograms,
-            instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys);
-
-        // name → body index over every instantiated (stdlib/synthesized) body. A `declare`d symbol is the
-        // UNQUOTED content of `@"..."`, while MangleRoutineName returns the IR-`@`-form that QUOTES names with
-        // special chars — so key the index unquoted (to match declare-closure lookups) but keep the quoted form
-        // for the emitter's resident set (IsResident compares against MangleRoutineName output).
-        var index = new Dictionary<string, MonomorphizedBody>(comparer: StringComparer.Ordinal);
-        var allQuoted = new HashSet<string>(comparer: StringComparer.Ordinal);
-        foreach (MonomorphizedBody b in r.InstantiatedGenericBodies.Values)
-        {
-            string mangled = LlvmEmitter.MangleRoutineName(routine: b.Info);
-            index[key: mangled.Trim(trimChar: '"')] = b;
-            allQuoted.Add(item: mangled);
-        }
-
-        // MAIN: @main + user routines + trace globals (defined, residentSymbols empty ⇒ deltaMode off); no
-        // stdlib bodies (InstantiatedGenericBodies empty) ⇒ every stdlib callee is an extern declare.
-        string mainIr = new LlvmEmitter(userPrograms: r.Registry.UserPrograms,
-            registry: r.Registry,
-            options: new LlvmEmitterOptions
-            {
-                StdlibPrograms = r.Registry.StdlibPrograms,
-                SynthesizedBodies = r.SynthesizedBodies,
-                InstantiatedGenericBodies = new Dictionary<string, MonomorphizedBody>(),
-                LiveRoutineKeys = r.LiveRoutineKeys,
-                MaySuspendRoutineKeys = r.MaySuspendRoutineKeys
-            }).Generate();
-
-        // materialize(name) → the ONE-routine external-linkage module defining `name` (or null when it isn't an
-        // RF routine we own — rf_* runtime resolves via process-search). ForExternalJitModule makes the define
-        // external (sibling modules can call it) and externs the shared trace globals (main owns them). The ORC
-        // generator calls this ON DEMAND as it resolves each unresolved symbol — no caller-side closure walk.
-        int materialized = 0;
-        string? Materialize(string name)
-        {
-            if (!index.TryGetValue(key: name, value: out MonomorphizedBody? body))
-            {
-                return null;
-            }
-
-            var resident = new HashSet<string>(collection: allQuoted, comparer: StringComparer.Ordinal);
-            resident.Remove(item: LlvmEmitter.MangleRoutineName(routine: body.Info));
-            materialized++;
-            return new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
-                registry: r.Registry,
-                options: new LlvmEmitterOptions
-                {
-                    StdlibPrograms = r.Registry.StdlibPrograms,
-                    SynthesizedBodies = r.SynthesizedBodies,
-                    InstantiatedGenericBodies =
-                        new Dictionary<string, MonomorphizedBody> { [key: name] = body },
-                    ResidentSymbols = resident,
-                    ForExternalJitModule = true
-                }).Generate();
-        }
-
-        int rc = Builder.Execution.OrcJitExecutor.JitAndRunLazy(mainIr: mainIr,
-            materialize: Materialize,
-            programName: "test",
-            programArgs: Array.Empty<string>());
-
-        // exit 0 (no crash, no "Symbols not found") + only the @main-reachable set materialized on demand
-        // (demand == liveness: far fewer than the full set). The program's own `show("hi")` output goes to the
-        // native runtime's stdout fd (bypasses C# Console), so the clean exit through the generator is the proof.
-        _out.WriteLine(
-            message:
-            $"lazy-generator: {materialized} routines materialized on demand (of {index.Count} available), exit={rc}");
-        Assert.Equal(expected: 0, actual: rc);
-        Assert.True(condition: materialized > 0 && materialized < index.Count,
-            userMessage:
-            $"demand should materialize a SUBSET, got {materialized}/{index.Count}");
-    }
-
-    /// <summary>
-    /// Resident-JIT incremental (B) M2b — the CROSS-RUN win: a per-routine on-disk IR cache
-    /// (<see cref="Builder.Execution.RoutineIrCache"/>) makes the fully-lazy JIT reuse each pure-stdlib
-    /// routine's one-routine module across runs instead of re-codegen'ing it every time (M2a re-emits every
-    /// reached routine each run). Runs `show("hi")` TWICE sharing one cache dir: run 1 is cold (every
-    /// cacheable routine codegen'd + written), run 2 is warm (served from disk, ZERO codegen). Both exit 0.
-    /// NEEDS libLLVM staged + runs the native runtime in-process → Skip'd in CI.
-    /// </summary>
-    [Fact(Skip =
-        "Local ORC-JIT M2b IR-cache run: needs libLLVM staged + runs the native RF runtime in-process. PASSES locally — run 2 serves every pure-stdlib routine from the disk IR cache (0 codegen) while run 1 populated it (run1: 71 codegen/71 miss; run2: 0 codegen/71 hit). See .claude-memory/resident-jit-pruned-base-works.md M2b.")]
-    public void JitAndRunLazy_IrCache_ReusesAcrossRuns()
-    {
-        AnalysisResult r =
-            new SemanticVerifier(language: Language.RazorForge).Analyze(
-                program: Parse(src: Trivial, file: "bench.rf"));
-        Assert.Empty(collection: r.Errors);
-        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
-            programs: r.Registry.UserPrograms,
-            instantiatedBodies: r.InstantiatedGenericBodies,
-            maySuspendKeys: r.MaySuspendRoutineKeys);
-
-        var index = new Dictionary<string, MonomorphizedBody>(comparer: StringComparer.Ordinal);
-        var allQuoted = new HashSet<string>(comparer: StringComparer.Ordinal);
-        foreach (MonomorphizedBody b in r.InstantiatedGenericBodies.Values)
-        {
-            string mangled = LlvmEmitter.MangleRoutineName(routine: b.Info);
-            index[key: mangled.Trim(trimChar: '"')] = b;
-            allQuoted.Add(item: mangled);
-        }
-
-        string mainIr = new LlvmEmitter(userPrograms: r.Registry.UserPrograms,
-            registry: r.Registry,
-            options: new LlvmEmitterOptions
-            {
-                StdlibPrograms = r.Registry.StdlibPrograms,
-                SynthesizedBodies = r.SynthesizedBodies,
-                InstantiatedGenericBodies = new Dictionary<string, MonomorphizedBody>(),
-                LiveRoutineKeys = r.LiveRoutineKeys,
-                MaySuspendRoutineKeys = r.MaySuspendRoutineKeys
-            }).Generate();
-
-        string EmitOne(string name, MonomorphizedBody body)
-        {
-            var resident = new HashSet<string>(collection: allQuoted, comparer: StringComparer.Ordinal);
-            resident.Remove(item: LlvmEmitter.MangleRoutineName(routine: body.Info));
-            return new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
-                registry: r.Registry,
-                options: new LlvmEmitterOptions
-                {
-                    StdlibPrograms = r.Registry.StdlibPrograms,
-                    SynthesizedBodies = r.SynthesizedBodies,
-                    InstantiatedGenericBodies =
-                        new Dictionary<string, MonomorphizedBody> { [key: name] = body },
-                    ResidentSymbols = resident,
-                    ForExternalJitModule = true
-                }).Generate();
-        }
-
-        // A fresh per-test cache dir (fixed fingerprint — the two runs share the same stdlib/builder).
-        string cacheDir = Path.Combine(path1: Path.GetTempPath(),
-            path2: "rf_jit_ir_cache_test_" + Guid.NewGuid().ToString(format: "N"));
-
-        int RunOnce(Builder.Execution.RoutineIrCache cache, out int codegens)
-        {
-            int cg = 0;
-            string? Materialize(string name)
-            {
-                if (!index.TryGetValue(key: name, value: out MonomorphizedBody? body))
-                {
-                    return null;
-                }
-
-                if (cache.TryGet(mangledName: name, ir: out string cached))
-                {
-                    return cached;
-                }
-
-                cg++;
-                string ir = EmitOne(name: name, body: body);
-                cache.Put(mangledName: name, ir: ir);
-                return ir;
-            }
-
-            int rc = Builder.Execution.OrcJitExecutor.JitAndRunLazy(mainIr: mainIr,
-                materialize: Materialize,
-                programName: "test",
-                programArgs: Array.Empty<string>());
-            codegens = cg;
-            return rc;
-        }
-
-        try
-        {
-            // Run 1 (cold): every cacheable routine is codegen'd + written; nothing served from disk.
-            var cache1 = new Builder.Execution.RoutineIrCache(fingerprint: "test-fp",
-                userModuleSegments: new[] { "Bench" }, dir: cacheDir);
-            int rc1 = RunOnce(cache: cache1, codegens: out int cg1);
-            Assert.Equal(expected: 0, actual: rc1);
-            Assert.Equal(expected: 0, actual: cache1.Hits);
-            Assert.True(condition: cache1.Misses > 0, userMessage: "run 1 should populate the cache");
-
-            // Run 2 (warm): the same pure-stdlib routines are served from the disk cache — ZERO fresh codegen.
-            var cache2 = new Builder.Execution.RoutineIrCache(fingerprint: "test-fp",
-                userModuleSegments: new[] { "Bench" }, dir: cacheDir);
-            int rc2 = RunOnce(cache: cache2, codegens: out int cg2);
-            _out.WriteLine(
-                message:
-                $"run1: codegens={cg1} misses={cache1.Misses} uncacheable={cache1.Uncacheable}; " +
-                $"run2: codegens={cg2} hits={cache2.Hits} uncacheable={cache2.Uncacheable}");
-            Assert.Equal(expected: 0, actual: rc2);
-            Assert.True(condition: cache2.Hits > 0, userMessage: "run 2 should reuse cached IR");
-            // Every cacheable routine run 2 reached was a disk hit (no fresh codegen for cacheable ones);
-            // cg2 counts only uncacheable re-emits, which must be < run 1's total codegen.
-            Assert.True(condition: cg2 < cg1,
-                userMessage: $"run 2 should codegen fewer than run 1 (cg2={cg2}, cg1={cg1})");
-        }
-        finally
-        {
-            if (Directory.Exists(path: cacheDir))
-            {
-                Directory.Delete(path: cacheDir, recursive: true);
-            }
-        }
     }
 }

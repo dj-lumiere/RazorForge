@@ -6,7 +6,6 @@ using Builder.Verification;
 using Builder.Verification.Results;
 using Xunit.Abstractions;
 
-#pragma warning disable xUnit1004
 namespace RazorForge.Tests.Perf;
 
 /// <summary>
@@ -17,8 +16,7 @@ namespace RazorForge.Tests.Perf;
 /// non-determinism bug — the exact class the pull collector must never reintroduce.
 ///
 /// <para>The curated <see cref="RiskyFixtures"/> theory runs in CI (fast subset covering errors/throws,
-/// entities, iterators, generics, locks, choices, variants, routine values). <see cref="AllFixtures_Parity"/>
-/// sweeps EVERY fixture and is opt-in (slow: one cold full-SA per fixture).</para>
+/// entities, iterators, generics, locks, choices, variants, routine values).</para>
 /// </summary>
 public sealed partial class WarmColdFixtureParityTests
 {
@@ -70,7 +68,7 @@ public sealed partial class WarmColdFixtureParityTests
             "error_paths_api", "crashable_api", "list_api", "dict_api", "set_api",
             "sorted_dict_api", "choice_api", "variant_api", "generic_routine_api",
             "guarded_api", "guarded_access_api", "fallible_lock_api", "agent_api",
-            "array_api", "range_api", "filesystem_api", "itertools_api"
+            "array_api", "range_api", "filesystem_api", "itertools_api", "builder_query_api"
         ];
         var data = new TheoryData<string, string>();
         foreach (string n in names)
@@ -144,29 +142,36 @@ public sealed partial class WarmColdFixtureParityTests
         Assert.NotEmpty(collection: warm.AnalyzedFileCache);
     }
 
-    [Fact(Skip =
-        "Slow full sweep (one cold full-SA per fixture, ~192×). Un-skip to audit ALL fixtures.")]
-    public void AllFixtures_Parity()
+    /// <summary>A warm build that reuses a library file an EARLIER build of another program analyzed. That analysis
+    /// made the recovery variants the file's own code reaches (`check w.retrieve()` inside the Agent library) after
+    /// the build's variant teardown had run, so they were cached without any scope-exit destroys, and the next
+    /// build took them as lowered: `AgentWork[S64].retrieve`'s check variant tore down none of its locals and the
+    /// lifecycle hooks of the `Check[U32]` it holds were never reached.</summary>
+    [Theory]
+    [InlineData("agent_api", "agent_start_api")]
+    public void BuildAfterAnotherProgram_MatchesCold(string first, string second)
     {
-        var diverged = new List<string>();
-        foreach (string path in Directory.GetFiles(path: FixtureDir, searchPattern: "*.rf")
-                                         .OrderBy(keySelector: p => p))
-        {
-            string name = Path.GetFileNameWithoutExtension(path: path);
-            (_, _, string[] coldOnly, string[] warmOnly) = CompareDefines(path: path);
-            if (coldOnly.Length > 0 || warmOnly.Length > 0)
-            {
-                diverged.Add(item: name);
-                _out.WriteLine(
-                    message:
-                    $"DIVERGED {name}: cold-only=[{string.Join(separator: ", ", values: coldOnly.Take(count: 6))}] " +
-                    $"warm-only=[{string.Join(separator: ", ", values: warmOnly.Take(count: 6))}]");
-            }
-        }
+        string path = Path.Combine(path1: FixtureDir, path2: second + ".rf");
+        string src = File.ReadAllText(path: path);
+        HashSet<string> coldDefs = DefineSet(ll: Codegen(
+            r: new SemanticVerifier(language: Language.RazorForge).Analyze(
+                program: Parse(src: src, path: path))));
 
-        Assert.True(condition: diverged.Count == 0,
+        SemanticVerifier.CompiledStdlibState warm =
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+        string firstPath = Path.Combine(path1: FixtureDir, path2: first + ".rf");
+        Codegen(r: new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+            program: Parse(src: File.ReadAllText(path: firstPath), path: firstPath)));
+        HashSet<string> warmDefs = DefineSet(ll: Codegen(
+            r: new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+                program: Parse(src: src, path: path))));
+
+        string[] coldOnly = coldDefs.Except(second: warmDefs).OrderBy(keySelector: s => s).ToArray();
+        string[] warmOnly = warmDefs.Except(second: coldDefs).OrderBy(keySelector: s => s).ToArray();
+        Assert.True(condition: coldOnly.Length == 0 && warmOnly.Length == 0,
             userMessage:
-            $"{diverged.Count} fixtures diverged: {string.Join(separator: ", ", values: diverged)}");
+            $"{second} after {first}: define-set diverged from cold, cold-only=[{string.Join(separator: ", ", values: coldOnly.Take(count: 6))}] " +
+            $"warm-only=[{string.Join(separator: ", ", values: warmOnly.Take(count: 6))}]");
     }
 
     private static (int cold, int warm, string[] coldOnly, string[] warmOnly) CompareDefines(
