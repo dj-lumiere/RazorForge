@@ -2,26 +2,18 @@ module System/Memory
 
 ### Several readers or one writer: `viewing g` lets other readers in at the same time, `modifying g` waits until it is
 ### the only one. Once a writer waits, readers that come later wait behind it, so a stream of readers can't keep a
-### writer out. The state is laid out as the runtime's MultiReadAccess. An agent that has to wait goes through the
-### AccessManager, which stops the program when agents wait on each other (`[debug] deadlock-check`).
+### writer out. The state is one byte, and the runtime's AccessManager keeps who holds it: an agent that has to wait
+### goes through the AccessManager, which stops the program when agents wait on each other (`[debug] deadlock-check`).
 ### :see: {AccessPolicy}, {Exclusive}, {Guarded}
 record MultiRead
 obeys AccessPolicy
-    ### The readers holding it, or the writer bit while a writer does.
-    secret state: U32
-    ### The writers waiting for it or holding it.
-    secret writers: U32
-    ### The id of the writer holding it, or of a reader while only readers do.
-    secret holder: U64
-    ### How many times an agent had to wait for it.
-    secret waits: U64
-    ### How long agents waited for it in all, in nanoseconds.
-    secret waited: U64
+    ### The byte whose access the AccessManager hands out: its address names this access.
+    secret guard: U8
 
 ### Creates a free reader-writer access.
 ### :returns: The resulting `MultiRead` value.
 routine MultiRead() -> MultiRead
-    return MultiRead(state: 0, writers: 0, holder: 0, waits: 0, waited: 0)
+    return MultiRead(guard: 0)
 
 ### The AccessManager's kind for this policy: a multi-read access.
 ### :returns: 2.

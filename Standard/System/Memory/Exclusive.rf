@@ -1,25 +1,19 @@
 module System/Memory
 
 ### One user at a time: `modifying g` waits until no other agent has `g` open, and it is used to read as well (an
-### `Exclusive` `Guarded` has no `viewing`). The state is laid out as the runtime's ExclusiveAccess: free or taken,
-### the agent holding it, and how often and how long agents waited for it. An agent that has to wait goes through the
-### AccessManager, which stops the program when agents wait on each other (`[debug] deadlock-check`).
+### `Exclusive` `Guarded` has no `viewing`). The state is one byte, and the runtime's AccessManager keeps who holds
+### it: an agent that has to wait goes through the AccessManager, which stops the program when agents wait on each
+### other (`[debug] deadlock-check`).
 ### :see: {AccessPolicy}, {MultiRead}, {Guarded}
 record Exclusive
 obeys AccessPolicy
-    ### 0 free, 1 taken, 2 taken with an agent that may be waiting.
-    secret state: U32
-    ### The id of the agent holding it, 0 while free.
-    secret holder: U64
-    ### How many times an agent had to wait for it.
-    secret waits: U64
-    ### How long agents waited for it in all, in nanoseconds.
-    secret waited: U64
+    ### The byte whose access the AccessManager hands out: its address names this access.
+    secret guard: U8
 
 ### Creates a free exclusive access.
 ### :returns: The resulting `Exclusive` value.
 routine Exclusive() -> Exclusive
-    return Exclusive(state: 0, holder: 0, waits: 0, waited: 0)
+    return Exclusive(guard: 0)
 
 ### The AccessManager's kind for this policy: an exclusive access.
 ### :returns: 1.
