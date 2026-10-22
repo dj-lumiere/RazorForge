@@ -7,18 +7,18 @@ using static TestHelpers;
 
 /// <summary>
 /// RazorForge <c>global</c>: reached from every thread, so the binding is never assigned again after its
-/// initialization. An Atomic or a Guarded changes what it holds through its own routines, any other value is only read.
+/// initialization. An Unbroken or a Guarded changes what it holds through its own routines, any other value is only read.
 /// </summary>
 public class GlobalTests
 {
     [Fact]
-    public void Analyze_AtomicAndGuardedGlobals_ChangeThroughTheirRoutines()
+    public void Analyze_UnbrokenAndGuardedGlobals_ChangeThroughTheirRoutines()
     {
         AssertAnalyzesSa(source: """
                                  entity Table
                                      n: S64
 
-                                 global hits: Atomic[U64] = Atomic[U64](initial: 0)
+                                 global hits: Unbroken[U64] = Unbroken[U64](initial: 0)
                                  global table: Guarded[Table, Exclusive] = Guarded[Table, Exclusive](from: Table(n: 0))
                                  global name: Text = "x"
 

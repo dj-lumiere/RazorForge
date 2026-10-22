@@ -11,7 +11,7 @@ public class GuardedDirectReadTests
     private const string Prelude = """
                                    entity Stats
                                        name: Text
-                                       open: Atomic[U64]
+                                       open: Unbroken[U64]
 
                                    @readonly
                                    routine Stats.label() -> Text
@@ -28,7 +28,7 @@ public class GuardedDirectReadTests
     {
         AssertAnalyzesSa(source: Prelude + """
                                            routine start()
-                                               var g = Guarded[Stats, ReadOnly](from: Stats(name: "a", open: Atomic[U64](initial: 0)))
+                                               var g = Guarded[Stats, ReadOnly](from: Stats(name: "a", open: Unbroken[U64](initial: 0)))
                                                var n = g.name
                                                var l = g.label()
                                                g.open.fetch_add(delta: 1)
@@ -41,7 +41,7 @@ public class GuardedDirectReadTests
     {
         AssertHasErrorSa(source: Prelude + """
                                            routine start()
-                                               var g = Guarded[Stats, ReadOnly](from: Stats(name: "a", open: Atomic[U64](initial: 0)))
+                                               var g = Guarded[Stats, ReadOnly](from: Stats(name: "a", open: Unbroken[U64](initial: 0)))
                                                g.rename(to: "b")
                                                return
                                            """,
@@ -53,7 +53,7 @@ public class GuardedDirectReadTests
     {
         AssertHasErrorSa(source: Prelude + """
                                            routine start()
-                                               var g = Guarded[Stats, Exclusive](from: Stats(name: "a", open: Atomic[U64](initial: 0)))
+                                               var g = Guarded[Stats, Exclusive](from: Stats(name: "a", open: Unbroken[U64](initial: 0)))
                                                var n = g.name
                                                return
                                            """,
@@ -65,7 +65,7 @@ public class GuardedDirectReadTests
     {
         AssertHasErrorSa(source: Prelude + """
                                            routine start()
-                                               var g = Guarded[Stats, MultiRead](from: Stats(name: "a", open: Atomic[U64](initial: 0)))
+                                               var g = Guarded[Stats, MultiRead](from: Stats(name: "a", open: Unbroken[U64](initial: 0)))
                                                var l = g.label()
                                                return
                                            """,

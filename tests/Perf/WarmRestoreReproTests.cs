@@ -10,7 +10,7 @@ namespace RazorForge.Tests.Perf;
 /// <summary>
 /// Regression lock for the warm-restore stdlib re-lowering crash. The compile daemon captures a fully
 /// lowered stdlib snapshot once, then serves many warm compiles from it. A warm compile that imports a
-/// non-System module (e.g. <c>Collections.CircularList</c>) triggers the fresh loader's <c>ScanStdlibFiles</c>,
+/// non-System module (e.g. <c>Collections.RotatableList</c>) triggers the fresh loader's <c>ScanStdlibFiles</c>,
 /// which re-parses EVERY <c>module System</c> file into <c>_corePrograms</c> as unanalyzed/unlowered ASTs.
 /// Before the fix those stale copies leaked into <c>FreshlyLoadedStdlibPrograms</c>, so the postprocessing
 /// pipeline tried to lower them and threw ("ConditionalExpression reached ExpressionLoweringPass without a
@@ -40,14 +40,14 @@ public sealed class WarmRestoreReproTests
         SemanticVerifier.CompiledStdlibState warm =
             SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
 
-        // A non-System import (Collections.CircularList) is what makes the fresh loader re-scan stdlib and re-parse
+        // A non-System import (Collections.RotatableList) is what makes the fresh loader re-scan stdlib and re-parse
         // every System file — the trigger for the leaked-fresh-System crash this test guards.
         const string user = """
                             module Bench
                             import IO/Console
-                            import Collections.CircularList
+                            import Collections.RotatableList
                             routine start()
-                                var d: CircularList[S32] = [1, 2, 3]
+                                var d: RotatableList[S32] = [1, 2, 3]
                                 each v in d
                                     show(f"{v}")
                                 return

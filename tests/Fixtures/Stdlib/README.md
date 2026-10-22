@@ -43,7 +43,7 @@ Each fixture passes iff its captured stdout matches the snapshot exactly (traili
 
 Covered today (see `*.rf` files in this directory):
 
-- Containers: `list`, `set`, `dict`, `circular_list`, `tuple`, `bitlist`, `sorted_list`, `sorted_set`, `sorted_dict`,
+- Containers: `list`, `set`, `dict`, `rotatable_list`, `tuple`, `bitlist`, `sorted_list`, `sorted_set`, `sorted_dict`,
   `array`, `bitarray`
 - Carriers: `maybe`, `maybe_entity` (auto-wrap to `Owned`), `result`, `crashable`
 - Memory wrappers: `owned`, `retained`, `viewed_grasped`

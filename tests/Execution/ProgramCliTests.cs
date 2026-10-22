@@ -260,6 +260,45 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateTypeNames_RenamesAtomicAndCircularList_KeepsStringsAndComments()
+    {
+        string dir = OldProject(name: "type-names", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/TypeNamesRf\n" +
+                "import Collections\n" +
+                "record Cell[T]\n" +
+                "needs T obeys AtomicType\n" +
+                "    value: Atomic[T]\n" +
+                "\n" +
+                "routine start()\n" +
+                "    var hits = Atomic[U64](initial: 0)\n" +
+                "    var ring: CircularList[S64] = [1, 2]\n" +
+                "    show(\"Atomic CircularList\")  # Atomic\n" +
+                "    var atomic_hits = hits.load()\n" +
+                "    return\n")
+        ]);
+
+        (int code, string output) = RunMain("migrate", "--step", "type-names", dir);
+        Assert.Equal(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
+        Assert.Equal(
+            expected: "module Test/TypeNamesRf\n" +
+                      "import Collections\n" +
+                      "record Cell[T]\n" +
+                      "needs T obeys UnbrokenType\n" +
+                      "    value: Unbroken[T]\n" +
+                      "\n" +
+                      "routine start()\n" +
+                      "    var hits = Unbroken[U64](initial: 0)\n" +
+                      "    var ring: RotatableList[S64] = [1, 2]\n" +
+                      "    show(\"Atomic CircularList\")  # Atomic\n" +
+                      "    var atomic_hits = hits.load()\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+    }
+
+    [Fact]
     public void MigrateDefault_IndentsFirst_RewritesReleaseSpellings_RenamesManifest()
     {
         string dir = OldProject(name: "release", oldManifest: true, files:
@@ -284,6 +323,7 @@ public sealed class ProgramCliTests : IDisposable
                 "  var c = p.check_size()\n" +
                 "  var w = -p.x ** 2\n" +
                 "  var n = 5_s64 + -2_s64 ** 2\n" +
+                "  var hits = Atomic[S64](initial: 0)\n" +
                 "  each i in n to 1\n" +
                 "    nothing\n" +
                 "  return\n")
@@ -310,6 +350,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    var c = check p.size()\n" +
                       "    var w = (-p.x) ** 2\n" +
                       "    var n = 5_s64 + (-2_s64) ** 2\n" +
+                      "    var hits = Unbroken[S64](initial: 0)\n" +
                       "    each i in n to 1\n" +
                       "        nothing\n" +
                       "    return\n",

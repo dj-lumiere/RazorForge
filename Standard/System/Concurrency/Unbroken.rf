@@ -1,0 +1,118 @@
+module System/Concurrency
+
+### A value that changes in one unbroken step: another thread never sees it halfway through a change.
+###
+### Every change synchronizes itself, so every routine on it is `@readonly`: a read token
+### (`Viewing`, a `Guarded[T, ReadOnly]` field) is enough to `fetch_add` or `store`.
+###
+### `Unbroken[T]` is a single-field record whose member routines take `me` by reference, so
+### `me.initial.hijack()` gives the live address of its storage. The atomic intrinsics
+### (`System/LLVMIntrinsics.rf`) then run sequentially consistent `load`/`store`/`atomicrmw`/`cmpxchg`
+### on that address.
+###
+### **Sharing across jobs.** An `Unbroken[T]` parameter is always passed by reference:
+### a routine taking one works on the caller's value, never on a copy. So
+### `bump.to[Work](cell: counter)` points every worker at the one value. The value must
+### outlive every worker: collect them (`retrieve()`/`gather()`) before its storage
+### goes out of scope, or put it behind a `Guarded[Unbroken[T]]` when no single frame is
+### guaranteed to outlive the workers.
+###
+### **Valid `T`.** `T` must lower to a byte-or-larger integer the hardware changes in one step:
+### `S8`..`S64` and `U8`..`U64`. `Bool` is not supported: it lowers to `i1`, and LLVM needs these
+### accesses to be byte-sized, so a flag is an `Unbroken[U8]` (`0`/`1`). There is no 128-bit form:
+### not every target changes 128 bits in one step without a lock, and the builder never emits a
+### lock for it. All routines are integer operations and, like the rest of the `Hijacked` surface,
+### unchecked.
+###
+### :typeparam T: The element type (an `UnbrokenType` integer).
+### :see: {Guarded}, {Hijacked}
+record Unbroken[T]
+needs RecordType T
+needs T obeys UnbrokenType
+    ### The payload, starting as the value it is created with (`Unbroken(initial: x)`, the memberwise
+    ### creator). Changed through sequentially consistent atomic intrinsics on its live address, never read
+    ### directly (see the by-reference `me` note above).
+    secret initial: T
+
+### In one unbroken step, reads the current value.
+### :returns: The value observed.
+@readonly
+routine Unbroken[T].load() -> T
+    danger
+        return LLVM::atomic_load[T](ptr: me.initial.hijack())
+
+### In one unbroken step, writes `desired`.
+### :param desired: The replacement value.
+@readonly
+routine Unbroken[T].store(desired: T)
+    danger
+        LLVM::atomic_store[T](ptr: me.initial.hijack(), value: desired)
+    return
+
+### In one unbroken step, writes `desired` and returns the value that was present before.
+### :param desired: The replacement value.
+### :returns: The previous value.
+@discardable
+@readonly
+routine Unbroken[T].swap(desired: T) -> T
+    danger
+        return LLVM::atomic_exchange[T](ptr: me.initial.hijack(), value: desired)
+
+### In one unbroken step, installs `desired` if the value currently equals `expected`.
+### :param expected: The value that must be present for the exchange to occur.
+### :param desired: The value to install on success.
+### :returns: `true` if the exchange happened.
+@readonly
+routine Unbroken[T].compare_exchange(expected: T, desired: T) -> Bool
+    danger
+        var result = LLVM::atomic_compare_and_exchange[T](
+            ptr: me.initial.hijack(),
+            expected: expected,
+            desired: desired,
+        )
+        return result.item1
+
+### In one unbroken step, adds `delta`, returning the value before the addition. Integer `T` only.
+### :param delta: The increment to apply.
+### :returns: The previous value.
+@discardable
+@readonly
+routine Unbroken[T].fetch_add(delta: T) -> T
+    danger
+        return LLVM::atomic_add[T](ptr: me.initial.hijack(), value: delta)
+
+### In one unbroken step, subtracts `delta`, returning the value before the subtraction. Integer `T` only.
+### :param delta: The decrement to apply.
+### :returns: The previous value.
+@discardable
+@readonly
+routine Unbroken[T].fetch_sub(delta: T) -> T
+    danger
+        return LLVM::atomic_sub[T](ptr: me.initial.hijack(), value: delta)
+
+### In one unbroken step, ANDs the value with `mask`, returning the value before the update. Integer `T` only.
+### :param mask: The bit mask to apply.
+### :returns: The previous value.
+@discardable
+@readonly
+routine Unbroken[T].fetch_and(mask: T) -> T
+    danger
+        return LLVM::atomic_and[T](ptr: me.initial.hijack(), value: mask)
+
+### In one unbroken step, ORs the value with `mask`, returning the value before the update. Integer `T` only.
+### :param mask: The bit mask to apply.
+### :returns: The previous value.
+@discardable
+@readonly
+routine Unbroken[T].fetch_or(mask: T) -> T
+    danger
+        return LLVM::atomic_or[T](ptr: me.initial.hijack(), value: mask)
+
+### In one unbroken step, XORs the value with `mask`, returning the value before the update. Integer `T` only.
+### :param mask: The bit mask to apply.
+### :returns: The previous value.
+@discardable
+@readonly
+routine Unbroken[T].fetch_xor(mask: T) -> T
+    danger
+        return LLVM::atomic_xor[T](ptr: me.initial.hijack(), value: mask)

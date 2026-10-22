@@ -9,7 +9,7 @@ using static TestHelpers;
 /// Tests for the `to[Work]` argument boundary (RF-S632). A Work may run on any thread in parallel with
 /// the code that made it, so each argument `f.to[Work](...)` computes now must cross safely: `steal`-moved
 /// (exclusive transfer), trivially-copyable value data (passed BY VALUE), or a thread-shareable wrapper
-/// (Atomic/Guarded/Witnessed, which carries its own synchronization, or a token a `using` over a Guarded's lock bound). Anything else passed by
+/// (Unbroken/Guarded/Witnessed, which carries its own synchronization, or a token a `using` over a Guarded's lock bound). Anything else passed by
 /// copy (a bare entity, or a record/tuple that transitively owns a single-threaded RC wrapper (Retained/Tracked) or
 /// single-threaded token (Viewing/Modifying)) would silently alias unsynchronized state and is rejected.
 /// </summary>
@@ -62,16 +62,16 @@ public class ThreadArgShareabilityTests
     }
 
     [Fact]
-    public void Analyze_AtomicThreadArg_Ok()
+    public void Analyze_UnbrokenThreadArg_Ok()
     {
-        // Atomic carries its own synchronization — shared by reference across the boundary.
+        // Unbroken carries its own synchronization — shared by reference across the boundary.
         string source = Prelude + """
-                                  routine work(cell: Atomic[S64]) -> S64
+                                  routine work(cell: Unbroken[S64]) -> S64
                                       drop cell.fetch_add(delta: 1)
                                       return 0
 
                                   routine start()
-                                      var counter = Atomic[S64](initial: 0)
+                                      var counter = Unbroken[S64](initial: 0)
                                       var t = work.to[Work](cell: counter)
                                       drop t.retrieve()
                                       return

@@ -154,7 +154,7 @@ When unsure, consult ground truth in the repo/package:
    Out-of-range literals are build errors (RF-S010): `-1` never fits an
    unsigned type — spell all-ones as `U8_MAX`, `U64_MAX`, etc.
 9. **A result you mean to throw away takes `drop`**: `drop name.trim()` (RF-W007 otherwise). A routine marked
-   `@discardable` returns a by-product (`Set.add`/`Set.remove`/`Dict.remove`'s Bool, `Atomic.fetch_*`'s old value,
+   `@discardable` returns a by-product (`Set.add`/`Set.remove`/`Dict.remove`'s Bool, `Unbroken.fetch_*`'s old value,
    `File.write_text`'s count): its result may be dropped silently, `seen.add(value: v)`. `drop x` on a local
    binding the routine owns (a local, an entity parameter handed over with `steal`) tears it down there and ends
    the name like `steal x` (RF-S615 after, RF-S616 on some paths only, tokens from it end, RF-S643); a member
@@ -275,7 +275,7 @@ show(f"total = {total}")
   file are an error (RF-S443) — they would start a second program.
 - A top-level `var` lives in the script's top-level scope, not the module:
   routines in the file cannot see it (RF-S444). Pass it as an argument. A
-  `global` is read-only, so state that changes goes in an `Atomic`/`Guarded` global.
+  `global` is read-only, so state that changes goes in an `Unbroken`/`Guarded` global.
 - Routines you define are still their own scopes and still end with `return`.
 
 `module <Path>` is optional. Without it the module path is derived from the file's
@@ -311,7 +311,7 @@ The rest takes an import: `Collections`, `IO/Console`, `IO/Environment`, `IO/Fil
 **Globals (RazorForge).** `global name: Type = init` (type and initializer both required):
 initialized in dependency order when `start()` begins (a cycle is RF-S436, no `start()` is
 RF-S438), torn down at every exit of `start()`. Every thread reaches it, so the binding is
-never assigned again: shared changing state is an `Atomic` (`hits.fetch_add(delta: 1)`) or a
+never assigned again: shared changing state is an `Unbroken` (`hits.fetch_add(delta: 1)`) or a
 `Guarded` (`modifying cache as c`), any other global is only read (writes are RF-S251 /
 RF-S256, `modifying G` on a global entity that is not a `Guarded` is RF-S256, `steal G` in any routine is
 RF-S421). A global never holds a token (RF-S601) or a single-thread handle (`Retained`, `Tracked`, at any depth:
@@ -361,7 +361,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
   An empty flags value shows as `none`, a one-item tuple as `(1,)`. A global record's member can't be assigned
   (RF-S257, like the global itself). `try sv.to[List[S64]]()` recovers a bad element too. Every collection reads
-  back with `sv.to[T]()` (`Dict`, `Set`, `SortedDict`, `SortedList`, `SortedSet`, `CircularList`), a dictionary's keys
+  back with `sv.to[T]()` (`Dict`, `Set`, `SortedDict`, `SortedList`, `SortedSet`, `RotatableList`), a dictionary's keys
   from their text. A type holding a `secret` member variable, at any depth, can't be read back: RF-S813.
 - Inside a `when` arm whose name reaches the variant's own value (`is Upload as u` on an entity branch, or a
   `Retained`/`Hijacked`/`Maybe` branch), giving the matched variable a new value is RF-S264: assign it after the
@@ -375,7 +375,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - `ask_line()` gives a blank line as `""` and crashes with `EndOfInputError` (`IO/Errors`) at the end of the input, as
   does `ask_word()`: read until the end with `when check ask_line()` + `is EndOfInputError => break`. An `ask_line()`
   right after `ask_word()` skips the line end the word left.
-- Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `CircularList[T]`, `BitList`,
+- Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `RotatableList[T]`, `BitList`,
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
   fixed-size `Array[T, COUNT]`, `BitArray[BITS]`
 - Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
@@ -853,7 +853,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     (RF-S616); a loop turn may not take it and go on (only where the loop ends).
   - `steal` on a `Retained`/`Guarded` gives the entity inside (`var t: Table = steal table`) when it is the last
     strong handle, crashing with `SharedHandleStealError` otherwise; weak handles can't be stolen.
-    Every `Atomic` routine is `@readonly` (each change synchronizes itself): `stats.open.fetch_add(delta: 1)`
+    Every `Unbroken` routine is `@readonly` (each change synchronizes itself): `stats.open.fetch_add(delta: 1)`
     works through a read token or a `ReadOnly` Guarded.
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
 - **`Hijacked[T]`** — a raw handle that manages nothing (no-op destruct); the stdlib's
@@ -949,7 +949,7 @@ parameter to values (`needs RecordType T`), or work on it in place.
 `needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
 kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
 `SplitArray`, `DictEntry` (tuples and variants follow their elements the same way). `Range[T]`,
-`Atomic[T]` and `SplitArray`'s element iterator are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
+`Unbroken[T]` and `SplitArray`'s element iterator are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
 asks only `TPriority obeys Comparable`. A queue is not walked directly: `pq.unordered()` and `pq.ordered()` copy its
 `(priority, element)` pairs (storage order / smallest priority first, `needs RecordType TElement`), `pq.drain()`
 empties it into them smallest first (`each (priority, element) in pq.drain()`). An
@@ -1067,13 +1067,13 @@ that differ from other languages:
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
   is `coll[^1]` (last element).
 - **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a
-  `List`/`CircularList` yields a new `List`/`CircularList`, on `Array[T, COUNT]` a `List[T]`
+  `List`/`RotatableList` yields a new `List`/`RotatableList`, on `Array[T, COUNT]` a `List[T]`
   (slice length is a runtime value, so it cannot be a fixed `Array`). Mutating
   the slice never touches the original. Open-ended `xs[a til ^0]` slices to the
   end. Element type must be `Copyable` (slicing a `List[Entity]` is a compile
   error). For a lazy, no-copy window use the iterator combinator
   `xs.skip(a).take(n)` instead — copy-vs-view is spelled by which you call.
-- `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `CircularList[T]`, and sorted collections are
+- `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `RotatableList[T]`, and sorted collections are
   entities. Do not pass a container as a bare parameter when read-only access is
   enough; declare the parameter `Viewing[List[T]]` and pass the container
   (`largest(items: xs)`). Bind `var v = items.view()` when the token needs a name.
@@ -1098,7 +1098,7 @@ that differ from other languages:
 - `List`, `Set`, `Dict` live in **`System`** (always available — never suggest
   `using Collections`). Only these three canonical collections have literal
   syntax of their own (`[1, 2]`, `{1, 2}`, `{1: 10}`); a specialized container
-  (`SortedSet`, `CircularList`, `Array`, `BitArray`, `BitList`, `PriorityQueue`, …)
+  (`SortedSet`, `RotatableList`, `Array`, `BitArray`, `BitList`, `PriorityQueue`, …)
   takes the same literal when the variable names its type
   (`var s: SortedSet[S64] = {3, 1, 2}`, `var pq: PriorityQueue[S32, Text] = {1: "high"}`).
   A literal takes its element types from where it goes, as a number does: `bytes.add_range(you: [3, 4])` on a
@@ -1131,7 +1131,7 @@ Every stdlib collection marks its adding/removing routines `@reshaping`.
 write on an ENTITY element (`grid[0].add_last(value: 1)`, `boxes[0].n = 5`,
 `grid[0][1] = 20`) acts on the element inside the container, not on a copy: the
 builder reaches it through the container's `modify_at`/`view_at` token (List,
-CircularList, Dict). In that same statement nothing may add to or remove from
+RotatableList, Dict). In that same statement nothing may add to or remove from
 the container, directly or through a call (RF-S639), since that could move the
 element. A VALUE element works the same way (`m[i][j] = v`, `pts[k].x = v`):
 the builder writes through a copy and stores it back.
@@ -1204,7 +1204,7 @@ operator (`/` is division).
   recursive, symlink-safe).
 - **Sessions:** `open_read` (→ `FileSource`, `pull(max:)`), `open_write`/`open_append` (→ `FileSink`, `push(data:)`), bound by
   `using`.
-- **Verbs by job:** `load` / `store` read and write a PLACE (`Memory`, `Box`, `Atomic`: reading again gives the same
+- **Verbs by job:** `load` / `store` read and write a PLACE (`Memory`, `Box`, `Unbroken`: reading again gives the same
   value). `pull` / `push` move bytes through a FLOW (the `Source` / `Sink` protocols: `FileSource`, `FileSink`,
   `stdin()`, `stdout()`, subprocess pipes). `transmit` / `receive` move one message at a time (channels:
   `Transmitter[T].transmit`, `transmit_if_room`). `migrate --step verbs` rewrites the old `load` / `store` on a
@@ -1304,7 +1304,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W008      | a Work nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-W009      | a started Work nothing collects      | `retrieve()` it, or `drop job` to stop it          |
 | RF-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Maybe[...]` kept in a name, a tuple) | keep the entity or a manager's handle, unpack `try` of a token with `when` at once |
-| RF-S632      | `to[Work]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
+| RF-S632      | `to[Work]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Unbroken`/`Guarded`/…, or `start_here()` |
 | RF-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or open both with `modifying x, y` |
 | RF-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
@@ -1476,23 +1476,23 @@ routine start()
 
 **What `to[Work]` may hand to the work (RF-S632).** Each value `f.to[Work](...)` computes now must be safe to
 hand to work that may run on another thread: a `steal`-moved bare entity, trivially copyable value data,
-or a shareable manager handle (`Atomic`, `Guarded`, `Witnessed`). A `Roamed`
+or a shareable manager handle (`Unbroken`, `Guarded`, `Witnessed`). A `Roamed`
 handle is promoted. Anything else (a bare entity by copy, a record owning `Retained`/`Tracked`/
 `Viewing`/`Modifying`) is rejected. The check follows everything the value reaches: an entity's member
 variables, a collection's elements (`List[Retained[Cell]]`), a channel end's items (`Receiver[Retained[Cell]]`),
 and the `given` names of a lambda (written in the call or bound to a variable first). A value holding a
 `Retained`, `Tracked` or token at any depth makes a Work of one thread: it starts with `start_here()`, and
-`start_now()` / `start_apart()` (or a `retrieve()` that starts it) is RF-S632. An `Atomic[T]` parameter is always by reference, so a routine taking
+`start_now()` / `start_apart()` (or a `retrieve()` that starts it) is RF-S632. An `Unbroken[T]` parameter is always by reference, so a routine taking
 one works on the caller's cell, and sharing one counter across jobs just works:
 
 ```razorforge
-routine bump(cell: Atomic[S64], times: S64)
+routine bump(cell: Unbroken[S64], times: S64)
     each i in 0 til times
         drop cell.fetch_add(delta: 1)
     return
 
 routine start()
-    var counter = Atomic[S64](initial: 0)
+    var counter = Unbroken[S64](initial: 0)
     var jobs = [bump.to[Work](cell: counter, times: 1000), bump.to[Work](cell: counter, times: 1000)]
     drop jobs.gather()
     show(f"{counter.load()}")          # 2000
@@ -1536,7 +1536,7 @@ asks the process to stop. Its routines are called on the type:
 ```razorforge
 import IO/Console
 
-global stop_requests: Atomic[U64] = Atomic[U64](initial: 0)
+global stop_requests: Unbroken[U64] = Unbroken[U64](initial: 0)
 
 routine on_stop()
     show("stopping")
@@ -1556,7 +1556,7 @@ routine start()
   that must happen is the handler's (other threads' `destroy` teardown does not run).
 - `CpuEventManager.when_interrupted(h)`: SIGINT, Ctrl+C or Ctrl+Break. When `h` returns, the program goes on.
 - The handler is a **`Callable[(), None]`** (a named routine or a lambda, taking nothing). It runs on a thread of
-  its own, so `show`, locks and allocation are fine in it. The state it changes is a `global` (`Atomic` /
+  its own, so `show`, locks and allocation are fine in it. The state it changes is a `global` (`Unbroken` /
   `Guarded`): there is no context argument.
 - **One slot per kind.** Setting a handler returns the one before as `Callable[(), None]?`, `none` when the
   system's action held the slot (the result may be dropped silently). Setting it again puts it back, and `none` gives

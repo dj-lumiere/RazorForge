@@ -184,6 +184,10 @@ file only once its other old spellings are gone.
   list: `jobs.gather()`. When the last holder of a Work lets it go, the work is cancelled and waited for.
 - Channels: `Sender[T]` is `Transmitter[T]`, `send` is `transmit` and `send_if_room` is `transmit_if_room`
   (`migrate --step verbs`).
+- `Atomic[T]` is `Unbroken[T]` (a value whose one change is never broken partway), and its marker protocol
+  `AtomicType` is `UnbrokenType`. `CircularList[T]` is `RotatableList[T]`, and its iterator `CircularListEmittable`
+  is `RotatableListEmittable`. The routines keep their names. Default `migrate` and `migrate --step type-names`
+  rewrite the old names, and a remaining old name is a build error that names the new one.
 - `FileManager`, `PartitionManager`, `StorageManager` and `CpuEventManager` are entities.
 
 ### Added
@@ -192,7 +196,7 @@ file only once its other old spellings are gone.
 - Script mode: the loose statements of the entry file are its `start()`. Loose statements in an imported file are
   RF-S443.
 - `global`: module-level state, initialized in order before `start()` runs and torn down at its end. A global
-  binding is read-only, so state that changes is an `Atomic` or a `Guarded`.
+  binding is read-only, so state that changes is an `Unbroken` or a `Guarded`.
 - `bundle`: a generic group whose kind is chosen per instance.
 - Loops carry values: `until c with total: S64 = 0`, `continue with total: v`, and `then` sees them.
 - A `when` that gives a value ends a block arm with `becomes value`. One arm can match several values
@@ -224,7 +228,7 @@ file only once its other old spellings are gone.
 - `T(from: SerialValue)` construction and collections read from serial values.
 - Work lists: `cancel()`, `next_finished`, `gather_all`, `take_finished`, `cancel_all`. A failure stays inside its
   Work until it is retrieved.
-- `List.take_each`, `List.swap`, `CircularList.add_range`, `lacks` beside every `has`, `KeyContainer`.
+- `List.take_each`, `List.swap`, `RotatableList.add_range`, `lacks` beside every `has`, `KeyContainer`.
 - `eq` and `cmp` between different types. The builder writes `ne` for each `eq` and `lacks` for each `has`.
 - B16, B32, B64 and B128 math routines are correctly rounded on every platform, and printed floats are the
   shortest decimal that reads back to the same bits. `BF16` does arithmetic.

@@ -37,23 +37,23 @@ needs EntityType T
     ### truth for `is_destroyed()`: a CYCLE-collected node's `count` is NOT zero (internal cycle edges keep
     ### it up), so liveness cannot key on the count — it keys on this flag. The controller struct itself
     ### lives on as a tombstone while weak observers remain; only `dead` says the entity is gone.
-    ### **`Atomic[U8]`, not `Bool`** (same reasoning as `escaped`): the free path publishes the flip and
+    ### **`Unbroken[U8]`, not `Bool`** (same reasoning as `escaped`): the free path publishes the flip and
     ### `is_destroyed()`/`is_alive()` read it from any thread — a plaintext `Bool` would be a data race and
     ### could be cached. `0` = live, `1` = dead. (`Bool` also lowers to `i1`, which has no HW atomic.)
-    secret dead: Atomic[U8]
+    secret dead: Unbroken[U8]
     ### `0` = LOCAL, `1` = ESCAPED. Flipped once by `promote()`. Every handle observes it.
-    ### **`Atomic[U8]`, not `Bool`:** `promote()` publishes the flip cross-thread at the escape site
+    ### **`Unbroken[U8]`, not `Bool`:** `promote()` publishes the flip cross-thread at the escape site
     ### and non-owner threads read it from `retain`/`release`/`guard_enter` — a plaintext `Bool` would
     ### be a data race (and could be hoisted/cached so a promoted object still looks LOCAL forever).
     ### SeqCst load/store on the atomic gives the release-store / acquire-load the flip needs. `Bool`
-    ### also lowers to `i1`, which has no hardware atomic; the flag is `0`/`1` over `Atomic[U8]`.
-    secret escaped: Atomic[U8]
+    ### also lowers to `i1`, which has no hardware atomic; the flag is `0`/`1` over `Unbroken[U8]`.
+    secret escaped: Unbroken[U8]
     ### Raw pointer to the managed entity.
     secret data: Hijacked[T]
     ### Exclusive-lock flag (`0` free / `1` held). Armed and used only in ESCAPED mode.
-    secret locked: Atomic[U8]
+    secret locked: Unbroken[U8]
     ### Task/coroutine id of the current lock holder (`0` when free). Task-keyed for migration safety.
-    secret holder_task: Atomic[U64]
+    secret holder_task: Unbroken[U64]
     ### Reentrancy depth. Only ever touched by the holder under mutual exclusion, so non-atomic.
     secret depth: U64
     ### Cycle-collector state (Bacon-Rajan). Touched only by the single-threaded collector.
@@ -101,11 +101,11 @@ dangerous routine RoamManager[T](data: Hijacked[T]) -> RoamManager[T]
     return RoamManager[T](
         count: 1,
         weak_count: 0,
-        dead: Atomic[U8](initial: 0),
-        escaped: Atomic[U8](initial: 0),
+        dead: Unbroken[U8](initial: 0),
+        escaped: Unbroken[U8](initial: 0),
         data: data,
-        locked: Atomic[U8](initial: 0),
-        holder_task: Atomic[U64](initial: 0),
+        locked: Unbroken[U8](initial: 0),
+        holder_task: Unbroken[U64](initial: 0),
         depth: 0,
         state: RoamState.LIVE,
         buffered: false,

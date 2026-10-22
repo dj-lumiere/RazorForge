@@ -219,7 +219,7 @@ so `cd` into a solution and run `razorforge buildandrun`.
 - **Numerics:** `S8` to `S256`, `U8` to `U256`, `B16` to `B128` (plus `BF16` for storage), `D32` / `D64` /
   `D128`, arbitrary-precision `Integer`, 34-digit `Decimal`, complex `C64` / `C128` / `C256`,
   quaternions, vectors, and SIMD `Vector[T, N]`, with checked, wrapping, and clamping arithmetic.
-- **Collections:** `List`, `Dict`, `Set`, `CircularList`, `BitList`, `PriorityQueue`, the sorted
+- **Collections:** `List`, `Dict`, `Set`, `RotatableList`, `BitList`, `PriorityQueue`, the sorted
   collections, `SplitList` (struct of arrays), fixed-size `Array[T, N]`, and lazy iterator adapters
   (`select`, `where`, `zip`, `enumerate`, …). Changing a collection while an `each` loop walks it is
   a build error, including when the change is hidden behind a call.

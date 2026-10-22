@@ -3,7 +3,7 @@ module Collections
 import BuilderQuery
 ### A growable, rotatable sequence backed by a power-of-two circular buffer.
 ###
-### `CircularList[T]` supports O(1) amortized insertion and removal at both the front
+### `RotatableList[T]` supports O(1) amortized insertion and removal at both the front
 ### and the back. A bitmask wraps the buffer indices instead of a modulo, so
 ### the capacity is always kept at a power of two. Random access by index is O(1)
 ### after resolving the physical slot from the logical position.
@@ -13,11 +13,11 @@ import BuilderQuery
 ### - You need a bounded "keep the latest N" history in FIXED space — `add_last_keeping(value, keeping: n)`
 ###   (or `add_last` then `keep_last(n)`) retains only the most recent `n` elements without ever
 ###   reallocating. `List[T]` cannot do this in O(1): dropping from the front is O(n) there. This is
-###   `CircularList`'s sharpest edge.
+###   `RotatableList`'s sharpest edge.
 ### - You need a sliding window or rolling history — advance in O(1) (dropped the front, push the back).
 ### - You need fast insertion and removal at both ends — e.g. a BFS frontier or an event stream.
 ### - You want a **stack**, **queue**, or **deque**: RazorForge has no separate types for these —
-###   `CircularList[T]` is all three. Stack = `add_last` / `remove_last!`; queue = `add_last` /
+###   `RotatableList[T]` is all three. Stack = `add_last` / `remove_last!`; queue = `add_last` /
 ###   `remove_first!`; deque = insert and remove at either end.
 ### - Use {List[T]} instead when you only ever add or remove at the back.
 ### - Use {PriorityQueue[TPriority, TElement]} instead when removal order depends on priority.
@@ -33,19 +33,19 @@ import BuilderQuery
 ### | `contains` | O(n) |
 ### | Iteration | O(n) |
 ###
-### :typeparam T: The element type stored in the circular list.
+### :typeparam T: The element type stored in the rotatable list.
 ### :see: {List[T]} for a simpler growable sequence optimized for back-only append.
 ### :see: {PriorityQueue[TPriority, TElement]} for priority-ordered removal.
-entity CircularList[T]
-relates CircularListEmittable[T] as Iter
+entity RotatableList[T]
+relates RotatableListEmittable[T] as Iter
 obeys Iterable[T], ModifyingIndexable[T], Sized, ListLiteral[T]
-    ### Stores the circular buffer backing the circular list.
+    ### Stores the circular buffer backing the rotatable list.
     ### Elements are laid out in allocation order and interpreted through
     ### `start` and `count` rather than by physical position alone.
     secret data: Hijacked[T]
     ### Stores the physical index of the logical front element.
     secret start: U64
-    ### Stores the number of live elements currently in the circular list.
+    ### Stores the number of live elements currently in the rotatable list.
     secret count: U64
     ### Stores the number of element slots allocated in the circular buffer.
     ### Capacity is always kept as a power of two so index wrapping can use a mask.
@@ -55,13 +55,13 @@ obeys Iterable[T], ModifyingIndexable[T], Sized, ListLiteral[T]
 # Iteration Support
 # ============================================================================
 
-### Walks the elements of a `CircularList[T]` from logical front to back.
+### Walks the elements of a `RotatableList[T]` from logical front to back.
 ### The iterator captures a raw pointer, the start index, element count, and capacity
-### at creation time so the source circular list does not need to remain alive during iteration.
+### at creation time so the source rotatable list does not need to remain alive during iteration.
 ### :typeparam T: The element type yielded by the iterator.
-entity CircularListEmittable[T]
+entity RotatableListEmittable[T]
 obeys Emittable[T]
-    ### Raw pointer into the source circular list's circular buffer.
+    ### Raw pointer into the source rotatable list's circular buffer.
     secret data: Hijacked[T]
     ### Front-of-queue physical index captured at iterator creation.
     secret start: U64
@@ -76,41 +76,41 @@ obeys Emittable[T]
 # Creators
 # ============================================================================
 
-### Creates a circular list containing exactly the given `elements`, in order. Variadic constructor behind the
+### Creates a rotatable list containing exactly the given `elements`, in order. Variadic constructor behind the
 ### `[a, b, c]` list-literal syntax (the `ListLiteral` opt-in): the builder packs the elements into a
 ### fixed `Array[T, K]` and monomorphizes one body per element count `K`.
-### :param elements: The elements to populate the circular list with, in order.
-### :returns: A circular list of the given elements.
-common routine CircularList[T].from_literal(elements...: T) -> CircularList[T]
-    var result = CircularList[T]()
+### :param elements: The elements to populate the rotatable list with, in order.
+### :returns: A rotatable list of the given elements.
+common routine RotatableList[T].from_literal(elements...: T) -> RotatableList[T]
+    var result = RotatableList[T]()
     var i: U64 = 0
     until i >= elements.count()
         result.add_last(value: elements.get_raw(index: i))
         i = i +% 1
     return result
 
-### Creates an empty circular list with no allocated storage.
+### Creates an empty rotatable list with no allocated storage.
 ### The backing buffer is acquired lazily on first insertion.
-routine CircularList[T]() -> CircularList[T]
+routine RotatableList[T]() -> RotatableList[T]
     danger
-        return CircularList[T](
+        return RotatableList[T](
             data: Hijacked[T].hollow(),
             start: 0,
             count: 0,
             capacity: 0,
         )
 
-### Creates an empty circular list with storage pre-allocated for at least `capacity` elements.
+### Creates an empty rotatable list with storage pre-allocated for at least `capacity` elements.
 ### The requested capacity is rounded up to the next power of two so index wrapping
 ### can use a bitmask.
 ### :param capacity: The minimum number of elements to reserve space for.
-routine CircularList[T](capacity: U64) -> CircularList[T]
+routine RotatableList[T](capacity: U64) -> RotatableList[T]
     var actual: U64 = 1
     until actual >= capacity
         actual = actual *% 2
     var byte_size = T.data_size() * actual
     danger
-        return CircularList[T](
+        return RotatableList[T](
             data: hijacked_from[T](rf_allocate_dynamic_uninit(byte_size)),
             start: 0,
             count: 0,
@@ -125,7 +125,7 @@ routine CircularList[T](capacity: U64) -> CircularList[T]
 ### :param index: The raw physical index to normalize.
 ### :returns: The equivalent in-range slot index for the current buffer.
 @readonly
-routine CircularList[T].wrap_index(index: U64) -> U64
+routine RotatableList[T].wrap_index(index: U64) -> U64
     # Capacity is always a power of 2 — use bitmask instead of modulo.
     return index & me.capacity -% 1
 
@@ -133,7 +133,7 @@ routine CircularList[T].wrap_index(index: U64) -> U64
 ### :param logical_index: The zero-based distance from the logical front.
 ### :returns: The physical slot index that currently holds that element.
 @readonly
-routine CircularList[T].physical_index(logical_index: U64) -> U64
+routine RotatableList[T].physical_index(logical_index: U64) -> U64
     # Convert logical index (0 = front) to physical index in buffer
     return me.wrap_index(me.start +% logical_index)
 
@@ -141,7 +141,7 @@ routine CircularList[T].physical_index(logical_index: U64) -> U64
 ### :param physical_idx: The slot index inside the backing buffer.
 ### :returns: The element stored in that slot.
 @readonly
-routine CircularList[T].read_at(physical_idx: U64) -> T
+routine RotatableList[T].read_at(physical_idx: U64) -> T
     var byte_offset = T.data_size() * physical_idx
     danger
         return me.data.offset(byte_offset).peek()
@@ -149,7 +149,7 @@ routine CircularList[T].read_at(physical_idx: U64) -> T
 ### Writes `value` into physical slot `physical_idx` without bounds checking.
 ### :param physical_idx: The slot index inside the backing buffer.
 ### :param value: The element to store.
-routine CircularList[T].write_at(physical_idx: U64, value: T)
+routine RotatableList[T].write_at(physical_idx: U64, value: T)
     var byte_offset = T.data_size() * physical_idx
     danger
         me.data.offset(byte_offset).poke(value)
@@ -159,29 +159,29 @@ routine CircularList[T].write_at(physical_idx: U64, value: T)
 # Core Operations
 # ============================================================================
 
-### Returns the number of live elements currently stored in the circular list.
+### Returns the number of live elements currently stored in the rotatable list.
 ### :returns: The live element count.
 @readonly
-routine CircularList[T].count() -> U64
+routine RotatableList[T].count() -> U64
     return me.count
 
 ### Returns the number of element slots available before the next growth step.
 ### :returns: The current backing-buffer slot count.
 @readonly
-routine CircularList[T].capacity() -> U64
+routine RotatableList[T].capacity() -> U64
     return me.capacity
 
-### Returns true if the circular list currently contains no elements.
+### Returns true if the rotatable list currently contains no elements.
 ### :returns: `true` when `count()` is zero.
 @readonly
-routine CircularList[T].is_empty() -> Bool
+routine RotatableList[T].is_empty() -> Bool
     return me.count == 0
 
-### Appends `value` at the logical back of the circular list.
+### Appends `value` at the logical back of the rotatable list.
 ### The buffer is doubled automatically when the current capacity is exhausted.
 ### :param value: The element to add at the back.
 @reshaping
-routine CircularList[T].add_last(value: T)
+routine RotatableList[T].add_last(value: T)
     # Add element to back - O(1) amortized
     if me.count >= me.capacity
         me.grow()
@@ -193,17 +193,17 @@ routine CircularList[T].add_last(value: T)
 ### Adds every element of `you` at the back, in order.
 ### :param you: The elements to add.
 @reshaping
-routine CircularList[T].add_range(you: Viewing[Iterable[T]])
+routine RotatableList[T].add_range(you: Viewing[Iterable[T]])
     each value in you
         me.add_last(value: value)
     return
 
-### Prepends `value` at the logical front of the circular list.
+### Prepends `value` at the logical front of the rotatable list.
 ### The front index is decremented with wraparound using the ring-buffer mask.
 ### The buffer is doubled automatically when the current capacity is exhausted.
 ### :param value: The element to add at the front.
 @reshaping
-routine CircularList[T].add_first(value: T)
+routine RotatableList[T].add_first(value: T)
     # Add element to front - O(1) amortized
     if me.count >= me.capacity
         me.grow()
@@ -213,11 +213,11 @@ routine CircularList[T].add_first(value: T)
     me.count = me.count +% 1
     return
 
-### Removes and returns the element at the logical back of the circular list.
+### Removes and returns the element at the logical back of the rotatable list.
 ### :returns: The element that was at the back.
-### :throws: {AbsentValueError} The circular list is empty.
+### :throws: {AbsentValueError} The rotatable list is empty.
 @reshaping
-failable routine CircularList[T].remove_last() -> T
+failable routine RotatableList[T].remove_last() -> T
     # Remove and return back element - O(1)
     if me.is_empty()
         throw AbsentValueError()
@@ -225,11 +225,11 @@ failable routine CircularList[T].remove_last() -> T
     var idx = me.physical_index(me.count)
     return me.read_at(idx)
 
-### Removes and returns the element at the logical front of the circular list.
+### Removes and returns the element at the logical front of the rotatable list.
 ### :returns: The element that was at the front.
-### :throws: {AbsentValueError} The circular list is empty.
+### :throws: {AbsentValueError} The rotatable list is empty.
 @reshaping
-failable routine CircularList[T].remove_first() -> T
+failable routine RotatableList[T].remove_first() -> T
     # Remove and return front element - O(1)
     if me.is_empty()
         throw AbsentValueError()
@@ -245,7 +245,7 @@ failable routine CircularList[T].remove_first() -> T
 ### Dropped elements are torn down in place, mirroring `destruct` — they are discarded, not
 ### handed back (a no-op for value types; frees owned entity elements).
 ### :param n: The maximum number of most-recent elements to retain.
-routine CircularList[T].keep_last(n: U64)
+routine RotatableList[T].keep_last(n: U64)
     # Drop the oldest (count - n) elements in O(count - n), no reallocation
     if n >= me.count
         return
@@ -269,7 +269,7 @@ routine CircularList[T].keep_last(n: U64)
 ### Dropped elements are torn down in place, mirroring `destruct` — they are discarded, not handed
 ### back (a no-op for value types; frees owned entity elements).
 ### :param n: The maximum number of oldest elements to retain.
-routine CircularList[T].keep_first(n: U64)
+routine RotatableList[T].keep_first(n: U64)
     # Drop the newest (count - n) elements from the back in O(count - n), no reallocation
     if n >= me.count
         return
@@ -292,7 +292,7 @@ routine CircularList[T].keep_first(n: U64)
 ### :param value: The element to add at the back.
 ### :param keeping: The maximum number of most-recent elements to retain afterward.
 @reshaping
-routine CircularList[T].add_last_keeping(value: T, keeping: U64)
+routine RotatableList[T].add_last_keeping(value: T, keeping: U64)
     me.add_last(value: value)
     me.keep_last(n: keeping)
     return
@@ -304,16 +304,16 @@ routine CircularList[T].add_last_keeping(value: T, keeping: U64)
 ### :param value: The element to add at the front.
 ### :param keeping: The maximum number of most-recent elements to retain afterward.
 @reshaping
-routine CircularList[T].add_first_keeping(value: T, keeping: U64)
+routine RotatableList[T].add_first_keeping(value: T, keeping: U64)
     me.add_first(value: value)
     me.keep_first(n: keeping)
     return
 
 ### Returns the front element without removing it.
 ### :returns: The current front element.
-### :throws: {AbsentValueError} The circular list is empty.
+### :throws: {AbsentValueError} The rotatable list is empty.
 @readonly
-failable routine CircularList[T].first() -> T
+failable routine RotatableList[T].first() -> T
     # Peek at front element without removing
     if me.is_empty()
         throw AbsentValueError()
@@ -321,9 +321,9 @@ failable routine CircularList[T].first() -> T
 
 ### Returns the back element without removing it.
 ### :returns: The current back element.
-### :throws: {AbsentValueError} The circular list is empty.
+### :throws: {AbsentValueError} The rotatable list is empty.
 @readonly
-failable routine CircularList[T].last() -> T
+failable routine RotatableList[T].last() -> T
     # Peek at back element without removing
     if me.is_empty()
         throw AbsentValueError()
@@ -332,7 +332,7 @@ failable routine CircularList[T].last() -> T
 
 ### Removes every element while preserving the current circular-buffer allocation.
 @reshaping
-routine CircularList[T].clear()
+routine RotatableList[T].clear()
     me.start = 0
     me.count = 0
     return
@@ -341,25 +341,25 @@ routine CircularList[T].clear()
 # Growth
 # ============================================================================
 
-### Grows the backing storage using the circular list's standard doubling policy.
-### Empty circular lists start at four slots; subsequent growth always doubles.
+### Grows the backing storage using the rotatable list's standard doubling policy.
+### Empty rotatable lists start at four slots; subsequent growth always doubles.
 ### NOTE: Unlike `List`/`PriorityQueue`, this deliberately does NOT use the hybrid
 ### `next_grow_capacity` (double-then-1.5x) policy. Capacity is pinned to a power of two so
 ### index wrapping can use a bitmask (`reserve` rounds up), and a 1.5x request would round
 ### straight back up to the next power of two — a no-op. Staying at 2x is intentional here.
 @reshaping
-routine CircularList[T].grow()
+routine RotatableList[T].grow()
     var new_capacity = if me.capacity == 0 then 4 else me.capacity *% 2
     me.reserve(new_capacity)
     return
 
-### Ensures the circular list can hold at least `new_capacity` elements without another growth step.
+### Ensures the rotatable list can hold at least `new_capacity` elements without another growth step.
 ### The requested capacity is rounded up to the next power of two. Elements are copied into
 ### the new buffer in logical order so the front moves to physical slot 0.
 ### Requests no larger than the current capacity are ignored.
 ### :param new_capacity: The minimum element count to accommodate.
 @reshaping
-routine CircularList[T].reserve(new_capacity: U64)
+routine RotatableList[T].reserve(new_capacity: U64)
     var actual: U64 = 1
     until actual >= new_capacity
         actual = actual *% 2
@@ -395,7 +395,7 @@ routine CircularList[T].reserve(new_capacity: U64)
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
 @overridable
-failable routine CircularList[T].getitem(index: U64) -> T
+failable routine RotatableList[T].getitem(index: U64) -> T
 needs RecordType T
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
@@ -406,7 +406,7 @@ needs RecordType T
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement element.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-failable routine CircularList[T].setitem(index: U64, value: T)
+failable routine RotatableList[T].setitem(index: U64, value: T)
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
     var physical_idx = me.physical_index(index)
@@ -421,7 +421,7 @@ failable routine CircularList[T].setitem(index: U64, value: T)
 ### :param value: The element that goes in.
 ### :returns: The element that was there.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-secret failable routine CircularList[T].exchange(index: U64, value: T) -> T
+secret failable routine RotatableList[T].exchange(index: U64, value: T) -> T
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
     var physical_idx = me.physical_index(index)
@@ -434,7 +434,7 @@ secret failable routine CircularList[T].exchange(index: U64, value: T) -> T
 ### 1)`. A plain `getitem` hands back a copy, and a call on that copy would change only the copy. Like
 ### `T.modify()`, the token lives only for that one call (the builder keeps the container still meanwhile,
 ### RF-S639). Entity elements only.
-failable routine CircularList[T].modify_at(index: U64) -> Modifying[T]
+failable routine RotatableList[T].modify_at(index: U64) -> Modifying[T]
 needs EntityType T
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
@@ -449,7 +449,7 @@ needs EntityType T
 ### `T.view()`, the token lives only for that one call (the builder keeps the container still meanwhile,
 ### RF-S639). Entity elements only.
 @readonly
-failable routine CircularList[T].view_at(index: U64) -> Viewing[T]
+failable routine RotatableList[T].view_at(index: U64) -> Viewing[T]
 needs EntityType T
     if index >= me.count
         throw IndexOutOfBoundsError(index: index, count: me.count)
@@ -458,17 +458,17 @@ needs EntityType T
             me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]](),
         )
 
-### Returns a NEW circular list holding independent copies of the elements in `range` — the slice form of
-### indexing (`circular list[a til b]`), over LOGICAL positions (front = 0). A half-open `a til b` yields
+### Returns a NEW rotatable list holding independent copies of the elements in `range` — the slice form of
+### indexing (`rotatable list[a til b]`), over LOGICAL positions (front = 0). A half-open `a til b` yields
 ### `[a, b)`; an inclusive `a to b` yields `[a, b]`; a range that counts down (`by -1`) reverses. Positions at or past
 ### `count` are skipped. Each element is copied through `copy`, so the result shares no structure with
 ### the original — the value-semantics counterpart to `List`/`Text` slicing.
 ### :param range: The logical index range to extract.
-### :returns: A new `CircularList[T]` owning copies of the selected elements.
+### :returns: A new `RotatableList[T]` owning copies of the selected elements.
 @readonly
-routine CircularList[T].getitem(range: Range[U64]) -> CircularList[T]
+routine RotatableList[T].getitem(range: Range[U64]) -> RotatableList[T]
 needs RecordType T
-    var result = CircularList[T]()
+    var result = RotatableList[T]()
     each i in range
         if i < me.count
             result.add_last(value: me[i])
@@ -482,7 +482,7 @@ needs RecordType T
 ### Elements that fall off the front reappear at the back. Only the front index
 ### changes when the buffer is full; otherwise `n` elements move.
 ### :param n: The number of positions to rotate left.
-routine CircularList[T].rotate_left(n: U64)
+routine RotatableList[T].rotate_left(n: U64)
     # Rotate elements left by n positions
     # Front elements move to back
     if me.count == 0
@@ -505,7 +505,7 @@ routine CircularList[T].rotate_left(n: U64)
 ### Elements that fall off the back reappear at the front. Only the front index
 ### changes when the buffer is full; otherwise `n` elements move.
 ### :param n: The number of positions to rotate right.
-routine CircularList[T].rotate_right(n: U64)
+routine RotatableList[T].rotate_right(n: U64)
     # Rotate elements right by n positions
     # Back elements move to front
     if me.count == 0
@@ -527,9 +527,9 @@ routine CircularList[T].rotate_right(n: U64)
     return
 
 @readonly
-routine CircularList[T].iter() -> CircularListEmittable[T]
+routine RotatableList[T].iter() -> RotatableListEmittable[T]
     danger
-        return CircularListEmittable[T](
+        return RotatableListEmittable[T](
             data: me.data,
             start: me.start,
             count: me.count,
@@ -540,7 +540,7 @@ routine CircularList[T].iter() -> CircularListEmittable[T]
 ### Returns the next element from the iterator in front-to-back order.
 ### :returns: The next logical element.
 ### :throws: {AbsentValueError} All elements captured at iterator creation have been yielded.
-failable routine CircularListEmittable[T].emit() -> T
+failable routine RotatableListEmittable[T].emit() -> T
     if me.index >= me.count
         throw AbsentValueError()
     var physical = me.start +% me.index & me.capacity -% 1
@@ -554,30 +554,30 @@ failable routine CircularListEmittable[T].emit() -> T
 # Utility Operations
 # ============================================================================
 
-### Returns the front element or `default_value` if the circular list is empty.
+### Returns the front element or `default_value` if the rotatable list is empty.
 ### :param default_value: The fallback to return when no element is stored.
 ### :returns: The front element if present; `default_value` otherwise.
 @readonly
-routine CircularList[T].first_or_default(default_value: T) -> T
+routine RotatableList[T].first_or_default(default_value: T) -> T
     if me.is_empty()
         return default_value
     return me.first()
 
-### Returns the back element or `default_value` if the circular list is empty.
+### Returns the back element or `default_value` if the rotatable list is empty.
 ### :param default_value: The fallback to return when no element is stored.
 ### :returns: The back element if present; `default_value` otherwise.
 @readonly
-routine CircularList[T].last_or_default(default_value: T) -> T
+routine RotatableList[T].last_or_default(default_value: T) -> T
     if me.is_empty()
         return default_value
     return me.last()
 
-### Returns true if any element in the circular list equals `value`.
+### Returns true if any element in the rotatable list equals `value`.
 ### Scans in logical front-to-back order using the element type's equality operator.
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
-routine CircularList[T].has(value: T) -> Bool
+routine RotatableList[T].has(value: T) -> Bool
 needs T obeys Equatable
     var i: U64 = 0
     until i >= me.count
@@ -590,7 +590,7 @@ needs T obeys Equatable
 ### :param value: The value to look for.
 ### :returns: `true` when `value` is absent.
 @readonly
-routine CircularList[T].lacks(value: T) -> Bool
+routine RotatableList[T].lacks(value: T) -> Bool
 needs T obeys Equatable
     return not me.has(value)
 
@@ -600,7 +600,7 @@ needs T obeys Equatable
 
 @readonly
 @override
-routine CircularList[T].represent() -> Text
+routine RotatableList[T].represent() -> Text
     var result = me.type_name() + "(["
     var i: U64 = 0
     each v in me
@@ -613,7 +613,7 @@ routine CircularList[T].represent() -> Text
 
 @readonly
 @override
-routine CircularList[T].diagnose() -> Text
+routine RotatableList[T].diagnose() -> Text
     var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
     var i: U64 = 0
     each v in me
@@ -624,11 +624,11 @@ routine CircularList[T].diagnose() -> Text
     result = result + "])"
     return result
 
-### Returns true if both circular lists contain the same elements in the same logical order.
-### :param you: The other circular list to compare against.
+### Returns true if both rotatable lists contain the same elements in the same logical order.
+### :param you: The other rotatable list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine CircularList[T].eq(you: Viewing[CircularList[T]]) -> Bool
+routine RotatableList[T].eq(you: Viewing[RotatableList[T]]) -> Bool
 needs T obeys Equatable
     if me.count != you.count
         return false
@@ -640,10 +640,10 @@ needs T obeys Equatable
     return true
 
 @override
-routine CircularList[T].destruct()
+routine RotatableList[T].destruct()
     danger
         # Tear down each live element in logical front-to-back (ring) order before freeing the buffer
-        # (mirrors CircularListEmittable.emit!). No-op for value types; frees owned entity elements.
+        # (mirrors RotatableListEmittable.emit!). No-op for value types; frees owned entity elements.
         var i: U64 = 0
         until i >= me.count
             var physical = me.start +% i & me.capacity -% 1
@@ -659,7 +659,7 @@ routine CircularList[T].destruct()
 ### order (elements are NOT contiguous, so `cyclic_trace_buffer` cannot be used — this mirrors the
 ### physical-index walk in `destruct` but calls `cyclic_visit` instead of `destruct`).
 @override
-dangerous routine CircularList[T].roam_trace()
+dangerous routine RotatableList[T].roam_trace()
     var i: U64 = 0
     until i >= me.count
         var physical = me.start +% i & me.capacity -% 1
@@ -673,7 +673,7 @@ dangerous routine CircularList[T].roam_trace()
 ### Cycle-collector FREE: free the backing buffer and this list's own box, but NOT the elements (the
 ### collector frees the whole white cycle directly).
 @override
-dangerous routine CircularList[T].roam_free()
+dangerous routine RotatableList[T].roam_free()
     me.data.invalidate()
     return
 
@@ -681,7 +681,7 @@ dangerous routine CircularList[T].roam_free()
 ### :returns: The `SerialValue.List` of each element's serialized form.
 @readonly
 @override
-routine CircularList[T].serialize() -> SerialValue
+routine RotatableList[T].serialize() -> SerialValue
     var __sv = List[SerialValue]()
     each __x in me
         __sv.add_last(value: __x.serialize())
@@ -691,8 +691,8 @@ routine CircularList[T].serialize() -> SerialValue
 ### :param value: The serialized element list.
 ### :returns: The rebuilt list.
 ### :throws: {SerialShapeError} when the value is not a list or an element does not fit `T`.
-failable common routine CircularList[T].from_serial(value: SerialValue) -> CircularList[T]
-    var result = CircularList[T]()
+failable common routine RotatableList[T].from_serial(value: SerialValue) -> RotatableList[T]
+    var result = RotatableList[T]()
     when value
         is List[SerialValue] as items =>
             each item in items

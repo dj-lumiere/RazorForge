@@ -67,7 +67,7 @@ public sealed class RazorForgeRules : LanguageRules
     public override string ScriptVariableAdvice(string name)
     {
         return $"Pass it in as an argument, or declare it as 'global {name}: <Type> = ...', of a type threads may " +
-               "share (an Atomic, a Guarded, or a value the program only reads).";
+               "share (an Unbroken, a Guarded, or a value the program only reads).";
     }
 
     public override bool SynthesizeBeforeAnalysis(List<(SyntaxTree.Program Program, string FilePath)> files,

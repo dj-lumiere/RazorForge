@@ -2,7 +2,7 @@ module Tests/Stdlib/ThreadArgCopyApi
 
 import IO/Console
 # Verifies the `to[Work]` argument boundary discipline (RF-S632):
-#   * a thread-shareable cell (Atomic[S64]) is passed BY REFERENCE — every worker
+#   * a thread-shareable cell (Unbroken[S64]) is passed BY REFERENCE — every worker
 #     aliases the spawner's one cell, so 2 workers x 5 fetch_add = 10.
 #   * a plain value record (Point) is passed BY VALUE — the worker mutates its OWN
 #     copy, so the spawner's original is untouched after the retrieve.
@@ -11,8 +11,8 @@ record Point
     posted x: S64
     posted y: S64
 
-# Atomic arg: shared by reference (the headline cross-thread sharing).
-routine add_n(cell: Atomic[S64], times: S64) -> S64
+# Unbroken arg: shared by reference (the headline cross-thread sharing).
+routine add_n(cell: Unbroken[S64], times: S64) -> S64
     each i in 0 til times
         drop cell.fetch_add(delta: 1)
     return times
@@ -22,7 +22,7 @@ routine bump_point(p: Point) -> S64
     return p.x + p.y
 
 routine start()
-    var counter = Atomic[S64](initial: 0)
+    var counter = Unbroken[S64](initial: 0)
     var a = add_n.to[Work](cell: counter, times: 5)
     var b = add_n.to[Work](cell: counter, times: 5)
     drop a.retrieve()

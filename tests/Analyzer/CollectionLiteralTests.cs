@@ -170,15 +170,15 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Verifies that the test validates literal with circular list annotation retargets to circular list.
+    /// Verifies that the test validates literal with rotatable list annotation retargets to rotatable list.
     /// </summary>
     [Fact]
-    public void ListLiteral_WithCircularListAnnotation_RetargetsToCircularList()
+    public void ListLiteral_WithRotatableListAnnotation_RetargetsToRotatableList()
     {
         string source = """
                         import Collections
                         routine test()
-                            var items: CircularList[S64] = [1, 2, 3]
+                            var items: RotatableList[S64] = [1, 2, 3]
                             return
                         """;
 
