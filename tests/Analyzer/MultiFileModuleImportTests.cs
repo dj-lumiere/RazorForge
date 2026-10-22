@@ -301,6 +301,70 @@ public sealed class MultiFileModuleImportTests
     }
 
     /// <summary>
+    /// A sibling whose unindented line starts with `failable routine` (or any other declaration modifier) is a
+    /// module file, not a script: it is gathered, so the entry sees its routines.
+    /// </summary>
+    [Fact]
+    public void EntryModuleFile_GathersSiblingStartingWithFailable_NoErrors()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             module SameMod
+                                                             import IO/Console
+
+                                                             routine start()
+                                                                 show(f"{double(n: 2)}")
+                                                                 return
+                                                             """,
+            moduleFiles:
+            [
+                ("SameMod/Helper.rf", """
+                                      module SameMod
+
+                                      routine double(n: S64) -> S64
+                                          return n * 2
+
+                                      failable routine half(n: S64) -> S64
+                                          if n % 2 != 0
+                                              throw AbsentValueError()
+                                          return n // 2
+                                      """)
+            ],
+            entryRelPath: "SameMod/Main.rf");
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+    }
+
+    /// <summary>
+    /// A same-module sibling with loose top-level statements (and no `routine start()` of its own) is not left out
+    /// silently: it is a script outside the entry file, RF-S443.
+    /// </summary>
+    [Fact]
+    public void EntryModuleFile_SiblingScript_Reported()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             module SameMod
+                                                             import IO/Console
+
+                                                             routine start()
+                                                                 show("main")
+                                                                 return
+                                                             """,
+            moduleFiles:
+            [
+                ("SameMod/Stray.rf", """
+                                     module SameMod
+                                     import IO/Console
+
+                                     show("stray")
+                                     """)
+            ],
+            entryRelPath: "SameMod/Main.rf");
+
+        Assert.Contains(collection: errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ScriptStatementsOutsideEntryFile);
+    }
+
+    /// <summary>
     /// Writes the entry file plus the module files to a fresh temp directory and runs the multi-file
     /// build pipeline (mirrors the <c>check</c> verb in Program.cs), returning all reported errors.
     /// </summary>

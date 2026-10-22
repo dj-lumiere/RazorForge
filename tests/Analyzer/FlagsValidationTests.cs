@@ -483,10 +483,11 @@ public class FlagsValidationTests
     }
 
     /// <summary>
-    /// Verifies that an is test combining two valid members with and produces no error.
+    /// `is` matches a type, never flags: `perms is READ and WRITE` reads as `(perms is READ) and WRITE`, and the
+    /// `is` on flags is reported with the pointer to `.has(...)`.
     /// </summary>
     [Fact]
-    public void Flags_IsTest_CombinedAnd_NoErrors()
+    public void Flags_IsTest_CombinedAnd_PointsToHas()
     {
         string source = """
                         flags Permissions
@@ -500,8 +501,8 @@ public class FlagsValidationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnFlagsType && e.Message.Contains(value: ".has("));
     }
 
     #endregion

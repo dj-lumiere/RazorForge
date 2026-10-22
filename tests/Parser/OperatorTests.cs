@@ -12,6 +12,27 @@ public class OperatorTests
     #region Standard Arithmetic Operators
 
     /// <summary>
+    /// `x isnot None and c` joins the whole `isnot` test to the next condition: `(x isnot None) and c`.
+    /// </summary>
+    [Fact]
+    public void Parse_IsNotNone_And_Condition()
+    {
+        string source = """
+                        routine test(x: Maybe[S64], c: Bool) -> Bool
+                            return x isnot None and c
+                        """;
+
+        global::SyntaxTree.Program program = AssertParses(source: source);
+        var routine = GetDeclaration<global::SyntaxTree.RoutineDeclaration>(program: program);
+        var body = (global::SyntaxTree.BlockStatement)routine.Body;
+        var ret = (global::SyntaxTree.ReturnStatement)body.Statements[index: 0];
+        var and = Assert.IsType<global::SyntaxTree.BinaryExpression>(@object: ret.Value);
+        Assert.IsType<global::SyntaxTree.IsPatternExpression>(@object: and.Left);
+        Assert.IsType<global::SyntaxTree.IdentifierExpression>(@object: and.Right);
+    }
+
+
+    /// <summary>
     /// Verifies that the parser accepts addition.
     /// </summary>
     [Fact]

@@ -89,6 +89,33 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "Range step zero error", actualString: stdout + stderr);
     }
 
+    /// <summary>Calls deeper than the main thread's stack holds crash with the stack overflow report and status 82
+    /// (the fault handler runs on a stack of its own), not with a bare segmentation fault.</summary>
+    [Fact]
+    public void StackOverflow_MainThread_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "stack_overflow_main.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "shallow 100", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "Stack overflow error", actualString: stdout + stderr);
+    }
+
+    /// <summary>The same in a Work: the coroutine's stack runs out on a worker thread, which reports it too.</summary>
+    [Fact]
+    public void StackOverflow_InWork_CrashesLoudly()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "stack_overflow.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "work [100]", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "Stack overflow error", actualString: stdout + stderr);
+    }
+
     /// <summary>A thread reading a channel whose sender its own scope still holds, with no other work running, crashes
     /// with a deadlock report instead of hanging.</summary>
     [Fact]

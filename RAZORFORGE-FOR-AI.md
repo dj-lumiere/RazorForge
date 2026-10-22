@@ -284,9 +284,10 @@ joined with `/` (`tools/text utils.rf` → `Tools/TextUtils`). Declare `module` 
 override that. Imports use `/` separators.
 
 Files in one folder that declare the same `module` are one module and build together, with no
-import between them. A file there with its own entry (`routine start()` or top-level statements)
-is another program and is not built with yours, so a draft that does not build yet can sit next
-to the program. Only files that are part of the build report their errors. A failed `build` keeps
+import between them. A file there with its own `routine start()` is another program and is not
+built with yours, so a draft that does not build yet can sit next to the program. A file there with
+top-level statements and no `routine start()` is built and is RF-S443, since only the entry file
+may be a script. Only files that are part of the build report their errors. A failed `build` keeps
 the last executable that built.
 
 **Two import forms, distinct meaning:** `import Foo/Bar` is a **module** import

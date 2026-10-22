@@ -1,0 +1,34 @@
+module Tests/Stdlib/WorkStealListApi
+
+import IO/Console
+# A local list handed to a Work with `steal` moves into the work, also when the Work is made inside another call
+# (`jobs.add_last(value: ...)`). A `Viewing` or `Modifying` of a list makes a copy with `duplicate()`.
+
+routine total(cells: List[S64]) -> S64
+    var sum: S64 = 0
+    each c in cells
+        sum += c
+    return sum
+
+routine copy_out(cells: Viewing[List[S64]]) -> List[S64]
+    return cells.duplicate()
+
+routine copy_then_grow(cells: Modifying[List[S64]]) -> List[S64]
+    var copy = cells.duplicate()
+    cells.add_last(value: 9)
+    return copy
+
+routine start()
+    var level = [1, 2, 3, 4]
+    var jobs = List[Work[S64]]()
+    var first = level[0 til 2]
+    var second = level[2 til 4]
+    jobs.add_last(value: total.to[Work](cells: steal first))
+    jobs.add_last(value: total.to[Work](cells: steal second))
+    show(f"{jobs.gather()}")
+    var kept = [1, 2, 3, 4]
+    var viewed = copy_out(cells: kept.view())
+    var grown = copy_then_grow(cells: kept.modify())
+    show(f"{viewed} {grown} {kept}")
+    show("DONE")
+    return
