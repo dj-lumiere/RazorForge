@@ -203,60 +203,33 @@ routine ByteSize.compare(you: ByteSize) -> ComparisonSign
 # Display
 # ============================================================================
 
-### Returns the display form of this byte size.
-### Breaks the raw byte count into binary unit components (PiB, TiB, GiB, MiB,
-### KiB, B) and concatenates the non-zero parts, matching the component-wise
-### style of `Duration.represent`.
+### Returns the display form of this byte size: the byte count with its digits
+### grouped in threes by `_` and a `B` after it, `1_500_000_000B`, `4_096B`,
+### `999B`, `0B`. The count is never split into units, so the text is always
+### exact. To show it in a unit, pick one with `kb_size()`, `mib_size()` and the
+### other conversion routines.
 ### :returns: The resulting `Text` value.
 @override
 routine ByteSize.represent() -> Text
-    var raw = LLVM::reinterpret_bits[ByteSize, U64](me)
-    if raw == 0
-        return "0B"
+    var rest = LLVM::reinterpret_bits[ByteSize, U64](me)
+    var groups = ""
+    until rest < 1_000
+        var group = rest % 1_000
+        rest = rest // 1_000
+        if group < 10
+            groups = f"_00{group}{groups}"
+        elseif group < 100
+            groups = f"_0{group}{groups}"
+        else
+            groups = f"_{group}{groups}"
+    return f"{rest}{groups}B"
 
-    var parts = ""
-    var sep = ""
-
-    var pib = raw // BYTES_PER_PIB
-    var rem = raw % BYTES_PER_PIB
-    if pib != 0
-        parts = f"{parts}{sep}{pib}PiB"
-        sep = " "
-
-    var tib = rem // BYTES_PER_TIB
-    rem = rem % BYTES_PER_TIB
-    if tib != 0
-        parts = f"{parts}{sep}{tib}TiB"
-        sep = " "
-
-    var gib = rem // BYTES_PER_GIB
-    rem = rem % BYTES_PER_GIB
-    if gib != 0
-        parts = f"{parts}{sep}{gib}GiB"
-        sep = " "
-
-    var mib = rem // BYTES_PER_MIB
-    rem = rem % BYTES_PER_MIB
-    if mib != 0
-        parts = f"{parts}{sep}{mib}MiB"
-        sep = " "
-
-    var kib = rem // BYTES_PER_KIB
-    rem = rem % BYTES_PER_KIB
-    if kib != 0
-        parts = f"{parts}{sep}{kib}KiB"
-        sep = " "
-
-    if rem != 0
-        parts = f"{parts}{sep}{rem}B"
-
-    return parts
-
-### Returns the diagnostic form of this byte size.
+### Returns the diagnostic form of this byte size, the call that makes it:
+### `ByteSize(bytes: 1500000000)`.
 ### :returns: The resulting `Text` value.
 @override
 routine ByteSize.diagnose() -> Text
-    return "ByteSize(" + LLVM::reinterpret_bits[ByteSize, U64](me).represent() + ")"
+    return f"ByteSize(bytes: {LLVM::reinterpret_bits[ByteSize, U64](me)})"
 
 # ============================================================================
 # Hashing

@@ -339,7 +339,9 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
   defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
 - `Bool`, `Text` (UTF-32 string), `Char`, `Byte`, `Bytes`
-- `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals. Duration `//` and `%` follow the
+- `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals. A `ByteSize` displays as its byte
+  count grouped in threes by `_` (`{4kib}` is `4_096B`, never split into units, `kb_size()`/`mib_size()`/... convert),
+  and diagnoses as `ByteSize(bytes: 4096)`. Duration `//` and `%` follow the
   integer rule (the remainder is never negative: `-10s // 3s` is `-4`), and overflow or `// 0s` crashes.
   `Moment(year:, …)` crashes with `InvalidMomentError` on a part out of range (month 13, February 30, hour 25).
   `Duration` and `Moment` are both `S64` seconds + `U32` nanoseconds. The time is read from `Clock`, called on the
