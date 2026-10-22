@@ -19,9 +19,11 @@ namespace RazorForge.Checks;
 /// <para>Each routine gets a REPLACE EFFECT: for each parameter (and <c>me</c>), the parts of it the routine may
 /// replace (<c>.inner</c>, <c>.inner.x</c>, or <c>.*</c> for anything inside). A stdlib routine counts through its
 /// <c>@readonly</c> marker (anything else may change what is inside its receiver and its entity parameters). A
-/// routine that returns a token gets a RETURN ORIGIN: the parameter it takes the token from and the part of it.
-/// Every return must take the token from the same parameter (RF-S600), so a caller knows which object it points
-/// at. Both summaries are solved as a fixpoint over all user routines.</para>
+/// routine that returns a token gets a RETURN ORIGIN: the parameters (and <c>me</c>) it may take the token from, each
+/// with the part of it. Different returns may use different parameters. A caller's token has every argument handed to
+/// one of them as a source, so a change that ends any of them ends the token. A return from a local, a temporary or
+/// an entity parameter the routine owns is RF-S600. Both summaries are solved as a fixpoint over all user
+/// routines.</para>
 /// <para>Within a routine the check follows the control flow: a token ended on one branch is ended after the
 /// branches meet, and a loop is walked until what it ends no longer changes. A call that can replace the source of
 /// a token passed to that same call is rejected at the call (RF-S639).</para>
@@ -56,7 +58,10 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
     private readonly Dictionary<RoutineDeclaration, Dictionary<string, HashSet<string>>> _replaceEffects =
         new(comparer: ReferenceEqualityComparer.Instance);
 
-    private readonly Dictionary<RoutineDeclaration, (string Slot, string Suffix)?> _returnOrigins =
+    /// <summary>The return origin of each token-returning user routine: the slots it may take the token from, each
+    /// with the part of it. Empty while the fixpoint has found none yet (a routine that only returns what a call to
+    /// itself returns), null when a return takes it from something that is not a slot.</summary>
+    private readonly Dictionary<RoutineDeclaration, HashSet<(string Slot, string Suffix)>?> _returnOrigins =
         new(comparer: ReferenceEqualityComparer.Instance);
 
     private readonly HashSet<RoutineDeclaration> _checked = new(comparer: ReferenceEqualityComparer.Instance);
@@ -268,9 +273,9 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         return effects;
     }
 
-    /// <summary>The slot a call to <paramref name="callee"/> takes its returned token from, and the part of it.
-    /// Null when the callee returns no token.</summary>
-    private (string Slot, string Suffix)? CalleeReturnOrigin(RoutineInfo callee)
+    /// <summary>The slots a call to <paramref name="callee"/> may take its returned token from, each with the part
+    /// of it. Null when the callee returns no token.</summary>
+    private HashSet<(string Slot, string Suffix)>? CalleeReturnOrigin(RoutineInfo callee)
     {
         if (!IsTrackedToken(type: callee.ReturnType))
         {
@@ -278,16 +283,16 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         }
 
         if (FindUserDeclaration(routine: callee) is { } decl &&
-            _returnOrigins.TryGetValue(key: decl, value: out (string, string)? known))
+            _returnOrigins.TryGetValue(key: decl, value: out HashSet<(string, string)>? known))
         {
-            return known ?? (MeSlot, Inside);
+            return known ?? [(MeSlot, Inside)];
         }
 
         return callee.Name switch
         {
-            "view" or "modify" => (MeSlot, ""),
-            "view_at" or "modify_at" => (MeSlot, "[]"),
-            _ when callee.OwnerType != null => (MeSlot, Inside),
+            "view" or "modify" => [(MeSlot, "")],
+            "view_at" or "modify_at" => [(MeSlot, "[]")],
+            _ when callee.OwnerType != null => [(MeSlot, Inside)],
             _ => null
         };
     }
@@ -370,25 +375,37 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     ? containers.Select(selector: c => Join(path: c, suffix: "[]"))
                                 .ToHashSet()
                     : null;
+            // The token comes from every argument handed to a slot the callee may take it from: a change that ends
+            // any one of them ends the token.
             case CallExpression { ResolvedRoutine: { } callee } call when !IsRoutineValueCall(call: call) &&
                                                                          CalleeReturnOrigin(callee: callee) is
-                                                                             { } from:
+                                                                             { } froms:
             {
-                Expression? source = from.Slot == MeSlot
-                    ? (call.Callee as MemberExpression)?.Object
-                    : BoundArguments(call: call, callee: callee)
-                     .Where(predicate: b => b.Param == from.Slot)
-                     .Select(selector: b => b.Arg)
-                     .FirstOrDefault();
-                if (source == null)
+                var origins = new HashSet<string>(comparer: StringComparer.Ordinal);
+                foreach ((string slot, string suffix) in froms)
                 {
-                    return [UnknownOrigin];
+                    Expression? source = slot == MeSlot
+                        ? (call.Callee as MemberExpression)?.Object
+                        : BoundArguments(call: call, callee: callee)
+                         .Where(predicate: b => b.Param == slot)
+                         .Select(selector: b => b.Arg)
+                         .FirstOrDefault();
+                    if (source == null)
+                    {
+                        origins.Add(item: UnknownOrigin);
+                        continue;
+                    }
+
+                    // A temporary among them makes the token a temporary: it ends with the statement.
+                    if (PathsOf(expr: source, tokenOrigins: tokenOrigins) is not { } bases)
+                    {
+                        return null;
+                    }
+
+                    origins.UnionWith(other: bases.Select(selector: b => Join(path: b, suffix: suffix)));
                 }
 
-                return PathsOf(expr: source, tokenOrigins: tokenOrigins) is { } bases
-                    ? bases.Select(selector: b => Join(path: b, suffix: from.Suffix))
-                           .ToHashSet()
-                    : null;
+                return origins;
             }
             case ConditionalExpression cond:
             {
@@ -412,7 +429,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         {
             _replaceEffects.TryAdd(key: decl,
                 value: new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal));
-            _returnOrigins.TryAdd(key: decl, value: null);
+            _returnOrigins.TryAdd(key: decl, value: []);
         }
 
         bool changed = true;
@@ -423,7 +440,8 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             foreach (RoutineDeclaration decl in _userRoutineDeclarations.Values)
             {
                 Dictionary<string, HashSet<string>> effects = _replaceEffects[key: decl];
-                (Dictionary<string, HashSet<string>> found, (string, string)? ret) = DirectSummary(routine: decl);
+                (Dictionary<string, HashSet<string>> found, HashSet<(string, string)>? ret) =
+                    DirectSummary(routine: decl);
                 foreach ((string slot, HashSet<string> parts) in found)
                 {
                     if (!effects.TryGetValue(key: slot, value: out HashSet<string>? known))
@@ -438,7 +456,8 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     }
                 }
 
-                if (!Equals(objA: _returnOrigins[key: decl], objB: ret))
+                HashSet<(string, string)>? was = _returnOrigins[key: decl];
+                if (was == null != (ret == null) || was != null && !was.SetEquals(other: ret!))
                 {
                     _returnOrigins[key: decl] = ret;
                     changed = true;
@@ -538,7 +557,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
     /// <summary>The replace effect and the return origin <paramref name="routine"/>'s body gives itself, given
     /// what is known of its callees so far.</summary>
-    private (Dictionary<string, HashSet<string>> Effects, (string, string)? Return) DirectSummary(
+    private (Dictionary<string, HashSet<string>> Effects, HashSet<(string, string)>? Return) DirectSummary(
         RoutineDeclaration routine)
     {
         HashSet<string> slots = Slots(routine: routine);
@@ -612,7 +631,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 }
             });
 
-        (string, string)? ret = null;
+        HashSet<(string, string)>? ret = [];
         if (IsTrackedToken(type: routine.ResolvedInfo?.ReturnType))
         {
             ret = ReturnSummary(routine: routine, slots: ReturnSlots(routine: routine), lookup: Lookup).Origin;
@@ -706,8 +725,9 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         return writes;
     }
 
-    /// <summary>The return origin of a token-returning routine, and the returns that break the one-source rule.</summary>
-    private ((string, string)? Origin, List<(ReturnStatement Ret, string Source)> Returns) ReturnSummary(
+    /// <summary>The return origin of a token-returning routine (null when a return takes the token from something
+    /// that is not one of <paramref name="slots"/>), and every return with each source it may take the token from.</summary>
+    private (HashSet<(string, string)>? Origin, List<(ReturnStatement Ret, string Source)> Returns) ReturnSummary(
         RoutineDeclaration routine, HashSet<string> slots, Func<string, HashSet<string>?> lookup)
     {
         var returns = new List<(ReturnStatement, string)>();
@@ -724,29 +744,18 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 }
             });
 
-        List<(ReturnStatement Ret, string Source)> fromSlots = returns
-                                                               .Where(predicate: r => slots.Contains(item: RootName(path: r.Item2)))
-                                                               .ToList();
-        if (fromSlots.Count == 0 || fromSlots.Count != returns.Count ||
-            fromSlots.Select(selector: r => RootName(path: r.Source))
-                     .Distinct()
-                     .Count() != 1)
+        if (returns.Any(predicate: r => !slots.Contains(item: RootName(path: r.Item2))))
         {
             return (null, returns);
         }
 
-        string slot = RootName(path: fromSlots[index: 0].Source);
-        List<string> suffixes = fromSlots.Select(selector: r => Suffix(path: r.Source))
-                                         .Distinct()
-                                         .ToList();
-        string suffix = suffixes.Count == 1
-            ? suffixes[index: 0]
-            : Inside;
-        return ((slot, suffix), returns);
+        return (returns.Select(selector: r => (RootName(path: r.Item2), Suffix(path: r.Item2)))
+                       .ToHashSet(), returns);
     }
 
-    /// <summary>RF-S600: every return of a token-returning routine takes the token from one and the same
-    /// parameter (<c>me</c> included), never from a local or a temporary.</summary>
+    /// <summary>RF-S600: every return of a token-returning routine takes the token from <c>me</c> or from a token
+    /// parameter (different returns may use different ones), never from a local, a temporary, or an entity parameter
+    /// the routine owns.</summary>
     private void CheckReturns(RoutineDeclaration routine)
     {
         if (!IsTrackedToken(type: routine.ResolvedInfo?.ReturnType))
@@ -757,7 +766,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         HashSet<string> slots = ReturnSlots(routine: routine);
         HashSet<string> owned = Slots(routine: routine);
         Dictionary<string, HashSet<string>> tokenVars = FlowInsensitiveTokenOrigins(routine: routine);
-        ((string, string)? origin, List<(ReturnStatement Ret, string Source)> returns) =
+        (HashSet<(string, string)>? origin, List<(ReturnStatement Ret, string Source)> returns) =
             ReturnSummary(routine: routine, slots: slots, lookup: name => tokenVars.GetValueOrDefault(key: name));
         if (origin != null)
         {
@@ -771,26 +780,15 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                           local.Source == UnknownOrigin
                 ? "a temporary or something the builder cannot trace to a parameter"
                 : owned.Contains(item: RootName(path: local.Source))
-                    ? $"'{Shown(path: local.Source)}', a parameter this routine takes ownership of"
+                    ? $"'{Shown(path: local.Source)}', an entity parameter handed over to this routine"
                     : $"'{Shown(path: local.Source)}', which belongs to this routine";
             report(code: SemanticDiagnosticCode.TokenReturnNotAllowed,
                 message:
                 $"You are returning a token taken from {what}. It is gone when the routine returns, so the token " +
                 "would point at freed memory. Return a token taken from 'me' or from a token parameter " +
-                "(declare it Viewing[T] or Modifying[T]; callers can still pass the entity itself).",
+                "(declare it Viewing[T] or Modifying[T], callers can still pass the entity itself).",
                 location: local.Ret.Location);
-            return;
         }
-
-        (ReturnStatement firstRet, string firstSource) = returns[index: 0];
-        (ReturnStatement otherRet, string otherSource) =
-            returns.First(predicate: r => RootName(path: r.Source) != RootName(path: firstSource));
-        report(code: SemanticDiagnosticCode.TokenReturnNotAllowed,
-            message:
-            $"This routine returns a token taken from '{RootName(path: firstSource)}' (line {firstRet.Location.Line}) " +
-            $"and one taken from '{RootName(path: otherSource)}' (line {otherRet.Location.Line}). A caller has to know " +
-            "which object the token points at, so every return must take it from the same parameter.",
-            location: otherRet.Location);
     }
 
     // ---- Flow -------------------------------------------------------------------------------------------

@@ -768,9 +768,16 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   - A routine may return a token taken from `me` or from a parameter the caller
     keeps owning (a token parameter):
     `return me.inner.view()`, or `peek(h: Viewing[Holder])` returning
-    `h.inner.view()`. Every return takes it from the same parameter, never from a
-    local, a temporary, or an entity parameter the routine owns (RF-S600). The
-    caller's token has that argument as source.
+    `h.inner.view()`. Different returns may use different token parameters, and an
+    `if`/`when` expression may choose between them:
+    `shorter(x: Viewing[List[S64]], y: Viewing[List[S64]]) -> Viewing[List[S64]]`
+    returning `x` or `y` builds. Never from a local, a temporary, or an entity
+    parameter the routine owns (RF-S600). The builder works out, per routine, the
+    parameters (and `me`) the token may come from, through calls too
+    (`return shorter(x: p, y: q)` may come from `p` or `q`). The caller's token
+    has every argument handed to one of them as a source: replacing, stealing or
+    ending any of them ends it (RF-S643 at a later use), and for an element token
+    a change that can add to or remove from any of them does too.
   - An entity element read into a variable is a token on the element with the
     container's permission: `var b = boxes[0]` holds `boxes.modify_at(index: 0)`
     when `boxes` can be changed there (`b.n += 1` changes the element in the
