@@ -1107,6 +1107,16 @@ that differ from other languages:
   `{1: "a"}` given to an `Iterable[DictEntry[U16, Text]]` builds a `Dict[U16, Text]`. With nothing to go by,
   `[1, 2]` is a `List[S64]`.
   An `Array` is also built from its elements: `Array[3](1, 2, 3)`.
+- **Showing a collection.** `show(xs)` and `f"{xs}"` write the elements, each in the form it has inside a
+  collection (`Text` and `Bytes` quoted `"a"`, `Char` and `Byte` as `'a'`, everything else its `represent`):
+  `List`, `Array` and the other sequences `[1, 2, 3]`, sets `{1, 2}`, maps `{1: 10, 2: 20}`, the empty set `{}`
+  and the empty map `{:}`. `Dict` and `Set` show in insertion order, the sorted collections in order. A
+  `PriorityQueue` shows its `priority: element` pairs in the order they come out, the next one first
+  (`[1: "a", 2: "b", 4: "d"]`), from a sorted copy, so the queue does not change. A range shows as it is written:
+  `0 to 10`, `0 til 10 by 2`, `10 to 0 by -2`. `f"{xs:?}"` (diagnose) puts the qualified type and the count around
+  the same text: `System.List[System.S64](count: 3, [1, 2, 3])`, `System.Dict[System.S64, System.S64](count: 0,
+  {:})`, `System.Range[System.S64](0 til 10 by 2)`. A fixed-size `Array`, `BitArray` or `SplitArray` has its count
+  in its type: `System.Array[System.S64, 3]([1, 2, 3])`.
 - Tuple fields are accessed as `t.item0`, `t.item1`, … (NOT `t.0`/`t.first`);
   destructure with `var (q, r) = pair`. `(a, b) = (b, a)` swaps places (locals, member variables, entities
   included: values move, nothing is copied, no `steal`); any other tuple on the left is a build error.
