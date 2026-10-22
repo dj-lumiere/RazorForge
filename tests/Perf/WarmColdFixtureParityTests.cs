@@ -67,7 +67,7 @@ public sealed partial class WarmColdFixtureParityTests
         [
             "error_paths_api", "crashable_api", "list_api", "dict_api", "set_api",
             "sorted_dict_api", "choice_api", "variant_api", "generic_routine_api",
-            "guarded_api", "guarded_access_api", "fallible_lock_api", "agent_api",
+            "guarded_api", "guarded_access_api", "fallible_lock_api", "work_api",
             "array_api", "range_api", "filesystem_api", "itertools_api", "builder_query_api"
         ];
         var data = new TheoryData<string, string>();
@@ -143,12 +143,12 @@ public sealed partial class WarmColdFixtureParityTests
     }
 
     /// <summary>A warm build that reuses a library file an EARLIER build of another program analyzed. That analysis
-    /// made the recovery variants the file's own code reaches (`check w.retrieve()` inside the Agent library) after
+    /// made the recovery variants the file's own code reaches (`check w.retrieve()` inside the Work library) after
     /// the build's variant teardown had run, so they were cached without any scope-exit destroys, and the next
-    /// build took them as lowered: `AgentWork[S64].retrieve`'s check variant tore down none of its locals and the
+    /// build took them as lowered: `WorkState[S64].retrieve`'s check variant tore down none of its locals and the
     /// lifecycle hooks of the `Check[U32]` it holds were never reached.</summary>
     [Theory]
-    [InlineData("agent_api", "agent_start_api")]
+    [InlineData("work_api", "work_start_api")]
     public void BuildAfterAnotherProgram_MatchesCold(string first, string second)
     {
         string path = Path.Combine(path1: FixtureDir, path2: second + ".rf");

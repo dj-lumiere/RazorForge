@@ -32,7 +32,7 @@ file only once its other old spellings are gone.
 
 **Failure and recovery**
 - A routine that can fail says so on its declaration: `failable routine parse(...)`. `routine parse!(...)` is
-  RF-G222 (`migrate --step failable`). A call never writes `!`: `f!(x)` and `agent.retrieve!()` are RF-G211.
+  RF-G222 (`migrate --step failable`). A call never writes `!`: `f!(x)` and `job.retrieve!()` are RF-G211.
 - Recovery is a keyword at the call: `try f(x)` gives a `Maybe[T]`, `check f(x)` gives a `Check[T]`. The generated
   `try_f` / `check_f` / `lookup_f` routines are gone. Default `migrate` writes `try f(x)` for `try_f(x)` (and
   `try r.f(x)` for `r.try_f(x)`) and `check f(x)` for `check_f(x)` and `lookup_f(x)`, and the build error on an old
@@ -117,7 +117,7 @@ file only once its other old spellings are gone.
   passing one container twice in a call (RF-S623).
 - `Array[T, N]()` with a `T` that has no zero value is RF-S641.
 - A lazy adapter is used in the statement that makes it. The elements of a loop over a read token are read-only.
-- An agent that receives a token or a `Retained` starts with `start_here()` (RF-S632).
+- A Work that receives a token or a `Retained` starts with `start_here()` (RF-S632).
 - A token is never a type argument: `List[Viewing[T]]`, `Maybe[Viewing[T]]` kept in a name, a tuple or a generic type
   holding one, written or inferred (`var xs = [a.view()]`), is RF-S601. What `try` gives on a routine that returns a
   token is unpacked with `when` where it is made. A lambda capturing a token is RF-S606, and `steal` on a token is
@@ -125,14 +125,14 @@ file only once its other old spellings are gone.
 - More paths are build errors. A token in a variant written in place (`Viewing[Cell] | S64`), a global of a token
   type, and a generic routine whose type parameter a call makes a token (`same(x: l.view())`) are RF-S601. In a
   generic body, handing a value of a type parameter to a parameter of a type parameter (`xs.add_last(value: x)`)
-  takes `steal` (RF-S413). RF-S632 follows an agent's argument into an entity's member variables, a collection's
+  takes `steal` (RF-S413). RF-S632 follows a Work's argument into an entity's member variables, a collection's
   elements, a channel end's items and a lambda's captures, and a global holding `Retained` or `Tracked` is RF-S632.
   `modifying G` on a global entity that is not a `Guarded` is RF-S256, `steal G` is RF-S421. An `each` over an
   adapter (`xs.where(...)`) guards `xs` against reshaping (RF-S625). A dangerous routine is never a routine value,
   a lambda body is outside the `danger` block it is written in, and an operator or f-text insertion whose routine
   is dangerous needs `danger` (RF-S609). A binding taken in a loop turn that reaches `continue` is RF-S616. A
   `failable` `destruct` is RF-S815.
-- A started Agent nobody retrieves is cancelled where it is dropped, and a failure its work came to crashes the
+- A started Work nobody retrieves is cancelled where it is dropped, and a failure its work came to crashes the
   program there. `job.cancel()` throws the failure away.
 
 **Types and the C boundary**
@@ -176,11 +176,12 @@ file only once its other old spellings are gone.
 - `Duration` `//` and `%` follow the integer rules, and overflow or division by zero crashes.
 - `Decimal` is a decimal128 (34 significant digits). `+`, `-` and `*` are exact or crash with
   `NumericOverflowError`. `/` and the math routines round to 34 digits.
-- Concurrency: `suspended` and `threaded` are gone. Any routine runs concurrently through `f.to[Agent](args)`
-  (default `migrate` adds `.to[Agent]` to the calls). Start an agent with `start_now()`, `start_here()` or
-  `start_apart()`. `execute()` is gone (default `migrate` writes `start_now()`). `gather()` and `race()` are
-  routines on the agent list: `agents.gather()`. When the last holder of an agent lets it go, the work is
-  cancelled and waited for.
+- Concurrency: `suspended` and `threaded` are gone. Any routine runs concurrently through `f.to[Work](args)`
+  (default `migrate` adds `.to[Work]` to the calls). A piece of handed-off work is a `Work[T]` (it was
+  `Agent[T]`, `AgentStartError` is `WorkStartError`): `migrate --step work` rewrites the old names, and a remaining
+  `Agent` is a build error that names `Work`. Start a Work with `start_now()`, `start_here()` or `start_apart()`.
+  `execute()` is gone (default `migrate` writes `start_now()`). `gather()` and `race()` are routines on the Work
+  list: `jobs.gather()`. When the last holder of a Work lets it go, the work is cancelled and waited for.
 - Channels: `Sender[T]` is `Transmitter[T]`, `send` is `transmit` and `send_if_room` is `transmit_if_room`
   (`migrate --step verbs`).
 - `FileManager`, `PartitionManager`, `StorageManager` and `CpuEventManager` are entities.
@@ -221,8 +222,8 @@ file only once its other old spellings are gone.
 - `ask[T]()`, `set_exit_code`, `to_wrap[T]()`, `to_clamp[T]()`, `to_text(radix:)`, `hex()`, `bin()`, `oct()`,
   `fixed(places)`.
 - `T(from: SerialValue)` construction and collections read from serial values.
-- Agents: `cancel()`, `next_finished`, `gather_all`, `take_finished`, `cancel_all`. A failure stays inside its
-  agent until it is retrieved.
+- Work lists: `cancel()`, `next_finished`, `gather_all`, `take_finished`, `cancel_all`. A failure stays inside its
+  Work until it is retrieved.
 - `List.take_each`, `List.swap`, `CircularList.add_range`, `lacks` beside every `has`, `KeyContainer`.
 - `eq` and `cmp` between different types. The builder writes `ne` for each `eq` and `lacks` for each `has`.
 - B16, B32, B64 and B128 math routines are correctly rounded on every platform, and printed floats are the
@@ -255,7 +256,7 @@ file only once its other old spellings are gone.
 - B64 to B16 narrowing gave wrong values on Windows.
 - `Text(from: CStr)` turns invalid UTF-8 into U+FFFD. Integer parsing reports `IntegerOverflowError` before it
   overflows.
-- A channel that waits on itself, or waits with no agent left to send, is reported as a deadlock.
+- A channel that waits on itself, or waits with no Work left to send, is reported as a deadlock.
 - A plain value passed to a `T?` parameter is wrapped as present.
 - Decimal arithmetic matches IEEE 754 bit for bit, and `fmod` / `remainder` on D32, D64 and D128 are exact.
 - A stack overflow crashes with exit code 82 and reports the call depth and stack size.

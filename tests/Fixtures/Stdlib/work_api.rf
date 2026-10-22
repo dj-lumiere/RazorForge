@@ -1,0 +1,36 @@
+module Tests/Stdlib/WorkApi
+
+# Work[T] — the handle an `f.to[Work](...)` call makes. Any routine can be the work: the
+# routine declares nothing about where it runs. `retrieve()` starts a Work nothing started (with
+# `start_now()`, on the runtime's pool of threads) and drives it to its value, so one `Work[T]` type
+# covers every call. Bound to a name, a Work is torn down at scope exit: completed -> freed,
+# in-flight -> abandoned. Here every Work is retrieved, so all complete cleanly. The set operations
+# (race!/gather!/cancel_all!) have their own fixtures; this one pins the bare single-handle contract.
+
+import IO/Console
+# Plain routines: `doubler.to[Work](...)` returns a Work[S64].
+routine doubler(x: S64) -> S64
+    return x * 2
+
+# A second plain routine: `tripler.to[Work](...)` returns a Work[S64] as well.
+routine tripler(x: S64) -> S64
+    return x * 3
+
+routine start()
+    # Two different routines, one handle type. Both are `Work[S64]` and both yield their value
+    # through the same `retrieve()` call.
+    var a = doubler.to[Work](x: 21)  # Work[S64], not started
+    var b = tripler.to[Work](x: 14)  # Work[S64], not started
+    show(f"coro={a.retrieve()}")  # starts it with start_now() and waits -> 42
+    show(f"thread={b.retrieve()}")  # the same for the second routine -> 42
+
+    # A fresh handle over the first routine, retrieved the same way -> 100.
+    var h = doubler.to[Work](x: 50)
+    show(f"again={h.retrieve()}")
+
+    # Work nothing started is done once it is cancelled: it never runs.
+    var never = doubler.to[Work](x: 1)
+    show(f"before cancel done={never.is_done()}")
+    never.cancel()
+    show(f"after cancel done={never.is_done()}")
+    return

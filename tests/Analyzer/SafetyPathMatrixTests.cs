@@ -91,7 +91,7 @@ public class SafetyPathMatrixTests
     // ---- single-thread handles stay on their thread (RF-S632) ------------------------------------------------
 
     [Fact]
-    public void Analyze_EntityHoldingRetainedStolenIntoAgent_Errors()
+    public void Analyze_EntityHoldingRetainedStolenIntoWork_Errors()
     {
         AssertHasErrorCode(source: """
                            entity Q
@@ -103,7 +103,7 @@ public class SafetyPathMatrixTests
                            routine start()
                                var r = Retained(from: Cell(n: 1))
                                var q = Q(r: r)
-                               var j = work.to[Agent](q: steal q)
+                               var j = work.to[Work](q: steal q)
                                j.start_now()
                                show(f"{j.retrieve()}")
                                return
@@ -112,7 +112,7 @@ public class SafetyPathMatrixTests
     }
 
     [Fact]
-    public void Analyze_ListOfRetainedStolenIntoAgent_Errors()
+    public void Analyze_ListOfRetainedStolenIntoWork_Errors()
     {
         AssertHasErrorCode(source: """
                            routine work(xs: List[Retained[Cell]]) -> S64
@@ -121,7 +121,7 @@ public class SafetyPathMatrixTests
                            routine start()
                                var r = Retained(from: Cell(n: 1))
                                var xs = [r]
-                               var j = work.to[Agent](xs: steal xs)
+                               var j = work.to[Work](xs: steal xs)
                                j.start_now()
                                show(f"{j.retrieve()}")
                                return
@@ -130,7 +130,7 @@ public class SafetyPathMatrixTests
     }
 
     [Fact]
-    public void Analyze_LambdaCapturingRetainedHandedToAgent_Errors()
+    public void Analyze_LambdaCapturingRetainedHandedToWork_Errors()
     {
         AssertHasErrorCode(source: """
                            routine work(f: Callable[(), S64]) -> S64
@@ -139,7 +139,7 @@ public class SafetyPathMatrixTests
                            routine start()
                                var r = Retained(from: Cell(n: 1))
                                var f = () given (r) => r.n
-                               var j = work.to[Agent](f: f)
+                               var j = work.to[Work](f: f)
                                show(f"{j.retrieve()}")
                                return
                            """,
@@ -147,7 +147,7 @@ public class SafetyPathMatrixTests
     }
 
     [Fact]
-    public void Analyze_ChannelOfRetainedHandedToAgent_Errors()
+    public void Analyze_ChannelOfRetainedHandedToWork_Errors()
     {
         AssertHasErrorCode(source: """
                            routine work(rx: Receiver[Retained[Cell]]) -> S64
@@ -158,7 +158,7 @@ public class SafetyPathMatrixTests
 
                            routine start()
                                var (tx, rx) = make_channel[Retained[Cell]](capacity: 4)
-                               var j = work.to[Agent](rx: steal rx)
+                               var j = work.to[Work](rx: steal rx)
                                j.start_now()
                                tx.close()
                                show(f"{j.retrieve()}")
@@ -176,7 +176,7 @@ public class SafetyPathMatrixTests
                            routine start()
                                return
                            """,
-            code: SemanticDiagnosticCode.ThreadArgNotShareable, expected: "Every agent reaches a global");
+            code: SemanticDiagnosticCode.ThreadArgNotShareable, expected: "Every running job reaches a global");
     }
 
     // ---- globals are only read (RF-S256, RF-S421) ----------------------------------------------------------------
@@ -378,7 +378,7 @@ public class SafetyPathMatrixTests
                                                    xs.add_last(value: x)
                                                var kept = keep(x: Cell(n: 2))
                                                var c = Cell(n: 3)
-                                               var j = work.to[Agent](q: steal c)
+                                               var j = work.to[Work](q: steal c)
                                                j.start_now()
                                                show(f"{j.retrieve()} {kept.count()}")
                                                var bank = Bank(a: Guarded[Cell, Exclusive](from: Cell(n: 1)),

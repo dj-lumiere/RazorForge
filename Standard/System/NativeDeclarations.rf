@@ -126,7 +126,7 @@ dangerous routine C::rf_task_wait_within(task: Addr, secs: S64, ns: U32) -> S32
 ### :returns: the boxed result payload pointer set by the task's entry thunk.
 dangerous routine C::rf_task_result_payload(task: Addr) -> Addr
 
-### Reads a task's status (0 new, 1 ready, 2 running, 3 parked, 4 completed). Used by Agent[T].destroy
+### Reads a task's status (0 new, 1 ready, 2 running, 3 parked, 4 completed). Used by Work[T].destroy
 ### to decide between freeing a completed worker and joining one still in flight.
 dangerous routine C::rf_task_status_get(task: Addr) -> U32
 
@@ -139,7 +139,7 @@ dangerous routine C::rf_task_set_detached(task: Addr)
 
 ### Consumer side of the thread task self-reap rendezvous: called once by the driving `retrieve!`
 ### (after reading the value, or on a deadline give-up). Frees the task iff the worker already exited;
-### else the worker frees it. An Agent handle copy's `destruct` never calls this — so no double-free.
+### else the worker frees it. A Work handle copy's `destruct` never calls this — so no double-free.
 dangerous routine C::rf_task_release(task: Addr)
 
 ### Opaque, stable identifier for the calling OS thread. Safe: takes no pointers and only reads the OS thread id.
@@ -195,21 +195,21 @@ dangerous routine C::rf_waitfor_duration(secs: S64, ns: U32)
 
 # ============================================================================
 # Cooperative cancellation (structured concurrency). cancel() sets a flag only —
-# it never frees or unwinds; teardown stays in Agent[T].destroy (single freer).
-# An agent body observes the request via cancellation_requested() and returns
-# early; waitfor returns early when its agent's flag is set.
+# it never frees or unwinds; teardown stays in Work[T].destroy (single freer).
+# A job body observes the request via cancellation_requested() and returns
+# early; waitfor returns early when its job's flag is set.
 # ============================================================================
 
-### Requests cooperative cancellation of a coroutine-backed agent. Sets a flag; the coroutine
+### Requests cooperative cancellation of a coroutine-backed job. Sets a flag; the coroutine
 ### observes it at its next suspend point (waitfor returns early) or via a poll, and returns on
 ### its own. Never frees.
 dangerous routine C::rf_coro_request_cancel(coro: Addr)
 
-### Requests cooperative cancellation of a thread-backed agent. Sets a flag the worker polls. Never
+### Requests cooperative cancellation of a thread-backed job. Sets a flag the worker polls. Never
 ### frees — destroy still joins the worker at teardown.
 dangerous routine C::rf_task_request_cancel(task: Addr)
 
-### Whether cancellation has been requested for the agent (coroutine OR worker thread) running on
+### Whether cancellation has been requested for the job (coroutine OR worker thread) running on
 ### THIS thread. The backing for the `cancellation_requested()` free routine. Reads only
 ### thread-local state. :returns: 1 if requested, else 0.
 routine C::rf_cancel_requested() -> U32
@@ -252,14 +252,14 @@ dangerous routine C::rf_sched_here() -> Addr
 
 ### Waits for `coro` to finish on the scheduler it was spawned on: parks inside a coroutine, blocks on a plain
 ### thread, or drives this thread's own scheduler when `coro` is a `start_here()` job. The engine behind
-### Agent[T].retrieve().
+### Work[T].retrieve().
 dangerous routine C::rf_sched_run_until_default(coro: Addr)
 
 ### Detaches `coro` from this thread's implicit scheduler if present (1 if removed). Call before
 ### rf_coro_abandon on a spawned-but-never-retrieved coroutine so the scheduler drops its reference.
 dangerous routine C::rf_sched_unschedule_default(coro: Addr) -> U32
 
-### Race-free owner-side disposal for an Agent handle's destroy. Detaches `coro` from the pool and,
+### Race-free owner-side disposal for a Work handle's destroy. Detaches `coro` from the pool and,
 ### under the scheduler lock, decides whether the OWNER may free it now (returns 1) or the free was
 ### DEFERRED (returns 0) because a worker still holds it (RUNNING / mid-pop) and will free it on
 ### completion. Prevents the owner from freeing a coroutine a worker is about to resume (the M:N UAF).
@@ -285,7 +285,7 @@ routine C::rf_in_coroutine() -> U32
 
 # ============================================================================
 # Channels (v0.3.0). A refcounted ring buffer carrying payload pointers between
-# agents. transmit (full) and next (empty) park inside a coroutine (rf_sched_park_external
+# jobs. transmit (full) and next (empty) park inside a coroutine (rf_sched_park_external
 # + rf_sched_wake) or block on a condvar on a plain thread — uncolored. Underlies the
 # stdlib `Receiver[T]` / `SharedReceiver[T]` surface (Channels.rf).
 # ============================================================================
@@ -369,26 +369,26 @@ dangerous routine C::rf_signal_cast_one(sig: Addr)
 dangerous routine C::rf_signal_cast_all(sig: Addr)
 
 # ============================================================================
-# race! competitor set (v0.2.0). Built one entry per Agent in List order, then
+# race! competitor set (v0.2.0). Built one entry per Work in List order, then
 # driven on this thread's implicit scheduler until the first competitor finishes.
-# Underlies the stdlib `race[T](of: List[Agent[T]])`.
+# Underlies the stdlib `race[T](of: List[Work[T]])`.
 # ============================================================================
 
 ### Allocates an empty race competitor set. :returns: an opaque `rf_race*` handle as an `Addr`.
 dangerous routine C::rf_race_begin() -> Addr
 
-### Appends a fiber competitor (an Agent started with `start_now()`/`start_here()`), preserving add (List)
+### Appends a fiber competitor (a Work started with `start_now()`/`start_here()`), preserving add (List)
 ### order.
 dangerous routine C::rf_race_add_coro(race: Addr, coro: Addr)
 
-### Appends a thread competitor (an Agent started with `start_apart()`), preserving add (List) order.
+### Appends a thread competitor (a Work started with `start_apart()`), preserving add (List) order.
 dangerous routine C::rf_race_add_task(race: Addr, task: Addr)
 
 ### Drives the scheduler until one competitor completes; :returns: its index in add (List) order, or
 ### -1 if the set is empty. Thread competitors' completions wake the loop; no wake can be lost.
 dangerous routine C::rf_race_wait(race: Addr) -> S64
 
-### Frees the competitor set. Does NOT touch the Agents themselves (the caller still owns them).
+### Frees the competitor set. Does NOT touch the jobs themselves (the caller still keeps them).
 dangerous routine C::rf_race_end(race: Addr)
 
 ### Copies `size` bytes from `src` to `dest`.
@@ -1634,18 +1634,18 @@ dangerous routine C::ingrid_integer_parse(
 # The AccessManager (Ingrid/runtime-tessera/access.te)
 # ============================================================================
 # A Guarded's access is taken and given up here. `access` is the address of the policy's state, whose byte the
-# AccessManager hands out to one agent (kind 1) or to many readers or one writer (kind 2), or for kind 0 an entity
+# AccessManager hands out to one job (kind 1) or to many readers or one writer (kind 2), or for kind 0 an entity
 # only checked to differ from the other targets of a block. `mode` is 1 to read, 2 to write.
 
-### Takes the access, waiting while another agent holds it. :param access: the policy's state. :param kind: 1 or 2.
-### :param mode: 1 or 2. :throws: crashes with `ReenterDuringAccessError` when this agent holds it already, and with
-### `DeadlockError` (`[debug] deadlock-check`) when agents wait on each other.
+### Takes the access, waiting while another job holds it. :param access: the policy's state. :param kind: 1 or 2.
+### :param mode: 1 or 2. :throws: crashes with `ReenterDuringAccessError` when this job holds it already, and with
+### `DeadlockError` (`[debug] deadlock-check`) when jobs wait on each other.
 dangerous routine C::rf_access_lock(access: Addr, kind: U32, mode: U32)
 
-### Whether this agent holds the access already. :param access: the policy's state. :returns: 1 when it does, else 0.
+### Whether this job holds the access already. :param access: the policy's state. :returns: 1 when it does, else 0.
 dangerous routine C::rf_access_holds(access: Addr) -> U8
 
-### Gives up the access this agent holds. :param access: the policy's state. :param kind: 1 or 2. :param mode: 1 or 2.
+### Gives up the access this job holds. :param access: the policy's state. :param kind: 1 or 2. :param mode: 1 or 2.
 dangerous routine C::rf_access_unlock(access: Addr, kind: U32, mode: U32)
 
 ### Names one target of a block that opens several at once, only checked to differ from the others. :param access:
@@ -1840,7 +1840,7 @@ routine C::rf_file_map(path: CStrView, path_len: S32, offset: U64, length: U64, 
 ### :returns: The delta in bytes.
 routine C::rf_file_map_delta() -> U64
 
-### Reads a whole file asynchronously on the runtime's I/O threads. Inside work an Agent runs as a fiber the
+### Reads a whole file asynchronously on the runtime's I/O threads. Inside work a Work runs as a fiber the
 ### fiber parks while the read runs (its siblings keep progressing), anywhere else it reads inline.
 ### :param path: The null-terminated file path.
 ### :param path_len: The path length in bytes.
@@ -1853,7 +1853,7 @@ routine C::rf_io_get_result_len() -> U64
 
 ### Writes a whole existing file asynchronously on the runtime's I/O threads, truncating its contents. A
 ### missing file fails.
-### Inside work an Agent runs as a fiber the fiber parks while the write runs (its siblings keep
+### Inside work a Work runs as a fiber the fiber parks while the write runs (its siblings keep
 ### progressing), anywhere else it writes inline. The payload is copied, so the caller's buffer need not
 ### outlive the call.
 ### :param path: The null-terminated file path.

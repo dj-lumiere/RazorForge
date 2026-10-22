@@ -6,8 +6,8 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for the `agent` argument boundary (RF-S632). The work of an Agent may run on any thread in parallel with
-/// the code that made it, so each argument `f.to[Agent](...)` computes now must cross safely: `steal`-moved
+/// Tests for the `to[Work]` argument boundary (RF-S632). A Work may run on any thread in parallel with
+/// the code that made it, so each argument `f.to[Work](...)` computes now must cross safely: `steal`-moved
 /// (exclusive transfer), trivially-copyable value data (passed BY VALUE), or a thread-shareable wrapper
 /// (Atomic/Guarded/Witnessed, which carries its own synchronization, or a token a `using` over a Guarded's lock bound). Anything else passed by
 /// copy (a bare entity, or a record/tuple that transitively owns a single-threaded RC wrapper (Retained/Tracked) or
@@ -35,7 +35,7 @@ public class ThreadArgShareabilityTests
                                       return n + 1
 
                                   routine start()
-                                      var t = work.to[Agent](n: 5)
+                                      var t = work.to[Work](n: 5)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -53,7 +53,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var origin = Point(x: 1, y: 2)
-                                      var t = work.to[Agent](p: origin)
+                                      var t = work.to[Work](p: origin)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -72,7 +72,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var counter = Atomic[S64](initial: 0)
-                                      var t = work.to[Agent](cell: counter)
+                                      var t = work.to[Work](cell: counter)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -90,7 +90,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var s = Guarded[Node, ReadOnly](from: Node(value: 1))
-                                      var t = work.to[Agent](s: s)
+                                      var t = work.to[Work](s: s)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -108,14 +108,14 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var n = Node(value: 1)
-                                      var t = work.to[Agent](node: n)
+                                      var t = work.to[Work](node: n)
                                       drop t.retrieve()
                                       return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
             expectedErrorSubstring:
-            "to an agent, but");
+            "to a Work, but");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
     }
@@ -134,7 +134,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var h = Holder(node: Retained(from: Node(value: 1)))
-                                      var t = work.to[Agent](h: h)
+                                      var t = work.to[Work](h: h)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -162,7 +162,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var h = Holder(node: Guarded[Node, ReadOnly](from: Node(value: 1)))
-                                      var t = work.to[Agent](h: h)
+                                      var t = work.to[Work](h: h)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -182,7 +182,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var n = Node(value: 1)
-                                      var t = work.to[Agent](node: steal n)
+                                      var t = work.to[Work](node: steal n)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -191,7 +191,7 @@ public class ThreadArgShareabilityTests
     }
 
     [Fact]
-    public void Analyze_StealRetainedIntoAgent_HandsOverTheEntity()
+    public void Analyze_StealRetainedIntoWork_HandsOverTheEntity()
     {
         // `steal r` on a Retained takes the entity out of the handle (it must be the last one), so the work gets the
         // bare entity, moved, and never the single-thread handle.
@@ -201,7 +201,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var r = Retained(from: Node(value: 1))
-                                      var t = work.to[Agent](n: steal r)
+                                      var t = work.to[Work](n: steal r)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -242,7 +242,7 @@ public class ThreadArgShareabilityTests
 
                                   routine start()
                                       var h = Holder(node: Retained(from: Node(value: 1)))
-                                      var t = work.to[Agent](h: steal h)
+                                      var t = work.to[Work](h: steal h)
                                       drop t.retrieve()
                                       return
                                   """;
@@ -254,7 +254,7 @@ public class ThreadArgShareabilityTests
             filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
     }
 
-    /// <summary>An Agent holding a token runs on this thread with start_here(), and is retrieved here.</summary>
+    /// <summary>A Work holding a token runs on this thread with start_here(), and is retrieved here.</summary>
     [Fact]
     public void Analyze_TokenArgStartedHere_Ok()
     {
@@ -265,7 +265,7 @@ public class ThreadArgShareabilityTests
 
                                            routine start()
                                                var node = Node(value: 1)
-                                               var job = bump.to[Agent](n: node.modify())
+                                               var job = bump.to[Work](n: node.modify())
                                                job.start_here()
                                                var got = job.retrieve()
                                                return
@@ -281,7 +281,7 @@ public class ThreadArgShareabilityTests
 
                                            routine start()
                                                var node = Node(value: 1)
-                                               var job = bump.to[Agent](n: node.modify())
+                                               var job = bump.to[Work](n: node.modify())
                                                job.start_now()
                                                var got = job.retrieve()
                                                return
@@ -290,14 +290,14 @@ public class ThreadArgShareabilityTests
     }
 
     [Fact]
-    public void Analyze_TokenArgAgentLeavingTheRoutine_Errors()
+    public void Analyze_TokenArgWorkLeavingTheRoutine_Errors()
     {
         AssertHasErrorSa(source: Prelude + """
                                            routine bump(n: Modifying[Node]) -> S64
                                                return n.value
 
-                                           routine make(node: Node) -> Agent[S64]
-                                               var job = bump.to[Agent](n: node.modify())
+                                           routine make(node: Node) -> Work[S64]
+                                               var job = bump.to[Work](n: node.modify())
                                                return job
                                            """,
             expectedErrorSubstring: "stays in the block that made it");
@@ -306,8 +306,8 @@ public class ThreadArgShareabilityTests
     [Fact]
     public void Analyze_BlockTokenThreadArg_Errors()
     {
-        // A token a `viewing` block opened on a Guarded lasts as long as the block, and the agent can run past it, so
-        // it is never handed to an agent: the agent takes the Guarded and opens its own access.
+        // A token a `viewing` block opened on a Guarded lasts as long as the block, and the job can run past it, so
+        // it is never handed to a job: the job takes the Guarded and opens its own access.
         string source = Prelude + """
                                   routine work(n: Viewing[Node]) -> S64
                                       return n.value
@@ -315,7 +315,7 @@ public class ThreadArgShareabilityTests
                                   routine start()
                                       var s = Guarded[Node, MultiRead](from: Node(value: 1))
                                       viewing s as v
-                                          var t = work.to[Agent](n: v)
+                                          var t = work.to[Work](n: v)
                                           drop t.retrieve()
                                       return
                                   """;

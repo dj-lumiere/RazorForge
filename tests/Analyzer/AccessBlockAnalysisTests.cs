@@ -10,7 +10,7 @@ using static TestHelpers;
 /// <c>modify()</c> passed to a call: opening a Guarded again inside a block of the same routine (RF-S630, for reading
 /// and for writing), naming a target twice (RF-S650), a target the block can't open that way (RF-S651),
 /// <c>try</c> on a target that can't be tried (RF-S611), the access call anywhere but passed to a call (RF-S652), and
-/// the token of a block handed to an agent (RF-S632).
+/// the token of a block handed to a job (RF-S632).
 /// </summary>
 public class AccessBlockAnalysisTests
 {
@@ -259,7 +259,7 @@ public class AccessBlockAnalysisTests
     }
 
     [Fact]
-    public void Analyze_BlockTokenToAgent_Errors()
+    public void Analyze_BlockTokenToWork_Errors()
     {
         string source = Prelude + """
                                   routine bump(c: Modifying[Counter]) -> S64
@@ -269,7 +269,7 @@ public class AccessBlockAnalysisTests
                                   routine start()
                                       var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                       modifying s as c
-                                          var job = bump.to[Agent](c: c)
+                                          var job = bump.to[Work](c: c)
                                           job.start_here()
                                           show(job.retrieve())
                                       return

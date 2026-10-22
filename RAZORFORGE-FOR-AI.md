@@ -227,7 +227,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   type, and SCREAMING marks a buildtime constant (like `preset`s and `U64_MAX`),
   so case alone tells type / type parameter / buildtime constant / runtime value
   apart. A receiver pattern's own parameter shadows the owner's parameter of the
-  same name (`routine List[Agent[T]].gather() -> List[T]`: that `T` is the pattern's).
+  same name (`routine List[Work[T]].gather() -> List[T]`: that `T` is the pattern's).
 - Say **"buildtime dispatch" / "runtime dispatch"**, not "static / dynamic".
   Everything monomorphizes; RF's default is buildtime dispatch, no runtime dispatch.
 - varargs parameter notation is **`name...: Type`** (the `...` follows the param
@@ -780,7 +780,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     the block, binds the `Viewing[...]` it returns to `v`, and calls `x.view_exit()` on every way out (its end,
     `return` (whose value is computed first), `throw`, `break`, `continue`); `modifying` is `modify_enter()` /
     `modify_exit()` and a `Modifying[...]`. Any type with the pair is a target: `Guarded` (takes the access: waits
-    while another agent holds it), `FileStorage` (maps the file), a type of your own. `view_enter()` must return a
+    while another job holds it), `FileStorage` (maps the file), a type of your own. `view_enter()` must return a
     `Viewing[...]` and `modify_enter()` a `Modifying[...]`, with the matching exit (RF-S654 otherwise). An access
     token (`modifying into, viewing from`: only checked to differ from the other tokens and entities, `viewing`
     narrows a write token) or an entity variable of the routine without the pair is a target the builder handles
@@ -801,7 +801,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   - **`try viewing` / `try modifying`**: `try viewing x as v` is `try x.view_enter()`: inside the block `v` is a
     `Maybe` of the token, present when the block entered `x`, and the body branches with `when v` (`is None => ...`,
     `else as t => ...`). Only an entered target is exited. A block has no `else` (RF-G226). With several targets each
-    name is its own `Maybe`. A Guarded's enter fails with `ReenterDuringAccessError` when this agent has the access
+    name is its own `Maybe`. A Guarded's enter fails with `ReenterDuringAccessError` when this job has the access
     open already (a routine called from inside the block that opened it), so `try` gives none there and a plain
     block crashes. `try` on a target the block doesn't enter (a token, an entity without the pair) is RF-S611.
     `using ... fallback` is gone (a grammar error that names this form).
@@ -815,8 +815,8 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   - **Opening it again.** Opening a `Guarded` (or an alias of it) inside a block of the same routine that has it
     open is RF-S630, for reading and for writing alike (waiting would never end, going in would see the block's work
     half done): pass the token instead. Opened again from a called routine, the enter fails with
-    `ReenterDuringAccessError` (the runtime knows which agent holds which access): a crash, or none under `try`. The token a block opens on a
-    `Guarded` never goes to an agent (RF-S632): hand the agent the `Guarded`. Passing the same write token twice in
+    `ReenterDuringAccessError` (the runtime knows which job holds which access): a crash, or none under `try`. The token a block opens on a
+    `Guarded` never goes to a job (RF-S632): hand the job the `Guarded`. Passing the same write token twice in
     one call is RF-S603.
   - **`using` is for resources only** (types obeying `Enterable`). `using x.view() as v` is RF-S612, and
     `migrate --step access` rewrites the old forms: `using g.modify() as m` into `modifying g as m`,
@@ -827,11 +827,11 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     Guarded's old `consult()` / `amend()` and `Consulting` / `Amending` into `view()` / `modify()` and `Viewing` /
     `Modifying`, and `LockPolicy` / `ReentrantLockError` into `AccessPolicy` / `ReenterDuringAccessError`. A `try`
     block with several targets is listed to rewrite by hand.
-  - **The AccessManager** (the runtime's, shared with Suflae and Tessera) knows which agent holds which access and
+  - **The AccessManager** (the runtime's, shared with Suflae and Tessera) knows which job holds which access and
     which one waits for what. A `Guarded`'s `GuardManager` keeps its own entity's readers and writer and turns to
-    the AccessManager only when an agent has to wait. `[debug] deadlock-check` (on in a `debug` build, off in the
-    release modes, `= false` / `= true` in config.toml overrides): before an agent waits, the chain of holders is
-    followed, and a cycle crashes with `DeadlockError` naming the agents and where each took its access.
+    the AccessManager only when a job has to wait. `[debug] deadlock-check` (on in a `debug` build, off in the
+    release modes, `= false` / `= true` in config.toml overrides): before a job waits, the chain of holders is
+    followed, and a cycle crashes with `DeadlockError` naming the jobs and where each took its access.
     `[debug] access-order = true` (off by default, costs time on every access): two accesses taken in opposite
     orders crash with `AccessOrderError` before they ever wait on each other.
   - **Two tokens that may be the same entity.** Two token parameters (or shared handles) on the same kind of
@@ -895,7 +895,7 @@ modifying c as m             # Modifying[Counter], write intent
 modifying payer, payee       # payer entered first, then payee: the names are the tokens
     payer.balance -= amount
     payee.balance += amount
-try modifying seats as s_entered     # a Maybe: none when this agent has seats open already
+try modifying seats as s_entered     # a Maybe: none when this job has seats open already
     when s_entered
         is None =>
             show("busy")
@@ -1301,10 +1301,10 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-G010      | a number names its type (`5_u8`)      | `var x: U8 = 5`, or let the place it goes type it  |
 | RF-W007      | ignored result                        | `drop expr`                                        |
-| RF-W008      | an Agent nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
-| RF-W009      | a started Agent nothing collects      | `retrieve()` it, or `drop job` to stop it          |
+| RF-W008      | a Work nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
+| RF-W009      | a started Work nothing collects      | `retrieve()` it, or `drop job` to stop it          |
 | RF-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Maybe[...]` kept in a name, a tuple) | keep the entity or a manager's handle, unpack `try` of a token with `when` at once |
-| RF-S632      | `to[Agent]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
+| RF-S632      | `to[Work]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Atomic`/`Guarded`/…, or `start_here()` |
 | RF-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or open both with `modifying x, y` |
 | RF-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
@@ -1314,7 +1314,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S650      | one block names a target (or a token name) twice | name it once |
 | RF-S651      | a target the block can't open that way | the verb its policy has, `as` for a nameless target |
 | RF-S652      | `g.view()` / `g.modify()` not passed to a call, or in a condition | pass it, or open a block |
-| RF-S642      | `to[Agent]` on something that is not a routine, or over generic-parameter-typed values | convert a routine, with concrete types |
+| RF-S642      | `to[Work]` on something that is not a routine, or over generic-parameter-typed values | convert a routine, with concrete types |
 | RF-S645      | `x.to()` with nothing that gives the target type | write it: `.to[S64]()`, or give the variable a type |
 | RF-S646      | no conversion between the two types (or to its own type) | convert to a type that has one, or drop the `.to` |
 | RF-S647      | `steal place as old` leaves a non-optional place empty | add `inject <new value>` |
@@ -1359,9 +1359,9 @@ routine start()
 ## 14. Concurrency
 
 Any routine can run concurrently, and a routine declares nothing about where it runs. The keyword
-**`f.to[Agent](args)`** makes a routine concurrent work: `download.to[Agent](url: u)` computes the arguments NOW
-(and a receiver that is a value, as in `p.total.to[Agent]()`), defers the call into an `Agent[T]`, and starts
-nothing. A verb on the Agent starts it and chooses where it runs. There is no `spawn`/`async` keyword.
+**`f.to[Work](args)`** makes a routine concurrent work: `download.to[Work](url: u)` computes the arguments NOW
+(and a receiver that is a value, as in `p.total.to[Work]()`), defers the call into a `Work[T]`, and starts
+nothing. A verb on the Work starts it and chooses where it runs. There is no `spawn`/`async` keyword.
 
 ```razorforge
 import IO/Console
@@ -1370,67 +1370,70 @@ routine add(a: S64, b: S64) -> S64
     return a + b
 
 routine start()
-    var job = add.to[Agent](a: 1, b: 2)    # Agent[S64]: arguments computed, nothing runs yet
+    var job = add.to[Work](a: 1, b: 2)    # Work[S64]: arguments computed, nothing runs yet
     job.start_now()                    # runs on the runtime's pool of threads
     # ... other work ...
     show(f"{job.retrieve()}")          # waits for the value
-    var jobs = [add.to[Agent](a: 1, b: 1), add.to[Agent](a: 2, b: 2)]
+    var jobs = [add.to[Work](a: 1, b: 1), add.to[Work](a: 2, b: 2)]
     show(f"{jobs.gather()}")           # starts both, waits for all, results in input order
     return
 ```
 
 - The routine is named, not called (as when it is a routine value, `var f = work`), and the conversion takes the
-  routine's own arguments. Only that routine is the work: `f.to[Agent](x).retrieve()` makes the Agent and collects it at once,
-  and in `p.twice().total.to[Agent]()` the receiver `p.twice()` is computed now. `agent` is an ordinary name.
-- **Recovery is where the Agent is collected:** `try job.retrieve()` / `check job.retrieve()`. To recover inside
-  the work, write a routine that uses `try` and make an Agent of it.
-- An Agent of a routine that returns nothing is `Agent[None]`. The type can be inferred:
-  `var jobs = [work.to[Agent](), work.to[Agent]()]` then `jobs.gather()`.
+  routine's own arguments. Only that routine is the work: `f.to[Work](x).retrieve()` makes the Work and collects it at once,
+  and in `p.twice().total.to[Work]()` the receiver `p.twice()` is computed now.
+- **Recovery is where the Work is collected:** `try job.retrieve()` / `check job.retrieve()`. To recover inside
+  the work, write a routine that uses `try` and make a Work of it.
+- A Work of a routine that returns nothing is `Work[None]`. The type can be inferred:
+  `var jobs = [work.to[Work](), work.to[Work]()]` then `jobs.gather()`.
 
-Verbs (methods on `Agent[T]`, all failable):
+`migrate --step work` rewrites an older `Agent` / `to[Agent]` / `AgentStartError` to `Work` / `to[Work]` /
+`WorkStartError`, and a remaining `Agent` is a build error naming `Work`.
+
+Verbs (methods on `Work[T]`, all failable):
 
 - `start_now()` — starts now on the runtime's pool of threads (M:N). The default for most work.
 - `start_here()` — starts now on THIS thread beside its other `start_here()` jobs. They take turns only
   where one waits (`retrieve`, `waitfor`, a channel), so they can share values without a lock, and a job
-  that blocks the thread stops them all. Inside a `start_now()` job it is an `AgentStartError`, because
+  that blocks the thread stops them all. Inside a `start_now()` job it is a `WorkStartError`, because
   such a job can move between threads.
 - `start_apart()` — starts now on an OS thread of its own, for work that blocks or computes for long.
-- `retrieve() -> T` — waits for the value. An Agent nothing started is started with `start_now()` first.
+- `retrieve() -> T` — waits for the value. A Work nothing started is started with `start_now()` first.
   Inside a job it parks (other jobs keep running), elsewhere it blocks.
-- **A failure stays in its Agent.** A failure inside the work does not end the program where the work
-  runs, and sibling Agents keep running. It surfaces where the Agent is retrieved: `job.retrieve()`
+- **A failure stays in its Work.** A failure inside the work does not end the program where the work
+  runs, and sibling jobs keep running. It surfaces where the Work is retrieved: `job.retrieve()`
   rethrows it (bare, it crashes loudly there like any failure), `check job.retrieve()` /
   `try job.retrieve()` recover it. The crash report's trace ends with
-  `agent in start()` (the line that made the Agent) and `Thrown again at` names the `retrieve()` line.
-- **An Agent nobody retrieves** is cancelled and waited for where it is dropped (`drop job`, or the end of the
+  `work in start()` (the line that made the Work) and `Thrown again at` names the `retrieve()` line.
+- **A Work nobody retrieves** is cancelled and waited for where it is dropped (`drop job`, or the end of the
   scope that holds it, RF-W009 warns). A failure its work came to crashes the program there with the failure's
   message. Call `job.cancel()` first to throw away what it comes to, a failure included.
 - `cancel()` — asks the work to stop. Work nothing started yet never runs. Running work sees the request at
   its next wait (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there
-  (a thread of its own cannot be stopped from outside). Retrieving a cancelled Agent waits for it to stop,
+  (a thread of its own cannot be stopped from outside). Retrieving a cancelled Work waits for it to stop,
   then throws `CancelRequested` (a crashable, no `Error` in the name because cancelling is not a failure),
   recovered with `check`/`try`.
 - `job.waitfor(5s).retrieve()` — retrieve with a deadline, throws `TaskTimeoutError` when it passes
-  (`try job.waitfor(5s).retrieve()` gives `None` instead). A deadline needs a thread of its own: an Agent
+  (`try job.waitfor(5s).retrieve()` gives `None` instead). A deadline needs a thread of its own: a Work
   nothing started yet is started with `start_apart()`, and one already running as a job of
-  `start_now()`/`start_here()` is refused with `AgentStartError`.
-- Starting an Agent twice, or retrieving it twice, is an `AgentStartError` (a crashable carrying
+  `start_now()`/`start_here()` is refused with `WorkStartError`.
+- Starting a Work twice, or retrieving it twice, is a `WorkStartError` (a crashable carrying
   `reason: Text`).
 - `is_done()`, `is_running()` — racy snapshots for polling.
-- On a `List[Agent[T]]`: `gather() -> List[T]` (wait for all, input order, throws the first failure it
+- On a `List[Work[T]]`: `gather() -> List[T]` (wait for all, input order, throws the first failure it
   meets in list order), `race() -> T` (the first finisher, throws the winner's failure), `cancel_all()`
-  (not failable, returns nothing: cancels every Agent and waits until each has stopped, dropping what each came
-  to, work nothing started yet never runs), `next_finished!() -> Agent[T]` (waits for the first to finish, takes
+  (not failable, returns nothing: cancels every Work and waits until each has stopped, dropping what each came
+  to, work nothing started yet never runs), `next_finished!() -> Work[T]` (waits for the first to finish, takes
   it out and returns it, loop it to handle results in finishing order), `gather_all() -> List[Check[T]]` (waits for
-  all, each Agent's value or failure in input order), `take_finished() -> List[Agent[T]]` (takes the finished Agents
+  all, each Work's value or failure in input order), `take_finished() -> List[Work[T]]` (takes the finished Works
   out in place and returns them, leaving the rest: rebuilding the list with `where` would drop work still
-  running). `gather` and `race` start the Agents nothing started with `start_now()`.
-- An Agent is an entity kept in one place: `steal` hands it over, `var b = a` is RF-S413. When the place that
+  running). `gather` and `race` start the Works nothing started with `start_now()`.
+- A Work is an entity kept in one place: `steal` hands it over, `var b = a` is RF-S413. When the place that
   keeps it lets go of it before a verb took its value (`drop job`, or the end of the scope or list that holds it), the work is cancelled
-  and waited for. A started Agent nothing retrieves, drops or hands on is warning RF-W009.
+  and waited for. A started Work nothing retrieves, drops or hands on is warning RF-W009.
 - There is no fire-and-forget verb: start with `start_now()` and collect later with `retrieve()` or
-  `gather()`. An Agent thrown away before anything starts it (`f.to[Agent]()` as a statement, or
-  `drop f.to[Agent]()`) never runs its work, and is warning RF-W008.
+  `gather()`. A Work thrown away before anything starts it (`f.to[Work]()` as a statement, or
+  `drop f.to[Work]()`) never runs its work, and is warning RF-W008.
 - Free routines: `waitfor(d)` waits `d` (parks inside a job, sleeps elsewhere; `50ms`, `5s`, or
   `Duration.from_milliseconds(ms: n)`), `yield_now()` lets other jobs run, `cancellation_requested()`
   tells a long loop to stop early. Cancellation is cooperative: `waitfor` returns early once it is asked.
@@ -1454,15 +1457,15 @@ routine slow(n: S64) -> S64
     return n
 
 routine start()
-    var bad = relay.to[Agent](n: -1)
-    var good = relay.to[Agent](n: 3)
+    var bad = relay.to[Work](n: -1)
+    var good = relay.to[Work](n: 3)
     bad.start_now()
     good.start_now()
     show(f"good: {good.retrieve()}")   # 3, the failure beside it changes nothing here
     when check bad.retrieve()
         is S64 as v => show(f"bad: {v}")
         is Crashables as e => show(f"bad failed: {e.crash_message()}")
-    var running = slow.to[Agent](n: 1)
+    var running = slow.to[Work](n: 1)
     running.start_now()
     running.cancel()
     when check running.retrieve()
@@ -1471,16 +1474,16 @@ routine start()
     return
 ```
 
-**What `to[Agent]` may hand to the work (RF-S632).** Each value `f.to[Agent](...)` computes now must be safe to
+**What `to[Work]` may hand to the work (RF-S632).** Each value `f.to[Work](...)` computes now must be safe to
 hand to work that may run on another thread: a `steal`-moved bare entity, trivially copyable value data,
 or a shareable manager handle (`Atomic`, `Guarded`, `Witnessed`). A `Roamed`
 handle is promoted. Anything else (a bare entity by copy, a record owning `Retained`/`Tracked`/
 `Viewing`/`Modifying`) is rejected. The check follows everything the value reaches: an entity's member
 variables, a collection's elements (`List[Retained[Cell]]`), a channel end's items (`Receiver[Retained[Cell]]`),
 and the `given` names of a lambda (written in the call or bound to a variable first). A value holding a
-`Retained`, `Tracked` or token at any depth makes an Agent of one thread: it starts with `start_here()`, and
+`Retained`, `Tracked` or token at any depth makes a Work of one thread: it starts with `start_here()`, and
 `start_now()` / `start_apart()` (or a `retrieve()` that starts it) is RF-S632. An `Atomic[T]` parameter is always by reference, so a routine taking
-one works on the caller's cell, and sharing one counter across agents just works:
+one works on the caller's cell, and sharing one counter across jobs just works:
 
 ```razorforge
 routine bump(cell: Atomic[S64], times: S64)
@@ -1490,7 +1493,7 @@ routine bump(cell: Atomic[S64], times: S64)
 
 routine start()
     var counter = Atomic[S64](initial: 0)
-    var jobs = [bump.to[Agent](cell: counter, times: 1000), bump.to[Agent](cell: counter, times: 1000)]
+    var jobs = [bump.to[Work](cell: counter, times: 1000), bump.to[Work](cell: counter, times: 1000)]
     drop jobs.gather()
     show(f"{counter.load()}")          # 2000
     return
@@ -1620,7 +1623,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Access blocks**: `viewing` `modifying` (and `try viewing` / `try modifying`, whose names are Maybes)
 - **Logical operators**: `and` `or` `not`
 - **Literals**: `true` `false` `None` `none`
-- **Concurrency**: `f.to[Agent](args)`
+- **Concurrency**: `f.to[Work](args)`
 - **Danger**†: `danger` (block) `dangerous` (modifier)
 - **Buildtime reflection**†: `expand` (loop) — the ONLY reflection keyword.
 

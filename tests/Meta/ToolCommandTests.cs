@@ -213,10 +213,10 @@ public sealed class ToolCommandTests : IDisposable
                 var t0: U64 = 0
                 danger
                     t0 = C::rf_monotonic_now_ns()
-                var agents = List[Agent[S64]]()
+                var agents = List[Work[S64]]()
                 var i = 0
                 until i >= 4
-                    agents.add_last(value: nap.to[Agent](id: i))
+                    agents.add_last(value: nap.to[Work](id: i))
                     i += 1
                 show(f"results {agents.gather()}")
                 var t1: U64 = 0

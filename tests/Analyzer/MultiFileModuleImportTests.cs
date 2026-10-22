@@ -493,7 +493,7 @@ public sealed class MultiFileModuleImportTests
     }
 
     /// <summary>
-    /// `None` is a type argument in an expression too (`List[Agent[None]]()`), not only in a type annotation.
+    /// `None` is a type argument in an expression too (`List[Work[None]]()`), not only in a type annotation.
     /// </summary>
     [Fact]
     public void NoneTypeArgument_InExpression()
@@ -504,8 +504,8 @@ public sealed class MultiFileModuleImportTests
                                                                  show("work")
                                                                  return
                                                              routine start()
-                                                                 var jobs = List[Agent[None]]()
-                                                                 jobs.add_last(work.to[Agent]())
+                                                                 var jobs = List[Work[None]]()
+                                                                 jobs.add_last(work.to[Work]())
                                                                  return
                                                              """,
             moduleFiles: []);

@@ -117,7 +117,7 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "Reenter during access error", actualString: stdout + stderr);
     }
 
-    /// <summary>Two agents that open two <c>Guarded</c> handles in opposite orders wait on each other: a debug build's
+    /// <summary>Two jobs that open two <c>Guarded</c> handles in opposite orders wait on each other: a debug build's
     /// deadlock check stops the program with a <c>DeadlockError</c> (status 82) that names both, instead of hanging.</summary>
     [Fact]
     public void AccessDeadlock_CrashesLoudly()
@@ -181,32 +181,32 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rf:27:13", actualString: report);
     }
 
-    /// <summary>An error in an Agent's work crashes where the Agent is retrieved. The report names the work's
-    /// frames, the Agent by the routine it was made in (not the routines the builder wrote to run it), and the
+    /// <summary>An error in a Work crashes where the Work is retrieved. The report names the work's
+    /// frames, the Work by the routine it was made in (not the routines the builder wrote to run it), and the
     /// program's own `retrieve()` line as where the error was thrown again (not the standard library's).</summary>
     [Fact]
-    public void AgentCrash_ReportsTheProgramsOwnPlaces()
+    public void WorkCrash_ReportsTheProgramsOwnPlaces()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "agent_crash_report.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_crash_report.rf");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
         string report = stdout + stderr;
         Assert.Contains(expectedSubstring: "boom(System.S64) (", actualString: report);
-        Assert.Contains(expectedSubstring: "agent in Tests/ExitCode/AgentCrashReport.start() (", actualString: report);
-        Assert.DoesNotContain(expectedSubstring: "__agent", actualString: report);
+        Assert.Contains(expectedSubstring: "work in Tests/ExitCode/WorkCrashReport.start() (", actualString: report);
+        Assert.DoesNotContain(expectedSubstring: "__work", actualString: report);
         Assert.Contains(expectedSubstring: "Thrown again at", actualString: report);
-        Assert.Contains(expectedSubstring: "agent_crash_report.rf:16:13", actualString: report);
+        Assert.Contains(expectedSubstring: "work_crash_report.rf:16:13", actualString: report);
     }
 
-    /// <summary>A started Agent nobody retrieves is cancelled and waited for at the end of its scope. A failure its
-    /// work came to crashes there with status 82 and the failure's message (safety matrix C45, rf-fail-agent-dropped):
+    /// <summary>A started Work nobody retrieves is cancelled and waited for at the end of its scope. A failure its
+    /// work came to crashes there with status 82 and the failure's message (safety matrix C45, rf-fail-job-dropped):
     /// it used to vanish with only RF-W009.</summary>
     [Fact]
-    public void DroppedAgentFailure_CrashesLoudly()
+    public void DroppedWorkFailure_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "agent_dropped_failure.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_dropped_failure.rf");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -215,15 +215,15 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "Verification failed error", actualString: stdout + stderr);
     }
 
-    /// <summary>An Agent the program cancelled before dropping it throws away what it came to, a failure included.</summary>
+    /// <summary>A Work the program cancelled before dropping it throws away what it came to, a failure included.</summary>
     [Fact]
-    public void CancelledAgentDrop_DropsItsFailure()
+    public void CancelledWorkDrop_DropsItsFailure()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "agent_cancelled_drop.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_cancelled_drop.rf");
 
         Assert.True(condition: exit == 0,
             userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-        Assert.Contains(expectedSubstring: "after the cancelled agent", actualString: stdout);
+        Assert.Contains(expectedSubstring: "after the cancelled work", actualString: stdout);
     }
 
     /// <summary><c>destruct</c> is never failable, so a failure inside it crashes with status 82 even beneath

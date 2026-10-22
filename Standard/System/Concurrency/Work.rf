@@ -4,10 +4,10 @@ import BuilderQuery
 # TaskSpawnError / TaskTimeoutError are defined in System/Common.rf (alongside the other
 # System crashables) so their synthesized represent/diagnose resolve crash_message correctly.
 
-### Where an `Agent[T]` runs, chosen by the verb that starts it. One concrete handle backs every place so a mixed
-### set can be raced from a single `List[Agent[T]]`.
-choice AgentPlace
-    ### Not started yet: `f.to[Agent](...)` made it and no verb has run it.
+### Where a `Work[T]` runs, chosen by the verb that starts it. One concrete handle backs every place so a mixed
+### set can be raced from a single `List[Work[T]]`.
+choice WorkPlace
+    ### Not started yet: `f.to[Work](...)` made it and no verb has run it.
     WAITING
     ### `start_now()`: a fiber on the runtime's pool of threads (M:N).
     NOW
@@ -18,42 +18,42 @@ choice AgentPlace
     ### Consumed: a verb waited for it, took its value and freed what ran it.
     DONE
 
-### A handle to work whose result you fetch with `retrieve()`. `f.to[Agent](...)` makes one: it computes the arguments
+### A handle to work whose result you fetch with `retrieve()`. `f.to[Work](...)` makes one: it computes the arguments
 ### now and defers the call. A verb chooses where it runs and starts it:
 ###   * `start_now()` runs it on the runtime's pool of threads, the default for most work.
 ###   * `start_here()` runs it on this thread beside its other `start_here()` jobs, which take turns only where one
 ###     waits.
 ###   * `start_apart()` runs it on an OS thread of its own, for work that blocks or computes for long.
-### `retrieve()` waits for the result (an Agent no verb started is started with `start_now()` first), and
-### `gather()` / `race()` do the same over a `List[Agent[T]]`.
+### `retrieve()` waits for the result (a Work no verb started is started with `start_now()` first), and
+### `gather()` / `race()` do the same over a `List[Work[T]]`.
 ###
-### RECIPE model: an Agent is a recipe, the routine with its arguments bound. `f.to[Agent](...)` builds the recipe (the
+### RECIPE model: a Work is a recipe, the routine with its arguments bound. `f.to[Work](...)` builds the recipe (the
 ### arguments boxed into a heap recipe) and starts NOTHING. The verb makes the task block that will hold the
 ### result and the fiber or thread that runs `entry(recipe)`.
 ###
-### An Agent has one owner, like any entity: `steal` moves it (into a list, out of a routine), and a list element
-### or a `waitfor` hands out access to it in place. When its owner drops it (`drop job`, or the end of the scope
-### that holds it) without a verb having taken its value, it is cancelled and waited for, so no work outlives the
+### A Work is an entity kept in one place: `steal` hands it over (into a list, out of a routine), and a list element
+### or a `waitfor` hands out access to it in place. When the place that keeps it drops it (`drop job`, or the end
+### of the scope that holds it) without a verb having taken its value, it is cancelled and waited for, so no work outlives the
 ### scope that started it. Work nothing started never runs.
 ###
 ### The verb that takes the value (`retrieve!`/`race!`/`gather!`) reaps what ran (fiber deleted or abandoned,
-### result block freed) and marks the Agent DONE. A recipe no verb ever runs leaks its recipe, and the routine body
+### result block freed) and marks the Work DONE. A recipe no verb ever runs leaks its recipe, and the routine body
 ### never runs.
-entity Agent[T]
+entity Work[T]
     ### The work: where it runs, its fiber or thread, and its result.
-    secret work: AgentWork[T]
+    secret state: WorkState[T]
     ### The wait deadline of the next `retrieve!`; only meaningful when `has_deadline` is true (APART).
     secret deadline: Duration
     ### Whether `waitfor` gave the next `retrieve!` a deadline.
     secret has_deadline: Bool
 
-### The work under an Agent: a value that names one native state cell, so the language's own Agent owns it and
-### decides when it ends (`dispose`). A copy names the same cell. One more Agent over the same work takes a hold
+### The state under a Work: a value that names one native state cell, so the language's own Work decides when it
+### ends (`dispose`). A copy names the same cell. One more Work over the same work takes a hold
 ### with `add_holder`, and the work ends when the last holder disposes of it.
-record AgentWork[T]
+record WorkState[T]
     ### The state cell: slot 0 the place (0 WAITING, 1 NOW, 2 HERE, 3 APART, 4 DONE), slot 1 the fiber
     ### (rf_coro*) for NOW and HERE, slot 2 the task control block that holds the produced value, slot 3 nonzero
-    ### when cancellation was requested before a verb started the work, slot 4 how many Agents hold it.
+    ### when cancellation was requested before a verb started the work, slot 4 how many Work handles hold it.
     secret cell: Addr
     ### The routine the fiber or thread runs, given the recipe.
     secret entry: Addr
@@ -67,13 +67,13 @@ routine recipe_slot_size() -> ByteSize
     return Addr.data_size()
 
 ### Allocates a recipe with `slots` Addr slots (slot 0 is the task, the rest are the arguments).
-### Builder plumbing for `agent` calls.
+### Builder plumbing for `to[Work]` conversions.
 ### :returns: the recipe's address.
 dangerous routine recipe_new(slots: U64) -> Addr
     return rf_allocate_dynamic(size: recipe_slot_size() * slots)
 
 ### Moves `value` into its own heap cell and stores the cell in recipe slot `slot` (like
-### `List.add_last` storing an element). Builder plumbing for `agent` calls.
+### `List.add_last` storing an element). Builder plumbing for `to[Work]` conversions.
 dangerous routine recipe_put[T](recipe: Addr, slot: U64, value: T)
     var cell = Hijacked[T](rf_allocate_dynamic(size: T.data_size()))
     cell.poke(value)
@@ -101,16 +101,16 @@ dangerous routine blocking_call(entry: Addr, recipe: Addr)
 dangerous routine recipe_task(recipe: Addr) -> Addr
     return Hijacked[Addr](recipe).peek()
 
-### Builds the Agent for an `agent` call: the recipe and the routine that runs it. Nothing runs until a verb.
-### :returns: the Agent recipe.
-dangerous routine agent_recipe[T](entry: Addr, recipe: Addr) -> Agent[T]
-    return Agent[T](work: agent_work[T](entry: entry, recipe: recipe), deadline: Duration(seconds: 0, nanoseconds: 0),
+### Builds the Work for a `to[Work]` conversion: the recipe and the routine that runs it. Nothing runs until a verb.
+### :returns: the Work recipe.
+dangerous routine work_recipe[T](entry: Addr, recipe: Addr) -> Work[T]
+    return Work[T](state: work_state[T](entry: entry, recipe: recipe), deadline: Duration(seconds: 0, nanoseconds: 0),
         has_deadline: false)
 
-### Builds the work for an `agent` call, not started: a fresh state cell over the recipe and the routine that
+### Builds the work for a `to[Work]` conversion, not started: a fresh state cell over the recipe and the routine that
 ### runs it.
 ### :returns: the work.
-dangerous routine agent_work[T](entry: Addr, recipe: Addr) -> AgentWork[T]
+dangerous routine work_state[T](entry: Addr, recipe: Addr) -> WorkState[T]
     var cell = rf_allocate_dynamic(size: recipe_slot_size() * 5)
     var words = Hijacked[U64](cell)
     words.poke_at_offset(at: recipe_slot_size() * 0, value: 0)
@@ -118,14 +118,14 @@ dangerous routine agent_work[T](entry: Addr, recipe: Addr) -> AgentWork[T]
     words.poke_at_offset(at: recipe_slot_size() * 2, value: 0)
     words.poke_at_offset(at: recipe_slot_size() * 3, value: 0)
     words.poke_at_offset(at: recipe_slot_size() * 4, value: 1)
-    return AgentWork[T](cell: cell, entry: entry, recipe: recipe)
+    return WorkState[T](cell: cell, entry: entry, recipe: recipe)
 
 ### Completes a recipe's task with what its work came to (the value, or the error it failed with) and frees the
-### recipe. The work's failure stays in its Agent: it surfaces where the Agent is retrieved. The outcome MOVES into
+### recipe. The work's failure stays in its Work: it surfaces where the Work is retrieved. The outcome MOVES into
 ### the task's box: its bytes are copied, then its tag is cleared, so the caller's teardown of `outcome` frees
 ### nothing the box now holds (a caught error is one object, freed once). Builder plumbing for the routine that runs
 ### a recipe.
-dangerous routine agent_finish[T](recipe: Addr, outcome: Hijacked[Check[T]])
+dangerous routine work_finish[T](recipe: Addr, outcome: Hijacked[Check[T]])
     var task = recipe_task(recipe: recipe)
     C::rf_invalidate(ptr: recipe)
     var size = Check[T].data_size()
@@ -137,71 +137,71 @@ dangerous routine agent_finish[T](recipe: Addr, outcome: Hijacked[Check[T]])
 
 ### Reads word `slot` of the shared cell. A slot that holds a handle holds its address as a number.
 ### :returns: the word.
-dangerous routine AgentWork[T].cell_word(slot: U64) -> U64
+dangerous routine WorkState[T].cell_word(slot: U64) -> U64
     return Hijacked[U64](me.cell).peek_at_offset(offset: recipe_slot_size() * slot)
 
 ### Writes word `slot` of the shared cell.
-dangerous routine AgentWork[T].set_cell_word(slot: U64, value: U64)
+dangerous routine WorkState[T].set_cell_word(slot: U64, value: U64)
     Hijacked[U64](me.cell).poke_at_offset(at: recipe_slot_size() * slot, value: value)
     return
 
 ### Where the work runs, or WAITING before a verb starts it.
 ### :returns: the place.
-routine AgentWork[T].place() -> AgentPlace
+routine WorkState[T].place() -> WorkPlace
     danger
         var code = me.cell_word(slot: 0)
         if code == 1
-            return AgentPlace.NOW
+            return WorkPlace.NOW
         if code == 2
-            return AgentPlace.HERE
+            return WorkPlace.HERE
         if code == 3
-            return AgentPlace.APART
+            return WorkPlace.APART
         if code == 4
-            return AgentPlace.DONE
-    return AgentPlace.WAITING
+            return WorkPlace.DONE
+    return WorkPlace.WAITING
 
 ### Records where the work runs.
-dangerous routine AgentWork[T].set_place(place: AgentPlace)
+dangerous routine WorkState[T].set_place(place: WorkPlace)
     var code: U64 = 0
-    if place == AgentPlace.NOW
+    if place == WorkPlace.NOW
         code = 1
-    elseif place == AgentPlace.HERE
+    elseif place == WorkPlace.HERE
         code = 2
-    elseif place == AgentPlace.APART
+    elseif place == WorkPlace.APART
         code = 3
-    elseif place == AgentPlace.DONE
+    elseif place == WorkPlace.DONE
         code = 4
     me.set_cell_word(slot: 0, value: code)
     return
 
 ### The fiber handle (rf_coro*) for NOW and HERE, none before a verb starts the work.
 ### :returns: the fiber.
-routine AgentWork[T].coro() -> Addr
+routine WorkState[T].coro() -> Addr
     danger
         return me.cell_word(slot: 1).to[Addr]()
 
 ### The task control block that holds the produced value, zero before a verb starts the work.
 ### :returns: the task.
-routine AgentWork[T].task() -> Addr
+routine WorkState[T].task() -> Addr
     danger
         return me.cell_word(slot: 2).to[Addr]()
 
 ### Starts the work at `place` if no verb started it yet: makes the task block (into recipe slot 0) and the fiber or
-### thread that runs the recipe. Idempotent, so `retrieve`/`gather`/`race` call it on every Agent they drive.
+### thread that runs the recipe. Idempotent, so `retrieve`/`gather`/`race` call it on every Work they drive.
 ### Takes `me` by reference: the place and handles it sets are what every later verb reads.
 ### :returns: false if the work could not be started, or `place` is HERE inside a `start_now()` job.
-dangerous routine AgentWork[T].start_at(place: AgentPlace) -> Bool
-    if me.place() != AgentPlace.WAITING or me.cancelled()
+dangerous routine WorkState[T].start_at(place: WorkPlace) -> Bool
+    if me.place() != WorkPlace.WAITING or me.cancelled()
         return true
-    if place == AgentPlace.APART
+    if place == WorkPlace.APART
         me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 1).to[U64]())
         Hijacked[Addr](me.recipe).poke(value: me.task())
-        me.set_place(place: AgentPlace.APART)
+        me.set_place(place: WorkPlace.APART)
         if me.cell_word(slot: 3) != 0
             C::rf_task_request_cancel(task: me.task())
         return C::rf_task_spawn_threaded(task: me.task(), entry: me.entry, userdata: me.recipe) != 0
     var here = Addr.hollow()
-    if place == AgentPlace.HERE
+    if place == WorkPlace.HERE
         here = C::rf_sched_here()
         if here.is_hollow()
             return false
@@ -212,89 +212,89 @@ dangerous routine AgentWork[T].start_at(place: AgentPlace) -> Bool
     me.set_place(place: place)
     if me.cell_word(slot: 3) != 0
         C::rf_coro_request_cancel(coro: coro)
-    if place == AgentPlace.HERE
+    if place == WorkPlace.HERE
         C::rf_sched_spawn(sched: here, coro: me.coro())
     else
         C::rf_sched_spawn_default(coro: me.coro())
     return true
 
 ### Starts the work if no verb started it yet, the way `retrieve` starts it: with `start_now()`. Builder and
-### library plumbing for the verbs over a `List[Agent[T]]`.
+### library plumbing for the verbs over a `List[Work[T]]`.
 ### :returns: false if the work could not be started.
-dangerous routine AgentWork[T].launch() -> Bool
-    return me.start_at(place: AgentPlace.NOW)
+dangerous routine WorkState[T].launch() -> Bool
+    return me.start_at(place: WorkPlace.NOW)
 
-### Starts a verb's own place, or crashes with what went wrong: the Agent was started already, or `start_here()`
+### Starts a verb's own place, or crashes with what went wrong: the Work was started already, or `start_here()`
 ### runs inside a `start_now()` job.
-### :throws: {AgentStartError} if the Agent was started already or cannot start at `place`.
+### :throws: {WorkStartError} if the Work was started already or cannot start at `place`.
 ### :throws: {TaskSpawnError} if the work could not be started.
-failable routine AgentWork[T].start_with(place: AgentPlace, verb: Text)
-    if me.place() != AgentPlace.WAITING
-        throw AgentStartError(reason: f"You called {verb} on an Agent that was already started. Start an Agent once.")
+failable routine WorkState[T].start_with(place: WorkPlace, verb: Text)
+    if me.place() != WorkPlace.WAITING
+        throw WorkStartError(reason: f"You called {verb} on a Work that was already started. Start a Work once.")
     danger
         if me.start_at(place: place)
             return
-    if place == AgentPlace.HERE and me.place() == AgentPlace.WAITING
-        throw AgentStartError(reason: "You called start_here() inside a job started with start_now(), which can move " +
+    if place == WorkPlace.HERE and me.place() == WorkPlace.WAITING
+        throw WorkStartError(reason: "You called start_here() inside a job started with start_now(), which can move " +
             "between threads, so it has no thread of its own to run a job beside. Start it with start_now(), or " +
             "start the outer job with start_here() or start_apart().")
     throw TaskSpawnError()
 
 ### Starts the work now on the runtime's pool of threads, where it may run beside its siblings on any thread.
 ### Collect the result later with `retrieve()` or `gather()`.
-### :throws: {AgentStartError} if the Agent was started already.
+### :throws: {WorkStartError} if the Work was started already.
 ### :throws: {TaskSpawnError} if the work could not be started.
-failable routine AgentWork[T].start_now()
-    me.start_with(place: AgentPlace.NOW, verb: "start_now()")
+failable routine WorkState[T].start_now()
+    me.start_with(place: WorkPlace.NOW, verb: "start_now()")
     return
 
 ### Starts the work now on this thread, beside this thread's other `start_here()` jobs. They take turns only where
 ### one waits (`retrieve`, `waitfor`, a channel), so they can share values without a lock, and a job that blocks
 ### the thread stops them all. Collect the result later with `retrieve()` or `gather()`.
-### :throws: {AgentStartError} if the Agent was started already, or this runs inside a `start_now()` job.
+### :throws: {WorkStartError} if the Work was started already, or this runs inside a `start_now()` job.
 ### :throws: {TaskSpawnError} if the work could not be started.
-failable routine AgentWork[T].start_here()
-    me.start_with(place: AgentPlace.HERE, verb: "start_here()")
+failable routine WorkState[T].start_here()
+    me.start_with(place: WorkPlace.HERE, verb: "start_here()")
     return
 
 ### Starts the work now on an OS thread of its own, where it may block or compute for long without stopping
 ### anything else. Collect the result later with `retrieve()` or `gather()`.
-### :throws: {AgentStartError} if the Agent was started already.
+### :throws: {WorkStartError} if the Work was started already.
 ### :throws: {TaskSpawnError} if the work could not be started.
-failable routine AgentWork[T].start_apart()
-    me.start_with(place: AgentPlace.APART, verb: "start_apart()")
+failable routine WorkState[T].start_apart()
+    me.start_with(place: WorkPlace.APART, verb: "start_apart()")
     return
 
-### Whether this Agent runs as a fiber (NOW or HERE). Internal plumbing for `race!`, which dispatches on the
+### Whether this Work runs as a fiber (NOW or HERE). Internal plumbing for `race!`, which dispatches on the
 ### place while reading List elements as temporaries (a direct field read on a generic List element miscompiles
 ### today, going through a member routine monomorphizes the receiver cleanly).
 ### :returns: true if it runs as a fiber, false if on a thread of its own.
-routine AgentWork[T].is_coro() -> Bool
-    return me.place() != AgentPlace.APART
+routine WorkState[T].is_coro() -> Bool
+    return me.place() != WorkPlace.APART
 
 ### The raw fiber handle (valid for NOW and HERE). Internal plumbing for `race!`.
 ### :returns: the rf_coro* as an Addr.
-routine AgentWork[T].coro_handle() -> Addr
+routine WorkState[T].coro_handle() -> Addr
     return me.coro()
 
 ### The raw task/result control block (fibers and threads both box their produced value here). Internal `race!`
 ### plumbing; also where the winner's value is read from.
 ### :returns: the rf_task* as an Addr.
-routine AgentWork[T].task_handle() -> Addr
+routine WorkState[T].task_handle() -> Addr
     return me.task()
 
 ### Whether the work has finished (its value is ready to `retrieve!` without waiting). A racy snapshot
 ### for polling/heuristics, not a synchronization decision — it can flip to true the instant after you
-### read it. A fiber is done at status COMPLETED (3), a thread at COMPLETED (4), and an Agent no verb started is
+### read it. A fiber is done at status COMPLETED (3), a thread at COMPLETED (4), and a Work no verb started is
 ### done only once it is cancelled.
 ### :returns: `true` if the work has completed.
-routine AgentWork[T].is_done() -> Bool
+routine WorkState[T].is_done() -> Bool
     # Work nothing started is done once it is cancelled: it never runs.
-    if me.place() == AgentPlace.WAITING
+    if me.place() == WorkPlace.WAITING
         return me.cancelled()
-    if me.place() == AgentPlace.DONE
+    if me.place() == WorkPlace.DONE
         return true
-    if me.place() != AgentPlace.APART
+    if me.place() != WorkPlace.APART
         if me.coro().is_hollow()
             return true
         danger
@@ -304,21 +304,21 @@ routine AgentWork[T].is_done() -> Bool
 
 ### Whether the work was started and has not yet finished. Racy snapshot (see `is_done`).
 ### :returns: `true` if still in flight.
-routine AgentWork[T].is_running() -> Bool
-    return me.place() != AgentPlace.WAITING and not me.is_done()
+routine WorkState[T].is_running() -> Bool
+    return me.place() != WorkPlace.WAITING and not me.is_done()
 
-### Requests cooperative cancellation of this agent: sets a flag in NATIVE memory (reached through the handle)
+### Requests cooperative cancellation of this job: sets a flag in NATIVE memory (reached through the handle)
 ### and returns. It never frees or unwinds. A fiber observes the request at its next wait (`waitfor` returns
 ### early) or through `cancellation_requested()`, a thread of its own only through
-### `cancellation_requested()` (a thread cannot be killed). An Agent no verb started yet records the request in its
+### `cancellation_requested()` (a thread cannot be killed). A Work no verb started yet records the request in its
 ### cell, and sees it as soon as it starts.
-dangerous routine AgentWork[T].request_cancel()
-    if me.place() == AgentPlace.DONE
+dangerous routine WorkState[T].request_cancel()
+    if me.place() == WorkPlace.DONE
         return
     me.set_cell_word(slot: 3, value: 1)
-    if me.place() == AgentPlace.WAITING
+    if me.place() == WorkPlace.WAITING
         return
-    if me.place() != AgentPlace.APART
+    if me.place() != WorkPlace.APART
         if not me.coro().is_hollow()
             C::rf_coro_request_cancel(coro: me.coro())
         return
@@ -326,24 +326,24 @@ dangerous routine AgentWork[T].request_cancel()
     return
 
 ### Waits for cancelled work to stop and frees what ran it, dropping what it came to. Work nothing started is
-### only marked done. Plumbing for `cancel_all` and for the teardown of an Agent nobody retrieved.
+### only marked done. Plumbing for `cancel_all` and for the teardown of a Work nobody retrieved.
 ### :param reports_failure: Whether a failure the work came to (other than stopping on the cancel request) crashes
-###     here instead of being dropped: true for an Agent dropped without `cancel()`, whose failure nothing else would
+###     here instead of being dropped: true for a Work dropped without `cancel()`, whose failure nothing else would
 ###     see.
-dangerous routine AgentWork[T].wind_down(reports_failure: Bool)
-    if me.place() == AgentPlace.DONE
+dangerous routine WorkState[T].wind_down(reports_failure: Bool)
+    if me.place() == WorkPlace.DONE
         return
-    if me.place() == AgentPlace.WAITING
-        me.set_place(place: AgentPlace.DONE)
+    if me.place() == WorkPlace.WAITING
+        me.set_place(place: WorkPlace.DONE)
         return
-    if me.place() != AgentPlace.APART
+    if me.place() != WorkPlace.APART
         C::rf_sched_run_until_default(coro: me.coro())
     elseif C::rf_in_coroutine() != 0
         until C::rf_task_await_coro(task: me.task()) != 0
             C::rf_sched_park_external()
     else
         drop C::rf_task_wait(task: me.task())
-    # The outcome is dropped: its scope's teardown frees it. A failure of an Agent nobody retrieved or cancelled is
+    # The outcome is dropped: its scope's teardown frees it. A failure of a Work nobody retrieved or cancelled is
     # not lost: the bare call to the failable `crash_unretrieved` crashes with it.
     var outcome = me.take_outcome()
     me.reap()
@@ -351,12 +351,12 @@ dangerous routine AgentWork[T].wind_down(reports_failure: Bool)
         me.crash_unretrieved(outcome: outcome)
     return
 
-### Throws the failure in `outcome`, if it holds one other than {CancelRequested}. Called bare where an Agent nobody
+### Throws the failure in `outcome`, if it holds one other than {CancelRequested}. Called bare where a Work nobody
 ### retrieved is dropped, so its failure crashes the program with the failure's own message.
 ### :param outcome: What the work came to.
 ### :throws: The failure the work came to.
 @readonly
-failable routine AgentWork[T].crash_unretrieved(outcome: Check[T])
+failable routine WorkState[T].crash_unretrieved(outcome: Check[T])
     when outcome
         is CancelRequested =>
             return
@@ -367,18 +367,18 @@ failable routine AgentWork[T].crash_unretrieved(outcome: Check[T])
 
 ### Moves the finished work's outcome out of its task block and frees the block.
 ### :returns: what the work came to.
-dangerous routine AgentWork[T].take_outcome() -> Check[T]
+dangerous routine WorkState[T].take_outcome() -> Check[T]
     var payload = C::rf_task_result_payload(task: me.task())
     var outcome = Hijacked[Check[T]](from: payload).peek()
     C::rf_invalidate(ptr: payload)
     return outcome
 
 ### Takes the outcome of finished work and frees what ran it, then gives its value: its error is rethrown here,
-### where the Agent is retrieved, and an Agent that was cancelled reports that instead of its value. The outcome is
+### where the Work is retrieved, and a Work that was cancelled reports that instead of its value. The outcome is
 ### this routine's own, so a rethrown error moves out of it.
-### :throws: {CancelRequested} if the Agent was cancelled.
+### :throws: {CancelRequested} if the Work was cancelled.
 ### :returns: The value the work returned.
-failable routine AgentWork[T].settle() -> T
+failable routine WorkState[T].settle() -> T
     danger
         var outcome = me.take_outcome()
         me.reap()
@@ -390,58 +390,58 @@ failable routine AgentWork[T].settle() -> T
             is Crashables as error =>
                 throw error
 
-### Whether `cancel` was called on this Agent.
+### Whether `cancel` was called on this Work.
 ### :returns: `true` once cancellation was requested.
-routine AgentWork[T].cancelled() -> Bool
+routine WorkState[T].cancelled() -> Bool
     danger
         return me.cell_word(slot: 3) != 0
 
 ### Asks the work to stop. Work nothing started yet never runs. Running work sees the request at its next wait
 ### (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there. Retrieving a cancelled
-### Agent waits for it to stop, then throws {CancelRequested}.
-routine AgentWork[T].cancel()
+### Work waits for it to stop, then throws {CancelRequested}.
+routine WorkState[T].cancel()
     danger
         me.request_cancel()
     return
 
-### Waits for the work to finish and returns its produced value. An Agent no verb started is started with
+### Waits for the work to finish and returns its produced value. A Work no verb started is started with
 ### `start_now()` first. UNCOLORED: inside a fiber it PARKS (siblings run meanwhile) instead of blocking, on a
 ### plain thread it blocks, and waiting for a `start_here()` job on its own thread runs that thread's jobs until
 ### this one finishes. A deadline (`job.waitfor(d).retrieve()`) races completion against the timer and throws
-### {TaskTimeoutError} if the deadline wins: it needs a `start_apart()` job, and an Agent no verb started yet is
+### {TaskTimeoutError} if the deadline wins: it needs a `start_apart()` job, and a Work no verb started yet is
 ### started that way. `retrieve!` reads the value out and reaps what
 ### ran: a thread's task goes to the worker↔consumer rendezvous, so on a deadline give-up the still-running
 ### thread frees its own block.
-### :throws: {AgentStartError} if the value was taken already, or a deadline was set on a fiber.
-### :throws: {CancelRequested} if the Agent was cancelled.
+### :throws: {WorkStartError} if the value was taken already, or a deadline was set on a fiber.
+### :throws: {CancelRequested} if the Work was cancelled.
 ### :throws: Whatever the work threw: its failure surfaces here, not where it ran.
 ### :throws: {TaskSpawnError} if the work could not be started.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
-failable routine AgentWork[T].retrieve(deadline: Duration, has_deadline: Bool) -> T
-    if me.place() == AgentPlace.DONE
-        throw AgentStartError(reason: "You called retrieve() on an Agent whose value was already taken. " +
-            "Retrieve an Agent once.")
+failable routine WorkState[T].retrieve(deadline: Duration, has_deadline: Bool) -> T
+    if me.place() == WorkPlace.DONE
+        throw WorkStartError(reason: "You called retrieve() on a Work whose value was already taken. " +
+            "Retrieve a Work once.")
     # Cancelled before anything started it: it never runs.
-    if me.place() == AgentPlace.WAITING and me.cancelled()
+    if me.place() == WorkPlace.WAITING and me.cancelled()
         danger
-            me.set_place(place: AgentPlace.DONE)
+            me.set_place(place: WorkPlace.DONE)
         throw CancelRequested()
-    # A deadline gives up on work that keeps running, which only a thread of its own can do: an Agent nothing
+    # A deadline gives up on work that keeps running, which only a thread of its own can do: a Work nothing
     # started yet starts there.
-    if has_deadline and (me.place() == AgentPlace.NOW or me.place() == AgentPlace.HERE)
-        throw AgentStartError(reason: "You gave retrieve() a deadline, but this Agent was started to take turns " +
+    if has_deadline and (me.place() == WorkPlace.NOW or me.place() == WorkPlace.HERE)
+        throw WorkStartError(reason: "You gave retrieve() a deadline, but this Work was started to take turns " +
             "with other work, and work like that can't be left behind while it runs. Give the deadline before " +
-            "anything starts the Agent: one nothing started yet starts where it can be left behind.")
+            "anything starts the Work: one nothing started yet starts where it can be left behind.")
     danger
         var started = false
         if has_deadline
-            started = me.start_at(place: AgentPlace.APART)
+            started = me.start_at(place: WorkPlace.APART)
         else
             started = me.launch()
         if not started
             throw TaskSpawnError()
-    if me.place() != AgentPlace.APART
+    if me.place() != WorkPlace.APART
         danger
             C::rf_sched_run_until_default(coro: me.coro())
             # The outcome is taken, then the fiber and its result block are reaped: this is the single consumer.
@@ -483,18 +483,18 @@ failable routine AgentWork[T].retrieve(deadline: Duration, has_deadline: Bool) -
         # The outcome is taken, then reaped: this is the single consumer, so the worker is freed exactly once.
         return me.settle()
 
-### Reaps this agent's work — the SOLE freeing path, called EXACTLY ONCE by the consumer that is done
+### Reaps this job's work — the SOLE freeing path, called EXACTLY ONCE by the consumer that is done
 ### with it (`retrieve!` after reading the value or a deadline give-up; `race!` over its whole set).
-### `destruct` reaps only an Agent no verb consumed (through `wind_down`), so nothing is freed twice. For a
+### `destruct` reaps only a Work no verb consumed (through `wind_down`), so nothing is freed twice. For a
 ### coroutine: a completed one
 ### is disposed + deleted, an in-flight one is disposed + abandoned (its cancellation shadow stack runs),
 ### and its result block is freed. For a thread: `rf_task_release` hands the free to the worker↔consumer
 ### rendezvous — a still-running worker (a deadline give-up, or a race loser) frees its own block as its
 ### final act, so reaping is NON-BLOCKING (no join).
-dangerous routine AgentWork[T].reap()
-    if me.place() == AgentPlace.WAITING or me.place() == AgentPlace.DONE
+dangerous routine WorkState[T].reap()
+    if me.place() == WorkPlace.WAITING or me.place() == WorkPlace.DONE
         return
-    if me.place() != AgentPlace.APART
+    if me.place() != WorkPlace.APART
         if not me.coro().is_hollow()
             var status = C::rf_coro_status_get(coro: me.coro())
             # Dispose race-free against the work-stealing workers. `rf_sched_dispose_default` detaches the
@@ -514,7 +514,7 @@ dangerous routine AgentWork[T].reap()
                 if C::rf_sched_dispose_default(coro: me.coro()) == 1
                     C::rf_coro_abandon(coro: me.coro())
             C::rf_task_destroy(task: me.task())
-        # The fiber and task are freed: the cell forgets them, so a query on this Agent after it was consumed
+        # The fiber and task are freed: the cell forgets them, so a query on this Work after it was consumed
         # (`is_done()` / `is_running()`) reports "done" instead of reading freed memory.
         me.set_cell_word(slot: 1, value: 0)
         me.set_cell_word(slot: 2, value: 0)
@@ -529,21 +529,21 @@ dangerous routine AgentWork[T].reap()
     me.set_cell_word(slot: 0, value: 4)
     return
 
-### Takes one more hold on the work, for one more Agent over it (Suflae's `waitfor` makes one).
+### Takes one more hold on the work, for one more Work over it (Suflae's `waitfor` makes one).
 ### :returns: The same work.
-dangerous routine AgentWork[T].add_holder() -> AgentWork[T]
+dangerous routine WorkState[T].add_holder() -> WorkState[T]
     me.set_cell_word(slot: 4, value: me.cell_word(slot: 4) +% 1)
     return me
 
 ### Lets go of one hold on the work. The last holder ends it: work that still runs is cancelled and waited for
 ### (what it came to is dropped), work nothing started never runs, and the state cell is freed. Work a verb consumed
-### only frees its cell. Each owning Agent's teardown calls it once.
-dangerous routine AgentWork[T].dispose()
+### only frees its cell. Each owning Work's teardown calls it once.
+dangerous routine WorkState[T].dispose()
     var holders = me.cell_word(slot: 4) -% 1
     if holders != 0
         me.set_cell_word(slot: 4, value: holders)
         return
-    if me.place() != AgentPlace.DONE
+    if me.place() != WorkPlace.DONE
         # Work the program cancelled itself drops its outcome. Otherwise nobody took what it came to, and a failure
         # in it crashes here instead of vanishing.
         var reports_failure = not me.cancelled()
@@ -554,99 +554,99 @@ dangerous routine AgentWork[T].dispose()
 
 ### Starts the work now on the runtime's pool of threads, where it may run beside its siblings on any thread.
 ### Collect the result later with `retrieve()` or `gather()`.
-### :throws: {AgentStartError} if the Agent was started already.
+### :throws: {WorkStartError} if the Work was started already.
 ### :throws: {TaskSpawnError} if the work could not be started.
-failable routine Agent[T].start_now()
-    me.work.start_now()
+failable routine Work[T].start_now()
+    me.state.start_now()
     return
 
 ### Starts the work now on this thread, beside this thread's other `start_here()` jobs. They take turns only where
 ### one waits (`retrieve`, `waitfor`, a channel), so they can share values without a lock, and a job that blocks
 ### the thread stops them all. Collect the result later with `retrieve()` or `gather()`.
-### :throws: {AgentStartError} if the Agent was started already, or this runs inside a `start_now()` job.
+### :throws: {WorkStartError} if the Work was started already, or this runs inside a `start_now()` job.
 ### :throws: {TaskSpawnError} if the work could not be started.
-failable routine Agent[T].start_here()
-    me.work.start_here()
+failable routine Work[T].start_here()
+    me.state.start_here()
     return
 
 ### Starts the work now on an OS thread of its own, where it may block or compute for long without stopping
 ### anything else. Collect the result later with `retrieve()` or `gather()`.
-### :throws: {AgentStartError} if the Agent was started already.
+### :throws: {WorkStartError} if the Work was started already.
 ### :throws: {TaskSpawnError} if the work could not be started.
-failable routine Agent[T].start_apart()
-    me.work.start_apart()
+failable routine Work[T].start_apart()
+    me.state.start_apart()
     return
 
-### Attaches a deadline to this Agent's next `retrieve!`, for `job.waitfor(5s).retrieve()` on an Agent started with
+### Attaches a deadline to this Work's next `retrieve!`, for `job.waitfor(5s).retrieve()` on a Work started with
 ### `start_apart()` (or that nothing started yet, which then starts that way).
 ### :param deadline: The maximum time `retrieve!` will wait.
-### :returns: This Agent, carrying the deadline.
-routine Agent[T].waitfor(deadline: Duration) -> Modifying[Agent[T]]
+### :returns: This Work, carrying the deadline.
+routine Work[T].waitfor(deadline: Duration) -> Modifying[Work[T]]
     me.deadline = deadline
     me.has_deadline = true
     return me.modify()
 
-### Waits for the work to finish and returns its produced value. An Agent no verb started is started with
+### Waits for the work to finish and returns its produced value. A Work no verb started is started with
 ### `start_now()` first. Inside a fiber it parks (siblings run meanwhile), on a plain thread it blocks. A deadline
 ### from `waitfor` races completion against the timer and throws {TaskTimeoutError} if the deadline wins.
-### :throws: {AgentStartError} if the value was taken already, or a deadline was set on a fiber.
-### :throws: {CancelRequested} if the Agent was cancelled.
+### :throws: {WorkStartError} if the value was taken already, or a deadline was set on a fiber.
+### :throws: {CancelRequested} if the Work was cancelled.
 ### :throws: Whatever the work threw: its failure surfaces here, not where it ran.
 ### :throws: {TaskSpawnError} if the work could not be started.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
-failable routine Agent[T].retrieve() -> T
+failable routine Work[T].retrieve() -> T
     # A deadline from `waitfor` is for this one retrieve.
     var has_deadline = me.has_deadline
     me.has_deadline = false
-    return me.work.retrieve(deadline: me.deadline, has_deadline: has_deadline)
+    return me.state.retrieve(deadline: me.deadline, has_deadline: has_deadline)
 
 ### Whether the work has finished (its value is ready to `retrieve!` without waiting). A racy snapshot for
 ### polling, not a synchronization decision.
 ### :returns: `true` if the work has completed.
-routine Agent[T].is_done() -> Bool
-    return me.work.is_done()
+routine Work[T].is_done() -> Bool
+    return me.state.is_done()
 
 ### Whether the work was started and has not yet finished. Racy snapshot (see `is_done`).
 ### :returns: `true` if still in flight.
-routine Agent[T].is_running() -> Bool
-    return me.work.is_running()
+routine Work[T].is_running() -> Bool
+    return me.state.is_running()
 
 ### Asks the work to stop. Work nothing started yet never runs. Running work sees the request at its next wait
 ### (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there. Retrieving a cancelled
-### Agent waits for it to stop, then throws {CancelRequested}.
-routine Agent[T].cancel()
-    me.work.cancel()
+### Work waits for it to stop, then throws {CancelRequested}.
+routine Work[T].cancel()
+    me.state.cancel()
     return
 
-### Whether `cancel` was called on this Agent.
+### Whether `cancel` was called on this Work.
 ### :returns: `true` once cancellation was requested.
-routine Agent[T].cancelled() -> Bool
-    return me.work.cancelled()
+routine Work[T].cancelled() -> Bool
+    return me.state.cancelled()
 
-### Ends an Agent its owner drops (`drop job`, or the end of the scope that holds it): work that still runs is
+### Ends a Work the place that keeps it drops (`drop job`, or the end of the scope that holds it): work that still runs is
 ### cancelled and waited for, work nothing started never runs.
 @override
-routine Agent[T].destruct()
+routine Work[T].destruct()
     danger
-        me.work.dispose()
+        me.state.dispose()
         return
 
-# --- Structured concurrency over a set of Agents -----------------------------------------------
-# A `List[Agent[T]]` bound to a name IS the structured-concurrency scope: ownership already
-# guarantees no child outlives it (the list's teardown cancels and waits for every Agent still running). So the
+# --- Structured concurrency over a set of jobs -----------------------------------------------
+# A `List[Work[T]]` bound to a name IS the structured-concurrency scope: the list keeping its Works already
+# guarantees no child outlives it (the list's teardown cancels and waits for every Work still running). So the
 # scope operations are MEMBER routines on that list — `race!` / `gather!` / `cancel_all` — read as
-# `agents.gather()`. They BORROW the list (`me` is by-reference): they never consume or free it, so
-# there is no hidden ownership transfer; cleanup stays with the list's own teardown at scope exit.
-# Each Agent is worked on in place (`me[i]`), so nothing double-frees.
+# `jobs.gather()`. They work on the list in place (`me` is by-reference): they never consume or free it, so
+# nothing is handed over behind the call, and cleanup stays with the list's own teardown at scope exit.
+# Each Work is worked on in place (`me[i]`), so nothing double-frees.
 
-### Races the Agents, driving them CONCURRENTLY until the FIRST one finishes, and returns that
-### winner's value. BORROWS the list — call it `agents.race()`. A coroutine loser is disposed/abandoned here, a
-### threaded loser's block is owned by the worker↔consumer rendezvous (its worker frees it on exit).
+### Races the jobs, driving them CONCURRENTLY until the FIRST one finishes, and returns that
+### winner's value. Works on the list in place — call it `jobs.race()`. A coroutine loser is disposed/abandoned here, a
+### threaded loser's block is freed through the worker↔consumer rendezvous (its worker frees it on exit).
 ### Mixed coroutine/thread sets are supported.
 ### :throws: {TaskSpawnError} if the set is empty (there is nothing to race).
-### :returns: The value produced by the first Agent to finish.
-failable routine List[Agent[T]].race() -> T
+### :returns: The value produced by the first Work to finish.
+failable routine List[Work[T]].race() -> T
     danger
         var n = me.count()
         if n == 0
@@ -656,38 +656,38 @@ failable routine List[Agent[T]].race() -> T
         var i: U64 = 0
         until i >= n
             # Launch each recipe so the whole set runs CONCURRENTLY, then race.
-            if not me[i].work.launch()
+            if not me[i].state.launch()
                 throw TaskSpawnError()
-            if me[i].work.is_coro()
-                C::rf_race_add_coro(race: race, coro: me[i].work.coro_handle())
+            if me[i].state.is_coro()
+                C::rf_race_add_coro(race: race, coro: me[i].state.coro_handle())
             else
-                C::rf_race_add_task(race: race, task: me[i].work.task_handle())
+                C::rf_race_add_task(race: race, task: me[i].state.task_handle())
             i = i + 1
 
         # Drive until the first competitor completes; `winner` indexes the List in add order. Fibers and threads
-        # box their produced value into a task block referenced by `agent`, so extraction is uniform.
+        # box their produced value into a task block referenced by the Work, so extraction is uniform.
         var winner = C::rf_race_wait(race: race)
         C::rf_race_end(race: race)
         var w = winner.to[U64]()
         # race! is the sole consumer of this set: the losers are never retrieved. Reap every loser exactly once
         # here (a still-running loser's worker frees its own block on exit, non-blocking), then settle the
-        # winner, which reaps it. The List's own teardown then only frees each Agent's cell.
+        # winner, which reaps it. The List's own teardown then only frees each Work's cell.
         var k: U64 = 0
         until k >= n
             if k != w
-                me[k].work.reap()
+                me[k].state.reap()
             k = k + 1
-        return me[w].work.settle()
+        return me[w].state.settle()
 
-### Drives the Agents CONCURRENTLY and waits for ALL of them to finish, returning their results in
-### INPUT order. The twin of `race!` (first finisher); `gather!` returns every finisher. BORROWS the
-### list — call it `agents.gather()`. Each Agent is driven with the same uncolored `retrieve!` logic,
+### Drives the jobs CONCURRENTLY and waits for ALL of them to finish, returning their results in
+### INPUT order. The twin of `race!` (first finisher); `gather!` returns every finisher. Works on the
+### list in place — call it `jobs.gather()`. Each Work is driven with the same uncolored `retrieve!` logic,
 ### so coroutine children progress on this thread's scheduler and thread children run on their OS
-### threads; total wait is the SLOWEST child, not the sum. FAIL-FAST: if any Agent's routine throws,
+### threads; total wait is the SLOWEST child, not the sum. FAIL-FAST: if any Work's routine throws,
 ### that throw propagates out and the remaining children are cancelled and waited for when the list tears
 ### down at scope exit. An empty set yields an empty list.
-### :returns: The values produced by every Agent, in the order they appear in the list.
-failable routine List[Agent[T]].gather() -> List[T]
+### :returns: The values produced by every Work, in the order they appear in the list.
+failable routine List[Work[T]].gather() -> List[T]
     danger
         var n = me.count()
         # Launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
@@ -695,7 +695,7 @@ failable routine List[Agent[T]].gather() -> List[T]
         # retrieve!'s own launch below is a no-op on these already-started recipes.
         var i: U64 = 0
         until i >= n
-            if not me[i].work.launch()
+            if not me[i].state.launch()
                 throw TaskSpawnError()
             i = i + 1
         var results = List[T]()
@@ -706,29 +706,29 @@ failable routine List[Agent[T]].gather() -> List[T]
             i = i + 1
         return results
 
-### Cancels every Agent in the set and waits for each to stop, dropping what it came to. Work nothing started yet
-### never runs. BORROWS the list — call it `agents.cancel_all()`. Running work sees the request at its next wait
+### Cancels every Work in the set and waits for each to stop, dropping what it came to. Work nothing started yet
+### never runs. Works on the list in place — call it `jobs.cancel_all()`. Running work sees the request at its next wait
 ### (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there: a thread of its own
 ### cannot be stopped from outside.
-routine List[Agent[T]].cancel_all()
+routine List[Work[T]].cancel_all()
     danger
         var n = me.count()
         var i: U64 = 0
         until i >= n
-            me[i].work.request_cancel()
+            me[i].state.request_cancel()
             i = i + 1
         i = 0
         until i >= n
-            me[i].work.wind_down(reports_failure: false)
+            me[i].state.wind_down(reports_failure: false)
             i = i + 1
     return
 
-### Waits until one of the Agents finishes, takes it out of the list and returns it, starting the ones nothing
-### started. Called again and again it hands the Agents over in the order they finish, so each result is handled as
-### soon as it is there. `retrieve` the returned Agent for its value or its failure.
-### :throws: {TaskSpawnError} if the list is empty or an Agent cannot be started.
-### :returns: The first Agent of the list to finish.
-failable routine List[Agent[T]].next_finished() -> Agent[T]
+### Waits until one of the jobs finishes, takes it out of the list and returns it, starting the ones nothing
+### started. Called again and again it hands the jobs over in the order they finish, so each result is handled as
+### soon as it is there. `retrieve` the returned Work for its value or its failure.
+### :throws: {TaskSpawnError} if the list is empty or a Work cannot be started.
+### :returns: The first Work of the list to finish.
+failable routine List[Work[T]].next_finished() -> Work[T]
     danger
         var n = me.count()
         if n == 0
@@ -736,39 +736,39 @@ failable routine List[Agent[T]].next_finished() -> Agent[T]
         var race = C::rf_race_begin()
         var i: U64 = 0
         until i >= n
-            if not me[i].work.launch()
+            if not me[i].state.launch()
                 throw TaskSpawnError()
-            if me[i].work.is_coro()
-                C::rf_race_add_coro(race: race, coro: me[i].work.coro_handle())
+            if me[i].state.is_coro()
+                C::rf_race_add_coro(race: race, coro: me[i].state.coro_handle())
             else
-                C::rf_race_add_task(race: race, task: me[i].work.task_handle())
+                C::rf_race_add_task(race: race, task: me[i].state.task_handle())
             i = i + 1
         var winner = C::rf_race_wait(race: race)
         C::rf_race_end(race: race)
         return me.remove_at(index: winner.to[U64]())
 
-### Drives the Agents concurrently and waits for all of them, returning each one's result or failure in INPUT
-### order: an Agent that fails does not stop the others or hide their results (`gather` throws the first failure).
-### :returns: Each Agent's value or failure, in the order they appear in the list.
-routine List[Agent[T]].gather_all() -> List[Check[T]]
+### Drives the jobs concurrently and waits for all of them, returning each one's result or failure in INPUT
+### order: a Work that fails does not stop the others or hide their results (`gather` throws the first failure).
+### :returns: Each Work's value or failure, in the order they appear in the list.
+routine List[Work[T]].gather_all() -> List[Check[T]]
     danger
         var n = me.count()
         var i: U64 = 0
         until i >= n
-            drop me[i].work.launch()
+            drop me[i].state.launch()
             i = i + 1
         var results = List[Check[T]]()
         each job in me
             results.add_last(value: check job.retrieve())
         return results
 
-### Takes the finished Agents out of the list and returns them, in order, leaving the ones still waiting or
+### Takes the finished jobs out of the list and returns them, in order, leaving the ones still waiting or
 ### running in place. A long-running server collects the work of its departed clients this way: rebuilding the list
-### with `where` would drop the old list, and with it the work that still runs. `retrieve` what a taken Agent came to,
+### with `where` would drop the old list, and with it the work that still runs. `retrieve` what a taken Work came to,
 ### or `drop` it.
-### :returns: The finished Agents.
-routine List[Agent[T]].take_finished() -> List[Agent[T]]
-    var finished = List[Agent[T]]()
+### :returns: The finished jobs.
+routine List[Work[T]].take_finished() -> List[Work[T]]
+    var finished = List[Work[T]]()
     var i: U64 = 0
     until i >= me.count()
         if me[i].is_done()
@@ -783,7 +783,7 @@ routine List[Agent[T]].take_finished() -> List[Agent[T]]
 ### thing in either context, which is why it is preferable to a raw `sleep`.
 ### :param duration: How long to wait.
 routine waitfor(duration: Duration)
-    # Interruptible: once cancellation has been requested for this agent, waitfor is a no-op so a
+    # Interruptible: once cancellation has been requested for this job, waitfor is a no-op so a
     # cooperative loop (`until ...: waitfor(...); if cancellation_requested(): return`) exits promptly
     # instead of sleeping out the full duration.
     if C::rf_cancel_requested() != 0
@@ -811,10 +811,10 @@ routine yield_now()
             C::rf_coro_yield()
     return
 
-### Whether cooperative cancellation has been requested for the currently-running agent, a fiber or a thread
-### of its own. An agent body polls this and returns early to stop
+### Whether cooperative cancellation has been requested for the currently-running job, a fiber or a thread
+### of its own. A job body polls this and returns early to stop
 ### cooperatively; this is the ONLY way to halt a CPU-bound worker thread (a thread cannot be killed).
-### A coroutine's `waitfor` also honors the request by returning early. Outside any agent it is always
-### false. :returns: true if cancellation was requested for this agent.
+### A coroutine's `waitfor` also honors the request by returning early. Outside any job it is always
+### false. :returns: true if cancellation was requested for this job.
 routine cancellation_requested() -> Bool
     return C::rf_cancel_requested() != 0

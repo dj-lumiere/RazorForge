@@ -228,7 +228,7 @@ so `cd` into a solution and run `razorforge buildandrun`.
   type, such as integers, `Char`, decimals and floats.
 - **Generics and protocols:** type parameters with protocol constraints (`needs T obeys P`), const
   generics (`Array[T, N]`), associated types. Everything monomorphizes, so there is no runtime dispatch.
-- **Concurrency:** any routine becomes concurrent work with `f.to[Agent](args)`, an `Agent[T]` that
+- **Concurrency:** any routine becomes concurrent work with `f.to[Work](args)`, a `Work[T]` that
   runs on the runtime's thread pool (`start_now()`), takes turns on the current thread (`start_here()`)
   or gets an OS thread of its own (`start_apart()`). Also `gather` / `race`, typed channels with
   backpressure, async file I/O, and OS signal handlers. Async networking is not implemented yet.
@@ -308,7 +308,7 @@ The builder itself (parser, analysis, lowering, LLVM emission) is
 - Native builds on Windows and Linux x86-64 and macOS ARM64, with prebuilt packages
 - Copy-or-share memory model, failable routines with recovery keywords, generics, collections, 256-bit
   integers, decimal and 128-bit floats
-- Concurrent work behind `Agent[T]`, channels, async file I/O, signals
+- Concurrent work behind `Work[T]`, channels, async file I/O, signals
 - Language server with VS Code and Rider integration
 
 **Next**

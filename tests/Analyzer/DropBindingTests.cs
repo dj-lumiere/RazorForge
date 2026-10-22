@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// <c>drop x</c> tears a local binding the routine owns down where it stands and ends the name, as <c>steal x</c>
-/// does. An Agent is an entity with one owner, and a started one nothing collects is warning RF-W009.
+/// does. A Work is an entity with one owner, and a started one nothing collects is warning RF-W009.
 /// </summary>
 public class DropBindingTests
 {
@@ -96,11 +96,11 @@ public class DropBindingTests
     }
 
     [Fact]
-    public void Analyze_AgentCopy_IsRejected()
+    public void Analyze_WorkCopy_IsRejected()
     {
         AnalysisResult result = AssertHasErrorSa(source: Prelude + """
                                                                    routine start()
-                                                                       var job = work.to[Agent]()
+                                                                       var job = work.to[Work]()
                                                                        var other = job
                                                                        drop other.retrieve()
                                                                        return
@@ -110,33 +110,33 @@ public class DropBindingTests
     }
 
     [Fact]
-    public void Analyze_StartedAgentNothingCollects_Warns()
+    public void Analyze_StartedWorkNothingCollects_Warns()
     {
         AnalysisResult result = AssertAnalyzesSa(source: Prelude + """
                                                                    routine start()
-                                                                       var job = work.to[Agent]()
+                                                                       var job = work.to[Work]()
                                                                        job.start_now()
                                                                        return
                                                                    """);
-        Assert.Contains(collection: result.Warnings, filter: w => w.Code == SemanticWarningCode.AgentNeverCollected);
+        Assert.Contains(collection: result.Warnings, filter: w => w.Code == SemanticWarningCode.WorkNeverCollected);
     }
 
     [Fact]
-    public void Analyze_StartedAgentRetrievedOrDropped_DoesNotWarn()
+    public void Analyze_StartedWorkRetrievedOrDropped_DoesNotWarn()
     {
         AnalysisResult result = AssertAnalyzesSa(source: Prelude + """
                                                                    routine start()
-                                                                       var kept = work.to[Agent]()
+                                                                       var kept = work.to[Work]()
                                                                        kept.start_now()
                                                                        when check kept.retrieve()
                                                                            is S64 as v => nothing
                                                                            else => nothing
-                                                                       var stopped = work.to[Agent]()
+                                                                       var stopped = work.to[Work]()
                                                                        stopped.start_now()
                                                                        drop stopped
                                                                        return
                                                                    """);
         Assert.DoesNotContain(collection: result.Warnings,
-            filter: w => w.Code == SemanticWarningCode.AgentNeverCollected);
+            filter: w => w.Code == SemanticWarningCode.WorkNeverCollected);
     }
 }

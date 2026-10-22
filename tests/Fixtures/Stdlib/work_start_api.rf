@@ -1,10 +1,10 @@
-module Tests/Stdlib/AgentStartApi
+module Tests/Stdlib/WorkStartApi
 
 import IO/Console
 
-# `agent f(...)` computes the arguments now and defers the call into an Agent. A verb chooses where it runs:
+# `f.to[Work](...)` computes the arguments now and defers the call into a Work. A verb chooses where it runs:
 # start_now() on the pool of threads, start_here() on this thread beside its other start_here() jobs,
-# start_apart() on a thread of its own. retrieve() starts an Agent nothing started with start_now().
+# start_apart() on a thread of its own. retrieve() starts a Work nothing started with start_now().
 
 record Pair
     a: S64
@@ -42,65 +42,65 @@ routine slow(n: S64) -> S64
     return n
 
 routine start()
-    var now = add.to[Agent](a: 1, b: 2)
+    var now = add.to[Work](a: 1, b: 2)
     now.start_now()
     show(f"now: {now.retrieve()}")
 
-    var here = add.to[Agent](a: 3, b: 4)
+    var here = add.to[Work](a: 3, b: 4)
     here.start_here()
     show(f"here: {here.retrieve()}")
 
-    var apart = add.to[Agent](a: 5, b: 6)
+    var apart = add.to[Work](a: 5, b: 6)
     apart.start_apart()
     show(f"apart: {apart.retrieve()}")
 
     # Nothing started it: retrieve() starts it with start_now().
-    var waiting = add.to[Agent](a: 7, b: 8)
+    var waiting = add.to[Work](a: 7, b: 8)
     show(f"waiting: {waiting.retrieve()}")
 
-    # The arguments are computed when the agent is made, not when it runs.
+    # The arguments are computed when the job is made, not when it runs.
     var x = 40
-    var early = add.to[Agent](a: x, b: 2)
+    var early = add.to[Work](a: x, b: 2)
     x = 0
     show(f"arguments now: {early.retrieve()}")
 
     # A receiver that is a value is computed now too: only the routine converted runs as the work.
     var p = Pair(a: 2, b: 3)
-    show(f"member: {p.sum.to[Agent]().retrieve()}")
-    show(f"chain: {p.twice().sum.to[Agent]().retrieve()}")
+    show(f"member: {p.sum.to[Work]().retrieve()}")
+    show(f"chain: {p.twice().sum.to[Work]().retrieve()}")
 
     # An Atomic is shared with the work, never copied.
     var counter = Atomic[S64](initial: 0)
-    var jobs = [bump.to[Agent](cell: counter, times: 1000), bump.to[Agent](cell: counter, times: 1000),
-        bump.to[Agent](cell: counter, times: 1000)]
+    var jobs = [bump.to[Work](cell: counter, times: 1000), bump.to[Work](cell: counter, times: 1000),
+        bump.to[Work](cell: counter, times: 1000)]
     drop jobs.gather()
     show(f"atomic: {counter.load()}")
 
-    # A failure stays in the work and is recovered where the Agent is collected.
-    var failing = checked.to[Agent](n: -1)
+    # A failure stays in the work and is recovered where the Work is collected.
+    var failing = checked.to[Work](n: -1)
     show(f"try retrieve: {try failing.retrieve()}")
-    var fine = checked.to[Agent](n: 5)
+    var fine = checked.to[Work](n: 5)
     show(f"try retrieve ok: {try fine.retrieve()}")
 
-    # An Agent starts once.
-    var twice = add.to[Agent](a: 1, b: 1)
+    # A Work starts once.
+    var twice = add.to[Work](a: 1, b: 1)
     twice.start_now()
     when check twice.start_here()
-        is AgentStartError as e => show(f"second start: {e.crash_message()}")
+        is WorkStartError as e => show(f"second start: {e.crash_message()}")
         else => show("second start: ran")
     drop twice.retrieve()
 
     # A deadline needs a thread of its own: a fiber cannot be given up on while it runs.
-    var fiber = add.to[Agent](a: 2, b: 2)
+    var fiber = add.to[Work](a: 2, b: 2)
     fiber.start_now()
     when check fiber.waitfor(deadline: 5s).retrieve()
-        is AgentStartError => show("deadline on a fiber: refused")
+        is WorkStartError => show("deadline on a fiber: refused")
         else => show("deadline on a fiber: ran")
     drop fiber.retrieve()
 
-    # A failure inside the work stays in its Agent: it surfaces where the Agent is retrieved, and the others go on.
-    var bad = relay.to[Agent](n: -1)
-    var good = relay.to[Agent](n: 3)
+    # A failure inside the work stays in its Work: it surfaces where the Work is retrieved, and the others go on.
+    var bad = relay.to[Work](n: -1)
+    var good = relay.to[Work](n: 3)
     bad.start_now()
     good.start_now()
     show(f"good: {good.retrieve()}")
@@ -110,18 +110,18 @@ routine start()
 
     # cancel(): running work stops at its next wait, work nothing started never runs, and retrieving either is
     # CancelRequested.
-    var running = slow.to[Agent](n: 1)
+    var running = slow.to[Work](n: 1)
     running.start_now()
     running.cancel()
     when check running.retrieve()
         is CancelRequested => show("running: cancelled")
         else => show("running: other")
-    var idle = slow.to[Agent](n: 2)
+    var idle = slow.to[Work](n: 2)
     idle.cancel()
     when check idle.retrieve()
         is CancelRequested => show("waiting: cancelled")
         else => show("waiting: other")
-    var set = [slow.to[Agent](n: 3), slow.to[Agent](n: 4)]
+    var set = [slow.to[Work](n: 3), slow.to[Work](n: 4)]
     set[0].start_now()
     set.cancel_all()
     show("cancel_all: wound down")

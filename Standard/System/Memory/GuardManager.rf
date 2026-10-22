@@ -6,9 +6,9 @@ module System/Memory
 ### (`me.<field>.hijack()`), so cloning/dropping a handle is safe across threads.
 ###
 ### Also holds the state of the access policy `TPolicy` (an {AccessPolicy}): who is using the entity right now, the
-### readers and the one writer, and which agent holds it. The state lives here, at the one address every handle
-### references, so the `viewing` and `modifying` blocks of every agent meet at it. The runtime's AccessManager takes
-### and gives up the access, and finds agents that wait on each other. A token itself carries only permission.
+### readers and the one writer, and which job holds it. The state lives here, at the one address every handle
+### references, so the `viewing` and `modifying` blocks of every job meet at it. The runtime's AccessManager takes
+### and gives up the access, and finds jobs that wait on each other. A token itself carries only permission.
 ### Selected by monomorphization: `ReadOnly` is zero-sized (no overhead), `Exclusive`/`MultiRead` carry their state.
 ### :typeparam T: The exclusively owned entity type.
 ### :typeparam TPolicy: The access policy.
@@ -92,7 +92,7 @@ secret routine GuardManager[T, TPolicy].access_address() -> Addr
     danger
         return me.access.hijack().get_address()
 
-### Takes the access, waiting while another agent holds it.
+### Takes the access, waiting while another job holds it.
 ### :param mode: 1 to read, 2 to write.
 @untraced
 routine GuardManager[T, TPolicy].open(mode: U32)
@@ -102,7 +102,7 @@ routine GuardManager[T, TPolicy].open(mode: U32)
             C::rf_access_lock(access: me.access_address(), kind: kind, mode: mode)
     return
 
-### Whether this agent holds the access already, for reading or for writing.
+### Whether this job holds the access already, for reading or for writing.
 ### :returns: `true` when it does (a `ReadOnly` policy has nothing to hold: `false`).
 @untraced
 routine GuardManager[T, TPolicy].held_here() -> Bool
@@ -112,7 +112,7 @@ routine GuardManager[T, TPolicy].held_here() -> Bool
     danger
         return C::rf_access_holds(access: me.access_address()) != 0
 
-### Gives up the access this agent holds.
+### Gives up the access this job holds.
 ### :param mode: 1 to read, 2 to write.
 @untraced
 routine GuardManager[T, TPolicy].close(mode: U32)

@@ -231,6 +231,35 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateWork_RenamesAgent_KeepsTheStartVerbs()
+    {
+        string dir = OldProject(name: "work", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/WorkRf\n" +
+                "routine start()\n" +
+                "    var job: Agent[S64] = f.to[Agent](x: 1)\n" +
+                "    job.start_here()\n" +
+                "    show(\"Agent\")  # Agent\n" +
+                "    var e: AgentStartError = AgentStartError(reason: \"\")\n" +
+                "    return\n")
+        ]);
+
+        (int code, string output) = RunMain("migrate", "--step", "work", dir);
+        Assert.Equal(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
+        Assert.Equal(
+            expected: "module Test/WorkRf\n" +
+                      "routine start()\n" +
+                      "    var job: Work[S64] = f.to[Work](x: 1)\n" +
+                      "    job.start_here()\n" +
+                      "    show(\"Agent\")  # Agent\n" +
+                      "    var e: WorkStartError = WorkStartError(reason: \"\")\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+    }
+
+    [Fact]
     public void MigrateDefault_IndentsFirst_RewritesReleaseSpellings_RenamesManifest()
     {
         string dir = OldProject(name: "release", oldManifest: true, files:

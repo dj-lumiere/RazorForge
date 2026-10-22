@@ -31,6 +31,8 @@ public class ReleaseHintTests
     [InlineData("GuardController[S64]", "It is called 'GuardManager' now")]
     [InlineData("FrozenController", "'FrozenController' is gone")]
     [InlineData("PQEntry[S64, S64]", "'PQEntry' is gone")]
+    [InlineData("Agent[S64]", "a 'Work' now")]
+    [InlineData("AgentStartError", "It is called 'WorkStartError' now")]
     public void RetiredType_NamesWhatIsWrittenNow(string type, string hint)
     {
         string errors = Errors(source: $"""
@@ -47,7 +49,7 @@ public class ReleaseHintTests
     [InlineData("try_halve(n: 4)", "write 'try halve(...)'")]
     [InlineData("check_halve(n: 4)", "write 'check halve(...)'")]
     [InlineData("lookup_halve(n: 4)", "write 'check halve(...)'")]
-    [InlineData("gather(of: 1)", "'agents.gather()'")]
+    [InlineData("gather(of: 1)", "'jobs.gather()'")]
     [InlineData("hollow[S64]()", "'T.hollow()'")]
     [InlineData("blank[S64]()", "'blank[T]()' is gone")]
     public void RetiredRoutine_NamesWhatIsWrittenNow(string call, string hint)
