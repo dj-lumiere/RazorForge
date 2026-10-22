@@ -872,6 +872,13 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         /// <summary>The loop variables those iterators hand out, while their loop body runs: an element seen
         /// through a read token is read-only too.</summary>
         private readonly HashSet<string> _readElements = new(comparer: StringComparer.Ordinal);
+
+        /// <summary>The containers each `each` loop's iterator (`_lf_iter_N`) walks, as source paths.</summary>
+        private readonly Dictionary<string, HashSet<string>> _iteratorSources = new(comparer: StringComparer.Ordinal);
+
+        /// <summary>The step value of an `each` loop (`_lf_elem_M` of `each (i, d) in xs.enumerate()`) with the
+        /// containers its tokens come from: `d`, read as `_lf_elem_M.item1`, is an element of `xs`.</summary>
+        private readonly Dictionary<string, HashSet<string>> _stepElements = new(comparer: StringComparer.Ordinal);
         private readonly Stack<(List<State?> Breaks, List<State?> Continues)> _loops = new();
         private readonly Stack<List<string>> _blockLocals = new();
         private State? _state;
@@ -994,6 +1001,22 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         _readIterators.Add(item: v.Name);
                     }
 
+                    // An `each` loop over a chain (`xs.enumerate()`) names the chain first (`_lf_src_N`).
+                    if (v.Name.StartsWith(value: "_lf_src_", comparisonType: StringComparison.Ordinal) &&
+                        v.Initializer is { } chain && WalkedContainers(walked: chain) is { } chainPaths)
+                    {
+                        _iteratorSources[key: v.Name] = chainPaths;
+                    }
+
+                    // An `each` loop's iterator remembers what it walks, so a token in its step value comes from there.
+                    if (v.Initializer is CallExpression
+                        {
+                            Callee: MemberExpression { Object: var walked, MemberName: "iter" }
+                        } && WalkedContainers(walked: walked) is { } walkedPaths)
+                    {
+                        _iteratorSources[key: v.Name] = walkedPaths;
+                    }
+
                     if (IsTrackedToken(type: v.Initializer?.ResolvedType))
                     {
                         Bind(name: v.Name, value: v.Initializer!, index: index);
@@ -1070,21 +1093,35 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     Expression step = whenStmt.Expression is RecoveryExpression recovery
                         ? recovery.LoweredCall ?? recovery.Inner
                         : whenStmt.Expression;
-                    bool readStep = step is CallExpression
+                    string? stepIter = step is CallExpression
                     {
-                        Callee: MemberExpression { Object: IdentifierExpression { Name: var stepIter } }
-                    } && _readIterators.Contains(item: stepIter);
+                        Callee: MemberExpression { Object: IdentifierExpression { Name: var stepIterName } }
+                    }
+                        ? stepIterName
+                        : null;
+                    bool readStep = stepIter != null && _readIterators.Contains(item: stepIter);
+                    HashSet<string>? stepSources = stepIter != null
+                        ? _iteratorSources.GetValueOrDefault(key: stepIter)
+                        : null;
                     foreach (WhenClause clause in whenStmt.Clauses)
                     {
                         _state = entry.Clone();
-                        string? element = readStep && clause.Pattern is ElsePattern { VariableName: { } bound }
-                            ? bound
+                        string? bound = clause.Pattern is ElsePattern { VariableName: { } boundName }
+                            ? boundName
                             : null;
+                        string? element = readStep ? bound : null;
                         bool added = element != null && _readElements.Add(item: element);
+                        bool stepAdded = bound != null && stepSources != null &&
+                                         _stepElements.TryAdd(key: bound, value: stepSources);
                         Statement(stmt: clause.Body);
                         if (added)
                         {
                             _readElements.Remove(item: element!);
+                        }
+
+                        if (stepAdded)
+                        {
+                            _stepElements.Remove(key: bound!);
                         }
 
                         merged = State.Merge(a: merged, b: _state);
@@ -1275,8 +1312,40 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 return;
             }
 
-            HashSet<string> origins = owner.OriginsOf(expr: value, tokenOrigins: Held) ?? [$"~{index}"];
+            // A token in an `each` step value (`var d = _lf_elem_M.item1`) is an element of what the loop walks.
+            HashSet<string> origins = Unwrap(expr: value) is MemberExpression
+            {
+                Object: IdentifierExpression { Name: var stepName }
+            } && _stepElements.TryGetValue(key: stepName, value: out HashSet<string>? walkedPaths)
+                ? walkedPaths.Select(selector: w => Join(path: w, suffix: "[]"))
+                             .ToHashSet()
+                : owner.OriginsOf(expr: value, tokenOrigins: Held) ?? [$"~{index}"];
             _state.Tokens[key: name] = new TokenState(Origins: origins, EndedBy: null, EndedAt: null);
+        }
+
+        /// <summary>The containers an `each` loop walks, from what its iterator is made of: `xs` for `xs.iter()`, and
+        /// for an adapter chain on a held place (`xs.enumerate().iter()`, `xs.view().where(...)`) the place the chain
+        /// starts from. Null when the chain starts from anything else (a temporary, a call result), whose source the
+        /// builder cannot tell.</summary>
+        private HashSet<string>? WalkedContainers(Expression walked)
+        {
+            Expression e = Unwrap(expr: walked);
+            while (e is CallExpression { Callee: MemberExpression { Object: var receiver } } adapter &&
+                   !IsTrackedToken(type: adapter.ResolvedType))
+            {
+                e = Unwrap(expr: receiver);
+            }
+
+            if (e is IdentifierExpression { Name: var named } &&
+                _iteratorSources.TryGetValue(key: named, value: out HashSet<string>? namedPaths))
+            {
+                return namedPaths;
+            }
+
+            return e is IdentifierExpression or MemberExpression or IndexExpression ||
+                   e is CallExpression && IsTrackedToken(type: e.ResolvedType)
+                ? owner.PathsOf(expr: e, tokenOrigins: Held)
+                : null;
         }
 
         private void EndTemporaries(int index, SourceLocation at)

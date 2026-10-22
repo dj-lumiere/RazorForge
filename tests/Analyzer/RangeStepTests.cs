@@ -53,6 +53,17 @@ public sealed class RangeStepTests
             filter: e => e.Code == SemanticDiagnosticCode.RangeStepZero);
     }
 
+    /// <summary>A Char range is RF-S503: a character has no next one. The message says so and points to code points.</summary>
+    [Fact]
+    public void Analyze_CharRange_PointsToCodePoints()
+    {
+        AnalysisResult result = AnalyzeSa(source: Walk(range: "'a' to 'e'"));
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RangeBoundsNotNumeric &&
+                         e.Message.Contains(value: "codepoint()") &&
+                         e.Message.Contains(value: "Char.from_codepoint"));
+    }
+
     private static string Walk(string range)
     {
         return "routine walk()\n" +

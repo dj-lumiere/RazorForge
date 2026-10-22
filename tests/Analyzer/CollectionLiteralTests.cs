@@ -77,6 +77,45 @@ public class CollectionLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptySetNoTypeAnnotation);
     }
     /// <summary>
+    /// `{}` is the empty set: where a dict is expected it is RF-S558, which names `{:}`, and no type mismatch follows.
+    /// </summary>
+    [Fact]
+    public void EmptySetLiteral_WhereDictExpected_PointsToEmptyDictLiteral()
+    {
+        string source = """
+                        routine test()
+                            var d: Dict[S32, S32] = {}
+                            var ds: List[Dict[S32, S32]] = [{1: 10}, {}]
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Equal(expected: 2, actual: result.Errors.Count);
+        Assert.All(collection: result.Errors,
+            action: e =>
+            {
+                Assert.Equal(expected: SemanticDiagnosticCode.EmptySetWhereDictExpected, actual: e.Code);
+                Assert.Contains(expectedSubstring: "{:}", actualString: e.Message);
+            });
+    }
+
+    /// <summary>
+    /// `{:}` is the empty dict where a dict is expected.
+    /// </summary>
+    [Fact]
+    public void EmptyDictLiteral_WhereDictExpected_Passes()
+    {
+        string source = """
+                        routine test()
+                            var d: Dict[S32, S32] = {:}
+                            var ds: List[Dict[S32, S32]] = [{1: 10}, {:}]
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+    /// <summary>
     /// Verifies that the test validates dict literal with type annotation infers key value types.
     /// </summary>
     [Fact]

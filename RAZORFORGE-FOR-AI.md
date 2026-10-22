@@ -1105,7 +1105,8 @@ that differ from other languages:
   A literal takes its element types from where it goes, as a number does: `bytes.add_range(you: [3, 4])` on a
   `List[U8]` builds a `List[U8]`, `total(xs: [5, 6])` for `xs: Iterable[U8]` builds a `List[U8]`, and
   `{1: "a"}` given to an `Iterable[DictEntry[U16, Text]]` builds a `Dict[U16, Text]`. With nothing to go by,
-  `[1, 2]` is a `List[S64]`.
+  `[1, 2]` is a `List[S64]`. The empty set literal is `{}` and the empty dict literal `{:}`
+  (`var d: Dict[S32, S32] = {:}`, `steal s[b] as old inject {:}`). A `{}` where a dict is expected is RF-S558.
   An `Array` is also built from its elements: `Array[3](1, 2, 3)`.
 - **Showing a collection.** `show(xs)` and `f"{xs}"` write the elements, each in the form it has inside a
   collection (`Text` and `Bytes` quoted `"a"`, `Char` and `Byte` as `'a'`, everything else its `represent`):
@@ -1310,6 +1311,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S711      | crashable bigger than 64 bytes        | keep a few values in it                            |
 | RF-S712      | `@throws` leaves out a crashable the routine throws | add it to the list, or recover it inside |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
+| RF-S558      | `{}` (empty set) where a dict is expected | write `{:}`                                    |
 | RF-G010      | a number names its type (`5_u8`)      | `var x: U8 = 5`, or let the place it goes type it  |
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-W008      | a Work nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
