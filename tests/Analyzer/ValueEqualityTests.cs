@@ -33,6 +33,35 @@ public class ValueEqualityTests
                          e.Message.Contains(value: "member variable 'on_click'"));
     }
 
+    /// <summary>A record that has no `==` through a member variable deep inside names the whole path down to the member
+    /// variable that really has none.</summary>
+    [Fact]
+    public void Analyze_EqualityMissingDeepInside_NamesThePath()
+    {
+        string source = """
+                        record D
+                            f: Callable[(), None]
+
+                        record C
+                            d: D
+
+                        record B
+                            c: C?
+
+                        record A
+                            b: B
+
+                        routine check_it(x: A) -> Bool
+                            return x == x
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "'A' has no '=='") &&
+                         e.Message.Contains(value: "its member variable 'b' is a 'B', which has none") &&
+                         e.Message.Contains(value: "'b.c.d.f' is a 'Callable"));
+    }
+
     /// <summary>A generic `needs T obeys Equatable` takes a plain record, and rejects a record whose member variable
     /// has no `==`.</summary>
     [Fact]
