@@ -70,6 +70,21 @@ public sealed class DecimalEncoderTests
             NumericLiteralParser.EncodeDecimalCanonical(str: "1e6200"));
     }
 
+    [Theory]
+    // A literal with 35 significant digits, exactly halfway: half up moves a positive magnitude up and a
+    // negative one down (the n with n - 0.5 <= x < n + 0.5 at the 34th digit).
+    [InlineData("1.0000000000000000000000000000000005", false, "1000000000000000000000000000000001")]
+    [InlineData("-1.0000000000000000000000000000000005", true, "1")]
+    [InlineData("2.0000000000000000000000000000000015", false, "2000000000000000000000000000000002")]
+    [InlineData("-2.0000000000000000000000000000000015", true, "2000000000000000000000000000000001")]
+    public void EncodeDecimalCanonical_TiesRoundHalfUp(string s, bool wantSign, string wantCoeff)
+    {
+        (bool sign, int _, BigInteger coeff) = Decode(d: NumericLiteralParser.EncodeDecimalCanonical(str: s));
+
+        Assert.Equal(expected: wantSign, actual: sign);
+        Assert.Equal(expected: BigInteger.Parse(value: wantCoeff), actual: coeff);
+    }
+
     private static void ParseRational(string s, out BigInteger num, out BigInteger den)
     {
         int e = s.IndexOf(value: 'e');
