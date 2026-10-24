@@ -1745,7 +1745,8 @@ else they are names: `var to = 3`, `routine step(by: S64, to: S64)`, `by + to`. 
 `inject` is a keyword only after `steal … as …`.
 
 The reflection **sources** `openmemvarof` `allmemvarof` `branchof` `caseof` `protocolof` (the protocols a type
-obeys, `nameof(p)` each name; there is no `memvarof`) and the metadata **accessors** `nameof` `orderof` `placeof` `sizeof` `typeof`
+obeys, the ones they refine included, each once: `Comparable` brings `Equatable`, `nameof(p)` each name; there is
+no `memvarof`) and the metadata **accessors** `nameof` `orderof` `placeof` `sizeof` `typeof`
 `typeidof` `valueof` `visibilityof` are **buildtime builtin intrinsics, NOT reserved
 keywords** — they tokenize as ordinary identifiers and are recognized in SA only when
 `import BuilderExpansion` is in effect (bare `nameof(m)` or `$`-spliced `me.$nameof(m)`),
