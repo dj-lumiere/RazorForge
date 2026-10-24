@@ -219,7 +219,8 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   members with `without` (`perms.without(WRITE)`: where a value of the flags type goes, its members are named bare).
   The flags value with no member on is `none` where the flags type is expected (`var marks: CellMarks = none`,
   `marks == none`, a preset or record preset). A `CellMarks?` slot takes `none` as the absent Maybe. There is no
-  `all_off()`.
+  `all_off()`. Choice values (`OK: 200`) and flags bits (`MINE: 0`, 0 to 63) are written on every member or on none
+  (then 0, 1, 2, ... in order): some with and some without is RF-S417.
   A `choice` auto-provides `Equatable`/`Comparable`/`Hashable` — no `obeys` and no
   method bodies needed.
 - **`Me` (capital) = the receiver's TYPE (the Self type); `me` (lowercase) = the
