@@ -579,11 +579,11 @@ routine D128.maximum(you: D128) -> D128
         return if me.is_sign_negative() then you else me
     return me
 
-### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero (alias of
-### `round`). Never crashes.
+### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero
+### (`round(rule: RoundingRule.HALF_AWAY)`). Never crashes.
 ### :returns: `me` rounded to an integral value with ties away from zero.
 routine D128.round_ties_away() -> D128
-    return me.round()
+    return me.round(rule: RoundingRule.HALF_AWAY)
 
 ### IEEE 754 sameQuantum: `true` when `me` and `you` have the same exponent (quantum), or are both
 ### infinities, or both NaNs. Never crashes.
@@ -632,7 +632,7 @@ routine D128.rem(you: D128) -> D128
 routine D128.normalize() -> D128
     return d128_of_words(w: C::ingrid_d128_normalize(x_low: d128_low(v: me), x_high: d128_high(v: me)))
 
-### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 round (half away), 4 rint (half even), 5 half up (Decimal's).
+### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 half away, 4 half even, 5 half up (Decimal's).
 routine d128_round_int(x: D128, mode: S64) -> D128
     var m = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](mode))
     return d128_of_words(w: C::ingrid_d128_round_int(x_low: d128_low(v: x), x_high: d128_high(v: x), mode: m))
@@ -649,13 +649,19 @@ routine D128.floor() -> D128
 routine D128.ceil() -> D128
     return d128_round_int(x: me, mode: 2)
 
-### Rounds to the nearest integral value, ties away from zero. Specials pass through. Never crashes.
-routine D128.round() -> D128
-    return d128_round_int(x: me, mode: 3)
+### Rounds to `places` digits after the point by `rule`, a tie to the even one when left out (D128's rule, as its
+### operators round): `x.round()` is the nearest integral value, `2.5` -> `2`, `(-2.5).round(rule: RoundingRule.HALF_AWAY)`
+### is `-3`. Specials pass through. Never crashes.
+### :param places: The digits after the point kept (0 for an integral value).
+### :param rule: How the digits past them go.
+### :returns: The rounded value.
+routine D128.round(places: U64 = 0, rule: RoundingRule = RoundingRule.HALF_EVEN) -> D128
+    return d128_of_words(w: C::ingrid_d128_round_places(x_low: d128_low(v: me), x_high: d128_high(v: me), places: places,
+        mode: rounding_mode(rule: rule)))
 
-### Rounds to the nearest integral value, ties to even (IEEE roundTiesToEven). Never crashes.
+### Rounds to the nearest integral value, ties to even (IEEE roundTiesToEven): the same as `round()`. Never crashes.
 routine D128.rint() -> D128
-    return d128_round_int(x: me, mode: 4)
+    return me.round()
 
 ### Fractional part me - trunc(me), with me's sign. A NaN propagates, ±inf gives ±0. Never crashes.
 routine D128.fract() -> D128

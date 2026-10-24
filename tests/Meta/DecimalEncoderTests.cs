@@ -7,8 +7,8 @@ namespace RazorForge.Tests.Meta;
 /// Validates the managed <see cref="NumericLiteralParser.EncodeDecimalCanonical"/> (buildtime
 /// decimal literal → finite-only CANONICAL 34-digit BID decimal128 bits) by round-trip: decoding
 /// the produced i128 back to (sign, exp, coeff) — exactly as <c>System.D128</c> <c>decode()</c> does
-/// — must reproduce the literal (exact for ≤34 significant digits, with fractional trailing zeros
-/// stripped). Layout: bit127 sign, bits126..113 biased exponent (bias 6176), bits112..0 coefficient.
+/// — must reproduce the literal (exact for ≤34 significant digits, in Decimal's one form: every trailing zero of
+/// the coefficient stripped, a zero +0). Layout: bit127 sign, bits126..113 biased exponent (bias 6176), bits112..0 coefficient.
 /// </summary>
 public sealed class DecimalEncoderTests
 {
@@ -28,7 +28,7 @@ public sealed class DecimalEncoderTests
     [InlineData("1", false, 0)]
     [InlineData("3.14159", false, -5)]
     [InlineData("-2.5", true, -1)]
-    [InlineData("100", false, 0)]
+    [InlineData("100", false, 2)]
     [InlineData("0.001", false, -3)]
     [InlineData("1e1000", false, 1000)]
     [InlineData("1e-1000", false, -1000)]
@@ -83,6 +83,42 @@ public sealed class DecimalEncoderTests
 
         Assert.Equal(expected: wantSign, actual: sign);
         Assert.Equal(expected: BigInteger.Parse(value: wantCoeff), actual: coeff);
+    }
+
+    [Theory]
+    // Decimal's one form: every trailing zero of the coefficient stripped (up to the largest exponent), a zero +0
+    // at exponent 0, so equal values are equal bits.
+    [InlineData("1.0", "1")]
+    [InlineData("1.00", "1")]
+    [InlineData("100", "1e2")]
+    [InlineData("1.50e2", "15e1")]
+    [InlineData("-0", "0")]
+    [InlineData("-0.00", "0")]
+    [InlineData("0e-5", "0")]
+    public void EncodeDecimalCanonical_OneForm(string s, string same)
+    {
+        Assert.Equal(expected: NumericLiteralParser.EncodeDecimalCanonical(str: same),
+            actual: NumericLiteralParser.EncodeDecimalCanonical(str: s));
+    }
+
+    [Fact]
+    public void EncodeDecimalCanonical_ZeroIsPositive()
+    {
+        (bool sign, int exp, BigInteger coeff) = Decode(d: NumericLiteralParser.EncodeDecimalCanonical(str: "-0.000"));
+
+        Assert.False(condition: sign);
+        Assert.Equal(expected: 0, actual: exp);
+        Assert.Equal(expected: BigInteger.Zero, actual: coeff);
+    }
+
+    [Fact]
+    public void EncodeDecimalCanonical_StripsUpToTheLargestExponent()
+    {
+        // 1000 x 10^6110 would be 1 x 10^6113, past qmax 6111: one zero goes, two stay.
+        (bool _, int exp, BigInteger coeff) = Decode(d: NumericLiteralParser.EncodeDecimalCanonical(str: "1000e6110"));
+
+        Assert.Equal(expected: 6111, actual: exp);
+        Assert.Equal(expected: new BigInteger(value: 100), actual: coeff);
     }
 
     private static void ParseRational(string s, out BigInteger num, out BigInteger den)

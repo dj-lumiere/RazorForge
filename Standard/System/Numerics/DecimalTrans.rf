@@ -5,16 +5,21 @@ module System/Numerics
 #
 # `Decimal` is a finite-only canonical face of decimal128 sharing D128's i128 BID
 # storage (see Decimal.rf), so every math routine here reinterprets to `D128` via
-# `dec_to_d128`, runs D128's correctly rounded transcendental (D128Trans.rf),
-# and wraps the result back with `dec_of_d128`. Decimal is finite-only, so:
-#   * the FAILABLE D128 routines (exp!, log!, sqrt!, pow!, asin!, ...) crash on a
-#     non-finite RESULT before returning — their return is always finite, so the
-#     plain `dec_of_d128` wrap is correct and the crash propagates loudly; and
-#   * the total D128 routines (sin, cos, abs, floor, ...) map a finite input to a
-#     finite output, so `dec_of_d128` is likewise safe.
-# There is NO bespoke Decimal transcendental engine any more — this file is a thin
-# forwarding layer over the D128 surface.
+# `dec_to_d128` and wraps the result back. A non-finite result crashes (NumericOverflowError for an
+# infinity, NumericDomainError for a NaN), since a Decimal is finite-only.
+# The functions that round (the transcendentals, pow, sqrt, hypot, atan2, quantize, round) go to Ingrid's Decimal
+# exports instead, which round a value exactly halfway half up, as every Decimal rounding does, and hand back the
+# result in Decimal's one form. The exact ones (abs, trunc, floor, scaleb, ...) reuse D128 and normalize.
 # ============================================================================
+
+### fn(me) through `ingrid_decimal_unary`: the engine's code `fn` (0 exp, 1 exp_m1, 2 exp2, 3 exp10, 4 ln, 5 ln_1p,
+### 6 log2, 7 log10, 8 asin, 9 acos, 10 atan, 11 sinh, 12 cosh, 13 tanh, 14 asinh, 15 acosh, 16 atanh, 17 erf,
+### 18 erfc, 19 gamma, 20 ln_gamma, 21 sin, 22 cos, 23 tan, 24 cbrt), correctly rounded, a tie half up.
+### :throws: {NumericDomainError} for a NaN result; {NumericOverflowError} for an infinite one.
+secret failable routine dec_unary(fn: U32, x: Decimal) -> Decimal
+    var d = dec_to_d128(x: x)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_unary(fn: fn, x_low: d128_low(v: d),
+        x_high: d128_high(v: d))))
 
 # ============================================================================
 # Exponentials
@@ -22,19 +27,19 @@ module System/Numerics
 
 ### e^me.
 failable routine Decimal.exp() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).exp())
+    return dec_unary(fn: 0, x: me)
 
 ### e^me - 1, accurate for small me.
 failable routine Decimal.exp_m1() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).exp_m1())
+    return dec_unary(fn: 1, x: me)
 
 ### 2^me.
 failable routine Decimal.exp2() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).exp2())
+    return dec_unary(fn: 2, x: me)
 
 ### 10^me.
 failable routine Decimal.exp10() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).exp10())
+    return dec_unary(fn: 3, x: me)
 
 # ============================================================================
 # Logarithms
@@ -42,19 +47,19 @@ failable routine Decimal.exp10() -> Decimal
 
 ### Natural logarithm ln(me).
 failable routine Decimal.ln() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).ln())
+    return dec_unary(fn: 4, x: me)
 
 ### ln(1 + me), accurate for small me.
 failable routine Decimal.ln_1p() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).ln_1p())
+    return dec_unary(fn: 5, x: me)
 
 ### Base-2 logarithm log2(me).
 failable routine Decimal.log2() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).log2())
+    return dec_unary(fn: 6, x: me)
 
 ### Base-10 logarithm log10(me).
 failable routine Decimal.log10() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).log10())
+    return dec_unary(fn: 7, x: me)
 
 # ============================================================================
 # Powers / roots
@@ -63,23 +68,37 @@ failable routine Decimal.log10() -> Decimal
 ### me raised to the power `you`.
 @readonly
 failable routine Decimal.pow(you: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).pow(you: dec_to_d128(x: you)))
+    var x = dec_to_d128(x: me)
+    var y = dec_to_d128(x: you)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_pow(x_low: d128_low(v: x),
+        x_high: d128_high(v: x), y_low: d128_low(v: y), y_high: d128_high(v: y))))
 
 ### Square root of me.
 failable routine Decimal.sqrt() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).sqrt())
+    var x = dec_to_d128(x: me)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_sqrt(x_low: d128_low(v: x),
+        x_high: d128_high(v: x))))
 
 ### Cube root of me.
 routine Decimal.cbrt() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).cbrt())
+    return dec_unary(fn: 24, x: me)
 
 ### Euclidean norm sqrt(x^2 + y^2), computed without overflow/underflow.
 routine hypot(x: Decimal, y: Decimal) -> Decimal
-    return dec_of_d128(x: hypot(x: dec_to_d128(x: x), y: dec_to_d128(x: y)))
+    return dec_hypot(x: x, y: y, z: DECIMAL_ZERO)
 
 ### 3D Euclidean norm sqrt(x^2 + y^2 + z^2), computed without overflow/underflow.
 routine hypot(x: Decimal, y: Decimal, z: Decimal) -> Decimal
-    return dec_of_d128(x: hypot(x: dec_to_d128(x: x), y: dec_to_d128(x: y), z: dec_to_d128(x: z)))
+    return dec_hypot(x: x, y: y, z: z)
+
+### sqrt(x^2 + y^2 + z^2) rounded half up, through Ingrid.
+secret failable routine dec_hypot(x: Decimal, y: Decimal, z: Decimal) -> Decimal
+    var a = dec_to_d128(x: x)
+    var b = dec_to_d128(x: y)
+    var c = dec_to_d128(x: z)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_hypot(x_low: d128_low(v: a),
+        x_high: d128_high(v: a), y_low: d128_low(v: b), y_high: d128_high(v: b), z_low: d128_low(v: c),
+        z_high: d128_high(v: c))))
 
 ### Fused multiply-add me*b + c with a single rounding, half up.
 failable routine Decimal.mul_add(b: Decimal, c: Decimal) -> Decimal
@@ -88,7 +107,7 @@ failable routine Decimal.mul_add(b: Decimal, c: Decimal) -> Decimal
     var z = dec_to_d128(x: c)
     var r = d128_of_words(w: C::ingrid_decimal_mul_add(a_low: d128_low(v: x), a_high: d128_high(v: x),
         b_low: d128_low(v: y), b_high: d128_high(v: y), c_low: d128_low(v: z), c_high: d128_high(v: z)))
-    return dec_of_d128_finite(d: r)
+    return dec_of_canonical_finite(d: r)
 
 # ============================================================================
 # Trigonometric
@@ -96,31 +115,34 @@ failable routine Decimal.mul_add(b: Decimal, c: Decimal) -> Decimal
 
 ### Sine of me (radians).
 routine Decimal.sin() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).sin())
+    return dec_unary(fn: 21, x: me)
 
 ### Cosine of me (radians).
 routine Decimal.cos() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).cos())
+    return dec_unary(fn: 22, x: me)
 
 ### Tangent of me (radians).
 routine Decimal.tan() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).tan())
+    return dec_unary(fn: 23, x: me)
 
 ### Arcsine of me (result in radians).
 failable routine Decimal.asin() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).asin())
+    return dec_unary(fn: 8, x: me)
 
 ### Arccosine of me (result in radians).
 failable routine Decimal.acos() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).acos())
+    return dec_unary(fn: 9, x: me)
 
 ### Arctangent of me (result in radians).
 routine Decimal.atan() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).atan())
+    return dec_unary(fn: 10, x: me)
 
 ### Two-argument arctangent atan2(y, x) (result in radians).
 routine atan2(y: Decimal, x: Decimal) -> Decimal
-    return dec_of_d128(x: atan2(y: dec_to_d128(x: y), x: dec_to_d128(x: x)))
+    var a = dec_to_d128(x: y)
+    var b = dec_to_d128(x: x)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_atan2(y_low: d128_low(v: a),
+        y_high: d128_high(v: a), x_low: d128_low(v: b), x_high: d128_high(v: b))))
 
 # ============================================================================
 # Hyperbolic
@@ -128,27 +150,27 @@ routine atan2(y: Decimal, x: Decimal) -> Decimal
 
 ### Hyperbolic sine of me.
 failable routine Decimal.sinh() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).sinh())
+    return dec_unary(fn: 11, x: me)
 
 ### Hyperbolic cosine of me.
 failable routine Decimal.cosh() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).cosh())
+    return dec_unary(fn: 12, x: me)
 
 ### Hyperbolic tangent of me.
 routine Decimal.tanh() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).tanh())
+    return dec_unary(fn: 13, x: me)
 
 ### Inverse hyperbolic sine of me.
 routine Decimal.asinh() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).asinh())
+    return dec_unary(fn: 14, x: me)
 
 ### Inverse hyperbolic cosine of me.
 failable routine Decimal.acosh() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).acosh())
+    return dec_unary(fn: 15, x: me)
 
 ### Inverse hyperbolic tangent of me.
 failable routine Decimal.atanh() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).atanh())
+    return dec_unary(fn: 16, x: me)
 
 # ============================================================================
 # Special functions
@@ -156,25 +178,25 @@ failable routine Decimal.atanh() -> Decimal
 
 ### Error function erf(me).
 routine Decimal.erf() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).erf())
+    return dec_unary(fn: 17, x: me)
 
 ### Complementary error function erfc(me) = 1 - erf(me).
 routine Decimal.erfc() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).erfc())
+    return dec_unary(fn: 18, x: me)
 
 ### Gamma function gamma(me).
 failable routine Decimal.gamma() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).gamma())
+    return dec_unary(fn: 19, x: me)
 
 ### Natural logarithm of the absolute value of the gamma function, ln_gamma(me).
 routine Decimal.ln_gamma() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).ln_gamma())
+    return dec_unary(fn: 20, x: me)
 
 # ============================================================================
 # Sign / inspection
 # ============================================================================
 
-### True if me has its sign bit set (negative, including -0).
+### True if me has its sign bit set (a Decimal below zero: there is no -0).
 routine Decimal.is_sign_negative() -> Bool
     return dec_to_d128(x: me).is_sign_negative()
 
@@ -182,11 +204,11 @@ routine Decimal.is_sign_negative() -> Bool
 routine Decimal.is_normal() -> Bool
     return dec_to_d128(x: me).is_normal()
 
-### True if me is +-0.
+### True if me is 0.
 routine Decimal.is_zero() -> Bool
     return dec_to_d128(x: me).is_zero()
 
-### True if me is negative (-0 is negative).
+### True if me is below zero (a Decimal zero is always +0).
 routine Decimal.is_negative() -> Bool
     return dec_to_d128(x: me).is_negative()
 
@@ -198,9 +220,9 @@ routine Decimal.is_positive() -> Bool
 routine Decimal.is_subnormal() -> Bool
     return dec_to_d128(x: me).is_subnormal()
 
-### -1, 0, or +1 matching the sign of me (+-0 -> +0).
+### -1, 0, or +1 matching the sign of me.
 routine Decimal.signum() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).signum())
+    return dec_of_canonical(x: dec_to_d128(x: me).signum())
 
 ### C99 fpclassify code (ZERO / SUBNORMAL / NORMAL; a well-formed Decimal is never inf/NaN).
 routine Decimal.fpclassify() -> FpClass
@@ -212,24 +234,31 @@ routine Decimal.fpclassify() -> FpClass
 
 ### Absolute value of me.
 routine Decimal.abs() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).abs())
+    return dec_of_canonical(x: dec_to_d128(x: me).abs())
 
-### Negation of me (flips the sign).
+### Negation of me (flips the sign: zero stays +0).
 @readonly
 routine Decimal.neg() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).neg())
+    var x = dec_to_d128(x: me)
+    if x.is_zero()
+        return me
+    return dec_of_canonical(x: x.neg())
 
-### Magnitude of me with the sign of `you`.
+### Magnitude of me with the sign of `you` (zero stays +0).
 routine Decimal.copysign(you: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).copysign(you: dec_to_d128(x: you)))
+    if me.is_zero()
+        return me
+    return dec_of_canonical(x: dec_to_d128(x: me).copysign(you: dec_to_d128(x: you)))
 
 # ============================================================================
 # Extrema / difference
 # ============================================================================
 
-### Positive difference max(me - you, 0).
+### Positive difference max(me - you, 0), rounded half up to 34 digits.
 routine Decimal.fdim(you: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).fdim(you: dec_to_d128(x: you)))
+    if me <= you
+        return DECIMAL_ZERO
+    return dec_of_d128_finite(d: dec_round_add(a: dec_to_d128(x: me), b: dec_to_d128(x: you).neg()))
 
 ### IEEE minimumNumber(me, you).
 routine Decimal.min_num(you: Decimal) -> Decimal
@@ -287,20 +316,25 @@ routine Decimal.floor() -> Decimal
 routine Decimal.ceil() -> Decimal
     return dec_of_d128(x: dec_to_d128(x: me).ceil())
 
-### Rounds half up (Decimal's rounding): the integral value n with n - 0.5 <= me < n + 0.5, that is floor(me + 0.5)
-### (2.5 -> 3, -2.5 -> -2, -0.5 -> 0).
-routine Decimal.round() -> Decimal
+### Rounds to `places` digits after the point by `rule`, half up when left out (Decimal's rule): `x.round()` is the
+### whole number n with n - 0.5 <= x < n + 0.5 (2.5 -> 3, -2.5 -> -2, -0.5 -> 0), `2.675.round(places: 2)` is 2.68,
+### `(-2.5).round(rule: RoundingRule.HALF_EVEN)` is -2.
+### :param places: The digits after the point kept (0 for a whole number).
+### :param rule: How the digits past them go.
+### :returns: The rounded value.
+@readonly
+routine Decimal.round(places: U64 = 0, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
     var x = dec_to_d128(x: me)
-    return dec_of_d128(x: d128_of_words(w: C::ingrid_decimal_round(x_low: d128_low(v: x), x_high: d128_high(v: x))))
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_round_places(x_low: d128_low(v: x),
+        x_high: d128_high(v: x), places: places, mode: rounding_mode(rule: rule))))
 
 ### Rounds the way Decimal rounds, half up: the same as `round()`.
 routine Decimal.rint() -> Decimal
-    var x = dec_to_d128(x: me)
-    return dec_of_d128(x: d128_of_words(w: C::ingrid_decimal_round(x_low: d128_low(v: x), x_high: d128_high(v: x))))
+    return me.round()
 
-### Rounds to the nearest integral value, ties away from zero.
+### Rounds to the nearest integral value, ties away from zero: `round(rule: RoundingRule.HALF_AWAY)`.
 routine Decimal.round_ties_away() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).round_ties_away())
+    return me.round(rule: RoundingRule.HALF_AWAY)
 
 ### The fractional part of me (me - trunc(me), carrying me's sign).
 routine Decimal.fract() -> Decimal
@@ -319,9 +353,13 @@ routine Decimal.modf() -> (Decimal, Decimal)
 routine Decimal.same_quantum(you: Decimal) -> Bool
     return dec_to_d128(x: me).same_quantum(you: dec_to_d128(x: you))
 
-### Rounds me to the quantum (exponent) of you.
+### Rounds me, half up, to the exponent of you (`x.quantize(0.01)` keeps two places, the result in Decimal's one form,
+### so its text drops the zeros). Crashes with NumericDomainError when that needs more than 34 digits.
 routine Decimal.quantize(you: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).quantize(you: dec_to_d128(x: you)))
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_quantize(a_low: d128_low(v: a),
+        a_high: d128_high(v: a), b_low: d128_low(v: b), b_high: d128_high(v: b))))
 
 ### IEEE totalOrder predicate (a total order over all values).
 routine Decimal.total_compare(you: Decimal) -> Bool

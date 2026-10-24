@@ -518,11 +518,11 @@ routine D32.maximum(you: D32) -> D32
         return if me.is_sign_negative() then you else me
     return me
 
-### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero (alias of
-### `round`). Never crashes.
+### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero
+### (`round(rule: RoundingRule.HALF_AWAY)`). Never crashes.
 ### :returns: `me` rounded to an integral value with ties away from zero.
 routine D32.round_ties_away() -> D32
-    return me.round()
+    return me.round(rule: RoundingRule.HALF_AWAY)
 
 ### IEEE 754 sameQuantum: `true` when `me` and `you` have the same exponent (quantum), or are both
 ### infinities, or both NaNs. Never crashes.
@@ -557,7 +557,7 @@ routine D32.rem(you: D32) -> D32
 routine D32.normalize() -> D32
     return D32.from_bits(bits: C::ingrid_d32_normalize(x: me.to_bits()))
 
-### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 round (half away), 4 rint (half even).
+### Rounds to integral. mode: 0 trunc, 1 floor, 2 ceil, 3 half away, 4 half even.
 routine d32_round_int(x: D32, mode: S64) -> D32
     var m = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](mode))
     return D32.from_bits(bits: C::ingrid_d32_round_int(x: x.to_bits(), mode: m))
@@ -574,13 +574,18 @@ routine D32.floor() -> D32
 routine D32.ceil() -> D32
     return d32_round_int(x: me, mode: 2)
 
-### Rounds to the nearest integral value, ties away from zero. Specials pass through. Never crashes.
-routine D32.round() -> D32
-    return d32_round_int(x: me, mode: 3)
+### Rounds to `places` digits after the point by `rule`, a tie to the even one when left out (D32's rule, as its
+### operators round): `x.round()` is the nearest integral value, `2.5` -> `2`, `(-2.5).round(rule: RoundingRule.HALF_AWAY)`
+### is `-3`. Specials pass through. Never crashes.
+### :param places: The digits after the point kept (0 for an integral value).
+### :param rule: How the digits past them go.
+### :returns: The rounded value.
+routine D32.round(places: U64 = 0, rule: RoundingRule = RoundingRule.HALF_EVEN) -> D32
+    return D32.from_bits(bits: C::ingrid_d32_round_places(x: me.to_bits(), places: places, mode: rounding_mode(rule: rule)))
 
-### Rounds to the nearest integral value, ties to even (IEEE roundTiesToEven). Never crashes.
+### Rounds to the nearest integral value, ties to even (IEEE roundTiesToEven): the same as `round()`. Never crashes.
 routine D32.rint() -> D32
-    return d32_round_int(x: me, mode: 4)
+    return me.round()
 
 ### Fractional part me - trunc(me), with me's sign. A NaN propagates, ±inf gives ±0. Never crashes.
 routine D32.fract() -> D32
