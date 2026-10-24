@@ -284,9 +284,23 @@ routine Decimal.maximum(you: Decimal) -> Decimal
 routine Decimal.mod_trunc(you: Decimal) -> Decimal
     return dec_of_d128(x: dec_to_d128(x: me).mod_trunc(you: dec_to_d128(x: you)))
 
-### IEEE remainder of me / you (result is the nearest, ties to even).
-routine Decimal.rem(you: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).rem(you: dec_to_d128(x: you)))
+### Returns the remainder of the floored division, `me - you * floor(me / you)`, computed exactly: its sign is the
+### divisor's, and a zero remainder is `0` (-7 by 2 is 1, 7 by -2 is -1, 5.5 by 2 is 1.5).
+### :param you: The divisor.
+### :returns: The remainder.
+### :throws: {DivisionByZeroError} when `you` is zero, and {NumericOverflowError} when the remainder needs more than 34
+###     significant digits (-1e-40 by 7 is 7 - 1e-40).
+failable routine Decimal.rem(you: Decimal) -> Decimal
+    if you.is_zero()
+        throw DivisionByZeroError()
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    var w = C::ingrid_decimal_rem(a_low: d128_low(v: a), a_high: d128_high(v: a), b_low: d128_low(v: b),
+        b_high: d128_high(v: b))
+    if w.w2 != 0
+        throw NumericOverflowError(
+            description: "the remainder has more significant digits than a Decimal holds (34)")
+    return dec_of_canonical(x: D128.from_words(low: w.w0, high: w.w1))
 
 # ============================================================================
 # Scaling / exponent
