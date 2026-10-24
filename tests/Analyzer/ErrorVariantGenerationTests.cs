@@ -229,7 +229,7 @@ public class ErrorVariantGenerationTests
     /// A <c>throw</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
     /// </summary>
     [Fact]
-    public void Analyze_ThrowInNonFailableRoutine_RequiresBangOnDeclaration()
+    public void Analyze_ThrowInNonFailableRoutine_Builds()
     {
         string source = """
                         crashable SomeError
@@ -248,8 +248,7 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
+        Assert.DoesNotContain(collection: result.Errors, filter: e => e.Message.Contains(value: "failable"));
     }
     /// <summary>
     /// Verifies semantic analysis behavior for throw non crashable and reports the expected error.

@@ -206,7 +206,6 @@ public partial class RazorForgeLexer
             [key: "continue"] = TokenType.Continue,
             [key: "return"] = TokenType.Return,
             [key: "throw"] = TokenType.Throw,
-            [key: "pierce"] = TokenType.Pierce,
             [key: "todo"] = TokenType.Todo,
             // Recovery prefix keywords: wrap a failable call into a carrier (Maybe/Check).
             // Bare words only — `try_foo`/`check_foo` tokenize as single identifiers, untouched.

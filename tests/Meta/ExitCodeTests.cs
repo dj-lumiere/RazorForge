@@ -23,18 +23,19 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "returning", actualString: stdout);
     }
 
-    /// <summary>A recovery keyword recovers every failure beneath it except <c>pierce</c>: a <c>pierce</c> two
-    /// calls under <c>try</c> still crashes with status 82, after the same call recovered a plain throw.</summary>
+    /// <summary>A throw in a routine that is not failable crashes where it stands with its crashable's message (status
+    /// 82), even when a failable routine calls it under <c>try</c>, after the same <c>try</c> received the failable
+    /// routine's own throw.</summary>
     [Fact]
-    public void PierceUnderTry_CrashesLoudly()
+    public void ThrowInPlainRoutineUnderTry_CrashesWithItsMessage()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "pierce_under_try.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "throw_in_plain_under_try.rf");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "recovered throw: none", actualString: stdout);
         Assert.Contains(expectedSubstring: "value: 6", actualString: stdout);
-        Assert.Contains(expectedSubstring: "piercing", actualString: stdout);
+        Assert.Contains(expectedSubstring: "breaking", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
         Assert.Contains(expectedSubstring: "Broken invariant error: the ledger no longer balances",
             actualString: stdout + stderr);
@@ -71,21 +72,23 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "Division by zero error", actualString: stdout + stderr);
     }
 
-    /// <summary>A <c>pierce</c> inside a lambda another routine calls still crashes with status 82 beneath
-    /// <c>try</c>, after the same call recovered the lambda's ordinary failure.</summary>
+    /// <summary>Failures rise only through failable routines: <c>try</c> receives a lambda's failure handed through a
+    /// <c>failable Callable</c> parameter and a failable routine's throw, but a division by zero inside a routine that
+    /// is not failable crashes there (status 82), even under <c>try</c>.</summary>
     [Fact]
-    public void PierceInLambdaUnderTry_CrashesLoudly()
+    public void FailureInsidePlainHelperUnderTry_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "pierce_in_lambda.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "wall_under_try.rf");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-        Assert.Contains(expectedSubstring: "recovered: none", actualString: stdout);
+        Assert.Contains(expectedSubstring: "recovered lambda: none", actualString: stdout);
         Assert.Contains(expectedSubstring: "value: 25", actualString: stdout);
-        Assert.Contains(expectedSubstring: "piercing", actualString: stdout);
+        Assert.Contains(expectedSubstring: "recovered throw: none", actualString: stdout);
+        Assert.Contains(expectedSubstring: "split: 5", actualString: stdout);
+        Assert.Contains(expectedSubstring: "dividing by zero", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "Broken invariant error: the ledger no longer balances",
-            actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Division by zero error", actualString: stdout + stderr);
     }
 
     /// <summary>A range step held in a variable is checked when the range is iterated: a negative step counts down,

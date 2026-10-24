@@ -120,10 +120,10 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// A <c>throw</c> in a routine not declared <c>!</c> is an error: the declaration must carry the <c>!</c>.
+    /// A <c>throw</c> in a routine not declared <c>failable</c> builds: it crashes where it stands.
     /// </summary>
     [Fact]
-    public void Analyze_ThrowInNonFailableRoutine_RequiresBangOnDeclaration()
+    public void Analyze_ThrowInNonFailableRoutine_Builds()
     {
         string source = """
                         crashable SampleError
@@ -135,10 +135,7 @@ public class WikiLanguageBreakageTests
                             throw SampleError(message: "boom")
                         """;
 
-        AnalysisResult result = AnalyzeSa(source: source);
-
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
+        AssertAnalyzesSa(source: source);
     }
 
     /// <summary>

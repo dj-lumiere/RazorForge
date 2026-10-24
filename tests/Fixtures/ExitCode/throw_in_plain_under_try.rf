@@ -1,0 +1,33 @@
+module Tests/ExitCode/ThrowInPlainUnderTry
+
+import IO/Console
+# A throw in a routine that is not failable crashes where it stands, with its crashable's message (status 82),
+# even when a failable routine calls it under `try`. The same `try` receives the failable routine's own throw.
+
+crashable BrokenInvariantError
+
+routine BrokenInvariantError.crash_message() -> Text
+    return "the ledger no longer balances"
+
+crashable NegativeTotalError
+
+routine NegativeTotalError.crash_message() -> Text
+    return "the total is negative"
+
+routine require_balanced(total: S64) -> S64
+    if total > 100
+        throw BrokenInvariantError()
+    return total
+
+failable routine audit(total: S64) -> S64
+    if total < 0
+        throw NegativeTotalError()
+    return require_balanced(total: total) + 1
+
+routine start()
+    show(f"recovered throw: {try audit(total: -1)}")
+    show(f"value: {try audit(total: 5)}")
+    show("breaking")
+    show(f"{try audit(total: 500)}")
+    show("not reached")
+    return

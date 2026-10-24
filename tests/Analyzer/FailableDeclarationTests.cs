@@ -3,14 +3,14 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Locks down where the failable <c>!</c> goes: a routine whose body throws or goes absent must be
-/// declared with <c>!</c> (RF-S750 / RF-S751), and its callers call it plainly.
+/// Locks down where <c>failable</c> goes: a routine whose failure goes to its caller is declared
+/// <c>failable</c>, and its callers call it plainly. A throw in a routine that is not failable crashes there.
 /// </summary>
 public class FailableDeclarationTests
 {
-    /// <summary>A throwing routine declared without <c>!</c> is an error.</summary>
+    /// <summary>A throwing routine declared without <c>failable</c> builds: the throw crashes there.</summary>
     [Fact]
-    public void Throw_WithoutBangOnDeclaration_IsError()
+    public void Throw_WithoutFailable_Builds()
     {
         string source = """
                         module L/Test
@@ -19,12 +19,12 @@ public class FailableDeclarationTests
                                 throw DivisionByZeroError()
                             return n
                         """;
-        AssertHasErrorSa(source: source, expectedErrorSubstring: "so it is declared 'failable'");
+        AssertAnalyzesSa(source: source);
     }
 
-    /// <summary>A routine that goes absent declared without <c>!</c> is an error.</summary>
+    /// <summary>A routine that throws AbsentValueError declared without <c>failable</c> builds too.</summary>
     [Fact]
-    public void Absent_WithoutBangOnDeclaration_IsError()
+    public void Absent_WithoutFailable_Builds()
     {
         string source = """
                         module L/Test
@@ -33,7 +33,7 @@ public class FailableDeclarationTests
                                 throw AbsentValueError()
                             return n
                         """;
-        AssertHasErrorSa(source: source, expectedErrorSubstring: "so it is declared 'failable'");
+        AssertAnalyzesSa(source: source);
     }
 
     /// <summary>A throwing routine declared with <c>!</c>, called plainly and with <c>try</c>, is fine.</summary>

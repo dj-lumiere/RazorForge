@@ -2,28 +2,28 @@ module Tests/Stdlib/RecoveryLambdaApi
 
 import IO/Console
 import IterTools
-# With `try`, `grab` or `lookup` in front, a failure inside a lambda or routine value is recovered too, wherever
-# the value is called beneath the keyword: through the emitter adapters (`select`, `where`) and the terminals
-# that drive them, through `any`/`all`/`sort_by`, through a user routine that calls the value it was handed,
-# a value passed down two levels, a value kept in an entity's field, and an `each` loop over an adapter.
+# A lambda that can fail, handed to a `failable Callable`, passes its failure up through the routine it was handed
+# to, so `try` and `check` receive it: through the emitter adapters (`select`, `where`) and the terminals that drive
+# them, through `any`/`all`/`sort_by`, through a routine that calls the value it was handed, a value passed down two
+# levels, a value kept in a member variable, and an `each` loop over an adapter in a failable routine.
 
-routine apply(f: Callable[(S32,), S32], x: S32) -> S32
+routine apply(f: failable Callable[(S32,), S32], x: S32) -> S32
     return f(x)
 
-routine apply_twice(f: Callable[(S32,), S32], x: S32) -> S32
+routine apply_twice(f: failable Callable[(S32,), S32], x: S32) -> S32
     return apply(f: f, x: apply(f: f, x: x))
 
-routine sum_inverse(xs: List[S32]) -> S32
+failable routine sum_inverse(xs: List[S32]) -> S32
     var total: S32 = 0
     each y in xs.select(transform: x => 100 // x)
         total += y
     return total
 
-routine hundred_over(x: S32) -> S32
+failable routine hundred_over(x: S32) -> S32
     return 100 // x
 
 entity Holder
-    secret f: Callable[(S32,), S32]
+    secret f: failable Callable[(S32,), S32]
 
 routine Holder.run(x: S32) -> S32
     return me.f(x)
@@ -86,7 +86,7 @@ routine start()
     show(f"stored grab: {check holder.run(x: 0)}")
 
     # a local routine value called directly beneath the keyword
-    var g: Callable[(S32,), S32] = x => 10 // x
+    var g: failable Callable[(S32,), S32] = x => 10 // x
     var s32_0: S32 = 0
     show(f"local try: {try g(s32_0)}")
     var s32_5: S32 = 5

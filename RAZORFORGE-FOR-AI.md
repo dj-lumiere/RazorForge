@@ -65,35 +65,36 @@ When unsure, consult ground truth in the repo/package:
    A routine with no value to give throws `AbsentValueError()`, an ordinary
    stdlib crashable: `throw AbsentValueError()`. To tell "not found" apart from
    other failures, match it by type: `is AbsentValueError => ...` on a `check`.
-   **With a keyword in front, every failure beneath it is recovered, at any depth;
-   only `pierce` and a failure inside a `destruct` still crash.** That covers a `throw` in the called
-   routine and in every routine it calls, bare calls included (failable or not:
-   `try f()` also recovers a division by zero inside a plain helper `f` calls); a
-   checked operator (`try a + b` recovers the overflow, `check a // b` the
-   divide-by-zero, `-x` of the minimum, `x += d`); a subscript out of range or a
-   missing key (`try xs[9]`), a failing conversion (`big.to[S8]()` with `big` at 300,
-   `"x".to[S64]()`). Each becomes the carrier's failure (`try`: absent,
-   `check`: the error), and evaluation stops at the first one. A bare call (no keyword)
-   still crashes loudly. Lambdas and routine values are covered the same way: a
-   failure inside a lambda handed to another routine
-   (`try xs.select(transform: x => 10 // x).to[List]()`, `check xs.sort_by(compare: f)`,
-   a user routine that calls the value it was given, a routine value passed down
-   several levels or kept in a field) is recovered by the keyword above the call
-   that reaches it, at any depth. A routine value called with no keyword above
-   that call still crashes on failure. An `each` loop over an adapter holding a
-   lambda ends only when its source ends: a failure inside the lambda is the
-   loop's failure, recovered by a keyword above the loop or crashing without one.
-   Not covered: a crash inside a library routine not declared `failable` (other
-   than in a routine value you handed it) stays a crash, a failure inside a `destruct` (a `destruct` is never
-   `failable`, RF-S815, and runs at a scope's end where nothing takes a failure) crashes even under `try`/`check`, and native runtime
-   fatal errors, out of memory and running out of stack are fatal everywhere.
-   **`pierce`** is the failure that must NOT be recovered: `pierce NopeError()`
-   crashes like an unrecovered `throw` (status 82), and it crashes the same way
-   under `try`/`check` at any depth. Use it for a broken invariant (state
-   the program can no longer trust), never for a condition a caller could handle.
-   It does not make a routine failable (no `failable` needed for it).
+   **Failures rise only through failable routines.** A `throw` in a `failable` routine gives the failure to the
+   caller: a bare call crashes loudly, `try`/`check` in front receive it, and a bare call inside another failable
+   routine passes it on to that routine's caller. A `throw` in a routine that is NOT failable crashes on the spot
+   with the crashable's message (status 82, like an unrecovered failure): use it for a broken invariant, never for a
+   condition a caller could handle. A routine that is not failable is a wall: a failure inside it (its own `throw`,
+   a checked operator, a bare call of a failable routine) crashes there, even under `try`/`check` above its caller
+   (`try audit()` with `audit` failable calling a plain `share` that divides by zero crashes). Checked operators,
+   subscripts and conversions are failable routines, so `try a + b`, `check a // b`, `-x` of the minimum,
+   `try xs[9]` (a subscript out of range, a missing key), `check big.to[S8]()` and `"x".to[S64]()` are received.
+   `try`/`check` in front of an expression that reaches no failable call is RF-S760 (remove the keyword, or declare
+   the routine `failable`). Evaluation stops at the first failure, which becomes the carrier's (`try`: absent,
+   `check`: the error). A failure inside a `destruct` (a `destruct` is never `failable`, RF-S815, and runs at a
+   scope's end where nothing takes a failure) crashes even under `try`/`check`, and native runtime fatal errors,
+   out of memory and running out of stack are fatal everywhere.
+   **Routine values.** A lambda whose body can fail (a checked operator, a subscript, a call of a failable routine)
+   and a failable routine named as a value are routine values that may fail, of a type written
+   `failable Callable[(T,), U]`. They go only to a parameter or member variable of such a type: handing one to a
+   plain `Callable[...]` is RF-S761 (mark the parameter `failable`, or hand it a value that cannot fail: `+%`/`*%`
+   wrapping, `+^` clamping, float arithmetic, a routine that is not failable). A call that hands a routine value
+   that may fail to a `failable Callable` parameter can fail through it, so
+   `try apply(f: x => 10 // x, x: 0)` gives `none` and a bare one crashes loudly. The stdlib routines that take a
+   routine value take it as `failable Callable[...]` (`select`, `where`, `take_while`, `skip_while`, `distinct_by`,
+   `select_many`, `any`, `all`, `accumulate`, `get_count`, `min_by`, `max_by`, `sort_by`, `sorted_by`). An adapter
+   holds the lambda in a `failable Callable` member variable and calls it later: a call that works on such an
+   adapter (its terminal, `s.to[List]()`, or the `each` loop over it) can fail through it, so
+   `try xs.select(transform: x => 10 // x).to[List]()` is received, and an `each` loop over such an adapter passes
+   the lambda's failure on in a failable routine and crashes anywhere else. The handlers of `CpuEventManager`
+   (`Callable[(), None]?`) are not marked: a handler's failure crashes the program.
    **`todo`** is a statement for code not written yet (`routine parse(bytes: Bytes) -> Header` with the body
-   `todo`): running it crashes with `NotImplementedError` naming the routine, like `pierce`. It does not make
+   `todo`): running it crashes with `NotImplementedError` naming the routine, even under `try`/`check`. It does not make
    the routine failable and ends its path, so a body that is only `todo` needs no `return`. The build warns
    once per routine that still has one (RF-W303). `nothing` is an empty body on purpose, a different thing.
    The keyword takes the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
@@ -662,8 +663,8 @@ A `when` that gives a value (`var label = when …`) takes one expression per ar
 or a block arm that ends with `becomes value` (its lines run, then `value` is the
 arm's value). A block arm without `becomes` is RF-S307, `becomes` elsewhere RF-S308.
 An arm may also be `throw ...` (`else => throw InvalidValueError(message: word)`): it gives no value, so the other
-arms decide the type, and it is allowed only in a `failable` routine (otherwise RF-S750, whose quick fix writes
-`failable` on the declaration). `try` / `check` / `lookup` at the call take that failure like any other.
+arms decide the type. In a `failable` routine the failure goes to the caller, where `try` / `check` take it like
+any other, and in a routine that is not failable it crashes on the spot.
 
 ## 6. Routines
 
@@ -1362,6 +1363,8 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S510/S512 | positional args in a multi-param call | name every argument                                |
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
 | RF-S753      | failable call left unhandled          | recover with `try`/`check` + `when`                 |
+| RF-S760      | `try`/`check` over nothing failable   | remove the keyword, or declare the routine `failable` |
+| RF-S761      | failable routine value to a plain `Callable` | write the parameter `failable Callable[...]`  |
 | RF-S712      | `@throws` leaves out a crashable the routine throws | add it to the list, or recover it inside |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-S558      | `{}` (empty set) where a dict is expected | write `{:}`                                    |
@@ -1389,6 +1392,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
 | RF-G224      | a loop written `while c`              | `until` with the condition that ends it, or `loop` (`migrate --step until`) |
 | RF-G225      | a line written `pass`                 | `nothing`, the line with no work (`migrate --step nothing`) |
+| RF-G227      | a line written `pierce X`             | `throw X` in a routine that is not failable crashes there (`migrate --step pierce`) |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 
@@ -1686,7 +1690,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `until` `loop` `with`
-  `each` `break` `continue` `return` `throw` `pierce` `todo` `becomes`
+  `each` `break` `continue` `return` `throw` `todo` `becomes`
 - **Iteration / range / hand-over**: `in` (loops only) `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `nothing` `given` `drop`

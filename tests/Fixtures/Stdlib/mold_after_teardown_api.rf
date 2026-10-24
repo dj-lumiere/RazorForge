@@ -1,0 +1,39 @@
+module Tests/Stdlib/MoldAfterTeardownApi
+
+import IO/Console
+# A failure goes into the failure mold after the throwing routine's teardown: a destruct that receives a failure of
+# its own on the way up does not overwrite the failure the routine threw.
+
+crashable CodeError
+    code: S64
+
+routine CodeError.crash_message() -> Text
+    return f"code {me.code}"
+
+failable routine inner_fail(code: S64) -> S64
+    if code > 0
+        throw CodeError(code: code)
+    return 0
+
+record Cleaner
+    id: S64
+
+@override
+routine Cleaner.destruct()
+    when check inner_fail(code: 99)
+        is CodeError as e => show(f"cleaner {me.id} received code {e.code}")
+        is S64 as v => show(f"cleaner value {v}")
+    return
+
+failable routine fail_with_cleanup(code: S64) -> S64
+    var cleaner = Cleaner(id: code)
+    if code > 0
+        throw CodeError(code: code + cleaner.id)
+    return cleaner.id
+
+routine start()
+    when check fail_with_cleanup(code: 7)
+        is CodeError as e => show(f"caught code {e.code}")
+        is S64 as v => show(f"value {v}")
+    show(f"try: {try fail_with_cleanup(code: 3)}")
+    return
