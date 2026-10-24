@@ -244,7 +244,7 @@ public class SafetyPathMatrixTests
                                show(f"{f()}")
                                return
                            """,
-            code: SemanticDiagnosticCode.DangerousCallOutsideDangerBlock, expected: "as a value");
+            code: SemanticDiagnosticCode.DangerousCallOutsideDangerBlock, expected: "You call 'f'");
     }
 
     [Fact]

@@ -929,10 +929,16 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   double-free, or a memory leak. Ordinary code (arithmetic, collection ops,
   channels, failable calls) is **never** wrapped in `danger`; it is not a
   catch-all for "risky" or "advanced". A `dangerous` routine can only be called
-  inside a `danger` block (RF-S609). That holds for every way of reaching it: it is never a routine value
-  (`var f = raw` is RF-S609, inside `danger` too), a lambda's body is outside the `danger` block the lambda is
-  written in, and an operator, a compound assignment or an f-text insertion whose routine is `dangerous`
-  (`p + q` on a dangerous `add`, `f"{p}"` on a dangerous `represent`) is written inside `danger` like the call.
+  inside a `danger` block (RF-S609). That holds for every way of reaching it: a lambda's body is outside the
+  `danger` block the lambda is written in, and an operator, a compound assignment or an f-text insertion whose
+  routine is `dangerous` (`p + q` on a dangerous `add`, `f"{p}"` on a dangerous `represent`) is written inside
+  `danger` like the call.
+- A routine value taken from a dangerous routine is a **dangerous callable** (no keyword): it goes only to a C
+  routine's `Callable` parameter (`C::qsort(..., by_value)`), to a dangerous routine's `Callable` parameter, or into a
+  local variable (`var f = raw`, which is a dangerous callable from then on). A dangerous routine's own `Callable`
+  parameters are dangerous callables in its body. A dangerous callable is called only inside `danger` or a dangerous
+  routine. Putting one in a plain `Callable` place (a plain routine's argument, a member variable, a collection, a
+  result, a lambda's value) is RF-S609.
 - No lifetime syntax; safety comes from the one-legitimate-version rule (an entity lives in one place), marked
   hand-overs (`steal`), scope-bound access tokens and managers.
 
