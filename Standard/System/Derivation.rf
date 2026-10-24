@@ -342,6 +342,42 @@ routine T.to[U64]() -> U64
 needs FlagsType T
     return LLVM::reinterpret_bits[T, U64](me)
 
+### Entity `eq`: the member variables compared in order, as for a record. A member variable may lead back to an
+### entity being compared already (a parent and its children, a ring), so the pair is kept for the running task
+### while its member variables are compared, and meeting it again counts as equal: a cyclic structure compares by its
+### shape and the comparison ends. The same entity is equal to itself without a walk.
+@override
+routine T.eq(you: Viewing[T]) -> Bool
+needs EntityType T
+needs T obeys Equatable
+    var mine = me.get_address()
+    var theirs = you.get_address()
+    if mine === theirs
+        return true
+    if C::rf_eq_enter(a: mine, b: theirs)
+        return true
+    expand m in allmemvarof(T)
+        if me.$nameof(m) != you.$nameof(m)
+            C::rf_eq_leave()
+            return false
+    C::rf_eq_leave()
+    return true
+
+### Entity keyed `hash(k0, k1)`: the member variables' hashes folded as for a record. A member variable leading back
+### to an entity whose hash is running already adds a fixed value instead of walking it again, so the hash ends.
+@override
+routine T.hash(k0: U64, k1: U64) -> U64
+needs EntityType T
+needs T obeys Hashable
+    if C::rf_hash_enter(target: me.get_address())
+        var inside_tag: U64 = 0x696E73696465
+        return inside_tag.hash(k0: k0, k1: k1)
+    var acc: U64 = 0
+    expand m in allmemvarof(T)
+        acc = acc.bitxor(you: me.$nameof(m).hash(k0: k0, k1: k1))
+    C::rf_hash_leave()
+    return acc
+
 ### Choice `eq`/`compare`: a choice holds EXACTLY ONE case, so equality and ordering are just a compare of
 ### the S32 discriminant — NOT the record field-walk above (a choice has no member variables, so
 ### `allmemvarof(T)` is empty and the record template would wrongly return `true`/`SAME` for every pair).

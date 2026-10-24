@@ -462,13 +462,16 @@ declare their own `i`.
 - **`==` and hashing are automatic, `Comparable` is opt-in.** Every record and every entity has `==`/`!=`
   with no `obeys` line when each member variable has `==` (the builder writes `eq` comparing them in
   order, a hand-written `eq` takes its place), so two distinct `Player(name: "Ada")` entities are `==` and
-  not `===`. A member variable without `==` (a `Callable[...]` routine value, an optional `T?`) means the
-  type has none: `==` on it is RF-S065 and passing it where `needs T obeys Equatable` is asked is RF-S150,
+  not `===`. A member variable without `==` (a `Callable[...]` routine value) means the type has none: `==` on it is RF-S065 and passing it where `needs T obeys Equatable` is asked is RF-S150,
   both naming that member variable. A record also hashes automatically (a `Set` element / `Dict` key) when
   every member variable hashes, else RF-S150 at the use names the member variable. An entity hashes only
   with `obeys Hashable` (its member variables can change while a `Set` holds it): `Set[Player]` without it is
   RF-S150. `Text`, `Bytes`, `Integer` and `Decimal` hash their value, so equal values hash equal however
-  they were built. `Comparable` (`<`, sorting) still needs `obeys Comparable`.
+  they were built. An optional `T?` has `==` and a hash when `T` does (two absent ones are equal, an absent and
+  a present one differ). An entity's builder-written `==` keeps the pairs it is comparing for the running task
+  (`rf_eq_enter`), and meeting one again counts as equal, so structures that lead back to themselves compare by
+  shape and end, and its hash stops at an entity it is already inside of. `Comparable` (`<`, sorting) still needs
+  `obeys Comparable`.
 
 **Conversions: `x.to[T]()`, the one way to convert.**
 

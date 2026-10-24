@@ -550,6 +550,7 @@ routine ListTakingEmitter[T].destruct()
 ### :param you: The other list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
+@overridable
 routine List[T].eq(you: Viewing[List[T]]) -> Bool
 needs T obeys Equatable
     if me.count() != you.count()
@@ -558,6 +559,26 @@ needs T obeys Equatable
     until i >= me.count()
         if me[i] != you[i]
             return false
+        i = i +% 1
+    return true
+
+### `eq` for single-owner entity elements: each pair is read through tokens, since an entity can't be copied out of
+### the list.
+@readonly
+@override
+routine List[T].eq(you: Viewing[List[T]]) -> Bool
+needs EntityType T
+needs T obeys Equatable
+    if me.count() != you.count()
+        return false
+    var i: U64 = 0
+    until i >= me.count()
+        # Each slot holds the entity's address, which is its read token.
+        danger
+            var mine = Viewing[T](me.data.offset(T.data_size() * i).peek_as[Hijacked[T]]())
+            var theirs = Viewing[T](you.data.offset(T.data_size() * i).peek_as[Hijacked[T]]())
+            if mine != theirs
+                return false
         i = i +% 1
     return true
 
