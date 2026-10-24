@@ -1095,17 +1095,24 @@ that differ from other languages:
   which goes on from where `it` is. An emitter made from a local container (directly, or from its `view()` /
   `modify()`) is itself a token on the container's elements: a local variable may hold it, and it ends when the
   container may change shape or ends (a later use is RF-S643, `xs.add_last(...)` ends it). It hands out what the
-  container's walk hands out (`Viewing` from a read-only head, `Modifying` otherwise). Keeping it in a field or
-  returning it is RF-S644. `(steal xs).emitter()` takes the list's elements into the emitter (each one comes out as
-  the value itself, like `each x in steal xs`), so it holds what it walks and can go anywhere. A range
-  (`var r = 0 til 10`) points at nothing and can be kept.
+  container's walk hands out (`Viewing` from a read-only head, `Modifying` otherwise). A routine may return one made
+  from `me` or from a token parameter (`routine big(xs: Viewing[List[S64]]) -> WhereEmittable[S64, List[S64]]` returning
+  `xs.where(...)`), and the caller's result is a token on what it passed there. Keeping it in a field, or returning one
+  made from anything else, is RF-S644. `(steal xs).emitter()` takes the list's elements into the emitter (each one
+  comes out as the value itself, like `each x in steal xs`), so it holds what it walks and can go anywhere, returned
+  from a routine too. A range (`var r = 0 til 10`) points at nothing and can be kept.
+- An emitter is an emittable (`Emitter[T]` obeys `Emittable[T]`): terminals and adapters work on it and take the
+  values it has not handed out yet (`var it = xs.emitter()`, `drop it.emit()`, then `it.to[List]()`, `it.sum()`,
+  `it.where(...)`).
 - Emitter adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`, `chain`, `distinct`, `select_many`,
   `min_by`, … — lazily evaluated, chainable, lambdas like `x => x % 2 == 0`. An adapter points at the container it
   was made from, so it follows the same rule: `var big = xs.where(...)` is a token on `xs`'s elements.
 - **Collecting.** An emittable is collected with a conversion that names the collection without its element type:
   `xs.where(...).to[List]()`, `to[Set]()`, `to[Dict]()` (the values are `(key, value)` tuples), and in `Collections`
   `to[SortedList]()`, `to[SortedSet]()`, `to[SortedDict]()` (pairs), `to[RotatableList]()`, `to[BitList]()` (Bools),
-  `to[PriorityQueue]()` (`(priority, element)` pairs). `to[List]`/`to[Set]`/`to[Dict]` need `import IterTools`.
+  `to[PriorityQueue]()` (`(priority, element)` pairs). `to[Array[T, N]]()` names the size (`xs.to[Array[S64, 3]]()`)
+  and is failable: fewer or more than `N` values throw `ElementCountMismatchError`. `to[List]`/`to[Set]`/`to[Dict]`/
+  `to[Array]` need `import IterTools`.
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive. Without
   `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`
   yields nothing, `(2 to 1).has(1)` is false). `by N` sets the step

@@ -7,8 +7,9 @@ using static TestHelpers;
 
 /// <summary>
 /// An emitter kept in a local and made from a local container (<c>xs.emitter()</c>, <c>xs.where(...)</c>) is a token
-/// on the container's elements: a change of the container's shape ends it (RF-S643 at a later use), and it cannot be
-/// returned (RF-S644). One built from <c>steal</c> holds the elements itself.
+/// on the container's elements: a change of the container's shape ends it (RF-S643 at a later use), and it is returned
+/// only when made from <c>me</c> or a token parameter (RF-S644 otherwise). One built from <c>steal</c> holds the
+/// elements itself.
 /// </summary>
 public class EmitterTokenTests
 {
@@ -88,15 +89,78 @@ public class EmitterTokenTests
     }
 
     [Fact]
-    public void Emitter_Returned_Errors()
+    public void Emitter_ReturnedFromTokenParameter_IsAllowed()
     {
         string source = Prelude + """
                                   routine walk(xs: Viewing[List[S64]]) -> ListEmitter[S64]
+                                      return xs.emitter()
+
+                                  routine big(xs: Viewing[List[S64]]) -> WhereEmittable[S64, List[S64]]
+                                      return xs.where(predicate: v => v > 1)
+
+                                  routine start()
+                                      var xs: List[S64] = [1, 2, 3]
+                                      var it = walk(xs: xs)
+                                      show(f"{it.emit()}")
+                                      each b in big(xs: xs)
+                                          show(f"{b}")
+                                      return
+                                  """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void Emitter_ReturnedFromLocal_Errors()
+    {
+        string source = Prelude + """
+                                  routine walk() -> ListEmitter[S64]
+                                      var xs: List[S64] = [1, 2, 3]
                                       return xs.emitter()
                                   """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.SourceIterableKept);
+    }
+
+    [Fact]
+    public void Emitter_Returned_EndsWithTheCallersContainer()
+    {
+        string source = Prelude + """
+                                  routine walk(xs: Viewing[List[S64]]) -> ListEmitter[S64]
+                                      return xs.emitter()
+
+                                  routine start()
+                                      var xs: List[S64] = [1, 2, 3]
+                                      var it = walk(xs: xs)
+                                      xs.add_last(4)
+                                      drop it.emit()
+                                      return
+                                  """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.TokenUsedAfterSourceChanged);
+    }
+
+    [Fact]
+    public void TakingEmitter_Returned_IsUsedByTheCaller()
+    {
+        string source = Prelude + """
+                                  routine taken() -> ListTakingEmitter[Text]
+                                      var names: List[Text] = ["a", "b"]
+                                      return (steal names).emitter()
+
+                                  routine start()
+                                      var t = taken()
+                                      each n in t
+                                          show(n)
+                                      return
+                                  """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
     }
 }

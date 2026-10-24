@@ -1035,7 +1035,9 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     if (ret.Value != null)
                     {
                         Expr(expr: ret.Value);
-                        if (_reporting && IsWalkToken(walk: ret.Value))
+                        // An emitter made from `me` or from a token parameter goes back to the caller, whose token on
+                        // what it passed there it is (as a returned token is): anything else would outlive what it walks.
+                        if (_reporting && IsWalkToken(walk: ret.Value) && !WalksReturnSlots(walk: ret.Value))
                         {
                             owner.ReportSourceIterableKept(type: ret.Value.ResolvedType!,
                                 where: "by returning it",
@@ -1393,6 +1395,19 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 : null;
         }
 
+        /// <summary>Whether every container the returned emitter <paramref name="walk"/> walks is reached from
+        /// <c>me</c> or from a token parameter: the slots a returned token may come from.</summary>
+        private bool WalksReturnSlots(Expression walk)
+        {
+            HashSet<string>? walked = Unwrap(expr: walk) is IdentifierExpression { Name: var name } &&
+                                      _state?.Tokens.GetValueOrDefault(key: name) is { } kept
+                ? kept.Origins
+                : WalkedContainers(walked: walk);
+            HashSet<string> slots = ReturnSlots(routine: routine);
+            return walked is { Count: > 0 } &&
+                   walked.All(predicate: path => slots.Contains(item: RootName(path: path)));
+        }
+
         private void EndTemporaries(int index, SourceLocation at)
         {
             End(written: $"~{index}", why: "was a temporary, gone at the end of its statement", at: at);
@@ -1712,9 +1727,30 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 r.MemberVariables,
             _ => null
         };
+        // An emitter that writes its own destruct gives back what it holds (`ListTakingEmitter`, the walk of
+        // `(steal xs).emitter()`, frees the buffer it took): its pointer is to what it holds, not into a source.
+        if (fields != null && HoldsWhatItWalks(type: type))
+        {
+            return false;
+        }
+
         return fields != null &&
                fields.Any(predicate: f => f.Type.BareName == RuntimeContract.Hijacked ||
                                           PointsIntoSource(type: f.Type, depth: depth + 1));
+    }
+
+    /// <summary>Whether <paramref name="type"/> writes its own <c>destruct</c> (one on its definition, not the
+    /// builder's).</summary>
+    private static bool HoldsWhatItWalks(TypeSymbol type)
+    {
+        TypeSymbol definition = type switch
+        {
+            EntityTypeSymbol { GenericDefinition: { } e } => e,
+            RecordTypeSymbol { GenericDefinition: { } r } => r,
+            _ => type
+        };
+        return TypeRegistry.Ambient?.GetMemberRoutinesForOwner(ownerType: definition)
+                           .Any(predicate: r => r is { Name: RuntimeContract.Destroy, IsSynthesized: false }) == true;
     }
 
     private static bool ObeysEmitter(IEnumerable<TypeSymbol> protocols)
@@ -1730,9 +1766,10 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         report(code: SemanticDiagnosticCode.SourceIterableKept,
             message:
             $"You are keeping '{type.BareName}' {where}. It points at the container it walks, so it is a token: a " +
-            "local variable may hold it until the container changes shape or ends, but it cannot go anywhere that " +
-            "outlives the container. Collect it with '.to[List]()', or build it from 'steal' ('(steal xs).emitter()') " +
-            "so it holds the elements itself.",
+            "local variable may hold it until the container changes shape or ends, and a routine may return one made " +
+            "from 'me' or from a token parameter (declare it Viewing[T] or Modifying[T]), but it cannot go anywhere " +
+            "else that outlives the container. Collect it with '.to[List]()', or build it from 'steal' " +
+            "('(steal xs).emitter()') so it holds the elements itself.",
             location: location);
     }
 
