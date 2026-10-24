@@ -206,6 +206,6 @@ public class RejectedBeforeEmitterTests
                                  show(n)
                              return
                          """,
-            expectedErrorSubstring: "'each ... in steal' takes the elements out of a 'List'");
+            expectedErrorSubstring: "Walking with 'steal' takes the elements out of a 'List'");
     }
 }
