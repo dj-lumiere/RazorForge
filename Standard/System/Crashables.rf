@@ -1,17 +1,21 @@
 module System
 
 ### Any crashable: the error a `check` caught, whatever its type. `is Crashables e` on a `Check`
-### binds it. It holds the crashable itself, in a fixed room every crashable fits in, with the crashable's type id in
-### front, so `crash_title`, `crash_message`, `represent` and `diagnose` reach that crashable's own: the builder
-### chooses the routine by the type id, among the crashables the program throws. The carrier that caught the error
-### owns what the crashable holds (a `Text` field), and a `Crashables` read out of it is valid while the carrier holds
-### the error.
+### binds it. It holds the crashable itself, in a room the program's largest crashable fits in, with the crashable's
+### type id in front, so `crash_title`, `crash_message`, `represent` and `diagnose` reach that crashable's own: the
+### builder chooses the routine by the type id, among the crashables the program throws. While a failure passes up
+### through the routines it fails, the crashable sits in the failure mold of the flow it was thrown on (each thread and
+### each coroutine has one) and the room is empty: the `check` that receives it copies it into the room. The carrier
+### that caught the error holds what the crashable holds (a `Text` field), and a `Crashables` read out of it is valid
+### while the carrier holds the error.
 record Crashables
     ### The type id of the crashable it holds.
     secret type_id: U64
-    ### The number of the failure, which says where it was first thrown (0 when the build keeps no trace).
+    ### The number of the failure, which says where it was first thrown (0 when the build keeps no trace). Its top bit
+    ### is set while the crashable is still in the flow's mold.
     secret failure: U64
-    ### The crashable itself: every crashable takes at most these 64 bytes.
+    ### The crashable itself, once a `check` kept it: the builder sizes this room for the program's largest crashable
+    ### (64 bytes at the least).
     secret data: Array[U64, 8]
 
 ### The caught error's title: its type's name in sentence case, unless the crashable writes its own.
@@ -55,11 +59,11 @@ dangerous routine Crashables.free()
 ### :returns: The address of frame 0.
 @untraced
 dangerous routine Crashables.thrown_trace_frames() -> Hijacked[TraceFrame]
-    return LLVM::failure_trace_frames(seq: me.failure)
+    return LLVM::failure_trace_frames(seq: me.failure & (U64_MAX >>> 1))
 
 ### How many frames the trace had when the error was first thrown (0 when the build keeps no trace, or the thread no
 ### longer remembers it).
 ### :returns: The depth.
 @untraced
 dangerous routine Crashables.thrown_trace_depth() -> S32
-    return LLVM::failure_trace_depth(seq: me.failure)
+    return LLVM::failure_trace_depth(seq: me.failure & (U64_MAX >>> 1))

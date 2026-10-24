@@ -40,6 +40,20 @@ public sealed class ExitCodeTests
             actualString: stdout + stderr);
     }
 
+    /// <summary>A failure no keyword receives crashes with status 82 and its own message, after a <c>check</c> on the
+    /// same flow kept an earlier failure: the failure mold holds the new failure, and the kept <c>Check</c> its own.</summary>
+    [Fact]
+    public void BareFailureAfterKeptCheck_CrashesWithItsOwnMessage()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "mold_bare_crash.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "kept: the code was 1", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "the code was 9", actualString: stdout + stderr);
+    }
+
     /// <summary>A lambda's failure is recovered only beneath a recovery keyword: called with no keyword above
     /// the call (here by an <c>each</c> loop over a <c>select</c>) it crashes with status 82, and the loop does
     /// not quietly end early.</summary>

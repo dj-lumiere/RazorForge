@@ -1,0 +1,97 @@
+module Tests/Stdlib/FailureMoldApi
+
+import IO/Console
+# A failure is written into the failure mold of the flow it is thrown on, and the `check` that receives it copies it
+# out into the Check it gives: a Check kept in a variable keeps its own error past the next failure, two jobs failing
+# on one thread each keep their own error, `try` gives None, and a crashable bigger than 64 bytes is thrown and kept
+# like any other.
+
+crashable CodeError
+    code: S64
+
+routine CodeError.crash_message() -> Text
+    return f"code {me.code}"
+
+# Ten numbers: 80 bytes, more than the 64 a failure once carried.
+crashable WideError
+    a: S64
+    b: S64
+    c: S64
+    d: S64
+    e: S64
+    f: S64
+    g: S64
+    h: S64
+    i: S64
+    j: S64
+
+routine WideError.crash_message() -> Text
+    return f"wide {me.a}..{me.j}"
+
+failable routine fail_with_code(code: S64) -> S64
+    if code > 0
+        throw CodeError(code: code)
+    return 0
+
+failable routine fail_wide(n: S64) -> S64
+    if n > 0
+        throw WideError(a: n, b: n + 1, c: n + 2, d: n + 3, e: n + 4, f: n + 5, g: n + 6, h: n + 7, i: n + 8, j: n + 9)
+    return 0
+
+# Torn down on the way up: waiting here lets the other job run, and throw, while this job's failure is on its way.
+record Napper
+    id: S64
+
+@override
+routine Napper.destruct()
+    waitfor(2ms)
+    return
+
+failable routine fail_after_nap(code: S64) -> S64
+    var napper = Napper(id: code)
+    return fail_with_code(code: code) + napper.id
+
+routine racer(code: S64) -> S64
+    var total: S64 = 0
+    var round: S64 = 0
+    until round >= 5
+        when check fail_after_nap(code: code)
+            is CodeError as e => total += e.code
+            is S64 as v => total += v
+        round += 1
+    return total
+
+routine start()
+    # Failure, then check.
+    when check fail_with_code(code: 7)
+        is CodeError as e => show(f"caught code {e.code}")
+        is S64 as v => show(f"value {v}")
+
+    # A Check kept in a variable keeps its error after another failure on the same flow.
+    var kept = check fail_with_code(code: 1)
+    var other = check fail_with_code(code: 2)
+    show(f"kept: {kept}")
+    show(f"other: {other}")
+    when kept
+        is CodeError as e => show(f"kept code {e.code}")
+        is S64 as v => show(f"value {v}")
+
+    # A crashable of 80 bytes.
+    var wide = check fail_wide(n: 1)
+    drop check fail_with_code(code: 3)
+    when wide
+        is WideError as e => show(f"wide {e.a} {e.j}")
+        is S64 as v => show(f"value {v}")
+
+    # try gives None.
+    show(f"try: {try fail_with_code(code: 4)}")
+    show(f"try ok: {try fail_with_code(code: 0)}")
+
+    # Two jobs on this thread, each failing while the other's failure is on its way up.
+    var first = racer.to[Work](code: 10)
+    var second = racer.to[Work](code: 1000)
+    first.start_here()
+    second.start_here()
+    show(f"first: {first.retrieve()}")
+    show(f"second: {second.retrieve()}")
+    return

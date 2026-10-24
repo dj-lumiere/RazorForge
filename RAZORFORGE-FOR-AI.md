@@ -106,12 +106,22 @@ When unsure, consult ground truth in the repo/package:
    it writes its own. There is no `Crashable` protocol. `Crashables` (plural) is the
    stdlib record for "any caught error": `crash_title()`, `crash_message()`,
    `represent()`, `diagnose()` and `crash_type_id()` on it reach the actual
-   crashable's own routines. **A crashable holds a few values** (numbers, a `Text`):
-   at most 64 bytes, a bigger one is RF-S711. A caught error is held IN the carrier
-   (a `Crashables` is the crashable's type id, the number that says where it was first
-   thrown, and the crashable itself), so a `Check` takes no memory of its own, and a call
-   on a `Crashables` is a switch the builder writes on the type id over the crashables
-   the program throws: nothing about it is looked up at run time.
+   crashable's own routines. **A crashable holds a few values** (numbers, a `Text`); it
+   has no size limit. **Failure molds.** Every flow (each thread, and each fiber or
+   coroutine a Work runs on) has one failure mold, reserved when the flow starts, as big
+   as the program's largest crashable. `throw` writes the crashable into the mold of the
+   flow it runs on (its member variables copied at that moment), and the failure passes up
+   through the routines it fails as its type id and failure number only. The `check` that
+   receives it copies the crashable out of the mold into the `Check` it gives, so a `Check`
+   bound to a name keeps its own error past the next failure, and a failure on one fiber
+   never overwrites another's. `try` copies nothing. One failure flies per flow at a time:
+   errors are never stacked (to keep several, keep several `Check` values). A kept error
+   thrown again (`throw e`, a Work's error at `retrieve`) goes back into the mold of the
+   flow that throws it. A caught error is then held IN the carrier (a `Crashables` is the
+   crashable's type id, the failure number, and the crashable itself), so a `Check` takes
+   no memory of its own, and a call on a `Crashables` is a switch the builder writes on
+   the type id over the crashables the program throws: nothing about it is looked up at
+   run time.
    **The list a routine throws** is collected by the builder (its own `throw`s and those
    of the failable routines it calls). `@throws([NotFoundError, ParseError])` above a
    failable routine fixes it, for a routine others build on: a crashable the routine can
@@ -1352,7 +1362,6 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S510/S512 | positional args in a multi-param call | name every argument                                |
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
 | RF-S753      | failable call left unhandled          | recover with `try`/`check` + `when`                 |
-| RF-S711      | crashable bigger than 64 bytes        | keep a few values in it                            |
 | RF-S712      | `@throws` leaves out a crashable the routine throws | add it to the list, or recover it inside |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-S558      | `{}` (empty set) where a dict is expected | write `{:}`                                    |
