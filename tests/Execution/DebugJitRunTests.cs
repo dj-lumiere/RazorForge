@@ -122,7 +122,9 @@ public sealed partial class DebugJitRunTests
         public JitProject(bool incremental, bool useDaemon)
         {
             _useDaemon = useDaemon;
-            _pipe = "rf-jit-test-" + Guid.NewGuid().ToString(format: "N");
+            // Short, because on Linux and macOS the pipe is a socket file in the temp folder and the system limits
+            // the length of its path: macOS's temp folder is about 50 characters long and allows 103 in all.
+            _pipe = "rf-jit-" + Guid.NewGuid().ToString(format: "N")[..12];
             _dir = Path.Combine(path1: Path.GetTempPath(), path2: _pipe);
             Directory.CreateDirectory(path: _dir);
             _entry = Path.Combine(path1: _dir, path2: "probe.rf");
