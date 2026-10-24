@@ -53,7 +53,8 @@ entity Work[T]
 record WorkState[T]
     ### The state cell: slot 0 the place (0 WAITING, 1 NOW, 2 HERE, 3 APART, 4 DONE), slot 1 the fiber
     ### (rf_coro*) for NOW and HERE, slot 2 the task control block that holds the produced value, slot 3 nonzero
-    ### when cancellation was requested before a verb started the work, slot 4 how many Work handles hold it.
+    ### when cancellation was requested before a verb started the work, slot 4 how many Work handles hold it, slot 5
+    ### nonzero while the work is started but held back, waiting to be let go with the rest of its list.
     secret cell: Addr
     ### The routine the fiber or thread runs, given the recipe.
     secret entry: Addr
@@ -111,13 +112,14 @@ dangerous routine work_recipe[T](entry: Addr, recipe: Addr) -> Work[T]
 ### runs it.
 ### :returns: the work.
 dangerous routine work_state[T](entry: Addr, recipe: Addr) -> WorkState[T]
-    var cell = rf_allocate_dynamic(size: recipe_slot_size() * 5)
+    var cell = rf_allocate_dynamic(size: recipe_slot_size() * 6)
     var words = Hijacked[U64](cell)
     words.poke_at_offset(at: recipe_slot_size() * 0, value: 0)
     words.poke_at_offset(at: recipe_slot_size() * 1, value: 0)
     words.poke_at_offset(at: recipe_slot_size() * 2, value: 0)
     words.poke_at_offset(at: recipe_slot_size() * 3, value: 0)
     words.poke_at_offset(at: recipe_slot_size() * 4, value: 1)
+    words.poke_at_offset(at: recipe_slot_size() * 5, value: 0)
     return WorkState[T](cell: cell, entry: entry, recipe: recipe)
 
 ### Completes a recipe's task with what its work came to (the value, or the error it failed with) and frees the
@@ -189,13 +191,19 @@ routine WorkState[T].task() -> Addr
 ### Starts the work at `place` if no verb started it yet: makes the task block (into recipe slot 0) and the fiber or
 ### thread that runs the recipe. Idempotent, so `retrieve`/`gather`/`race` call it on every Work they drive.
 ### Takes `me` by reference: the place and handles it sets are what every later verb reads.
+### A `held` start makes the task block and the fiber or thread but leaves recipe slot 0 empty: the routine that runs
+### the recipe waits there (`work_wait_released`) until `release()` writes the task, so the Works of a list are all
+### ready before any of them runs.
 ### :returns: false if the work could not be started, or `place` is HERE inside a `start_now()` job.
-dangerous routine WorkState[T].start_at(place: WorkPlace) -> Bool
+dangerous routine WorkState[T].start_at(place: WorkPlace, held: Bool) -> Bool
     if me.place() != WorkPlace.WAITING or me.cancelled()
         return true
+    if held
+        me.set_cell_word(slot: 5, value: 1)
     if place == WorkPlace.APART
         me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 1).to[U64]())
-        Hijacked[Addr](me.recipe).poke(value: me.task())
+        if not held
+            Hijacked[Addr](me.recipe).poke(value: me.task())
         me.set_place(place: WorkPlace.APART)
         if me.cell_word(slot: 3) != 0
             C::rf_task_request_cancel(task: me.task())
@@ -206,7 +214,8 @@ dangerous routine WorkState[T].start_at(place: WorkPlace) -> Bool
         if here.is_hollow()
             return false
     me.set_cell_word(slot: 2, value: C::rf_task_create(kind: 0).to[U64]())
-    Hijacked[Addr](me.recipe).poke(value: me.task())
+    if not held
+        Hijacked[Addr](me.recipe).poke(value: me.task())
     var coro = C::rf_coro_create(entry: me.entry, userdata: me.recipe, stack_size: 0)
     me.set_cell_word(slot: 1, value: coro.to[U64]())
     me.set_place(place: place)
@@ -222,7 +231,40 @@ dangerous routine WorkState[T].start_at(place: WorkPlace) -> Bool
 ### library plumbing for the verbs over a `List[Work[T]]`.
 ### :returns: false if the work could not be started.
 dangerous routine WorkState[T].launch() -> Bool
-    return me.start_at(place: WorkPlace.NOW)
+    return me.start_at(place: WorkPlace.NOW, held: false)
+
+### Starts the work with `start_now()` if no verb started it yet, held back until `release()` lets it go. Plumbing for
+### the verbs over a list of jobs.
+### :returns: false if the work could not be started.
+dangerous routine WorkState[T].launch_held() -> Bool
+    return me.start_at(place: WorkPlace.NOW, held: true)
+
+### Whether no verb started the work yet.
+### :returns: `true` while the work waits for a verb.
+routine WorkState[T].is_waiting() -> Bool
+    return me.place() == WorkPlace.WAITING
+
+### Lets a work started held (`start_at(place:, held: true)`) go: writes its task into recipe slot 0, where the routine
+### that runs the recipe waits for it. Does nothing for a work that is not held, so it can be called on every Work of
+### a list.
+dangerous routine WorkState[T].release()
+    if me.cell_word(slot: 5) == 0
+        return
+    me.set_cell_word(slot: 5, value: 0)
+    LLVM::atomic_store[U64](ptr: Hijacked[U64](me.recipe), value: me.cell_word(slot: 2))
+    return
+
+### Waits, at the start of the routine that runs a Work, until the verb that started it lets it go: a list's
+### `start_now()` / `start_here()` / `start_apart()` makes every Work ready first and then lets them all go, so none runs
+### before the others are ready. A Work started on its own is let go at once. Builder plumbing for the routine that
+### runs a recipe.
+dangerous routine work_wait_released(recipe: Addr)
+    until LLVM::atomic_load[U64](ptr: Hijacked[U64](recipe)) != 0
+        if C::rf_in_coroutine() != 0
+            C::rf_coro_yield()
+        else
+            C::rf_waitfor_duration(secs: 0, ns: 1000)
+    return
 
 ### Starts a verb's own place, or crashes with what went wrong: the Work was started already, or `start_here()`
 ### runs inside a `start_now()` job.
@@ -232,7 +274,7 @@ failable routine WorkState[T].start_with(place: WorkPlace, verb: Text)
     if me.place() != WorkPlace.WAITING
         throw WorkStartError(reason: f"You called {verb} on a Work that was already started. Start a Work once.")
     danger
-        if me.start_at(place: place)
+        if me.start_at(place: place, held: false)
             return
     if place == WorkPlace.HERE and me.place() == WorkPlace.WAITING
         throw WorkStartError(reason: "You called start_here() inside a job started with start_now(), which can move " +
@@ -436,7 +478,7 @@ failable routine WorkState[T].retrieve(deadline: Duration, has_deadline: Bool) -
     danger
         var started = false
         if has_deadline
-            started = me.start_at(place: WorkPlace.APART)
+            started = me.start_at(place: WorkPlace.APART, held: false)
         else
             started = me.launch()
         if not started
@@ -640,6 +682,81 @@ routine Work[T].destruct()
 # nothing is handed over behind the call, and cleanup stays with the list's own teardown at scope exit.
 # Each Work is worked on in place (`me[i]`), so nothing double-frees.
 
+### Starts every Work of the list now on the runtime's pool of threads, all together: each one is made ready first
+### and then they are let go at once, so none runs before the others are ready. Collect the results later with
+### `gather()` (or `race()`, `next_finished()`, `gather_all()`).
+### :throws: {WorkStartError} if a Work of the list was started already.
+### :throws: {TaskSpawnError} if a Work could not be started.
+failable routine List[Work[T]].start_now()
+    me.start_together(place: WorkPlace.NOW, verb: "start_now()")
+    return
+
+### Starts every Work of the list now on this thread, beside its other `start_here()` jobs, all together: each one is
+### made ready first and then they are let go at once. They take turns only where one waits (`retrieve`, `waitfor`, a
+### channel). Collect the results later with `gather()`.
+### :throws: {WorkStartError} if a Work of the list was started already, or this runs inside a `start_now()` job.
+### :throws: {TaskSpawnError} if a Work could not be started.
+failable routine List[Work[T]].start_here()
+    me.start_together(place: WorkPlace.HERE, verb: "start_here()")
+    return
+
+### Starts every Work of the list now, each on an OS thread of its own, all together: every thread is made first and
+### then they are let go at once, so none runs before the others are ready. Collect the results later with `gather()`.
+### :throws: {WorkStartError} if a Work of the list was started already.
+### :throws: {TaskSpawnError} if a Work could not be started.
+failable routine List[Work[T]].start_apart()
+    me.start_together(place: WorkPlace.APART, verb: "start_apart()")
+    return
+
+### Starts every Work of the list at `place`, held, then lets them all go. Plumbing for the list's `start_now()`,
+### `start_here()` and `start_apart()`.
+### :throws: {WorkStartError} if a Work of the list was started already, or HERE runs inside a `start_now()` job.
+### :throws: {TaskSpawnError} if a Work could not be started.
+failable routine List[Work[T]].start_together(place: WorkPlace, verb: Text)
+    var n = me.count()
+    var i: U64 = 0
+    until i >= n
+        if me[i].state.place() != WorkPlace.WAITING
+            throw WorkStartError(reason: f"You called {verb} on a list whose Work at position {i} was already " +
+                "started. Start a Work once.")
+        i = i + 1
+    danger
+        i = 0
+        until i >= n
+            if not me[i].state.start_at(place: place, held: true)
+                me.release_all()
+                if place == WorkPlace.HERE
+                    throw WorkStartError(reason: "You called start_here() inside a job started with start_now(), " +
+                        "which can move between threads, so it has no thread of its own to run jobs beside. Start " +
+                        "them with start_now(), or start the outer job with start_here() or start_apart().")
+                throw TaskSpawnError()
+            i = i + 1
+        me.release_all()
+    return
+
+### Starts every Work of the list that nothing started yet with `start_now()`, all together, the way `gather` and
+### `race` start them. Plumbing for the verbs over a list.
+### :returns: false if a Work could not be started.
+dangerous routine List[Work[T]].launch_together() -> Bool
+    var n = me.count()
+    var started = true
+    var i: U64 = 0
+    until i >= n
+        if not me[i].state.start_at(place: WorkPlace.NOW, held: true)
+            started = false
+        i = i + 1
+    me.release_all()
+    return started
+
+### Lets every held Work of the list go.
+dangerous routine List[Work[T]].release_all()
+    var n = me.count()
+    var i: U64 = 0
+    until i >= n
+        me[i].state.release()
+        i = i + 1
+    return
+
 ### Races the jobs, driving them CONCURRENTLY until the FIRST one finishes, and returns that
 ### winner's value. Works on the list in place — call it `jobs.race()`. A coroutine loser is disposed/abandoned here, a
 ### threaded loser's block is freed through the worker↔consumer rendezvous (its worker frees it on exit).
@@ -652,12 +769,12 @@ failable routine List[Work[T]].race() -> T
         if n == 0
             throw TaskSpawnError()
 
+        # Start the whole set together so it runs CONCURRENTLY, then race.
+        if not me.launch_together()
+            throw TaskSpawnError()
         var race = C::rf_race_begin()
         var i: U64 = 0
         until i >= n
-            # Launch each recipe so the whole set runs CONCURRENTLY, then race.
-            if not me[i].state.launch()
-                throw TaskSpawnError()
             if me[i].state.is_coro()
                 C::rf_race_add_coro(race: race, coro: me[i].state.coro_handle())
             else
@@ -690,16 +807,13 @@ failable routine List[Work[T]].race() -> T
 failable routine List[Work[T]].gather() -> List[T]
     danger
         var n = me.count()
-        # Launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
-        # one-by-one would serialize the children into N× the wall-clock. Launching is idempotent, so
-        # retrieve!'s own launch below is a no-op on these already-started recipes.
-        var i: U64 = 0
-        until i >= n
-            if not me[i].state.launch()
-                throw TaskSpawnError()
-            i = i + 1
+        # Start the WHOLE set FIRST, together, so the children run CONCURRENTLY, then retrieve each. Driving
+        # one-by-one would serialize the children into N× the wall-clock. Starting is idempotent, so
+        # retrieve!'s own start below is a no-op on these already-started recipes.
+        if not me.launch_together()
+            throw TaskSpawnError()
         var results = List[T]()
-        i = 0
+        var i: U64 = 0
         until i >= n
             var value = me[i].retrieve()
             results.add_last(value: value)
@@ -733,11 +847,11 @@ failable routine List[Work[T]].next_finished() -> Work[T]
         var n = me.count()
         if n == 0
             throw TaskSpawnError()
+        if not me.launch_together()
+            throw TaskSpawnError()
         var race = C::rf_race_begin()
         var i: U64 = 0
         until i >= n
-            if not me[i].state.launch()
-                throw TaskSpawnError()
             if me[i].state.is_coro()
                 C::rf_race_add_coro(race: race, coro: me[i].state.coro_handle())
             else
@@ -752,11 +866,7 @@ failable routine List[Work[T]].next_finished() -> Work[T]
 ### :returns: Each Work's value or failure, in the order they appear in the list.
 routine List[Work[T]].gather_all() -> List[Check[T]]
     danger
-        var n = me.count()
-        var i: U64 = 0
-        until i >= n
-            drop me[i].state.launch()
-            i = i + 1
+        drop me.launch_together()
         var results = List[Check[T]]()
         each job in me
             results.add_last(value: check job.retrieve())
