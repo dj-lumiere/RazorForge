@@ -1,0 +1,43 @@
+module Tests/Stdlib/GenericLambdaApi
+
+import IO/Console
+import BuilderExpansion
+# A lambda written inside a generic routine is one routine per instance of it, a creator may take type parameters
+# of its own, a routine value kept in a record is called through the token an `each` loop hands out, and
+# `protocolof(T)` walks the protocols a type obeys.
+record Shower
+    show_it: Callable[(), Text]
+
+record Boxed
+    secret label: Text
+
+routine Boxed(from: T) -> Boxed
+needs RecordType T
+    return Boxed(label: f"{T.type_name()}: {from}")
+
+routine shower_of[T](value: T) -> Shower
+needs RecordType T
+    return Shower(show_it: () => f"{T.type_name()}")
+
+routine protocol_count[T]() -> U64
+    var n: U64 = 0
+    expand p in protocolof(T)
+        n = n + 1
+    return n
+
+record Point
+obeys Equatable
+    x: S64
+    y: S64
+
+routine start()
+    var n: S64 = 5
+    var showers = List[Shower]()
+    showers.add_last(value: shower_of[S64](value: n))
+    showers.add_last(value: shower_of[Text](value: "five"))
+    each s in showers
+        show(s.show_it())
+    show(Boxed(from: n).label)
+    show(Boxed(from: Point(x: 1, y: 2)).label)
+    show(protocol_count[Point]() > 0)
+    return

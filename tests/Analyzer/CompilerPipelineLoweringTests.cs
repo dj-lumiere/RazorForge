@@ -932,7 +932,7 @@ public class CompilerPipelineLoweringTests
             actualString: llvmIr);
         Assert.Contains(
             expectedSubstring:
-            "define ptr @\"[independent] System.hijacked_from(S64)(addr: System.Addr)\"(ptr %addr)",
+            "define ptr @\"[independent] System.hijacked_from(System.S64)(addr: System.Addr)\"(ptr %addr)",
             actualString: llvmIr);
     }
 
@@ -1467,11 +1467,11 @@ public class CompilerPipelineLoweringTests
         string llvmIr = generator.Generate();
         Assert.Contains(
             expectedSubstring:
-            "define ptr @\"[dangerous, independent] wrap_addr(S64)(addr: System.Addr)\"(ptr %addr)",
+            "define ptr @\"[dangerous, independent] wrap_addr(System.S64)(addr: System.Addr)\"(ptr %addr)",
             actualString: llvmIr);
         Assert.Contains(
             expectedSubstring:
-            "define ptr @\"[independent] System.hijacked_from(S64)(addr: System.Addr)\"(ptr %addr)",
+            "define ptr @\"[independent] System.hijacked_from(System.S64)(addr: System.Addr)\"(ptr %addr)",
             actualString: llvmIr);
     }
 
