@@ -1,0 +1,49 @@
+module Tests/Stdlib/RecoveryKeepsTeardownApi
+
+import IO/Console
+# A `try` / `check` over a call on a local reads the local in place: the local is still torn down at the end of
+# its scope, whether the recovered call failed or not (Rust I-unsound port, C46).
+
+entity Item
+    n: S64
+
+routine Item.destruct()
+    show(f"destruct {me.n}")
+    return
+
+failable routine boom(n: S64) -> S64
+    if n == 3
+        throw InvalidValueError(input: "3", target: "S64")
+    return n
+
+routine recovered_failure()
+    var a = Item(n: 1)
+    var r = check boom(n: 3)
+    when r
+        is Crashables as e => show("failed 1")
+        else => show("ok 1")
+    return
+
+routine recovered_receiver()
+    var xs = List[Item]()
+    xs.add_last(value: Item(n: 3))
+    xs.add_last(value: Item(n: 4))
+    var r = check xs.sort_by(compare: (a, b) => a.n // (a.n - 2) < b.n)
+    when r
+        is Crashables as e => show("failed 3")
+        else => show("ok 3")
+    return
+
+routine recovered_receiver_try()
+    var xs = List[Item]()
+    xs.add_last(value: Item(n: 5))
+    var r = try xs.sort_by(compare: (a, b) => a.n // 1 < b.n)
+    show("done 5")
+    return
+
+routine start()
+    recovered_failure()
+    recovered_receiver()
+    recovered_receiver_try()
+    show("end")
+    return

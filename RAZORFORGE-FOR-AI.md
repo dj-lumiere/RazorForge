@@ -321,8 +321,10 @@ The rest takes an import: `Collections`, `IO/Console`, `IO/Environment`, `IO/Fil
 `System.X`.
 
 **Globals (RazorForge).** `global name: Type = init` (type and initializer both required):
-initialized in dependency order when `start()` begins (a cycle is RF-S436, no `start()` is
-RF-S438), torn down at every exit of `start()`. Every thread reaches it, so the binding is
+initialized in dependency order when `start()` begins (a cycle is RF-S436, one reading itself too:
+`global A: S64 = A + 1`, no `start()` is RF-S438), torn down at every exit of `start()` in the opposite order. A
+global the `destruct` of another global's type reads (or the destruct of an entity it holds) is initialized before
+it and torn down after it, whatever order they are written in, and two whose destructs read each other are RF-S436. Every thread reaches it, so the binding is
 never assigned again: shared changing state is an `Unbroken` (`hits.fetch_add(delta: 1)`) or a
 `Guarded` (`modifying cache as c`), any other global is only read (writes are RF-S251 /
 RF-S256, `modifying G` on a global entity that is not a `Guarded` is RF-S256, `steal G` in any routine is
@@ -434,7 +436,8 @@ preset MAX_RETRIES: S32 = 5   # named constant: UPPER_CASE, explicit type requir
 There is **no `let` and no `const`** — `var` for bindings, `preset` for
 constants. A preset is computed when the program is built: one that calls a routine, does arithmetic or fills in
 a text runs once during the build and becomes the value it came to (number, Bool, Text, Char, or a record/tuple/
-choice of those; RF-S258 if it fails or has no such value). A preset made by a construction is one read-only value
+choice of those; RF-S258 if it fails or has no such value, RF-S436 if its value names itself, directly or through
+other presets). A preset made by a construction is one read-only value
 everywhere (an entity preset has one identity). (`lateinit var x: T` defers initialization: storage is allocated at
 the declaration — entities get a real zeroed block, the constructor not run. Assign before reading: a read (a token
 from it included) where some path hasn't assigned it is RF-S202, a `return` path doesn't count and a loop is left with
@@ -782,6 +785,18 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     does not end it.
   - A call that can replace the source of a token handed to that same call is
     RF-S639 (`h.replace_with(t: h.inner.view())`).
+  - A name a pattern binds to an entity in place is a token on the matched place: `else as c` of `when s.item`,
+    `is Cell as c`, a member name in a record pattern (`if ch is Chest(item: as c)` reads `ch.item`), and the element
+    an `each` loop over entities hands out (from the walked container). Replacing that place (`s.item = none`,
+    `ch.item = ...`, `xs[0] = ...`), moving it out (`steal ch.item as old`) or dropping it ends the name, and a later
+    use is RF-S643. A value element or member is a copy and is not affected.
+  - Two names that may be the same entity without the builder knowing it are treated as maybe the same: two token
+    parameters (and `me`) on the same entity type, and two `Retained` handles on one (a copy of a handle, a handle
+    that came from a call, a field or a parameter: one made right there with `Retained(from: ...)` and only reached
+    through is its own). A change through one ends the tokens taken from the same part of the other (RF-S643), unless
+    a `modifying a, b` block over both checked that they differ. Handing one call two tokens taken from the same
+    entity through differently named token variables (`var m2 = m`, then `both(a: m, b: m2)`) with one of them
+    written is RF-S623, like handing it the same container twice.
   - A token parameter takes the entity itself: `total(items: xs)` passes
     `xs.view()` for `Viewing[T]` (a temporary works too), `grow(items: xs)` passes
     `xs.modify()` for `Modifying[T]`. A record value or a value of a type parameter
@@ -1010,6 +1025,10 @@ relates ListEmitter[T] as Emitter     # associated type binding
 ```
 
 - Constraint syntax: `T obeys SomeProtocol`. `Me` is the self type.
+- A member routine of a generic type may be written for some of its instances only, with a kind on the type's
+  parameter (`routine List[T].sorted_by(...)` with `needs RecordType T`: it copies the elements). Calling it on an
+  instance the kind leaves out (`sorted_by` on a `List` of entities) is RF-S151 at the call. `sorted()` and
+  `sorted_by` copy, so a list of entities sorts in place with `sort()` / `sort_by`.
 - Const generics: `Array[T, COUNT]`.
 - **Type arguments use `[...]`, never `<...>` — by design; do not propose `<>`.**
   `f < T > (x)` is already a valid chained comparison in RF, so angle brackets
@@ -1091,6 +1110,10 @@ digit.repeat(4)), text("-"), capture("month", digit.repeat(2))])` (a `preset` pa
 
 Verify exact signatures in `Standard/RazorForge/Collections/` — highlights
 that differ from other languages:
+
+- A collection's storage size never wraps around: asking for room for more bytes than a `U64` counts
+  (`xs.reserve(new_capacity: n)` with `n` times the element size past `U64_MAX`) crashes with `IntegerOverflowError`
+  (a `ByteSize` times a count is checked).
 
 - `list.add_last(value: v)`, `list.remove_first!()`, `list.remove_at!(0)` —
   removal is failable (empty/out-of-range throws); `try list.remove_first()`
@@ -1193,6 +1216,10 @@ token, `Retained` or `Tracked` handle to the same kind of container
 cannot tell whether it is the same container. Open both with
 `modifying into, viewing from` to loop over `from` and change `into`.
 Every stdlib collection marks its adding/removing routines `@reshaping`.
+The same holds while a member routine of a collection calls a lambda it is handed: a lambda that can add to or
+remove from that collection (or a token or shared handle that may be it), directly or through a call
+(`r.sort_by(compare: (a, b) given (alias) => grow(xs: alias, a: a, b: b))`), is RF-S625 at that call, since the
+routine is still working on the elements.
 
 **Writes into an element land in the container.** A call, field write, or index
 write on an ENTITY element (`grid[0].add_last(value: 1)`, `boxes[0].n = 5`,

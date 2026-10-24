@@ -27,6 +27,32 @@ public sealed class ExitCodeTests
     /// 82), even when a failable routine calls it under <c>try</c>, after the same <c>try</c> received the failable
     /// routine's own throw.</summary>
     [Fact]
+    public void GlobalReadByAnotherGlobalsDestruct_IsTornDownAfterIt()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "global_destruct_order.rf");
+
+        Assert.True(condition: exit == 0,
+            userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        int reporter = stdout.IndexOf(value: "reporter 7 reads the log: 3 lines, first a line long enough",
+            comparisonType: StringComparison.Ordinal);
+        int log = stdout.IndexOf(value: "log destruct with 3 lines", comparisonType: StringComparison.Ordinal);
+        Assert.True(condition: reporter >= 0 && log > reporter,
+            userMessage: $"expected the reporter torn down before the log\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+    }
+
+    [Fact]
+    public void ReserveSizePastU64_CrashesInsteadOfWrapping()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "reserve_size_overflow.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "reserving", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "Integer overflow error", actualString: stdout + stderr);
+    }
+
+    [Fact]
     public void ThrowInPlainRoutineUnderTry_CrashesWithItsMessage()
     {
         (int exit, string stdout, string stderr) = RunFixture(fixture: "throw_in_plain_under_try.rf");

@@ -884,6 +884,51 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         private int _statementIndex;
         private List<string>? _callEnds;
 
+        /// <summary>The names that may reach the same entity as another name of the same entity type without the
+        /// builder knowing it: token parameters, <c>me</c>, and <c>Retained</c> handles (a copy of one is the same
+        /// entity). Each maps to the entity type it reaches, and a change through one of them ends the tokens taken
+        /// from the same part of every other.</summary>
+        private readonly Dictionary<string, string> _aliasRoots = new(comparer: StringComparer.Ordinal);
+
+        /// <summary>The names a pattern bound to what an identifier being matched holds, with that identifier: giving
+        /// the identifier a new value there is RF-S264 already, so it does not end them a second time.</summary>
+        private readonly Dictionary<string, string> _pinnedSubjects = new(comparer: StringComparer.Ordinal);
+
+        /// <summary>The pairs of names a <c>viewing</c> / <c>modifying</c> block with several targets is running over:
+        /// the block checks they are different entities, so a change through one does not reach the other.</summary>
+        private readonly HashSet<(string, string)> _distinct = [];
+
+        /// <summary>The names the routine's body uses as a whole value somewhere (handed on, copied, stolen), not
+        /// only to reach into (<c>r.inner</c>).</summary>
+        private HashSet<string> BareNames => _bareNames ??= CollectBareNames();
+
+        private HashSet<string>? _bareNames;
+
+        private HashSet<string> CollectBareNames()
+        {
+            var reachedThrough = new HashSet<IdentifierExpression>(comparer: ReferenceEqualityComparer.Instance);
+            AstWalker.WalkExpressions(root: routine.Body, visit: e =>
+            {
+                if (e is MemberExpression { Object: IdentifierExpression through })
+                {
+                    reachedThrough.Add(item: through);
+                }
+                else if (e is CallExpression { Callee: MemberExpression { Object: IdentifierExpression receiver } })
+                {
+                    reachedThrough.Add(item: receiver);
+                }
+            });
+            var bare = new HashSet<string>(comparer: StringComparer.Ordinal);
+            AstWalker.WalkExpressions(root: routine.Body, visit: e =>
+            {
+                if (e is IdentifierExpression id && !reachedThrough.Contains(item: id))
+                {
+                    bare.Add(item: id.Name);
+                }
+            });
+            return bare;
+        }
+
         public void Run()
         {
             var start = new Dictionary<string, TokenState>(comparer: StringComparer.Ordinal);
@@ -892,6 +937,19 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 foreach (ParamInfo p in info.Parameters.Where(predicate: p => IsTrackedToken(type: p.Type)))
                 {
                     start[key: p.Name] = new TokenState(Origins: [p.Name], EndedBy: null, EndedAt: null);
+                }
+
+                foreach (ParamInfo p in info.Parameters)
+                {
+                    if (AliasKey(type: p.Type) is { } key)
+                    {
+                        _aliasRoots[key: p.Name] = key;
+                    }
+                }
+
+                if (info.OwnerType is EntityTypeSymbol owner && info.Kind is not (RoutineKind.CommonRoutine or RoutineKind.Creator))
+                {
+                    _aliasRoots[key: MeSlot] = owner.Name;
                 }
             }
 
@@ -916,15 +974,187 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 return;
             }
 
-            foreach ((string name, TokenState t) in _state.Tokens.ToList())
+            // A change through a name that may be the same entity as another one (two token parameters, two copies of
+            // a Retained handle) changes that part of the other as well.
+            var writes = new List<(string Path, string Why)> { (written, why) };
+            string root = RootName(path: written);
+            string suffix = Suffix(path: written);
+            if (suffix.Length > 0 && _aliasRoots.TryGetValue(key: root, value: out string? key))
             {
-                if (t.EndedBy == null &&
-                    t.Origins.FirstOrDefault(predicate: o => Ends(written: written, origin: o)) is { } ended)
+                foreach ((string other, string otherKey) in _aliasRoots)
                 {
-                    string from = ended == UnknownOrigin || ended.StartsWith(value: "~", comparisonType: StringComparison.Ordinal)
-                        ? "the object it was taken from"
-                        : $"'{Shown(path: ended)}', where it was taken from,";
-                    _state.Tokens[key: name] = t with { EndedBy = $"{from} {why}", EndedAt = at };
+                    if (other != root && otherKey == key && !_distinct.Contains(item: (root, other)))
+                    {
+                        writes.Add(item: (Join(path: other, suffix: suffix),
+                            $"may have been changed through '{root}', which may be the same {key} as '{other}' " +
+                            $"({why.Replace(oldValue: "was ", newValue: "", comparisonType: StringComparison.Ordinal)})"));
+                    }
+                }
+            }
+
+            foreach ((string path, string reason) in writes)
+            {
+                foreach ((string name, TokenState t) in _state.Tokens.ToList())
+                {
+                    if (t.EndedBy == null &&
+                        !(_pinnedSubjects.TryGetValue(key: name, value: out string? subject) && subject == path) &&
+                        t.Origins.FirstOrDefault(predicate: o => Ends(written: path, origin: o)) is { } ended)
+                    {
+                        string from = ended == UnknownOrigin || ended.StartsWith(value: "~", comparisonType: StringComparison.Ordinal)
+                            ? "the object it was taken from"
+                            : $"'{Shown(path: ended)}', where it was taken from,";
+                        _state.Tokens[key: name] = t with { EndedBy = $"{from} {reason}", EndedAt = at };
+                    }
+                }
+            }
+        }
+
+        /// <summary>The entity type a value of <paramref name="type"/> may share with another name: the inner type of a
+        /// token or a <c>Retained</c> handle. Null for anything else.</summary>
+        private static string? AliasKey(TypeSymbol? type)
+        {
+            return type?.BareName is RuntimeContract.Viewing or RuntimeContract.Modifying or RuntimeContract.Retained &&
+                   type.TypeArguments is [EntityTypeSymbol inner]
+                ? inner.Name
+                : null;
+        }
+
+        /// <summary>The names a pattern binds, each with the part of the matched value it names (empty for the whole
+        /// value, <c>.item</c> for <c>Chest(item: as c)</c>).</summary>
+        private static IEnumerable<(string Name, string Suffix)> PatternBindings(Pattern? pattern, string suffix)
+        {
+            switch (pattern)
+            {
+                case ElsePattern { VariableName: { } rest }:
+                    yield return (rest, suffix);
+                    break;
+                case TypePattern typed:
+                    if (typed.VariableName is { } whole)
+                    {
+                        yield return (whole, suffix);
+                    }
+
+                    foreach ((string, string) b in MemberBindings(bindings: typed.Bindings, suffix: suffix))
+                    {
+                        yield return b;
+                    }
+
+                    break;
+                case TypeDestructuringPattern destructured:
+                    foreach ((string, string) b in MemberBindings(bindings: destructured.Bindings, suffix: suffix))
+                    {
+                        yield return b;
+                    }
+
+                    break;
+                case DestructuringPattern nested:
+                    foreach ((string, string) b in MemberBindings(bindings: nested.Bindings, suffix: suffix))
+                    {
+                        yield return b;
+                    }
+
+                    break;
+                case GuardPattern guarded:
+                    foreach ((string, string) b in PatternBindings(pattern: guarded.InnerPattern, suffix: suffix))
+                    {
+                        yield return b;
+                    }
+
+                    break;
+            }
+        }
+
+        private static IEnumerable<(string Name, string Suffix)> MemberBindings(List<DestructuringBinding>? bindings,
+            string suffix)
+        {
+            foreach (DestructuringBinding b in bindings ?? [])
+            {
+                string part = b.MemberVariableName is { } member
+                    ? suffix + "." + member
+                    : suffix;
+                if (b.NestedPattern != null)
+                {
+                    foreach ((string, string) inner in PatternBindings(pattern: b.NestedPattern, suffix: part))
+                    {
+                        yield return inner;
+                    }
+                }
+                else if ((b.BindingName ?? b.MemberVariableName) is { } name)
+                {
+                    yield return (name, part);
+                }
+            }
+        }
+
+        /// <summary>Whether the name <paramref name="name"/> in <paramref name="body"/> reads an entity in place (an
+        /// entity or a token on one): its first use there says the type the pattern gave it.</summary>
+        private static bool NamesEntityInPlace(Statement body, string name)
+        {
+            TypeSymbol? found = null;
+            AstWalker.WalkExpressions(root: body, visit: e =>
+            {
+                if (found == null && e is IdentifierExpression { Name: var n, ResolvedType: { } t } && n == name)
+                {
+                    found = t;
+                }
+            });
+            // A token on a value element reads the slot, which a replacement fills again: only an entity there is
+            // torn down by it.
+            return found is EntityTypeSymbol ||
+                   IsTrackedToken(type: found) && found!.TypeArguments is [EntityTypeSymbol];
+        }
+
+        /// <summary>Takes each name <paramref name="pattern"/> binds to an entity in place as a token on the part of
+        /// <paramref name="matched"/> it names, for <paramref name="body"/>: replacing, stealing or dropping that part
+        /// there ends it (RF-S643 at a later use). Gives the names it bound.</summary>
+        private List<string> BindPattern(Pattern? pattern, HashSet<string> matched, Statement body, string? subject)
+        {
+            var bound = new List<string>();
+            if (_state == null)
+            {
+                return bound;
+            }
+
+            foreach ((string name, string part) in PatternBindings(pattern: pattern, suffix: ""))
+            {
+                if (!NamesEntityInPlace(body: body, name: name))
+                {
+                    continue;
+                }
+
+                _state.Tokens[key: name] = new TokenState(
+                    Origins: matched.Select(selector: m => Join(path: m, suffix: part))
+                                    .ToHashSet(),
+                    EndedBy: null,
+                    EndedAt: null);
+                if (subject != null && part.Length == 0)
+                {
+                    _pinnedSubjects[key: name] = subject;
+                }
+
+                bound.Add(item: name);
+            }
+
+            return bound;
+        }
+
+        private void UnbindPattern(List<string> bound, State entry)
+        {
+            foreach (string name in bound)
+            {
+                _pinnedSubjects.Remove(key: name);
+                if (_state == null)
+                {
+                    continue;
+                }
+
+                if (entry.Tokens.TryGetValue(key: name, value: out TokenState? before))
+                {
+                    _state.Tokens[key: name] = before;
+                }
+                else
+                {
+                    _state.Tokens.Remove(key: name);
                 }
             }
         }
@@ -1013,6 +1243,16 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         _iteratorSources[key: v.Name] = walkedPaths;
                     }
 
+                    // A handle made here (`Retained(from: ...)`) and only ever reached through (`r.inner`) is no other
+                    // name's entity. A copy, a handle handed out or one that came from somewhere may be.
+                    if (v.Initializer?.ResolvedType is { BareName: RuntimeContract.Retained } handle &&
+                        AliasKey(type: handle) is { } handleKey &&
+                        (v.Initializer is not CallExpression { ResolvedRoutine.Kind: RoutineKind.Creator } ||
+                         BareNames.Contains(item: v.Name)))
+                    {
+                        _aliasRoots[key: v.Name] = handleKey;
+                    }
+
                     if (walkToken)
                     {
                         BindWalk(name: v.Name, walk: v.Initializer!, index: index);
@@ -1075,7 +1315,17 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 {
                     Expr(expr: ifs.Condition);
                     State entry = _state.Clone();
+                    // `if ch is Chest(item: as c)`: the names the pattern binds reach the matched place in the body.
+                    List<string> patternBound =
+                        ifs.Condition is IsPatternExpression { IsNegated: false } matchedIf &&
+                        owner.PathsOf(expr: matchedIf.Expression, tokenOrigins: Held) is { } ifMatched
+                            ? BindPattern(pattern: matchedIf.Pattern, matched: ifMatched, body: ifs.ThenStatement,
+                                subject: matchedIf.Expression is IdentifierExpression { Name: var ifSubject }
+                                    ? ifSubject
+                                    : null)
+                            : [];
                     Statement(stmt: ifs.ThenStatement);
+                    UnbindPattern(bound: patternBound, entry: entry);
                     State? afterThen = _state;
                     _state = entry;
                     if (ifs.ElseStatement is { } alt)
@@ -1105,9 +1355,21 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     HashSet<string>? stepSources = stepIter != null
                         ? _iteratorSources.GetValueOrDefault(key: stepIter)
                         : null;
+                    // What the arms' names reach in place: an element of what an `each` loop walks, or the place
+                    // being matched (`when slot.item`, `when v`).
+                    HashSet<string>? matched = stepSources != null
+                        ? stepSources.Select(selector: w => Join(path: w, suffix: "[]"))
+                                     .ToHashSet()
+                        : owner.PathsOf(expr: whenStmt.Expression, tokenOrigins: Held);
+                    string? subject = whenStmt.Expression is IdentifierExpression { Name: var subjectName }
+                        ? subjectName
+                        : null;
                     foreach (WhenClause clause in whenStmt.Clauses)
                     {
                         _state = entry.Clone();
+                        List<string> patternBound = matched != null
+                            ? BindPattern(pattern: clause.Pattern, matched: matched, body: clause.Body, subject: subject)
+                            : [];
                         string? bound = clause.Pattern is ElsePattern { VariableName: { } boundName }
                             ? boundName
                             : null;
@@ -1126,6 +1388,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                             _stepElements.Remove(key: bound!);
                         }
 
+                        UnbindPattern(bound: patternBound, entry: entry);
                         merged = State.Merge(a: merged, b: _state);
                     }
 
@@ -1187,7 +1450,36 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         Bind(name: target.Name, value: target.Target, index: index);
                     }
 
+                    // The block checks its targets are different entities, so in its body a change through one of
+                    // them does not reach another.
+                    List<string> targetRoots = access.Targets
+                                                     .SelectMany(selector: t =>
+                                                          owner.PathsOf(expr: t.Target, tokenOrigins: _ => null) ?? [])
+                                                     .Select(selector: RootName)
+                                                     .Concat(second: access.Targets.Select(selector: t => t.Name))
+                                                     .Distinct()
+                                                     .ToList();
+                    var addedPairs = new List<(string, string)>();
+                    if (access.Targets.Count > 1)
+                    {
+                        foreach (string ra in targetRoots)
+                        {
+                            foreach (string rb in targetRoots)
+                            {
+                                if (ra != rb && _distinct.Add(item: (ra, rb)))
+                                {
+                                    addedPairs.Add(item: (ra, rb));
+                                }
+                            }
+                        }
+                    }
+
                     Statement(stmt: access.Body);
+                    foreach ((string, string) pair in addedPairs)
+                    {
+                        _distinct.Remove(item: pair);
+                    }
+
                     CloseBlock(at: access.Location);
                     foreach (AccessTarget target in access.Targets)
                     {
@@ -1196,6 +1488,23 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
                     return;
                 }
+                // `steal slot.item as old [inject fresh]` moves the value out of the place: a token on it ends.
+                case StealStatement stealStmt:
+                    if (stealStmt.Fresh != null)
+                    {
+                        Expr(expr: stealStmt.Fresh);
+                    }
+
+                    if (owner.PathsOf(expr: stealStmt.Place, tokenOrigins: Held) is { } stolenPlace)
+                    {
+                        foreach (string sp in stolenPlace)
+                        {
+                            End(written: sp, why: $"was moved out by 'steal {Shown(path: sp)}'", at: stealStmt.Location);
+                        }
+                    }
+
+                    EndTemporaries(index: index, at: stmt.Location);
+                    return;
                 // `drop x` ends `x` as `steal x` does: a token taken from it ends here.
                 case DropStatement { EndsBinding: true } ended:
                     Expr(expr: ended.Expression);
@@ -1535,6 +1844,65 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             }
         }
 
+        /// <summary>RF-S623 for one call handed the same entity twice through token variables that name it
+        /// differently (<c>var m2 = m</c>, then <c>both(a: m, b: m2)</c>), with one of the two written: a change through
+        /// the write token changes what the other reads. Two arguments spelled as the same place are reported by the
+        /// shape check already.</summary>
+        private void CheckSameEntityTwice(CallExpression call)
+        {
+            if (call.ResolvedRoutine is not { } callee || IsRoutineValueCall(call: call))
+            {
+                return;
+            }
+
+            var handed = new List<(string Param, Expression Arg, bool Writes, HashSet<string> Origins)>();
+            foreach ((string param, Expression arg) in BoundArguments(call: call, callee: callee))
+            {
+                TypeSymbol? type = callee.Parameters.FirstOrDefault(predicate: p => p.Name == param)?.Type;
+                if (!IsTrackedToken(type: type) || owner.PathsOf(expr: arg, tokenOrigins: Held) is not { } origins)
+                {
+                    continue;
+                }
+
+                handed.Add(item: (param, arg, type!.BareName == RuntimeContract.Modifying, origins));
+            }
+
+            for (int a = 0; a < handed.Count; a++)
+            {
+                for (int b = a + 1; b < handed.Count; b++)
+                {
+                    (string pa, Expression ea, bool wa, HashSet<string> oa) = handed[index: a];
+                    (string pb, Expression eb, bool wb, HashSet<string> ob) = handed[index: b];
+                    if (!(wa || wb) ||
+                        !oa.Any(predicate: x => ob.Any(predicate: y => x != UnknownOrigin && y != UnknownOrigin &&
+                                                                      (UnderOrEqual(path: x, prefix: y) ||
+                                                                       UnderOrEqual(path: y, prefix: x)))))
+                    {
+                        continue;
+                    }
+
+                    HashSet<string>? sa = owner.PathsOf(expr: ea, tokenOrigins: _ => null);
+                    HashSet<string>? sb = owner.PathsOf(expr: eb, tokenOrigins: _ => null);
+                    if (sa != null && sb != null &&
+                        sa.Any(predicate: x => sb.Any(predicate: y => UnderOrEqual(path: x, prefix: y) ||
+                                                                      UnderOrEqual(path: y, prefix: x))))
+                    {
+                        continue;
+                    }
+
+                    string shared = Shown(path: oa.First(predicate: x => ob.Any(predicate: y =>
+                        UnderOrEqual(path: x, prefix: y) || UnderOrEqual(path: y, prefix: x))));
+                    owner.Report(code: SemanticDiagnosticCode.SameContainerTwiceInCall,
+                        message:
+                        $"You are handing '{pa}' and '{pb}' of '{callee.Name}' tokens taken from the same '{shared}', " +
+                        "and one of them is written: a change through one changes what the other reads. Pass one " +
+                        "token, or tokens on two different entities.",
+                        location: call.Location);
+                    return;
+                }
+            }
+        }
+
         private void Call(CallExpression call)
         {
             List<string>? outer = _callEnds;
@@ -1593,6 +1961,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
             if (_reporting)
             {
+                CheckSameEntityTwice(call: call);
                 owner.CheckReadTokenWrites(call: call,
                     isReadElement: e => e is IdentifierExpression { Name: var n } && _readElements.Contains(item: n));
             }
