@@ -89,6 +89,46 @@ routine Retained[T].modify() -> Modifying[T]
         return Modifying[T](Hijacked[RetainManager[T]](me).as_entity().raw_data())
 
 # ============================================================================
+# Walking the held entity
+# ============================================================================
+
+### Walks the entity a `Retained` handle reaches and holds one more reference to it, so the emitter is valid on its
+### own: it may be kept, stored in a member variable or returned after the handle it came from is gone. It hands out
+### what the entity's own emitter hands out.
+### :typeparam T: The element type.
+### :typeparam TSourceEmitter: The entity's own emitter, which does the walk.
+### :typeparam TSource: The entity walked.
+entity RetainedEmitter[T, TSourceEmitter, TSource]
+obeys Emitter[T]
+needs TSourceEmitter obeys Emitter[T]
+needs EntityType TSource
+    ### The entity's own emitter. It comes first, so it is torn down before the reference below lets the entity go.
+    secret walk: TSourceEmitter
+    ### One more reference to the entity, held as long as the emitter lives.
+    secret source: Retained[TSource]
+
+### An emitter over the held entity that holds one more reference to it (see {RetainedEmitter}). An emitter made from
+### the entity itself (`r.view().emitter()`) is a token on it, as one made from any entity a name holds.
+### :returns: The emitter.
+routine Retained[T].emitter() -> RetainedEmitter[TElement, T/Emitter, T]
+needs AnyType TElement
+needs T obeys Emittable[TElement]
+    danger
+        # The emitter's own reference to the entity, given back by its `source` member variable's teardown.
+        var ctrl = Hijacked[RetainManager[T]](me).as_entity()
+        ctrl.hold()
+        return RetainedEmitter[TElement, T/Emitter, T](
+            walk: ctrl.raw_data().as_entity().emitter(),
+            source: me,
+        )
+
+### The next value the held entity's own emitter hands out.
+### :returns: The value.
+### :throws: {AbsentValueError} The walk is over.
+failable routine RetainedEmitter[T, TSourceEmitter, TSource].emit() -> TSourceEmitter/Item
+    return me.walk.emit()
+
+# ============================================================================
 # Display (transparent — delegates to inner value)
 # ============================================================================
 

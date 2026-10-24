@@ -1100,7 +1100,11 @@ that differ from other languages:
   `xs.where(...)`), and the caller's result is a token on what it passed there. Keeping it in a field, or returning one
   made from anything else, is RF-S644. `(steal xs).emitter()` takes the list's elements into the emitter (each one
   comes out as the value itself, like `each x in steal xs`), so it holds what it walks and can go anywhere, returned
-  from a routine too. A range (`var r = 0 til 10`) points at nothing and can be kept.
+  from a routine too. A range (`var r = 0 til 10`) points at nothing and can be kept. `r.emitter()` on a
+  `Retained[T]` gives a `RetainedEmitter[TElement, T/Emitter, T]` (the element type comes from `T`'s `Emittable`
+  conformance) that holds one more reference to the entity, so it is no token: it can be returned, kept in an
+  entity's member variable, or used after `r` is given another entity. `each x in r` walks the same way. An emitter
+  made from the entity itself (`r.view().emitter()`) is a token like one made from a local container.
 - An emitter is an emittable (`Emitter[T]` obeys `Emittable[T]`): terminals and adapters work on it and take the
   values it has not handed out yet (`var it = xs.emitter()`, `drop it.emit()`, then `it.to[List]()`, `it.sum()`,
   `it.where(...)`).

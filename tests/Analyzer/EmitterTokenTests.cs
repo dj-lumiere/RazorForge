@@ -163,4 +163,40 @@ public class EmitterTokenTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+
+    [Fact]
+    public void RetainedEmitter_Returned_IsAllowed()
+    {
+        // `r.emitter()` holds one more reference to the list, and its element type comes from the list's
+        // conformance (`List[S64]` obeys `Emittable[S64]`), so nothing in the call names it.
+        string source = Prelude + """
+                                  routine walk() -> RetainedEmitter[S64, ListEmitter[S64], List[S64]]
+                                      var r = Retained[List[S64]](from: [1, 2, 3])
+                                      return r.emitter()
+
+                                  routine start()
+                                      var it = walk()
+                                      each x in it
+                                          show(f"{x}")
+                                      return
+                                  """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void EmitterOfRetainedsEntity_Returned_Errors()
+    {
+        // Made from the entity itself (`r.view()`), the emitter is a token on it, as one made from a local.
+        string source = Prelude + """
+                                  routine walk() -> ListEmitter[S64]
+                                      var r = Retained[List[S64]](from: [1, 2, 3])
+                                      return r.view().emitter()
+                                  """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.SourceIterableKept);
+    }
 }

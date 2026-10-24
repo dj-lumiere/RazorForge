@@ -75,6 +75,10 @@ needs EntityType T
     ### (Suflae's shape use). Every name of the entity shares this controller, so a change made through any of
     ### them sees the use. Kept by the builder through `Roamed.begin_shape_use`/`end_shape_use`.
     secret shape_users: U64
+    ### The controller of another entity this one keeps alive (one strong handle to it), or the hollow address. An
+    ### emitter adapter keeps the collection it walks this way, wherever the adapter is stored. The last strong
+    ### release lets it go.
+    secret kept: Addr
 
 ### Builder intrinsic: yields a closure over this type's synthesized `roam_trace` cycle-collector
 ### hook (visits the entity's `Roamed` fields). ExpressionLoweringPass rewrites every call to a
@@ -113,6 +117,7 @@ dangerous routine RoamManager[T](data: Hijacked[T]) -> RoamManager[T]
         free_hook: data.as_entity().roam_free_ref(),
         drop_hook: data.as_entity().roam_drop_ref(),
         shape_users: 0,
+        kept: Addr.hollow(),
     )
 
 # ============================================================================
@@ -142,6 +147,13 @@ routine RoamManager[T].hold()
 routine RoamManager[T].unhold()
     danger
         C::ingrid_roam_unhold(header: me.header())
+    return
+
+### Makes this entity keep another one alive: one more strong handle to the controller at `kept`, let go when this
+### entity's last strong handle goes. A controller it kept before is let go now.
+### :param kept: The other entity's controller.
+dangerous routine RoamManager[T].keep(kept: Addr)
+    C::ingrid_roam_keep(header: me.header(), kept: kept)
     return
 
 ### Takes the entity out of this controller when one strong handle and no weak observer reach it, freeing the

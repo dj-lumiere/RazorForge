@@ -1,0 +1,44 @@
+module Tests/Stdlib/RetainedEmitterApi
+
+# The emitter of a `Retained[T]` holds one more reference to what it walks, so it is valid on its own: it may be
+# returned, stored, or kept after the handle it came from is gone. An emitter made from the entity itself
+# (`r.view().emitter()`) is a token on it.
+import IO/Console
+import IterTools
+
+entity Walker
+    walk: RetainedEmitter[S64, ListEmitter[S64], List[S64]]
+
+routine walk_of(xs: List[S64]) -> RetainedEmitter[S64, ListEmitter[S64], List[S64]]
+    var r = Retained[List[S64]](from: steal xs)
+    return r.emitter()
+
+routine start()
+    # Returned after the only other handle is gone.
+    var it = walk_of(xs: [4, 5, 6])
+    show(f"first: {it.emit()}")
+    each x in it
+        show(f"rest: {x}")
+
+    # Stored in a member variable.
+    var w = Walker(walk: walk_of(xs: [7, 8]))
+    show(f"stored: {w.walk.emit()}")
+
+    # Terminals and adapters work on it, and `each` over the handle walks the same way.
+    var r = Retained[List[S64]](from: [1, 2, 3])
+    show(f"sum: {r.emitter().sum()}")
+    show(f"where: {r.emitter().where(predicate: v => v > 1).to[List]()}")
+    var total: S64 = 0
+    each x in r
+        total = total + x
+    show(f"each: {total}")
+
+    # Kept while the handle it came from is given another list.
+    var kept = r.emitter()
+    r = Retained[List[S64]](from: [9])
+    show(f"kept: {kept.to[List]()}")
+
+    # From the entity itself it is a token, used while the entity is there.
+    var view_walk = r.view().emitter()
+    show(f"view: {view_walk.emit()}")
+    return

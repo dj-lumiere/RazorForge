@@ -1734,6 +1734,14 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             return false;
         }
 
+        // An emitter that holds a strong reference to what it walks (the walk `r.emitter()` gives for a
+        // `Retained[T]`) keeps it alive as long as the emitter lives: it is valid on its own.
+        if (fields != null && fields.Any(predicate: f => f.Type.BareName is RuntimeContract.Retained or
+                RuntimeContract.Roamed or RuntimeContract.Guarded))
+        {
+            return false;
+        }
+
         return fields != null &&
                fields.Any(predicate: f => f.Type.BareName == RuntimeContract.Hijacked ||
                                           PointsIntoSource(type: f.Type, depth: depth + 1));
@@ -1768,8 +1776,9 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             $"You are keeping '{type.BareName}' {where}. It points at the container it walks, so it is a token: a " +
             "local variable may hold it until the container changes shape or ends, and a routine may return one made " +
             "from 'me' or from a token parameter (declare it Viewing[T] or Modifying[T]), but it cannot go anywhere " +
-            "else that outlives the container. Collect it with '.to[List]()', or build it from 'steal' " +
-            "('(steal xs).emitter()') so it holds the elements itself.",
+            "else that outlives the container. Collect it with '.to[List]()', build it from 'steal' " +
+            "('(steal xs).emitter()') so it holds the elements itself, or keep the container in a 'Retained' and " +
+            "take the emitter from the handle ('r.emitter()'), which holds one more reference to it.",
             location: location);
     }
 
