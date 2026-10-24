@@ -256,9 +256,10 @@ public partial class RazorForgeLexer
             // `expand` (RF-only), but the gate itself and the built-in structural protocols apply to SF
             // types just as well.
             [key: "everywhere"] = TokenType.Everywhere,
-            // Reserved for keywords a later release uses: none of them can name anything now.
+            // `until cond` loops while the condition is false, `becomes v` gives a block arm of a value `when` its value.
             [key: "until"] = TokenType.Until,
             [key: "becomes"] = TokenType.Becomes,
+            // Reserved for a keyword a later release uses: it can't name anything now.
             [key: "inject"] = TokenType.ReservedWord
         };
 
