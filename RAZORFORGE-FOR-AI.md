@@ -1222,6 +1222,9 @@ token, `Retained` or `Tracked` handle to the same kind of container
 (`each v in from { into.add(value: v) }`), is rejected too, because the builder
 cannot tell whether it is the same container. Open both with
 `modifying into, viewing from` to loop over `from` and change `into`.
+A loop over a token walks the container the token is on: `var w = xs.view()` (or `viewing xs as w`) then
+`each x in w { xs.add_last(value: x) }` is RF-S625, and so is a change of any container a routine that gave the token
+may have taken it from (`var w = shorter(x: a.view(), y: b.view())` keeps both `a` and `b` still).
 Every stdlib collection marks its adding/removing routines `@reshaping`.
 The same holds while a member routine of a collection calls a lambda it is handed: a lambda that can add to or
 remove from that collection (or a token or shared handle that may be it), directly or through a call
