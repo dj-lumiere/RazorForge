@@ -137,7 +137,7 @@ public class LayoutGrammarTests
     {
         Program program = AssertParses(source: """
                                                entity Pair[A, B]
-                                               relates PairEmitter[A] as Iter
+                                               relates PairEmitter[A] as Emitter
                                                obeys Equatable, Hashable,
                                                    Comparable
                                                needs EntityType A, U64 B
@@ -252,7 +252,7 @@ public class LayoutGrammarTests
     {
         Program program = AssertParses(source: """
                                                entity Pair[A]
-                                               relates PairEmitter[A] as Iter, A as Key
+                                               relates PairEmitter[A] as Emitter, A as Key
                                                    first: A
 
                                                protocol Keyed

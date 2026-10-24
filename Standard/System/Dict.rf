@@ -32,8 +32,8 @@ secret preset ENTRY_LIVE: U8 = 1
 ### :typeparam TValue: The value type associated with each key.
 ### :see: {Set[T]} for the set counterpart.
 entity Dict[TKey, TValue]
-relates DictEmittable[TKey, TValue] as Iter, TKey as Key, TValue as Value
-obeys Iterable[DictEntry[TKey, TValue]], KeyFindable, KeyContainer,
+relates DictEmitter[TKey, TValue] as Emitter, TKey as Key, TValue as Value
+obeys Emittable[DictEntry[TKey, TValue]], KeyFindable, KeyContainer,
     Copyable when TKey obeys Copyable and TValue obeys Copyable, DictLiteral[TKey, TValue]
 needs TKey obeys Hashable, Equatable
     secret ctrl: Hijacked[U8]
@@ -49,9 +49,9 @@ needs TKey obeys Hashable, Equatable
     secret k0: U64
     secret k1: U64
 
-### Emittable that walks the dense entries array of a {Dict[TKey, TValue]} in insertion order.
-entity DictEmittable[TKey, TValue]
-obeys Emittable[DictEntry[TKey, TValue]]
+### Emitter that walks the dense entries array of a {Dict[TKey, TValue]} in insertion order.
+entity DictEmitter[TKey, TValue]
+obeys Emitter[DictEntry[TKey, TValue]]
     secret keys: Hijacked[TKey]
     secret vals: Hijacked[TValue]
     secret entry_live: Hijacked[U8]
@@ -151,7 +151,7 @@ routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TVal
 routine Dict[TKey, TValue].destruct()
     danger
         # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
-        # in DictEmittable.emit!). No-op for value types; frees owned entity keys/values.
+        # in DictEmitter.emit!). No-op for value types; frees owned entity keys/values.
         var p: U64 = 0
         until p >= me.entries_used
             if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
@@ -560,9 +560,9 @@ needs RecordType TValue
 # ============================================================================
 
 @readonly
-routine Dict[TKey, TValue].iter() -> DictEmittable[TKey, TValue]
+routine Dict[TKey, TValue].emitter() -> DictEmitter[TKey, TValue]
     danger
-        return DictEmittable[TKey, TValue](
+        return DictEmitter[TKey, TValue](
             keys: me.keys,
             vals: me.vals,
             entry_live: me.entry_live,
@@ -570,7 +570,7 @@ routine Dict[TKey, TValue].iter() -> DictEmittable[TKey, TValue]
             pos: 0,
         )
 
-failable routine DictEmittable[TKey, TValue].emit() -> DictEntry[TKey, TValue]
+failable routine DictEmitter[TKey, TValue].emit() -> DictEntry[TKey, TValue]
     danger
         until me.pos >= me.entries_used
             var p = me.pos

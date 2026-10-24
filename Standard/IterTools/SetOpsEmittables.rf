@@ -1,0 +1,129 @@
+module IterTools
+
+### Represents a lazy adapter that yields elements present in both this emittable and another.
+### The second emittable is fully materialized into a set when iteration begins.
+### :typeparam T: The element type of both source sequences.
+### :typeparam TSource: The concrete primary source emittable type (borrowed).
+### :typeparam TOther: The concrete membership-test emittable type (borrowed).
+entity IntersectEmittable[T, TSource, TOther]
+relates IntersectEmitter[T, TSource/Emitter] as Emitter
+obeys Emittable[T]
+needs TSource obeys Emittable[T]
+needs TOther obeys Emittable[T]
+    ### Stores the primary source emittable (borrowed, not owned).
+    secret source: Hijacked[TSource]
+    ### Stores the membership-test emittable to materialize at iteration start (borrowed).
+    secret you: Hijacked[TOther]
+
+### Iterates over a source sequence and keeps only elements that appear in the membership set.
+### :typeparam T: The element type of the filtered sequence.
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity IntersectEmitter[T, TSourceEmitter]
+obeys Emitter[T]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the underlying source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
+    ### Stores the pre-materialized membership set.
+    secret you: Set[T]
+
+### Represents a lazy adapter that suppresses elements present in another emittable.
+### The exclusion emittable is fully materialized into a set when iteration begins.
+### :typeparam T: The element type of both source sequences.
+### :typeparam TSource: The concrete primary source emittable type (borrowed).
+### :typeparam TOther: The concrete exclusion emittable type (borrowed).
+entity ExcludeEmittable[T, TSource, TOther]
+relates ExcludeEmitter[T, TSource/Emitter] as Emitter
+obeys Emittable[T]
+needs TSource obeys Emittable[T]
+needs TOther obeys Emittable[T]
+    ### Stores the primary source emittable (borrowed, not owned).
+    secret source: Hijacked[TSource]
+    ### Stores the exclusion emittable to materialize at iteration start (borrowed).
+    secret you: Hijacked[TOther]
+
+### Iterates over a source sequence and suppresses elements found in the exclusion set.
+### :typeparam T: The element type of the filtered sequence.
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity ExcludeEmitter[T, TSourceEmitter]
+obeys Emitter[T]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the underlying source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
+    ### Stores the pre-materialized exclusion set.
+    secret you: Set[T]
+
+### Materializes `other` into a set and returns an emitter that filters `source` against it.
+### :returns: The resulting `IntersectEmitter[T, TSource/Emitter]` value.
+@readonly
+routine IntersectEmittable[T, TSource, TOther].emitter() -> IntersectEmitter[T, TSource/Emitter]
+needs T obeys Hashable, Comparable
+    danger
+        var other_set = me.you.as_entity().to[Set]()
+        return IntersectEmitter[T, TSource/Emitter](
+            source: me.source.referent().emitter(),
+            you: other_set,
+        )
+
+### Returns the next source element that is also present in the membership set.
+### Source elements not found in the set are consumed and discarded.
+### :returns: The resulting `T` value.
+failable routine IntersectEmitter[T, TSourceEmitter].emit() -> TSourceEmitter/Item
+needs T obeys Hashable, Comparable
+    danger
+        loop
+            var item = me.source.emit()
+            if me.you.has(item)
+                return item
+
+### Returns a lazy adapter that keeps only elements also present in `other`.
+### :param you: The emittable that defines the membership set.
+### :returns: The resulting `IntersectEmittable[T, Me, TOther]` value.
+@readonly
+routine Emittable[T].intersect[TOther](you: Viewing[TOther]) -> IntersectEmittable[T, Me, TOther]
+needs TOther obeys Emittable[T]
+needs T obeys Hashable, Comparable
+    danger
+        return IntersectEmittable[T, Me, TOther](source: me.hijack(), you: you.hijack())
+
+### Materializes `other` into a set and returns an emitter that removes matching elements.
+### :returns: The resulting `ExcludeEmitter[T, TSource/Emitter]` value.
+@readonly
+routine ExcludeEmittable[T, TSource, TOther].emitter() -> ExcludeEmitter[T, TSource/Emitter]
+needs T obeys Hashable, Comparable
+    danger
+        var other_set = me.you.as_entity().to[Set]()
+        return ExcludeEmitter[T, TSource/Emitter](
+            source: me.source.referent().emitter(),
+            you: other_set,
+        )
+
+### Returns the next source element that is not present in the exclusion set.
+### Source elements found in the set are consumed and discarded.
+### :returns: The resulting `T` value.
+failable routine ExcludeEmitter[T, TSourceEmitter].emit() -> TSourceEmitter/Item
+needs T obeys Hashable, Comparable
+    danger
+        loop
+            var item = me.source.emit()
+            if not me.you.has(item)
+                return item
+
+### Returns a lazy adapter that suppresses all elements also found in `other`.
+### :param you: The emittable that defines the exclusion set.
+### :returns: The resulting `ExcludeEmittable[T, Me, TOther]` value.
+@readonly
+routine Emittable[T].exclude[TOther](you: Viewing[TOther]) -> ExcludeEmittable[T, Me, TOther]
+needs TOther obeys Emittable[T]
+needs T obeys Hashable, Comparable
+    danger
+        return ExcludeEmittable[T, Me, TOther](source: me.hijack(), you: you.hijack())
+
+### Returns a lazy adapter that yields all distinct elements from this emittable followed by `other`.
+### Duplicate values across both sources are suppressed.
+### :param you: The emittable to concatenate before deduplication.
+### :returns: The resulting `DistinctEmittable[T, ExtendEmittable[T, Me, TOther]]` value.
+@readonly
+routine Emittable[T].union[TOther](you: Viewing[TOther]) -> DistinctEmittable[T, ExtendEmittable[T, Me, TOther]]
+needs TOther obeys Emittable[T]
+needs T obeys Hashable, Comparable
+    return me.extend(you).distinct()

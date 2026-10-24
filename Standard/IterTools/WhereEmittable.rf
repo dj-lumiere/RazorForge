@@ -1,14 +1,14 @@
 module IterTools
 
-### Represents a lazy filtering adapter over a source iterable.
+### Represents a lazy filtering adapter over a source emittable.
 ### The adapter can keep either matching or non-matching items depending on `inverted`.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam TSource: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity WhereIterable[T, TSource]
-relates WhereEmittable[T, TSource/Iter] as Iter
-obeys Iterable[T]
-needs TSource obeys Iterable[T]
-    ### Stores the source iterable (borrowed, not owned).
+### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
+entity WhereEmittable[T, TSource]
+relates WhereEmitter[T, TSource/Emitter] as Emitter
+obeys Emittable[T]
+needs TSource obeys Emittable[T]
+    ### Stores the source emittable (borrowed, not owned).
     secret source: Hijacked[TSource]
     ### Stores the predicate used to test each source value.
     secret predicate: Callable[(T,), Bool]
@@ -17,25 +17,25 @@ needs TSource obeys Iterable[T]
 
 ### Iterates over a source sequence while yielding only values that satisfy the effective filter.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam TSourceIter: The concrete source iterator type (owned).
-entity WhereEmittable[T, TSourceIter]
-obeys Emittable[T]
-needs TSourceIter obeys Emittable[T]
-    ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: TSourceIter
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity WhereEmitter[T, TSourceEmitter]
+obeys Emitter[T]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the underlying source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
     ### Stores the predicate used for filtering.
     secret predicate: Callable[(T,), Bool]
     ### Stores whether matches should be inverted.
     secret inverted: Bool
 
-### Returns the stateful iterator that applies the filter lazily.
+### Returns the stateful emitter that applies the filter lazily.
 ### Source values are examined only as the caller requests more output values.
-### :returns: The resulting `WhereEmittable[T, TSource/Iter]` value.
+### :returns: The resulting `WhereEmitter[T, TSource/Emitter]` value.
 @readonly
-routine WhereIterable[T, TSource].iter() -> WhereEmittable[T, TSource/Iter]
+routine WhereEmittable[T, TSource].emitter() -> WhereEmitter[T, TSource/Emitter]
     danger
-        return WhereEmittable[T, TSource/Iter](
-            source: me.source.referent().iter(),
+        return WhereEmitter[T, TSource/Emitter](
+            source: me.source.referent().emitter(),
             predicate: me.predicate,
             inverted: me.inverted,
         )
@@ -43,7 +43,7 @@ routine WhereIterable[T, TSource].iter() -> WhereEmittable[T, TSource/Iter]
 ### Returns the next value that satisfies the effective filter condition.
 ### Source values are consumed and discarded until one passes the filter.
 ### :returns: The resulting `T` value.
-failable routine WhereEmittable[T, TSourceIter].emit() -> TSourceIter/Item
+failable routine WhereEmitter[T, TSourceEmitter].emit() -> TSourceEmitter/Item
     danger
         loop
             var item = me.source.emit()
@@ -56,17 +56,17 @@ failable routine WhereEmittable[T, TSourceIter].emit() -> TSourceIter/Item
 ### Returns a lazy adapter that keeps only values for which `predicate` returns
 ### `true`.
 ### :param predicate: The filter predicate.
-### :returns: The resulting `WhereIterable[T, Me]` value.
+### :returns: The resulting `WhereEmittable[T, Me]` value.
 @readonly
-routine Iterable[T].where(predicate: Callable[(T,), Bool]) -> WhereIterable[T, Me]
+routine Emittable[T].where(predicate: Callable[(T,), Bool]) -> WhereEmittable[T, Me]
     danger
-        return WhereIterable[T, Me](source: me.hijack(), predicate: predicate, inverted: false)
+        return WhereEmittable[T, Me](source: me.hijack(), predicate: predicate, inverted: false)
 
 ### Returns a lazy adapter that keeps only values for which `predicate` returns
 ### `false`.
 ### :param predicate: The filter predicate.
-### :returns: The resulting `WhereIterable[T, Me]` value.
+### :returns: The resulting `WhereEmittable[T, Me]` value.
 @readonly
-routine Iterable[T].where_not(predicate: Callable[(T,), Bool]) -> WhereIterable[T, Me]
+routine Emittable[T].where_not(predicate: Callable[(T,), Bool]) -> WhereEmittable[T, Me]
     danger
-        return WhereIterable[T, Me](source: me.hijack(), predicate: predicate, inverted: true)
+        return WhereEmittable[T, Me](source: me.hijack(), predicate: predicate, inverted: true)

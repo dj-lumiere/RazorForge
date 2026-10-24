@@ -421,7 +421,7 @@ public class TypeDeclarationTests
     public void Parse_GenericProtocol()
     {
         string source = """
-                        protocol Iterable[T]
+                        protocol Emittable[T]
                             @readonly
                             routine Me.iterate() -> Iterator[T]
                         """;

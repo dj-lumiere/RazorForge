@@ -3,37 +3,37 @@ module IterTools
 ### Represents a lazy adapter that discards leading values while a predicate stays true.
 ### Once the predicate fails, all remaining source values are yielded unchanged.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam TSource: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity SkipWhileIterable[T, TSource]
-relates SkipWhileEmittable[T, TSource/Iter] as Iter
-obeys Iterable[T]
-needs TSource obeys Iterable[T]
-    ### Stores the source iterable (borrowed, not owned).
+### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
+entity SkipWhileEmittable[T, TSource]
+relates SkipWhileEmitter[T, TSource/Emitter] as Emitter
+obeys Emittable[T]
+needs TSource obeys Emittable[T]
+    ### Stores the source emittable (borrowed, not owned).
     secret source: Hijacked[TSource]
     ### Stores the predicate used to decide whether a value should be skipped.
     secret predicate: Callable[(T,), Bool]
 
 ### Iterates over a source sequence after dropping its leading predicate-matching prefix.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam TSourceIter: The concrete source iterator type (owned).
-entity SkipWhileEmittable[T, TSourceIter]
-obeys Emittable[T]
-needs TSourceIter obeys Emittable[T]
-    ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: TSourceIter
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity SkipWhileEmitter[T, TSourceEmitter]
+obeys Emitter[T]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the underlying source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
     ### Stores the predicate used while skipping.
     secret predicate: Callable[(T,), Bool]
     ### Stores whether the emitter is still discarding leading values.
     secret skipping: Bool
 
-### Returns the stateful iterator that skips leading values while the predicate succeeds.
+### Returns the stateful emitter that skips leading values while the predicate succeeds.
 ### The returned emitter tracks whether it is still in the skipping phase.
-### :returns: The resulting `SkipWhileEmittable[T, TSource/Iter]` value.
+### :returns: The resulting `SkipWhileEmitter[T, TSource/Emitter]` value.
 @readonly
-routine SkipWhileIterable[T, TSource].iter() -> SkipWhileEmittable[T, TSource/Iter]
+routine SkipWhileEmittable[T, TSource].emitter() -> SkipWhileEmitter[T, TSource/Emitter]
     danger
-        return SkipWhileEmittable[T, TSource/Iter](
-            source: me.source.referent().iter(),
+        return SkipWhileEmitter[T, TSource/Emitter](
+            source: me.source.referent().emitter(),
             predicate: me.predicate,
             skipping: true,
         )
@@ -41,7 +41,7 @@ routine SkipWhileIterable[T, TSource].iter() -> SkipWhileEmittable[T, TSource/It
 ### Returns the next value after any remaining skippable prefix has been consumed.
 ### After the first predicate failure, later values are yielded without rechecking earlier skip state.
 ### :returns: The resulting `T` value.
-failable routine SkipWhileEmittable[T, TSourceIter].emit() -> TSourceIter/Item
+failable routine SkipWhileEmitter[T, TSourceEmitter].emit() -> TSourceEmitter/Item
     danger
         if me.skipping
             loop
@@ -53,8 +53,8 @@ failable routine SkipWhileEmittable[T, TSourceIter].emit() -> TSourceIter/Item
 
 ### Returns a lazy adapter that skips values while `predicate` returns `true`.
 ### :param predicate: The predicate that controls the initial skipping phase.
-### :returns: The resulting `SkipWhileIterable[T, Me]` value.
+### :returns: The resulting `SkipWhileEmittable[T, Me]` value.
 @readonly
-routine Iterable[T].skip_while(predicate: Callable[(T,), Bool]) -> SkipWhileIterable[T, Me]
+routine Emittable[T].skip_while(predicate: Callable[(T,), Bool]) -> SkipWhileEmittable[T, Me]
     danger
-        return SkipWhileIterable[T, Me](source: me.hijack(), predicate: predicate)
+        return SkipWhileEmittable[T, Me](source: me.hijack(), predicate: predicate)

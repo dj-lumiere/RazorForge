@@ -11,31 +11,31 @@ entity Transmitter[T]
 
 # ---- Receiving ends -----------------------------------------------------------------------------
 
-### The single-consumer receiving end. Obeys `Iterable[T]`: `for x in hop` drains it until the
+### The single-consumer receiving end. Obeys `Emittable[T]`: `for x in hop` drains it until the
 ### channel closes and the buffer empties. There is only ever one `Receiver` per channel (it is not
 ### cloneable — use a `SharedReceiver` for multiple consumers).
 entity Receiver[T]
-relates ChannelDrain[T] as Iter
-obeys Iterable[T]
+relates ChannelDrain[T] as Emitter
+obeys Emittable[T]
     ### The shared native channel handle (rf_channel*).
     secret chan: Addr
 
 ### A multi-consumer receiving handle. Clone one per consumer for a worker pool; any free worker
-### takes the next item. Obeys `Iterable[T]` like `Receiver`.
+### takes the next item. Obeys `Emittable[T]` like `Receiver`.
 entity SharedReceiver[T]
-relates ChannelDrain[T] as Iter
-obeys Iterable[T]
+relates ChannelDrain[T] as Emitter
+obeys Emittable[T]
     ### The shared native channel handle (rf_channel*).
     secret chan: Addr
 
-# ---- The drain iterator -------------------------------------------------------------------------
+# ---- The drain emitter -------------------------------------------------------------------------
 
-### The iterator a receiving end hands to a `for` loop. It references the channel without owning it (the
+### The emitter a receiving end hands to a `for` loop. It references the channel without owning it (the
 ### owning `Receiver`/`SharedReceiver` holds the consumer reference); `emit!` receives one item, parking
 ### while the buffer is empty, and throws `AbsentValueError` once the channel is closed and drained — ending the loop.
 entity ChannelDrain[T]
-obeys Emittable[T]
-    ### The shared native channel handle (rf_channel*), non-owning (this iterator holds no reference).
+obeys Emitter[T]
+    ### The shared native channel handle (rf_channel*), non-owning (this emitter holds no reference).
     secret chan: Addr
 
 # Channels — `Receiver[T]` (single consumer) / `SharedReceiver[T]` (multi consumer) message passing.
@@ -43,7 +43,7 @@ obeys Emittable[T]
 # A channel is a typed conduit carrying a STREAM of values between concurrent jobs (the streaming
 # counterpart to Work's one-shot result). The transmitting end is a `Transmitter[T]` (cloneable for multiple
 # producers); the receiving end is a `Receiver[T]` (one owner) or, for multiple consumers, a `SharedReceiver[T]`
-# (clone one per consumer). Receiving == iterating: both receivers obey `Iterable[T]`, so `for x in`,
+# (clone one per consumer). Receiving == iterating: both receivers obey `Emittable[T]`, so `for x in`,
 # IterTools, and explicit iteration all work — there is no separate receive verb.
 #
 # `transmit` and receive park the calling coroutine when the buffer is full / empty (woken cross-thread
@@ -147,10 +147,10 @@ secret routine destroy_buffered[T](chan: Addr)
             box = hijacked_from[T](C::rf_channel_next(chan: chan))
     return
 
-### Returns an iterator that draws items from the channel (receive == iterate).
+### Returns an emitter that draws items from the channel (receive == iterate).
 ### :returns: A `ChannelDrain[T]` over this channel.
 @readonly
-routine Receiver[T].iter() -> ChannelDrain[T]
+routine Receiver[T].emitter() -> ChannelDrain[T]
     danger
         return ChannelDrain[T](chan: me.chan)
 
@@ -203,10 +203,10 @@ routine SharedReceiver[T].duplicate() -> SharedReceiver[T]
         C::rf_channel_add_consumer(chan: me.chan)
         return SharedReceiver[T](chan: me.chan)
 
-### Returns an iterator that draws items from the channel (receive == iterate).
+### Returns an emitter that draws items from the channel (receive == iterate).
 ### :returns: A `ChannelDrain[T]` over this channel.
 @readonly
-routine SharedReceiver[T].iter() -> ChannelDrain[T]
+routine SharedReceiver[T].emitter() -> ChannelDrain[T]
     danger
         return ChannelDrain[T](chan: me.chan)
 

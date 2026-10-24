@@ -49,17 +49,17 @@ needs T obeys Comparable
 ### :see: {Set[T]} for an unsorted, hash-table-backed set with O(1) operations.
 ### :see: {SortedDict[K, V]} for a sorted mapping from keys to values.
 entity SortedSet[T]
-relates SortedSetEmittable[T] as Iter
-obeys Iterable[T], Container, SetLiteral[T]
+relates SortedSetEmitter[T] as Emitter
+obeys Emittable[T], Container, SetLiteral[T]
 needs T obeys Comparable
     secret root: Hijacked[BTreeSetNode[T]]?
     secret count: U64
 
 ### Walks the elements of a `SortedSet[T]` in ascending sorted order.
 ### Each call to `emit!` resolves the element at the current rank from the source set.
-### :typeparam T: The element type yielded by the iterator.
-entity SortedSetEmittable[T]
-obeys Emittable[T]
+### :typeparam T: The element type yielded by the emitter.
+entity SortedSetEmitter[T]
+obeys Emitter[T]
     ### The source set being iterated (NON-OWNING borrow — a cursor borrows its container).
     set: Hijacked[SortedSet[T]]
     ### The next sorted rank to yield.
@@ -1113,12 +1113,12 @@ failable routine SortedSet[T].last() -> T
 # Iteration (in-order traversal)
 # ============================================================================
 
-### Returns an iterator over the set in ascending sorted order.
-### :returns: The resulting `SortedSetEmittable[T]` value.
+### Returns an emitter over the set in ascending sorted order.
+### :returns: The resulting `SortedSetEmitter[T]` value.
 @readonly
-routine SortedSet[T].iter() -> SortedSetEmittable[T]
+routine SortedSet[T].emitter() -> SortedSetEmitter[T]
     danger
-        return SortedSetEmittable[T](set: me.hijack(), index: 0)
+        return SortedSetEmitter[T](set: me.hijack(), index: 0)
 
 ### Materializes the set as a list in ascending order.
 ### :returns: The resulting `List[T]` value.
@@ -1155,7 +1155,7 @@ secret routine SortedSet[T].collect_inorder(node: Viewing[BTreeSetNode[T]], resu
 ### Returns the next element in ascending set order.
 ### :returns: The element at the current sorted rank.
 ### :throws: {AbsentValueError} All elements have been yielded.
-failable routine SortedSetEmittable[T].emit() -> T
+failable routine SortedSetEmitter[T].emit() -> T
     danger
         if me.index >= me.set.as_entity().count()
             throw AbsentValueError()

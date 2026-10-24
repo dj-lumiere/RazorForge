@@ -1,53 +1,53 @@
 module IterTools
 
-### Materializes this iterable into a `List[T]`.
+### Materializes this emittable into a `List[T]`.
 ### Values are consumed eagerly in iteration order.
 ### :returns: The resulting `List[T]` value.
 @readonly
-routine Iterable[T].to[List[T]]() -> List[T]
+routine Emittable[T].to[List[T]]() -> List[T]
     var result = List[T]()
     each item in me
         result.add_last(item)
     return result
 
-### Materializes this iterable into a `Set[T]`.
+### Materializes this emittable into a `Set[T]`.
 ### Duplicate values collapse according to the set's equality and ordering semantics.
 ### :returns: The resulting `Set[T]` value.
 @readonly
-routine Iterable[T].to[Set[T]]() -> Set[T]
+routine Emittable[T].to[Set[T]]() -> Set[T]
 needs T obeys Hashable, Comparable
     var result = Set[T]()
     each item in me
         result.add(item)
     return result
 
-### Counts how many values this iterable produces.
-### This consumes the iterable from start to finish.
+### Counts how many values this emittable produces.
+### This consumes the emittable from start to finish.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Iterable[T].get_count() -> U64
+routine Emittable[T].get_count() -> U64
     var n: U64 = 0
     each _ in me
         n = n + 1
     return n
 
-### Returns the first value produced by this iterable.
-### This is a convenience terminal operation over the first iterator element.
+### Returns the first value produced by this emittable.
+### This is a convenience terminal operation over the first emitter element.
 ### :returns: The resulting `T` value.
 @readonly
-failable routine Iterable[T].first() -> T
-    var emitter = me.iter()
-    return emitter.emit()
+failable routine Emittable[T].first() -> T
+    var walk = me.emitter()
+    return walk.emit()
 
-### Returns the last value produced by this iterable.
-### The iterable is consumed fully in order to find the final element.
+### Returns the last value produced by this emittable.
+### The emittable is consumed fully in order to find the final element.
 ### :returns: The resulting `T` value.
 @readonly
-failable routine Iterable[T].last() -> T
-    var emitter = me.iter()
-    var latest: T = emitter.emit()
+failable routine Emittable[T].last() -> T
+    var walk = me.emitter()
+    var latest: T = walk.emit()
     loop
-        var item = try emitter.emit()
+        var item = try walk.emit()
         when item
             is None => return latest
             else as value => latest = value
@@ -57,7 +57,7 @@ failable routine Iterable[T].last() -> T
 ### :param predicate: The predicate to test against each item.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Iterable[T].any(predicate: Callable[(T,), Bool]) -> Bool
+routine Emittable[T].any(predicate: Callable[(T,), Bool]) -> Bool
     each item in me
         if predicate(item)
             return true
@@ -68,63 +68,63 @@ routine Iterable[T].any(predicate: Callable[(T,), Bool]) -> Bool
 ### :param predicate: The predicate to test against each item.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Iterable[T].all(predicate: Callable[(T,), Bool]) -> Bool
+routine Emittable[T].all(predicate: Callable[(T,), Bool]) -> Bool
     each item in me
         if not predicate(item)
             return false
     return true
 
-### Folds this iterable into a single result value.
+### Folds this emittable into a single result value.
 ### The combiner receives the current accumulator and the next item in iteration
 ### order.
 ### :param start: The initial accumulator value.
 ### :param combiner: The routine used to produce the next accumulator value.
 ### :returns: The resulting `TState` value.
 @readonly
-routine Iterable[T].accumulate[TState](start: TState, combiner: Callable[(TState, T), TState]) -> TState
+routine Emittable[T].accumulate[TState](start: TState, combiner: Callable[(TState, T), TState]) -> TState
     var result = steal start
     each item in me
         result = combiner(result, item)
     return result
 
-### Returns the sum of all values in this iterable.
+### Returns the sum of all values in this emittable.
 ### The first element is used as the initial accumulator; subsequent elements are added to it.
 ### :returns: The resulting `T` value.
 @readonly
-failable routine Iterable[T].sum() -> T
+failable routine Emittable[T].sum() -> T
 needs T obeys Addable
-    var emitter = me.iter()
-    var result: T = emitter.emit()
+    var walk = me.emitter()
+    var result: T = walk.emit()
     loop
-        var item = try emitter.emit()
+        var item = try walk.emit()
         when item
             is None => return result
             else as value => result = result + value
 
-### Returns the smallest value in this iterable.
+### Returns the smallest value in this emittable.
 ### :returns: The resulting `T` value.
 @readonly
-failable routine Iterable[T].min() -> T
+failable routine Emittable[T].min() -> T
 needs T obeys Comparable
-    var emitter = me.iter()
-    var result: T = emitter.emit()
+    var walk = me.emitter()
+    var result: T = walk.emit()
     loop
-        var item = try emitter.emit()
+        var item = try walk.emit()
         when item
             is None => return result
             else as value =>
                 if value < result
                     result = value
 
-### Returns the largest value in this iterable.
+### Returns the largest value in this emittable.
 ### :returns: The resulting `T` value.
 @readonly
-failable routine Iterable[T].max() -> T
+failable routine Emittable[T].max() -> T
 needs T obeys Comparable
-    var emitter = me.iter()
-    var result: T = emitter.emit()
+    var walk = me.emitter()
+    var result: T = walk.emit()
     loop
-        var item = try emitter.emit()
+        var item = try walk.emit()
         when item
             is None => return result
             else as value =>
@@ -135,13 +135,13 @@ needs T obeys Comparable
 ### :param selector: The routine that extracts a comparable key from each element.
 ### :returns: The resulting `T` value.
 @readonly
-failable routine Iterable[T].min_by[TKey](selector: Callable[(T,), TKey]) -> T
+failable routine Emittable[T].min_by[TKey](selector: Callable[(T,), TKey]) -> T
 needs TKey obeys Comparable
-    var emitter = me.iter()
-    var best: T = emitter.emit()
+    var walk = me.emitter()
+    var best: T = walk.emit()
     var best_key = selector(best)
     loop
-        var item = try emitter.emit()
+        var item = try walk.emit()
         when item
             is None => return best
             else as value =>
@@ -154,13 +154,13 @@ needs TKey obeys Comparable
 ### :param selector: The routine that extracts a comparable key from each element.
 ### :returns: The resulting `T` value.
 @readonly
-failable routine Iterable[T].max_by[TKey](selector: Callable[(T,), TKey]) -> T
+failable routine Emittable[T].max_by[TKey](selector: Callable[(T,), TKey]) -> T
 needs TKey obeys Comparable
-    var emitter = me.iter()
-    var best: T = emitter.emit()
+    var walk = me.emitter()
+    var best: T = walk.emit()
     var best_key = selector(best)
     loop
-        var item = try emitter.emit()
+        var item = try walk.emit()
         when item
             is None => return best
             else as value =>
@@ -173,29 +173,29 @@ needs TKey obeys Comparable
 ### :param predicate: The test applied to each element.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Iterable[T].get_count(predicate: Callable[(T,), Bool]) -> U64
+routine Emittable[T].get_count(predicate: Callable[(T,), Bool]) -> U64
     var n: U64 = 0
     each item in me
         if predicate(item)
             n = n + 1
     return n
 
-### Returns the first value produced by this iterable, or `default` when the iterable is empty.
-### :param default: The value to return when the iterable yields nothing.
+### Returns the first value produced by this emittable, or `default` when the emittable is empty.
+### :param default: The value to return when the emittable yields nothing.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].first_or_default(default: T) -> T
-    var emitter = me.iter()
-    var result = try emitter.emit()
+routine Emittable[T].first_or_default(default: T) -> T
+    var walk = me.emitter()
+    var result = try walk.emit()
     when result
         is None => return default
         else as item => return item
 
-### Returns the last value produced by this iterable, or `default` when the iterable is empty.
-### :param default: The value to return when the iterable yields nothing.
+### Returns the last value produced by this emittable, or `default` when the emittable is empty.
+### :param default: The value to return when the emittable yields nothing.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].last_or_default(default: T) -> T
+routine Emittable[T].last_or_default(default: T) -> T
     var latest = steal default
     each item in me
         latest = item
@@ -207,7 +207,7 @@ routine Iterable[T].last_or_default(default: T) -> T
 ### :param separator: The text inserted between successive parts.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Iterable[Text].join(separator: Text) -> Text
+routine Emittable[Text].join(separator: Text) -> Text
     var result = List[Char]()
     var first = true
     each part in me

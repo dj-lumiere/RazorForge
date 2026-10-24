@@ -1,0 +1,55 @@
+module IterTools
+
+### Represents a lazy adapter that yields at most `limit` elements from a source sequence.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
+entity TakeEmittable[T, TSource]
+relates TakeEmitter[T, TSource/Emitter] as Emitter
+obeys Emittable[T]
+needs TSource obeys Emittable[T]
+    ### Stores the source emittable (borrowed, not owned).
+    secret source: Hijacked[TSource]
+    ### Stores the maximum number of values to yield.
+    secret limit: U64
+
+### Iterates over at most the configured number of values from the source sequence.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity TakeEmitter[T, TSourceEmitter]
+obeys Emitter[T]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the underlying source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
+    ### Stores how many values may still be yielded.
+    secret remaining: U64
+
+### Returns the stateful emitter that enforces the configured take limit.
+### The emitted emitter decrements its remaining budget on each successful
+### yield.
+### :returns: The resulting `TakeEmitter[T, TSource/Emitter]` value.
+@readonly
+routine TakeEmittable[T, TSource].emitter() -> TakeEmitter[T, TSource/Emitter]
+    danger
+        return TakeEmitter[T, TSource/Emitter](source: me.source.referent().emitter(), remaining: me.limit)
+
+### Returns the next value while the remaining take budget is still positive.
+### Iteration stops once the configured limit has been reached, even if the
+### source still has more values available.
+### :returns: The resulting `T` value.
+### :throws: {AbsentValueError} Thrown when the take limit has been exhausted or the source ends first.
+failable routine TakeEmitter[T, TSourceEmitter].emit() -> TSourceEmitter/Item
+    danger
+        if me.remaining == 0
+            throw AbsentValueError()
+        var _result = me.source.emit()
+        me.remaining = me.remaining - 1
+        return _result
+
+### Returns a lazy adapter that yields at most `count` values.
+### This is useful for truncating potentially long or infinite emittables.
+### :param count: The maximum number of values to take.
+### :returns: The resulting `TakeEmittable[T, Me]` value.
+@readonly
+routine Emittable[T].take(count: U64) -> TakeEmittable[T, Me]
+    danger
+        return TakeEmittable[T, Me](source: me.hijack(), limit: count)

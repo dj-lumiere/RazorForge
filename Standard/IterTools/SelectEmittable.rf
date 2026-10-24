@@ -1,0 +1,57 @@
+module IterTools
+
+### Represents a lazy mapping adapter over an input emittable.
+### Each source element is transformed only when requested by iteration.
+### :typeparam T: The source element type.
+### :typeparam TResult: The projected output type.
+### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
+entity SelectEmittable[T, TResult, TSource]
+relates SelectEmitter[T, TResult, TSource/Emitter] as Emitter
+obeys Emittable[TResult]
+needs TSource obeys Emittable[T]
+    ### Stores the source emittable (borrowed, not owned).
+    secret source: Hijacked[TSource]
+    ### Stores the projection routine applied to each value.
+    secret transform: Callable[(T,), TResult]
+
+### Iterates over a source sequence and projects each yielded value through a transform routine.
+### :typeparam T: The source element type.
+### :typeparam TResult: The projected output type.
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity SelectEmitter[T, TResult, TSourceEmitter]
+obeys Emitter[TResult]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the underlying source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
+    ### Stores the transform routine to apply to each input value.
+    secret transform: Callable[(T,), TResult]
+
+### Returns the stateful emitter that drives this projection adapter.
+### The emitted emitter reuses the same transform routine for every yielded
+### source value.
+### :returns: The resulting `SelectEmitter[T, TResult, TSource/Emitter]` value.
+@readonly
+routine SelectEmittable[T, TResult, TSource].emitter() -> SelectEmitter[T, TResult, TSource/Emitter]
+    danger
+        return SelectEmitter[T, TResult, TSource/Emitter](
+            source: me.source.referent().emitter(),
+            transform: me.transform,
+        )
+
+### Returns the next projected value from the mapped sequence.
+### The transform runs once for each successfully yielded source value.
+### :returns: The resulting `TResult` value.
+failable routine SelectEmitter[T, TResult, TSourceEmitter].emit() -> TResult
+    danger
+        var item = me.source.emit()
+        return me.transform(item)
+
+### Returns a lazy projection of this emittable.
+### The source sequence is not evaluated until the resulting emitter is
+### consumed.
+### :param transform: The routine used to map each source value to a result value.
+### :returns: The resulting `SelectEmittable[T, TResult, Me]` value.
+@readonly
+routine Emittable[T].select[TResult](transform: Callable[(T,), TResult]) -> SelectEmittable[T, TResult, Me]
+    danger
+        return SelectEmittable[T, TResult, Me](source: me.hijack(), transform: transform)

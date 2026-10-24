@@ -49,8 +49,8 @@ public class AssociatedTypeTests
     public void Parse_Entity_RelatesBinding()
     {
         string source = """
-                        entity MyList[T] obeys Iterable[T]
-                        relates ListEmitter[T] as Iter
+                        entity MyList[T] obeys Emittable[T]
+                        relates ListEmitter[T] as Emitter
                             secret count: U64
                         """;
 
@@ -60,7 +60,7 @@ public class AssociatedTypeTests
         Assert.NotNull(@object: entity.AssociatedTypes);
         Assert.Single(collection: entity.AssociatedTypes!);
         AssociatedTypeDeclaration binding = entity.AssociatedTypes![index: 0];
-        Assert.Equal(expected: "Iter", actual: binding.Name);
+        Assert.Equal(expected: "Emitter", actual: binding.Name);
         Assert.NotNull(@object: binding.Binding); // concrete `ListEmitter[T]`
         Assert.Equal(expected: "ListEmitter", actual: binding.Binding!.Name);
         Assert.Null(@object: binding.Constraint); // a binding has no constraint
@@ -73,8 +73,8 @@ public class AssociatedTypeTests
     public void Parse_Record_RelatesBinding()
     {
         string source = """
-                        record Pair[T] obeys Iterable[T]
-                        relates PairEmitter[T] as Iter
+                        record Pair[T] obeys Emittable[T]
+                        relates PairEmitter[T] as Emitter
                             first: T
                         """;
 
@@ -83,7 +83,7 @@ public class AssociatedTypeTests
 
         Assert.NotNull(@object: record.AssociatedTypes);
         Assert.Single(collection: record.AssociatedTypes!);
-        Assert.Equal(expected: "Iter", actual: record.AssociatedTypes![index: 0].Name);
+        Assert.Equal(expected: "Emitter", actual: record.AssociatedTypes![index: 0].Name);
         Assert.Equal(expected: "PairEmitter",
             actual: record.AssociatedTypes![index: 0].Binding!.Name);
     }

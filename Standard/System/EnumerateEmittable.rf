@@ -1,0 +1,62 @@
+module System
+
+### Represents a lazy adapter that pairs each produced element with an index.
+### The emitted index starts at `0` by default or at the caller-supplied offset.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
+entity EnumerateEmittable[T, TSource]
+relates EnumerateEmitter[T, TSource/Emitter] as Emitter
+obeys Emittable[Tuple[U64, T]]
+needs TSource obeys Emittable[T]
+    ### Stores the source emittable (borrowed, not owned).
+    secret source: Hijacked[TSource]
+    ### Stores the first index value to assign.
+    secret start_index: U64
+
+### Iterates over a source sequence, pairing each element with an incrementing index.
+### :typeparam T: The element type of the source sequence.
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity EnumerateEmitter[T, TSourceEmitter]
+obeys Emitter[Tuple[U64, T]]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the emitter over the source sequence (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
+    ### Stores the next index value to assign.
+    secret index: U64
+
+### Returns the stateful emitter that produces indexed tuples lazily.
+### :returns: The resulting `EnumerateEmitter[T, TSource/Emitter]` value.
+@readonly
+routine EnumerateEmittable[T, TSource].emitter() -> EnumerateEmitter[T, TSource/Emitter]
+    danger
+        return EnumerateEmitter[T, TSource/Emitter](
+            source: me.source.referent().emitter(),
+            index: me.start_index,
+        )
+
+### Returns the next value from this emitter.
+### The returned tuple contains the current index followed by the source item.
+### :returns: The index and the source's item (a token on a stored element, read as its value).
+failable routine EnumerateEmitter[T, TSourceEmitter].emit() -> Tuple[U64, TSourceEmitter/Item]
+    danger
+        var item = me.source.emit()
+        var index = me.index
+        me.index = me.index + 1
+        return (index, item)
+
+### Returns a lazy enumerating adapter over this emittable.
+### The first yielded index is `0`.
+### :returns: The resulting `EnumerateEmittable[T, Me]` value.
+@readonly
+routine Emittable[T].enumerate() -> EnumerateEmittable[T, Me]
+    danger
+        return EnumerateEmittable[T, Me](source: me.hijack(), start_index: 0)
+
+### Returns a lazy enumerating adapter over this emittable.
+### The first yielded index is `start`.
+### :param start: The inclusive starting position.
+### :returns: The resulting `EnumerateEmittable[T, Me]` value.
+@readonly
+routine Emittable[T].enumerate(start: U64) -> EnumerateEmittable[T, Me]
+    danger
+        return EnumerateEmittable[T, Me](source: me.hijack(), start_index: start)

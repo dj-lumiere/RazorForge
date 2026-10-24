@@ -3,48 +3,48 @@ module IterTools
 ### Represents a lazy adapter that yields values while a predicate remains true.
 ### Iteration stops permanently after the first predicate failure.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam TSource: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity TakeWhileIterable[T, TSource]
-relates TakeWhileEmittable[T, TSource/Iter] as Iter
-obeys Iterable[T]
-needs TSource obeys Iterable[T]
-    ### Stores the source iterable (borrowed, not owned).
+### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
+entity TakeWhileEmittable[T, TSource]
+relates TakeWhileEmitter[T, TSource/Emitter] as Emitter
+obeys Emittable[T]
+needs TSource obeys Emittable[T]
+    ### Stores the source emittable (borrowed, not owned).
     secret source: Hijacked[TSource]
     ### Stores the predicate that determines whether iteration should continue.
     secret predicate: Callable[(T,), Bool]
 
 ### Iterates over a source sequence until the continuation predicate fails.
 ### :typeparam T: The element type produced by the source sequence.
-### :typeparam TSourceIter: The concrete source iterator type (owned).
-entity TakeWhileEmittable[T, TSourceIter]
-obeys Emittable[T]
-needs TSourceIter obeys Emittable[T]
-    ### Stores the underlying source iterator (owned; destroyed with the adapter).
-    secret source: TSourceIter
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity TakeWhileEmitter[T, TSourceEmitter]
+obeys Emitter[T]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the underlying source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
     ### Stores the continuation predicate.
     secret predicate: Callable[(T,), Bool]
     ### Stores whether iteration has already terminated.
     secret done: Bool
 
-### Returns the stateful iterator that enforces the continuation predicate.
-### The emitted iterator remembers when the predicate has already failed so it
+### Returns the stateful emitter that enforces the continuation predicate.
+### The emitted emitter remembers when the predicate has already failed so it
 ### never resumes after termination.
-### :returns: The resulting `TakeWhileEmittable[T, TSource/Iter]` value.
+### :returns: The resulting `TakeWhileEmitter[T, TSource/Emitter]` value.
 @readonly
-routine TakeWhileIterable[T, TSource].iter() -> TakeWhileEmittable[T, TSource/Iter]
+routine TakeWhileEmittable[T, TSource].emitter() -> TakeWhileEmitter[T, TSource/Emitter]
     danger
-        return TakeWhileEmittable[T, TSource/Iter](
-            source: me.source.referent().iter(),
+        return TakeWhileEmitter[T, TSource/Emitter](
+            source: me.source.referent().emitter(),
             predicate: me.predicate,
             done: false,
         )
 
 ### Returns the next value while the continuation predicate still succeeds.
-### Once `done` becomes true, the iterator remains exhausted for all later
+### Once `done` becomes true, the emitter remains exhausted for all later
 ### calls.
 ### :returns: The resulting `T` value.
 ### :throws: {AbsentValueError} Thrown when the predicate has failed or the source ends first.
-failable routine TakeWhileEmittable[T, TSourceIter].emit() -> TSourceIter/Item
+failable routine TakeWhileEmitter[T, TSourceEmitter].emit() -> TSourceEmitter/Item
     danger
         if me.done
             throw AbsentValueError()
@@ -57,8 +57,8 @@ failable routine TakeWhileEmittable[T, TSourceIter].emit() -> TSourceIter/Item
 ### Returns a lazy adapter that yields values while `predicate` returns `true`.
 ### The first failing value is consumed but not yielded.
 ### :param predicate: The predicate that controls when iteration stops.
-### :returns: The resulting `TakeWhileIterable[T, Me]` value.
+### :returns: The resulting `TakeWhileEmittable[T, Me]` value.
 @readonly
-routine Iterable[T].take_while(predicate: Callable[(T,), Bool]) -> TakeWhileIterable[T, Me]
+routine Emittable[T].take_while(predicate: Callable[(T,), Bool]) -> TakeWhileEmittable[T, Me]
     danger
-        return TakeWhileIterable[T, Me](source: me.hijack(), predicate: predicate)
+        return TakeWhileEmittable[T, Me](source: me.hijack(), predicate: predicate)

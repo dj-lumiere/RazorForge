@@ -27,7 +27,7 @@ public class ReferringIterableTests
         string source = """
                         module L/Test
                         import IO/Console
-                        routine consume_iterable[T](xs: Viewing[Iterable[T]])
+                        routine consume_iterable[T](xs: Viewing[Emittable[T]])
                             return
                         """;
 
@@ -44,7 +44,7 @@ public class ReferringIterableTests
         string source = """
                         module L/Test
                         import IO/Console
-                        routine consume_mut[T](xs: Modifying[Iterable[T]])
+                        routine consume_mut[T](xs: Modifying[Emittable[T]])
                             return
                         """;
 
@@ -67,7 +67,7 @@ public class ReferringIterableTests
         string source = """
                         module L/Test
                         import IO/Console
-                        routine sum_it(xs: Viewing[Iterable[S64]]) -> S64
+                        routine sum_it(xs: Viewing[Emittable[S64]]) -> S64
                             var total = 0
                             each x in xs
                                 total = total + x
@@ -88,7 +88,7 @@ public class ReferringIterableTests
         string source = """
                         module L/Test
                         import IO/Console
-                        routine count_it(xs: Iterable[S64]) -> S64
+                        routine count_it(xs: Emittable[S64]) -> S64
                             var n = 0
                             each x in xs
                                 n = n + 1

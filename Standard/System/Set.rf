@@ -31,8 +31,8 @@ secret preset ENTRY_LIVE: U8 = 1
 ### :typeparam T: The element type. Must obey {Hashable} and {Equatable}.
 ### :see: {Dict[K, V]} for the dictionary counterpart.
 entity Set[T]
-relates SetEmittable[T] as Iter
-obeys Iterable[T], Container, SetLiteral[T]
+relates SetEmitter[T] as Emitter
+obeys Emittable[T], Container, SetLiteral[T]
 needs T obeys Hashable, Equatable
     secret ctrl: Hijacked[U8]
     secret indices: Hijacked[U64]
@@ -46,9 +46,9 @@ needs T obeys Hashable, Equatable
     secret k0: U64
     secret k1: U64
 
-### Emittable that walks the dense entries array of a {Set[T]} in insertion order.
-entity SetEmittable[T]
-obeys Emittable[T]
+### Emitter that walks the dense entries array of a {Set[T]} in insertion order.
+entity SetEmitter[T]
+obeys Emitter[T]
     secret slots: Hijacked[T]
     secret entry_live: Hijacked[U8]
     secret entries_used: U64
@@ -329,16 +329,16 @@ routine Set[T].remove(value: T) -> Bool
 # ============================================================================
 
 @readonly
-routine Set[T].iter() -> SetEmittable[T]
+routine Set[T].emitter() -> SetEmitter[T]
     danger
-        return SetEmittable[T](
+        return SetEmitter[T](
             slots: me.slots,
             entry_live: me.entry_live,
             entries_used: me.entries_used,
             pos: 0,
         )
 
-failable routine SetEmittable[T].emit() -> T
+failable routine SetEmitter[T].emit() -> T
     danger
         until me.pos >= me.entries_used
             var p = me.pos
@@ -468,7 +468,7 @@ routine Set[T].eq(other: Viewing[Set[T]]) -> Bool
 routine Set[T].destruct()
     danger
         # Tear down each live element before freeing the buffers (mirrors the live-entry scan in
-        # SetEmittable.emit!). For value elements `destruct` is a no-op; for owned entity elements
+        # SetEmitter.emit!). For value elements `destruct` is a no-op; for owned entity elements
         # this frees them. Must run before invalidating `slots`/`entry_live`.
         var p: U64 = 0
         until p >= me.entries_used

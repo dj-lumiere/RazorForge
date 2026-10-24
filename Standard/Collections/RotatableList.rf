@@ -37,8 +37,8 @@ import BuilderQuery
 ### :see: {List[T]} for a simpler growable sequence optimized for back-only append.
 ### :see: {PriorityQueue[TPriority, TElement]} for priority-ordered removal.
 entity RotatableList[T]
-relates RotatableListEmittable[T] as Iter
-obeys Iterable[T], ModifyingIndexable[T], Sized, ListLiteral[T]
+relates RotatableListEmitter[T] as Emitter
+obeys Emittable[T], ModifyingIndexable[T], Sized, ListLiteral[T]
     ### Stores the circular buffer backing the rotatable list.
     ### Elements are laid out in allocation order and interpreted through
     ### `start` and `count` rather than by physical position alone.
@@ -56,18 +56,18 @@ obeys Iterable[T], ModifyingIndexable[T], Sized, ListLiteral[T]
 # ============================================================================
 
 ### Walks the elements of a `RotatableList[T]` from logical front to back.
-### The iterator captures a raw pointer, the start index, element count, and capacity
+### The emitter captures a raw pointer, the start index, element count, and capacity
 ### at creation time so the source rotatable list does not need to remain alive during iteration.
-### :typeparam T: The element type yielded by the iterator.
-entity RotatableListEmittable[T]
-obeys Emittable[T]
+### :typeparam T: The element type yielded by the emitter.
+entity RotatableListEmitter[T]
+obeys Emitter[T]
     ### Raw pointer into the source rotatable list's circular buffer.
     secret data: Hijacked[T]
-    ### Front-of-queue physical index captured at iterator creation.
+    ### Front-of-queue physical index captured at emitter creation.
     secret start: U64
-    ### Element count captured at iterator creation.
+    ### Element count captured at emitter creation.
     secret count: U64
-    ### Buffer capacity captured at iterator creation.
+    ### Buffer capacity captured at emitter creation.
     secret capacity: U64
     ### Current logical position.
     secret index: U64
@@ -193,7 +193,7 @@ routine RotatableList[T].add_last(value: T)
 ### Adds every element of `you` at the back, in order.
 ### :param you: The elements to add.
 @reshaping
-routine RotatableList[T].add_range(you: Viewing[Iterable[T]])
+routine RotatableList[T].add_range(you: Viewing[Emittable[T]])
     each value in you
         me.add_last(value: value)
     return
@@ -527,9 +527,9 @@ routine RotatableList[T].rotate_right(n: U64)
     return
 
 @readonly
-routine RotatableList[T].iter() -> RotatableListEmittable[T]
+routine RotatableList[T].emitter() -> RotatableListEmitter[T]
     danger
-        return RotatableListEmittable[T](
+        return RotatableListEmitter[T](
             data: me.data,
             start: me.start,
             count: me.count,
@@ -537,10 +537,10 @@ routine RotatableList[T].iter() -> RotatableListEmittable[T]
             index: 0,
         )
 
-### Returns the next element from the iterator in front-to-back order.
+### Returns the next element from the emitter in front-to-back order.
 ### :returns: The next logical element.
-### :throws: {AbsentValueError} All elements captured at iterator creation have been yielded.
-failable routine RotatableListEmittable[T].emit() -> T
+### :throws: {AbsentValueError} All elements captured at emitter creation have been yielded.
+failable routine RotatableListEmitter[T].emit() -> T
     if me.index >= me.count
         throw AbsentValueError()
     var physical = me.start +% me.index & me.capacity -% 1
@@ -643,7 +643,7 @@ needs T obeys Equatable
 routine RotatableList[T].destruct()
     danger
         # Tear down each live element in logical front-to-back (ring) order before freeing the buffer
-        # (mirrors RotatableListEmittable.emit!). No-op for value types; frees owned entity elements.
+        # (mirrors RotatableListEmitter.emit!). No-op for value types; frees owned entity elements.
         var i: U64 = 0
         until i >= me.count
             var physical = me.start +% i & me.capacity -% 1

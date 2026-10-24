@@ -47,20 +47,20 @@ needs TKey obeys Comparable
 ### :see: {Dict[TKey, TValue]} for an unordered dictionary with O(1) average lookup.
 ### :see: {SortedList[T]} for a sorted sequence that allows duplicates.
 entity SortedDict[TKey, TValue]
-relates SortedDictEmittable[TKey, TValue] as Iter, TKey as Key, TValue as Value
-obeys Iterable[DictEntry[TKey, TValue]], KeyFindable, KeyContainer, DictLiteral[TKey, TValue]
+relates SortedDictEmitter[TKey, TValue] as Emitter, TKey as Key, TValue as Value
+obeys Emittable[DictEntry[TKey, TValue]], KeyFindable, KeyContainer, DictLiteral[TKey, TValue]
 needs TKey obeys Comparable
     secret root: Hijacked[BTreeDictNode[TKey, TValue]]?
     secret count: U64
 
-### Emittable that yields entries of a {SortedDict[TKey, TValue]} in ascending key order.
+### Emitter that yields entries of a {SortedDict[TKey, TValue]} in ascending key order.
 ### Holds a NON-OWNING `Hijacked` pointer to the dict — a cursor borrows its container, it does not
-### own it. An owning `dict: SortedDict` field would make the iterator's teardown free the whole tree,
+### own it. An owning `dict: SortedDict` field would make the emitter's teardown free the whole tree,
 ### double-freeing it against the real owner's scope-exit `destruct` (containment = ownership).
 ### :typeparam TKey: The key type.
 ### :typeparam TValue: The value type.
-entity SortedDictEmittable[TKey, TValue]
-obeys Emittable[DictEntry[TKey, TValue]]
+entity SortedDictEmitter[TKey, TValue]
+obeys Emitter[DictEntry[TKey, TValue]]
     dict: Hijacked[SortedDict[TKey, TValue]]
     index: U64
 
@@ -135,7 +135,7 @@ secret routine BTreeDictNode[TKey, TValue].value_get(i: U64) -> TValue
 ### Builds a {DictEntry[TKey, TValue]} from the entry at slot `i`, taking OWNED copies of the key and value.
 ### The key/value are bound to locals first so the copy pass injects a retaining `store` (a bare
 ### `key_get(i)` call-result argument would NOT be copied, leaving the entry aliasing the buffer's
-### refcounted controller — a double-free when the entry is torn down). Mirrors Dict's iterator.
+### refcounted controller — a double-free when the entry is torn down). Mirrors Dict's emitter.
 ### :param i: Zero-based entry index.
 ### :returns: An owning {DictEntry[TKey, TValue]} copy of the entry at position `i`.
 @readonly
@@ -1250,9 +1250,9 @@ secret routine SortedDict[TKey, TValue].get_by_rank(
 # ============================================================================
 
 @readonly
-routine SortedDict[TKey, TValue].iter() -> SortedDictEmittable[TKey, TValue]
+routine SortedDict[TKey, TValue].emitter() -> SortedDictEmitter[TKey, TValue]
     danger
-        return SortedDictEmittable[TKey, TValue](dict: me.hijack(), index: 0)
+        return SortedDictEmitter[TKey, TValue](dict: me.hijack(), index: 0)
 
 ### Creates a {List[DictEntry[TKey, TValue]]} from all entries of `from` in ascending key order.
 ### :returns: A new list of all entries in key-ascending order.
@@ -1288,7 +1288,7 @@ secret routine SortedDict[TKey, TValue].collect_inorder(
             )
         return
 
-failable routine SortedDictEmittable[TKey, TValue].emit() -> DictEntry[TKey, TValue]
+failable routine SortedDictEmitter[TKey, TValue].emit() -> DictEntry[TKey, TValue]
     danger
         if me.index >= me.dict.as_entity().count()
             throw AbsentValueError()

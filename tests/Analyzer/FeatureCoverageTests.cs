@@ -213,7 +213,7 @@ public class FeatureCoverageTests
     public void IterTools_WhereSelectTakeChain_Compiles()
     {
         const string source = """
-                              module Test/Feat/Iter
+                              module Test/Feat/Emitter
                               import IO/Console
                               import IterTools
 

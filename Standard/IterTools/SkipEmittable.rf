@@ -1,0 +1,50 @@
+module IterTools
+
+### Represents a lazy adapter that discards the first `count` elements from a sequence.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
+entity SkipEmittable[T, TSource]
+relates SkipEmitter[T, TSource/Emitter] as Emitter
+obeys Emittable[T]
+needs TSource obeys Emittable[T]
+    ### Stores the source emittable (borrowed, not owned).
+    secret source: Hijacked[TSource]
+    ### Stores how many leading values should be skipped.
+    secret count: U64
+
+### Iterates over a source sequence after discarding an initial prefix.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity SkipEmitter[T, TSourceEmitter]
+obeys Emitter[T]
+needs TSourceEmitter obeys Emitter[T]
+    ### Stores the underlying source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
+    ### Stores how many items still need to be discarded.
+    secret remaining: U64
+
+### Returns the stateful emitter that discards the configured prefix lazily.
+### The returned emitter defers the actual skipping until iteration begins.
+### :returns: The resulting `SkipEmitter[T, TSource/Emitter]` value.
+@readonly
+routine SkipEmittable[T, TSource].emitter() -> SkipEmitter[T, TSource/Emitter]
+    danger
+        return SkipEmitter[T, TSource/Emitter](source: me.source.referent().emitter(), remaining: me.count)
+
+### Returns the next value after any remaining skipped prefix has been consumed.
+### Values are discarded only until `remaining` reaches zero.
+### :returns: The resulting `T` value.
+failable routine SkipEmitter[T, TSourceEmitter].emit() -> TSourceEmitter/Item
+    danger
+        until me.remaining == 0
+            me.source.emit()
+            me.remaining = me.remaining - 1
+        return me.source.emit()
+
+### Returns a lazy adapter that skips the first `count` values.
+### :param count: The number of leading values to discard.
+### :returns: The resulting `SkipEmittable[T, Me]` value.
+@readonly
+routine Emittable[T].skip(count: U64) -> SkipEmittable[T, Me]
+    danger
+        return SkipEmittable[T, Me](source: me.hijack(), count: count)

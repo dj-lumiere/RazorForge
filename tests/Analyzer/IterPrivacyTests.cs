@@ -7,25 +7,24 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// `$iter`, `$access`, and `$control` are dunder-private — only the builder's lowering
-/// passes may emit them (for-loop → $iter; argument coercion → $access/$control). User
-/// code calling them directly is a build error; otherwise the borrow / iterator could
-/// be stored in a var and outlive its source. Defining the dunder is still allowed.
+/// `access` and `control` are builder-only: argument coercion inserts them, and user code calling them directly is a
+/// build error. `emitter()` is a routine like any other: user code may call it (the emitter it gives is held like a
+/// token when it walks a local container).
 /// </summary>
 public class IterPrivacyTests
 {
     [Fact]
-    public void UserCode_CallsDollarIter_OnList_Rejected()
+    public void UserCode_CallsEmitter_OnList_Allowed()
     {
         string source = """
                         routine start()
                             var xs = [1, 2, 3]
-                            var it = xs.iter()
+                            var it = xs.emitter()
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DirectWiredRoutineCall);
     }
 
@@ -105,15 +104,13 @@ public class IterPrivacyTests
     }
 
     [Fact]
-    public void UserCode_DefinesDollarIter_OnRecord_Allowed()
+    public void UserCode_DefinesEmitter_OnRecord_Allowed()
     {
-        // Declaring a `$iter` memberRoutine on a user type is fine — the prohibition is on
-        // *calling* `$iter` from user code, not on implementing the protocol.
         string source = """
                         record Bag
                             n: S64
 
-                        routine Bag.iter() -> Bag
+                        routine Bag.emitter() -> Bag
                             return me
                         """;
 

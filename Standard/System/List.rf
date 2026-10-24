@@ -40,8 +40,8 @@ secret preset SORT_MIN_RUN: U64 = 32
 ### :see: {RotatableList[T]} for efficient double-ended insertion and removal.
 ### :see: {SortedList[T]} for a list that maintains ascending order automatically.
 entity List[T]
-relates ListEmittable[T] as Iter
-obeys Iterable[T], ModifyingIndexable[T], Sized, Container, Equatable,
+relates ListEmitter[T] as Emitter
+obeys Emittable[T], ModifyingIndexable[T], Sized, Container, Equatable,
     Copyable when T obeys Copyable, ListLiteral[T]
     ### Stores the backing buffer.
     secret data: Hijacked[T]
@@ -51,18 +51,18 @@ obeys Iterable[T], ModifyingIndexable[T], Sized, Container, Equatable,
     secret capacity: U64
 
 # ============================================================================
-# Iterable protocol support
+# Emittable protocol support
 # ============================================================================
 
 ### Walks the elements of a `List[T]` from front to back, handing out a write token on each element in its slot.
 ### The walk points at the list's buffer and has no rights over it: the list outlives the walk and cannot change
 ### its shape while it is walked (RF-S625). A walk that starts from a read-only list hands out read tokens.
 ### :typeparam T: The element type the tokens point at.
-entity ListEmittable[T]
-obeys Emittable[T]
+entity ListEmitter[T]
+obeys Emitter[T]
     ### Stores a pointer into the source list buffer.
     secret data: Hijacked[T]
-    ### Stores the element count captured at iterator creation.
+    ### Stores the element count captured at emitter creation.
     secret count: U64
     ### Stores the current iteration position.
     secret index: U64
@@ -180,7 +180,7 @@ routine List[T].add_last(value: T)
 ### per-element growth that a naive `for x in other; me.add_last(value: x)` loop
 ### incurs. Equivalent to `extend` in Python or `addAll` in Java/Kotlin.
 ###
-### :param you: The sequence to append. Any `Iterable[T]` is accepted; pass a
+### :param you: The sequence to append. Any `Emittable[T]` is accepted; pass a
 ###               `List[T]`, `Bytes` (for `List[Byte]`), a generator, an IterTools
 ###               chain, etc.
 ### :note: Common fast-output idiom: accumulate digit bytes into a `List[Byte]`
@@ -190,7 +190,7 @@ routine List[T].add_last(value: T)
 ### NOTE: Stub signature — implementation pending. Tracking:
 ###       memory/bytes_io_api_plan.md (v0.1.0 first additions).
 @reshaping
-routine List[T].add_range(you: Viewing[Iterable[T]])
+routine List[T].add_range(you: Viewing[Emittable[T]])
     # TODO(fast-io): hoist capacity-reserve when `you` exposes a known count.
     # For now, fall back to per-element append so the routine type-checks while the
     # optimized path is being designed.
@@ -469,15 +469,15 @@ routine List[T].clear()
     return
 
 @readonly
-routine List[T].iter() -> ListEmittable[T]
+routine List[T].emitter() -> ListEmitter[T]
     danger
-        return ListEmittable[T](data: me.data, count: me.count(), index: 0)
+        return ListEmitter[T](data: me.data, count: me.count(), index: 0)
 
 ### Returns a write token on the next element: the address of its slot.
 ### :returns: The token.
 ### :throws: {AbsentValueError} The walk is over.
 @overridable
-failable routine ListEmittable[T].emit() -> Modifying[T]
+failable routine ListEmitter[T].emit() -> Modifying[T]
 needs AnyType T
     if me.index >= me.count
         throw AbsentValueError()
@@ -490,7 +490,7 @@ needs AnyType T
 ### :returns: The token.
 ### :throws: {AbsentValueError} The walk is over.
 @override
-failable routine ListEmittable[T].emit() -> Modifying[T]
+failable routine ListEmitter[T].emit() -> Modifying[T]
 needs EntityType T
     if me.index >= me.count
         throw AbsentValueError()
@@ -502,8 +502,8 @@ needs EntityType T
 ### Walks the elements of a `List[T]` front to back and hands each one over: what `each x in steal xs` walks. The
 ### walk holds the list's buffer from its start, and the elements it has not handed over end with it.
 ### :typeparam T: The element type.
-entity ListTakingEmittable[T]
-obeys Emittable[T]
+entity ListTakingEmitter[T]
+obeys Emitter[T]
     ### Stores the buffer, which the walk frees.
     secret data: Hijacked[T]
     ### Stores the number of elements in the buffer.
@@ -514,8 +514,8 @@ obeys Emittable[T]
 ### Hands the elements over to a walk and leaves the list empty.
 ### :returns: The walk.
 @reshaping
-routine List[T].take_each() -> ListTakingEmittable[T]
-    var walk = ListTakingEmittable[T](data: me.data, count: me.count, index: 0)
+routine List[T].take_each() -> ListTakingEmitter[T]
+    var walk = ListTakingEmitter[T](data: me.data, count: me.count, index: 0)
     danger
         me.data = Hijacked[T].hollow()
     me.count = 0
@@ -525,7 +525,7 @@ routine List[T].take_each() -> ListTakingEmittable[T]
 ### Hands over the next element.
 ### :returns: The element.
 ### :throws: {AbsentValueError} The walk is over.
-failable routine ListTakingEmittable[T].emit() -> T
+failable routine ListTakingEmitter[T].emit() -> T
     if me.index >= me.count
         throw AbsentValueError()
     var slot = me.index
@@ -535,7 +535,7 @@ failable routine ListTakingEmittable[T].emit() -> T
 
 ### Ends the elements not handed over yet, then frees the buffer.
 @override
-routine ListTakingEmittable[T].destruct()
+routine ListTakingEmitter[T].destruct()
     danger
         var elem_size = T.data_size()
         each i in me.index til me.count

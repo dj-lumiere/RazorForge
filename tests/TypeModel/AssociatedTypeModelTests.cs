@@ -68,7 +68,7 @@ public class AssociatedTypeModelTests
 
         Assert.Same(expected: paramS, actual: projection.Base);
         Assert.Equal(expected: "Iter", actual: projection.SlotName);
-        Assert.Equal(expected: "S/Iter", actual: projection.Name);
+        Assert.Equal(expected: "S/Emitter", actual: projection.Name);
     }
 
     /// <summary>

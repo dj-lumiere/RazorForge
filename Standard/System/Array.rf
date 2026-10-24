@@ -36,8 +36,8 @@ import BuilderQuery
 ### :see: {BitArray[COUNT]} for a compact fixed-size bit sequence.
 @llvm("[{COUNT} x {T}]")
 bundle Array[T, COUNT]
-relates ArrayEmittable[T, COUNT] as Iter
-obeys Comparable, Iterable[T], ModifyingIndexable[T], Sized, Container
+relates ArrayEmitter[T, COUNT] as Emitter
+obeys Comparable, Emittable[T], ModifyingIndexable[T], Sized, Container
 needs U64 COUNT
     # N elements of T stored inline by builder - no explicit member variables needed
     nothing
@@ -47,11 +47,11 @@ needs U64 COUNT
 # ============================================================================
 
 ### Walks the elements of a fixed-size `Array[T, COUNT]` from index 0 to N - 1.
-### Because `Array` is a record type, the iterator holds its own copy of the array data.
-### :typeparam T: The element type yielded by the iterator.
+### Because `Array` is a record type, the emitter holds its own copy of the array data.
+### :typeparam T: The element type yielded by the emitter.
 ### :typeparam COUNT: The buildtime element count.
-entity ArrayEmittable[T, COUNT]
-obeys Emittable[T]
+entity ArrayEmitter[T, COUNT]
+obeys Emitter[T]
 needs U64 COUNT
     ### Points at the array being iterated, where it lives: each element is read in place, so iterating an array of
     ### entities neither copies the array nor gives an element a second owner (the loop's binding only reads it).
@@ -291,18 +291,18 @@ needs T obeys Equatable
             return i
     throw AbsentValueError()
 
-### Returns an iterator over the elements in ascending index order. It reads each element where the array holds it,
+### Returns an emitter over the elements in ascending index order. It reads each element where the array holds it,
 ### so the array must stay where it is while the loop runs (the builder keeps it from being reshaped, RF-S625).
 @readonly
-routine Array[T, COUNT].iter() -> ArrayEmittable[T, COUNT]
+routine Array[T, COUNT].emitter() -> ArrayEmitter[T, COUNT]
     danger
-        return ArrayEmittable[T, COUNT](data: me.hijack(), index: 0)
+        return ArrayEmitter[T, COUNT](data: me.hijack(), index: 0)
 
-### Returns the next element from the iterator in ascending index order, read in place: for an entity element it is
-### the array's own element, which the loop only reads (as `List`'s iterator does).
+### Returns the next element from the emitter in ascending index order, read in place: for an entity element it is
+### the array's own element, which the loop only reads (as `List`'s emitter does).
 ### :returns: The element at the current index.
 ### :throws: {AbsentValueError} All `COUNT` elements have been yielded.
-failable routine ArrayEmittable[T, COUNT].emit() -> T
+failable routine ArrayEmitter[T, COUNT].emit() -> T
     if me.index >= COUNT
         throw AbsentValueError()
     danger

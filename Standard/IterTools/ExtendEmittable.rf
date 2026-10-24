@@ -1,0 +1,65 @@
+module IterTools
+
+### Represents a lazy adapter that yields one emittable after another.
+### The second sequence is not touched until the first one is exhausted.
+### :typeparam T: The element type produced by both source sequences.
+### :typeparam TFirstSource: The concrete first source emittable type (borrowed).
+### :typeparam TSecondSource: The concrete second source emittable type (borrowed).
+entity ExtendEmittable[T, TFirstSource, TSecondSource]
+relates ExtendEmitter[T, TFirstSource/Emitter, TSecondSource/Emitter] as Emitter
+obeys Emittable[T]
+needs TFirstSource obeys Emittable[T]
+needs TSecondSource obeys Emittable[T]
+    ### Stores the first source emittable (borrowed, not owned).
+    secret first: Hijacked[TFirstSource]
+    ### Stores the second source emittable (borrowed, not owned).
+    secret second: Hijacked[TSecondSource]
+
+### Iterates over an `ExtendEmittable` by exhausting the first source before moving to the second.
+### :typeparam T: The element type produced by the concatenated sequence.
+### :typeparam TFirstEmitter: The concrete first source emitter type (owned).
+### :typeparam TSecondEmitter: The concrete second source emitter type (owned).
+entity ExtendEmitter[T, TFirstEmitter, TSecondEmitter]
+obeys Emitter[T]
+needs TFirstEmitter obeys Emitter[T]
+needs TSecondEmitter obeys Emitter[T]
+    ### Stores the emitter for the first source (owned; destroyed with the adapter).
+    secret first: TFirstEmitter
+    ### Stores the emitter for the second source (owned; destroyed with the adapter).
+    secret second: TSecondEmitter
+    ### Stores whether iteration has already advanced into the second source.
+    secret in_second: Bool
+
+### Returns the stateful emitter that concatenates the two source sequences.
+### The returned emitter walks `first` to completion before switching to `second`.
+### :returns: The resulting `ExtendEmitter[T, TFirstSource/Emitter, TSecondSource/Emitter]` value.
+@readonly
+routine ExtendEmittable[T, TFirstSource, TSecondSource].emitter() -> ExtendEmitter[T, TFirstSource/Emitter, TSecondSource/Emitter]
+    danger
+        return ExtendEmitter[T, TFirstSource/Emitter, TSecondSource/Emitter](
+            first: me.first.referent().emitter(),
+            second: me.second.referent().emitter(),
+            in_second: false,
+        )
+
+### Returns the next value from the concatenated sequence.
+### Once the first emitter is exhausted, all remaining values come from the second emitter.
+### :returns: The resulting `T` value.
+failable routine ExtendEmitter[T, TFirstEmitter, TSecondEmitter].emit() -> T
+    danger
+        if not me.in_second
+            var result = try me.first.emit()
+            when result
+                is None => me.in_second = true
+                else as item =>
+                    return item
+        return me.second.emit()
+
+### Returns a lazy concatenation of this emittable and `other`.
+### :param other: The emittable to consume after `me`.
+### :returns: The resulting `ExtendEmittable[T, Me, TOther]` value.
+@readonly
+routine Emittable[T].extend[TOther](other: Viewing[TOther]) -> ExtendEmittable[T, Me, TOther]
+needs TOther obeys Emittable[T]
+    danger
+        return ExtendEmittable[T, Me, TOther](first: me.hijack(), second: other.hijack())

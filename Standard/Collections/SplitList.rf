@@ -18,8 +18,8 @@ import BuilderQuery
 ### :typeparam T: The record element type (must be `Splittable`).
 ### :see: {List[T]} for the array-of-structs counterpart.
 entity SplitList[T]
-relates SplitListEmittable[T] as Iter
-obeys Iterable[T], ModifyingIndexable[T], Sized, Container, ListLiteral[T]
+relates SplitListEmitter[T] as Emitter
+obeys Emittable[T], ModifyingIndexable[T], Sized, Container, ListLiteral[T]
 needs T obeys Splittable
     expand m in allmemvarof(T)
         ### One contiguous column buffer holding this field across every element.
@@ -29,15 +29,15 @@ needs T obeys Splittable
     ### The number of elements each column can hold without reallocating.
     secret capacity: U64
 
-### A forward iterator over a `SplitList[T]`: holds a borrowed alias of each column buffer plus the
+### A forward emitter over a `SplitList[T]`: holds a borrowed alias of each column buffer plus the
 ### captured count and current position. Emits whole `T` values gathered one field at a time.
-entity SplitListEmittable[T]
-obeys Emittable[T]
+entity SplitListEmitter[T]
+obeys Emitter[T]
 needs T obeys Splittable
     expand m in allmemvarof(T)
         ### Borrowed alias of the source list's column for this field.
         secret $nameof(m): Hijacked[$typeof(m)]
-    ### Element count captured when the iterator was created.
+    ### Element count captured when the emitter was created.
     secret count: U64
     ### Current iteration position.
     secret index: U64
@@ -230,14 +230,14 @@ routine SplitList[T].diagnose() -> Text
 
 # Iteration
 
-### Returns a forward iterator over the elements, reconstructing each `T` from the columns in order.
-### The iterator BORROWS the column buffers (does not own them); mutating the list during iteration
+### Returns a forward emitter over the elements, reconstructing each `T` from the columns in order.
+### The emitter BORROWS the column buffers (does not own them); mutating the list during iteration
 ### is unsafe.
-### :returns: A `SplitListEmittable[T]` positioned at the first element.
+### :returns: A `SplitListEmitter[T]` positioned at the first element.
 @readonly
-routine SplitList[T].iter() -> SplitListEmittable[T]
+routine SplitList[T].emitter() -> SplitListEmitter[T]
     danger
-        var it = SplitListEmittable[T].hollow()
+        var it = SplitListEmitter[T].hollow()
         expand m in allmemvarof(T)
             it.$nameof(m) = me.$nameof(m)
         it.count = me.count
@@ -246,8 +246,8 @@ routine SplitList[T].iter() -> SplitListEmittable[T]
 
 ### Produces the next element and advances, or throws `AbsentValueError` when the sequence is exhausted.
 ### :returns: The element at the current position.
-### :throws: {AbsentValueError} The iterator has reached the end.
-failable routine SplitListEmittable[T].emit() -> T
+### :throws: {AbsentValueError} The emitter has reached the end.
+failable routine SplitListEmitter[T].emit() -> T
     if me.index >= me.count
         throw AbsentValueError()
     var result = T.blank()

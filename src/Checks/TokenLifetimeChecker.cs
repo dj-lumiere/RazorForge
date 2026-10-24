@@ -980,18 +980,16 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         Expr(expr: v.Initializer);
                     }
 
-                    if (_reporting && IsSourceIterable(type: v.Initializer?.ResolvedType) &&
-                        !v.Name.StartsWith(value: "_lf_", comparisonType: StringComparison.Ordinal))
-                    {
-                        owner.ReportSourceIterableKept(type: v.Initializer!.ResolvedType!,
-                            where: $"in '{v.Name}'",
-                            location: v.Location);
-                    }
+                    // An emitter kept in a local (`var it = xs.emitter()`, `var big = xs.where(...)`) that points at
+                    // the container it walks is a token on that container's elements: it ends when the container may
+                    // have changed shape or ends, and a later use is RF-S643.
+                    bool walkToken = !v.Name.StartsWith(value: "_lf_", comparisonType: StringComparison.Ordinal) &&
+                                     v.Initializer is { } walkInit && IsWalkToken(walk: walkInit);
 
                     // `each item in v` over a read token starts with `var _lf_iter_N = v.iter()`.
                     if (v.Initializer is CallExpression
                         {
-                            Callee: MemberExpression { Object: var iterated, MemberName: "iter" }
+                            Callee: MemberExpression { Object: var iterated, MemberName: "emitter" }
                         } && (IsReadToken(type: iterated.ResolvedType) ||
                               iterated is IdentifierExpression { Name: var readName } &&
                               _readElements.Contains(item: readName)))
@@ -1009,13 +1007,17 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     // An `each` loop's iterator remembers what it walks, so a token in its step value comes from there.
                     if (v.Initializer is CallExpression
                         {
-                            Callee: MemberExpression { Object: var walked, MemberName: "iter" }
+                            Callee: MemberExpression { Object: var walked, MemberName: "emitter" }
                         } && WalkedContainers(walked: walked) is { } walkedPaths)
                     {
                         _iteratorSources[key: v.Name] = walkedPaths;
                     }
 
-                    if (IsTrackedToken(type: v.Initializer?.ResolvedType))
+                    if (walkToken)
+                    {
+                        BindWalk(name: v.Name, walk: v.Initializer!, index: index);
+                    }
+                    else if (IsTrackedToken(type: v.Initializer?.ResolvedType))
                     {
                         Bind(name: v.Name, value: v.Initializer!, index: index);
                     }
@@ -1033,7 +1035,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     if (ret.Value != null)
                     {
                         Expr(expr: ret.Value);
-                        if (_reporting && IsSourceIterable(type: ret.Value.ResolvedType))
+                        if (_reporting && IsWalkToken(walk: ret.Value))
                         {
                             owner.ReportSourceIterableKept(type: ret.Value.ResolvedType!,
                                 where: "by returning it",
@@ -1321,6 +1323,51 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             _state.Tokens[key: name] = new TokenState(Origins: origins, EndedBy: null, EndedAt: null);
         }
 
+        /// <summary>Binds an emitter kept in a local as a token on the elements of what it walks (<c>xs[]</c> for
+        /// <c>xs.emitter()</c> or <c>xs.where(...)</c>, every argument for <c>zip(a: xs, b: ys)</c>), or on the
+        /// statement's temporaries when it walks one.</summary>
+        private void BindWalk(string name, Expression walk, int index)
+        {
+            if (_state == null)
+            {
+                return;
+            }
+
+            HashSet<string>? walked = WalkedContainers(walked: walk) ?? FreeWalkArguments(walk: walk);
+            HashSet<string> origins = walked?.Select(selector: w => Join(path: w, suffix: "[]"))
+                                            .ToHashSet() ?? [$"~{index}"];
+            _state.Tokens[key: name] = new TokenState(Origins: origins, EndedBy: null, EndedAt: null);
+        }
+
+        /// <summary>The places a free routine's emitter walks (<c>zip(a: xs, b: ys)</c>): each argument that is a held
+        /// place. Null when the head of the chain is no free call, or an argument is a temporary.</summary>
+        private HashSet<string>? FreeWalkArguments(Expression walk)
+        {
+            Expression e = Unwrap(expr: walk);
+            while (e is CallExpression { Callee: MemberExpression { Object: var receiver } })
+            {
+                e = Unwrap(expr: receiver);
+            }
+
+            if (e is not CallExpression { Callee: not MemberExpression, ResolvedRoutine: { } callee } free)
+            {
+                return null;
+            }
+
+            var paths = new HashSet<string>(comparer: StringComparer.Ordinal);
+            foreach ((_, Expression arg) in BoundArguments(call: free, callee: callee))
+            {
+                if (owner.PathsOf(expr: arg, tokenOrigins: Held) is not { } argPaths)
+                {
+                    return null;
+                }
+
+                paths.UnionWith(other: argPaths);
+            }
+
+            return paths;
+        }
+
         /// <summary>The containers an `each` loop walks, from what its iterator is made of: `xs` for `xs.iter()`, and
         /// for an adapter chain on a held place (`xs.enumerate().iter()`, `xs.view().where(...)`) the place the chain
         /// starts from. Null when the chain starts from anything else (a temporary, a call result), whose source the
@@ -1353,7 +1400,8 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
         private void Assign(Expression target, Expression value, int index, SourceLocation at)
         {
-            if (_reporting && IsSourceIterable(type: value.ResolvedType))
+            // A local takes the emitter as a token (below), anything else would keep it past what it walks.
+            if (_reporting && target is not IdentifierExpression && IsWalkToken(walk: value))
             {
                 owner.ReportSourceIterableKept(type: value.ResolvedType!,
                     where: target switch
@@ -1375,7 +1423,11 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     location: at);
             }
 
-            if (target is IdentifierExpression id && _state?.Tokens.ContainsKey(key: id.Name) == true)
+            if (target is IdentifierExpression walkName && _state != null && IsWalkToken(walk: value))
+            {
+                BindWalk(name: walkName.Name, walk: value, index: index);
+            }
+            else if (target is IdentifierExpression id && _state?.Tokens.ContainsKey(key: id.Name) == true)
             {
                 Bind(name: id.Name, value: value, index: index);
                 return;
@@ -1602,7 +1654,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         HashSet<string> iterableParams = constraints
                                          .Where(predicate: c => c.ConstraintType == ConstraintKind.Obeys &&
                                                                 (c.ConstraintTypes ?? []).Any(predicate: t =>
-                                                                    t.Name == "Iterable"))
+                                                                    t.Name == "Emittable"))
                                          .Select(selector: c => c.ParameterName)
                                          .ToHashSet(comparer: StringComparer.Ordinal);
         return fields.Any(predicate: f => f.Type.BareName == RuntimeContract.Hijacked &&
@@ -1610,14 +1662,77 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                                           iterableParams.Contains(item: held.Name));
     }
 
+    /// <summary>
+    /// Whether <paramref name="walk"/> gives an emitter that points at the container it walks and keeps nothing of
+    /// its own: an adapter (<see cref="IsSourceIterable"/>) or an emitter whose fields reach a raw pointer into what
+    /// it walks (<c>xs.emitter()</c>, <c>xs.where(...).emitter()</c>). Such an emitter is a token. One built from
+    /// <c>steal</c> (<c>(steal xs).emitter()</c>, which takes the elements) holds what it walks, and a range or a
+    /// generator points at nothing, so neither is one.
+    /// </summary>
+    private static bool IsWalkToken(Expression walk)
+    {
+        if (walk.ResolvedType is not { } type || !(IsSourceIterable(type: type) || PointsIntoSource(type: type, depth: 0)))
+        {
+            return false;
+        }
+
+        Expression e = Unwrap(expr: walk);
+        while (true)
+        {
+            switch (e)
+            {
+                case StealExpression:
+                    return false;
+                case CallExpression { ResolvedRoutine.Name: RuntimeContract.TakeEach }:
+                    return false;
+                case CallExpression { Callee: MemberExpression { Object: var receiver } } call
+                    when !IsTrackedToken(type: call.ResolvedType):
+                    e = Unwrap(expr: receiver);
+                    continue;
+                default:
+                    return true;
+            }
+        }
+    }
+
+    /// <summary>Whether a value of <paramref name="type"/> is an emitter (it has <c>emit</c>) whose member variables
+    /// reach a <c>Hijacked</c> pointer, directly or through the emitter it wraps.</summary>
+    private static bool PointsIntoSource(TypeSymbol type, int depth)
+    {
+        if (depth > 8)
+        {
+            return false;
+        }
+
+        List<MemberVariableInfo>? fields = type switch
+        {
+            EntityTypeSymbol e when ObeysEmitter(protocols: (e.GenericDefinition as EntityTypeSymbol ?? e).ImplementedProtocols) =>
+                e.MemberVariables,
+            RecordTypeSymbol r when ObeysEmitter(protocols: (r.GenericDefinition as RecordTypeSymbol ?? r).ImplementedProtocols) =>
+                r.MemberVariables,
+            _ => null
+        };
+        return fields != null &&
+               fields.Any(predicate: f => f.Type.BareName == RuntimeContract.Hijacked ||
+                                          PointsIntoSource(type: f.Type, depth: depth + 1));
+    }
+
+    private static bool ObeysEmitter(IEnumerable<TypeSymbol> protocols)
+    {
+        return protocols.Any(predicate: p => p.BareName == EmitterProtocolName);
+    }
+
+    /// <summary>The protocol an emitter obeys.</summary>
+    private const string EmitterProtocolName = "Emitter";
+
     private void ReportSourceIterableKept(TypeSymbol type, string where, SourceLocation location)
     {
         report(code: SemanticDiagnosticCode.SourceIterableKept,
             message:
-            $"You are keeping a lazy '{type.BareName}' {where}. It points at the collection it was made from, so it is " +
-            "used in the statement that makes it: loop over it with 'each', finish it with a terminal call " +
-            "('.List()', '.first()', '.get_count()', …), or pass it straight to a routine. To use the result more than " +
-            "once, keep '.List()' of it.",
+            $"You are keeping '{type.BareName}' {where}. It points at the container it walks, so it is a token: a " +
+            "local variable may hold it until the container changes shape or ends, but it cannot go anywhere that " +
+            "outlives the container. Collect it with '.to[List]()', or build it from 'steal' ('(steal xs).emitter()') " +
+            "so it holds the elements itself.",
             location: location);
     }
 

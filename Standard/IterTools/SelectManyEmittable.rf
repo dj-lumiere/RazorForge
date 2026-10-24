@@ -1,0 +1,79 @@
+module IterTools
+
+### Represents a lazy flat-map adapter that applies a transform to each source element and
+### yields all values produced by each resulting inner emittable in sequence.
+### :typeparam T: The source element type.
+### :typeparam TResult: The output element type produced by each inner emittable.
+### :typeparam TInner: The CONCRETE inner-emittable type the transform returns (captured so the
+###   emitter dispatches `.to[List]()` against a real type — RazorForge has no runtime dispatch, so a
+###   bare `Emittable[TResult]` transform return would leave `Emittable[TResult].List` unresolvable).
+### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
+entity SelectManyEmittable[T, TResult, TInner, TSource]
+relates SelectManyEmitter[T, TResult, TInner, TSource/Emitter] as Emitter
+obeys Emittable[TResult]
+needs TSource obeys Emittable[T]
+needs TInner obeys Emittable[TResult]
+    ### Stores the source emittable (borrowed, not owned).
+    secret source: Hijacked[TSource]
+    ### Stores the transform routine applied to each source element.
+    secret transform: Callable[(T,), TInner]
+
+### Iterates over source elements, expanding each through a transform to yield a flat sequence.
+### An internal buffer holds the current inner sequence; once drained the next outer element is fetched.
+### :typeparam T: The source element type.
+### :typeparam TResult: The element type yielded by each inner emittable.
+### :typeparam TInner: The concrete inner-emittable type returned by the transform.
+### :typeparam TSourceEmitter: The concrete source emitter type (owned).
+entity SelectManyEmitter[T, TResult, TInner, TSourceEmitter]
+obeys Emitter[TResult]
+needs TSourceEmitter obeys Emitter[T]
+needs TInner obeys Emittable[TResult]
+    ### Stores the outer source emitter (owned; destroyed with the adapter).
+    secret source: TSourceEmitter
+    ### Stores the transform routine used to expand each source element.
+    secret transform: Callable[(T,), TInner]
+    ### Stores the current inner buffer of materialized inner-sequence values.
+    secret buffer: List[TResult]
+    ### Stores the read position within the current inner buffer.
+    secret buffer_index: U64
+
+### Returns the stateful emitter that drives the flat-map expansion.
+### :returns: The resulting `SelectManyEmitter[T, TResult, TInner, TSource/Emitter]` value.
+@readonly
+routine SelectManyEmittable[T, TResult, TInner, TSource].emitter() -> SelectManyEmitter[T, TResult, TInner, TSource/Emitter]
+    var buffer = List[TResult]()
+    danger
+        return SelectManyEmitter[T, TResult, TInner, TSource/Emitter](
+            source: me.source.referent().emitter(),
+            transform: me.transform,
+            buffer: buffer,
+            buffer_index: 0,
+        )
+
+### Returns the next value from the current inner buffer, refilling it as needed.
+### The emitter calls `emit!` on the outer source whenever the buffer is exhausted.
+### :returns: The resulting `TResult` value.
+@reshaping
+failable routine SelectManyEmitter[T, TResult, TInner, TSourceEmitter].emit() -> TResult
+    danger
+        loop
+            if me.buffer_index < me.buffer.count()
+                var item = me.buffer[me.buffer_index]
+                me.buffer_index = me.buffer_index + 1
+                return item
+            var outer = me.source.emit()
+            var new_buffer = me.transform(outer).to[List]()
+            me.buffer = steal new_buffer
+            me.buffer_index = 0
+
+### Returns a lazy adapter that applies `transform` to each element and yields values from all
+### resulting inner emittables in sequence. The inner-emittable type `TInner` is an explicit type
+### argument (e.g. `select_many[S64, List[S64]]`) because RazorForge resolves the dispatch on it
+### at build time.
+### :param transform: The routine that maps each source element to an inner emittable.
+### :returns: The resulting `SelectManyEmittable[T, TResult, TInner, Me]` value.
+@readonly
+routine Emittable[T].select_many[TResult, TInner](transform: Callable[(T,), TInner]) -> SelectManyEmittable[T, TResult, TInner, Me]
+needs TInner obeys Emittable[TResult]
+    danger
+        return SelectManyEmittable[T, TResult, TInner, Me](source: me.hijack(), transform: transform)
