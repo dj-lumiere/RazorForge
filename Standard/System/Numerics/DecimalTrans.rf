@@ -81,9 +81,14 @@ routine hypot(x: Decimal, y: Decimal) -> Decimal
 routine hypot(x: Decimal, y: Decimal, z: Decimal) -> Decimal
     return dec_of_d128(x: hypot(x: dec_to_d128(x: x), y: dec_to_d128(x: y), z: dec_to_d128(x: z)))
 
-### Fused multiply-add me*b + c with a single rounding.
+### Fused multiply-add me*b + c with a single rounding, a value exactly halfway away from zero.
 failable routine Decimal.mul_add(b: Decimal, c: Decimal) -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).mul_add(b: dec_to_d128(x: b), c: dec_to_d128(x: c)))
+    var x = dec_to_d128(x: me)
+    var y = dec_to_d128(x: b)
+    var z = dec_to_d128(x: c)
+    var r = d128_of_words(w: C::ingrid_decimal_mul_add(a_low: d128_low(v: x), a_high: d128_high(v: x),
+        b_low: d128_low(v: y), b_high: d128_high(v: y), c_low: d128_low(v: z), c_high: d128_high(v: z)))
+    return dec_of_d128_finite(d: r)
 
 # ============================================================================
 # Trigonometric
@@ -282,13 +287,13 @@ routine Decimal.floor() -> Decimal
 routine Decimal.ceil() -> Decimal
     return dec_of_d128(x: dec_to_d128(x: me).ceil())
 
-### Rounds to the nearest integral value, ties to even.
+### Rounds to the nearest integral value, a value exactly halfway away from zero (Decimal's rounding).
 routine Decimal.round() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).round())
+    return dec_of_d128(x: dec_to_d128(x: me).round_ties_away())
 
-### Rounds to the nearest integral value using the current rounding mode (ties to even).
+### Rounds to the nearest integral value the way Decimal rounds, a value exactly halfway away from zero.
 routine Decimal.rint() -> Decimal
-    return dec_of_d128(x: dec_to_d128(x: me).rint())
+    return dec_of_d128(x: dec_to_d128(x: me).round_ties_away())
 
 ### Rounds to the nearest integral value, ties away from zero.
 routine Decimal.round_ties_away() -> Decimal

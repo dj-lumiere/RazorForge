@@ -333,7 +333,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   EXACTLY: too many significant bits or a bit below the smallest subnormal is RF-S018, not a rounding. On a
   `D32`/`D64`/`D128`/`Decimal` type it is RF-S017. It takes a binary float context, else `B64`
   (in Suflae too).
-- Arbitrary precision: `Integer`. `Decimal` is a finite-only decimal with 34 significant digits (decimal128, canonical, never inf/NaN): `+ - *` are exact and crash with `NumericOverflowError` when the result needs more than 34 digits, `/` and the math routines round to the nearest (a number takes them from context, `var big: Integer = 10`). No arbitrary-precision binary float or
+- Arbitrary precision: `Integer`. `Decimal` is a finite-only decimal with 34 significant digits (decimal128, canonical, never inf/NaN): `+ - *` are exact and crash with `NumericOverflowError` when the result needs more than 34 digits, `/` and the math routines round to the nearest, and every rounding a `Decimal` does (`/`, text and integers or floats with more digits, `round()`, `fixed(places:)`, literals) takes a value exactly halfway away from zero (`2.5` to `3`, `-2.5` to `-3`), while `D32`/`D64`/`D128` keep IEEE 754's ties to even (a number takes them from context, `var big: Integer = 10`). No arbitrary-precision binary float or
   complex: `B128` and `C256` are the widest.
 - Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
