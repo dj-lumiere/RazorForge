@@ -20,7 +20,7 @@ internal static class GlobalInitPass
         MakeConstructedPresetsGlobal(orderedFiles: orderedFiles);
 
         if (!ModuleGlobalOrder.TryOrder(orderedFiles: orderedFiles, report: report,
-                out List<(string Name, TypeExpression Type, Expression Init, SourceLocation Loc)> globals,
+                out List<ModuleGlobal> globals,
                 out List<HashSet<int>> _, out List<int> order))
         {
             return false;
