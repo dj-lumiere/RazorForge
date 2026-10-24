@@ -1,0 +1,67 @@
+module Tests/Stdlib/EmitterApi
+
+import IO/Console
+import IterTools
+import Collections
+# Emitters used directly (C63), emitters collected with to[...] (C64), and a list of Works started together (C66).
+
+routine square(n: S64) -> S64
+    return n * n
+
+routine start()
+    var xs: List[S64] = [4, 1, 3, 1]
+
+    # An emitter kept in a local walks on from where it is.
+    var it = xs.emitter()
+    show(f"first: {it.emit()}")
+    each x in it
+        show(f"rest: {x}")
+    when try it.emit()
+        is None => show("after the end: none")
+        else as v => show(f"after the end: {v}")
+
+    # An adapter kept in a local.
+    var big = xs.where(predicate: v => v > 1)
+    each b in big
+        show(f"big: {b}")
+
+    # Collecting.
+    show(f"list: {xs.select(transform: v => v * 10).to[List]()}")
+    show(f"set: {xs.to[Set]().count()}")
+    var pairs: List[Tuple[S64, Text]] = [(2, "b"), (1, "a"), (2, "c")]
+    var d = pairs.to[Dict]()
+    show(f"dict: {d.count()} {d[2]}")
+    show(f"sorted list: {xs.to[SortedList]()}")
+    show(f"sorted set: {xs.to[SortedSet]()}")
+    show(f"sorted dict: {pairs.to[SortedDict]()}")
+    show(f"rotatable: {xs.to[RotatableList]()}")
+    var bits: List[Bool] = [true, false]
+    show(f"bits: {bits.to[BitList]()}")
+    show(f"queue: {pairs.to[PriorityQueue]().count()}")
+
+    # Taking the elements: the emitter holds them itself.
+    var taken = (steal xs).emitter()
+    each t in taken
+        show(f"taken: {t}")
+
+    # A list of Works started together, then collected.
+    var jobs = List[Work[S64]]()
+    each i in 1 to 3
+        jobs.add_last(steal square.to[Work](n: i))
+    jobs.start_now()
+    show(f"now: {jobs.gather()}")
+    var apart = List[Work[S64]]()
+    each i in 4 to 5
+        apart.add_last(steal square.to[Work](n: i))
+    apart.start_apart()
+    show(f"apart: {apart.gather()}")
+    var here = List[Work[S64]]()
+    each i in 6 to 7
+        here.add_last(steal square.to[Work](n: i))
+    here.start_here()
+    show(f"here: {here.gather()}")
+    var twice = check here.start_now()
+    when twice
+        is WorkStartError => show("twice: refused")
+        else => show("twice: started")
+    return

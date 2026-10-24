@@ -215,7 +215,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   receiver INSTANCE.** Do not conflate them.
 - The generic-constraint keyword is **`needs`** (e.g. `needs T obeys P`), **not
   `where`** — `where` is not RF syntax. A constraint's protocol type arguments are
-  checked too: a `List[Text]` given where `Iterable[S64]` is taken is RF-S150.
+  checked too: a `List[Text]` given where `Emittable[S64]` is taken is RF-S150.
 - **Generic parameter names.** A type parameter is `T` alone only when it is the
   only one and its role is obvious (`List[T]`, `Maybe[T]`, `Array[T, COUNT]`).
   Otherwise every type parameter is `T` + a PascalCase role (`Dict[TKey, TValue]`,
@@ -358,7 +358,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - A variant holding only values copies with `=` (one that may hold an entity is RF-S413). A file of only `var` lines
   is a script. The overflow message is "Integer overflow error: The value does not fit in the target type."
 - A field-by-field construction infers type arguments (`Pair(first: 1, second: "one")` is `Pair[S64, Text]`). A type
-  obeying `Iterable[T]` gets its `Iter` from what its `iter()` returns (no `relates` needed), so IterTools adapters
+  obeying `Emittable[T]` gets its `Emitter` from what its `emitter()` returns (no `relates` needed), so IterTools adapters
   walk it. A bundle holding an entity moves with `steal` (no copy step). An element token from `each` converts like
   its value (`w.to[S64]()`). `CpuEventManager.when_interrupted`/`when_terminated` link and run.
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
@@ -666,7 +666,7 @@ dangerous routine raw_poke(p: Addr)     # callable only inside danger blocks
   (keeps the `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
   the constructor `T(...)`, `destruct`, `copy`, `eq`, `compare`, `represent` (to-text), `diagnose`
-  (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`
+  (debug text), `getitem!`/`setitem` (indexing), `emitter`/`emit` (walking), `add`
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
 - Failure inside a failable routine: `throw SomeError(...)`. A routine with no
   value to give throws `AbsentValueError()`.
@@ -959,11 +959,11 @@ parameter to values (`needs RecordType T`), or work on it in place.
 `needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
 kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
 `SplitArray`, `DictEntry` (tuples and variants follow their elements the same way). `Range[T]`,
-`Unbroken[T]` and `SplitArray`'s element iterator are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
+`Unbroken[T]` and `SplitArray`'s element emitter are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
 asks only `TPriority obeys Comparable`. A queue is not walked directly: `pq.unordered()` and `pq.ordered()` copy its
 `(priority, element)` pairs (storage order / smallest priority first, `needs RecordType TElement`), `pq.drain()`
 empties it into them smallest first (`each (priority, element) in pq.drain()`). An
-`Array`'s iterator reads each element in place, so `each r in arr` works on an array of entities (the binding
+`Array`'s emitter reads each element in place, so `each r in arr` works on an array of entities (the binding
 only reads; the array keeps owning each element). Suflae has no
 `bundle` (an SF entity is shared, so a record holding one copies the handle).
 
@@ -977,12 +977,12 @@ record Pair[TFirst, TSecond]
     first: TFirst
     second: TSecond
 
-protocol Iterable[T]
-relates Iter obeys Iterator[T]        # associated type slot
-    routine iter() -> Me/Iter          # `/` projects an associated type
+protocol Emittable[T]
+relates Emitter obeys Emitter[T]       # associated type slot
+    routine emitter() -> Me/Emitter    # `/` projects an associated type
 
-entity List[T] obeys Iterable[T]
-relates ListEmitter[T] as Iter        # associated type binding
+entity List[T] obeys Emittable[T]
+relates ListEmitter[T] as Emitter     # associated type binding
 ```
 
 - Constraint syntax: `T obeys SomeProtocol`. `Me` is the self type.
@@ -1081,7 +1081,7 @@ that differ from other languages:
   (slice length is a runtime value, so it cannot be a fixed `Array`). Mutating
   the slice never touches the original. Open-ended `xs[a til ^0]` slices to the
   end. Element type must be `Copyable` (slicing a `List[Entity]` is a compile
-  error). For a lazy, no-copy window use the iterator combinator
+  error). For a lazy, no-copy window use the emitter adapters
   `xs.skip(a).take(n)` instead — copy-vs-view is spelled by which you call.
 - `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `RotatableList[T]`, and sorted collections are
   entities. Do not pass a container as a bare parameter when read-only access is
@@ -1089,12 +1089,23 @@ that differ from other languages:
   (`largest(items: xs)`). Bind `var v = items.view()` when the token needs a name.
 - `SortedList`/`SortedSet` have **no positional indexing** — rank access is
   `get_by_rank!(...)`.
-- Iterator adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`,
-  `chain`, `distinct`, `select_many`, `min_by`, … — lazily evaluated, chainable,
-  lambdas like `x => x % 2 == 0`. An adapter points at the collection it was made
-  from, so it is used in the statement that makes it (`each`, a terminal call such
-  as `.to[List]()`, or an argument). Keeping one in a variable or field, or returning
-  it, is RF-S644. A range (`var r = 0 til 10`) points at nothing and can be kept.
+- **Emitters.** What walks a value is an emitter (`Emitter[T]`, one `emit()` at a time); what can be walked is an
+  emittable (`Emittable[T]`, it has `emitter()`). `each x in xs` takes `xs.emitter()` for you, and you may call it
+  yourself: `var it = xs.emitter()`, then `it.emit()` (failable, `AbsentValueError` at the end) or `each x in it`,
+  which goes on from where `it` is. An emitter made from a local container (directly, or from its `view()` /
+  `modify()`) is itself a token on the container's elements: a local variable may hold it, and it ends when the
+  container may change shape or ends (a later use is RF-S643, `xs.add_last(...)` ends it). It hands out what the
+  container's walk hands out (`Viewing` from a read-only head, `Modifying` otherwise). Keeping it in a field or
+  returning it is RF-S644. `(steal xs).emitter()` takes the list's elements into the emitter (each one comes out as
+  the value itself, like `each x in steal xs`), so it holds what it walks and can go anywhere. A range
+  (`var r = 0 til 10`) points at nothing and can be kept.
+- Emitter adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`, `chain`, `distinct`, `select_many`,
+  `min_by`, … — lazily evaluated, chainable, lambdas like `x => x % 2 == 0`. An adapter points at the container it
+  was made from, so it follows the same rule: `var big = xs.where(...)` is a token on `xs`'s elements.
+- **Collecting.** An emittable is collected with a conversion that names the collection without its element type:
+  `xs.where(...).to[List]()`, `to[Set]()`, `to[Dict]()` (the values are `(key, value)` tuples), and in `Collections`
+  `to[SortedList]()`, `to[SortedSet]()`, `to[SortedDict]()` (pairs), `to[RotatableList]()`, `to[BitList]()` (Bools),
+  `to[PriorityQueue]()` (`(priority, element)` pairs). `to[List]`/`to[Set]`/`to[Dict]` need `import IterTools`.
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive. Without
   `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`
   yields nothing, `(2 to 1).has(1)` is false). `by N` sets the step
@@ -1112,8 +1123,8 @@ that differ from other languages:
   takes the same literal when the variable names its type
   (`var s: SortedSet[S64] = {3, 1, 2}`, `var pq: PriorityQueue[S32, Text] = {1: "high"}`).
   A literal takes its element types from where it goes, as a number does: `bytes.add_range(you: [3, 4])` on a
-  `List[U8]` builds a `List[U8]`, `total(xs: [5, 6])` for `xs: Iterable[U8]` builds a `List[U8]`, and
-  `{1: "a"}` given to an `Iterable[DictEntry[U16, Text]]` builds a `Dict[U16, Text]`. With nothing to go by,
+  `List[U8]` builds a `List[U8]`, `total(xs: [5, 6])` for `xs: Emittable[U8]` builds a `List[U8]`, and
+  `{1: "a"}` given to an `Emittable[DictEntry[U16, Text]]` builds a `Dict[U16, Text]`. With nothing to go by,
   `[1, 2]` is a `List[S64]`. The empty set literal is `{}` and the empty dict literal `{:}`
   (`var d: Dict[S32, S32] = {:}`, `steal s[b] as old inject {:}`). A `{}` where a dict is expected is RF-S558.
   An `Array` is also built from its elements: `Array[3](1, 2, 3)`.
@@ -1397,7 +1408,8 @@ routine start()
     # ... other work ...
     show(f"{job.retrieve()}")          # waits for the value
     var jobs = [add.to[Work](a: 1, b: 1), add.to[Work](a: 2, b: 2)]
-    show(f"{jobs.gather()}")           # starts both, waits for all, results in input order
+    jobs.start_now()                   # starts both together
+    show(f"{jobs.gather()}")           # waits for all, results in input order
     return
 ```
 
@@ -1449,7 +1461,10 @@ Verbs (methods on `Work[T]`, all failable):
   it out and returns it, loop it to handle results in finishing order), `gather_all() -> List[Check[T]]` (waits for
   all, each Work's value or failure in input order), `take_finished() -> List[Work[T]]` (takes the finished Works
   out in place and returns them, leaving the rest: rebuilding the list with `where` would drop work still
-  running). `gather` and `race` start the Works nothing started with `start_now()`.
+  running). `jobs.start_now()` / `jobs.start_here()` / `jobs.start_apart()` start every Work of the list together:
+  each one is made ready first (its thread too) and then all are let go at once, so none runs before the others are
+  ready; a Work of the list started already is a `WorkStartError`. `gather` and `race` only collect: a Work nothing
+  started is started with `start_now()` the same way, all together.
 - A Work is an entity kept in one place: `steal` hands it over, `var b = a` is RF-S413. When the place that
   keeps it lets go of it before a verb took its value (`drop job`, or the end of the scope or list that holds it), the work is cancelled
   and waited for. A started Work nothing retrieves, drops or hands on is warning RF-W009.
@@ -1534,7 +1549,7 @@ opening a `FileSource`/`FileSink` inside a job.
   `transmitter.transmit_if_room(item: x) -> Bool` never waits: `true` when it went in, `false` when the channel was full
   (the item is destroyed), `ChannelClosedError` like `transmit`.
   `transmitter.duplicate()` clones a producer for fan-in; `transmitter.close()` / `is_closed()`.
-- `Receiver`/`SharedReceiver` are `Iterable[T]` — drain with `each x in rx` (ends when closed + empty).
+- `Receiver`/`SharedReceiver` are `Emittable[T]` — drain with `each x in rx` (ends when closed + empty).
   `rx.close()` closes from the receiving side: buffered items are destroyed unreceived, a later `transmit` throws
   `ChannelClosedError`, and a transmitter waiting for room wakes with it (an early stop travels up a pipeline).
 
