@@ -459,6 +459,16 @@ declare their own `i`.
 - Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
   compares whether two references are the SAME object (entities, handles, and `Addr`
   only — RF-S440 on value types and access tokens). See §7.
+- **`==` and hashing are automatic, `Comparable` is opt-in.** Every record and every entity has `==`/`!=`
+  with no `obeys` line when each member variable has `==` (the builder writes `eq` comparing them in
+  order, a hand-written `eq` takes its place), so two distinct `Player(name: "Ada")` entities are `==` and
+  not `===`. A member variable without `==` (a `Callable[...]` routine value, an optional `T?`) means the
+  type has none: `==` on it is RF-S065 and passing it where `needs T obeys Equatable` is asked is RF-S150,
+  both naming that member variable. A record also hashes automatically (a `Set` element / `Dict` key) when
+  every member variable hashes, else RF-S150 at the use names the member variable. An entity hashes only
+  with `obeys Hashable` (its member variables can change while a `Set` holds it): `Set[Player]` without it is
+  RF-S150. `Text`, `Bytes`, `Integer` and `Decimal` hash their value, so equal values hash equal however
+  they were built. `Comparable` (`<`, sorting) still needs `obeys Comparable`.
 
 **Conversions: `x.to[T]()`, the one way to convert.**
 
