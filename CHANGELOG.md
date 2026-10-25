@@ -322,6 +322,9 @@ file only once its other old spellings are gone.
 - Rider plugin and VS Code extension.
 - `[target] backend = "tessera"` (opt-in).
 - Windows trace builds write CodeView and PDB files.
+- A crash trace holds the program's routines only: a standard library routine keeps no frame, and a crash
+  inside one reports the line where the program called it. `[debug] trace-stdlib = true` keeps the library's
+  frames too (for work on the library).
 - Diagnostics are written in the second person and point to the new spelling of a retired word.
 - `migrate --step indent` (indent in steps of 4 spaces). Default `migrate` and the `have` and `until` steps read a
   file whose numbers still have type suffixes, and leave the suffixes for `--step suffix`.
