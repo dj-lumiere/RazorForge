@@ -270,6 +270,26 @@ file only once its other old spellings are gone.
   one (`5e-390` on a `D64`), not only those at the smallest exponent.
 - `Decimal.to[B32]()` and `to[B64]()` crash with `NumericOverflowError` past the float's range, as documented
   (they gave an infinity).
+- `C64`, `C128` and `C256`: `*`, `/`, `reciprocal()`, `norm()` and `abs()` round each part once from the exact value.
+  On a `C128`, `(0.1+0.1i) * (0.1+0.3i)` is `-0.02+0.04i` (it was `-0.019999999999999997+0.04i`), `(0.1+0.1i) /
+  (0.1+0.3i)` is `0.4-0.2i` (it was `0.39999999999999997-0.2i`) and the modulus of `0.1+0.1i` is `0.1414213562373095`
+  (it was `0.14142135623730953`). A squared modulus past the range no longer crashes when the result fits:
+  `(1+1i) / (1e-200+0i)` is `1e+200+1e+200i` and the modulus of `1e200+1e200i` is `1.414213562373095e+200` (both
+  crashed).
+- The complex square root, logarithms and inverse functions give their principal values, and a `-0` part picks the
+  side of a branch cut: the square root of `-4 - 0i` is `0-2i` (it was `0+2i`), `acosh` of `-2+0i` is
+  `1.3169578969248166+3.141592653589793i` (the real part was negative), `atan` of `2i` is
+  `1.5707963267948966+0.5493061443340549i` (the real part was negative), and `asin`/`atanh` of `2+0i` take the side
+  above the cut. `tan`, `tanh` and the inverse functions no longer lose digits to cancellation, and `sin`, `cos`,
+  `sinh`, `cosh` and `exp` are made from the correctly rounded real functions, so every elementary function is within
+  a few units in the last place. The other complex results that use them (`ln`, `log2`, `log10`, `pow`) can change in
+  the last digit.
+- `exp_unchecked`, `sinh_unchecked` and `cosh_unchecked` of a complex number give an infinity past the range (they
+  crashed): `exp_unchecked` of `100+0i` on a `C64` is `inf+0i`.
+- Reading a complex number from text that is not one fails with `InvalidValueError` naming the whole text and the
+  complex type (it named the part and its float type), and a NaN part reads as the positive quiet NaN.
+- A complex number's `hash` is the same for `+0` and `-0` parts, as `==` treats them.
+- `C256.to[C64]()` rounds each part once (it went through `B64`, rounding twice).
 - `AccessManager`: `viewing` / `modifying` blocks, deadlock detection (`[debug] deadlock-check`, on in debug
   builds) and `access-order`.
 - Emitters: a program may call `emitter()` and keep the emitter in a local, where it is a token on the container
