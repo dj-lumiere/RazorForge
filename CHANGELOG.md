@@ -261,6 +261,15 @@ file only once its other old spellings are gone.
 - `x.rsqrt()` is 1 / sqrt(x) rounded once (not `1 / x.sqrt()`, which rounds twice) on `B16`, `BF16`, `B32`, `B64`,
   `B128`, `D32`, `D64`, `D128` and `Decimal`. `x <= 0` crashes like the other checked float math (raw:
   `rsqrt_unchecked`), and `Decimal.rsqrt` of `x <= 0` is a `NumericDomainError`.
+- `powi(n)` on `D32`, `D64`, `D128` and `Decimal` is rounded once, not once per multiplication (`1.1.powi(-7)` on a
+  `D64` is `0.5131581182307068`, it was `...069`). An exact `D` power keeps the exponent `n` times `x`'s (`2.0.powi(2)`
+  is `4.00`, it was `4.000`) and `x.powi(0)` is `1` (it was `1.0`). `midpoint` is `(a + b) / 2` rounded once, so two
+  finite values have a finite midpoint (`D64_MAX.midpoint(D64_MAX)` is `D64_MAX`, it was `inf`) and the sum is not
+  rounded first (on a `D64`, `9999999999999999.midpoint(9999999999999998)` is `9999999999999998`, it was `1.00000000000000E+16`).
+- `D32`/`D64`/`D128` `is_subnormal()` and `fpclassify()` count every finite nonzero value below the smallest normal
+  one (`5e-390` on a `D64`), not only those at the smallest exponent.
+- `Decimal.to[B32]()` and `to[B64]()` crash with `NumericOverflowError` past the float's range, as documented
+  (they gave an infinity).
 - `AccessManager`: `viewing` / `modifying` blocks, deadlock detection (`[debug] deadlock-check`, on in debug
   builds) and `access-order`.
 - Emitters: a program may call `emitter()` and keep the emitter in a local, where it is a token on the container
