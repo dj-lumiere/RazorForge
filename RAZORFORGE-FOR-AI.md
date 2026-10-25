@@ -1596,7 +1596,11 @@ or a shareable manager handle (`Unbroken`, `Guarded`, `Witnessed`). A `Roamed`
 handle is promoted. Anything else (a bare entity by copy, a record owning `Retained`/`Tracked`/
 `Viewing`/`Modifying`) is rejected. The check follows everything the value reaches: an entity's member
 variables, a collection's elements (`List[Retained[Cell]]`), a channel end's items (`Receiver[Retained[Cell]]`),
-and the `given` names of a lambda (written in the call or bound to a variable first). A value holding a
+and the `given` names of a lambda (written in the call or bound to a variable first). A routine-value parameter a
+routine hands to `to[Work]` (directly, or on to another routine that does) is followed to its callers: handing such a
+routine a lambda that captured a `Retained`, `Tracked` or token is RF-S632 ("You hand 'spawn' a lambda that captured
+`r` (a `Retained`), and 'spawn' hands its 'f' to a Work..."). A routine value kept in a member variable or a collection
+and handed to a Work later is not followed. A value holding a
 `Retained`, `Tracked` or token at any depth makes a Work of one thread: it starts with `start_here()`, and
 `start_now()` / `start_apart()` (or a `retrieve()` that starts it) is RF-S632. An `Unbroken[T]` parameter is always by reference, so a routine taking
 one works on the caller's cell, and sharing one counter across jobs just works:

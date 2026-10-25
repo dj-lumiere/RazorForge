@@ -147,6 +147,29 @@ public class SafetyPathMatrixTests
     }
 
     [Fact]
+    public void Analyze_LambdaCapturingRetainedHandedThroughParametersToWork_Errors()
+    {
+        AssertHasErrorCode(source: """
+                           routine work(f: Callable[(), S64]) -> S64
+                               return f()
+
+                           routine spawn(f: Callable[(), S64]) -> Work[S64]
+                               return work.to[Work](f: f)
+
+                           routine relay(g: Callable[(), S64]) -> Work[S64]
+                               return spawn(f: g)
+
+                           routine start()
+                               var r = Retained(from: Cell(n: 1))
+                               var f = () given (r) => r.n
+                               var j = relay(g: f)
+                               show(f"{j.retrieve()}")
+                               return
+                           """,
+            code: SemanticDiagnosticCode.ThreadArgNotShareable, expected: "'relay' hands its 'g' to a Work");
+    }
+
+    [Fact]
     public void Analyze_ChannelOfRetainedHandedToWork_Errors()
     {
         AssertHasErrorCode(source: """
