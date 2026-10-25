@@ -187,13 +187,7 @@ routine B128.next_down() -> B128
 ### logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
 ### :returns: The radix-2 exponent of `me`.
 routine B128.logb() -> B128
-    if me.is_nan()
-        return me
-    if me.is_infinite()
-        return B128.from_bits(bits: b128_inf(sign: 0))
-    if me.is_zero()
-        return B128.from_bits(bits: b128_inf(sign: 1))
-    return b128_ilogb(v: me).to[B128]()
+    return b128_of_words(w: C::ingrid_b128_logb(low: me.low_bits(), high: me.high_bits()))
 
 ### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-two exponent to apply.
@@ -489,11 +483,7 @@ routine B128.max(you: B128) -> B128
 ### :param you: The value to subtract.
 ### :returns: The positive difference, or +0.
 routine B128.fdim(you: B128) -> B128
-    if me.is_nan() or you.is_nan()
-        return B128.from_bits(bits: b128_qnan())
-    if me > you
-        return me - you
-    return b128_from_int(0)
+    return b128_of_words(w: C::ingrid_b128_fdim(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()))
 
 ### Multiplies by `2^n` exactly when representable (C `scalbn` / `ldexp`).
 ### :param n: The power-of-two exponent adjustment.
@@ -636,61 +626,13 @@ routine B128.diagnose() -> Text
         return "B128(snan)"
     return float_text(low: me.low_bits(), high: me.high_bits(), format: 4, style: 3, digits: 0)
 
-### Builds the `B128` value of a small non-negative integer (castFromInt).
-### :param n: The integer to convert.
-### :returns: The corresponding `B128`.
-routine b128_from_int(n: U64) -> B128
-    if n == 0
-        return B128.from_bits(bits: 0)
-    var p = LLVM::sub(a: 63, b: LLVM::leading_zeros(n))
-    var biased = LLVM::add(a: p, b: 16383)
-    var n128 = LLVM::zero_extend[U64, U128](n)
-    var sig = LLVM::shift_left(
-        value: n128,
-        bits: LLVM::zero_extend[U64, U128](LLVM::sub(a: 112, b: p)),
-    )
-    var frac = LLVM::bit_and(a: sig, b: b128_mant_mask())
-    var packed = LLVM::bit_or(
-        a: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](biased), bits: 112),
-        b: frac,
-    )
-    return B128.from_bits(bits: packed)
-
-### Returns the unbiased binary exponent (floor log2 |v|), C's `ilogb`.
-### :param v: The value (assumed nonzero).
-### :returns: The binary exponent.
-routine b128_ilogb(v: B128) -> S64
-    var e = v.raw_exponent()
-    if e == 0
-        var m = v.raw_mantissa()
-        if LLVM::int_eq[U128](a: m, b: 0)
-            return 0
-        var msb = LLVM::sub(a: 127, b: LLVM::leading_zeros(m))
-        return LLVM::sub(a: LLVM::int_truncate[U128, S64](msb), b: 16494)
-    return LLVM::sub(a: LLVM::sign_extend[S32, S64](LLVM::int_truncate[U64, S32](e)), b: 16383)
-
 # ============================================================================
 # More exact members: nextafter, modf, frexp
 # ============================================================================
 
 ### Returns the next representable value after `me` toward `you` (C `nextafter`).
 routine B128.nextafter(you: B128) -> B128
-    if me.is_nan() or you.is_nan()
-        return B128.from_bits(bits: b128_qnan())
-    if me == you
-        return you
-    if me.is_zero()
-        var ys = LLVM::bit_and(a: you.to_bits(), b: b128_sign_mask())
-        return B128.from_bits(bits: LLVM::bit_or(a: ys, b: 1))
-    var mag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
-    var ispos = not me.is_negative()
-    var valup = me < you
-    if ispos == valup
-        mag = LLVM::add(a: mag, b: 1)
-    else
-        mag = LLVM::sub(a: mag, b: 1)
-    var sgn = LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask())
-    return B128.from_bits(bits: LLVM::bit_or(a: sgn, b: mag))
+    return b128_of_words(w: C::ingrid_b128_nextafter(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()))
 
 ### Splits into integer and fractional parts (C `modf`): returns (intpart, fracpart).
 routine B128.modf() -> (B128, B128)
@@ -705,20 +647,8 @@ routine B128.modf() -> (B128, B128)
 
 ### Splits into a fraction in [0.5,1) and a power-of-two exponent (C `frexp`).
 routine B128.frexp() -> (B128, S64)
-    if me.is_zero() or me.is_infinite() or me.is_nan()
-        var asis = B128.from_bits(bits: me.to_bits())
-        return (asis, 0)
-    var bits = me.to_bits()
-    var sign = bits & (1 << 127)
-    var be = LLVM::int_truncate[U128, S64]((bits >>> 112) & 0x7FFF)
-    var f = bits & (1 << 112) -% 1
-    var k = be -% 16382
-    if be == 0
-        # subnormal: f * 2^-16494 with its leading bit at msb
-        var msb = 127 -% LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](LLVM::leading_zeros(f)))
-        f = (f << LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](112 -% msb))) & (1 << 112) -% 1
-        k = msb -% 16493
-    return (B128.from_bits(bits: sign | (0x3FFE << 112) | f), k)
+    var w = C::ingrid_b128_frexp(low: me.low_bits(), high: me.high_bits())
+    return (B128.from_bits(bits: (w.w1.to[U128]() << 64) | w.w0.to[U128]()), LLVM::reinterpret_bits[U64, S64](w.w2))
 
 ### Converts an `S8` into quadruple-precision floating-point form.
 ### :returns: The corresponding `B128` value.
@@ -928,17 +858,7 @@ routine B128.powi(n: S32) -> B128
 ### :param you: The other value.
 ### :returns: The arithmetic midpoint of `me` and `you`.
 routine B128.midpoint(you: B128) -> B128
-    var lo = B128_MIN_POSITIVE.mul_unchecked(2.0)
-    var hi = B128_MAX.truediv_unchecked(2.0)
-    var aa = me.abs()
-    var ab = you.abs()
-    if aa <= hi and ab <= hi
-        return me.add_unchecked(you).truediv_unchecked(2.0)
-    if aa < lo
-        return me.add_unchecked(you.truediv_unchecked(2.0))
-    if ab < lo
-        return me.truediv_unchecked(2.0).add_unchecked(you)
-    return me.truediv_unchecked(2.0).add_unchecked(you.truediv_unchecked(2.0))
+    return b128_of_words(w: C::ingrid_b128_midpoint(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()))
 
 # ============================================================================
 # Utility Methods

@@ -52,63 +52,52 @@ secret routine float_text(low: U64, high: U64, format: U32, style: U32, digits: 
 secret routine float_parse(text: Text, format: U32) -> IngridWords
     return C::ingrid_float_parse_utf32(chars: text.data, count: text.count, format: format)
 
-### The text of decoded decimal parts as Ingrid writes it.
-### :param p: The parts.
-### :param style: 0 the scientific text, 1 the same with fractional trailing zeros dropped, 2 `places` digits after
-###     the point, 3 the `diagnose` text (the type name, then the text in parentheses).
-### :param places: The digits after the point for style 2, for style 3 the type: 32, 64, or 128 for D32, D64, or D128
-###     (the scientific text) and 0 for Decimal (the text without fractional trailing zeros).
+### The text of a decimal given its bits, as Ingrid writes it.
+### :param low: The low 64 bits of the bits.
+### :param high: The high 64 bits (0 below D128).
+### :param width: 32, 64, or 128 for D32, D64, or D128, and 0 for Decimal.
+### :param style: 0 the scientific text, 1 Decimal's text (no fractional trailing zeros, integers in full), 2 `places`
+###     digits after the point, 3 the `diagnose` text (the type name, then the text in parentheses), 4 Decimal's
+###     `places` digits after the point.
+### :param places: The digits after the point for styles 2 and 4.
+### :param mode: How styles 2 and 4 round (`rounding_mode`): the type's own rule writes the digits as they are, any other
+###     rounds to `places` digits first.
 ### :returns: The text.
-secret routine decimal_text(p: D128Parts, style: U32, places: U64) -> Text
-    var sign: U32 = 0
-    if p.sign
-        sign = 1
-    var special = LLVM::int_truncate[U64, U32](p.special)
-    var c_low = LLVM::int_truncate[U128, U64](p.coeff)
-    var c_high = LLVM::int_truncate[U128, U64](p.coeff >>> 64)
+secret routine decimal_bits_text(low: U64, high: U64, width: U32, style: U32, places: U64, mode: U32) -> Text
     var buf = Array[Char, 64]()
     var count: U64 = 0
     danger
         var o = LLVM::reinterpret_bits[Hijacked[Array[Char, 64]], Hijacked[Char]](buf.hijack())
-        count = C::ingrid_decimal_text_utf32(
-            sign: sign,
-            special: special,
-            exp: p.exp,
-            c_low: c_low,
-            c_high: c_high,
+        count = C::ingrid_decimal_bits_text_utf32(
+            low: low,
+            high: high,
+            width: width,
             style: style,
             places: places,
+            mode: mode,
             out: o,
             out_count: FLOAT_TEXT_ROOM,
         )
         if count <= FLOAT_TEXT_ROOM
             return Text(from_span: o, count: count)
     var result = text_alloc(count: count)
-    drop C::ingrid_decimal_text_utf32(
-        sign: sign,
-        special: special,
-        exp: p.exp,
-        c_low: c_low,
-        c_high: c_high,
+    drop C::ingrid_decimal_bits_text_utf32(
+        low: low,
+        high: high,
+        width: width,
         style: style,
         places: places,
+        mode: mode,
         out: result.data,
         out_count: count,
     )
     return result
 
-### Scans decimal text into its parts (sign, special, coefficient, base-10 exponent) without rounding: the shared
-### front end of the decimal parsers (Ingrid's scanner). An optional sign, an integer and fraction mantissa, an
-### optional `e`/`E` exponent, and the special values `inf`/`infinity`/`nan` (any case). A mantissa longer than 38
-### digits keeps its first 38 and folds the rest into a sticky last digit, and an exponent beyond ±10^9 saturates.
-### :throws: {InvalidValueError} on malformed input.
-failable routine scan_decimal_parts(from_text: Text) -> D128Parts
-    var w = C::ingrid_decimal_scan_utf32(chars: from_text.data, count: from_text.count)
-    if (w.w0 & 0xFF) != 0
-        throw InvalidValueError(input: from_text, target: "decimal number")
-    return D128Parts(
-        sign: ((w.w0 >>> 8) & 0xFF) != 0,
-        special: w.w0 >>> 16,
-        exp: LLVM::reinterpret_bits[U64, S64](w.w3),
-        coeff: (w.w2.to[U128]() << 64) | w.w1.to[U128](),
-    )
+### Reads decimal text as a decimal of `width`, rounded once (Ingrid's reader): an optional sign, an integer and fraction
+### mantissa, an optional `e`/`E` exponent, and the special values `inf`/`infinity`/`nan` (any case).
+### :param text: The text.
+### :param width: 32, 64, or 128 for D32, D64, or D128, and 0 for Decimal.
+### :returns: w0: 0 a value, 1 not a number (for a Decimal also an infinity or a NaN), 2 a Decimal out of range. w1 and
+###     w2: the bits' low and high 64.
+secret routine decimal_bits_parse(text: Text, width: U32) -> IngridWords
+    return C::ingrid_decimal_bits_parse_utf32(chars: text.data, count: text.count, width: width)

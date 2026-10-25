@@ -16,8 +16,9 @@ preset D128_EPSILON: D128 = 1e-33
 # ============================================================================
 # D128 — IEEE 754-2008 decimal128 in BID storage. The arithmetic, rounding, conversions, DPD and math are
 # computed by Ingrid's decimal engine (Ingrid/tessera/decimal/, written in Tessera), one engine for D32, D64 and
-# D128 that rounds each result once to this format. This file keeps the type, its BID layout (decode and encode
-# for the text forms), the checked operators, the conversions' RazorForge faces, and text parsing.
+# D128 that rounds each result once to this format. Every routine here is one call into that engine,
+# with what the language adds around it: the checked operators that crash and the `_unchecked` raw ones, the text,
+# and the protocol conformances.
 # ============================================================================
 
 ### A software decimal128 value in BID storage.
@@ -25,20 +26,6 @@ preset D128_EPSILON: D128 = 1e-33
 record D128
 obeys Numeric, Comparable, Copyable, Hashable
     nothing
-
-### The decoded fields of a decimal128: value = (-1)^sign * coeff * 10^exp.
-### `special`: 0 finite, 1 infinity, 2 quiet NaN, 3 signaling NaN. Specials are
-### encoded with the IEEE combination prefix (11110 = Inf, 11111 = NaN), which the
-### finite range never reaches (biased exp <= 12287, top 2 bits never 11).
-record D128Parts
-    ### Sign bit.
-    sign: Bool
-    ### 0 finite, 1 inf, 2 qNaN, 3 sNaN.
-    special: U64
-    ### Unbiased exponent (finite only).
-    exp: S64
-    ### Integer significand 0..10^34-1 (finite only).
-    coeff: U128
 
 ### Reinterprets this value as its raw decimal128 bit pattern.
 @readonly
@@ -71,158 +58,50 @@ common routine D128.from_dpd(bits: U128) -> D128
     var high = LLVM::int_truncate[U128, U64](bits >>> 64)
     return d128_of_words(w: C::ingrid_d128_from_dpd(low: low, high: high))
 
-### BINARY decode — sign / specials (combination prefix) / 14-bit biased exponent /
-### 113-bit coefficient.
-@readonly
-routine D128.decode() -> D128Parts
-    var bits = me.to_bits()
-    # bit127 = sign.
-    var sign = LLVM::int_ne[U128](
-        a: LLVM::bit_and[U128](
-            a: bits,
-            b: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 127)),
-        ),
-        b: 0,
-    )
-    # Combination prefix = top 5 bits (126..122): 11110 (0x1E) = Inf, 11111 (0x1F) = NaN.
-    var top5 = LLVM::int_truncate[U128, U64](
-        LLVM::bit_and(
-            a: LLVM::shift_right_unsigned(bits, U128.to_width(s: 122)),
-            b: LLVM::zero_extend[U64, U128](0x1F),
-        ),
-    )
-    if LLVM::int_eq(a: top5, b: 0x1E)
-        return D128Parts(
-            sign: sign,
-            special: 1,
-            exp: 0,
-            coeff: LLVM::zero_extend[U64, U128](0),
-        )
-    if LLVM::int_eq(a: top5, b: 0x1F)
-        # NaN: bit121 is the signaling flag (1 = sNaN -> special 3, else qNaN -> 2).
-        var sp: U64 = 2
-        if LLVM::int_ne[U128](
-            a: LLVM::bit_and[U128](
-                a: LLVM::shift_right_unsigned[U128](bits, U128.to_width(s: 121)),
-                b: LLVM::zero_extend[U64, U128](1),
-            ),
-            b: 0,
-        )
-            sp = 3
-        return D128Parts(
-            sign: sign,
-            special: sp,
-            exp: 0,
-            coeff: LLVM::zero_extend[U64, U128](0),
-        )
-    # Finite: bits 126..113 = 14-bit biased exponent; bits 112..0 = 113-bit coefficient.
-    var biased = LLVM::int_truncate[U128, U64](
-        LLVM::bit_and(
-            a: LLVM::shift_right_unsigned(bits, U128.to_width(s: 113)),
-            b: LLVM::zero_extend[U64, U128](0x3FFF),
-        ),
-    )
-    var coeff = LLVM::bit_and[U128](
-        a: bits,
-        b: LLVM::sub[U128](
-            a: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 113)),
-            b: 1,
-        ),
-    )
-    # Unbias by 6176 to recover the true base-10 exponent.
-    return D128Parts(
-        sign: sign,
-        special: 0,
-        exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](biased), b: 6176),
-        coeff: coeff,
-    )
-
-### BINARY encode — pack sign / specials / exponent / coefficient.
-routine d128_of_parts(p: D128Parts) -> D128
-    # Sign goes to bit127.
-    var sbit = LLVM::shift_left(
-        value: LLVM::zero_extend[U64, U128](if p.sign then 1 else 0),
-        bits: U128.to_width(s: 127),
-    )
-    if LLVM::int_ne(a: p.special, b: 0)
-        # Combination prefix 0x1E (Inf) or 0x1F (NaN) into bits 126..122; bit121 set for sNaN.
-        var top5: U64 = if LLVM::int_eq(a: p.special, b: 1) then 0x1E else 0x1F
-        var b = LLVM::bit_or(
-            a: sbit,
-            b: LLVM::shift_left(
-                value: LLVM::zero_extend[U64, U128](top5),
-                bits: U128.to_width(s: 122),
-            ),
-        )
-        if LLVM::int_eq(a: p.special, b: 3)
-            b = LLVM::bit_or[U128](
-                a: b,
-                b: LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: 121)),
-            )
-        return D128.from_bits(bits: b)
-    # Finite: rebias the exponent (+6176), mask to 14 bits at bits 126..113, OR in the coefficient.
-    var biased = LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 6176)
-    var ebits = LLVM::shift_left(
-        value: LLVM::zero_extend[U64, U128](LLVM::bit_and(a: biased, b: 0x3FFF)),
-        bits: U128.to_width(s: 113),
-    )
-    return D128.from_bits(bits: LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: ebits), b: p.coeff))
-
 ### Infinity with the given sign.
 common routine D128.infinity(sign: Bool) -> D128
-    return d128_of_parts(
-        p: D128Parts(
-            sign: sign,
-            special: 1,
-            exp: 0,
-            coeff: LLVM::zero_extend[U64, U128](0),
-        ),
-    )
+    var neg: U32 = 0
+    if sign
+        neg = 1
+    return d128_of_words(w: C::ingrid_d128_special(kind: 1, neg: neg))
 
 ### A quiet NaN.
 common routine D128.quiet_nan() -> D128
-    return d128_of_parts(
-        p: D128Parts(
-            sign: false,
-            special: 2,
-            exp: 0,
-            coeff: LLVM::zero_extend[U64, U128](0),
-        ),
-    )
+    return d128_of_words(w: C::ingrid_d128_special(kind: 2, neg: 0))
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
 common routine D128.signaling_nan() -> D128
-    return d128_of_parts(
-        p: D128Parts(
-            sign: false,
-            special: 3,
-            exp: 0,
-            coeff: LLVM::zero_extend[U64, U128](0),
-        ),
-    )
+    return d128_of_words(w: C::ingrid_d128_special(kind: 3, neg: 0))
 
-### True when finite (neither inf nor NaN).
+### True when this is a finite value.
+@readonly
+@inline
 routine D128.is_finite() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 0)
+    return (C::ingrid_d128_class(x_low: d128_low(v: me), x_high: d128_high(v: me)) & 2) != 0
 
-### True when infinite.
+### True when this is ±infinity.
+@readonly
+@inline
 routine D128.is_infinite() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 1)
+    return (C::ingrid_d128_class(x_low: d128_low(v: me), x_high: d128_high(v: me)) & 4) != 0
 
-### True when NaN (quiet or signaling).
+### True when this is a NaN (quiet or signaling).
+@readonly
+@inline
 routine D128.is_nan() -> Bool
-    return LLVM::unsigned_ge(a: me.decode().special, b: 2)
+    return (C::ingrid_d128_class(x_low: d128_low(v: me), x_high: d128_high(v: me)) & 8) != 0
 
-### True when this is a SIGNALING NaN (special field == 3).
+### True when this is a SIGNALING NaN.
+@readonly
+@inline
 routine D128.is_signaling() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 3)
+    return (C::ingrid_d128_class(x_low: d128_low(v: me), x_high: d128_high(v: me)) & 16) != 0
 
 ### True when this is a finite zero (±0).
 @readonly
+@inline
 routine D128.is_zero() -> Bool
-    var p = me.decode()
-    return LLVM::int_eq(a: p.special, b: 0)
-        and LLVM::int_eq(a: p.coeff, b: LLVM::zero_extend[U64, U128](0))
+    return (C::ingrid_d128_class(x_low: d128_low(v: me), x_high: d128_high(v: me)) & 32) != 0
 
 ### Builds a finite D128 from a sign, a coefficient and a base-10 exponent: value = (-1)^sign * coeff *
 ### 10^exp, rounded half to even to 34 digits and brought into the exponent range.
@@ -243,13 +122,7 @@ common routine D128.from_components(sign: Bool, coeff: U128, exp: S64) -> D128
 
 ### Builds a D128 from a 64-bit signed integer (exponent 0).
 common routine D128.from_int64(value: S64) -> D128
-    var neg = LLVM::signed_lt(a: value, b: 0)
-    var mag = if neg then LLVM::sub(a: 0, b: value) else value
-    return D128.from_components(
-        sign: neg,
-        coeff: LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](mag)),
-        exp: 0,
-    )
+    return d128_of_words(w: C::ingrid_d128_from_s64(n: value))
 
 ### An integer (sign and 256-bit magnitude) as a D128, rounded half to even to 34 digits.
 routine d128_of_integer(neg: Bool, m: U256) -> D128
@@ -262,6 +135,15 @@ routine d128_of_integer(neg: Bool, m: U256) -> D128
     var m3 = LLVM::int_truncate[U256, U64](m >>> 192)
     return d128_of_words(w: C::ingrid_d128_from_integer(neg: n, m0: m0, m1: m1, m2: m2, m3: m3))
 
+### A signed 256-bit integer as a D128, rounded half to even to 34 digits.
+secret routine d128_of_s256(v: S256) -> D128
+    var m = LLVM::reinterpret_bits[S256, U256](v)
+    var m0 = LLVM::int_truncate[U256, U64](m)
+    var m1 = LLVM::int_truncate[U256, U64](m >>> 64)
+    var m2 = LLVM::int_truncate[U256, U64](m >>> 128)
+    var m3 = LLVM::int_truncate[U256, U64](m >>> 192)
+    return d128_of_words(w: C::ingrid_d128_from_s256(m0: m0, m1: m1, m2: m2, m3: m3))
+
 ### The bits of the binary float nearest to x, `which` bits wide (16, 32, 64, or 128). An infinity keeps its sign,
 ### a NaN becomes the positive quiet NaN.
 routine d128_to_binary(x: D128, which: U32) -> U128
@@ -272,93 +154,57 @@ routine d128_to_binary(x: D128, which: U32) -> U128
 routine d128_of_b128(x: B128) -> D128
     return d128_of_words(w: C::ingrid_d128_from_binary(low: x.low_bits(), high: x.high_bits()))
 
-### The truncated integer magnitude of a finite decimal coeff * 10^exp as a U256. Throws when it exceeds U256.
-failable routine d128_int_magnitude(coeff: U128, exp: S64) -> U256
-    if coeff == 0
-        return 0
-    if exp < 0
-        if exp < -38
-            return 0
-        var c = coeff
-        var k = exp
-        until k >= 0
-            c = u128_floordiv(a: c, b: 10)
-            k = k +% 1
-        return LLVM::zero_extend[U128, U256](c)
-    if exp > 77
-        throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
-    var m = LLVM::zero_extend[U128, U256](coeff)
-    var i = 0
-    until i >= exp
-        var prod = LLVM::unsigned_mul_checked[U256](m, 10)
-        if prod.item1
-            throw NumericOverflowError(description: "decimal magnitude exceeds a 256-bit integer")
-        m = prod.item0
-        i = i +% 1
-    return m
+### Throws the error for a D128 whose integer part does not fit the integer asked for.
+### :param status: What `ingrid_d128_integer_status` gave (not 0).
+### :param bits: The integer's width, 128 or 256.
+### :throws: {NumericDomainError} for an infinity or a NaN, {NumericOverflowError} for a negative value to an
+###     unsigned integer or an integer part out of range.
+secret failable routine d128_integer_failure(status: U32, bits: U32) -> None
+    if status == 1
+        throw NumericDomainError(description: "non-finite decimal is not an integer")
+    if status == 2
+        throw NumericOverflowError(description: "negative decimal to unsigned integer")
+    if status == 3
+        throw NumericOverflowError(description: f"decimal magnitude exceeds a {bits}-bit integer")
+    throw NumericOverflowError(description: "decimal out of range for target integer")
 
-### The truncated integer magnitude of a finite decimal as a U128. Throws when it exceeds U128.
-failable routine d128_int_magnitude_u128(coeff: U128, exp: S64) -> U128
-    var m = d128_int_magnitude(coeff: coeff, exp: exp)
-    if (m >>> 128) != 0
-        throw NumericOverflowError(description: "decimal magnitude exceeds a 128-bit integer")
-    return LLVM::int_truncate[U256, U128](m)
+### The 256 bits of the integer part of me (toward zero), as Ingrid hands them back.
+secret routine d128_integer_bits(x: D128) -> U256
+    var w = C::ingrid_d128_to_integer(x_low: d128_low(v: x), x_high: d128_high(v: x))
+    var high = (w.w3.to[U256]() << 64) | w.w2.to[U256]()
+    return (((high << 64) | w.w1.to[U256]()) << 64) | w.w0.to[U256]()
 
 ### Truncates toward zero to an unsigned 128-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U128.
 failable routine D128.to[U128]() -> U128
-    var p = me.decode()
-    if p.special != 0
-        throw NumericDomainError(description: "non-finite decimal is not an integer")
-    if p.sign and p.coeff != 0
-        throw NumericOverflowError(description: "negative decimal to unsigned integer")
-    return d128_int_magnitude_u128(coeff: p.coeff, exp: p.exp)
+    var status = C::ingrid_d128_integer_status(x_low: d128_low(v: me), x_high: d128_high(v: me), signed: 0, bits: 128)
+    if status != 0
+        d128_integer_failure(status: status, bits: 128)
+    return LLVM::int_truncate[U256, U128](d128_integer_bits(x: me))
 
 ### Truncates toward zero to a signed 128-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^127, 2^127-1].
 failable routine D128.to[S128]() -> S128
-    var p = me.decode()
-    if p.special != 0
-        throw NumericDomainError(description: "non-finite decimal is not an integer")
-    var mag = d128_int_magnitude_u128(coeff: p.coeff, exp: p.exp)
-    var lim: U128 = 1 << 127
-    if p.sign
-        if mag > lim
-            throw NumericOverflowError(description: "decimal out of range for target integer")
-        if mag == lim
-            return LLVM::reinterpret_bits[U128, S128](lim)
-        return 0 -% LLVM::reinterpret_bits[U128, S128](mag)
-    if mag >= lim
-        throw NumericOverflowError(description: "decimal out of range for target integer")
-    return LLVM::reinterpret_bits[U128, S128](mag)
+    var status = C::ingrid_d128_integer_status(x_low: d128_low(v: me), x_high: d128_high(v: me), signed: 1, bits: 128)
+    if status != 0
+        d128_integer_failure(status: status, bits: 128)
+    return LLVM::reinterpret_bits[U128, S128](LLVM::int_truncate[U256, U128](d128_integer_bits(x: me)))
 
 ### Truncates toward zero to an unsigned 256-bit integer. Throws on a non-finite value, a
 ### negative value, or an integer part beyond U256.
 failable routine D128.to[U256]() -> U256
-    var p = me.decode()
-    if p.special != 0
-        throw NumericDomainError(description: "non-finite decimal is not an integer")
-    if p.sign and p.coeff != 0
-        throw NumericOverflowError(description: "negative decimal to unsigned integer")
-    return d128_int_magnitude(coeff: p.coeff, exp: p.exp)
+    var status = C::ingrid_d128_integer_status(x_low: d128_low(v: me), x_high: d128_high(v: me), signed: 0, bits: 256)
+    if status != 0
+        d128_integer_failure(status: status, bits: 256)
+    return d128_integer_bits(x: me)
 
 ### Truncates toward zero to a signed 256-bit integer. Throws on a non-finite value or an
 ### integer part outside [-2^255, 2^255-1].
 failable routine D128.to[S256]() -> S256
-    var p = me.decode()
-    if p.special != 0
-        throw NumericDomainError(description: "non-finite decimal is not an integer")
-    var mag = d128_int_magnitude(coeff: p.coeff, exp: p.exp)
-    var lim: U256 = 1 << 255
-    if p.sign
-        if mag > lim
-            throw NumericOverflowError(description: "decimal out of range for target integer")
-        if mag == lim
-            return LLVM::reinterpret_bits[U256, S256](lim)
-        return 0 -% LLVM::reinterpret_bits[U256, S256](mag)
-    if mag >= lim
-        throw NumericOverflowError(description: "decimal out of range for target integer")
-    return LLVM::reinterpret_bits[U256, S256](mag)
+    var status = C::ingrid_d128_integer_status(x_low: d128_low(v: me), x_high: d128_high(v: me), signed: 1, bits: 256)
+    if status != 0
+        d128_integer_failure(status: status, bits: 256)
+    return LLVM::reinterpret_bits[U256, S256](d128_integer_bits(x: me))
 
 # Checked arithmetic crashes with a specific cause on a non-finite result (mirrors B64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. Use the `*_unchecked`
@@ -495,34 +341,6 @@ secret routine d128_ingrid_order(a: D128, b: D128) -> S64
 routine D128.eq(you: D128) -> Bool
     return d128_ingrid_order(a: me, b: you) == 0
 
-### The keyed hash of a decimal's value, the same for equal values whatever their digits: `1.0`, `1.00`, and `1E+0`
-### hash the same, a D64 and a D128 of one value too, `+0` and `-0` (equal) hash as one zero, and every NaN hashes
-### the same. The coefficient goes without its trailing zeros into one U128, with the biased exponent and the sign
-### above its 113 bits. 16383 in the exponent bits is past every finite exponent: it marks a NaN (coefficient 0) or
-### an infinity (coefficient 1).
-### :param p: The decoded value.
-### :param k0: The first 64-bit key word.
-### :param k1: The second 64-bit key word.
-### :returns: SipHash-2-4 of that U128.
-secret routine decimal_value_hash(p: D128Parts, k0: U64, k1: U64) -> U64
-    var special: U128 = 0x3FFF
-    var sign: U128 = 0
-    if p.sign
-        sign = 1
-    if p.special >= 2
-        return __secure_hash_u128(v: special << 113, k0: k0, k1: k1)
-    if p.special == 1
-        return __secure_hash_u128(v: (special << 113) | 1 | (sign << 127), k0: k0, k1: k1)
-    if p.coeff == 0
-        return __secure_hash_u128(v: 0, k0: k0, k1: k1)
-    var c = p.coeff
-    var e = p.exp
-    until c % 10 != 0
-        c = c // 10
-        e = e + 1
-    var biased = (e + 6176).to[U128]()
-    return __secure_hash_u128(v: c | (biased << 113) | (sign << 127), k0: k0, k1: k1)
-
 ### Returns a SipHash-2-4 keyed hash of the value: equal values hash equal whatever their digits (`1.0` and `1.00`,
 ### `+0` and `-0`), and every NaN hashes the same.
 ### :param k0: The first 64-bit key word.
@@ -530,7 +348,7 @@ secret routine decimal_value_hash(p: D128Parts, k0: U64, k1: U64) -> U64
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 @readonly
 routine D128.hash(k0: U64, k1: U64) -> U64
-    return decimal_value_hash(p: me.decode(), k0: k0, k1: k1)
+    return C::ingrid_d128_hash(x_low: d128_low(v: me), x_high: d128_high(v: me), k0: k0, k1: k1)
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
@@ -558,7 +376,7 @@ failable routine D128.pow(you: D128) -> D128
 ### Returns the decimal text of this value.
 @override
 routine D128.represent() -> Text
-    return decimal_text(p: me.decode(), style: 0, places: 0)
+    return decimal_bits_text(low: d128_low(v: me), high: d128_high(v: me), width: 128, style: 0, places: 0, mode: 4)
 
 ### Renders this value with exactly `places` digits after the point, rounded half to even from its
 ### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
@@ -567,66 +385,53 @@ routine D128.represent() -> Text
 ### :param rule: How the digits past them go (a tie to the even one when left out).
 ### :returns: The rendered `Text`.
 routine D128.fixed(places: U64, rule: RoundingRule = RoundingRule.HALF_EVEN) -> Text
-    if rule == RoundingRule.HALF_EVEN
-        return decimal_text(p: me.decode(), style: 2, places: places)
-    return decimal_text(p: me.round(places: places, rule: rule).decode(), style: 2, places: places)
+    return decimal_bits_text(low: d128_low(v: me), high: d128_high(v: me), width: 128, style: 2, places: places,
+        mode: rounding_mode(rule: rule))
 
 ### Returns a diagnostic representation tagged with the type name.
 @override
 routine D128.diagnose() -> Text
-    return decimal_text(p: me.decode(), style: 3, places: 128)
+    return decimal_bits_text(low: d128_low(v: me), high: d128_high(v: me), width: 128, style: 3, places: 0, mode: 4)
 
 ### The smaller of `me` and `you`. If one operand is NaN, the other one.
 ### :param you: The value to compare with.
 ### :returns: The smaller value, the other operand when one is NaN, and NaN when both are.
 routine D128.min(you: D128) -> D128
-    if me.is_nan()
-        return you
-    if you.is_nan()
-        return me
-    return if me <= you then me else you
+    return d128_of_words(w: C::ingrid_d128_select(a_low: d128_low(v: me), a_high: d128_high(v: me), b_low: d128_low(v: you), b_high: d128_high(v: you), which: 0))
 ### The larger of `me` and `you`. If one operand is NaN, the other one.
 ### :param you: The value to compare with.
 ### :returns: The larger value, the other operand when one is NaN, and NaN when both are.
 routine D128.max(you: D128) -> D128
-    if me.is_nan()
-        return you
-    if you.is_nan()
-        return me
-    return if me >= you then me else you
+    return d128_of_words(w: C::ingrid_d128_select(a_low: d128_low(v: me), a_high: d128_high(v: me), b_low: d128_low(v: you), b_high: d128_high(v: you), which: 1))
 ### Restricts `me` to the closed interval `[min_val, max_val]`.
 ### :param min_val: The lower bound.
 ### :param max_val: The upper bound.
 ### :returns: The clamped value.
 @positional
 routine D128.clamp(min_val: D128, max_val: D128) -> D128
-    return me.min(max_val).max(min_val)
+    return d128_of_words(w: C::ingrid_d128_clamp(x_low: d128_low(v: me), x_high: d128_high(v: me), lo_low: d128_low(v: min_val),
+        lo_high: d128_high(v: min_val), hi_low: d128_low(v: max_val), hi_high: d128_high(v: max_val)))
 
 ### Returns the reciprocal `1 / me`.
 ### :returns: The multiplicative inverse.
 routine D128.recip() -> D128
     return D128_ONE.truediv_unchecked(me)
 
-### Returns `me` raised to the integer power `n` via exponentiation by squaring.
-### A negative `n` inverts the result.
+### Returns `me` raised to the integer power `n`, rounded once to 34 digits (a tie to the even one), not one rounding
+### per multiplication. An exact power takes the exponent `n` times `me`'s when its digits allow (`2.0.powi(2)` is
+### `4.00`, `10.powi(3)` is `1000`). `x.powi(0)` is 1 for every x, a zero to a negative power is an infinity, and a
+### result past the range is an infinity or a zero, as IEEE 754 pown says. Never crashes.
 ### :param n: The integer exponent.
 ### :returns: `me ** n`.
 routine D128.powi(n: S32) -> D128
-    var base = if n < 0 then D128_ONE.truediv_unchecked(me) else me
-    var count = n.unsigned_abs()
-    var result = D128_ONE
-    until count == 0
-        if count.bitand(1) == 1
-            result = result.mul_unchecked(base)
-        base = base.mul_unchecked(base)
-        count = count.logical_shift_right(1)
-    return result
+    return d128_of_words(w: C::ingrid_d128_powi(x_low: d128_low(v: me), x_high: d128_high(v: me), n: n.to[S64]()))
 
-### Returns `(me + you) / 2`.
+### Returns `(me + you) / 2`, rounded once to 34 digits (a tie to the even one): the sum is not rounded on its own,
+### so the midpoint of two finite values is finite and exact where it can be.
 ### :param you: The other value.
 ### :returns: The arithmetic midpoint of `me` and `you`.
 routine D128.midpoint(you: D128) -> D128
-    return me.add_unchecked(you).truediv_unchecked(2.0)
+    return d128_of_words(w: C::ingrid_d128_midpoint(a_low: d128_low(v: me), a_high: d128_high(v: me), b_low: d128_low(v: you), b_high: d128_high(v: you)))
 
 # ============================================================================
 # Creators — integers (exact, then rounded half to even to 34 digits)
@@ -650,21 +455,11 @@ routine S64.to[D128]() -> D128
 
 ### Converts an S128 into decimal128 (exponent 0, rounded half to even when it has more than 34 digits).
 routine S128.to[D128]() -> D128
-    var v = LLVM::sign_extend[S128, S256](me)
-    var neg = v < 0
-    var mag = LLVM::reinterpret_bits[S256, U256](v)
-    if neg
-        mag = 0 -% mag
-    return d128_of_integer(neg: neg, m: mag)
+    return d128_of_s256(v: LLVM::sign_extend[S128, S256](me))
 
 ### Converts an S256 into decimal128 (exponent 0, rounded half to even when it has more than 34 digits).
 routine S256.to[D128]() -> D128
-    var v = me
-    var neg = v < 0
-    var mag = LLVM::reinterpret_bits[S256, U256](v)
-    if neg
-        mag = 0 -% mag
-    return d128_of_integer(neg: neg, m: mag)
+    return d128_of_s256(v: me)
 
 ### Converts a U8 into decimal128 (exponent 0).
 routine U8.to[D128]() -> D128
@@ -733,12 +528,10 @@ routine D128.to[D128]() -> D128
 ### Parses decimal text into a `D128` (the scanned value rounded half to even to 34 digits).
 ### :throws: {InvalidValueError} on malformed input.
 failable routine parse_decimal_d128(from_text: Text) -> D128
-    var p = scan_decimal_parts(from_text: from_text)
-    if p.special == 1
-        return D128.infinity(sign: p.sign)
-    if p.special >= 2
-        return D128.quiet_nan()
-    return D128.from_components(sign: p.sign, coeff: p.coeff, exp: p.exp)
+    var w = decimal_bits_parse(text: from_text, width: 128)
+    if w.w0 != 0
+        throw InvalidValueError(input: from_text, target: "decimal number")
+    return D128.from_words(low: w.w1, high: w.w2)
 
 ### Parses a decimal literal into a `D128`.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.

@@ -16,8 +16,9 @@ preset D64_EPSILON: D64 = 1e-15
 # ============================================================================
 # D64 — IEEE 754-2008 decimal64 in BID storage. The arithmetic, rounding, conversions, DPD and math are
 # computed by Ingrid's decimal engine (Ingrid/tessera/decimal/, written in Tessera), one engine for D32, D64 and
-# D128 that rounds each result once to this format. This file keeps the type, its BID layout (decode and encode
-# for the text forms), the checked operators, the conversions' RazorForge faces, and text parsing.
+# D128 that rounds each result once to this format. Every routine here is one call into that engine,
+# with what the language adds around it: the checked operators that crash and the `_unchecked` raw ones, the text,
+# and the protocol conformances.
 # ============================================================================
 
 ### A software decimal64 value in BID storage.
@@ -25,22 +26,6 @@ preset D64_EPSILON: D64 = 1e-15
 record D64
 obeys Numeric, Comparable, Copyable, Hashable
     nothing
-
-### Narrow decoded fields (U64 coefficient — decimal64 has <= 16 digits).
-record D64Parts
-    sign: Bool
-    special: U64
-    exp: S64
-    coeff: U64
-
-### Widen to D128Parts for the shared special-value rules / decimal formatter.
-routine d64parts_to_d128(p: D64Parts) -> D128Parts
-    return D128Parts(
-        sign: p.sign,
-        special: p.special,
-        exp: p.exp,
-        coeff: LLVM::zero_extend[U64, U128](p.coeff),
-    )
 
 ### Reinterprets the 64-bit BID storage as a raw U64 (no decode).
 @readonly
@@ -59,120 +44,50 @@ routine D64.to_dpd() -> U64
 common routine D64.from_dpd(bits: U64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_dpd(bits: bits))
 
-### BID64 decode -> narrow parts.
-@readonly
-routine D64.decode() -> D64Parts
-    var bits = me.to_bits()
-    # sign = bit 63
-    var sign = LLVM::int_ne(
-        a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 63), b: 1),
-        b: 0,
-    )
-    # top5 = 5-bit combination prefix (bits 62:58) that selects form/special
-    var top5 = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 58), b: 0x1F)
-    # 11110 -> infinity (special 1)
-    if LLVM::int_eq(a: top5, b: 0x1E)
-        return D64Parts(sign: sign, special: 1, exp: 0, coeff: 0)
-    # 11111 -> NaN; bit 57 distinguishes signaling (special 3) from quiet (special 2)
-    if LLVM::int_eq(a: top5, b: 0x1F)
-        var sp: U64 = 2
-        if LLVM::int_ne(
-            a: LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 57), b: 1),
-            b: 0,
-        )
-            sp = 3
-        return D64Parts(sign: sign, special: sp, exp: 0, coeff: 0)
-    var biased: U64 = 0
-    var c64: U64 = 0
-    # top5 >> 3 == 3 means combo prefix starts with 11 -> Form 2, else Form 1
-    if LLVM::int_eq(a: LLVM::shift_right_unsigned(top5, 3), b: 3)
-        # Form 2: exp bits 60:51, coeff = (bits 50:0) | 2^53
-        biased = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 51), b: 0x3FF)
-        c64 = LLVM::bit_or(
-            a: LLVM::bit_and(a: bits, b: 0x7FFFFFFFFFFFF),
-            b: 0x20000000000000,
-        )
-    else
-        # Form 1: exp bits 62:53, coeff bits 52:0
-        biased = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 53), b: 0x3FF)
-        c64 = LLVM::bit_and(a: bits, b: 0x1FFFFFFFFFFFFF)
-    # unbias: stored exponent q = biased - 398 (bias=398)
-    return D64Parts(
-        sign: sign,
-        special: 0,
-        exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](biased), b: 398),
-        coeff: c64,
-    )
-
-### Narrow parts -> BID64 (Form 1 / Form 2 / special). Finite parts must already be
-### rounded to <= 16 digits and in the decimal64 exponent range (decfin64 guarantees it).
-routine d64_of_parts(p: D64Parts) -> D64
-    # sign into bit 63
-    var sbit: U64 = LLVM::shift_left[U64](value: if p.sign then 1 else 0, bits: 63)
-    if LLVM::int_ne(a: p.special, b: 0)
-        # special: combo prefix 11110 (inf) or 11111 (NaN) into bits 62:58
-        var top5: U64 = if LLVM::int_eq(a: p.special, b: 1) then 0x1E else 0x1F
-        var bb: U64 = LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: top5, bits: 58))
-        # signaling NaN sets bit 57
-        if LLVM::int_eq(a: p.special, b: 3)
-            bb = LLVM::bit_or(a: bb, b: LLVM::shift_left[U64](value: 1, bits: 57))
-        return D64.from_bits(bits: bb)
-    # rebias: biased = (q + 398) masked to 10 bits
-    var biased = LLVM::bit_and(
-        a: LLVM::add(a: LLVM::reinterpret_bits[S64, U64](p.exp), b: 398),
-        b: 0x3FF,
-    )
-    var c64 = p.coeff
-    # coeff < 2^53 -> Form 1, else Form 2 (implicit leading 2^53)
-    if LLVM::unsigned_lt(a: c64, b: 0x20000000000000)
-        # Form 1: exp bits 62:53, coeff bits 52:0
-        return D64.from_bits(
-            bits: LLVM::bit_or(
-                a: LLVM::bit_or(a: sbit, b: LLVM::shift_left(value: biased, bits: 53)),
-                b: c64,
-            ),
-        )
-    # Form 2: bits 62:61 = 11, exp bits 60:51, coeff low 51 bits (implicit 2^53)
-    var g2: U64 = LLVM::shift_left(value: 0x3, bits: 61)  # the 11 prefix
-    var ebits = LLVM::shift_left(value: biased, bits: 51)
-    var clow = LLVM::bit_and(a: c64, b: 0x7FFFFFFFFFFFF)  # low 51 coeff bits
-    return D64.from_bits(
-        bits: LLVM::bit_or(a: LLVM::bit_or(a: sbit, b: g2), b: LLVM::bit_or(a: ebits, b: clow)),
-    )
-
 ### Infinity / quiet NaN.
 common routine D64.infinity(sign: Bool) -> D64
-    return d64_of_parts(p: D64Parts(sign: sign, special: 1, exp: 0, coeff: 0))
+    var neg: U32 = 0
+    if sign
+        neg = 1
+    return D64.from_bits(bits: C::ingrid_d64_special(kind: 1, neg: neg))
 
 ### Returns a quiet NaN.
 common routine D64.quiet_nan() -> D64
-    return d64_of_parts(p: D64Parts(sign: false, special: 2, exp: 0, coeff: 0))
+    return D64.from_bits(bits: C::ingrid_d64_special(kind: 2, neg: 0))
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
 common routine D64.signaling_nan() -> D64
-    return d64_of_parts(p: D64Parts(sign: false, special: 3, exp: 0, coeff: 0))
+    return D64.from_bits(bits: C::ingrid_d64_special(kind: 3, neg: 0))
 
-### True when this is a finite value (special field == 0).
+### True when this is a finite value.
+@readonly
+@inline
 routine D64.is_finite() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 0)
+    return (C::ingrid_d64_class(x: me.to_bits()) & 2) != 0
 
-### True when this is ±infinity (special field == 1).
+### True when this is ±infinity.
+@readonly
+@inline
 routine D64.is_infinite() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 1)
+    return (C::ingrid_d64_class(x: me.to_bits()) & 4) != 0
 
-### True when this is a NaN (special field >= 2: 2 quiet, 3 signaling).
+### True when this is a NaN (quiet or signaling).
+@readonly
+@inline
 routine D64.is_nan() -> Bool
-    return LLVM::unsigned_ge(a: me.decode().special, b: 2)
+    return (C::ingrid_d64_class(x: me.to_bits()) & 8) != 0
 
-### True when this is a SIGNALING NaN (special field == 3).
+### True when this is a SIGNALING NaN.
+@readonly
+@inline
 routine D64.is_signaling() -> Bool
-    return LLVM::int_eq(a: me.decode().special, b: 3)
+    return (C::ingrid_d64_class(x: me.to_bits()) & 16) != 0
 
 ### True when this is a finite zero (±0).
 @readonly
+@inline
 routine D64.is_zero() -> Bool
-    var p = me.decode()
-    return LLVM::int_eq(a: p.special, b: 0) and LLVM::int_eq(a: p.coeff, b: 0)
+    return (C::ingrid_d64_class(x: me.to_bits()) & 32) != 0
 
 ### Builds a finite D64 from a sign, a coefficient and a base-10 exponent: value = (-1)^sign * coeff *
 ### 10^exp, rounded half to even to 16 digits and brought into the exponent range.
@@ -184,9 +99,7 @@ common routine D64.from_components(sign: Bool, coeff: U64, exp: S64) -> D64
 
 ### Builds a D64 from a 64-bit signed integer (exponent 0).
 common routine D64.from_int64(value: S64) -> D64
-    var neg = LLVM::signed_lt(a: value, b: 0)
-    var mag = if neg then LLVM::sub(a: 0, b: value) else value
-    return D64.from_components(sign: neg, coeff: LLVM::reinterpret_bits[S64, U64](mag), exp: 0)
+    return D64.from_bits(bits: C::ingrid_d64_from_s64(n: value))
 
 ### An integer (sign and 256-bit magnitude) as a D64, rounded half to even to 16 digits.
 routine d64_of_integer(neg: Bool, m: U256) -> D64
@@ -198,6 +111,15 @@ routine d64_of_integer(neg: Bool, m: U256) -> D64
     var m2 = LLVM::int_truncate[U256, U64](m >>> 128)
     var m3 = LLVM::int_truncate[U256, U64](m >>> 192)
     return D64.from_bits(bits: C::ingrid_d64_from_integer(neg: n, m0: m0, m1: m1, m2: m2, m3: m3))
+
+### A signed 256-bit integer as a D64, rounded half to even to 16 digits.
+secret routine d64_of_s256(v: S256) -> D64
+    var m = LLVM::reinterpret_bits[S256, U256](v)
+    var m0 = LLVM::int_truncate[U256, U64](m)
+    var m1 = LLVM::int_truncate[U256, U64](m >>> 64)
+    var m2 = LLVM::int_truncate[U256, U64](m >>> 128)
+    var m3 = LLVM::int_truncate[U256, U64](m >>> 192)
+    return D64.from_bits(bits: C::ingrid_d64_from_s256(m0: m0, m1: m1, m2: m2, m3: m3))
 
 ### The bits of the binary float nearest to x, `which` bits wide (16, 32, 64, or 128). An infinity keeps its sign,
 ### a NaN becomes the positive quiet NaN.
@@ -289,7 +211,7 @@ routine D64.eq(you: D64) -> Bool
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 @readonly
 routine D64.hash(k0: U64, k1: U64) -> U64
-    return decimal_value_hash(p: d64parts_to_d128(p: me.decode()), k0: k0, k1: k1)
+    return C::ingrid_d64_hash(x: me.to_bits(), k0: k0, k1: k1)
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
@@ -312,10 +234,11 @@ failable routine D64.pow(you: D64) -> D64
         throw NumericDomainError(description: "domain error: no real result")
     throw NumericOverflowError(description: "overflow: out of range")
 
-### Shortest decimal text (widens to D128Parts and reuses the shared formatter).
+### The decimal text, every digit of the coefficient kept: positional for an exponent of at most 0 not below 1e-6
+### (`1.50`, `0.001`), `d.dddE+x` otherwise (`1E+3`).
 @override
 routine D64.represent() -> Text
-    return decimal_text(p: d64parts_to_d128(p: me.decode()), style: 0, places: 0)
+    return decimal_bits_text(low: me.to_bits().to[U64](), high: 0, width: 64, style: 0, places: 0, mode: 4)
 
 ### Renders this value with exactly `places` digits after the point, rounded half to even from its
 ### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
@@ -324,66 +247,52 @@ routine D64.represent() -> Text
 ### :param rule: How the digits past them go (a tie to the even one when left out).
 ### :returns: The rendered `Text`.
 routine D64.fixed(places: U64, rule: RoundingRule = RoundingRule.HALF_EVEN) -> Text
-    if rule == RoundingRule.HALF_EVEN
-        return decimal_text(p: d64parts_to_d128(p: me.decode()), style: 2, places: places)
-    return decimal_text(p: d64parts_to_d128(p: me.round(places: places, rule: rule).decode()), style: 2, places: places)
+    return decimal_bits_text(low: me.to_bits().to[U64](), high: 0, width: 64, style: 2, places: places,
+        mode: rounding_mode(rule: rule))
 
 ### Debug form: `D64(<value>)`.
 @override
 routine D64.diagnose() -> Text
-    return decimal_text(p: d64parts_to_d128(p: me.decode()), style: 3, places: 64)
+    return decimal_bits_text(low: me.to_bits().to[U64](), high: 0, width: 64, style: 3, places: 0, mode: 4)
 
 ### The smaller of `me` and `you`. If one operand is NaN, the other one.
 ### :param you: The value to compare with.
 ### :returns: The smaller value, the other operand when one is NaN, and NaN when both are.
 routine D64.min(you: D64) -> D64
-    if me.is_nan()
-        return you
-    if you.is_nan()
-        return me
-    return if me <= you then me else you
+    return D64.from_bits(bits: C::ingrid_d64_select(a: me.to_bits(), b: you.to_bits(), which: 0))
 ### The larger of `me` and `you`. If one operand is NaN, the other one.
 ### :param you: The value to compare with.
 ### :returns: The larger value, the other operand when one is NaN, and NaN when both are.
 routine D64.max(you: D64) -> D64
-    if me.is_nan()
-        return you
-    if you.is_nan()
-        return me
-    return if me >= you then me else you
+    return D64.from_bits(bits: C::ingrid_d64_select(a: me.to_bits(), b: you.to_bits(), which: 1))
 ### Restricts `me` to the closed interval `[min_val, max_val]`.
 ### :param min_val: The lower bound.
 ### :param max_val: The upper bound.
 ### :returns: The clamped value.
 @positional
 routine D64.clamp(min_val: D64, max_val: D64) -> D64
-    return me.min(max_val).max(min_val)
+    return D64.from_bits(bits: C::ingrid_d64_clamp(x: me.to_bits(), lo: min_val.to_bits(), hi: max_val.to_bits()))
 
 ### Returns the reciprocal `1 / me`.
 ### :returns: The multiplicative inverse.
 routine D64.recip() -> D64
     return D64_ONE.truediv_unchecked(me)
 
-### Returns `me` raised to the integer power `n` via exponentiation by squaring.
-### A negative `n` inverts the result.
+### Returns `me` raised to the integer power `n`, rounded once to 16 digits (a tie to the even one), not one rounding
+### per multiplication. An exact power takes the exponent `n` times `me`'s when its digits allow (`2.0.powi(2)` is
+### `4.00`, `10.powi(3)` is `1000`). `x.powi(0)` is 1 for every x, a zero to a negative power is an infinity, and a
+### result past the range is an infinity or a zero, as IEEE 754 pown says. Never crashes.
 ### :param n: The integer exponent.
 ### :returns: `me ** n`.
 routine D64.powi(n: S32) -> D64
-    var base = if n < 0 then D64_ONE.truediv_unchecked(me) else me
-    var count = n.unsigned_abs()
-    var result = D64_ONE
-    until count == 0
-        if count.bitand(1) == 1
-            result = result.mul_unchecked(base)
-        base = base.mul_unchecked(base)
-        count = count.logical_shift_right(1)
-    return result
+    return D64.from_bits(bits: C::ingrid_d64_powi(x: me.to_bits(), n: n.to[S64]()))
 
-### Returns `(me + you) / 2`.
+### Returns `(me + you) / 2`, rounded once to 16 digits (a tie to the even one): the sum is not rounded on its own,
+### so the midpoint of two finite values is finite and exact where it can be.
 ### :param you: The other value.
 ### :returns: The arithmetic midpoint of `me` and `you`.
 routine D64.midpoint(you: D64) -> D64
-    return me.add_unchecked(you).truediv_unchecked(2.0)
+    return D64.from_bits(bits: C::ingrid_d64_midpoint(a: me.to_bits(), b: you.to_bits()))
 
 # ============================================================================
 # Creators — integers (exact, then rounded half to even to 16 digits)
@@ -407,21 +316,11 @@ routine S64.to[D64]() -> D64
 
 ### Converts an S128 into decimal64 (exponent 0, rounded half to even when it has more than 16 digits).
 routine S128.to[D64]() -> D64
-    var v = LLVM::sign_extend[S128, S256](me)
-    var neg = v < 0
-    var mag = LLVM::reinterpret_bits[S256, U256](v)
-    if neg
-        mag = 0 -% mag
-    return d64_of_integer(neg: neg, m: mag)
+    return d64_of_s256(v: LLVM::sign_extend[S128, S256](me))
 
 ### Converts an S256 into decimal64 (exponent 0, rounded half to even when it has more than 16 digits).
 routine S256.to[D64]() -> D64
-    var v = me
-    var neg = v < 0
-    var mag = LLVM::reinterpret_bits[S256, U256](v)
-    if neg
-        mag = 0 -% mag
-    return d64_of_integer(neg: neg, m: mag)
+    return d64_of_s256(v: me)
 
 ### Converts a U8 into decimal64 (exponent 0).
 routine U8.to[D64]() -> D64
@@ -490,17 +389,10 @@ routine D128.to[D64]() -> D64
 ### Parses a decimal literal into a `D64` (the scanned value rounded once to 16 digits).
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 failable routine Text.to[D64]() -> D64
-    var p = scan_decimal_parts(from_text: me)
-    if p.special == 1
-        return D64.infinity(sign: p.sign)
-    if p.special >= 2
-        return D64.quiet_nan()
-    var neg: U32 = 0
-    if p.sign
-        neg = 1
-    var low = LLVM::int_truncate[U128, U64](p.coeff)
-    var high = LLVM::int_truncate[U128, U64](p.coeff >>> 64)
-    return D64.from_bits(bits: C::ingrid_d64_from_parts(neg: neg, c_low: low, c_high: high, exp: p.exp))
+    var w = decimal_bits_parse(text: me, width: 64)
+    if w.w0 != 0
+        throw InvalidValueError(input: me, target: "decimal number")
+    return D64.from_bits(bits: w.w1)
 
 # ============================================================================
 # Byte Representation

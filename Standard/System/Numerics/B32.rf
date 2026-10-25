@@ -706,26 +706,6 @@ routine B32.hash(k0: U64, k1: U64) -> U64
         k1: k1,
     )
 
-# ============================================================================
-# Runtime externs (rf_b32_* in native/runtime/math_functions.c) for the exact
-# operations. The transcendental functions and hypot are CORE-MATH ports in the
-# files of this folder, and the basic ops use LLVM intrinsics.
-# ============================================================================
-### C libm extern: IEEE remainder (C remainder).
-routine C::rf_b32_rem(x: B32, y: B32) -> B32
-
-### C libm extern: positive difference max(x - y, 0) (C fdim).
-routine C::rf_b32_fdim(x: B32, y: B32) -> B32
-
-### C libm extern: next representable value after x toward y.
-routine C::rf_b32_nextafter(x: B32, y: B32) -> B32
-
-### C libm extern: x * 2^n (C scalbn).
-routine C::rf_b32_scalbn(value: B32, n: S64) -> B32
-
-### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
-routine C::rf_b32_ilogb(value: B32) -> S64
-
 ### Arc sine.
 failable routine B32.asin() -> B32
     var rr = me.asin_unchecked()
@@ -877,23 +857,27 @@ routine B32.mod_trunc(you: B32) -> B32
 
 ### IEEE remainder of me/you (C remainder).
 routine B32.rem(you: B32) -> B32
-    return C::rf_b32_rem(x: me, y: you)
+    return C::ingrid_b32_rem(x: me, y: you)
 
 ### Positive difference max(me - you, 0) (C fdim).
 routine B32.fdim(you: B32) -> B32
-    return C::rf_b32_fdim(x: me, y: you)
+    if me.is_nan() or you.is_nan()
+        return me.add_unchecked(you)
+    if me > you
+        return me.sub_unchecked(you)
+    return 0.0
 
 ### Next representable value after me toward you.
 routine B32.nextafter(you: B32) -> B32
-    return C::rf_b32_nextafter(x: me, y: you)
+    return C::ingrid_b32_nextafter(x: me, y: you)
 
 ### me * 2^n (C scalbn).
 routine B32.scalbn(n: S64) -> B32
-    return C::rf_b32_scalbn(value: me, n: n)
+    return C::ingrid_b32_scalbn(x: me, n: n)
 
 ### Alias of scalbn (C ldexp).
 routine B32.ldexp(n: S64) -> B32
-    return C::rf_b32_scalbn(value: me, n: n)
+    return C::ingrid_b32_scalbn(x: me, n: n)
 
 ### Rounds to nearest integer in the current rounding mode (C rint).
 routine B32.rint() -> B32
@@ -925,8 +909,8 @@ routine B32.modf() -> (B32, B32)
 routine B32.frexp() -> (B32, S64)
     if me.is_zero() or me.is_infinite() or me.is_nan()
         return (me, 0)
-    var e = LLVM::add(a: C::rf_b32_ilogb(value: me), b: 1)
-    return (C::rf_b32_scalbn(value: me, n: LLVM::sub(a: 0, b: e)), e)
+    var e = C::ingrid_b32_ilogb(x: me) + 1
+    return (C::ingrid_b32_scalbn(x: me, n: 0 - e), e)
 
 ### True if the sign bit is set (C signbit).
 routine B32.is_sign_negative() -> Bool
@@ -1008,7 +992,7 @@ routine B32.logb() -> B32
         return inf
     if me.is_zero()
         return -inf
-    return (C::rf_b32_ilogb(value: me)).to[B32]()
+    return C::ingrid_b32_ilogb(x: me).to[B32]()
 
 ### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-two exponent to apply.

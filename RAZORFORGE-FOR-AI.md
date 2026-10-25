@@ -473,7 +473,9 @@ declare their own `i`.
   `exp2_m1`, `exp10_m1`, `sin_pi` / `cos_pi` / `tan_pi`, `asin_pi` / `acos_pi` / `atan_pi`, `atan2_pi`,
   `rsqrt` (1 / sqrt(x) rounded once, on every binary float, the D types and `Decimal`: `x <= 0` fails like the other
   checked math, `Decimal.rsqrt` of `x <= 0` is `NumericDomainError`), `sin_cos`, `gamma`, `ln_gamma`, `mul_add`
-  (fused `me * b + c`), each with its `_unchecked` form,
+  (fused `me * b + c`), each with its `_unchecked` form, `powi(n)` (a whole power) and `midpoint` (`(a + b) / 2`,
+  no overflow), rounded once on the D types and `Decimal` like the others (an exact D-type power keeps the exponent
+  `n` times x's: `2.0.powi(2)` is `4.00`, `10.powi(3)` is `1000`, `x.powi(0)` is `1`),
   and `mod_trunc` (remainder of a truncated division, sign of `me`), `rem` (IEEE remainder, quotient rounded to
   nearest even, on `Decimal` the Euclidean remainder above), `fract` (`me - trunc(me)`), `is_sign_negative` (sign bit, true for -0), `total_compare` (IEEE
   totalOrder). Float/decimal `max`/`min` return the other operand when one is NaN (NaN only when both are);

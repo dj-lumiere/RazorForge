@@ -885,6 +885,34 @@ routine C::ingrid_b16_mul_add(x: U16, y: U16, z: U16) -> U16
 routine C::ingrid_b32_mod_trunc(x: U32, y: U32) -> U32
 routine C::ingrid_b32_to_bf16(x: U32) -> U16
 routine C::ingrid_b64_to_bf16(x: U64) -> U16
+### The IEEE 754 remainder (ties to even, C remainder), exact.
+routine C::ingrid_b32_rem(x: B32, y: B32) -> B32
+### x * 2^n (C scalbn), rounded once.
+routine C::ingrid_b32_scalbn(x: B32, n: S64) -> B32
+### The next B32 after x toward y (C nextafter).
+routine C::ingrid_b32_nextafter(x: B32, y: B32) -> B32
+### floor(log2 |x|) of a finite nonzero B32 (C ilogb).
+routine C::ingrid_b32_ilogb(x: B32) -> S64
+### The IEEE 754 remainder (ties to even, C remainder), exact.
+routine C::ingrid_b64_rem(x: B64, y: B64) -> B64
+### The remainder with the quotient truncated (C fmod), exact.
+routine C::ingrid_b64_mod_trunc(x: B64, y: B64) -> B64
+### x * 2^n (C scalbn), rounded once.
+routine C::ingrid_b64_scalbn(x: B64, n: S64) -> B64
+### The next B64 after x toward y (C nextafter).
+routine C::ingrid_b64_nextafter(x: B64, y: B64) -> B64
+### floor(log2 |x|) of a finite nonzero B64 (C ilogb).
+routine C::ingrid_b64_ilogb(x: B64) -> S64
+### (x + y) / 2 rounded once, with no intermediate overflow.
+routine C::ingrid_b128_midpoint(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+### The next B128 after x toward y (C nextafter).
+routine C::ingrid_b128_nextafter(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+### max(x - y, 0) rounded once, a NaN for a NaN (C fdim).
+routine C::ingrid_b128_fdim(low: U64, high: U64, y_low: U64, y_high: U64) -> IngridWords
+### IEEE 754 logb as a B128 (-inf for a zero, +inf for an infinity).
+routine C::ingrid_b128_logb(low: U64, high: U64) -> IngridWords
+### C frexp: `w0`/`w1` the fraction (0.5 <= |fraction| < 1, a zero or infinity whole), `w2` the exponent's bits.
+routine C::ingrid_b128_frexp(low: U64, high: U64) -> IngridWords
 
 # Text of the binary floats (Ingrid/tessera/floattext.te). A text routine writes up to `out_count` characters at
 # `out` and returns how many the text has: when that is more, the caller asks again with that much room.
@@ -1076,9 +1104,6 @@ routine C::ingrid_d128_div(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> 
 ### `a + b` rounded to 34 digits, half up (`Decimal`'s rounding).
 routine C::ingrid_decimal_add(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
 
-### `a * b` rounded to 34 digits, half up (`Decimal`'s rounding).
-routine C::ingrid_decimal_mul(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
-
 ### The remainder of the floored division `a - b * floor(a / b)` for `Decimal`, exact, with `b`'s sign, in its one
 ### form: `w2` 1 when it needs more than 34 digits, 2 when `b` is zero (`Decimal.rem`).
 routine C::ingrid_decimal_rem(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
@@ -1099,9 +1124,6 @@ routine C::ingrid_decimal_from_integer(neg: U32, m0: U64, m1: U64, m2: U64, m3: 
 ### A binary float (as B128 bits) rounded to 34 digits and reduced, half up (`Decimal`'s
 ### rounding).
 routine C::ingrid_decimal_from_binary(low: U64, high: U64) -> IngridWords
-
-### x rounded to a whole number the way `Decimal.round()` rounds (half up, a zero result is +0).
-routine C::ingrid_decimal_round(x_low: U64, x_high: U64) -> IngridWords
 
 ### x in `Decimal`'s one form: no trailing zeros in the coefficient, a zero +0 at exponent 0.
 routine C::ingrid_decimal_normalize(x_low: U64, x_high: U64) -> IngridWords
@@ -1209,28 +1231,6 @@ routine C::ingrid_d128_to_binary(x_low: U64, x_high: U64, which: U32) -> IngridW
 
 ### A D32 as a D128 (exact).
 routine C::ingrid_d128_from_d32(x: U32) -> IngridWords
-
-### The text of a decimal given its fields (`special`: 0 finite, 1 an infinity, 2 a quiet NaN, 3 a signaling NaN).
-### `style`: 0 the scientific text of D32 / D64 / D128, 1 the same with fractional trailing zeros dropped (Decimal),
-### 2 exactly `places` digits after the point, 3 the `diagnose` text (`places` 32, 64, 128 for D32, D64, D128, 0 for
-### Decimal). Writes up to `out_count` characters at `out` and returns how many the text has
-### (Ingrid/tessera/decimal/dec_text.te).
-routine C::ingrid_decimal_text_utf32(
-    sign: U32,
-    special: U32,
-    exp: S64,
-    c_low: U64,
-    c_high: U64,
-    style: U32,
-    places: U64,
-    out: Hijacked[Char],
-    out_count: U64,
-) -> U64
-
-### Reads decimal text into its fields without rounding. w0: 1 when it is not a number, else the sign in bits 8 and
-### up and the special kind (0 finite, 1 an infinity, 2 a NaN) in bits 16 and up. w1 and w2: the coefficient's low
-### and high 64 bits. w3: the exponent's bits.
-routine C::ingrid_decimal_scan_utf32(chars: Hijacked[Char], count: U64) -> IngridWords
 
 ### A D64 as a D128 (exact).
 routine C::ingrid_d128_from_d64(x: U64) -> IngridWords
@@ -1489,6 +1489,215 @@ routine C::ingrid_d128_pow(x_low: U64, x_high: U64, y_low: U64, y_high: U64) -> 
 
 ### The angle of (x, y) in (-pi, pi], correctly rounded to 34 digits and reduced.
 routine C::ingrid_d128_atan2(y_low: U64, y_high: U64, x_low: U64, x_high: U64) -> IngridWords
+
+# ============================================================================
+# Decimal surface (Ingrid/tessera/decimal/dec_surface.te)
+# ============================================================================
+# The decimal routines next to the arithmetic, each one call: the class of a value, the special values, the sign
+# operations, the hash under the caller's key, IEEE 754's total order and sameQuantum, the selections, signum, fdim,
+# the fractional part, the integer power and the midpoint (each rounded once), integers to decimals, the integer part
+# of a D128, and the text of a decimal and a decimal read from text given its bits. A class is flags: 1 the sign bit,
+# then 2 finite, 4 an infinity, or 8 a NaN (16 more for a signaling one), and for a finite value 32 a zero or 64 a
+# subnormal. A selection's `which` is 0 min, 1 max, 2 minimum, 3 maximum.
+
+### The class of a D32 as flags.
+routine C::ingrid_d32_class(x: U32) -> U32
+
+### The D32 special value `kind` (1 an infinity, 2 a quiet NaN, 3 a signaling NaN), negative when `neg` is 1.
+routine C::ingrid_d32_special(kind: U32, neg: U32) -> U32
+
+### x with its sign bit cleared.
+routine C::ingrid_d32_abs(x: U32) -> U32
+
+### x with its sign bit flipped.
+routine C::ingrid_d32_neg(x: U32) -> U32
+
+### x with the sign bit of y.
+routine C::ingrid_d32_copysign(x: U32, y: U32) -> U32
+
+### SipHash-2-4 of x's value under the key (k0, k1): equal values hash the same, every NaN too.
+routine C::ingrid_d32_hash(x: U32, k0: U64, k1: U64) -> U64
+
+### IEEE 754 totalOrder (`mag` 0) or totalOrderMag (`mag` 1): 1 when a comes before b or is b.
+routine C::ingrid_d32_total_order(a: U32, b: U32, mag: U32) -> U32
+
+### IEEE 754 sameQuantum: 1 when a and b have one exponent, or are both infinities, or both NaNs.
+routine C::ingrid_d32_same_quantum(a: U32, b: U32) -> U32
+
+### The operand a selection keeps, bit for bit.
+routine C::ingrid_d32_select(a: U32, b: U32, which: U32) -> U32
+
+### x kept inside [lo, hi]: min(x, hi), then the max of that and lo.
+routine C::ingrid_d32_clamp(x: U32, lo: U32, hi: U32) -> U32
+
+### -1, 0, or 1 with x's sign (a zero gives +0, a NaN the quiet NaN).
+routine C::ingrid_d32_signum(x: U32) -> U32
+
+### C99 fdim: a - b rounded once when above zero, else +0 (a NaN for a NaN).
+routine C::ingrid_d32_fdim(a: U32, b: U32) -> U32
+
+### x - trunc(x), exact (a NaN as it is, an infinity a zero of its sign).
+routine C::ingrid_d32_fract(x: U32) -> U32
+
+### x^n rounded once (ties to even), IEEE 754 pown's special cases.
+routine C::ingrid_d32_powi(x: U32, n: S64) -> U32
+
+### (a + b) / 2 rounded once (ties to even).
+routine C::ingrid_d32_midpoint(a: U32, b: U32) -> U32
+
+### The integer n with exponent 0, rounded half to even past the format's digits.
+routine C::ingrid_d32_from_s64(n: S64) -> U32
+
+### The integer whose 256-bit two's complement is m3 m2 m1 m0 (m0 lowest), rounded half to even past the digits.
+routine C::ingrid_d32_from_s256(m0: U64, m1: U64, m2: U64, m3: U64) -> U32
+
+### The class of a D64 as flags.
+routine C::ingrid_d64_class(x: U64) -> U32
+
+### The D64 special value `kind` (1 an infinity, 2 a quiet NaN, 3 a signaling NaN), negative when `neg` is 1.
+routine C::ingrid_d64_special(kind: U32, neg: U32) -> U64
+
+### x with its sign bit cleared.
+routine C::ingrid_d64_abs(x: U64) -> U64
+
+### x with its sign bit flipped.
+routine C::ingrid_d64_neg(x: U64) -> U64
+
+### x with the sign bit of y.
+routine C::ingrid_d64_copysign(x: U64, y: U64) -> U64
+
+### SipHash-2-4 of x's value under the key (k0, k1): equal values hash the same, every NaN too.
+routine C::ingrid_d64_hash(x: U64, k0: U64, k1: U64) -> U64
+
+### IEEE 754 totalOrder (`mag` 0) or totalOrderMag (`mag` 1): 1 when a comes before b or is b.
+routine C::ingrid_d64_total_order(a: U64, b: U64, mag: U32) -> U32
+
+### IEEE 754 sameQuantum: 1 when a and b have one exponent, or are both infinities, or both NaNs.
+routine C::ingrid_d64_same_quantum(a: U64, b: U64) -> U32
+
+### The operand a selection keeps, bit for bit.
+routine C::ingrid_d64_select(a: U64, b: U64, which: U32) -> U64
+
+### x kept inside [lo, hi]: min(x, hi), then the max of that and lo.
+routine C::ingrid_d64_clamp(x: U64, lo: U64, hi: U64) -> U64
+
+### -1, 0, or 1 with x's sign (a zero gives +0, a NaN the quiet NaN).
+routine C::ingrid_d64_signum(x: U64) -> U64
+
+### C99 fdim: a - b rounded once when above zero, else +0 (a NaN for a NaN).
+routine C::ingrid_d64_fdim(a: U64, b: U64) -> U64
+
+### x - trunc(x), exact (a NaN as it is, an infinity a zero of its sign).
+routine C::ingrid_d64_fract(x: U64) -> U64
+
+### x^n rounded once (ties to even), IEEE 754 pown's special cases.
+routine C::ingrid_d64_powi(x: U64, n: S64) -> U64
+
+### (a + b) / 2 rounded once (ties to even).
+routine C::ingrid_d64_midpoint(a: U64, b: U64) -> U64
+
+### The integer n with exponent 0, rounded half to even past the format's digits.
+routine C::ingrid_d64_from_s64(n: S64) -> U64
+
+### The integer whose 256-bit two's complement is m3 m2 m1 m0 (m0 lowest), rounded half to even past the digits.
+routine C::ingrid_d64_from_s256(m0: U64, m1: U64, m2: U64, m3: U64) -> U64
+
+### The class of a D128 as flags.
+routine C::ingrid_d128_class(x_low: U64, x_high: U64) -> U32
+
+### The D128 special value `kind` (1 an infinity, 2 a quiet NaN, 3 a signaling NaN), negative when `neg` is 1.
+routine C::ingrid_d128_special(kind: U32, neg: U32) -> IngridWords
+
+### x with its sign bit cleared.
+routine C::ingrid_d128_abs(x_low: U64, x_high: U64) -> IngridWords
+
+### x with its sign bit flipped.
+routine C::ingrid_d128_neg(x_low: U64, x_high: U64) -> IngridWords
+
+### x with the sign bit of y (`y_high`: y's high 64 bits).
+routine C::ingrid_d128_copysign(x_low: U64, x_high: U64, y_high: U64) -> IngridWords
+
+### SipHash-2-4 of x's value under the key (k0, k1): equal values hash the same, every NaN too.
+routine C::ingrid_d128_hash(x_low: U64, x_high: U64, k0: U64, k1: U64) -> U64
+
+### IEEE 754 totalOrder (`mag` 0) or totalOrderMag (`mag` 1): 1 when a comes before b or is b.
+routine C::ingrid_d128_total_order(a_low: U64, a_high: U64, b_low: U64, b_high: U64, mag: U32) -> U32
+
+### IEEE 754 sameQuantum: 1 when a and b have one exponent, or are both infinities, or both NaNs.
+routine C::ingrid_d128_same_quantum(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> U32
+
+### The operand a selection keeps, bit for bit.
+routine C::ingrid_d128_select(a_low: U64, a_high: U64, b_low: U64, b_high: U64, which: U32) -> IngridWords
+
+### x kept inside [lo, hi]: min(x, hi), then the max of that and lo.
+routine C::ingrid_d128_clamp(x_low: U64, x_high: U64, lo_low: U64, lo_high: U64, hi_low: U64, hi_high: U64) -> IngridWords
+
+### -1, 0, or 1 with x's sign (a zero gives +0, a NaN the quiet NaN).
+routine C::ingrid_d128_signum(x_low: U64, x_high: U64) -> IngridWords
+
+### C99 fdim: a - b rounded once when above zero, else +0 (a NaN for a NaN).
+routine C::ingrid_d128_fdim(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+
+### x - trunc(x), exact (a NaN as it is, an infinity a zero of its sign).
+routine C::ingrid_d128_fract(x_low: U64, x_high: U64) -> IngridWords
+
+### x^n rounded once (ties to even), IEEE 754 pown's special cases.
+routine C::ingrid_d128_powi(x_low: U64, x_high: U64, n: S64) -> IngridWords
+
+### (a + b) / 2 rounded once (ties to even).
+routine C::ingrid_d128_midpoint(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+
+### The integer n with exponent 0, rounded half to even past the format's digits.
+routine C::ingrid_d128_from_s64(n: S64) -> IngridWords
+
+### The integer whose 256-bit two's complement is m3 m2 m1 m0 (m0 lowest), rounded half to even past the digits.
+routine C::ingrid_d128_from_s256(m0: U64, m1: U64, m2: U64, m3: U64) -> IngridWords
+
+### Whether the integer part of x (toward zero) fits an integer of `bits` bits (128 or 256, `signed` 1 or 0): 0 it
+### fits, 1 x is an infinity or a NaN, 2 x is below zero and the integer unsigned, 3 the magnitude needs more than
+### `bits` bits, 4 it fits that many bits but not the signed range.
+routine C::ingrid_d128_integer_status(x_low: U64, x_high: U64, signed: U32, bits: U32) -> U32
+
+### The integer part of x (toward zero) as a 256-bit two's complement value, `w0` lowest to `w3` highest.
+routine C::ingrid_d128_to_integer(x_low: U64, x_high: U64) -> IngridWords
+
+### x^n rounded once to 34 digits (a tie half up), in Decimal's one form.
+routine C::ingrid_decimal_powi(x_low: U64, x_high: U64, n: S64) -> IngridWords
+
+### (a + b) / 2 rounded once to 34 digits (a tie half up), in Decimal's one form.
+routine C::ingrid_decimal_midpoint(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> IngridWords
+
+### The integer n as a Decimal, in its one form.
+routine C::ingrid_decimal_from_s64(n: S64) -> IngridWords
+
+### The integer whose 256-bit two's complement is m3 m2 m1 m0 (m0 lowest), rounded half up to 34 digits.
+routine C::ingrid_decimal_from_s256(m0: U64, m1: U64, m2: U64, m3: U64) -> IngridWords
+
+### -x for a Decimal (a zero stays +0).
+routine C::ingrid_decimal_neg(x_low: U64, x_high: U64) -> IngridWords
+
+### x's magnitude with the sign of y (`y_high`: y's high 64 bits) for a Decimal (a zero stays +0).
+routine C::ingrid_decimal_copysign(x_low: U64, x_high: U64, y_high: U64) -> IngridWords
+
+### The text of a decimal given its bits (`width` 32, 64, 128, or 0 for Decimal; `high` 0 below 128). `style`: 0 the
+### scientific text of D32 / D64 / D128, 1 Decimal's text, 2 exactly `places` digits after the point, 3 the `diagnose`
+### text, 4 Decimal's digits after the point. For styles 2 and 4 the value is first rounded to `places` digits by `mode`
+### when that is not the type's own rule. Writes up to `out_count` characters at `out` and returns how many the text
+### has.
+routine C::ingrid_decimal_bits_text_utf32(
+    low: U64,
+    high: U64,
+    width: U32,
+    style: U32,
+    places: U64,
+    mode: U32,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> U64
+
+### Reads decimal text as a decimal of `width` (32, 64, 128, or 0 for Decimal), rounded once. w0: 0 a value, 1 not a
+### number (for a Decimal also an infinity or a NaN), 2 a Decimal out of range. w1 and w2: the bits' low and high 64.
+routine C::ingrid_decimal_bits_parse_utf32(chars: Hijacked[Char], count: U64, width: U32) -> IngridWords
 
 # ============================================================================
 # Arbitrary-precision Integer (Ingrid/tessera/generated/numerics.te)

@@ -717,18 +717,8 @@ routine B64.hash(k0: U64, k1: U64) -> U64
     return __secure_hash_u64(v: LLVM::reinterpret_bits[B64, U64](me), k0: k0, k1: k1)
 
 # ============================================================================
-# Platform libm (<math.h>) doubles via the runtime's UNIQUELY-NAMED rf_b64_*
-# passthroughs (native/runtime/math_functions.c). Unique names are essential: a
-# bare `atan`/`cbrt`/... (or a method `x.cbrt()`) can resolve to a
-# same-named 0-arg generic in scope (a resolver quirk).
-# The transcendental functions themselves are CORE-MATH ports in the files of this folder.
-# ============================================================================
-### C libm extern (rf_b64_ passthrough): cube root.
-routine C::rf_b64_cbrt(value: B64) -> B64
-
-# ============================================================================
 # B64 libm methods (the C99 doubles B64 didn't already have via LLVM intrinsics),
-# delegating to the rf_b64_* runtime passthroughs / bare libm externals above.
+# each one call into Ingrid's library (Tessera's routines).
 # ============================================================================
 ### exp(me) - 1, accurate near 0. Checked: crashes on overflow. Use `exp_m1_unchecked` for raw IEEE.
 failable routine B64.exp_m1() -> B64
@@ -887,21 +877,6 @@ failable routine B64.gamma() -> B64
 # frexp, modf, rint, fdim, mod_trunc, rem, trunc, fract, and
 # classification (is_sign_negative/is_normal/is_subnormal/fpclassify).
 # ============================================================================
-### C libm extern (rf_b64_ passthrough): next representable value after x toward y.
-routine C::rf_b64_nextafter(x: B64, y: B64) -> B64
-
-### C libm extern (rf_b64_ passthrough): x * 2^n (C scalbn).
-routine C::rf_b64_scalbn(value: B64, n: S64) -> B64
-
-### C libm extern (rf_b64_ passthrough): unbiased radix-2 exponent as an integer (C ilogb).
-routine C::rf_b64_ilogb(value: B64) -> S64
-
-### C libm extern (rf_b64_ passthrough): positive difference max(x - y, 0) (C fdim).
-routine C::rf_b64_fdim(x: B64, y: B64) -> B64
-
-### C libm extern (rf_b64_ passthrough): IEEE remainder, ties to even (C remainder).
-routine C::rf_b64_rem(x: B64, y: B64) -> B64
-
 ### Base-10 exponential 10**me. Checked: crashes on overflow. Use `exp10_unchecked` for raw IEEE.
 failable routine B64.exp10() -> B64
     var r = me.exp10_unchecked()
@@ -913,15 +888,15 @@ failable routine B64.exp10() -> B64
 
 ### Next representable value after me toward you.
 routine B64.nextafter(you: B64) -> B64
-    return C::rf_b64_nextafter(x: me, y: you)
+    return C::ingrid_b64_nextafter(x: me, y: you)
 
 ### me * 2^n (C scalbn).
 routine B64.scalbn(n: S64) -> B64
-    return C::rf_b64_scalbn(value: me, n: n)
+    return C::ingrid_b64_scalbn(x: me, n: n)
 
 ### Alias of scalbn (C ldexp).
 routine B64.ldexp(n: S64) -> B64
-    return C::rf_b64_scalbn(value: me, n: n)
+    return C::ingrid_b64_scalbn(x: me, n: n)
 
 ### Rounds to nearest integer in the current rounding mode (C rint).
 routine B64.rint() -> B64
@@ -929,15 +904,19 @@ routine B64.rint() -> B64
 
 ### Positive difference max(me - you, 0) (C fdim).
 routine B64.fdim(you: B64) -> B64
-    return C::rf_b64_fdim(x: me, y: you)
+    if me.is_nan() or you.is_nan()
+        return me.add_unchecked(you)
+    if me > you
+        return me.sub_unchecked(you)
+    return 0.0
 
-### Floating-point remainder of me/you (C fmod).
+### Floating-point remainder of me/you (C fmod), exact.
 routine B64.mod_trunc(you: B64) -> B64
-    return LLVM::float_rem[B64](a: me, b: you)
+    return C::ingrid_b64_mod_trunc(x: me, y: you)
 
 ### IEEE remainder of me/you, ties to even (C remainder).
 routine B64.rem(you: B64) -> B64
-    return C::rf_b64_rem(x: me, y: you)
+    return C::ingrid_b64_rem(x: me, y: you)
 
 ### Truncates toward zero (C trunc; alias of int_truncate).
 routine B64.trunc() -> B64
@@ -956,8 +935,8 @@ routine B64.modf() -> (B64, B64)
 routine B64.frexp() -> (B64, S64)
     if me.is_zero() or me.is_infinite() or me.is_nan()
         return (me, 0)
-    var e = LLVM::add(a: C::rf_b64_ilogb(value: me), b: 1)
-    return (C::rf_b64_scalbn(value: me, n: LLVM::sub(a: 0, b: e)), e)
+    var e = C::ingrid_b64_ilogb(x: me) + 1
+    return (C::ingrid_b64_scalbn(x: me, n: 0 - e), e)
 
 ### True if the sign bit is set (C signbit; true for -0 and -NaN).
 routine B64.is_sign_negative() -> Bool
@@ -1040,14 +1019,14 @@ routine B64.logb() -> B64
         return inf
     if me.is_zero()
         return -inf
-    return (C::rf_b64_ilogb(value: me)).to[B64]()
+    return C::ingrid_b64_ilogb(x: me).to[B64]()
 
 ### IEEE 754 scaleB: `me * 2^n`, computed without intermediate rounding. Checked: crashes if a
 ### finite `me` overflows to ±infinity (use `scaleb_unchecked` for raw IEEE propagation).
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
 failable routine B64.scaleb(n: S64) -> B64
-    var r = C::rf_b64_scalbn(value: me, n: n)
+    var r = C::ingrid_b64_scalbn(x: me, n: n)
     if r.is_finite() or not me.is_finite()
         return r
     if r.is_nan()
@@ -1058,7 +1037,7 @@ failable routine B64.scaleb(n: S64) -> B64
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
 routine B64.scaleb_unchecked(n: S64) -> B64
-    return C::rf_b64_scalbn(value: me, n: n)
+    return C::ingrid_b64_scalbn(x: me, n: n)
 
 ### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing (returns the non-NaN
 ### operand; NaN only if both are NaN). Never crashes.

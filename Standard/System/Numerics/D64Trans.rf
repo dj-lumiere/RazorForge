@@ -342,58 +342,52 @@ routine D64.mul_add_unchecked(b: D64, c: D64) -> D64
 # ============================================================================
 
 ### IEEE 754 signbit: the raw sign bit (true for negatives, -0, and -NaN). Never crashes.
+@inline
 routine D64.is_sign_negative() -> Bool
-    return me.decode().sign
+    return (C::ingrid_d64_class(x: me.to_bits()) & 1) != 0
 
 ### True if me is negative (sign bit set, which includes -0 and -NaN).
+@inline
 routine D64.is_negative() -> Bool
-    return me.decode().sign
+    return (C::ingrid_d64_class(x: me.to_bits()) & 1) != 0
 
 ### True if me is strictly positive (not signed, not zero).
+@inline
 routine D64.is_positive() -> Bool
-    var p = me.decode()
-    return not p.sign and p.special == 0 and p.coeff != 0
+    return (C::ingrid_d64_class(x: me.to_bits()) & 35) == 2
 
-### True if me is a finite, nonzero value at the minimum exponent (-398) with fewer than 16 digits.
+### True if me is finite, nonzero, and below the smallest normal value (10^emin), at any exponent.
+@inline
 routine D64.is_subnormal() -> Bool
-    var p = me.decode()
-    if p.special != 0 or p.coeff == 0
-        return false
-    return p.exp == -398 and p.coeff < 1000000000000000
+    return (C::ingrid_d64_class(x: me.to_bits()) & 64) != 0
 
 ### Splits into integer and fractional parts (C modf), both carrying me's sign.
 routine D64.modf() -> (D64, D64)
-    if me.is_nan()
-        return (me, me)
-    if me.is_infinite()
-        return (me, D64.from_components(sign: me.decode().sign, coeff: 0, exp: 0))
-    var ip = me.trunc()
-    return (ip, me - ip)
+    return (me.trunc(), me.fract())
 
 ### True if me is finite and nonzero (this includes the subnormals).
+@inline
 routine D64.is_normal() -> Bool
-    var p = me.decode()
-    return p.special == 0 and p.coeff != 0
+    return (C::ingrid_d64_class(x: me.to_bits()) & 34) == 2
 
 ### C99 fpclassify: SIGNALING_NAN, NAN, INFINITE, ZERO, SUBNORMAL, or NORMAL.
 routine D64.fpclassify() -> FpClass
-    var p = me.decode()
-    if p.special == 3
+    var c = C::ingrid_d64_class(x: me.to_bits())
+    if (c & 16) != 0
         return SIGNALING_NAN
-    if p.special == 2
+    if (c & 8) != 0
         return NAN
-    if p.special == 1
+    if (c & 4) != 0
         return INFINITE
-    if p.coeff == 0
+    if (c & 32) != 0
         return ZERO
-    if me.is_subnormal()
+    if (c & 64) != 0
         return SUBNORMAL
     return NORMAL
 
 ### Absolute value |me| (clears the sign bit, keeps specials and the cohort). Never crashes.
 routine D64.abs() -> D64
-    var p = me.decode()
-    return d64_of_parts(p: D64Parts(sign: false, special: p.special, exp: p.exp, coeff: p.coeff))
+    return D64.from_bits(bits: C::ingrid_d64_abs(x: me.to_bits()))
 
 ### IEEE 754 totalOrder for decimals: a total order over all values including signed zeros, cohorts
 ### (equal value with differing exponents), and NaNs. For finite operands of equal value the smaller-exponent
@@ -401,47 +395,27 @@ routine D64.abs() -> D64
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
 routine D64.total_compare(you: D64) -> Bool
-    var pa = me.decode()
-    var pb = you.decode()
-    if pa.special >= 2 or pb.special >= 2
-        return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(
-            sign: pb.sign,
-            special: pb.special,
-        )
-    var c = me.compare(you: you)
-    if c != SAME
-        return c == ME_SMALL
-    if pa.sign != pb.sign
-        return pa.sign
-    if pa.sign
-        return pa.exp >= pb.exp
-    return pa.exp <= pb.exp
+    return C::ingrid_d64_total_order(a: me.to_bits(), b: you.to_bits(), mag: 0) == 1
 
 ### IEEE 754 totalOrderMag for decimals: `total_compare` applied to the magnitudes.
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine D64.total_order_mag(you: D64) -> Bool
-    return me.abs().total_compare(you: you.abs())
+    return C::ingrid_d64_total_order(a: me.to_bits(), b: you.to_bits(), mag: 1) == 1
 
 ### Negation -me (flips the sign bit, keeps specials and the cohort). Never crashes.
 @readonly
 routine D64.neg() -> D64
-    var p = me.decode()
-    return d64_of_parts(p: D64Parts(sign: not p.sign, special: p.special, exp: p.exp, coeff: p.coeff))
+    return D64.from_bits(bits: C::ingrid_d64_neg(x: me.to_bits()))
 
 ### C99 copysign: me's magnitude with you's sign bit. Never crashes.
 ### :param you: The value supplying the sign.
 routine D64.copysign(you: D64) -> D64
-    var p = me.decode()
-    return d64_of_parts(p: D64Parts(sign: you.decode().sign, special: p.special, exp: p.exp, coeff: p.coeff))
+    return D64.from_bits(bits: C::ingrid_d64_copysign(x: me.to_bits(), y: you.to_bits()))
 
 ### Returns -1, 0, or +1 for the sign of `me`. A NaN propagates, ±0 gives +0.
 routine D64.signum() -> D64
-    if me.is_nan()
-        return D64.quiet_nan()
-    if me.is_zero()
-        return D64.from_components(sign: false, coeff: 0, exp: 0)
-    return D64.from_components(sign: me.decode().sign, coeff: 1, exp: 0)
+    return D64.from_bits(bits: C::ingrid_d64_signum(x: me.to_bits()))
 
 ### Throws when `me` is non-finite (inf or NaN).
 @crash_only
@@ -459,12 +433,7 @@ routine D64.mod_trunc(you: D64) -> D64
 ### C99 fdim: the positive difference max(me - you, 0), NaN if either operand is NaN.
 ### :param you: The value to subtract.
 routine D64.fdim(you: D64) -> D64
-    if me.is_nan() or you.is_nan()
-        return D64.quiet_nan()
-    var d = me - you
-    if d.decode().sign
-        return D64.from_components(sign: false, coeff: 0, exp: 0)
-    return d
+    return D64.from_bits(bits: C::ingrid_d64_fdim(a: me.to_bits(), b: you.to_bits()))
 
 ### IEEE 754 scaleB: `me * 10^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-ten exponent to apply.
@@ -505,35 +474,13 @@ routine D64.max_num(you: D64) -> D64
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, NaN if either is NaN.
 routine D64.minimum(you: D64) -> D64
-    if me.is_nan()
-        return me
-    if you.is_nan()
-        return you
-    var c = me.compare(you: you)
-    if c == ME_SMALL
-        return me
-    if c == ME_LARGE
-        return you
-    if me.is_zero()
-        return if me.is_sign_negative() then me else you
-    return me
+    return D64.from_bits(bits: C::ingrid_d64_select(a: me.to_bits(), b: you.to_bits(), which: 2))
 
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, NaN if either is NaN.
 routine D64.maximum(you: D64) -> D64
-    if me.is_nan()
-        return me
-    if you.is_nan()
-        return you
-    var c = me.compare(you: you)
-    if c == ME_LARGE
-        return me
-    if c == ME_SMALL
-        return you
-    if me.is_zero()
-        return if me.is_sign_negative() then you else me
-    return me
+    return D64.from_bits(bits: C::ingrid_d64_select(a: me.to_bits(), b: you.to_bits(), which: 3))
 
 ### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero
 ### (`round(rule: RoundingRule.HALF_AWAY)`). Never crashes.
@@ -546,13 +493,7 @@ routine D64.round_ties_away() -> D64
 ### :param you: The value whose quantum to compare against.
 ### :returns: Whether the two share a quantum.
 routine D64.same_quantum(you: D64) -> Bool
-    var pa = me.decode()
-    var pb = you.decode()
-    if pa.special >= 2 or pb.special >= 2
-        return pa.special >= 2 and pb.special >= 2
-    if pa.special == 1 or pb.special == 1
-        return pa.special == 1 and pb.special == 1
-    return pa.exp == pb.exp
+    return C::ingrid_d64_same_quantum(a: me.to_bits(), b: you.to_bits()) == 1
 
 ### IEEE 754 quantize: `me`'s value with the exponent of `you`, rounded half to even when digits are dropped.
 ### NaN when the result needs more than 16 digits, or for incompatible specials.
@@ -606,8 +547,4 @@ routine D64.rint() -> D64
 
 ### Fractional part me - trunc(me), with me's sign. A NaN propagates, ±inf gives ±0. Never crashes.
 routine D64.fract() -> D64
-    if me.is_nan()
-        return me
-    if me.is_infinite()
-        return D64.from_components(sign: me.decode().sign, coeff: 0, exp: 0)
-    return me - me.trunc()
+    return D64.from_bits(bits: C::ingrid_d64_fract(x: me.to_bits()))
