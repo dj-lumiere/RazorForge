@@ -1,0 +1,84 @@
+module Tests/Stdlib/IntegerSmallBigApi
+
+import IO/Console
+
+# Integer arithmetic around the 2^64 line where a value stops fitting in one word: small values are computed in
+# place and bigger ones by the engine, so every pair of operands below crosses that line in some way. Big
+# literals are constant limbs, and the sums and products that reach 2^64 at run time own their limbs. A zero
+# result is never negative, so no line shows "-0".
+
+routine s64_text(a: Integer) -> Text
+    var t = "none"
+    when try a.to[S64]()
+        is None => t = "none"
+        else as v => t = f"{v}"
+    return t
+
+routine u64_text(a: Integer) -> Text
+    var t = "none"
+    when try a.to[U64]()
+        is None => t = "none"
+        else as v => t = f"{v}"
+    return t
+
+routine order_text(a: Integer, b: Integer) -> Text
+    var t = ""
+    t = t + (if a < b then "<" else ".")
+    t = t + (if a <= b then "l" else ".")
+    t = t + (if a == b then "=" else ".")
+    t = t + (if a != b then "!" else ".")
+    t = t + (if a >= b then "g" else ".")
+    t = t + (if a > b then ">" else ".")
+    return t
+
+routine show_pair(a: Integer, b: Integer)
+    var line = f"{a} {b}: {a + b} {a - b} {order_text(a: a, b: b)} {a & b} {a | b} {a ^ b}"
+    if b.is_zero()
+        show(line)
+        return
+    show(f"{line} {a // b} {a % b}")
+    return
+
+routine show_one(a: Integer)
+    var shifts = f"{a << 1} {a << 63} {a << 64} {a >> 1} {a >> 63} {a >> 64}"
+    var signs = f"{-a} {a.abs()} {a.is_zero()} {a.is_negative()} {a.is_positive()} {a.is_even()}"
+    var conversions = f"{s64_text(a: a)} {u64_text(a: a)} {a.to[B64]().to_bits()}"
+    if a.bit_length() <= 64
+        conversions = f"{conversions} {a.to[B32]().to_bits()}"
+    show(f"{a}: {shifts} | {signs} | {conversions}")
+    return
+
+routine start()
+    var values = List[Integer]()
+    values.add_last(value: 0.to[Integer]())
+    values.add_last(value: 1.to[Integer]())
+    values.add_last(value: (-1).to[Integer]())
+    values.add_last(value: 7.to[Integer]())
+    values.add_last(value: (-7).to[Integer]())
+    values.add_last(value: S64_MAX.to[Integer]())
+    values.add_last(value: S64_MIN.to[Integer]())
+    values.add_last(value: S64_MAX.to[Integer]() + 1.to[Integer]())
+    values.add_last(value: (U64_MAX -% 1).to[Integer]())
+    values.add_last(value: U64_MAX.to[Integer]())
+    values.add_last(value: U64_MAX.to[Integer]().neg())
+    # 2^64 and 2^64 + 1 made at run time, so they own their limbs.
+    var max = U64_MAX.to[Integer]()
+    values.add_last(value: max + 1.to[Integer]())
+    values.add_last(value: max + 2.to[Integer]())
+    # The same numbers as literals, whose limbs are constant.
+    var two_64: Integer = 18446744073709551616
+    var minus_two_64: Integer = -18446744073709551616
+    var big: Integer = 340282366920938463463374607431768211461
+    values.add_last(value: two_64)
+    values.add_last(value: minus_two_64)
+    values.add_last(value: big)
+    each a in values
+        show_one(a: a)
+    each a in values
+        each b in values
+            show_pair(a: a, b: b)
+    # Results that come back below 2^64 from a bigger operand, and the zeros they reach.
+    show(f"{two_64 - 1.to[Integer]()} {two_64 - two_64} {minus_two_64 + two_64} {(max + 1.to[Integer]()) - two_64}")
+    show(f"{(two_64 * two_64) // two_64} {(two_64 * 3.to[Integer]()) % two_64} {two_64 >> 64} {(two_64 >> 1) << 1}")
+    show("DONE")
+    return

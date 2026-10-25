@@ -41,10 +41,12 @@ record IntegerLimbView
 # ============================================================================
 
 # The zero `Integer`.
+@inline
 secret routine integer_zero() -> Integer
     return integer_small(neg: false, mag: 0)
 
 # The `Integer` with magnitude `mag` below 2^64, negative when `neg` (zero stays non-negative).
+@inline
 secret routine integer_small(neg: Bool, mag: U64) -> Integer
     danger
         return Integer(
@@ -61,6 +63,7 @@ secret dangerous routine integer_over_limbs(neg: Bool, tab: Hijacked[U64], len: 
     return Integer(owner: Guarded[List[U64], ReadOnly](from: limbs), small: 0, data: tab, count: len, neg: neg)
 
 # The magnitude when it is below 2^64, and whether it is.
+@inline
 secret routine integer_small_part(v: Integer) -> (Bool, U64)
     return (v.count == 0, v.small)
 
@@ -171,6 +174,7 @@ secret routine integer_sum(a: Integer, b: Integer, negate_b: Bool) -> Integer
         return integer_adopt(out: out, len: w.w1, neg: w.w2 != 0)
 
 # The low 64 bits of the magnitude.
+@inline
 secret routine integer_low_word(v: Integer) -> U64
     if v.count == 0
         return v.small
@@ -564,6 +568,16 @@ secret routine integer_text(v: Integer, radix: U64) -> Text
 # Lifecycle Management
 # ============================================================================
 
+### Ends this value. A value below 2^64 and a literal's constant limbs have no list to let go of, and only a
+### value that shares a list of limbs gives up its share.
+@inline
+@override
+routine Integer.destruct()
+    if me.owner.is_hollow()
+        return
+    me.owner.destruct()
+    return
+
 ### Creates the integer value `0`.
 ### Use this overload when the surrounding context needs an explicit `Integer`
 ### instead of a fixed-width literal.
@@ -575,6 +589,7 @@ routine Integer() -> Integer
 ### The numeric payload is copied into the arbitrary-precision representation,
 ### so the result is no longer limited by `S64` range after construction.
 ### :returns: The resulting `Integer` value.
+@inline
 routine S64.to[Integer]() -> Integer
     return integer_of_s64(v: me)
 
@@ -582,6 +597,7 @@ routine S64.to[Integer]() -> Integer
 ### This is the direct widening entry point for exact conversion from native
 ### unsigned integer data.
 ### :returns: The resulting `Integer` value.
+@inline
 routine U64.to[Integer]() -> Integer
     return integer_of_u64(v: me)
 
@@ -593,23 +609,28 @@ routine U64.to[Integer]() -> Integer
 
 # 64-bit base builders: one limb holds the magnitude. They avoid the `Integer(from:)` call form (which
 # mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
+@inline
 routine integer_of_s64(v: S64) -> Integer
     if v < 0
         return integer_small(neg: true, mag: 0 -% LLVM::reinterpret_bits[S64, U64](v))
     return integer_small(neg: false, mag: LLVM::reinterpret_bits[S64, U64](v))
 
+@inline
 routine integer_of_u64(v: U64) -> Integer
     return integer_small(neg: false, mag: v)
 
 ### Widens a fixed-width integer into an `Integer` (exact). 64-bit limbs go through the
 ### base builders; wider widths compose them with shift+add.
 ### :returns: The equal `Integer` value.
+@inline
 routine S8.to[Integer]() -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S8, S64](me))
 
+@inline
 routine S16.to[Integer]() -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S16, S64](me))
 
+@inline
 routine S32.to[Integer]() -> Integer
     return integer_of_s64(v: LLVM::sign_extend[S32, S64](me))
 
@@ -629,12 +650,15 @@ routine S256.to[Integer]() -> Integer
     return if neg then r.neg() else r
 ### Widens an unsigned fixed-width integer into an `Integer` (exact).
 ### :returns: The equal `Integer` value.
+@inline
 routine U8.to[Integer]() -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U8, U64](me))
 
+@inline
 routine U16.to[Integer]() -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U16, U64](me))
 
+@inline
 routine U32.to[Integer]() -> Integer
     return integer_of_u64(v: LLVM::zero_extend[U32, U64](me))
 
@@ -715,15 +739,39 @@ common routine Integer.from_literal(text: Text) -> Integer
 ### No overflow occurs; the storage grows as needed.
 ### :param other: The value to add.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.add(other: Integer) -> Integer
+    # Two values below 2^64 are added here, and only a sum that carries past 2^64 or a bigger operand calls the
+    # engine.
+    if me.count == 0 and other.count == 0
+        if me.neg == other.neg
+            var sum = me.small +% other.small
+            if sum >= me.small
+                return integer_small(neg: me.neg, mag: sum)
+        elseif me.small >= other.small
+            return integer_small(neg: me.neg, mag: me.small -% other.small)
+        else
+            return integer_small(neg: other.neg, mag: other.small -% me.small)
     return integer_sum(a: me, b: other, negate_b: false)
 
 ### Subtracts `other` from this value using exact integer arithmetic.
 ### :param other: The value to subtract.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.sub(other: Integer) -> Integer
+    # Subtracting is adding `other` with the other sign: opposite signs add the magnitudes, equal signs take the
+    # smaller magnitude from the bigger one.
+    if me.count == 0 and other.count == 0
+        if me.neg != other.neg
+            var sum = me.small +% other.small
+            if sum >= me.small
+                return integer_small(neg: me.neg, mag: sum)
+        elseif me.small >= other.small
+            return integer_small(neg: me.neg, mag: me.small -% other.small)
+        else
+            return integer_small(neg: not me.neg, mag: other.small -% me.small)
     return integer_sum(a: me, b: other, negate_b: true)
 
 ### Multiplies this value by `other` using exact integer arithmetic.
@@ -737,25 +785,34 @@ routine Integer.mul(other: Integer) -> Integer
 ### `me - other * q` lies in `[0, |other|)`.
 ### :param other: The non-zero divisor.
 ### :returns: The integer quotient.
+@inline
 @readonly
 failable routine Integer.floordiv(other: Integer) -> Integer
     if other.is_zero()
         throw DivisionByZeroError()
+    if me.count == 0 and other.count == 0
+        return integer_small_quotient(a: me, b: other)
     return integer_divmod(a: me, b: other).item0
 
 ### Returns the Euclidean remainder of this value divided by `other`.
 ### :param other: The non-zero divisor.
 ### :returns: The remainder, always in `[0, |other|)`.
+@inline
 @readonly
 failable routine Integer.mod(other: Integer) -> Integer
     if other.is_zero()
         throw DivisionByZeroError()
+    if me.count == 0 and other.count == 0
+        return integer_small_remainder(a: me, b: other)
     return integer_divmod(a: me, b: other).item1
 
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.neg() -> Integer
+    if me.count == 0
+        return integer_small(neg: not me.neg, mag: me.small)
     return integer_with_sign(v: me, neg: not me.neg)
 
 # ============================================================================
@@ -765,22 +822,72 @@ routine Integer.neg() -> Integer
 ### Returns `true` when both values represent the same mathematical integer.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
+@inline
 @readonly
 routine Integer.eq(you: Integer) -> Bool
+    # A value has one form only: a different sign or limb count is a different value.
+    if me.neg != you.neg or me.count != you.count
+        return false
+    if me.count == 0
+        return me.small == you.small
     return integer_compare(a: me, b: you) == 0
 
 ### Compares this value with `you` using numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
+@inline
 @readonly
 routine Integer.compare(you: Integer) -> ComparisonSign
-    var comparison_value = integer_compare(a: me, b: you)
+    if me.count == 0 and you.count == 0
+        if me.neg != you.neg
+            return if me.neg then ME_SMALL else ME_LARGE
+        if me.small == you.small
+            return SAME
+        # Between two negative values the bigger magnitude is the smaller value.
+        var smaller_magnitude = me.small < you.small
+        return if smaller_magnitude != me.neg then ME_SMALL else ME_LARGE
+    return integer_compare_sign(a: me, b: you)
+
+# The `compare` of two values one of which is at least 2^64.
+secret routine integer_compare_sign(a: Integer, b: Integer) -> ComparisonSign
+    var comparison_value = integer_compare(a: a, b: b)
     if comparison_value < 0
         return ME_SMALL
     elseif comparison_value > 0
         return ME_LARGE
     else
         return SAME
+
+# The Euclidean quotient of two values below 2^64, `b` nonzero.
+@inline
+secret routine integer_small_quotient(a: Integer, b: Integer) -> Integer
+    var q = a.small // b.small
+    if not a.neg
+        return integer_small(neg: b.neg, mag: q)
+    # A negative dividend rounds the quotient away from zero unless the division is exact, so the remainder
+    # stays at least 0. The quotient magnitude is then at most 2^64 - 1, as b is at least 1.
+    if q *% b.small == a.small
+        return integer_small(neg: not b.neg, mag: q)
+    return integer_small(neg: not b.neg, mag: q +% 1)
+
+# The Euclidean remainder of two values below 2^64, `b` nonzero: in [0, |b|).
+@inline
+secret routine integer_small_remainder(a: Integer, b: Integer) -> Integer
+    var r = a.small % b.small
+    if a.neg and r != 0
+        return integer_small(neg: false, mag: b.small -% r)
+    return integer_small(neg: false, mag: r)
+
+# Whether `a` and `b` are both below 2^63 in magnitude, so that their two's-complement forms fit an S64.
+@inline
+secret routine integer_both_word(a: Integer, b: Integer) -> Bool
+    return a.count == 0 and b.count == 0 and ((a.small | b.small) >>> 63) == 0
+
+# The S64 two's-complement form of `v`, whose magnitude is below 2^63.
+@inline
+secret routine integer_word(v: Integer) -> S64
+    var bits = if v.neg then 0 -% v.small else v.small
+    return LLVM::reinterpret_bits[U64, S64](bits)
 
 # ============================================================================
 # Bitwise Operations
@@ -789,36 +896,52 @@ routine Integer.compare(you: Integer) -> ComparisonSign
 ### Computes the bitwise AND of this value and `other` (two's-complement form).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.bitand(other: Integer) -> Integer
+    if integer_both_word(a: me, b: other)
+        return integer_of_s64(v: integer_word(v: me) & integer_word(v: other))
     return integer_bitop(a: me, b: other, op: 0)
 
 ### Computes the bitwise OR of this value and `other` (two's-complement form).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.bitor(other: Integer) -> Integer
+    if integer_both_word(a: me, b: other)
+        return integer_of_s64(v: integer_word(v: me) | integer_word(v: other))
     return integer_bitop(a: me, b: other, op: 1)
 
 ### Computes the bitwise XOR of this value and `other` (two's-complement form).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.bitxor(other: Integer) -> Integer
+    if integer_both_word(a: me, b: other)
+        return integer_of_s64(v: integer_word(v: me) ^ integer_word(v: other))
     return integer_bitop(a: me, b: other, op: 2)
 
 ### Shifts this value left by `bits` positions (`me << bits`): `me * 2^bits`.
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.shift_left(bits: U32) -> Integer
+    # A shift of a value below 2^64 whose bits all stay below bit 64 is done here.
+    if me.count == 0 and bits < 64 and (me.small >>> (64 -% bits)) == 0
+        return integer_small(neg: me.neg, mag: me.small << bits)
     return integer_shift(a: me, bits: bits.to[U64](), left: true)
 
 ### Shifts this value right by `bits` positions (`me >> bits`): `floor(me / 2^bits)`, so `-5 >> 1` is `-3`.
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.arith_shift_right(bits: U32) -> Integer
+    if me.count == 0 and bits < 64
+        return integer_small_shift_right(v: me, bits: bits)
     return integer_shift(a: me, bits: bits.to[U64](), left: false)
 
 ### Shifts this value right by `bits` positions filling with zeros (`me >>> bits`). An `Integer` has no fixed
@@ -830,7 +953,17 @@ routine Integer.arith_shift_right(bits: U32) -> Integer
 failable routine Integer.logical_shift_right(bits: U32) -> Integer
     if me.neg
         throw NumericDomainError(description: ">>> on a negative Integer: it has no width to fill with zeros")
+    if me.count == 0 and bits < 64
+        return integer_small(neg: false, mag: me.small >>> bits)
     return integer_shift(a: me, bits: bits.to[U64](), left: false)
+
+# floor(v / 2^bits) of a value below 2^64, `bits` below 64. For a negative value floor(-m / 2^k) is
+# -(((m - 1) >> k) + 1).
+@inline
+secret routine integer_small_shift_right(v: Integer, bits: U32) -> Integer
+    if not v.neg
+        return integer_small(neg: false, mag: v.small >>> bits)
+    return integer_small(neg: true, mag: ((v.small -% 1) >>> bits) +% 1)
 
 # ============================================================================
 # Math Operations
@@ -838,8 +971,11 @@ failable routine Integer.logical_shift_right(bits: U32) -> Integer
 
 ### Returns the absolute magnitude of this value.
 ### :returns: The resulting `Integer` value.
+@inline
 @readonly
 routine Integer.abs() -> Integer
+    if me.count == 0
+        return integer_small(neg: false, mag: me.small)
     return integer_with_sign(v: me, neg: false)
 
 ### Raises this value to a non-negative integer exponent.
@@ -889,19 +1025,21 @@ routine Integer.lcm(other: Integer) -> Integer
 
 ### Returns `true` when this value is exactly zero.
 ### :returns: The resulting `Bool` value.
+@inline
 @readonly
 routine Integer.is_zero() -> Bool
-    var s = integer_small_part(v: me)
-    return s.item0 and s.item1 == 0
+    return me.count == 0 and me.small == 0
 
 ### Returns `true` when this value is less than zero.
 ### :returns: The resulting `Bool` value.
+@inline
 @readonly
 routine Integer.is_negative() -> Bool
     return me.neg
 
 ### Returns `true` when this value is greater than zero.
 ### :returns: The resulting `Bool` value.
+@inline
 @readonly
 routine Integer.is_positive() -> Bool
     return not me.is_zero() and not me.is_negative()
@@ -917,6 +1055,7 @@ routine Integer.signum() -> S32
 
 ### Returns `true` when this value is even (divisible by two).
 ### :returns: The resulting `Bool` value.
+@inline
 @readonly
 routine Integer.is_even() -> Bool
     return (integer_low_word(v: me) & 1) == 0
@@ -1021,6 +1160,7 @@ failable routine Integer.modpow(exp: Integer, modulus: Integer) -> Integer
 ### Converts an arbitrary-precision integer to `S64`.
 ### :returns: The resulting `S64` value.
 ### :throws: {IntegerOverflowError} if this value is outside `S64_MIN..S64_MAX`.
+@inline
 failable routine Integer.to[S64]() -> S64
     var s = integer_small_part(v: me)
     if not s.item0
@@ -1035,6 +1175,7 @@ failable routine Integer.to[S64]() -> S64
 ### Converts an arbitrary-precision integer to `U64`.
 ### :returns: The resulting `U64` value.
 ### :throws: {IntegerOverflowError} if this value is negative or exceeds `U64_MAX`.
+@inline
 failable routine Integer.to[U64]() -> U64
     var s = integer_small_part(v: me)
     if me.is_negative() or not s.item0
@@ -1126,14 +1267,24 @@ failable routine Integer.to[S256]() -> S256
 ### Converts an arbitrary-precision integer to the nearest `B32`.
 ### :returns: The `B32` closest to this value.
 ### :throws: {NumericOverflowError} if this value is beyond the range of `B32`.
+@inline
 failable routine Integer.to[B32]() -> B32
+    # A magnitude below 2^64 converts in one rounding step, and the sign is exact.
+    if me.count == 0
+        var magnitude = LLVM::unsigned_to_float[U64, B32](me.small)
+        return if me.neg then -magnitude else magnitude
     # The exact decimal text read back as a float rounds once, to the nearest `B32`.
     return me.represent().to[B32]()
 
 ### Converts an arbitrary-precision integer to the nearest `B64`.
 ### :returns: The `B64` closest to this value.
 ### :throws: {NumericOverflowError} if this value is beyond the range of `B64`.
+@inline
 failable routine Integer.to[B64]() -> B64
+    # A magnitude below 2^64 converts in one rounding step, and the sign is exact.
+    if me.count == 0
+        var magnitude = LLVM::unsigned_to_float[U64, B64](me.small)
+        return if me.neg then -magnitude else magnitude
     # The exact decimal text read back as a float rounds once, to the nearest `B64`.
     return me.represent().to[B64]()
 
