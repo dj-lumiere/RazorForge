@@ -32,10 +32,9 @@ needs TInner obeys Emittable[TResult]
     secret source: TSourceEmitter
     ### Stores the transform routine used to expand each source element.
     secret transform: failable Callable[(T,), TInner]
-    ### Stores the current inner buffer of materialized inner-sequence values.
+    ### Stores the values of the current inner sequence not handed out yet, last one first: each value is taken
+    ### off the end, so the caller receives it and the buffer no longer holds it.
     secret buffer: List[TResult]
-    ### Stores the read position within the current inner buffer.
-    secret buffer_index: U64
 
 ### Returns the stateful emitter that drives the flat-map expansion.
 ### :returns: The resulting `SelectManyEmitter[T, TResult, TInner, TSource/Emitter]` value.
@@ -47,7 +46,6 @@ routine SelectManyEmittable[T, TResult, TInner, TSource].emitter() -> SelectMany
             source: me.source.referent().emitter(),
             transform: me.transform,
             buffer: buffer,
-            buffer_index: 0,
         )
 
 ### Returns the next value from the current inner buffer, refilling it as needed.
@@ -57,14 +55,12 @@ routine SelectManyEmittable[T, TResult, TInner, TSource].emitter() -> SelectMany
 failable routine SelectManyEmitter[T, TResult, TInner, TSourceEmitter].emit() -> TResult
     danger
         loop
-            if me.buffer_index < me.buffer.count()
-                var item = me.buffer[me.buffer_index]
-                me.buffer_index = me.buffer_index + 1
-                return item
+            if me.buffer.count() > 0
+                return me.buffer.remove_last()
             var outer = me.source.emit()
             var new_buffer = me.transform(outer).to[List]()
+            new_buffer.reverse_in_place()
             me.buffer = steal new_buffer
-            me.buffer_index = 0
 
 ### Returns a lazy adapter that applies `transform` to each element and yields values from all
 ### resulting inner emittables in sequence. The inner-emittable type `TInner` is an explicit type

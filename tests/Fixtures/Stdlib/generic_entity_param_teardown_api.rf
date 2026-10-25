@@ -1,0 +1,46 @@
+module Tests/Stdlib/GenericEntityParamTeardownApi
+
+import IO/Console
+# An entity handed to a parameter written `x: T` is torn down by the routine it was handed to when that routine
+# does not keep it, on a failure as well as on a return. One it keeps is torn down once, by what keeps it (Rust
+# I-unsound port, C46 / C84).
+
+entity Item
+    n: S64
+
+routine Item.destruct()
+    show(f"destruct {me.n}")
+    return
+
+failable routine put[T](x: T, k: S64) -> S64
+    if k == 0
+        throw InvalidValueError(input: "0", target: "S64")
+    return 1
+
+routine pass_on[T](x: T) -> S64
+    return count_one(x: steal x)
+
+routine count_one[T](x: T) -> S64
+    return 1
+
+routine keep_in[T](xs: Modifying[List[T]], x: T)
+    if xs.count() > 5
+        return
+    xs.add_last(value: steal x)
+    return
+
+routine start()
+    var r = try put(x: Item(n: 1), k: 0)
+    show("after failed put")
+    var q = try put(x: Item(n: 2), k: 1)
+    show("after put")
+    show(f"passed on {pass_on(x: Item(n: 3))}")
+    var xs = List[Item]()
+    var z = try xs.add_at(index: 5, value: Item(n: 4))
+    show("after failed add_at")
+    var w = try xs.add_at(index: 0, value: Item(n: 5))
+    show("after add_at")
+    keep_in(xs: xs.modify(), x: Item(n: 6))
+    show(f"kept {xs.count()}")
+    show("end")
+    return
