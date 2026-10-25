@@ -960,13 +960,42 @@ routine Text.words() -> List[Text]
 routine Text.represent() -> Text
     return me
 
-### Returns the diagnostic representation of this text.
-### The result includes the type name and character count for debugging.
+### Returns the diagnostic representation of this text: the type name, the character count, and the text in quotes
+### with the characters that would hide its value written as escapes (`quoted_source`), so two different texts never
+### read the same and a space at the end shows before the closing quote.
 ### :returns: The resulting `Text` value.
 @readonly
 @override
 routine Text.diagnose() -> Text
-    return f"Text(count: {me.count}, \"{me}\")"
+    return f"Text(count: {me.count}, {quoted_source(text: me)})"
+
+### The text in double quotes with the characters that would hide its value written as escapes: a double quote, a
+### backslash, a line break, a tab and a carriage return as backslash escapes, and every other control character as
+### a backslash, `u` and six hexadecimal digits.
+### :param text: The text.
+### :returns: The quoted text.
+secret routine quoted_source(text: Text) -> Text
+    var result = "\""
+    each letter in text
+        var code = letter.codepoint()
+        if code == 0x22
+            result = result + "\\\""
+        elseif code == 0x5C
+            result = result + "\\\\"
+        elseif code == 0x0A
+            result = result + "\\n"
+        elseif code == 0x09
+            result = result + "\\t"
+        elseif code == 0x0D
+            result = result + "\\r"
+        elseif code < 0x20 or code == 0x7F
+            var digits = code.to[U64]().to_text(radix: 16)
+            until digits.count >= 6
+                digits = "0" + digits
+            result = result + "\\u" + digits
+        else
+            result = result + letter.to[Text]()
+    return result + "\""
 
 ### Returns an emitter over this text value.
 ### The emitter starts at index `0`.
