@@ -1,0 +1,85 @@
+module Tests/Stdlib/ReserveFailureApi
+
+import IO/Console
+import BuilderExpansion
+import Collections
+
+# Making room up front fails with OutOfMemoryError, which check receives: a byte size past what a U64 counts, or
+# more memory than the heap has. The collection stays as it was and can still be used.
+
+record ReservePoint
+obeys Splittable
+    x: S64
+    y: S64
+
+routine start()
+    var xs = List[S64]()
+    xs.add_last(value: 1)
+    # 2^61 + 1 elements of eight bytes: the byte size does not fit in a U64.
+    var past_u64: U64 = 2305843009213693953
+    when check xs.reserve(new_capacity: past_u64)
+        is None => show("list reserve past U64: reserved")
+        is OutOfMemoryError as e => show(f"list reserve past U64: {e.crash_message()}")
+    # 10^18 elements of eight bytes fit in a U64, but no heap has that much room.
+    var too_many: U64 = 1_000_000_000_000_000_000
+    when check xs.reserve(new_capacity: too_many)
+        is None => show("list reserve too many: reserved")
+        is OutOfMemoryError as e => show(f"list reserve too many: {e.requested_bytes} bytes")
+    xs.add_last(value: 2)
+    show(f"list after: {xs} count {xs.count()}")
+    # A failable argument under the same check: both failures reach it.
+    var ten: U64 = 10
+    when check xs.reserve(new_capacity: ten * ten)
+        is None => show(f"list reserve ten squared: capacity {xs.capacity()}")
+        is Crashables as e => show(f"list reserve ten squared: {e.crash_message()}")
+
+    when check List[S64](capacity: past_u64)
+        is List[S64] => show("list capacity past U64: made")
+        is OutOfMemoryError => show("list capacity past U64: OutOfMemoryError")
+    when check List[S64](count: too_many, fill_value: 0)
+        is List[S64] => show("list fill too many: made")
+        is OutOfMemoryError => show("list fill too many: OutOfMemoryError")
+    var fine = List[S64](capacity: 4)
+    show(f"list capacity 4: count {fine.count()}")
+
+    var ring = RotatableList[S64]()
+    ring.add_last(value: 5)
+    when check ring.reserve(new_capacity: U64_MAX)
+        is None => show("rotatable reserve: reserved")
+        is OutOfMemoryError => show("rotatable reserve: OutOfMemoryError")
+    when check RotatableList[S64](capacity: too_many)
+        is RotatableList[S64] => show("rotatable capacity: made")
+        is OutOfMemoryError => show("rotatable capacity: OutOfMemoryError")
+    show(f"rotatable after: {ring}")
+
+    var bits = BitList()
+    bits.add_last(value: true)
+    when check bits.reserve(new_capacity: U64_MAX)
+        is None => show("bits reserve: reserved")
+        is OutOfMemoryError => show("bits reserve: OutOfMemoryError")
+    show(f"bits after: {bits.count()}")
+
+    var queue = PriorityQueue[S64, Text]()
+    queue.add(element: "a", priority: 1)
+    when check queue.reserve(new_capacity: past_u64)
+        is None => show("queue reserve: reserved")
+        is OutOfMemoryError => show("queue reserve: OutOfMemoryError")
+    when check PriorityQueue[S64, Text](capacity: too_many)
+        is PriorityQueue[S64, Text] => show("queue capacity: made")
+        is OutOfMemoryError => show("queue capacity: OutOfMemoryError")
+    show(f"queue after: {queue.count()}")
+
+    var columns = SplitList[ReservePoint]()
+    columns.add_last(value: ReservePoint(x: 1, y: 2))
+    when check columns.reserve(new_capacity: past_u64)
+        is None => show("split reserve: reserved")
+        is OutOfMemoryError => show("split reserve: OutOfMemoryError")
+    show(f"split after: {columns.count()}")
+
+    when check Set[S64](key: SecureHashKey.random(), capacity: U64_MAX)
+        is Set[S64] => show("set capacity: made")
+        is OutOfMemoryError => show("set capacity: OutOfMemoryError")
+    when check Dict[S64, S64](key: SecureHashKey.random(), capacity: too_many)
+        is Dict[S64, S64] => show("dict capacity: made")
+        is OutOfMemoryError => show("dict capacity: OutOfMemoryError")
+    return

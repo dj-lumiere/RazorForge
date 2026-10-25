@@ -111,13 +111,10 @@ routine Dict[TKey, TValue](key: SecureHashKey) -> Dict[TKey, TValue]
         dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
         return dict
 
-routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TValue]
-    var cap = DICT_INITIAL_CAPACITY
-    until cap >= capacity
-        cap = cap *% 2
-    var ecap = DICT_INITIAL_ENTRIES
-    until ecap >= capacity
-        ecap = ecap *% 2
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
+failable routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TValue]
+    var cap = storage_doubled_capacity(start: DICT_INITIAL_CAPACITY, capacity: capacity)
+    var ecap = storage_doubled_capacity(start: DICT_INITIAL_ENTRIES, capacity: capacity)
     danger
         var dict = Dict[TKey, TValue](
             ctrl: Hijacked[U8].hollow(),
@@ -133,16 +130,16 @@ routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TVal
             k0: key.k0,
             k1: key.k1,
         )
-        dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+        dict.ctrl = Hijacked[U8](allocate_storage_uninit(element_size: U8.data_size(), count: cap))
         C::rf_set_bytes_at(
             dest: dict.ctrl.address(),
             value: CTRL_EMPTY,
             size: cap,
         )
-        dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
-        dict.keys = hijacked_from[TKey](rf_allocate_dynamic_uninit(TKey.data_size() * ecap))
-        dict.vals = hijacked_from[TValue](rf_allocate_dynamic_uninit(TValue.data_size() * ecap))
-        dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
+        dict.indices = Hijacked[U64](allocate_storage_uninit(element_size: U64.data_size(), count: cap))
+        dict.keys = hijacked_from[TKey](allocate_storage_uninit(element_size: TKey.data_size(), count: ecap))
+        dict.vals = hijacked_from[TValue](allocate_storage_uninit(element_size: TValue.data_size(), count: ecap))
+        dict.entry_live = Hijacked[U8](allocate_storage_uninit(element_size: U8.data_size(), count: ecap))
         return dict
 
 ### Frees the heap buffers owned by this dictionary. The element/key/value contents are

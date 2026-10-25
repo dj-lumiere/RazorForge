@@ -1,0 +1,88 @@
+module System/Memory
+
+# ============================================================================
+# Storage sized up front. A collection that makes room for a count of elements in one step (`reserve`, a
+# `capacity:` creator) asks through these routines, so a size past what a U64 counts and a heap with no room both
+# throw `OutOfMemoryError`, which `try` and `check` receive.
+# ============================================================================
+
+### Allocates `size` zeroed bytes from the heap, or gives a hollow address when the heap has no room for them.
+### :param size: The byte count to allocate.
+### :returns: The memory, or a hollow address.
+dangerous routine C::rf_allocate_dynamic_or_hollow(size: U64) -> Addr
+
+### Allocates `size` bytes from the heap, not zeroed, or gives a hollow address when the heap has no room for them.
+### :param size: The byte count to allocate.
+### :returns: The memory, or a hollow address.
+dangerous routine C::rf_allocate_dynamic_uninit_or_hollow(size: U64) -> Addr
+
+### Resizes the block at `ptr` to `size` bytes, keeping its contents up to the smaller size, or gives a hollow address
+### when the heap has no room for them. The block at `ptr` then stays as it was.
+### :param ptr: The block, or a hollow address to allocate a new one.
+### :param size: The new size in bytes. Resizing to 0 bytes may give a hollow address: that frees the block.
+### :returns: The block, maybe moved, or a hollow address.
+dangerous routine C::rf_reallocate_dynamic_or_hollow(ptr: Addr, size: U64) -> Addr
+
+### Returns the byte size of `count` elements of `element_size` bytes each.
+### :param element_size: The size of one element.
+### :param count: How many elements.
+### :returns: The size of all of them.
+### :throws: {OutOfMemoryError} The size is more than a `U64` counts.
+failable routine storage_byte_size(element_size: ByteSize, count: U64) -> ByteSize
+    var one = element_size.byte_size()
+    if one != 0 and count > U64_MAX // one
+        throw OutOfMemoryError(requested_bytes: U64_MAX)
+    return element_size * count
+
+### Allocates storage for `count` elements of `element_size` bytes each, not zeroed: the caller writes an element
+### before reading it.
+### :param element_size: The size of one element.
+### :param count: How many elements.
+### :returns: The storage, a hollow address when the size is 0 and the heap gave none.
+### :throws: {OutOfMemoryError} The size is more than a `U64` counts, or the heap has no room for it.
+failable dangerous routine allocate_storage_uninit(element_size: ByteSize, count: U64) -> Addr
+    var bytes = storage_byte_size(element_size: element_size, count: count).byte_size()
+    var ptr = C::rf_allocate_dynamic_uninit_or_hollow(size: bytes)
+    if ptr.is_hollow() and bytes != 0
+        throw OutOfMemoryError(requested_bytes: bytes)
+    return ptr
+
+### Allocates zeroed storage for `count` elements of `element_size` bytes each.
+### :param element_size: The size of one element.
+### :param count: How many elements.
+### :returns: The storage, a hollow address when the size is 0 and the heap gave none.
+### :throws: {OutOfMemoryError} The size is more than a `U64` counts, or the heap has no room for it.
+failable dangerous routine allocate_storage(element_size: ByteSize, count: U64) -> Addr
+    var bytes = storage_byte_size(element_size: element_size, count: count).byte_size()
+    var ptr = C::rf_allocate_dynamic_or_hollow(size: bytes)
+    if ptr.is_hollow() and bytes != 0
+        throw OutOfMemoryError(requested_bytes: bytes)
+    return ptr
+
+### Resizes the storage at `ptr` to hold `count` elements of `element_size` bytes each, keeping the elements up to
+### the smaller count. When this throws, the storage at `ptr` stays as it was.
+### :param ptr: The storage, or a hollow address to allocate new storage.
+### :param element_size: The size of one element.
+### :param count: How many elements the storage holds from now on.
+### :returns: The storage, maybe moved.
+### :throws: {OutOfMemoryError} The size is more than a `U64` counts, or the heap has no room for it.
+failable dangerous routine reallocate_storage(ptr: Addr, element_size: ByteSize, count: U64) -> Addr
+    var bytes = storage_byte_size(element_size: element_size, count: count).byte_size()
+    var moved = C::rf_reallocate_dynamic_or_hollow(ptr: ptr, size: bytes)
+    if moved.is_hollow() and bytes != 0
+        throw OutOfMemoryError(requested_bytes: bytes)
+    return moved
+
+### Returns the smallest slot count at or above `capacity` that `start` doubled some number of times reaches (`start`
+### itself when it is already enough). A storage whose slot count is a power of two starts from one.
+### :param start: The smallest slot count, above 0.
+### :param capacity: The element count the storage must hold.
+### :returns: The slot count.
+### :throws: {OutOfMemoryError} No such slot count fits in a `U64`.
+failable routine storage_doubled_capacity(start: U64, capacity: U64) -> U64
+    var slots = start
+    until slots >= capacity
+        if slots > U64_MAX // 2
+            throw OutOfMemoryError(requested_bytes: U64_MAX)
+        slots = slots * 2
+    return slots

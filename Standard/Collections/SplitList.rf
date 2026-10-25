@@ -108,15 +108,20 @@ needs T obeys Equatable
     return not me.has(value)
 
 ### Grows every column buffer to hold at least `new_capacity` elements. A null column reallocates from
-### scratch (`rf_reallocate_dynamic` on a null address behaves as an allocation).
+### scratch (reallocating a null address is an allocation).
 ### :param new_capacity: The per-column capacity to reserve.
+### :throws: {OutOfMemoryError} A column's storage is more bytes than a `U64` counts, or the heap has no room for it.
+###     The split list then holds what it held, and its capacity stays as it was.
 @reshaping
-routine SplitList[T].reserve(new_capacity: U64)
+failable routine SplitList[T].reserve(new_capacity: U64)
     if new_capacity > me.capacity
         expand m in allmemvarof(T)
             danger
-                var bytes = $typeof(m).data_size() * new_capacity
-                var ptr = rf_reallocate_dynamic(ptr: me.$nameof(m).get_address(), size: bytes)
+                var ptr = reallocate_storage(
+                    ptr: me.$nameof(m).get_address(),
+                    element_size: $typeof(m).data_size(),
+                    count: new_capacity,
+                )
                 me.$nameof(m) = hijacked_from[$typeof(m)](ptr)
         me.capacity = new_capacity
     return

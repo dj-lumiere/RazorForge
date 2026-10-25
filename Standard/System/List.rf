@@ -85,10 +85,10 @@ routine List[T]() -> List[T]
 dangerous routine List[T](over: Hijacked[T], count: U64) -> List[T]
     return List[T](data: over, count: count, capacity: count)
 
-routine List[T](capacity: U64) -> List[T]
-    var byte_size = T.data_size() * capacity
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
+failable routine List[T](capacity: U64) -> List[T]
     danger
-        var ptr = rf_allocate_dynamic_uninit(byte_size)
+        var ptr = allocate_storage_uninit(element_size: T.data_size(), count: capacity)
         return List[T](
             data: hijacked_from[T](ptr),
             count: 0,
@@ -101,15 +101,15 @@ routine List[T](capacity: U64) -> List[T]
 ### :param count: The number of elements to produce.
 ### :param fill_value: The value to copy into each slot.
 ### :returns: A list containing `count` copies of `fill_value`.
-routine List[T](count: U64, fill_value: T) -> List[T]
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
+failable routine List[T](count: U64, fill_value: T) -> List[T]
 needs RecordType T
     if count == 0
         return List[T]()
 
-    var byte_size = T.data_size() * count
     var t_size = T.data_size()
     danger
-        var ptr = rf_allocate_dynamic_uninit(byte_size)
+        var ptr = allocate_storage_uninit(element_size: t_size, count: count)
         var data = hijacked_from[T](ptr)
         var i: U64 = 0
         until i >= count
@@ -442,19 +442,20 @@ routine List[T].set_raw(index: U64, value: T)
 ### Ensures the backing allocation holds at least `new_capacity` elements.
 ### Does nothing if the current capacity already meets or exceeds `new_capacity`.
 ### :param new_capacity: The minimum slot count to guarantee.
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it. The
+###     list then stays as it was.
 @reshaping
-routine List[T].reserve(new_capacity: U64)
+failable routine List[T].reserve(new_capacity: U64)
     if new_capacity > me.capacity
-        var new_byte_size = T.data_size() * new_capacity
-
         danger
             if me.data.is_hollow()
-                var ptr = rf_allocate_dynamic_uninit(new_byte_size)
+                var ptr = allocate_storage_uninit(element_size: T.data_size(), count: new_capacity)
                 me.data = hijacked_from[T](ptr)
             else
-                var ptr = rf_reallocate_dynamic(
+                var ptr = reallocate_storage(
                     ptr: me.data.address(),
-                    size: new_byte_size,
+                    element_size: T.data_size(),
+                    count: new_capacity,
                 )
                 me.data = hijacked_from[T](ptr)
 

@@ -73,18 +73,11 @@ routine PriorityQueue[TPriority, TElement]() -> PriorityQueue[TPriority, TElemen
 ### Creates an empty priority pool with storage pre-allocated for `capacity` entries.
 ### Use this when the expected pool size is known and early reallocations should be avoided.
 ### :param capacity: The number of entries to reserve space for.
-routine PriorityQueue[TPriority, TElement](capacity: U64) -> PriorityQueue[TPriority, TElement]
-    var priority_byte_size = TPriority.data_size() * capacity
-    var element_byte_size = TElement.data_size() * capacity
-    danger
-        var priority_ptr = rf_allocate_dynamic_uninit(priority_byte_size)
-        var element_ptr = rf_allocate_dynamic_uninit(element_byte_size)
-        return PriorityQueue[TPriority, TElement](
-            priorities: Hijacked[TPriority](priority_ptr),
-            elements: Hijacked[TElement](element_ptr),
-            count: 0,
-            capacity: capacity,
-        )
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
+failable routine PriorityQueue[TPriority, TElement](capacity: U64) -> PriorityQueue[TPriority, TElement]
+    var result = PriorityQueue[TPriority, TElement]()
+    result.reserve(new_capacity: capacity)
+    return result
 
 # ============================================================================
 # Internal Helpers
@@ -131,30 +124,31 @@ routine PriorityQueue[TPriority, TElement].set_element_raw(index: U64, value: TE
 ### Both the priority and element buffers are grown together. Requests no larger than
 ### the current capacity are ignored.
 ### :param new_capacity: The minimum entry count to guarantee.
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it. The
+###     queue then holds what it held, and its capacity stays as it was.
 @reshaping
-routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
+failable routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
     if new_capacity > me.capacity
-        var priority_byte_size = TPriority.data_size() * new_capacity
-        var element_byte_size = TElement.data_size() * new_capacity
-
         danger
             if me.priorities.is_hollow()
-                var ptr = rf_allocate_dynamic_uninit(priority_byte_size)
+                var ptr = allocate_storage_uninit(element_size: TPriority.data_size(), count: new_capacity)
                 me.priorities = Hijacked[TPriority](ptr)
             else
-                var ptr = rf_reallocate_dynamic(
+                var ptr = reallocate_storage(
                     ptr: me.priorities.address(),
-                    size: priority_byte_size,
+                    element_size: TPriority.data_size(),
+                    count: new_capacity,
                 )
                 me.priorities = Hijacked[TPriority](ptr)
 
             if me.elements.is_hollow()
-                var ptr = rf_allocate_dynamic_uninit(element_byte_size)
+                var ptr = allocate_storage_uninit(element_size: TElement.data_size(), count: new_capacity)
                 me.elements = Hijacked[TElement](ptr)
             else
-                var ptr = rf_reallocate_dynamic(
+                var ptr = reallocate_storage(
                     ptr: me.elements.address(),
-                    size: element_byte_size,
+                    element_size: TElement.data_size(),
+                    count: new_capacity,
                 )
                 me.elements = Hijacked[TElement](ptr)
 

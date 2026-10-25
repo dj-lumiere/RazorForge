@@ -1139,9 +1139,13 @@ digit.repeat(4)), text("-"), capture("month", digit.repeat(2))])` (a `preset` pa
 Verify exact signatures in `Standard/RazorForge/Collections/` — highlights
 that differ from other languages:
 
-- A collection's storage size never wraps around: asking for room for more bytes than a `U64` counts
-  (`xs.reserve(new_capacity: n)` with `n` times the element size past `U64_MAX`) crashes with `IntegerOverflowError`
-  (a `ByteSize` times a count is checked).
+- Making room up front is failable: `reserve(new_capacity:)` on `List`, `RotatableList`, `BitList`, `PriorityQueue`
+  and `SplitList`, and the creators `List[T](capacity:)`, `List[T](count:, fill_value:)`, `RotatableList[T](capacity:)`,
+  `BitList(capacity:)`, `PriorityQueue[P, E](capacity:)`, `Set[T](key:, capacity:)` and `Dict[K, V](key:, capacity:)`
+  throw `OutOfMemoryError` when the storage is more bytes than a `U64` counts (`requested_bytes` is then `U64_MAX`)
+  or the heap has no room for it. The size never wraps around, `check xs.reserve(new_capacity: n)` receives the
+  failure, and the collection then stays as it was. A bare call crashes with the error. Growth on the way
+  (`add_last` past the capacity) is not failable: running out of memory there crashes.
 
 - `list.add_last(value: v)`, `list.remove_first!()`, `list.remove_at!(0)` —
   removal is failable (empty/out-of-range throws); `try list.remove_first()`

@@ -104,14 +104,12 @@ routine RotatableList[T]() -> RotatableList[T]
 ### The requested capacity is rounded up to the next power of two so index wrapping
 ### can use a bitmask.
 ### :param capacity: The minimum number of elements to reserve space for.
-routine RotatableList[T](capacity: U64) -> RotatableList[T]
-    var actual: U64 = 1
-    until actual >= capacity
-        actual = actual *% 2
-    var byte_size = T.data_size() * actual
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
+failable routine RotatableList[T](capacity: U64) -> RotatableList[T]
+    var actual = storage_doubled_capacity(start: 1, capacity: capacity)
     danger
         return RotatableList[T](
-            data: hijacked_from[T](rf_allocate_dynamic_uninit(byte_size)),
+            data: hijacked_from[T](allocate_storage_uninit(element_size: T.data_size(), count: actual)),
             start: 0,
             count: 0,
             capacity: actual,
@@ -358,17 +356,16 @@ routine RotatableList[T].grow()
 ### the new buffer in logical order so the front moves to physical slot 0.
 ### Requests no larger than the current capacity are ignored.
 ### :param new_capacity: The minimum element count to accommodate.
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it. The
+###     rotatable list then stays as it was.
 @reshaping
-routine RotatableList[T].reserve(new_capacity: U64)
-    var actual: U64 = 1
-    until actual >= new_capacity
-        actual = actual *% 2
+failable routine RotatableList[T].reserve(new_capacity: U64)
+    var actual = storage_doubled_capacity(start: 1, capacity: new_capacity)
     if actual <= me.capacity
         return
 
-    var new_byte_size = T.data_size() * actual
     danger
-        var _new_data = hijacked_from[T](rf_allocate_dynamic_uninit(new_byte_size))
+        var _new_data = hijacked_from[T](allocate_storage_uninit(element_size: T.data_size(), count: actual))
 
         # Copy elements in logical order (unwrap the ring)
         var i: U64 = 0
@@ -379,6 +376,8 @@ routine RotatableList[T].reserve(new_capacity: U64)
             _new_data.offset(new_byte_offset).poke(value)
             i = i +% 1
 
+        if not me.data.is_hollow()
+            me.data.invalidate()
         me.data = _new_data
         me.start = 0
         me.capacity = actual

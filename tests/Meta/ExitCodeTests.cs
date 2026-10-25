@@ -49,7 +49,7 @@ public sealed class ExitCodeTests
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "reserving", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "Integer overflow error", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Out of memory error", actualString: stdout + stderr);
     }
 
     [Fact]

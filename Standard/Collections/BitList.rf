@@ -80,11 +80,12 @@ common routine BitList.from_literal(elements...: Bool) -> BitList
 ### bit sets incrementally.
 ### :param capacity: The minimum number of bits to reserve.
 ### :returns: An empty `BitList` with preallocated storage.
-routine BitList(capacity: U64) -> BitList
+### :throws: {OutOfMemoryError} The heap has no room for the storage.
+failable routine BitList(capacity: U64) -> BitList
     # Create bit list with pre-allocated capacity (in bits)
-    var word_size = capacity +% 63 >> 6
+    var word_size = bit_words(capacity)
     danger
-        var data_ptr = Hijacked[U64](C::rf_allocate_dynamic_uninit(word_size *% 8))
+        var data_ptr = Hijacked[U64](allocate_storage_uninit(element_size: U64.data_size(), count: word_size))
         # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
         # and mid-word appends only read bits we've already written ourselves.
         return BitList(data: data_ptr, count: 0, capacity: capacity)
@@ -92,6 +93,15 @@ routine BitList(capacity: U64) -> BitList
 # ============================================================================
 # Internal Helpers
 # ============================================================================
+
+### Returns how many 64-bit words hold `bits` bits.
+### :param bits: The bit count.
+### :returns: The word count.
+secret routine bit_words(bits: U64) -> U64
+    var words = bits >> 6
+    if bits & 63 != 0
+        words = words + 1
+    return words
 
 ### Resolves a logical bit index to the containing machine word.
 ### :param bit_index: The zero-based bit position.
@@ -210,24 +220,27 @@ failable routine BitList.remove_last() -> Bool
 
 ### Ensures that the packed storage can hold at least `new_capacity` logical bits.
 ### :param new_capacity: The minimum capacity to reserve.
+### :throws: {OutOfMemoryError} The heap has no room for the storage. The bit list then stays as it was.
 @reshaping
-routine BitList.reserve(new_capacity: U64)
+failable routine BitList.reserve(new_capacity: U64)
     # Ensure capacity is at least new_capacity (in bits)
     if new_capacity > me.capacity
-        var new_word_size = new_capacity +% 63 >> 6
+        var new_word_size = bit_words(new_capacity)
         danger
-            var new_data = Hijacked[U64](C::rf_allocate_dynamic_uninit(new_word_size *% 8))
+            var new_data = Hijacked[U64](allocate_storage_uninit(element_size: U64.data_size(), count: new_word_size))
 
             # Copy existing words; remainder stays uninitialized — add_last overwrites
             # whole words at word boundaries, so the untouched tail is never read.
             if me.count > 0
-                var copy_words = me.count +% 63 >> 6
+                var copy_words = bit_words(me.count)
                 C::rf_copy_bytes_at(
                     dest: new_data.get_address(),
                     src: me.data.get_address(),
                     size: copy_words *% 8,
                 )
 
+            if not me.data.is_hollow()
+                me.data.invalidate()
             me.data = new_data
         me.capacity = new_capacity
     return
