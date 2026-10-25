@@ -294,7 +294,7 @@ RazorForge/
 ├── rider-plugin/         # Rider plugin
 ├── RazorForge.tmbundle/  # TextMate grammar
 ├── RAZORFORGE-FOR-AI.md  # Reference for AI assistants
-└── CHANGELOG.md          # Release notes for RazorForge and Suflae
+└── CHANGELOG.md          # Release notes
 ```
 
 The builder itself (parser, analysis, lowering, LLVM emission) is
