@@ -23,7 +23,7 @@ preset D64_EPSILON: D64 = 1e-15
 ### A software decimal64 value in BID storage.
 @llvm("i64")
 record D64
-obeys Numeric, Comparable, Copyable
+obeys Numeric, Comparable, Copyable, Hashable
     nothing
 
 ### Narrow decoded fields (U64 coefficient — decimal64 has <= 16 digits).
@@ -281,6 +281,15 @@ routine D64.truediv_unchecked(you: D64) -> D64
 @readonly
 routine D64.eq(you: D64) -> Bool
     return C::ingrid_d64_order(a: me.to_bits(), b: you.to_bits()) == 0
+
+### Returns a SipHash-2-4 keyed hash of the value: equal values hash equal whatever their digits (`1.0` and `1.00`,
+### `+0` and `-0`), and every NaN hashes the same.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+@readonly
+routine D64.hash(k0: U64, k1: U64) -> U64
+    return decimal_value_hash(p: d64parts_to_d128(p: me.decode()), k0: k0, k1: k1)
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).

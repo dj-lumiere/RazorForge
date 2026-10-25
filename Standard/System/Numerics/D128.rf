@@ -23,7 +23,7 @@ preset D128_EPSILON: D128 = 1e-33
 ### A software decimal128 value in BID storage.
 @llvm("i128")
 record D128
-obeys Numeric, Comparable, Copyable
+obeys Numeric, Comparable, Copyable, Hashable
     nothing
 
 ### The decoded fields of a decimal128: value = (-1)^sign * coeff * 10^exp.
@@ -494,6 +494,43 @@ secret routine d128_ingrid_order(a: D128, b: D128) -> S64
 @readonly
 routine D128.eq(you: D128) -> Bool
     return d128_ingrid_order(a: me, b: you) == 0
+
+### The keyed hash of a decimal's value, the same for equal values whatever their digits: `1.0`, `1.00`, and `1E+0`
+### hash the same, a D64 and a D128 of one value too, `+0` and `-0` (equal) hash as one zero, and every NaN hashes
+### the same. The coefficient goes without its trailing zeros into one U128, with the biased exponent and the sign
+### above its 113 bits. 16383 in the exponent bits is past every finite exponent: it marks a NaN (coefficient 0) or
+### an infinity (coefficient 1).
+### :param p: The decoded value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: SipHash-2-4 of that U128.
+secret routine decimal_value_hash(p: D128Parts, k0: U64, k1: U64) -> U64
+    var special: U128 = 0x3FFF
+    var sign: U128 = 0
+    if p.sign
+        sign = 1
+    if p.special >= 2
+        return __secure_hash_u128(v: special << 113, k0: k0, k1: k1)
+    if p.special == 1
+        return __secure_hash_u128(v: (special << 113) | 1 | (sign << 127), k0: k0, k1: k1)
+    if p.coeff == 0
+        return __secure_hash_u128(v: 0, k0: k0, k1: k1)
+    var c = p.coeff
+    var e = p.exp
+    until c % 10 != 0
+        c = c // 10
+        e = e + 1
+    var biased = (e + 6176).to[U128]()
+    return __secure_hash_u128(v: c | (biased << 113) | (sign << 127), k0: k0, k1: k1)
+
+### Returns a SipHash-2-4 keyed hash of the value: equal values hash equal whatever their digits (`1.0` and `1.00`,
+### `+0` and `-0`), and every NaN hashes the same.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+@readonly
+routine D128.hash(k0: U64, k1: U64) -> U64
+    return decimal_value_hash(p: me.decode(), k0: k0, k1: k1)
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
