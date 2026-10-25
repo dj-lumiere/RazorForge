@@ -463,7 +463,9 @@ declare their own `i`.
   `shift_left`, `>>` `arith_shift_right`, `>>>` `logical_shift_right` (the others: `add`, `eq`, `lt`, `bitand`, ...).
 - Float and decimal math names: natural log `ln`, `ln_1p`, `log2`, `log10`, `log2_1p`, `log10_1p`, `exp_m1`,
   `exp2_m1`, `exp10_m1`, `sin_pi` / `cos_pi` / `tan_pi`, `asin_pi` / `acos_pi` / `atan_pi`, `atan2_pi`,
-  `recip_sqrt`, `sin_cos`, `gamma`, `ln_gamma`, `mul_add` (fused `me * b + c`), each with its `_unchecked` form,
+  `rsqrt` (1 / sqrt(x) rounded once, on every binary float, the D types and `Decimal`: `x <= 0` fails like the other
+  checked math, `Decimal.rsqrt` of `x <= 0` is `NumericDomainError`), `sin_cos`, `gamma`, `ln_gamma`, `mul_add`
+  (fused `me * b + c`), each with its `_unchecked` form,
   and `mod_trunc` (remainder of a truncated division, sign of `me`), `rem` (IEEE remainder, quotient rounded to
   nearest even, on `Decimal` the Euclidean remainder above), `fract` (`me - trunc(me)`), `is_sign_negative` (sign bit, true for -0), `total_compare` (IEEE
   totalOrder). Float/decimal `max`/`min` return the other operand when one is NaN (NaN only when both are);

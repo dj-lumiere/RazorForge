@@ -172,7 +172,7 @@ file only once its other old spellings are gone.
 - A module is its folder. The base module is `System` (it was `Core`) and every file sees it and the modules under
   it (`System/Numerics`, `System/Text`, `System/Memory`, `System/Concurrency`, `System/Cpu`, ...) without an import.
   Importing a parent does not import its children (`migrate --step modules`).
-- Math routines use the shared names: `ln`, `exp_m1`, `sin_pi`, `recip_sqrt`, `ln_gamma`, `mul_add`, `mod_trunc`,
+- Math routines use the shared names: `ln`, `exp_m1`, `sin_pi`, `ln_gamma`, `mul_add`, `mod_trunc`,
   `rem`, `fract`, `compare`, `floordiv`, `shift_left`, `arith_shift_right`, `total_compare`, `is_sign_negative`
   (`migrate --step names`).
 - Float operations and math routines crash on an inf or NaN result. The raw result is `+! -! *! /! **!` and the
@@ -255,6 +255,9 @@ file only once its other old spellings are gone.
 - `T.hollow()` for every type, inside `danger`.
 
 **Standard library**
+- `x.rsqrt()` is 1 / sqrt(x) rounded once (not `1 / x.sqrt()`, which rounds twice) on `B16`, `BF16`, `B32`, `B64`,
+  `B128`, `D32`, `D64`, `D128` and `Decimal`. `x <= 0` crashes like the other checked float math (raw:
+  `rsqrt_unchecked`), and `Decimal.rsqrt` of `x <= 0` is a `NumericDomainError`.
 - `AccessManager`: `viewing` / `modifying` blocks, deadlock detection (`[debug] deadlock-check`, on in debug
   builds) and `access-order`.
 - Emitters: a program may call `emitter()` and keep the emitter in a local, where it is a token on the container
