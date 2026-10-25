@@ -105,7 +105,6 @@ routine Range[T].is_empty() -> Bool
 routine Range[T].has(value: T) -> Bool
 needs T obeys FloorDivisible
     me.require_nonzero_step()
-    var zero = me.start - me.start
     if me.is_ascending()
         if value < me.start
             return false
@@ -113,14 +112,24 @@ needs T obeys FloorDivisible
             return false
         if not me.inclusive and value >= me.end
             return false
-        return (value - me.start).mod(you: me.stride()) == zero
+        return on_step(value: value, from: me.start, stride: me.stride())
     if value > me.start
         return false
     if me.inclusive and value < me.end
         return false
     if not me.inclusive and value <= me.end
         return false
-    return (me.start - value).mod(you: me.stride()) == zero
+    return on_step(value: value, from: me.start, stride: me.stride())
+
+### Whether `value` is a whole number of strides from `from`: both leave the same remainder, which never computes the
+### distance between them (it may not fit in the type, as from `S64_MIN` to `S64_MAX`).
+### :param value: The value to test.
+### :param from: The range's start.
+### :param stride: The step's magnitude.
+### :returns: `true` when the remainders match.
+secret routine on_step[T](value: T, from: T, stride: T) -> Bool
+needs T obeys FloorDivisible, Comparable
+    return value.mod(you: stride) == from.mod(you: stride)
 
 ### Returns whether `value` is not in this value: the opposite of `has`.
 ### :param value: The value to look for.
@@ -192,19 +201,23 @@ failable routine RangeEmitter[T].emit() -> T
     var _result = me.current
 
     # How far the bound still is decides whether another step fits, before stepping: stepping first would go
-    # past the type's own limit at its edge (`4 to 0` over `U64` would compute `0 - 1`).
-    var stepped = false
+    # past the type's own limit at its edge (`4 to 0` over `U64` would compute `0 - 1`). The distance itself may
+    # not fit in the type (`S64_MIN to S64_MAX`): then it is more than any step.
     if me.ascending
-        var room = me.end - me.current
-        if room > me.step or (me.inclusive and room == me.step)
-            me.current = me.current + me.step
-            stepped = true
+        when try me.end.sub(you: me.current)
+            is None => me.current = me.current + me.step
+            else as room =>
+                if room > me.step or (me.inclusive and room == me.step)
+                    me.current = me.current + me.step
+                else
+                    me.done = true
     else
-        var room = me.current - me.end
-        if room > me.step or (me.inclusive and room == me.step)
-            me.current = me.current - me.step
-            stepped = true
-    if not stepped
-        me.done = true
+        when try me.current.sub(you: me.end)
+            is None => me.current = me.current - me.step
+            else as room =>
+                if room > me.step or (me.inclusive and room == me.step)
+                    me.current = me.current - me.step
+                else
+                    me.done = true
 
     return _result
