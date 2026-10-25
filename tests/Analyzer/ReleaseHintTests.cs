@@ -35,6 +35,7 @@ public class ReleaseHintTests
     [InlineData("AgentStartError", "It is called 'WorkStartError' now")]
     [InlineData("Atomic[S64]", "It is called 'Unbroken' now (migrate --step type-names rewrites it)")]
     [InlineData("CircularList[S64]", "It is called 'RotatableList' now (migrate --step type-names rewrites it)")]
+    [InlineData("MemoryAllocationError", "It is called 'OutOfMemoryError' now (migrate --step type-names rewrites it)")]
     public void RetiredType_NamesWhatIsWrittenNow(string type, string hint)
     {
         string errors = Errors(source: $"""
