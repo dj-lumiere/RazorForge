@@ -1,0 +1,369 @@
+module Math3D
+
+import Simd
+# ============================================================================
+# Type
+# ============================================================================
+
+### A 3-row, 3-column single-precision matrix, stored **column-major** as three SIMD column vectors
+### (`Vector[B32, 3]`), the same layout as `Matrix2R2C` and `Matrix4R4C`. Element `(row, col)` lives at
+### `column[col][row]`. Conventions: **right-handed**, angles in **radians**.
+record Matrix3R3C
+obeys Addable, Subtractable, Multiplicable, Negatable, Equatable
+    ### Column 0.
+    c0: Vector[B32, 3]
+    ### Column 1.
+    c1: Vector[B32, 3]
+    ### Column 2.
+    c2: Vector[B32, 3]
+
+# ============================================================================
+# Column helper
+# ============================================================================
+
+### Builds a `Vector[B32, 3]` from its three lanes.
+### :param x: Lane 0.
+### :param y: Lane 1.
+### :param z: Lane 2.
+### :returns: The packed 3-lane vector `<x, y, z>`.
+@positional
+routine vec3(x: B32, y: B32, z: B32) -> Vector[B32, 3]
+    var v = LLVM::zero_value[Vector[B32, 3]]()
+    v = LLVM::insert_element[Vector[B32, 3], B32](v, x, 0)
+    v = LLVM::insert_element[Vector[B32, 3], B32](v, y, 1)
+    v = LLVM::insert_element[Vector[B32, 3], B32](v, z, 2)
+    return v
+
+# ============================================================================
+# Constructors / factories
+# ============================================================================
+
+### The 3x3 identity matrix.
+### :returns: A matrix with ones on the diagonal, zeros elsewhere.
+common routine Matrix3R3C.identity() -> Matrix3R3C
+    return Matrix3R3C(c0: vec3(1.0, 0.0, 0.0), c1: vec3(0.0, 1.0, 0.0), c2: vec3(0.0, 0.0, 1.0))
+
+### The 3x3 zero matrix (every element zero).
+### :returns: A matrix of all zeros.
+common routine Matrix3R3C.zero() -> Matrix3R3C
+    var z = LLVM::zero_value[Vector[B32, 3]]()
+    return Matrix3R3C(c0: z, c1: z, c2: z)
+
+### A non-uniform scaling matrix.
+### :param sx: X scale.
+### :param sy: Y scale.
+### :param sz: Z scale.
+### :returns: The scaling matrix.
+common routine Matrix3R3C.scaling(sx: B32, sy: B32, sz: B32) -> Matrix3R3C
+    return Matrix3R3C(c0: vec3(sx, 0.0, 0.0), c1: vec3(0.0, sy, 0.0), c2: vec3(0.0, 0.0, sz))
+
+### A right-handed rotation about the X axis.
+### :param angle: The rotation angle in radians.
+### :returns: The rotation matrix.
+common routine Matrix3R3C.rotation_x(angle: B32) -> Matrix3R3C
+    var c = angle.cos()
+    var s = angle.sin()
+    return Matrix3R3C(c0: vec3(1.0, 0.0, 0.0), c1: vec3(0.0, c, s), c2: vec3(0.0, -s, c))
+
+### A right-handed rotation about the Y axis.
+### :param angle: The rotation angle in radians.
+### :returns: The rotation matrix.
+common routine Matrix3R3C.rotation_y(angle: B32) -> Matrix3R3C
+    var c = angle.cos()
+    var s = angle.sin()
+    return Matrix3R3C(c0: vec3(c, 0.0, -s), c1: vec3(0.0, 1.0, 0.0), c2: vec3(s, 0.0, c))
+
+### A right-handed rotation about the Z axis.
+### :param angle: The rotation angle in radians.
+### :returns: The rotation matrix.
+common routine Matrix3R3C.rotation_z(angle: B32) -> Matrix3R3C
+    var c = angle.cos()
+    var s = angle.sin()
+    return Matrix3R3C(c0: vec3(c, s, 0.0), c1: vec3(-s, c, 0.0), c2: vec3(0.0, 0.0, 1.0))
+
+### A rotation matrix from a (unit) quaternion: the top left 3x3 block of `Matrix4R4C.from_quaternion`.
+### :param q: The rotation quaternion (assumed normalized).
+### :returns: The equivalent rotation matrix.
+common routine Matrix3R3C.from_quaternion(q: Q128) -> Matrix3R3C
+    var m = Matrix4R4C.from_quaternion(q: q)
+    return Matrix3R3C(
+        c0: vec3(m.get(row: 0, col: 0), m.get(row: 1, col: 0), m.get(row: 2, col: 0)),
+        c1: vec3(m.get(row: 0, col: 1), m.get(row: 1, col: 1), m.get(row: 2, col: 1)),
+        c2: vec3(m.get(row: 0, col: 2), m.get(row: 1, col: 2), m.get(row: 2, col: 2)),
+    )
+
+# ============================================================================
+# Element access
+# ============================================================================
+
+### Returns column `index` (0 to 2) as a `Vector[B32, 3]`.
+### :param index: The column index.
+### :returns: The column vector.
+@readonly
+routine Matrix3R3C.column(index: U64) -> Vector[B32, 3]
+    if index == 0
+        return me.c0
+    if index == 1
+        return me.c1
+    return me.c2
+
+### Returns the element at `(row, col)` (both 0 to 2).
+### :param row: The row index.
+### :param col: The column index.
+### :returns: The scalar element.
+@readonly
+routine Matrix3R3C.get(row: U64, col: U64) -> B32
+    return LLVM::extract_element[Vector[B32, 3], B32](me.column(index: col), row)
+
+### Returns row `index` (0 to 2) as a `Vector[B32, 3]`, the `me[index]` read operator, so `m[row][col]` reads one
+### element.
+### :param index: The row index (0 to 2).
+### :returns: The row vector `<m(row,0), m(row,1), m(row,2)>`.
+### :throws: {IndexOutOfBoundsError} if `index >= 3`.
+@readonly
+failable routine Matrix3R3C.getitem(index: U64) -> Vector[B32, 3]
+    if index >= 3
+        throw IndexOutOfBoundsError(index: index, count: 3)
+    return vec3(
+        LLVM::extract_element[Vector[B32, 3], B32](me.c0, index),
+        LLVM::extract_element[Vector[B32, 3], B32](me.c1, index),
+        LLVM::extract_element[Vector[B32, 3], B32](me.c2, index),
+    )
+
+# ============================================================================
+# Arithmetic
+# ============================================================================
+
+### Element-wise matrix sum.
+### :param you: The matrix to add.
+### :returns: `me + you`.
+routine Matrix3R3C.add(you: Matrix3R3C) -> Matrix3R3C
+    return Matrix3R3C(c0: me.c0 + you.c0, c1: me.c1 + you.c1, c2: me.c2 + you.c2)
+
+### Element-wise matrix difference.
+### :param you: The matrix to subtract.
+### :returns: `me - you`.
+routine Matrix3R3C.sub(you: Matrix3R3C) -> Matrix3R3C
+    return Matrix3R3C(c0: me.c0 - you.c0, c1: me.c1 - you.c1, c2: me.c2 - you.c2)
+
+### Element-wise negation.
+### :returns: `-me`.
+routine Matrix3R3C.neg() -> Matrix3R3C
+    return Matrix3R3C(c0: -me.c0, c1: -me.c1, c2: -me.c2)
+
+### Scales every element by a scalar.
+### :param factor: The scalar multiplier.
+### :returns: `factor · me`.
+routine Matrix3R3C.scale(factor: B32) -> Matrix3R3C
+    return Matrix3R3C(
+        c0: me.c0.scale(factor: factor),
+        c1: me.c1.scale(factor: factor),
+        c2: me.c2.scale(factor: factor),
+    )
+
+### Transforms a vector: `me · v` (matrix times column vector).
+### :param v: The vector to transform.
+### :returns: `me · v`, computed as `c0·v.x + c1·v.y + c2·v.z`.
+@readonly
+routine Matrix3R3C.transform(v: Vector[B32, 3]) -> Vector[B32, 3]
+    var vx = LLVM::extract_element[Vector[B32, 3], B32](v, 0)
+    var vy = LLVM::extract_element[Vector[B32, 3], B32](v, 1)
+    var vz = LLVM::extract_element[Vector[B32, 3], B32](v, 2)
+    return me.c0.scale(factor: vx) + me.c1.scale(factor: vy) + me.c2.scale(factor: vz)
+
+### Matrix product `me · you`. Each result column is `me · you.column`.
+### :param you: The right-hand matrix.
+### :returns: `me · you`.
+routine Matrix3R3C.mul(you: Matrix3R3C) -> Matrix3R3C
+    return Matrix3R3C(
+        c0: me.transform(v: you.c0),
+        c1: me.transform(v: you.c1),
+        c2: me.transform(v: you.c2),
+    )
+
+### The transpose (rows and columns swapped).
+### :returns: `meᵀ`.
+@readonly
+routine Matrix3R3C.transpose() -> Matrix3R3C
+    return Matrix3R3C(
+        c0: vec3(me.get(row: 0, col: 0), me.get(row: 0, col: 1), me.get(row: 0, col: 2)),
+        c1: vec3(me.get(row: 1, col: 0), me.get(row: 1, col: 1), me.get(row: 1, col: 2)),
+        c2: vec3(me.get(row: 2, col: 0), me.get(row: 2, col: 1), me.get(row: 2, col: 2)),
+    )
+
+# ============================================================================
+# Determinant / inverse / solve
+# ============================================================================
+
+### The determinant of this matrix.
+### :returns: `det(me)`.
+@readonly
+routine Matrix3R3C.determinant() -> B32
+    return C::ingrid_m3_determinant(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m02: me.get(row: 0, col: 2),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+        m12: me.get(row: 1, col: 2),
+        m20: me.get(row: 2, col: 0),
+        m21: me.get(row: 2, col: 1),
+        m22: me.get(row: 2, col: 2),
+    )
+
+### The inverse of this matrix, by Gaussian elimination with partial pivoting.
+### :returns: `me⁻¹`.
+### :throws: {SingularMatrixError} when a pivot is exactly 0. An infinity or NaN during the computation crashes
+###     like the checked `B32` operators.
+@readonly
+failable routine Matrix3R3C.inverse() -> Matrix3R3C
+    var r = C::ingrid_m3_inverse(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m02: me.get(row: 0, col: 2),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+        m12: me.get(row: 1, col: 2),
+        m20: me.get(row: 2, col: 0),
+        m21: me.get(row: 2, col: 1),
+        m22: me.get(row: 2, col: 2),
+    )
+    if r.singular != 0
+        throw SingularMatrixError(size: 3)
+    return matrix3_from_result(r: r)
+
+### The inverse of this matrix by the same elimination in raw IEEE 754 arithmetic: no check, so a singular
+### matrix gives infinities or NaN.
+### :returns: `me⁻¹`, or non-finite elements when `me` is singular.
+@readonly
+routine Matrix3R3C.inverse_unchecked() -> Matrix3R3C
+    var r = C::ingrid_m3_inverse_unchecked(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m02: me.get(row: 0, col: 2),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+        m12: me.get(row: 1, col: 2),
+        m20: me.get(row: 2, col: 0),
+        m21: me.get(row: 2, col: 1),
+        m22: me.get(row: 2, col: 2),
+    )
+    return matrix3_from_result(r: r)
+
+### Solves `me · x = b` for `x` by Gaussian elimination with partial pivoting.
+### :param b: The right-hand side.
+### :returns: The solution `x`.
+### :throws: {SingularMatrixError} when a pivot is exactly 0. An infinity or NaN during the computation crashes
+###     like the checked `B32` operators.
+@readonly
+failable routine Matrix3R3C.solve(b: Vector[B32, 3]) -> Vector[B32, 3]
+    var r = C::ingrid_m3_solve(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m02: me.get(row: 0, col: 2),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+        m12: me.get(row: 1, col: 2),
+        m20: me.get(row: 2, col: 0),
+        m21: me.get(row: 2, col: 1),
+        m22: me.get(row: 2, col: 2),
+        b0: LLVM::extract_element[Vector[B32, 3], B32](b, 0),
+        b1: LLVM::extract_element[Vector[B32, 3], B32](b, 1),
+        b2: LLVM::extract_element[Vector[B32, 3], B32](b, 2),
+    )
+    if r.singular != 0
+        throw SingularMatrixError(size: 3)
+    return vec3(r.m00, r.m10, r.m20)
+
+### The 3x3 matrix in the top left corner of what an Ingrid inverse handed back.
+### :param r: The result.
+### :returns: The matrix.
+secret routine matrix3_from_result(r: IngridMatrixResult) -> Matrix3R3C
+    return Matrix3R3C(
+        c0: vec3(r.m00, r.m10, r.m20),
+        c1: vec3(r.m01, r.m11, r.m21),
+        c2: vec3(r.m02, r.m12, r.m22),
+    )
+
+# ============================================================================
+# Comparison / display
+# ============================================================================
+
+### Returns `true` when all nine elements compare equal.
+### :param you: The matrix to compare against.
+### :returns: `true` if every column matches.
+routine Matrix3R3C.eq(you: Matrix3R3C) -> Bool
+    return me.c0 == you.c0 and me.c1 == you.c1 and me.c2 == you.c2
+
+### Formats the matrix row by row as `[[m00, m01, m02], [m10, m11, m12], [m20, m21, m22]]`.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Matrix3R3C.represent() -> Text
+    var row0 = f"[{me.get(row: 0, col: 0)}, {me.get(row: 0, col: 1)}, {me.get(row: 0, col: 2)}]"
+    var row1 = f"[{me.get(row: 1, col: 0)}, {me.get(row: 1, col: 1)}, {me.get(row: 1, col: 2)}]"
+    var row2 = f"[{me.get(row: 2, col: 0)}, {me.get(row: 2, col: 1)}, {me.get(row: 2, col: 2)}]"
+    return f"[{row0}, {row1}, {row2}]"
+
+### Returns a diagnostic string wrapping the value with its type name.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Matrix3R3C.diagnose() -> Text
+    return f"Math3D.Matrix3R3C({me.represent()})"
+
+# ============================================================================
+# Ingrid (Ingrid/tessera/matrix.te)
+# ============================================================================
+# The elements go in as `m{row}{col}`, and an inverse or a solution comes back as an IngridMatrixResult.
+
+routine C::ingrid_m3_determinant(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+) -> B32
+
+routine C::ingrid_m3_inverse(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+) -> IngridMatrixResult
+
+routine C::ingrid_m3_inverse_unchecked(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+) -> IngridMatrixResult
+
+routine C::ingrid_m3_solve(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+    b0: B32,
+    b1: B32,
+    b2: B32,
+) -> IngridMatrixResult

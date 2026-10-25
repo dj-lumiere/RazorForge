@@ -27,7 +27,7 @@ obeys Addable, Subtractable, Multiplicable, Negatable, Equatable
 ###
 ### The projection/view builders (`perspective`, `orthographic`, `look_at`) live
 ### separately; this file covers construction, arithmetic, `transpose`,
-### `determinant`, `inverse`, and the affine builders (translation / scaling /
+### `determinant`, `inverse`, `solve`, and the affine builders (translation / scaling /
 ### rotation / from-quaternion).
 
 # ============================================================================
@@ -291,12 +291,13 @@ routine Matrix4R4C.determinant() -> B32
         m33: me.get(row: 3, col: 3),
     )
 
-### The inverse of this matrix. A singular matrix (determinant 0) yields the zero
-### matrix.
-### :returns: `me⁻¹`, or the zero matrix if `me` is singular.
+### The inverse of this matrix, by Gaussian elimination with partial pivoting.
+### :returns: `me⁻¹`.
+### :throws: {SingularMatrixError} when a pivot is exactly 0. An infinity or NaN during the computation crashes
+###     like the checked `B32` operators.
 @readonly
-routine Matrix4R4C.inverse() -> Matrix4R4C
-    return C::ingrid_m4_inverse(
+failable routine Matrix4R4C.inverse() -> Matrix4R4C
+    var r = C::ingrid_m4_inverse(
         m00: me.get(row: 0, col: 0),
         m01: me.get(row: 0, col: 1),
         m02: me.get(row: 0, col: 2),
@@ -313,6 +314,78 @@ routine Matrix4R4C.inverse() -> Matrix4R4C
         m31: me.get(row: 3, col: 1),
         m32: me.get(row: 3, col: 2),
         m33: me.get(row: 3, col: 3),
+    )
+    if r.singular != 0
+        throw SingularMatrixError(size: 4)
+    return matrix4_from_result(r: r)
+
+### The inverse of this matrix by the same elimination in raw IEEE 754 arithmetic: no check, so a singular
+### matrix gives infinities or NaN.
+### :returns: `me⁻¹`, or non-finite elements when `me` is singular.
+@readonly
+routine Matrix4R4C.inverse_unchecked() -> Matrix4R4C
+    var r = C::ingrid_m4_inverse_unchecked(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m02: me.get(row: 0, col: 2),
+        m03: me.get(row: 0, col: 3),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+        m12: me.get(row: 1, col: 2),
+        m13: me.get(row: 1, col: 3),
+        m20: me.get(row: 2, col: 0),
+        m21: me.get(row: 2, col: 1),
+        m22: me.get(row: 2, col: 2),
+        m23: me.get(row: 2, col: 3),
+        m30: me.get(row: 3, col: 0),
+        m31: me.get(row: 3, col: 1),
+        m32: me.get(row: 3, col: 2),
+        m33: me.get(row: 3, col: 3),
+    )
+    return matrix4_from_result(r: r)
+
+### Solves `me · x = b` for `x` by Gaussian elimination with partial pivoting.
+### :param b: The right-hand side.
+### :returns: The solution `x`.
+### :throws: {SingularMatrixError} when a pivot is exactly 0. An infinity or NaN during the computation crashes
+###     like the checked `B32` operators.
+@readonly
+failable routine Matrix4R4C.solve(b: Vector[B32, 4]) -> Vector[B32, 4]
+    var r = C::ingrid_m4_solve(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m02: me.get(row: 0, col: 2),
+        m03: me.get(row: 0, col: 3),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+        m12: me.get(row: 1, col: 2),
+        m13: me.get(row: 1, col: 3),
+        m20: me.get(row: 2, col: 0),
+        m21: me.get(row: 2, col: 1),
+        m22: me.get(row: 2, col: 2),
+        m23: me.get(row: 2, col: 3),
+        m30: me.get(row: 3, col: 0),
+        m31: me.get(row: 3, col: 1),
+        m32: me.get(row: 3, col: 2),
+        m33: me.get(row: 3, col: 3),
+        b0: LLVM::extract_element[Vector[B32, 4], B32](b, 0),
+        b1: LLVM::extract_element[Vector[B32, 4], B32](b, 1),
+        b2: LLVM::extract_element[Vector[B32, 4], B32](b, 2),
+        b3: LLVM::extract_element[Vector[B32, 4], B32](b, 3),
+    )
+    if r.singular != 0
+        throw SingularMatrixError(size: 4)
+    return vec4(r.m00, r.m10, r.m20, r.m30)
+
+### The matrix an Ingrid inverse handed back.
+### :param r: The result.
+### :returns: The matrix.
+secret routine matrix4_from_result(r: IngridMatrixResult) -> Matrix4R4C
+    return Matrix4R4C(
+        c0: vec4(r.m00, r.m10, r.m20, r.m30),
+        c1: vec4(r.m01, r.m11, r.m21, r.m31),
+        c2: vec4(r.m02, r.m12, r.m22, r.m32),
+        c3: vec4(r.m03, r.m13, r.m23, r.m33),
     )
 
 # ============================================================================
@@ -355,8 +428,9 @@ routine Matrix4R4C.diagnose() -> Text
 # ============================================================================
 # Ingrid (Ingrid/tessera/matrix.te)
 # ============================================================================
-# The determinant, the inverse and the rotation from a quaternion: the elements go in as `m{row}{col}`, and a
-# matrix comes back as itself (64 bytes, returned through a hidden pointer on every target).
+# The determinant, the inverse, the solve and the rotation from a quaternion: the elements go in as `m{row}{col}`,
+# an inverse or a solution comes back as an IngridMatrixResult, and the rotation as the matrix itself (64 bytes,
+# returned through a hidden pointer on every target).
 
 routine C::ingrid_m4_determinant(
     m00: B32,
@@ -394,6 +468,48 @@ routine C::ingrid_m4_inverse(
     m31: B32,
     m32: B32,
     m33: B32,
-) -> Matrix4R4C
+) -> IngridMatrixResult
+
+routine C::ingrid_m4_inverse_unchecked(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m03: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m13: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+    m23: B32,
+    m30: B32,
+    m31: B32,
+    m32: B32,
+    m33: B32,
+) -> IngridMatrixResult
+
+routine C::ingrid_m4_solve(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m03: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m13: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+    m23: B32,
+    m30: B32,
+    m31: B32,
+    m32: B32,
+    m33: B32,
+    b0: B32,
+    b1: B32,
+    b2: B32,
+    b3: B32,
+) -> IngridMatrixResult
 
 routine C::ingrid_m4_from_quaternion(w: B32, x: B32, y: B32, z: B32) -> Matrix4R4C

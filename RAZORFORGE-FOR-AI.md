@@ -352,6 +352,14 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
   defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
+- Geometry (`import Math3D`, `B32` elements): `Vector2D`/`Vector3D`/`Vector4D`, the quaternions `Q128` (B32 parts)
+  and `Q256` (B64 parts), and the matrices `Matrix2R2C`, `Matrix3R3C`, `Matrix4R4C`, stored column-major as
+  `Simd.Vector[B32, N]` columns (`vec2`/`vec3`/`vec4` build one, `Matrix2R2C(c0: vec2(4.0, 2.0), c1: vec2(7.0, 6.0))`
+  is `[[4, 7], [2, 6]]`). `m.get(row:, col:)` is one element, `m[row]` a row, `m.transform(v:)` is `m · v`, `*` the
+  matrix product. `inverse()` and `solve(b:)` (A x = b) are Gaussian elimination with partial pivoting and are
+  failable: `SingularMatrixError` when a pivot is exactly 0 (there is no near-singular tolerance), and an inf or NaN
+  during the computation crashes like checked float math. `inverse_unchecked()` is the raw IEEE result. There is no
+  n×n matrix type.
 - `Bool`, `Text` (UTF-32 string), `Char`, `Byte`, `Bytes`
 - `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals. A `ByteSize` displays as its byte
   count grouped in threes by `_` (`{4kib}` is `4_096B`, never split into units, `kb_size()`/`mib_size()`/... convert),

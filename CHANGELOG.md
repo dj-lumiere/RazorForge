@@ -210,6 +210,9 @@ file only once its other old spellings are gone.
   `pow`, `sqrt` and the other math routines) is half up: `2.5` goes to `3` and `-2.5` to `-2`. `D32`, `D64` and `D128`
   keep IEEE 754 ties to even.
 - `Decimal`'s `rem` is the Euclidean remainder, like integer `%`: `0 <= r < |b|` (`-7` by `2` is `1`).
+- `Matrix4R4C.inverse()` is failable: a singular matrix throws `SingularMatrixError` (0.4 gave the zero matrix).
+  The inverse is Gaussian elimination with partial pivoting, so a result that isn't exact can differ from 0.4's in
+  its last bits. `inverse_unchecked()` gives the raw result (infinities or NaN for a singular matrix).
 - Concurrency: `suspended` and `threaded` are gone. Any routine runs concurrently through `f.to[Work](args)`
   (default `migrate` adds `.to[Work]` to the calls). A piece of handed-off work is a `Work[T]` (it was `Agent[T]`,
   `AgentStartError` is `WorkStartError`): `migrate --step work` rewrites the old names, and a remaining `Agent` is a
@@ -268,6 +271,11 @@ file only once its other old spellings are gone.
   pairs), `to[SortedList]`, `to[SortedSet]`, `to[SortedDict]`, `to[RotatableList]`, `to[BitList]`,
   `to[PriorityQueue]` (of `(priority, element)` pairs), and `to[Array[T, N]]` (`ElementCountMismatchError` when the
   count differs).
+- `Math3D` has `Matrix2R2C` and `Matrix3R3C` beside `Matrix4R4C`, with the same routines, `vec2` and `vec3`, a 2D
+  `rotation`, `rotation_x`, `rotation_y`, `rotation_z` and `from_quaternion` on `Matrix3R3C`, and `scaling`. All three
+  have `inverse()`, `inverse_unchecked()` and `solve(b:)` (A x = b), computed by Gaussian elimination with partial
+  pivoting. `inverse()` and `solve(b:)` throw `SingularMatrixError` when a pivot is exactly 0, and an infinity or NaN
+  during the computation crashes like the other checked float operations.
 - `RotatableList[T]`: a list that adds and removes at both ends and rotates.
 - `jobs.start_now()`, `jobs.start_here()` and `jobs.start_apart()` on a list of Works start every Work in it and let
   them all go together, so none runs before the others are ready. `gather` and `race` start the ones not started yet

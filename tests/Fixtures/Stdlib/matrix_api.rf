@@ -1,0 +1,190 @@
+module Tests/Stdlib/MatrixApi
+
+import IO/Console
+import Math3D
+import Simd
+# Exercises Matrix2R2C and Matrix3R3C, and the inverse, inverse_unchecked and solve of all three matrices. The
+# matrices have small integer elements, so most results are exact. Each inverse is also checked against the
+# identity: every element of inverse · A - I is at most 16 units in the last place of 1.0 (16 × 2^-23), the
+# bound these cases keep with the B32 rounding of the product included.
+
+# 16 × 2^-23, the largest distance from the identity the inverse checks accept.
+preset IDENTITY_TOLERANCE: B32 = 0.0000019073486328125
+
+### The largest |element| of a 2x2 matrix.
+routine largest2(m: Matrix2R2C) -> B32
+    var largest: B32 = 0.0
+    var size: U64 = 2
+    each r in 0 til size
+        each c in 0 til size
+            largest = largest.max(you: m.get(row: r, col: c).abs())
+    return largest
+
+### The largest |element| of a 3x3 matrix.
+routine largest3(m: Matrix3R3C) -> B32
+    var largest: B32 = 0.0
+    var size: U64 = 3
+    each r in 0 til size
+        each c in 0 til size
+            largest = largest.max(you: m.get(row: r, col: c).abs())
+    return largest
+
+### The largest |element| of a 4x4 matrix.
+routine largest4(m: Matrix4R4C) -> B32
+    var largest: B32 = 0.0
+    var size: U64 = 4
+    each r in 0 til size
+        each c in 0 til size
+            largest = largest.max(you: m.get(row: r, col: c).abs())
+    return largest
+
+### Whether every element of a 2x2 matrix is finite.
+routine all_finite2(m: Matrix2R2C) -> Bool
+    var size: U64 = 2
+    each r in 0 til size
+        each c in 0 til size
+            if not m.get(row: r, col: c).is_finite()
+                return false
+    return true
+
+### Shows a 2x2 inverse, or why there is none.
+routine show_inverse2(label: Text, a: Matrix2R2C)
+    when check a.inverse()
+        is Matrix2R2C as inv =>
+            var off = largest2(m: inv * a - Matrix2R2C.identity())
+            show(f"{label} inverse: {inv}, inverse * A within tolerance: {off <= IDENTITY_TOLERANCE}")
+        is Crashables as e => show(f"{label} inverse: {e.crash_message()}")
+    return
+
+### Shows a 3x3 inverse, or why there is none.
+routine show_inverse3(label: Text, a: Matrix3R3C)
+    when check a.inverse()
+        is Matrix3R3C as inv =>
+            var off = largest3(m: inv * a - Matrix3R3C.identity())
+            show(f"{label} inverse: {inv}, inverse * A within tolerance: {off <= IDENTITY_TOLERANCE}")
+        is Crashables as e => show(f"{label} inverse: {e.crash_message()}")
+    return
+
+### Shows a 4x4 inverse, or why there is none.
+routine show_inverse4(label: Text, a: Matrix4R4C)
+    when check a.inverse()
+        is Matrix4R4C as inv =>
+            var off = largest4(m: inv * a - Matrix4R4C.identity())
+            show(f"{label} inverse: {inv}, inverse * A within tolerance: {off <= IDENTITY_TOLERANCE}")
+        is Crashables as e => show(f"{label} inverse: {e.crash_message()}")
+    return
+
+routine start()
+    # Matrix2R2C: construction, access, arithmetic.
+    var id2 = Matrix2R2C.identity()
+    var a2 = Matrix2R2C(c0: vec2(4.0, 2.0), c1: vec2(7.0, 6.0))
+    show(f"identity2: {id2}")
+    show(f"zero2: {Matrix2R2C.zero()}")
+    show(f"a2: {a2}, diagnose: {a2.diagnose()}")
+    show(f"a2 get(0,1): {a2.get(row: 0, col: 1)}, row 1: {a2[1]}, column 1: {a2.column(index: 1)}")
+    show(f"a2 transpose: {a2.transpose()}")
+    show(f"a2 + id2: {a2 + id2}, a2 - id2: {a2 - id2}, -a2: {-a2}")
+    show(f"a2.scale(0.5): {a2.scale(factor: 0.5)}")
+    show(f"a2 * a2: {a2 * a2}")
+    show(f"a2 transforms (1, 1): {a2.transform(v: vec2(1.0, 1.0))}")
+    show(f"a2 determinant: {a2.determinant()}")
+    show(f"a2 == a2: {a2 == a2}, a2 == id2: {a2 == id2}")
+    show(f"scaling2: {Matrix2R2C.scaling(sx: 2.0, sy: 3.0)}")
+    var quarter = Matrix2R2C.rotation(angle: 1.5707963).transform(v: vec2(1.0, 0.0))
+    var qx = quarter[0]
+    var qy = quarter[1] - 1.0
+    show(f"rotation(90) maps x to y: {qx * qx + qy * qy < 0.000001}")
+
+    # Matrix2R2C: inverse and solve.
+    show_inverse2(label: "a2", a: a2)
+    show_inverse2(label: "swap2", a: Matrix2R2C(c0: vec2(0.0, 1.0), c1: vec2(1.0, 0.0)))
+    show_inverse2(label: "zero column2", a: Matrix2R2C(c0: vec2(0.0, 0.0), c1: vec2(1.0, 2.0)))
+    show_inverse2(label: "after pivot2", a: Matrix2R2C(c0: vec2(1.0, 2.0), c1: vec2(2.0, 4.0)))
+    var raw2 = Matrix2R2C(c0: vec2(1.0, 2.0), c1: vec2(2.0, 4.0)).inverse_unchecked()
+    show(f"after pivot2 inverse_unchecked finite: {all_finite2(m: raw2)}")
+    show(f"a2 inverse_unchecked == inverse: {a2.inverse_unchecked() == a2.inverse()}")
+    var s2 = Matrix2R2C(c0: vec2(2.0, 1.0), c1: vec2(1.0, 3.0))
+    show(f"solve2 (5, 10): {s2.solve(b: vec2(5.0, 10.0))}")
+    show(f"solve2 swap (2, 3): {Matrix2R2C(c0: vec2(0.0, 1.0), c1: vec2(1.0, 0.0)).solve(b: vec2(2.0, 3.0))}")
+    when check Matrix2R2C(c0: vec2(1.0, 2.0), c1: vec2(2.0, 4.0)).solve(b: vec2(1.0, 1.0))
+        is Vector[B32, 2] as x => show(f"solve2 singular: {x}")
+        is SingularMatrixError as e => show(f"solve2 singular: {e.crash_message()}")
+        is Crashables as e => show(f"solve2 other: {e.crash_message()}")
+
+    # Matrix3R3C: construction, access, arithmetic.
+    var id3 = Matrix3R3C.identity()
+    var a3 = Matrix3R3C(
+        c0: vec3(2.0, -1.0, 0.0),
+        c1: vec3(-1.0, 2.0, -1.0),
+        c2: vec3(0.0, -1.0, 2.0),
+    )
+    show(f"identity3: {id3}")
+    show(f"zero3: {Matrix3R3C.zero()}")
+    show(f"a3: {a3}, diagnose: {a3.diagnose()}")
+    show(f"a3 get(1,2): {a3.get(row: 1, col: 2)}, row 0: {a3[0]}, column 2: {a3.column(index: 2)}")
+    var t3 = Matrix3R3C(c0: vec3(1.0, 4.0, 7.0), c1: vec3(2.0, 5.0, 8.0), c2: vec3(3.0, 6.0, 10.0))
+    show(f"t3: {t3}, transpose: {t3.transpose()}")
+    show(f"a3 + id3: {a3 + id3}")
+    show(f"a3 - id3: {a3 - id3}")
+    show(f"-a3: {-a3}, a3.scale(2): {a3.scale(factor: 2.0)}")
+    show(f"a3 * t3: {a3 * t3}")
+    show(f"t3 transforms (1, 1, 1): {t3.transform(v: vec3(1.0, 1.0, 1.0))}")
+    show(f"a3 determinant: {a3.determinant()}, t3 determinant: {t3.determinant()}")
+    show(f"a3 == a3: {a3 == a3}, a3 == t3: {a3 == t3}")
+    show(f"scaling3: {Matrix3R3C.scaling(sx: 2.0, sy: 4.0, sz: 8.0)}")
+    var zx = Matrix3R3C.rotation_z(angle: 1.5707963).transform(v: vec3(1.0, 0.0, 0.0))
+    show(f"rotation_z(90) maps x to y: {zx[0] * zx[0] + (zx[1] - 1.0) * (zx[1] - 1.0) < 0.000001}")
+    var xy = Matrix3R3C.rotation_x(angle: 1.5707963).transform(v: vec3(0.0, 1.0, 0.0))
+    show(f"rotation_x(90) maps y to z: {xy[1] * xy[1] + (xy[2] - 1.0) * (xy[2] - 1.0) < 0.000001}")
+    var yz = Matrix3R3C.rotation_y(angle: 1.5707963).transform(v: vec3(0.0, 0.0, 1.0))
+    show(f"rotation_y(90) maps z to x: {(yz[0] - 1.0) * (yz[0] - 1.0) + yz[2] * yz[2] < 0.000001}")
+    show(f"from_quaternion(half turn x): {Matrix3R3C.from_quaternion(q: Q128(w: 0.0, x: 1.0, y: 0.0, z: 0.0))}")
+
+    # Matrix3R3C: inverse and solve.
+    show_inverse3(label: "a3", a: a3)
+    show_inverse3(label: "t3", a: t3)
+    show_inverse3(
+        label: "zero column3",
+        a: Matrix3R3C(c0: vec3(0.0, 0.0, 0.0), c1: vec3(1.0, 3.0, 5.0), c2: vec3(2.0, 4.0, 6.0)),
+    )
+    show_inverse3(
+        label: "after pivot3",
+        a: Matrix3R3C(c0: vec3(1.0, 2.0, 1.0), c1: vec3(2.0, 4.0, 1.0), c2: vec3(3.0, 6.0, 1.0)),
+    )
+    var s3 = Matrix3R3C(c0: vec3(1.0, 0.0, 2.0), c1: vec3(1.0, 2.0, 5.0), c2: vec3(1.0, 5.0, -1.0))
+    show(f"solve3 (6, -4, 27): {s3.solve(b: vec3(6.0, -4.0, 27.0))}")
+    when check Matrix3R3C(
+        c0: vec3(1.0, 2.0, 1.0),
+        c1: vec3(2.0, 4.0, 1.0),
+        c2: vec3(3.0, 6.0, 1.0),
+    ).solve(b: vec3(1.0, 2.0, 3.0))
+        is Vector[B32, 3] as x => show(f"solve3 singular: {x}")
+        is SingularMatrixError as e => show(f"solve3 singular: {e.crash_message()}")
+        is Crashables as e => show(f"solve3 other: {e.crash_message()}")
+
+    # Matrix4R4C: inverse and solve.
+    var a4 = Matrix4R4C(
+        c0: vec4(4.0, 3.0, 2.0, 1.0),
+        c1: vec4(3.0, 4.0, 3.0, 2.0),
+        c2: vec4(2.0, 3.0, 4.0, 3.0),
+        c3: vec4(1.0, 2.0, 3.0, 4.0),
+    )
+    show_inverse4(label: "a4", a: a4)
+    show_inverse4(label: "translation4", a: Matrix4R4C.translation(tx: 1.0, ty: 2.0, tz: 3.0))
+    show_inverse4(label: "zero4", a: Matrix4R4C.zero())
+    var p4 = Matrix4R4C(
+        c0: vec4(-2.0, -4.0, 3.0, 1.0),
+        c1: vec4(-3.0, -4.0, 3.0, 1.0),
+        c2: vec4(3.0, 3.0, -3.0, 0.0),
+        c3: vec4(-3.0, 4.0, -2.0, -2.0),
+    )
+    show_inverse4(label: "after pivot4", a: p4)
+    show(f"after pivot4 determinant: {p4.determinant()}")
+    var x4 = a4.solve(b: vec4(0.0, -4.0, -4.0, -10.0))
+    var e4 = x4 - vec4(1.0, -2.0, 3.0, -4.0)
+    show(f"solve4 (0, -4, -4, -10) is (1, -2, 3, -4) within tolerance: {e4.length_squared() < 0.000001}")
+    when check p4.solve(b: vec4(1.0, 1.0, 1.0, 1.0))
+        is Vector[B32, 4] as x => show(f"solve4 singular: {x}")
+        is SingularMatrixError as e => show(f"solve4 singular: {e.crash_message()}")
+        is Crashables as e => show(f"solve4 other: {e.crash_message()}")
+    return

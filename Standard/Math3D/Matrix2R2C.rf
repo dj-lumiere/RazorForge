@@ -1,0 +1,256 @@
+module Math3D
+
+import Simd
+# ============================================================================
+# Type
+# ============================================================================
+
+### A 2-row, 2-column single-precision matrix, stored **column-major** as two SIMD column vectors
+### (`Vector[B32, 2]`), the same layout as `Matrix3R3C` and `Matrix4R4C`. Element `(row, col)` lives at
+### `column[col][row]`, and angles are in **radians**, counterclockwise.
+record Matrix2R2C
+obeys Addable, Subtractable, Multiplicable, Negatable, Equatable
+    ### Column 0.
+    c0: Vector[B32, 2]
+    ### Column 1.
+    c1: Vector[B32, 2]
+
+# ============================================================================
+# Column helper
+# ============================================================================
+
+### Builds a `Vector[B32, 2]` from its two lanes.
+### :param x: Lane 0.
+### :param y: Lane 1.
+### :returns: The packed 2-lane vector `<x, y>`.
+@positional
+routine vec2(x: B32, y: B32) -> Vector[B32, 2]
+    var v = LLVM::zero_value[Vector[B32, 2]]()
+    v = LLVM::insert_element[Vector[B32, 2], B32](v, x, 0)
+    v = LLVM::insert_element[Vector[B32, 2], B32](v, y, 1)
+    return v
+
+# ============================================================================
+# Constructors / factories
+# ============================================================================
+
+### The 2x2 identity matrix.
+### :returns: A matrix with ones on the diagonal, zeros elsewhere.
+common routine Matrix2R2C.identity() -> Matrix2R2C
+    return Matrix2R2C(c0: vec2(1.0, 0.0), c1: vec2(0.0, 1.0))
+
+### The 2x2 zero matrix (every element zero).
+### :returns: A matrix of all zeros.
+common routine Matrix2R2C.zero() -> Matrix2R2C
+    var z = LLVM::zero_value[Vector[B32, 2]]()
+    return Matrix2R2C(c0: z, c1: z)
+
+### A non-uniform scaling matrix.
+### :param sx: X scale.
+### :param sy: Y scale.
+### :returns: The scaling matrix.
+common routine Matrix2R2C.scaling(sx: B32, sy: B32) -> Matrix2R2C
+    return Matrix2R2C(c0: vec2(sx, 0.0), c1: vec2(0.0, sy))
+
+### A counterclockwise rotation of the plane.
+### :param angle: The rotation angle in radians.
+### :returns: The rotation matrix `[[cos, -sin], [sin, cos]]`.
+common routine Matrix2R2C.rotation(angle: B32) -> Matrix2R2C
+    var c = angle.cos()
+    var s = angle.sin()
+    return Matrix2R2C(c0: vec2(c, s), c1: vec2(-s, c))
+
+# ============================================================================
+# Element access
+# ============================================================================
+
+### Returns column `index` (0 or 1) as a `Vector[B32, 2]`.
+### :param index: The column index.
+### :returns: The column vector.
+@readonly
+routine Matrix2R2C.column(index: U64) -> Vector[B32, 2]
+    if index == 0
+        return me.c0
+    return me.c1
+
+### Returns the element at `(row, col)` (both 0 or 1).
+### :param row: The row index.
+### :param col: The column index.
+### :returns: The scalar element.
+@readonly
+routine Matrix2R2C.get(row: U64, col: U64) -> B32
+    return LLVM::extract_element[Vector[B32, 2], B32](me.column(index: col), row)
+
+### Returns row `index` (0 or 1) as a `Vector[B32, 2]`, the `me[index]` read operator, so `m[row][col]` reads one
+### element.
+### :param index: The row index (0 or 1).
+### :returns: The row vector `<m(row,0), m(row,1)>`.
+### :throws: {IndexOutOfBoundsError} if `index >= 2`.
+@readonly
+failable routine Matrix2R2C.getitem(index: U64) -> Vector[B32, 2]
+    if index >= 2
+        throw IndexOutOfBoundsError(index: index, count: 2)
+    return vec2(
+        LLVM::extract_element[Vector[B32, 2], B32](me.c0, index),
+        LLVM::extract_element[Vector[B32, 2], B32](me.c1, index),
+    )
+
+# ============================================================================
+# Arithmetic
+# ============================================================================
+
+### Element-wise matrix sum.
+### :param you: The matrix to add.
+### :returns: `me + you`.
+routine Matrix2R2C.add(you: Matrix2R2C) -> Matrix2R2C
+    return Matrix2R2C(c0: me.c0 + you.c0, c1: me.c1 + you.c1)
+
+### Element-wise matrix difference.
+### :param you: The matrix to subtract.
+### :returns: `me - you`.
+routine Matrix2R2C.sub(you: Matrix2R2C) -> Matrix2R2C
+    return Matrix2R2C(c0: me.c0 - you.c0, c1: me.c1 - you.c1)
+
+### Element-wise negation.
+### :returns: `-me`.
+routine Matrix2R2C.neg() -> Matrix2R2C
+    return Matrix2R2C(c0: -me.c0, c1: -me.c1)
+
+### Scales every element by a scalar.
+### :param factor: The scalar multiplier.
+### :returns: `factor · me`.
+routine Matrix2R2C.scale(factor: B32) -> Matrix2R2C
+    return Matrix2R2C(c0: me.c0.scale(factor: factor), c1: me.c1.scale(factor: factor))
+
+### Transforms a vector: `me · v` (matrix times column vector).
+### :param v: The vector to transform.
+### :returns: `me · v`, computed as `c0·v.x + c1·v.y`.
+@readonly
+routine Matrix2R2C.transform(v: Vector[B32, 2]) -> Vector[B32, 2]
+    var vx = LLVM::extract_element[Vector[B32, 2], B32](v, 0)
+    var vy = LLVM::extract_element[Vector[B32, 2], B32](v, 1)
+    return me.c0.scale(factor: vx) + me.c1.scale(factor: vy)
+
+### Matrix product `me · you`. Each result column is `me · you.column`.
+### :param you: The right-hand matrix.
+### :returns: `me · you`.
+routine Matrix2R2C.mul(you: Matrix2R2C) -> Matrix2R2C
+    return Matrix2R2C(c0: me.transform(v: you.c0), c1: me.transform(v: you.c1))
+
+### The transpose (rows and columns swapped).
+### :returns: `meᵀ`.
+@readonly
+routine Matrix2R2C.transpose() -> Matrix2R2C
+    return Matrix2R2C(
+        c0: vec2(me.get(row: 0, col: 0), me.get(row: 0, col: 1)),
+        c1: vec2(me.get(row: 1, col: 0), me.get(row: 1, col: 1)),
+    )
+
+# ============================================================================
+# Determinant / inverse / solve
+# ============================================================================
+
+### The determinant of this matrix.
+### :returns: `det(me)`.
+@readonly
+routine Matrix2R2C.determinant() -> B32
+    return C::ingrid_m2_determinant(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+    )
+
+### The inverse of this matrix, by Gaussian elimination with partial pivoting.
+### :returns: `me⁻¹`.
+### :throws: {SingularMatrixError} when a pivot is exactly 0. An infinity or NaN during the computation crashes
+###     like the checked `B32` operators.
+@readonly
+failable routine Matrix2R2C.inverse() -> Matrix2R2C
+    var r = C::ingrid_m2_inverse(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+    )
+    if r.singular != 0
+        throw SingularMatrixError(size: 2)
+    return Matrix2R2C(c0: vec2(r.m00, r.m10), c1: vec2(r.m01, r.m11))
+
+### The inverse of this matrix by the same elimination in raw IEEE 754 arithmetic: no check, so a singular
+### matrix gives infinities or NaN.
+### :returns: `me⁻¹`, or non-finite elements when `me` is singular.
+@readonly
+routine Matrix2R2C.inverse_unchecked() -> Matrix2R2C
+    var r = C::ingrid_m2_inverse_unchecked(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+    )
+    return Matrix2R2C(c0: vec2(r.m00, r.m10), c1: vec2(r.m01, r.m11))
+
+### Solves `me · x = b` for `x` by Gaussian elimination with partial pivoting.
+### :param b: The right-hand side.
+### :returns: The solution `x`.
+### :throws: {SingularMatrixError} when a pivot is exactly 0. An infinity or NaN during the computation crashes
+###     like the checked `B32` operators.
+@readonly
+failable routine Matrix2R2C.solve(b: Vector[B32, 2]) -> Vector[B32, 2]
+    var r = C::ingrid_m2_solve(
+        m00: me.get(row: 0, col: 0),
+        m01: me.get(row: 0, col: 1),
+        m10: me.get(row: 1, col: 0),
+        m11: me.get(row: 1, col: 1),
+        b0: LLVM::extract_element[Vector[B32, 2], B32](b, 0),
+        b1: LLVM::extract_element[Vector[B32, 2], B32](b, 1),
+    )
+    if r.singular != 0
+        throw SingularMatrixError(size: 2)
+    return vec2(r.m00, r.m10)
+
+# ============================================================================
+# Comparison / display
+# ============================================================================
+
+### Returns `true` when all four elements compare equal.
+### :param you: The matrix to compare against.
+### :returns: `true` if every column matches.
+routine Matrix2R2C.eq(you: Matrix2R2C) -> Bool
+    return me.c0 == you.c0 and me.c1 == you.c1
+
+### Formats the matrix row by row as `[[m00, m01], [m10, m11]]`.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Matrix2R2C.represent() -> Text
+    var row0 = f"[{me.get(row: 0, col: 0)}, {me.get(row: 0, col: 1)}]"
+    var row1 = f"[{me.get(row: 1, col: 0)}, {me.get(row: 1, col: 1)}]"
+    return f"[{row0}, {row1}]"
+
+### Returns a diagnostic string wrapping the value with its type name.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Matrix2R2C.diagnose() -> Text
+    return f"Math3D.Matrix2R2C({me.represent()})"
+
+# ============================================================================
+# Ingrid (Ingrid/tessera/matrix.te)
+# ============================================================================
+# The elements go in as `m{row}{col}`, and an inverse or a solution comes back as an IngridMatrixResult.
+
+routine C::ingrid_m2_determinant(m00: B32, m01: B32, m10: B32, m11: B32) -> B32
+
+routine C::ingrid_m2_inverse(m00: B32, m01: B32, m10: B32, m11: B32) -> IngridMatrixResult
+
+routine C::ingrid_m2_inverse_unchecked(m00: B32, m01: B32, m10: B32, m11: B32) -> IngridMatrixResult
+
+routine C::ingrid_m2_solve(
+    m00: B32,
+    m01: B32,
+    m10: B32,
+    m11: B32,
+    b0: B32,
+    b1: B32,
+) -> IngridMatrixResult
