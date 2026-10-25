@@ -1,0 +1,38 @@
+module Tests/Stdlib/SelectManyEntitiesApi
+
+import IO/Console
+import IterTools
+# `select_many` whose transform gives entities: the lambda's parameter takes the source's element type and its
+# result the inner list's, with the type arguments written out or inferred, over values and over entities, under
+# `try` and `check` too.
+
+entity Crate
+    n: S64
+
+routine sme_pair(x: S64) -> List[Crate]
+    return [Crate(n: x), Crate(n: -x)]
+
+routine start()
+    var src: List[S64] = [1, 2]
+    var written = src.select_many[Crate, List[Crate]](transform: x => [Crate(n: x), Crate(n: x * 10)]).to[List]()
+    each c in written
+        show(f"written {c.n}")
+    var inferred = src.select_many(transform: x => sme_pair(x: x)).to[List]()
+    show(f"inferred {inferred.count()}")
+    var named = src.select_many(transform: sme_pair).to[List]()
+    show(f"named {named.count()}")
+
+    var crates: List[Crate] = [Crate(n: 3), Crate(n: 4)]
+    each k in crates.select_many(transform: c => [Crate(n: c.n * 100)])
+        show(f"from crates {k.n}")
+    var ns = crates.select_many(transform: c => [c.n, c.n + 1]).to[List]()
+    show(f"numbers {ns}")
+
+    when try src.select_many(transform: x => [Crate(n: x)]).to[List]()
+        is None => show("try: none")
+        else as all => show(f"try: {all.count()}")
+    when check crates.select_many(transform: c => [Crate(n: 8 // (c.n - 3))]).to[List]()
+        is List[Crate] as made => show(f"check: {made.count()}")
+        is DivisionByZeroError as e => show(f"check: {e.crash_message()}")
+        is Crashables => show("check: other")
+    return
