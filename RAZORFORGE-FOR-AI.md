@@ -355,6 +355,10 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
   defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
+  `* / abs norm reciprocal` round each part once from the exact value (no overflow on the way when the result
+  fits). `sqrt`, `ln`, the inverse functions, `tan`/`tanh` take principal branches with C99 Annex G signed-zero cuts
+  (`sqrt` of `-4 - 0i` is `0-2i`), within a few ulps. `exp_unchecked`/`sinh_unchecked`/`cosh_unchecked` give inf past
+  the range, the checked forms crash. All of it is Ingrid's (`Ingrid/tessera/complex.te`).
 - Geometry (`import Math3D`, `B32` elements): `Vector2D`/`Vector3D`/`Vector4D`, the quaternions `Q128` (B32 parts)
   and `Q256` (B64 parts), and the matrices `Matrix2R2C`, `Matrix3R3C`, `Matrix4R4C`, stored column-major as
   `Simd.Vector[B32, N]` columns (`vec2`/`vec3`/`vec4` build one, `Matrix2R2C(c0: vec2(4.0, 2.0), c1: vec2(7.0, 6.0))`

@@ -11,9 +11,11 @@ obeys Numeric, Equatable, Hashable
     imag: B64
 
 # The math lives in Ingrid's Tessera library (`Ingrid/tessera/complex.te`), which RazorForge and Suflae share:
-# each routine below that computes hands the parts to a `C::ingrid_c128_*` routine (declared in
-# System/NativeDeclarations.rf). Its `+ - * /` are checked like B64's own, so a part that overflows or has no real
-# value crashes as it does here, and the elementary functions are the same correctly rounded ones.
+# each routine below that computes, compares, classifies, hashes, converts, or writes or reads text is one call to a
+# `C::ingrid_c128_*` or `C::ingrid_complex_*` routine (declared in System/NativeDeclarations.rf). Its `+ - * /`
+# crash like B64's own when a part overflows or has no real value. The product, quotient, reciprocal, squared modulus,
+# and modulus are rounded once in each part, and the elementary functions take their principal branches, with a
+# zero part's sign picking the side of a branch cut.
 
 # Complex constants. `common routine` factories (not `preset`s): a `C128` value is a two-`B64` record, not
 # a buildtime scalar constant, so inlining it at every use (what a `preset` does) leaves the
@@ -46,12 +48,18 @@ routine B64.to[C128]() -> C128
 ### Widens a `C64` to `C128` by extending each component to `B64`.
 ### :returns: A `C128` carrying the same numeric value.
 routine C64.to[C128]() -> C128
-    return C128(real: me.real.to[B64](), imag: me.imag.to[B64]())
+    return c128_from_words(w: C::ingrid_c64_to_c128(real: me.real, imag: me.imag))
 
 ### Narrows a `C256` to `C128` by truncating each component to `B64`.
 ### :returns: The nearest representable `C128`.
 routine C256.to[C128]() -> C128
-    return C128(real: me.real.to[B64](), imag: me.imag.to[B64]())
+    var w = C::ingrid_c256_to_c128(
+        real_low: c256_low(v: me.real),
+        real_high: c256_high(v: me.real),
+        imag_low: c256_low(v: me.imag),
+        imag_high: c256_high(v: me.imag),
+    )
+    return c128_from_words(w: w)
 
 ### Real scalar -> `C128` (imaginary part 0), routing the value through `B64`.
 ### :returns: `me + 0i` in double precision.
@@ -144,51 +152,53 @@ routine C128.from_polar(r: B64, theta: B64) -> C128
 ### :returns: A `C128` whose components are the sums of the corresponding components.
 @readonly
 routine C128.add(you: C128) -> C128
-    return C128(real: me.real + you.real, imag: me.imag + you.imag)
+    var w = C::ingrid_c128_add(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
+    return c128_from_words(w: w)
 
 ### Returns the complex difference `me - you` (component-wise subtraction).
 ### :param you: The value to subtract.
 ### :returns: A `C128` whose components are the differences of the corresponding components.
 @readonly
 routine C128.sub(you: C128) -> C128
-    return C128(real: me.real - you.real, imag: me.imag - you.imag)
+    var w = C::ingrid_c128_sub(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
+    return c128_from_words(w: w)
 
 ### Returns `me + you`, promoting the real `you` to complex (imaginary part 0). `+`/`-`/`*`/`/` accept
 ### a real operand; the component width must match (B64 pairs with C128).
 ### :param you: The real addend.
 ### :returns: The complex sum.
 routine C128.add(you: B64) -> C128
-    return me.add(you.to[C128]())
+    return c128_from_words(w: C::ingrid_c128_add(real: me.real, imag: me.imag, other_real: you, other_imag: 0.0))
 
 ### Returns `me - you`, promoting the real `you` to complex (imaginary part 0).
 ### :param you: The real value to subtract.
 ### :returns: The complex difference.
 routine C128.sub(you: B64) -> C128
-    return me.sub(you.to[C128]())
+    return c128_from_words(w: C::ingrid_c128_sub(real: me.real, imag: me.imag, other_real: you, other_imag: 0.0))
 
 ### Returns `me * you` for a real `you` (both components scaled).
 ### :param you: The real factor.
 ### :returns: The scaled complex value.
 @readonly
 routine C128.mul(you: B64) -> C128
-    return C128(real: me.real * you, imag: me.imag * you)
+    return c128_from_words(w: C::ingrid_c128_mul_real(real: me.real, imag: me.imag, factor: you))
 
 ### Returns `me / you` for a real `you` (both components divided).
 ### :param you: The real divisor.
 ### :returns: The divided complex value.
 @readonly
 routine C128.truediv(you: B64) -> C128
-    return C128(real: me.real / you, imag: me.imag / you)
+    return c128_from_words(w: C::ingrid_c128_div_real(real: me.real, imag: me.imag, divisor: you))
 
-### Returns the complex product `me * you` using the formula `(ac−bd) + (ad+bc)i`.
+### Returns the complex product `me * you`, `(ac−bd) + (ad+bc)i` with each part rounded once from its exact value.
 ### :param you: The right operand.
 ### :returns: The Gaussian product.
 routine C128.mul(you: C128) -> C128
     var w = C::ingrid_c128_mul(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag)
     return c128_from_words(w: w)
 
-### Returns the complex quotient `me / you`.
-### Divides by the squared modulus of `you`.
+### Returns the complex quotient `me / you`, `((ac+bd) + (bc−ad)i) / (c²+d²)` with each part rounded once from its
+### exact value.
 ### :param you: The divisor.
 ### :returns: The complex quotient.
 routine C128.truediv(you: C128) -> C128
@@ -199,7 +209,7 @@ routine C128.truediv(you: C128) -> C128
 ### :returns: A `C128` with both components negated.
 @readonly
 routine C128.neg() -> C128
-    return C128(real: -me.real, imag: -me.imag)
+    return c128_from_words(w: C::ingrid_c128_neg(real: me.real, imag: me.imag))
 
 # ============================================================================
 # Comparison
@@ -210,13 +220,13 @@ routine C128.neg() -> C128
 ### :returns: `true` if `me.real == you.real` and `me.imag == you.imag`.
 @readonly
 routine C128.eq(you: C128) -> Bool
-    return me.real == you.real and me.imag == you.imag
+    return C::ingrid_c128_eq(real: me.real, imag: me.imag, other_real: you.real, other_imag: you.imag) != 0
 
 # ============================================================================
 # Components and Properties
 # ============================================================================
 
-### Returns the modulus (absolute value) of this complex number.
+### Returns the modulus (absolute value) of this complex number, rounded once, with no overflow on the way.
 ### :returns: `√(real² + imag²)`.
 routine C128.abs() -> B64
     return C::ingrid_c128_abs(real: me.real, imag: me.imag)
@@ -229,15 +239,15 @@ routine C128.arg() -> B64
 ### Returns the complex conjugate (negates the imaginary part).
 ### :returns: `real - imag·i`.
 routine C128.conjugate() -> C128
-    return C128(real: me.real, imag: -me.imag)
+    return c128_from_words(w: C::ingrid_c128_conjugate(real: me.real, imag: me.imag))
 
-### Returns the squared modulus (avoids the square root of `abs`).
+### Returns the squared modulus (avoids the square root of `abs`), rounded once.
 ### :returns: `real² + imag²`.
 routine C128.norm() -> B64
     return C::ingrid_c128_norm(real: me.real, imag: me.imag)
 
 # ============================================================================
-# Trigonometric (sinh/cosh computed from exp since B64 lacks native versions)
+# Trigonometric
 # ============================================================================
 
 ### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
@@ -271,15 +281,17 @@ routine C128.atan() -> C128
     return c128_from_words(w: C::ingrid_c128_atan(real: me.real, imag: me.imag))
 
 # ============================================================================
-# Hyperbolic (sinh/cosh computed from exp since B64 lacks native versions)
+# Hyperbolic
 # ============================================================================
 
-### Returns the complex hyperbolic sine of this value.
+### Returns the complex hyperbolic sine of this value, with raw IEEE 754 propagation: a part past the range is an
+### infinity.
 ### :returns: The complex hyperbolic sine.
 routine C128.sinh_unchecked() -> C128
     return c128_from_words(w: C::ingrid_c128_sinh(real: me.real, imag: me.imag))
 
-### Returns the complex hyperbolic cosine of this value.
+### Returns the complex hyperbolic cosine of this value, with raw IEEE 754 propagation: a part past the range is an
+### infinity.
 ### :returns: The complex hyperbolic cosine.
 routine C128.cosh_unchecked() -> C128
     return c128_from_words(w: C::ingrid_c128_cosh(real: me.real, imag: me.imag))
@@ -308,7 +320,8 @@ routine C128.atanh() -> C128
 # Exponential, Logarithmic, and Square Root
 # ============================================================================
 
-### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
+### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`, with raw IEEE 754
+### propagation: a part past the range is an infinity.
 ### :returns: The complex exponential.
 routine C128.exp_unchecked() -> C128
     return c128_from_words(w: C::ingrid_c128_exp(real: me.real, imag: me.imag))
@@ -328,7 +341,7 @@ routine C128.log10() -> C128
 routine C128.log2() -> C128
     return c128_from_words(w: C::ingrid_c128_log2(real: me.real, imag: me.imag))
 
-### Returns the multiplicative inverse `1/me` (conjugate over the squared modulus).
+### Returns the multiplicative inverse `1/me` (conjugate over the squared modulus), each part rounded once.
 ### :returns: `conj(me) / |me|²`.
 routine C128.reciprocal() -> C128
     return c128_from_words(w: C::ingrid_c128_reciprocal(real: me.real, imag: me.imag))
@@ -336,9 +349,11 @@ routine C128.reciprocal() -> C128
 ### Returns the polar form `(magnitude, angle-in-radians)` — the inverse of `from_polar`.
 ### :returns: A tuple `(abs, arg)`.
 routine C128.to_polar() -> (B64, B64)
-    return (me.abs(), me.arg())
+    var w = C::ingrid_c128_polar(real: me.real, imag: me.imag)
+    return (B64.from_bits(bits: w.w0), B64.from_bits(bits: w.w1))
 
-### Returns the complex square root, choosing the root with non-negative real part.
+### Returns the complex square root, choosing the root with non-negative real part. The imaginary part takes the
+### sign of this one's, so `-4 - 0i` gives `0 - 2i`.
 ### :returns: The principal square root of this value.
 routine C128.sqrt_unchecked() -> C128
     return c128_from_words(w: C::ingrid_c128_sqrt(real: me.real, imag: me.imag))
@@ -352,11 +367,12 @@ routine C128.pow(you: C128) -> C128
     return c128_from_words(w: w)
 
 ### Crashes unless both parts of `r` are finite: a NaN part is a domain error, an infinite part an
-### overflow. The check behind the `!` forms of `exp`/`ln`/`sqrt`/`sinh`/`cosh`.
+### overflow. The check behind the checked forms of `exp`/`ln`/`sqrt`/`sinh`/`cosh`.
 failable routine c128_checked(r: C128) -> C128
-    if r.real.is_finite() and r.imag.is_finite()
+    var k = C::ingrid_c128_class(real: r.real, imag: r.imag)
+    if (k & 32) != 0
         return r
-    if r.real.is_nan() or r.imag.is_nan()
+    if (k & 8) != 0
         throw NumericDomainError(description: "domain error: no complex result")
     throw NumericOverflowError(description: "overflow: out of range")
 
@@ -402,29 +418,29 @@ routine C128.pow(exp: S64) -> C128
 ### Returns `true` if both the real and imaginary parts are exactly zero.
 ### :returns: `true` if `me == C128.zero()`.
 routine C128.is_zero() -> Bool
-    return me.real == 0.0 and me.imag == 0.0
+    return (C::ingrid_c128_class(real: me.real, imag: me.imag) & 1) != 0
 
 ### Returns `true` if the imaginary part is exactly zero (the value lies on the real axis).
 ### :returns: `true` if `me.imag == 0.0`.
 routine C128.is_real() -> Bool
-    return me.imag == 0.0
+    return (C::ingrid_c128_class(real: me.real, imag: me.imag) & 2) != 0
 
 ### Returns `true` if the real part is exactly zero (the value lies on the imaginary axis).
 ### :returns: `true` if `me.real == 0.0`.
 routine C128.is_imaginary() -> Bool
-    return me.real == 0.0
+    return (C::ingrid_c128_class(real: me.real, imag: me.imag) & 4) != 0
 
 ### Returns `true` if either part is NaN.
 routine C128.is_nan() -> Bool
-    return me.real.is_nan() or me.imag.is_nan()
+    return (C::ingrid_c128_class(real: me.real, imag: me.imag) & 8) != 0
 
 ### Returns `true` if either part is infinite.
 routine C128.is_infinite() -> Bool
-    return me.real.is_infinite() or me.imag.is_infinite()
+    return (C::ingrid_c128_class(real: me.real, imag: me.imag) & 16) != 0
 
 ### Returns `true` if both parts are finite.
 routine C128.is_finite() -> Bool
-    return me.real.is_finite() and me.imag.is_finite()
+    return (C::ingrid_c128_class(real: me.real, imag: me.imag) & 32) != 0
 
 # ============================================================================
 # Text Representation
@@ -436,29 +452,38 @@ routine C128.is_finite() -> Bool
 ### :returns: The resulting `Text` value.
 @override
 routine C128.represent() -> Text
-    var real_text = me.real.represent()
-    var imag_abs = me.imag.abs().represent()
-    if me.imag < 0.0
-        return real_text + "-" + imag_abs + "i"
-    return real_text + "+" + imag_abs + "i"
+    return complex_text(
+        real_low: me.real.to_bits(),
+        real_high: 0,
+        imag_low: me.imag.to_bits(),
+        imag_high: 0,
+        format: 0,
+        style: 0,
+        digits: 0,
+    )
 
 ### Formats this value as `a+bi` / `a-bi` with exactly `places` digits after the point in each part
 ### (see `B64.fixed`).
 ### :param places: The number of digits after the point.
 ### :returns: The resulting `Text` value.
 routine C128.fixed(places: U64) -> Text
-    var imag_abs = me.imag.abs().fixed(places)
-    if me.imag < 0.0
-        return me.real.fixed(places) + "-" + imag_abs + "i"
-    return me.real.fixed(places) + "+" + imag_abs + "i"
+    return complex_text(
+        real_low: me.real.to_bits(),
+        real_high: 0,
+        imag_low: me.imag.to_bits(),
+        imag_high: 0,
+        format: 0,
+        style: 2,
+        digits: places,
+    )
 
 ### Parses `a`, `bi`, `a+bi` or `a-bi` (a bare `i` / `-i` is a unit imaginary part), the form
 ### `represent` writes. Each part uses `B64`'s own number syntax.
 ### :returns: The parsed value.
 ### :throws: {InvalidValueError} if the text is not a complex number.
 failable routine Text.to[C128]() -> C128
-    var parts = split_complex_text(text: me, target: "C128")
-    return C128(real: parts.real.to[B64](), imag: parts.imag.to[B64]())
+    var w = complex_parse(text: me, format: 0, target: "C128")
+    return C128(real: B64.from_bits(bits: w.w0), imag: B64.from_bits(bits: w.w1))
 
 ### Returns the real component (the `real` field is also public).
 ### :returns: The real part as `B64`.
@@ -475,7 +500,15 @@ routine C128.imag_part() -> B64
 ### :returns: The resulting `Text` value.
 @override
 routine C128.diagnose() -> Text
-    return "C128(" + me.represent() + ")"
+    return complex_text(
+        real_low: me.real.to_bits(),
+        real_high: 0,
+        imag_low: me.imag.to_bits(),
+        imag_high: 0,
+        format: 0,
+        style: 3,
+        digits: 0,
+    )
 
 # ============================================================================
 # Hashing
@@ -487,6 +520,4 @@ routine C128.diagnose() -> Text
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 @readonly
 routine C128.hash(k0: U64, k1: U64) -> U64
-    var acc = __hash_round(acc: 0, h: me.real.hash(k0: k0, k1: k1))
-    acc = __hash_round(acc: acc, h: me.imag.hash(k0: k0, k1: k1))
-    return __hash_finalize(h: acc)
+    return C::ingrid_c128_hash(real: me.real, imag: me.imag, k0: k0, k1: k1)

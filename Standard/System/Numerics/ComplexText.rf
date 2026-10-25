@@ -1,44 +1,74 @@
 module System/Numerics
 
-### The two number texts of a complex literal `a+bi`, ready for the component type's parser.
-record ComplexTextParts
-    ### The real part's text (`0` when the input has none).
-    real: Text
-    ### The imaginary part's text without the `i` (`0` when the input has none, `1` / `-1` for a bare `i`).
-    imag: Text
+# ============================================================================
+# The text of C64, C128, and C256: Ingrid's (Ingrid/tessera/complex.te), which writes the characters into a buffer this
+# side hands it and reads them from a text's characters. A short text fits the stack buffer, and a longer one is asked
+# for again with room for all of it.
+# ============================================================================
 
-### Splits `a`, `bi`, `a+bi` or `a-bi` into its real and imaginary texts. The split point is the last
-### `+`/`-` that is not the leading sign and not an exponent sign (`1e-3+2i` splits before `+2i`).
-### :param text: The text to split.
-### :param target: The type being parsed, for the error.
-### :returns: The real and imaginary texts.
-### :throws: {InvalidValueError} if the text is empty.
-failable routine split_complex_text(text: Text, target: Text) -> ComplexTextParts
-    var t = text.trim()
-    var n = t.count()
-    if n == 0
+### The text of a complex number given its parts' bits, as Ingrid writes it: `1.5+2i`.
+### :param real_low: The low 64 bits of the real part's bits.
+### :param real_high: The high 64 bits of the real part's bits (0 below B128).
+### :param imag_low: The low 64 bits of the imaginary part's bits.
+### :param imag_high: The high 64 bits of the imaginary part's bits (0 below B128).
+### :param format: 1 B32 parts (C64), 0 B64 (C128), 4 B128 (C256).
+### :param style: 0 the shortest decimals (`represent`), 2 `digits` digits after the point (`fixed`), 3 the type name
+###     around the shortest (`diagnose`).
+### :param digits: The digits after the point, for style 2.
+### :returns: The text.
+secret routine complex_text(
+    real_low: U64,
+    real_high: U64,
+    imag_low: U64,
+    imag_high: U64,
+    format: U32,
+    style: U32,
+    digits: U64,
+) -> Text
+    var buf = Array[Char, 64]()
+    var count: U64 = 0
+    danger
+        var p = LLVM::reinterpret_bits[Hijacked[Array[Char, 64]], Hijacked[Char]](buf.hijack())
+        count = C::ingrid_complex_text_utf32(
+            real_low: real_low,
+            real_high: real_high,
+            imag_low: imag_low,
+            imag_high: imag_high,
+            format: format,
+            style: style,
+            digits: digits,
+            out: p,
+            out_count: FLOAT_TEXT_ROOM,
+        )
+        if count <= FLOAT_TEXT_ROOM
+            return Text(from_span: p, count: count)
+    var result = text_alloc(count: count)
+    drop C::ingrid_complex_text_utf32(
+        real_low: real_low,
+        real_high: real_high,
+        imag_low: imag_low,
+        imag_high: imag_high,
+        format: format,
+        style: style,
+        digits: digits,
+        out: result.data,
+        out_count: count,
+    )
+    return result
+
+### Reads `a`, `bi`, `a+bi`, or `a-bi` (a bare `i` / `-i` is a unit imaginary part), the form `represent` writes, with
+### spaces around it allowed, each part in its own type's number syntax (Ingrid's reader).
+### :param text: The text.
+### :param format: 1 B32 parts (C64), 0 B64 (C128), 4 B128 (C256).
+### :param target: The type being read, for the error.
+### :returns: The parts' bits: for B32 and B64 parts the real part's in `w0` and the imaginary part's in `w1`, for B128
+###     parts the real part's low and high 64 bits in `w0` and `w1` and the imaginary part's in `w2` and `w3`.
+### :throws: {InvalidValueError} if the text is not a complex number.
+failable secret routine complex_parse(text: Text, format: U32, target: Text) -> IngridWords
+    var w = IngridWords(w0: 0, w1: 0, w2: 0, w3: 0)
+    var status: U64 = 0
+    danger
+        status = C::ingrid_complex_parse_utf32(chars: text.data, count: text.count, format: format, out: w.hijack())
+    if status != 0
         throw InvalidValueError(input: text, target: target)
-    if t[n - 1] != 'i'
-        return ComplexTextParts(real: t, imag: "0")
-    var body = t[0 til n - 1]
-    var split: U64 = 0
-    var k = body.count()
-    until k <= 1 or split != 0
-        k = k - 1
-        var c = body[k]
-        if (c == '+' or c == '-') and body[k - 1] != 'e' and body[k - 1] != 'E'
-            split = k
-    var real = "0"
-    var imag = body
-    if split > 0
-        real = body[0 til split]
-        imag = body[split til body.count()]
-    if real.count() > 1 and real[0] == '+'
-        real = real[1 til real.count()]
-    if imag.count() > 0 and imag[0] == '+'
-        imag = imag[1 til imag.count()]
-    if imag.count() == 0
-        imag = "1"
-    elseif imag == "-"
-        imag = "-1"
-    return ComplexTextParts(real: real, imag: imag)
+    return w

@@ -531,11 +531,12 @@ routine C::ingrid_siphash24_u128(low: U64, high: U64, k0: U64, k1: U64) -> U64
 # ============================================================================
 # Complex numbers (Ingrid/tessera/complex.te)
 # ============================================================================
-# The bodies of C64, C128 and C256's math, each part of an operand passed as its own float. A C64 comes back
-# packed in one `U64` (the real part's bits low, the imaginary part's high), a C128 in `IngridWords`, and a
-# C256 as itself. Each is the RazorForge routine of the same name (`sinh` is `sinh_unchecked`, `exp` is
-# `exp_unchecked`, `ln` is `ln_unchecked`, `sqrt` is `sqrt_unchecked`, `div` is `truediv`, `powi` is
-# `pow(exp:)`).
+# The bodies of C64, C128 and C256's routines, each part of an operand passed as its own float. A C64 comes back
+# packed in one `U64` (the real part's bits low, the imaginary part's high), a C128 in `IngridWords`, and a C256 as
+# itself. Each is the RazorForge routine of the same name (`sinh` is `sinh_unchecked`, `exp` is `exp_unchecked`, `ln`
+# is `ln_unchecked`, `sqrt` is `sqrt_unchecked`, `div` is `truediv`, `powi` is `pow(exp:)`, `mul_real` and `div_real`
+# are `*` and `/` with a real operand, `polar` is `to_polar`). `eq` gives 1 for equal and 0 otherwise, and `class` the
+# flags 1 zero, 2 on the real axis, 4 on the imaginary axis, 8 a NaN part, 16 an infinite part, 32 both parts finite.
 
 ### Four 64-bit words: how an Ingrid routine hands back a result wider than one register (a C128, a Q128, a Q256,
 ### or a tuple). 32 bytes of integers, which every target returns through a hidden pointer the caller passes, so
@@ -552,6 +553,18 @@ record IngridWords
     w3: U64
 
 # C64: B32 parts.
+routine C::ingrid_c64_add(real: B32, imag: B32, other_real: B32, other_imag: B32) -> U64
+routine C::ingrid_c64_sub(real: B32, imag: B32, other_real: B32, other_imag: B32) -> U64
+routine C::ingrid_c64_mul_real(real: B32, imag: B32, factor: B32) -> U64
+routine C::ingrid_c64_div_real(real: B32, imag: B32, divisor: B32) -> U64
+routine C::ingrid_c64_neg(real: B32, imag: B32) -> U64
+routine C::ingrid_c64_conjugate(real: B32, imag: B32) -> U64
+routine C::ingrid_c64_eq(real: B32, imag: B32, other_real: B32, other_imag: B32) -> U32
+routine C::ingrid_c64_class(real: B32, imag: B32) -> U32
+routine C::ingrid_c64_polar(real: B32, imag: B32) -> U64
+routine C::ingrid_c64_hash(real: B32, imag: B32, k0: U64, k1: U64) -> U64
+routine C::ingrid_c64_to_c128(real: B32, imag: B32) -> IngridWords
+routine C::ingrid_c64_to_c256(real: B32, imag: B32) -> C256
 routine C::ingrid_c64_mul(real: B32, imag: B32, other_real: B32, other_imag: B32) -> U64
 routine C::ingrid_c64_div(real: B32, imag: B32, other_real: B32, other_imag: B32) -> U64
 routine C::ingrid_c64_pow(real: B32, imag: B32, other_real: B32, other_imag: B32) -> U64
@@ -580,6 +593,18 @@ routine C::ingrid_c64_powi(real: B32, imag: B32, n: S64) -> U64
 routine C::ingrid_c64_from_polar(r: B32, theta: B32) -> U64
 
 # C128: B64 parts.
+routine C::ingrid_c128_add(real: B64, imag: B64, other_real: B64, other_imag: B64) -> IngridWords
+routine C::ingrid_c128_sub(real: B64, imag: B64, other_real: B64, other_imag: B64) -> IngridWords
+routine C::ingrid_c128_mul_real(real: B64, imag: B64, factor: B64) -> IngridWords
+routine C::ingrid_c128_div_real(real: B64, imag: B64, divisor: B64) -> IngridWords
+routine C::ingrid_c128_neg(real: B64, imag: B64) -> IngridWords
+routine C::ingrid_c128_conjugate(real: B64, imag: B64) -> IngridWords
+routine C::ingrid_c128_eq(real: B64, imag: B64, other_real: B64, other_imag: B64) -> U32
+routine C::ingrid_c128_class(real: B64, imag: B64) -> U32
+routine C::ingrid_c128_polar(real: B64, imag: B64) -> IngridWords
+routine C::ingrid_c128_hash(real: B64, imag: B64, k0: U64, k1: U64) -> U64
+routine C::ingrid_c128_to_c64(real: B64, imag: B64) -> U64
+routine C::ingrid_c128_to_c256(real: B64, imag: B64) -> C256
 routine C::ingrid_c128_mul(real: B64, imag: B64, other_real: B64, other_imag: B64) -> IngridWords
 routine C::ingrid_c128_div(real: B64, imag: B64, other_real: B64, other_imag: B64) -> IngridWords
 routine C::ingrid_c128_pow(real: B64, imag: B64, other_real: B64, other_imag: B64) -> IngridWords
@@ -610,6 +635,66 @@ routine C::ingrid_c128_from_polar(r: B64, theta: B64) -> IngridWords
 # C256: each B128 part as its low and high 64 bits (a 128-bit value crosses Win64 by pointer from Tessera but
 # by value from RazorForge, so neither side passes one). `abs`, `arg` and `norm` hand their B128 back in
 # `IngridWords` (`w0` low, `w1` high).
+routine C::ingrid_c256_add(
+    real_low: U64,
+    real_high: U64,
+    imag_low: U64,
+    imag_high: U64,
+    other_real_low: U64,
+    other_real_high: U64,
+    other_imag_low: U64,
+    other_imag_high: U64,
+) -> C256
+routine C::ingrid_c256_sub(
+    real_low: U64,
+    real_high: U64,
+    imag_low: U64,
+    imag_high: U64,
+    other_real_low: U64,
+    other_real_high: U64,
+    other_imag_low: U64,
+    other_imag_high: U64,
+) -> C256
+routine C::ingrid_c256_mul_real(
+    real_low: U64,
+    real_high: U64,
+    imag_low: U64,
+    imag_high: U64,
+    factor_low: U64,
+    factor_high: U64,
+) -> C256
+routine C::ingrid_c256_div_real(
+    real_low: U64,
+    real_high: U64,
+    imag_low: U64,
+    imag_high: U64,
+    divisor_low: U64,
+    divisor_high: U64,
+) -> C256
+routine C::ingrid_c256_neg(real_low: U64, real_high: U64, imag_low: U64, imag_high: U64) -> C256
+routine C::ingrid_c256_conjugate(real_low: U64, real_high: U64, imag_low: U64, imag_high: U64) -> C256
+routine C::ingrid_c256_eq(
+    real_low: U64,
+    real_high: U64,
+    imag_low: U64,
+    imag_high: U64,
+    other_real_low: U64,
+    other_real_high: U64,
+    other_imag_low: U64,
+    other_imag_high: U64,
+) -> U32
+routine C::ingrid_c256_class(real_low: U64, real_high: U64, imag_low: U64, imag_high: U64) -> U32
+routine C::ingrid_c256_polar(real_low: U64, real_high: U64, imag_low: U64, imag_high: U64) -> IngridWords
+routine C::ingrid_c256_hash(
+    real_low: U64,
+    real_high: U64,
+    imag_low: U64,
+    imag_high: U64,
+    k0: U64,
+    k1: U64,
+) -> U64
+routine C::ingrid_c256_to_c64(real_low: U64, real_high: U64, imag_low: U64, imag_high: U64) -> U64
+routine C::ingrid_c256_to_c128(real_low: U64, real_high: U64, imag_low: U64, imag_high: U64) -> IngridWords
 routine C::ingrid_c256_mul(
     real_low: U64,
     real_high: U64,
@@ -663,6 +748,42 @@ routine C::ingrid_c256_reciprocal(real_low: U64, real_high: U64, imag_low: U64, 
 routine C::ingrid_c256_sqrt(real_low: U64, real_high: U64, imag_low: U64, imag_high: U64) -> C256
 routine C::ingrid_c256_powi(real_low: U64, real_high: U64, imag_low: U64, imag_high: U64, n: S64) -> C256
 routine C::ingrid_c256_from_polar(r_low: U64, r_high: U64, theta_low: U64, theta_high: U64) -> C256
+
+# The text of all three: the parts' bits as their low and high 64 bits, `format` 1 for B32 parts (C64), 0 for B64
+# (C128), 4 for B128 (C256).
+
+### Writes a complex number's text, one character per element of `out`: style 0 `represent` (`1.5+2i`), 2 `fixed` with
+### `digits` digits after the point, 3 `diagnose` (`C64(1.5+2i)`).
+### :param real_low: The low 64 bits of the real part's bits.
+### :param real_high: The high 64 bits of the real part's bits (0 below B128).
+### :param imag_low: The low 64 bits of the imaginary part's bits.
+### :param imag_high: The high 64 bits of the imaginary part's bits (0 below B128).
+### :param format: 1 B32 parts, 0 B64, 4 B128.
+### :param style: 0, 2, or 3.
+### :param digits: The digits after the point, for style 2.
+### :param out: Where the text goes.
+### :param out_count: Room in `out`.
+### :returns: How many characters the text has: more than `out_count` when it didn't fit, and only that much was written.
+routine C::ingrid_complex_text_utf32(
+    real_low: U64,
+    real_high: U64,
+    imag_low: U64,
+    imag_high: U64,
+    format: U32,
+    style: U32,
+    digits: U64,
+    out: Hijacked[Char],
+    out_count: U64,
+) -> U64
+
+### Reads `a`, `bi`, `a+bi`, or `a-bi`, with spaces around it allowed.
+### :param chars: The text's first character (anything when `count` is 0).
+### :param count: How many characters it has.
+### :param format: 1 B32 parts, 0 B64, 4 B128.
+### :param out: Where the parts' bits go: for B32 and B64 parts the real part's in `w0` and the imaginary part's in `w1`,
+###     for B128 parts the real part's low and high 64 bits in `w0` and `w1` and the imaginary part's in `w2` and `w3`.
+### :returns: 0 for a complex number, 1 for text that is not one (`out` is left alone).
+routine C::ingrid_complex_parse_utf32(chars: Hijacked[Char], count: U64, format: U32, out: Hijacked[IngridWords]) -> U64
 
 # ============================================================================
 # Binary floats (Ingrid/tessera/binfloat.te)
