@@ -739,6 +739,9 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
 
 - A container, a member variable or a manager that holds an entity is where it is kept; `steal` marks each
   hand-over to such a place.
+- A name `steal` emptied takes a new value with `=` (`keep(i: steal a)`, then `a = Item(n: 2)`, on every path or on
+  some): the new value is torn down once at the end of the scope (or before the next `=`), and the value that left
+  is not torn down there.
 - A `return` ends the routine's own variables: a local handed over inside the returned value moves without
   `steal` (`return Shelf(book: book)`, `return (a, b)`, `return xs`). `steal` on such a local there is RF-W259 (quick
   fix and `migrate --step return-steal` remove it). A parameter handed over in a `return` still takes `steal`.
@@ -1001,7 +1004,9 @@ structure is an entity, as for records, RF-S960).
 In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
 it (`var y = x`, `return me.value`, a tuple of it, handing it to a parameter of a type parameter as in
 `xs.add_last(value: x)`) is RF-S413 on the template's own line: `steal` it, keep the
-parameter to values (`needs RecordType T`), or work on it in place.
+parameter to values (`needs RecordType T`), or work on it in place. An entity handed to a parameter written `x: T`
+belongs to the routine: one it does not keep (hand over, store, return) is torn down at its exits before it keeps
+it, a `throw` included (`try xs.add_at(index: 5, value: Item(n: 3))` that fails tears the `Item` down).
 `needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
 kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
 `SplitArray`, `DictEntry` (tuples and variants follow their elements the same way). `Range[T]`,
