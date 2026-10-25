@@ -29,6 +29,22 @@ public sealed class TesseraBackendNameTests
         Assert.Equal(expected: "0 0 12 home 2", actual: BuildAndRun(fixture: "TesseraBackendPresets"));
     }
 
+    /// <summary>
+    /// A local or parameter <c>steal</c> handed over and <c>=</c> filled again, on the Tessera backend: the slot is
+    /// emptied at the hand-over, so the refilled value is torn down once at the end of its scope and the value that
+    /// left is never torn down there. Prints what the LLVM build of the same program prints.
+    /// </summary>
+    [Fact]
+    public void StealThenRefill_TearsDownTheRefilledValueOnTheTesseraBackend()
+    {
+        string expected = File.ReadAllText(path: Path.Combine(paths:
+                [RepoRoot, "tests", "Fixtures", "Stdlib", "steal_then_refill_api.expected.txt"]))
+            .ReplaceLineEndings(replacementText: "\n")
+            .Trim();
+        Assert.Equal(expected: expected,
+            actual: BuildAndRun(fixture: "TesseraBackendStealRefill").ReplaceLineEndings(replacementText: "\n"));
+    }
+
     /// <summary>Builds and runs <c>tests/Fixtures/{fixture}/main.rf</c> and returns what it printed.</summary>
     private static string BuildAndRun(string fixture)
     {
