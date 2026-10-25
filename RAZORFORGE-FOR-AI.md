@@ -1429,7 +1429,6 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
 | RF-G224      | a loop written `while c`              | `until` with the condition that ends it, or `loop` (`migrate --step until`) |
 | RF-G225      | a line written `pass`                 | `nothing`, the line with no work (`migrate --step nothing`) |
-| RF-G227      | a line written `pierce X`             | `throw X` in a routine that is not failable crashes there (`migrate --step pierce`) |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 

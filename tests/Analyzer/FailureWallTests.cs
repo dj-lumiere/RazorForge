@@ -9,7 +9,7 @@ using static TestHelpers;
 /// One error kind, and failures that rise only through failable routines (C81): a <c>throw</c> in a routine that is
 /// not failable crashes where it stands, <c>try</c>/<c>check</c> over an expression that reaches no failable call is
 /// RF-S760, a routine value that may fail goes only to a <c>failable Callable[...]</c> (RF-S761), and <c>pierce</c> is
-/// not a word of the language (RF-G227).
+/// an ordinary name.
 /// </summary>
 public class FailureWallTests
 {
@@ -158,19 +158,28 @@ public class FailureWallTests
         Assert.Single(collection: result.Errors, predicate: e => e.Code == SemanticDiagnosticCode.NothingToRecover);
     }
 
-    /// <summary><c>pierce</c> is not a keyword: RF-G227, with the fix <c>throw</c> in a routine that is not
-    /// failable.</summary>
+    /// <summary><c>pierce</c> is not a keyword: it names a variable, a routine and a field like any other
+    /// name.</summary>
     [Fact]
-    public void Pierce_IsGrammarError()
+    public void Pierce_IsAnOrdinaryName()
     {
         string source = """
                         module L/Test
+                        import IO/Console
+                        record Arrow
+                            pierce: S64
+                        routine pierce(n: S64) -> S64
+                            return n + 1
+                        routine aim(pierce: S64) -> S64
+                            var a = Arrow(pierce: pierce)
+                            return a.pierce
                         routine start()
-                            pierce LogicBreachedError()
+                            var hit = pierce(n: 1)
+                            var pierced = aim(pierce: hit)
+                            show(f"{pierced}")
                             return
                         """;
-        (_, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
-        Assert.True(condition: parser.HasErrors);
-        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "pierce"));
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
     }
 }

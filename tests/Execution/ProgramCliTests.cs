@@ -260,6 +260,35 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigratePierce_RewritesTheOldStatement_LeavesPierceAsAName()
+    {
+        string dir = OldProject(name: "pierce", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/PierceRf\n" +
+                "routine start()\n" +
+                "    var pierce = 1\n" +
+                "    pierce = pierce + 1\n" +
+                "    if pierce > 5\n" +
+                "        pierce LogicBreachedError()\n" +
+                "    return\n")
+        ]);
+
+        (int code, string output) = RunMain("migrate", "--step", "pierce", dir);
+        Assert.Equal(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
+        Assert.Equal(
+            expected: "module Test/PierceRf\n" +
+                      "routine start()\n" +
+                      "    var pierce = 1\n" +
+                      "    pierce = pierce + 1\n" +
+                      "    if pierce > 5\n" +
+                      "        throw LogicBreachedError()\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+    }
+
+    [Fact]
     public void MigrateTypeNames_RenamesAtomicAndCircularList_KeepsStringsAndComments()
     {
         string dir = OldProject(name: "type-names", oldManifest: false, files:
