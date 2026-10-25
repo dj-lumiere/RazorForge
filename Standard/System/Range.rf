@@ -202,22 +202,29 @@ failable routine RangeEmitter[T].emit() -> T
 
     # How far the bound still is decides whether another step fits, before stepping: stepping first would go
     # past the type's own limit at its edge (`4 to 0` over `U64` would compute `0 - 1`). The distance itself may
-    # not fit in the type (`S64_MIN to S64_MAX`): then it is more than any step.
+    # not fit in the type when the two ends have opposite signs (`S64_MIN to S64_MAX`): then the step is compared
+    # from the end instead, which stays in range because the step is positive and the end is on the far side of 0.
+    var zero = me.current - me.current
+    var fits = false
     if me.ascending
-        when try me.end.sub(you: me.current)
-            is None => me.current = me.current + me.step
-            else as room =>
-                if room > me.step or (me.inclusive and room == me.step)
-                    me.current = me.current + me.step
-                else
-                    me.done = true
+        if me.current < zero and me.end >= zero
+            var last = me.end - me.step
+            fits = last > me.current or (me.inclusive and last == me.current)
+        else
+            var room = me.end - me.current
+            fits = room > me.step or (me.inclusive and room == me.step)
+        if fits
+            me.current = me.current + me.step
     else
-        when try me.current.sub(you: me.end)
-            is None => me.current = me.current - me.step
-            else as room =>
-                if room > me.step or (me.inclusive and room == me.step)
-                    me.current = me.current - me.step
-                else
-                    me.done = true
+        if me.current >= zero and me.end < zero
+            var last = me.end + me.step
+            fits = last < me.current or (me.inclusive and last == me.current)
+        else
+            var room = me.current - me.end
+            fits = room > me.step or (me.inclusive and room == me.step)
+        if fits
+            me.current = me.current - me.step
+    if not fits
+        me.done = true
 
     return _result
