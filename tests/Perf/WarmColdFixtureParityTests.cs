@@ -68,7 +68,8 @@ public sealed partial class WarmColdFixtureParityTests
             "error_paths_api", "crashable_api", "list_api", "dict_api", "set_api",
             "sorted_dict_api", "choice_api", "variant_api", "generic_routine_api",
             "guarded_api", "guarded_access_api", "fallible_lock_api", "work_api",
-            "array_api", "range_api", "filesystem_api", "itertools_api", "builder_query_api"
+            "array_api", "range_api", "filesystem_api", "itertools_api", "builder_query_api",
+            "bytes_methods_api", "cstr_decode_api", "ffi_extern_api"
         ];
         var data = new TheoryData<string, string>();
         foreach (string n in names)

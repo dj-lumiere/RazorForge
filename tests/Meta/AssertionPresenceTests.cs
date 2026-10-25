@@ -23,7 +23,9 @@ public sealed partial class AssertionPresenceTests
         "AssertHasError",
         "AssertHasErrorSuflae",
         "GenerateIr",
-        "AssertBundleCompilesInProcess"
+        "AssertBundleCompilesInProcess",
+        "AssertDangerError",
+        "AssertReshapeError"
     ];
 
     /// <summary>
