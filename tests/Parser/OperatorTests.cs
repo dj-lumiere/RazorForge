@@ -388,6 +388,16 @@ public class OperatorTests
 
         AssertParses(source: source);
     }
+    /// <summary>`!=` doesn't chain onto a comparison, but parentheses end the chain: `(a < b) != c` compares the truth
+    /// of `a < b` with `c` (RF-G216 only without them).</summary>
+    [Fact]
+    public void Parse_ParenthesizedComparison_ThenNotEqual()
+    {
+        AssertParses(source: "routine test() -> Bool\n    return (a < b) != c\n");
+        AssertParses(source: "routine test() -> Bool\n    return (a != b) != (c < d)\n");
+        AssertParseError(source: "routine test() -> Bool\n    return a < b != c\n");
+    }
+
     /// <summary>
     /// Verifies that the parser accepts chained range comparison.
     /// </summary>
