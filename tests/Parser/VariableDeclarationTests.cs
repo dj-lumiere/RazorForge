@@ -377,7 +377,7 @@ public class VariableDeclarationTests
     [InlineData("0b1010_u8", "U8", 19)]
     [InlineData("0o17_u32", "U32", 17)]
     [InlineData("1.5_b32", "B32", 16)]
-    [InlineData("10n", "Integer", 15)]
+    [InlineData("10n", "Int", 15)]
     [InlineData("2.5dn", "Decimal", 16)]
     [InlineData("0_addr", "Addr", 14)]
     public void Tokenize_TypeNamingSuffix_IsAnError(string number, string typeName, int column)

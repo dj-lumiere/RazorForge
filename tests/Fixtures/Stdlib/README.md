@@ -80,7 +80,7 @@ Covered today (see `*.rf` files in this directory):
   `accumulate`
 - Calling conventions: `named_arguments`, `overload_resolution`
 - Math: `float_math` — sqrt/pow/exp/log/trig/rounding/clamp/classification
-- Integer methods: `integer_methods` — bit ops, classification, parse-from-text
+- Int methods: `integer_methods` — bit ops, classification, parse-from-text
 - Characters: `character` — codepoint, classification, case-conversion, multi-byte
 - Comparison ops: `comparison_ops` — user-derived compare + lt/le/gt/ge cascade
 - Division semantics: `division_semantics` — floor div / modulo sign rules (Python-style)

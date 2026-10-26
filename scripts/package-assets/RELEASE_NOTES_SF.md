@@ -34,7 +34,7 @@ escapes**, with a **cycle collector** to reclaim reference cycles the count alon
 
 Suflae's defaults are chosen for clarity, not machine width.
 
-- **`Integer`** is the default for unsuffixed integer literals (arbitrary width, no silent overflow
+- **`Int`** is the default for unsuffixed integer literals (arbitrary width, no silent overflow
   surprises).
 - **`Decimal`** is base-10 (not binary `F64`) — the default for fractional literals.
 - Both are reused from RazorForge's standard library; Suflae keeps RF's `S64`/`F64` literal defaults only

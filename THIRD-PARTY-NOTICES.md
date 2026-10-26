@@ -3,7 +3,7 @@
 RazorForge itself is distributed under the MIT License (see [LICENSE](LICENSE)).
 
 Portions of the RazorForge standard library — specifically the decimal BID layout
-and the arbitrary-precision `Integer` engine under `Standard/RazorForge/System/Numerics/`
+and the arbitrary-precision `Int` engine under `Standard/RazorForge/System/Numerics/`
 — are **ports and extensions** of the
 algorithms, table data, and bit-layouts of the third-party projects credited
 below. The RazorForge code was written by reading the upstream source and
@@ -17,7 +17,7 @@ projects, their copyright notices and license terms are retained here as require
 
 ## LibBF — tiny arbitrary-precision floating-point library
 
-Used by the RazorForge arbitrary-precision **`Integer`** engine (`IntegerEngine`, built on the limb
+Used by the RazorForge arbitrary-precision **`Int`** engine (`IntEngine`, built on the limb
 layer in `LimbEngine`). The limb primitives, the NTT multiplication over five ~2^62 primes, and
 Newton-reciprocal division and square root are ports of LibBF (64-bit limb configuration).
 
@@ -51,7 +51,7 @@ THE SOFTWARE.
 
 ## LibTomMath — multiple-precision integer library
 
-Used by the RazorForge **`Integer`** engine (`IntegerEngine`, `Integer`). The engine replaced the
+Used by the RazorForge **`Int`** engine (`IntEngine`, `Int`). The engine replaced the
 LibTomMath-backed runtime and follows its integer semantics and algorithms: sign-magnitude values,
 Euclidean division, binary GCD, two's-complement bitwise operations on negative values, and the radix
 text conversion with its digit map (`0-9 A-Z a-z + /`, case-insensitive up to radix 36).
@@ -92,7 +92,7 @@ For more information, please refer to <https://unlicense.org/>
 ## Intel® Decimal Floating-Point Math Library (BID / "libbid")
 
 Used by the RazorForge decimal types **`D32` / `D64` / `D128`** and **`Decimal`**: their
-Binary-Integer-Decimal (BID) encoding and decoding follow Intel's BID library.
+Binary-Int-Decimal (BID) encoding and decoding follow Intel's BID library.
 
 - Project: **Intel® Decimal Floating-Point Math Library** (BID, commonly "libbid").
 - License: **BSD 3-Clause License** (verbatim upstream text below).

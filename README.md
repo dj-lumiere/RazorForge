@@ -90,7 +90,7 @@ exceptions to declare or catch.
 **Numbers mean what they say.** `+ - *` are checked and crash on overflow, while wrapping (`+%`) and
 clamping (`+^`) are separate operators you choose. Integers go from `S8`/`U8` to `S256`/`U256`, and
 next to the binary floats `B16` to `B128` sit decimal floats `D32`/`D64`/`D128`, the
-arbitrary-precision `Integer`, and `Decimal`, a decimal with 34 significant digits that is never infinite or NaN. A bare literal takes its type from where it goes (`level +^ 100`, `var x: B64 = inf`),
+arbitrary-precision `Int`, and `Decimal`, a decimal with 34 significant digits that is never infinite or NaN. A bare literal takes its type from where it goes (`level +^ 100`, `var x: B64 = inf`),
 and a variable's type is never inferred from later uses. The float math library is correctly rounded, and a float prints as
 the shortest text that reads back as the same value.
 
@@ -217,7 +217,7 @@ so `cd` into a solution and run `razorforge buildandrun`.
   pattern matching with exhaustiveness checks. A variant shows the value it holds (`40`, or `none` when
   empty), and choices compare with `==` and by their order (`<`, `>=`).
 - **Numerics:** `S8` to `S256`, `U8` to `U256`, `B16` to `B128` (plus `BF16` for storage), `D32` / `D64` /
-  `D128`, arbitrary-precision `Integer`, 34-digit `Decimal`, complex `C64` / `C128` / `C256`,
+  `D128`, arbitrary-precision `Int`, 34-digit `Decimal`, complex `C64` / `C128` / `C256`,
   quaternions, vectors, and SIMD `Vector[T, N]`, with checked, wrapping, and clamping arithmetic.
 - **Collections:** `List`, `Dict`, `Set`, `RotatableList`, `BitList`, `PriorityQueue`, the sorted
   collections, `SplitList` (struct of arrays), fixed-size `Array[T, N]`, and lazy iterator adapters
@@ -256,7 +256,7 @@ including low-end Pentium, Celeron, and Atom parts, cannot run the output.
 [Suflae](https://github.com/dj-lumiere/Suflae) (`.sf`) is RazorForge's sibling. It shares the
 grammar, the standard library, and the loud failures, and shares every entity for you: its
 entities are shared reference-counted handles with a cycle collector, bare numbers are exact
-`Integer` and `Decimal`, and it has thread-safe module `global`s. A `.sf` file can import `.rf`
+`Int` and `Decimal`, and it has thread-safe module `global`s. A `.sf` file can import `.rf`
 modules, so one program can mix the two. Pick RazorForge when you want to choose how each thing is
 shared and how wide each number is, Suflae when you would rather not think about either.
 

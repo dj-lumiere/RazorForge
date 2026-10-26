@@ -13,7 +13,7 @@ namespace RazorForge.Lexer;
 /// <list type="bullet">
 ///   <item><description>Must start with a letter, underscore, or dollar sign ($)</description></item>
 ///   <item><description>Can contain letters, digits, and underscores</description></item>
-///   <item><description>Optional single ? suffix for failable types (e.g., Integer?)</description></item>
+///   <item><description>Optional single ? suffix for failable types (e.g., Int?)</description></item>
 /// </list>
 /// <para>
 /// The parser determines from context whether an identifier refers to a type or a value.
@@ -44,7 +44,7 @@ public partial class RazorForgeLexer
     /// </para>
     /// <para>
     /// After the base identifier, an optional single ? suffix is consumed for
-    /// failable types (e.g., Integer?). Double ?? is NOT consumed here as
+    /// failable types (e.g., Int?). Double ?? is NOT consumed here as
     /// it is the none coalescing operator.
     /// </para>
     /// <para>

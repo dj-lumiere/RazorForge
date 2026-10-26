@@ -87,7 +87,7 @@ public partial class RazorForgeLexer
         [key: "d32"] = "D32",
         [key: "d64"] = "D64",
         [key: "d128"] = "D128",
-        [key: "n"] = "Integer",
+        [key: "n"] = "Int",
         [key: "dn"] = "Decimal"
     };
 
