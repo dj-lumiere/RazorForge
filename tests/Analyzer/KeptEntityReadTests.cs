@@ -16,6 +16,7 @@ public class KeptEntityReadTests
 {
     private const string Prelude = """
                                    import IO/Console
+                                   import IterTools
 
                                    entity Box
                                        n: S64
@@ -95,6 +96,37 @@ public class KeptEntityReadTests
                                         return
                                     """,
             expected: "You are returning a 'Box' that the value it belongs to still holds"));
+    }
+
+    /// <summary>A lambda that gives back a member variable of an entity element hands out an entity the element
+    /// still keeps (`t => t.members` over teams), as a `return` of it would.</summary>
+    [Fact]
+    public void Analyze_LambdaGivingBackAnEntityMember_Errors()
+    {
+        Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
+                                    entity Team
+                                        members: List[S64]
+
+                                    routine start()
+                                        var teams = List[Team]()
+                                        teams.add_last(value: Team(members: [1, 2]))
+                                        var all = teams.select_many(transform: t => t.members).to[List]()
+                                        return
+                                    """,
+            expected: "This lambda gives back a 'List[S64]' that the value it belongs to still holds"));
+    }
+
+    /// <summary>A lambda giving back a value read from an entity element is a copy, not the entity.</summary>
+    [Fact]
+    public void Analyze_LambdaGivingBackAValueMember_Analyzes()
+    {
+        Assert.Empty(collection: AnalyzeSa(source: Prelude + """
+                                                       routine start()
+                                                           var boxes = List[Box]()
+                                                           boxes.add_last(value: Box(n: 1))
+                                                           var ns = boxes.select(transform: b => b.n).to[List]()
+                                                           return
+                                                       """).Errors);
     }
 
     [Fact]

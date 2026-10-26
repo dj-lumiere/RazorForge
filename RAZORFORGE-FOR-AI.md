@@ -1287,7 +1287,7 @@ the builder writes through a copy and stores it back.
 `p.a` read an entity their container still holds, so putting one anywhere that
 keeps what it holds (`x = boxes[0]`, `p.b = boxes[0]`,
 `take(b: boxes[0])`, `holder.add_last(value: boxes[0])`, `return boxes[0]`,
-`(boxes[0], 1)`) is RF-S413: it would share one entity between two places with no manager (a tuple
+`(boxes[0], 1)`, a lambda giving it back: `teams.select_many(transform: t => t.members)`) is RF-S413: it would share one entity between two places with no manager (a tuple
 keeps its items, so a variable goes in with `steal` too: `(steal z, 1)`). Take an
 element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
 explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
