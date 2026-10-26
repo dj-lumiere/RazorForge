@@ -46,6 +46,12 @@ needs T obeys Comparable, Addable, Subtractable
     inclusive: Bool
     ### Stores whether iteration has already completed.
     done: Bool
+    ### Stores whether `limit` holds: the range's end leaves room for one whole step past it on the side the walk
+    ### comes from, so each step is one comparison against `limit`.
+    steady: Bool
+    ### Stores the value from which one more step still lands inside the range (`end - step` counting up,
+    ### `end + step` counting down), when `steady` is true.
+    limit: T
 
 ### Creates an inclusive range from `start` to `end` using a step of `1`.
 ### :param start: The inclusive starting position.
@@ -181,25 +187,58 @@ failable routine Range[T].require_nonzero_step()
 @readonly
 routine Range[T].emitter() -> RangeEmitter[T]
     me.require_nonzero_step()
+    var stride = me.stride()
+    var ascending = me.is_ascending()
+    var done = me.is_empty()
+    # `end - stride` stays inside the type when the end is at least one stride. `end + stride` does when the end is
+    # not above zero, or when a stride fits between the end and the start (which is above the end then). In the
+    # other ranges each step measures how far the end still is instead.
+    var steady = false
+    var limit = me.end
+    if not done
+        if ascending
+            if me.end >= stride
+                steady = true
+                limit = me.end - stride
+        elseif me.end <= me.start - me.start or stride <= me.start - me.end
+            steady = true
+            limit = me.end + stride
     return RangeEmitter[T](
         current: me.start,
         end: me.end,
-        step: me.stride(),
-        ascending: me.is_ascending(),
+        step: stride,
+        ascending: ascending,
         inclusive: me.inclusive,
-        done: me.is_empty(),
+        done: done,
+        steady: steady,
+        limit: limit,
     )
 
 ### Returns the next value from this emitter.
 ### Each successful call yields the current value and advances by `step`.
 ### :returns: The resulting `T` value.
 ### :throws: {AbsentValueError} Thrown when the requested value is unavailable.
+@inline
 failable routine RangeEmitter[T].emit() -> T
     if me.done
         throw AbsentValueError()
+    var result = me.current
+    if not me.steady
+        me.step_measured()
+    elseif me.ascending
+        if me.current < me.limit or (me.inclusive and me.current == me.limit)
+            me.current = me.current + me.step
+        else
+            me.done = true
+    elseif me.current > me.limit or (me.inclusive and me.current == me.limit)
+        me.current = me.current - me.step
+    else
+        me.done = true
+    return result
 
-    var _result = me.current
-
+### Takes one step of a walk whose end leaves no room for `limit`: how far the end still is decides whether another
+### step fits, and the walk is done when none does.
+secret routine RangeEmitter[T].step_measured()
     # How far the bound still is decides whether another step fits, before stepping: stepping first would go
     # past the type's own limit at its edge (`4 to 0` over `U64` would compute `0 - 1`). The distance itself may
     # not fit in the type when the two ends have opposite signs (`S64_MIN to S64_MAX`): then the step is compared
@@ -226,5 +265,4 @@ failable routine RangeEmitter[T].emit() -> T
             me.current = me.current - me.step
     if not fits
         me.done = true
-
-    return _result
+    return
