@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Builder;
 using Builder.Execution;
 
@@ -130,6 +131,73 @@ public sealed class ProgramCliTests : IDisposable
         Assert.Equal(expected: 0, actual: code);
         Assert.True(condition: File.Exists(path: outLl), userMessage: "codegen should write the .ll file");
         Assert.False(condition: string.IsNullOrWhiteSpace(value: File.ReadAllText(path: outLl)));
+    }
+
+    /// <summary>
+    /// An <c>Int</c> literal outside the <c>S64</c> range is a <c>Guarded[List[U64], ReadOnly]</c> the builder lays down
+    /// as module data: the manager and the list are written field by field, and each field must get what the
+    /// declarations in <c>System/Memory/GuardManager.rf</c> and <c>System/List.rf</c> say it holds. The emitted IR names
+    /// each struct's member variables in order, so this reads the order from there and checks every value: the share
+    /// count starts at 1, the weak count and the policy state at 0, the manager's <c>data</c> is the list, and the
+    /// list's <c>data</c>, <c>count</c> and <c>capacity</c> are the limbs and their number. A use shares it once more.
+    /// A field the builder does not know stops the build, which fails this test too.
+    /// </summary>
+    [Fact]
+    public void LlvmEmitter_BigIntLiteral_LaysTheListOutAsGuardManagerAndListDeclareIt()
+    {
+        string rf = Path.Combine(path1: _dir, path2: "big.rf");
+        File.WriteAllText(path: rf,
+            contents:
+            "module Test/BigLiteral\n" +
+            "import IO/Console\n" +
+            "\n" +
+            "routine start()\n" +
+            "    var big: Int = 340282366920938463463374607431768211457\n" +
+            "    show(big)\n" +
+            "    return\n");
+        string outLl = Path.Combine(path1: _dir, path2: "big.ll");
+        (int code, string output) = RunMain("codegen", rf, outLl);
+        Assert.True(condition: code == 0, userMessage: output);
+        string ir = File.ReadAllText(path: outLl);
+
+        Dictionary<string, string> Fields(string globalSuffix, string structPrefix)
+        {
+            Match global = Regex.Match(input: ir,
+                pattern: $@"^(@\.shared\.\d+)\.{globalSuffix} = private global (%""{Regex.Escape(str: structPrefix)}[^""]*"") \{{ (.*) \}}$",
+                options: RegexOptions.Multiline);
+            Assert.True(condition: global.Success, userMessage: $"no {globalSuffix} global in:\n{ir}");
+            string structName = global.Groups[groupnum: 2].Value;
+            Match names = Regex.Match(input: ir,
+                pattern: $@"^; {Regex.Escape(str: structName)} member variables: (.*)$", options: RegexOptions.Multiline);
+            Assert.True(condition: names.Success, userMessage: $"no member variable list for {structName}");
+            string[] fieldNames = names.Groups[groupnum: 1].Value.Split(separator: ", ")
+                                       .Select(selector: n => n[(n.IndexOf(value: '=') + 1)..]).ToArray();
+            string[] values = global.Groups[groupnum: 3].Value.Split(separator: ", ");
+            Assert.Equal(expected: fieldNames.Length, actual: values.Length);
+            var byName = new Dictionary<string, string>();
+            for (int i = 0; i < fieldNames.Length; i++)
+            {
+                byName[key: fieldNames[i]] = values[i].Replace(oldValue: global.Groups[groupnum: 1].Value, newValue: "@");
+            }
+
+            return byName;
+        }
+
+        // 2^128 + 1 is three limbs: 1, 0, 1.
+        Assert.Matches(expectedRegexPattern: @"@\.shared\.\d+\.data = private unnamed_addr constant \[3 x i64\] \[i64 1, i64 0, i64 1\]",
+            actualString: ir);
+        Dictionary<string, string> list = Fields(globalSuffix: "list", structPrefix: "Entity.System.List[");
+        Assert.Equal(expected: 3, actual: list.Count);
+        Assert.Equal(expected: "ptr @.data", actual: list[key: "data"]);
+        Assert.Equal(expected: "i64 3", actual: list[key: "count"]);
+        Assert.Equal(expected: "i64 3", actual: list[key: "capacity"]);
+        Dictionary<string, string> manager = Fields(globalSuffix: "manager", structPrefix: "Entity.System.GuardManager[");
+        Assert.Equal(expected: 4, actual: manager.Count);
+        Assert.Equal(expected: "i64 1", actual: manager[key: "strong_count"]);
+        Assert.Equal(expected: "i64 0", actual: manager[key: "weak_count"]);
+        Assert.Equal(expected: "ptr @.list", actual: manager[key: "data"]);
+        Assert.EndsWith(expectedEndString: "zeroinitializer", actualString: manager[key: "access"]);
+        Assert.Matches(expectedRegexPattern: @"atomicrmw add ptr %\S+, i64 1 seq_cst", actualString: ir);
     }
 
     [Fact]
@@ -303,7 +371,8 @@ public sealed class ProgramCliTests : IDisposable
                 "routine start()\n" +
                 "    var hits = Atomic[U64](initial: 0)\n" +
                 "    var ring: CircularList[S64] = [1, 2]\n" +
-                "    show(\"Atomic CircularList\")  # Atomic\n" +
+                "    var big: Integer = 7.to[Integer]()\n" +
+                "    show(\"Atomic CircularList Integer\")  # Atomic Integer\n" +
                 "    var atomic_hits = hits.load()\n" +
                 "    return\n")
         ]);
@@ -321,7 +390,8 @@ public sealed class ProgramCliTests : IDisposable
                       "routine start()\n" +
                       "    var hits = Unbroken[U64](initial: 0)\n" +
                       "    var ring: RotatableList[S64] = [1, 2]\n" +
-                      "    show(\"Atomic CircularList\")  # Atomic\n" +
+                      "    var big: Int = 7.to[Int]()\n" +
+                      "    show(\"Atomic CircularList Integer\")  # Atomic Integer\n" +
                       "    var atomic_hits = hits.load()\n" +
                       "    return\n",
             actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
