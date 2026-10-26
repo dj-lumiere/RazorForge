@@ -344,7 +344,7 @@ file only once its other old spellings are gone.
 - `new`, `migrate`, `docs`, `fmt`, `lint`, `test`, `lsp` and `check --json`.
 - The language server: diagnostics, formatting, hover, go to definition, rename and quick fixes.
 - Rider plugin and VS Code extension.
-- `[target] backend = "tessera"` (opt-in).
+- `[target] backend = "tessera"` (experimental, opt-in): builds through Tessera instead of LLVM IR directly. It does not cover every program yet.
 - Windows trace builds write CodeView and PDB files.
 - A crash trace holds the program's routines only: a standard library routine keeps no frame, and a crash
   inside one reports the line where the program called it. `[debug] trace-stdlib = true` keeps the library's
