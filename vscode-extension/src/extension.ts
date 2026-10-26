@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { LanguageClient, LanguageClientOptions, ServerOptions } from "vscode-languageclient/node";
+import { registerRun } from "./run";
 
 /**
  * RazorForge in VS Code: the TextMate grammar colors the text, and the language server (`RazorForge lsp`) brings the errors,
@@ -13,6 +14,7 @@ let watcher: vscode.FileSystemWatcher | undefined;
 let restartTimer: NodeJS.Timeout | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+    registerRun(context, { id: "razorforge", name: "RazorForge" }, locateServer);
     context.subscriptions.push(
         vscode.commands.registerCommand("razorforge.restartServer", () => restart(context)),
         vscode.workspace.onDidChangeConfiguration(e => {
