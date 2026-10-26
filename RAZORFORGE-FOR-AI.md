@@ -145,9 +145,12 @@ When unsure, consult ground truth in the repo/package:
    trace (the routines between the throw and the catcher included) and a `Thrown again at file:line:col` line.
    Every crash report is headed by the error's crash title (`Division error: ...`, the type name in sentence
    case unless the crashable writes its own `crash_title`), runtime crashes too (`Integer overflow error: ...`).
-   The trace holds the program's routines only: a standard library routine pushes no frame, and a crash inside one
-   reports the line where the program called it. `[debug] trace-stdlib = true` (for work on the library) keeps the
-   library's frames too.
+   The trace holds the program's routines only: a standard library routine has no frame on it, and a crash inside one
+   reports the line where the program called it. A routine LLVM inlined still has its frame. `[debug] trace-stdlib =
+   true` (for work on the library) keeps the library's frames too. On Linux x86-64 a build made ahead of time reads
+   the trace from the stack when a crash asks for it (every routine keeps a frame record, the builder writes a table
+   of return addresses), so while the program runs it only keeps the frame records. Elsewhere, and in the debug JIT, the program
+   keeps a shadow stack as it runs.
    `is None` is a `Maybe` arm only (a `Check` has no absent state: "not found" in a
    `Check` is the arm `is AbsentValueError`). When the value is itself a variant, an arm may name the types it holds instead of the
    whole value (`when check parse(...)` with `is Deposit as d`, `is Withdraw as w`, `is Crashables as e`),
