@@ -170,6 +170,68 @@ public class SafetyPathMatrixTests
     }
 
     [Fact]
+    public void Analyze_LambdaCapturingRetainedKeptInMemberVariableHandedToWork_Errors()
+    {
+        AssertHasErrorCode(source: """
+                           record Holder
+                               f: Callable[(), S64]
+
+                           routine work(f: Callable[(), S64]) -> S64
+                               return f()
+
+                           routine start()
+                               var r = Retained(from: Cell(n: 1))
+                               var h = Holder(f: () given (r) => r.n)
+                               var j = work.to[Work](f: h.f)
+                               j.start_now()
+                               show(f"{j.retrieve()}")
+                               return
+                           """,
+            code: SemanticDiagnosticCode.ThreadArgNotShareable, expected: "This lambda captured `r`");
+    }
+
+    [Fact]
+    public void Analyze_LambdaCapturingRetainedKeptInListHandedToWork_Errors()
+    {
+        AssertHasErrorCode(source: """
+                           routine work(f: Callable[(), S64]) -> S64
+                               return f()
+
+                           routine start()
+                               var r = Retained(from: Cell(n: 1))
+                               var fs: List[Callable[(), S64]] = []
+                               fs.add_last(value: () given (r) => r.n)
+                               var j = work.to[Work](f: fs[0])
+                               j.start_now()
+                               show(f"{j.retrieve()}")
+                               return
+                           """,
+            code: SemanticDiagnosticCode.ThreadArgNotShareable, expected: "This lambda captured `r`");
+    }
+
+    [Fact]
+    public void Analyze_LambdaCapturingValueKeptInMemberVariableHandedToWork_Analyzes()
+    {
+        AssertAnalyzes(source: """
+                       import IO/Console
+
+                       record Holder
+                           f: Callable[(), S64]
+
+                       routine work(f: Callable[(), S64]) -> S64
+                           return f()
+
+                       routine start()
+                           var n: S64 = 4
+                           var h = Holder(f: () given (n) => n + 1)
+                           var j = work.to[Work](f: h.f)
+                           j.start_now()
+                           show(f"{j.retrieve()}")
+                           return
+                       """);
+    }
+
+    [Fact]
     public void Analyze_ChannelOfRetainedHandedToWork_Errors()
     {
         AssertHasErrorCode(source: """
