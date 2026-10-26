@@ -178,17 +178,20 @@ routine udiv256_by_u128_sticky(num: U256, den: U256) -> U256
         var p1 = LLVM::signed_gt(a: s1, b: 0)
         var dn1 = LLVM::shift_left(value: d0, bits: s1u)
         var vr1 = reciprocal_word(dn1)
+        var na3_carry = if p1 then LLVM::shift_right_unsigned(a2, s1i) else 0
         var na3 = LLVM::bit_or(
             a: LLVM::shift_left(value: a3, bits: s1u),
-            b: if p1 then LLVM::shift_right_unsigned(a2, s1i) else 0,
+            b: na3_carry,
         )
+        var na2_carry = if p1 then LLVM::shift_right_unsigned(a1, s1i) else 0
         var na2 = LLVM::bit_or(
             a: LLVM::shift_left(value: a2, bits: s1u),
-            b: if p1 then LLVM::shift_right_unsigned(a1, s1i) else 0,
+            b: na2_carry,
         )
+        var na1_carry = if p1 then LLVM::shift_right_unsigned(a0, s1i) else 0
         var na1 = LLVM::bit_or(
             a: LLVM::shift_left(value: a1, bits: s1u),
-            b: if p1 then LLVM::shift_right_unsigned(a0, s1i) else 0,
+            b: na1_carry,
         )
         var na0 = LLVM::shift_left(value: a0, bits: s1u)
         var r0 = if p1 then LLVM::shift_right_unsigned(a3, s1i) else 0
@@ -206,25 +209,29 @@ routine udiv256_by_u128_sticky(num: U256, den: U256) -> U256
     var su = LLVM::reinterpret_bits[S64, U64](s)
     var pos = LLVM::signed_gt(a: s, b: 0)
     var si = LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 64, b: s))
+    var vn1_carry = if pos then LLVM::shift_right_unsigned(d0, si) else 0
     var vn1 = LLVM::bit_or(
         a: LLVM::shift_left(value: d1, bits: su),
-        b: if pos then LLVM::shift_right_unsigned(d0, si) else 0,
+        b: vn1_carry,
     )
     var vn0 = LLVM::shift_left(value: d0, bits: su)
     # vn1 is normalized and invariant across the 3 unrolled quotient-digit steps → reciprocal once.
     var vrec = reciprocal_word(vn1)
     var un0 = LLVM::shift_left(value: a0, bits: su)
+    var un1_carry = if pos then LLVM::shift_right_unsigned(a0, si) else 0
     var un1 = LLVM::bit_or(
         a: LLVM::shift_left(value: a1, bits: su),
-        b: if pos then LLVM::shift_right_unsigned(a0, si) else 0,
+        b: un1_carry,
     )
+    var un2_carry = if pos then LLVM::shift_right_unsigned(a1, si) else 0
     var un2 = LLVM::bit_or(
         a: LLVM::shift_left(value: a2, bits: su),
-        b: if pos then LLVM::shift_right_unsigned(a1, si) else 0,
+        b: un2_carry,
     )
+    var un3_carry = if pos then LLVM::shift_right_unsigned(a2, si) else 0
     var un3 = LLVM::bit_or(
         a: LLVM::shift_left(value: a3, bits: su),
-        b: if pos then LLVM::shift_right_unsigned(a2, si) else 0,
+        b: un3_carry,
     )
     var un4 = if pos then LLVM::shift_right_unsigned(a3, si) else 0
     var st2 = knuth_step(ujn: un4, ujn1: un3, ujn2: un2, vn0: vn0, vn1: vn1, vrec: vrec)
@@ -241,13 +248,15 @@ routine udiv256_by_u128_sticky(num: U256, den: U256) -> U256
     un0 = st0.ujn2
     var q = asm256(q0: st0.q, q1: st1.q, q2: st2.q, q3: 0)
     # denormalized remainder (low 2 limbs) for the sticky
+    var rem0_carry = if pos then LLVM::shift_left(value: un1, bits: si) else 0
     var rem0 = LLVM::bit_or(
         a: LLVM::shift_right_unsigned(un0, su),
-        b: if pos then LLVM::shift_left(value: un1, bits: si) else 0,
+        b: rem0_carry,
     )
+    var rem1_carry = if pos then LLVM::shift_left(value: un2, bits: si) else 0
     var rem1 = LLVM::bit_or(
         a: LLVM::shift_right_unsigned(un1, su),
-        b: if pos then LLVM::shift_left(value: un2, bits: si) else 0,
+        b: rem1_carry,
     )
     if LLVM::int_ne(a: LLVM::bit_or(a: rem0, b: rem1), b: 0)
         q = LLVM::bit_or(a: q, b: LLVM::zero_extend[U64, U256](1))
@@ -269,9 +278,10 @@ routine udiv128_by_u64_sticky(num: U128, den: U64) -> U128
     var p1 = LLVM::signed_gt(a: s1, b: 0)
     var dn1 = LLVM::shift_left(value: den, bits: s1u)
     var vr1 = reciprocal_word(dn1)
+    var na1_carry = if p1 then LLVM::shift_right_unsigned(a0, s1i) else 0
     var na1 = LLVM::bit_or(
         a: LLVM::shift_left(value: a1, bits: s1u),
-        b: if p1 then LLVM::shift_right_unsigned(a0, s1i) else 0,
+        b: na1_carry,
     )
     var na0 = LLVM::shift_left(value: a0, bits: s1u)
     var r0 = if p1 then LLVM::shift_right_unsigned(a1, s1i) else 0
@@ -306,9 +316,10 @@ routine udiv128_hi_lt_den_sticky(num: U128, den: U64) -> U128
     # hi(num) < den ⟹ (num << s) fits U128; the normalized high word na1 < dn, so one div2by1
     # yields the full quotient. dr.r is the normalized remainder (true remainder << s), nonzero
     # iff the true remainder is → correct sticky without denormalizing.
+    var na1_carry = if p then LLVM::shift_right_unsigned(a0, si) else 0
     var na1 = LLVM::bit_or(
         a: LLVM::shift_left(value: a1, bits: su),
-        b: if p then LLVM::shift_right_unsigned(a0, si) else 0,
+        b: na1_carry,
     )
     var na0 = LLVM::shift_left(value: a0, bits: su)
     var dr = div2by1(u1: na1, u0: na0, d: dn, v: vr)

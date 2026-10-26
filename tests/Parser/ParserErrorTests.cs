@@ -485,7 +485,7 @@ public class ParserErrorTests
     public void Parse_NestedInlineIfThenElse_ReportsError()
     {
         // Nested if-then-else expressions are not idiomatic and should be rejected
-        // The parser prevents nesting by design (using _parsingInlineConditional flag)
+        // The parser prevents nesting by design: a branch is an ordinary expression, which never starts with if
         // Use when/match or regular if statements for complex conditionals
         string source = """
                         routine classify(n: S32) -> Text

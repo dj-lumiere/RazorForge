@@ -24,10 +24,13 @@ When unsure, consult ground truth in the repo/package:
 2. **Normal routine completion uses an explicit `return`** — even void ones.
    This is load-bearing (destructor scheduling anchors at `return`), not style.
    Failable routines may also terminate with `throw`.
-3. **Conditional expressions are top-level only.**
-   `return if c then a else b` ✓ — but `f(x: if c then a else b)` or
-   `(if c then a else b) + 1` are parse errors *by design*. Use `when` or a
-   named intermediate instead.
+3. **Conditional expressions are top-level only.** `if c then a else b` is the
+   whole value of `var x =` (also `preset`, `global`), a plain `x =`, or `return`.
+   Anywhere else it is RF-G112 *by design*: inside parentheses, an argument
+   (`f(x: if c then a else b)`), an operand (`(if c then a else b) + 1`, `x += if ...`),
+   a subscript, an f-text slot, a branch or condition of another conditional
+   (`else if ...` too), a `when` arm's value, and directly after `try`/`check`.
+   Use `when` or a named intermediate instead.
 4. **`//` is integer floor division; `/` is true division.**
 5. **Default arithmetic is checked** — `+ - *` throw on overflow. Wrapping
    variants: `+% -% *%`. Clamping (saturating): `+^ -^ *^`. Floating-point
@@ -726,10 +729,12 @@ dangerous routine raw_poke(p: Addr)     # callable only inside danger blocks
   (`routine T.create(...)` is an ordinary member routine named `create`), and
   overload resolution picks the failable or plain one for you.
 - **Annotations are a fixed set.** `@readonly`, `@writable`, `@reshaping`, `@discardable`, `@positional`,
-  `@infix`, `@inline`, `@no_optimize`, `@crash_only`, `@untraced`, `@blocking`, `@layout(...)`, `@link(...)`,
+  `@infix`, `@inline`, `@noinline`, `@no_optimize`, `@crash_only`, `@untraced`, `@blocking`, `@layout(...)`, `@link(...)`,
   `@target(...)`, `@test`/`@case`/`@skip`/`@time_limit` (routine tests, below) and the
   library's own (`@llvm`, `@llvm_ir`, `@rf`, `@innate`, `@generated`, `@override`, `@overridable`,
-  `@self_locking`). Any other name is RF-G221 (a misspelling names the close one). There is no
+  `@self_locking`). Any other name is RF-G221 (a misspelling names the close one). `@noinline` keeps a routine
+  out of its callers (LLVM `noinline`, its own body still optimized), `@no_optimize` also turns its optimization off
+  (`noinline optnone`), and `@inline` with `@noinline` on one routine is RF-G227. There is no
   `@deprecated`, no `@initonly` and no `@bench` yet.
 - **Routine tests.** `razorforge test` builds a file once per `@test` routine, with a `start()` that calls it in
   place of the program's own: once per `@case(input: (a, b), output: r)` (arguments in parameter order, the result
@@ -1463,6 +1468,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-G225      | a line written `pass`                 | `nothing`, the line with no work (`migrate --step nothing`) |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
+| RF-G227      | `@inline` and `@noinline` on one routine | keep the one you mean                            |
 
 ## 13. A complete worked example
 
