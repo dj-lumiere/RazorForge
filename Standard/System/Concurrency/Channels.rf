@@ -53,14 +53,28 @@ obeys Emitter[T]
 
 # ---- Creation -----------------------------------------------------------------------------------
 
+### Creates the native channel behind `make_channel` and `make_shared_channel`.
+### :param capacity: The buffer depth (0 = rendezvous).
+### :returns: The channel's address.
+### :throws: {OutOfMemoryError} The buffer is more bytes than a `U64` counts, or the heap has no room for it.
+failable dangerous routine open_channel(capacity: U64) -> Addr
+    # A rendezvous channel still keeps one slot. Each slot holds one address.
+    var slots = if capacity == 0 then 1 else capacity
+    var bytes = storage_byte_size(element_size: Addr.data_size(), count: slots).byte_size()
+    var chan = C::rf_channel_create(capacity: capacity)
+    if chan.is_hollow()
+        throw OutOfMemoryError(requested_bytes: bytes)
+    return chan
+
 ### Creates a single-consumer channel and returns its `(Transmitter, Receiver)` pair. `capacity` is the
 ### buffered depth: 0 = rendezvous (transmit waits for a taker), N = a bounded buffer (transmit blocks when
 ### full = backpressure). Clone the `Transmitter` for multiple producers (fan-in).
 ### :param capacity: The buffer depth (0 = rendezvous).
 ### :returns: A `(Transmitter[T], Receiver[T])` tuple sharing one channel.
-routine make_channel[T](capacity: U64) -> (Transmitter[T], Receiver[T])
+### :throws: {OutOfMemoryError} The buffer is more bytes than a `U64` counts, or the heap has no room for it.
+failable routine make_channel[T](capacity: U64) -> (Transmitter[T], Receiver[T])
     danger
-        var chan = C::rf_channel_create(capacity: capacity)
+        var chan = open_channel(capacity: capacity)
         return (Transmitter[T](chan: chan), Receiver[T](chan: chan))
 
 ### Creates a multi-consumer channel and returns its `(Transmitter, SharedReceiver)` pair. Clone the
@@ -68,9 +82,10 @@ routine make_channel[T](capacity: U64) -> (Transmitter[T], Receiver[T])
 ### fan-out, not broadcast). `capacity` as in `make_channel`.
 ### :param capacity: The buffer depth (0 = rendezvous).
 ### :returns: A `(Transmitter[T], SharedReceiver[T])` tuple sharing one channel.
-routine make_shared_channel[T](capacity: U64) -> (Transmitter[T], SharedReceiver[T])
+### :throws: {OutOfMemoryError} The buffer is more bytes than a `U64` counts, or the heap has no room for it.
+failable routine make_shared_channel[T](capacity: U64) -> (Transmitter[T], SharedReceiver[T])
     danger
-        var chan = C::rf_channel_create(capacity: capacity)
+        var chan = open_channel(capacity: capacity)
         return (Transmitter[T](chan: chan), SharedReceiver[T](chan: chan))
 
 ### Transmits one item, moving its ownership into the channel. Blocks/parks while the buffer is full

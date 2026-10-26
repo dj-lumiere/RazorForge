@@ -1,0 +1,39 @@
+module Tests/Stdlib/EntityTupleRecoveryApi
+
+import IO/Console
+# A failable routine that gives back a tuple of entities, recovered with try: the entity made before a failable step
+# moves into the tuple once, and `var (a, b) = ...` in a failable routine passes a failure on. Each entity is torn
+# down once.
+
+entity Part
+    n: S64
+
+@override
+routine Part.destruct()
+    show(f"part {me.n} ends")
+    return
+
+failable routine pair(n: S64) -> (Part, Part)
+    if n < 0
+        throw IntegerOverflowError()
+    return (Part(n: n), Part(n: n + 1))
+
+failable routine total(n: S64) -> S64
+    var (a, b) = pair(n: n)
+    return a.n + b.n
+
+routine start()
+    when try pair(n: 3)
+        is None => show("pair 3: None")
+        else as p => show(f"pair 3: {p.item0.n} {p.item1.n}")
+    when try pair(n: -1)
+        is None => show("pair -1: None")
+        else => show("pair -1: made")
+    when try total(n: -1)
+        is None => show("total -1: None")
+        else as v => show(f"total -1: {v}")
+    when try total(n: 4)
+        is None => show("total 4: None")
+        else as v => show(f"total 4: {v}")
+    show(f"total 5: {total(n: 5)}")
+    return

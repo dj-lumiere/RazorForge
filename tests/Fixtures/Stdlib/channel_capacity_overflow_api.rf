@@ -1,0 +1,22 @@
+module Tests/Stdlib/ChannelCapacityOverflowApi
+
+import IO/Console
+# A channel whose buffer is more bytes than a U64 counts fails with OutOfMemoryError, which try and check receive. A
+# channel of a usable capacity still works after that.
+
+routine start()
+    when try make_channel[S64](capacity: U64_MAX)
+        is None => show("make_channel past U64: None")
+        else => show("make_channel past U64: made")
+    when check make_shared_channel[S64](capacity: U64_MAX // 4)
+        is OutOfMemoryError as e => show(f"make_shared_channel past U64: {e.crash_message()}")
+        else => show("make_shared_channel past U64: made")
+    when try make_channel[S64](capacity: 2)
+        is None => show("make_channel 2: None")
+        else as pair =>
+            var (feeder, hop) = steal pair
+            feeder.transmit(item: 7)
+            feeder.close()
+            each v in hop
+                show(f"received {v}")
+    return
