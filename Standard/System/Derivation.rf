@@ -38,6 +38,55 @@ needs AnyType T
         is Byte => return "'" + value.represent() + "'"
         else => return value.represent()
 
+### The text in double quotes with the characters that would hide its value written as escapes: a double quote, a
+### backslash, a line break, a tab and a carriage return as backslash escapes, and every other control character as
+### a backslash, `u` and six hexadecimal digits.
+### :param text: The text.
+### :returns: The quoted text.
+secret routine quoted_source(text: Text) -> Text
+    var result = "\""
+    each letter in text
+        var code = letter.codepoint()
+        if code == 0x22
+            result = result + "\\\""
+        elseif code == 0x5C
+            result = result + "\\\\"
+        elseif code == 0x0A
+            result = result + "\\n"
+        elseif code == 0x09
+            result = result + "\\t"
+        elseif code == 0x0D
+            result = result + "\\r"
+        elseif code < 0x20 or code == 0x7F
+            var digits = code.to[U64]().to_text(radix: 16)
+            until digits.count >= 6
+                digits = "0" + digits
+            result = result + "\\u" + digits
+        else
+            result = result + letter.to[Text]()
+    return result + "\""
+
+### The form a value takes as a container element in a `diagnose()`: the container's type names the element's type, so
+### an element is written the way a literal is, a text quoted with its escapes (`"a\", \"b"` is one text, not two) and a
+### character quoted, while a variant element names the member type its value has (`S32(1)`, `Text("a")`), which the
+### container's type does not say.
+routine nested_diagnose(value: T) -> Text
+needs AnyType T
+    when T
+        is Text => return quoted_source(text: value.represent())
+        is VariantType => return value.diagnose()
+        else => return nested_repr(value)
+
+### A container element's form in a `represent()` (`nested_repr`) or a `diagnose()` (`nested_diagnose`).
+### :param value: The element.
+### :param diagnosing: Whether the container is writing its `diagnose()`.
+### :returns: The element's text.
+routine nested_form(value: T, diagnosing: Bool) -> Text
+needs AnyType T
+    if diagnosing
+        return nested_diagnose(value)
+    return nested_repr(value)
+
 ### Variant `represent()`: TYPE-dispatch on the live arm — `TypeName(payload_repr)`, or `TypeName(none)`
 ### for the absent arm. The `@override needs VariantType T` gate makes the wired synthesizer pick this
 ### over the record default for a variant type. `expand m in branchof(T)` generates one arm clause each;
@@ -51,18 +100,16 @@ needs VariantType T
         expand m in branchof(T)
             is $typeof(m) as v => return me.type_name() + "(" + v.represent() + ")"
 
-### Variant `diagnose()`: `Module.Variant(type_id: <arm id>, <arm diagnose>)` — TAG-dispatch via
-### `branchof`; the live arm's `typeidof(m)` (its stable type id) and the payload's `diagnose()`. The absent
-### `None` arm shows `(type_id: 0, none)`. (No `None`/void arms exist — `None` is the canonical empty
-### branch — so no bindingless-arm form is needed.)
+### Variant `diagnose()`: the member type the value has and the value in its element form (`S32(1)`, `Text("a")`), or
+### `none` for the absent arm, so two members holding the same digits never read the same.
 @readonly
 @override
 routine T.diagnose() -> Text
 needs VariantType T
     when me
-        is None => return me.full_type_name() + "(type_id: 0, none)"
+        is None => return "none"
         expand m in branchof(T)
-            is $typeof(m) as v => return me.full_type_name() + "(type_id: " + typeidof(m).represent() + ", " + v.diagnose() + ")"
+            is $typeof(m) as v => return nameof(m) + "(" + nested_diagnose(v) + ")"
 
 ### Choice `represent()`: VALUE-dispatch on the S32 discriminant via `caseof`, returning the bare case
 ### name (`READ`). `LLVM::reinterpret_bits[T, S32](me)` reads the discriminant, and `$valueof(c)` is each case's
@@ -194,8 +241,8 @@ needs TupleType T
     return result + ")"
 
 ### Tuple `diagnose()`: `Module.Tuple[…](v0, v1, …)`, the qualified type name prefixed onto the elements in their
-### container-element form (`nested_repr`), as `represent` writes them: the type name says each element's type, and a
-### text is quoted, so `(1, "1")` never reads as `(1, 1)`.
+### container-element form (`nested_diagnose`): the type name says each element's type, a text is quoted with its
+### escapes, so `(1, "1")` never reads as `(1, 1)`.
 @readonly
 @override
 routine T.diagnose() -> Text
@@ -205,7 +252,7 @@ needs TupleType T
     expand m in allmemvarof(T)
         if not first
             result = result + ", "
-        result = result + nested_repr(me.$nameof(m))
+        result = result + nested_diagnose(me.$nameof(m))
         first = false
     return result + ")"
 
