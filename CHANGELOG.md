@@ -54,6 +54,10 @@ file only once its other old spellings are gone.
 - `absent` is gone: a routine with nothing to give throws, `throw AbsentValueError()` (default `migrate`).
 - The `Crashable` protocol is the `Crashables` record. Every crashable writes its own `crash_message()` (`RF-S704`).
 - `MemoryAllocationError` is `OutOfMemoryError` (default `migrate`, `migrate --step type-names`).
+- `Integer` is `Int` (default `migrate`, `migrate --step type-names`). There is no alias: `Integer` is a build
+  error that names `Int`. An `Int` is 16 bytes: a value in the `S64` range is held in the value itself, and a
+  value outside it shares a read-only list of limbs between copies. A literal outside the `S64` range is laid down
+  once by the builder and shared by each use. `List[Int]` takes 16 bytes per element (40 before).
 
 **Syntax**
 - A loop is `until c` (it stops when `c` becomes true) or `loop` (it ends only with `break`, `return` or `throw`).

@@ -45,7 +45,7 @@ When unsure, consult ground truth in the repo/package:
    zero throws `DivisionByZeroError` and `0 / 0` throws `NumericDomainError`
    (integer `//` and `%` by zero throw `DivisionByZeroError`).
    There is no arbitrary-precision binary float: `B128` is the widest, and exact
-   arithmetic is `Integer` and the decimals.
+   arithmetic is `Int` and the decimals.
 6. **Data exists to be shared, and record and entity are the two ways.** The question that picks one: may each
    place that shares the value hold its own copy? Yes: a `record`, shared by handing out copies (`=` copies).
    No, copies would be a problem: an `entity`, whose one legitimate version is the single source of truth, so it
@@ -318,7 +318,7 @@ it are seen everywhere without an import.
 (`Standard/RazorForge/System/Text/` is `System/Text`), and a `module` line that names another
 module is a build error. `System` is the base: the built-in types, `List` / `Dict` / `Set`,
 the protocols and the errors, with `System/Numerics` (every number type and its math,
-`Integer`, `Decimal`), `System/Text` (`Text`, `Bytes`, formatting), `System/Memory` (the
+`Int`, `Decimal`), `System/Text` (`Text`, `Bytes`, formatting), `System/Memory` (the
 wrappers and controllers, `ByteSize`), `System/Temporal` (`Duration`, `Moment`, `Clock`),
 `System/Concurrency`, `System/Serialization`, `System/Cpu` (`CpuEventManager`) and `System/CSubSystem` (C types
 and strings).
@@ -353,7 +353,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   EXACTLY: too many significant bits or a bit below the smallest subnormal is RF-S018, not a rounding. On a
   `D32`/`D64`/`D128`/`Decimal` type it is RF-S017. It takes a binary float context, else `B64`
   (in Suflae too).
-- Arbitrary precision: `Integer`. `Decimal` is a finite-only decimal with 34 significant digits (decimal128, canonical, never inf/NaN): `+ - *` are exact and crash with `NumericOverflowError` when the result needs more than 34 digits, `/` and the math routines round to the nearest, and every rounding a `Decimal` does (`/`, text and integers or floats with more digits, `round()`, `fixed(places:)`, literals) is half up: x goes to the n (at the digit kept) with `n - 0.5 <= x < n + 0.5`, that is `floor(x + 0.5)` (`2.5` to `3`, `-2.5` to `-2`, `-7.125` to 2 places `-7.12`, `(-0.5).round()` is `0`), `pow`/`powi`/`sqrt` and the transcendentals included, while `D32`/`D64`/`D128` keep IEEE 754's ties to even, cohorts and `-0` (a number takes them from context, `var big: Integer = 10`). A `Decimal` has one form per value: every result is normalized (no trailing zeros in the coefficient, a zero is always `+0`, never `-0`: `(-0.5).fixed(0)` is `0`, `"-0".to[Decimal]()` is `0`), so `1.0` and `1.00` are the same bits and `Decimal` is `Hashable` (a `Set`/`Dict` key). Its text drops the zeros after the point and writes an integer of up to 34 digits in full (`100`, `1.5e3` shows `1500`, `1e40` shows `1E+40`). A negative literal is one signed value (`-1.0000000000000000000000000000000005` rounds half up to `-1`). Operators keep the type's one rule; a routine that rounds on purpose takes a `RoundingRule` (`HALF_UP`, `HALF_EVEN`, `HALF_AWAY`, `FLOOR`, `CEIL`, `TRUNC`, leaving it out gives the type's rule: `HALF_UP` for `Decimal`, `HALF_EVEN` for `D32`/`D64`/`D128`): `x.round(places: 2, rule: RoundingRule.FLOOR)` (`places` default 0, so `D64.round()` is ties to even), `x.fixed(places: 2, rule: ...)`, and on `Decimal` `a.divide(by: b, places: 2, rule: ...)`, `a.add(you: b, places: 2)`, `a.subtract(you: b, places: 2)`, `a.multiply(by: b, places: 10)` (computed exactly, rounded once, so they round where `+ - *` fail, and throw `NumericOverflowError` only when even the rounded value needs more than 34 digits). There is no global rounding state. `a.rem(you: b)` on `Decimal` is the Euclidean remainder, as integer `%` is: computed exactly, `0 <= r < |b|`, never negative and never `-0` (`-7` by `2` is `1`, `7` by `-2` is `1`, `5.5` by `-2` is `1.5`, `-5.5` by `2` is `0.5`, `1E+30` by `7` is `1`), throws `DivisionByZeroError` for a zero `b` and `NumericOverflowError` when the remainder needs more than 34 digits (`-1e-40` by `7`). `Decimal` has no `%` or `//`, and `D32`/`D64`/`D128` keep the IEEE `rem`. No arbitrary-precision binary float or
+- Arbitrary precision: `Int` (16 bytes, two words: a value in the `S64` range is held in the value itself, with no heap and no engine call for `+ - *`, compares, shifts, bitwise, `//` and `%`; a value outside it shares a read-only list of 64-bit limbs between copies, and a literal outside the range is laid down once by the builder and shared by each use). `Decimal` is a finite-only decimal with 34 significant digits (decimal128, canonical, never inf/NaN): `+ - *` are exact and crash with `NumericOverflowError` when the result needs more than 34 digits, `/` and the math routines round to the nearest, and every rounding a `Decimal` does (`/`, text and integers or floats with more digits, `round()`, `fixed(places:)`, literals) is half up: x goes to the n (at the digit kept) with `n - 0.5 <= x < n + 0.5`, that is `floor(x + 0.5)` (`2.5` to `3`, `-2.5` to `-2`, `-7.125` to 2 places `-7.12`, `(-0.5).round()` is `0`), `pow`/`powi`/`sqrt` and the transcendentals included, while `D32`/`D64`/`D128` keep IEEE 754's ties to even, cohorts and `-0` (a number takes them from context, `var big: Int = 10`). A `Decimal` has one form per value: every result is normalized (no trailing zeros in the coefficient, a zero is always `+0`, never `-0`: `(-0.5).fixed(0)` is `0`, `"-0".to[Decimal]()` is `0`), so `1.0` and `1.00` are the same bits and `Decimal` is `Hashable` (a `Set`/`Dict` key). Its text drops the zeros after the point and writes an integer of up to 34 digits in full (`100`, `1.5e3` shows `1500`, `1e40` shows `1E+40`). A negative literal is one signed value (`-1.0000000000000000000000000000000005` rounds half up to `-1`). Operators keep the type's one rule; a routine that rounds on purpose takes a `RoundingRule` (`HALF_UP`, `HALF_EVEN`, `HALF_AWAY`, `FLOOR`, `CEIL`, `TRUNC`, leaving it out gives the type's rule: `HALF_UP` for `Decimal`, `HALF_EVEN` for `D32`/`D64`/`D128`): `x.round(places: 2, rule: RoundingRule.FLOOR)` (`places` default 0, so `D64.round()` is ties to even), `x.fixed(places: 2, rule: ...)`, and on `Decimal` `a.divide(by: b, places: 2, rule: ...)`, `a.add(you: b, places: 2)`, `a.subtract(you: b, places: 2)`, `a.multiply(by: b, places: 10)` (computed exactly, rounded once, so they round where `+ - *` fail, and throw `NumericOverflowError` only when even the rounded value needs more than 34 digits). There is no global rounding state. `a.rem(you: b)` on `Decimal` is the Euclidean remainder, as integer `%` is: computed exactly, `0 <= r < |b|`, never negative and never `-0` (`-7` by `2` is `1`, `7` by `-2` is `1`, `5.5` by `-2` is `1.5`, `-5.5` by `2` is `0.5`, `1E+30` by `7` is `1`), throws `DivisionByZeroError` for a zero `b` and `NumericOverflowError` when the remainder needs more than 34 digits (`-1e-40` by `7`). `Decimal` has no `%` or `//`, and `D32`/`D64`/`D128` keep the IEEE `rem`. No arbitrary-precision binary float or
   complex: `B128` and `C256` are the widest.
 - Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
@@ -422,7 +422,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - `inf` and `nan` are number literals (reserved words) that take their type from where they go: `var x: B64 = inf`,
   `limit: B32 = -inf` (negative infinity is `-` on `inf`), `return nan`, `x < inf`. Every binary float (B16 B32 B64
   B128) and the decimal floats D32 D64 D128 take them. With nothing giving a type (`var x = inf`) it is RF-S019,
-  and where a `Decimal`, `Integer` or integer type goes it is RF-S020. There are no infinity/NaN presets and no
+  and where a `Decimal`, `Int` or integer type goes it is RF-S020. There are no infinity/NaN presets and no
   `inf_b64` spelling (RF-G010).
 
 **Optionals and `none`:**
@@ -503,7 +503,7 @@ declare their own `i`.
   both naming that member variable. A record also hashes automatically (a `Set` element / `Dict` key) when
   every member variable hashes, else RF-S150 at the use names the member variable. An entity hashes only
   with `obeys Hashable` (its member variables can change while a `Set` holds it): `Set[Player]` without it is
-  RF-S150. `Text`, `Bytes`, `Integer` and `Decimal` hash their value, so equal values hash equal however
+  RF-S150. `Text`, `Bytes`, `Int` and `Decimal` hash their value, so equal values hash equal however
   they were built. `D32`/`D64`/`D128` are `Hashable` too and hash the value, not the digits they keep: `1.0` and
   `1.00`, `+0` and `-0` hash the same, and every NaN hashes the same. An optional `T?` has `==` and a hash when `T` does (two absent ones are equal, an absent and
   a present one differ). An entity's builder-written `==` keeps the pairs it is comparing for the running task
@@ -515,8 +515,8 @@ declare their own `i`.
 
 ```razorforge
 var small = count.to[U8]()        # number to number
-var big = count.to[Integer]()      # Integer/Decimal convert on to B32/B64 (nearest value)
-var n = "42".to[S64]()             # text parsing (also Integer, Decimal, B64, ...)
+var big = count.to[Int]()      # Int/Decimal convert on to B32/B64 (nearest value)
+var n = "42".to[S64]()             # text parsing (also Int, Decimal, B64, ...)
 var address = a.to[U64]()          # an Addr's number, and 'x'.to[Text]() makes one-character text
 var raw = status.to[S32]()         # a choice's value (also to[S64]()), perms.to[U64]() a flags bitmask
 var wide: U64 = count.to()         # T left out: the declared type gives it
@@ -1092,7 +1092,7 @@ trailing space before the closing quote, and a tuple quotes its text items (`Sys
 
 The only f-text format specs are `=`, `?` and `=?`. Everything else is a member routine you call
 inside the braces:
-- **Integers** (`S8`..`S256`, `U8`..`U256`, `Integer`): `to_text(radix:)` (2 to 36, lowercase
+- **Integers** (`S8`..`S256`, `U8`..`U256`, `Int`): `to_text(radix:)` (2 to 36, lowercase
   digits, `-` for negatives, crashes on another radix) and the shorthands `hex()` / `bin()` / `oct()`.
   No `0x` prefix; `.to_uppercase()` for `FF`.
 - **Reals** (`B16`..`B128`, `D32`..`D128`, `Decimal`): `fixed(places)` — exactly `places`

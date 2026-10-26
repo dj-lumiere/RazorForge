@@ -1,0 +1,102 @@
+module Tests/Stdlib/IntS64BoundaryApi
+
+# Int around the S64 line, where a value stops being held in the value itself and gets a shared list of limbs:
+# S64_MIN and S64_MAX and one past each, 2^64 - 1 and 2^64, mixed signs, every conversion that reads both forms,
+# and literals outside the S64 range used in loops and handed to Work threads. A literal outside the range is a
+# list the builder lays down once with a share count of 1: `holders` reads that count, which every use raises by
+# one and every ending value lowers by one again, so it is the same after a loop or a batch of jobs as before.
+
+import IO/Console
+
+# The share count of the list behind `v`, 0 for a value in the S64 range (it has no list). The first word of an Int is
+# the address of the manager of its list, and the manager starts with the share count.
+routine holders(v: Int) -> U64
+    danger
+        var manager = Hijacked[Hijacked[U64]](from: v.get_address()).peek()
+        if manager.is_hollow()
+            return 0
+        return manager.peek()
+
+routine describe(label: Text, v: Int)
+    var s64 = try v.to[S64]()
+    var u64 = try v.to[U64]()
+    var s = when s64
+        is None => "none"
+        else as x => f"{x}"
+    var u = when u64
+        is None => "none"
+        else as x => f"{x}"
+    show(f"{label}: {v} neg={v.is_negative()} bits={v.bit_length()} even={v.is_even()} s64={s} u64={u}")
+    return
+
+routine sum_with_literal(times: S64) -> Int
+    var total = 0.to[Int]()
+    var i: S64 = 0
+    until i >= times
+        var big: Int = 18446744073709551616
+        var half: Int = 9223372036854775808
+        total = total + big
+        total = total - half
+        i = i + 1
+    return total
+
+routine start()
+    var s64_max: Int = 9223372036854775807
+    var s64_min: Int = -9223372036854775808
+    var two_63: Int = 9223372036854775808
+    var below_min: Int = -9223372036854775809
+    var u64_max: Int = 18446744073709551615
+    var two_64: Int = 18446744073709551616
+    var one = 1.to[Int]()
+
+    describe(label: "S64_MAX", v: s64_max)
+    describe(label: "S64_MIN", v: s64_min)
+    describe(label: "2^63", v: two_63)
+    describe(label: "-2^63 - 1", v: below_min)
+    describe(label: "2^64 - 1", v: u64_max)
+    describe(label: "2^64", v: two_64)
+
+    # Crossing the line in both directions.
+    show(f"S64_MAX + 1 = {s64_max + one}, same as 2^63: {s64_max + one == two_63}")
+    show(f"2^63 - 1 = {two_63 - one}, same as S64_MAX: {two_63 - one == s64_max}")
+    show(f"S64_MIN - 1 = {s64_min - one}, same: {s64_min - one == below_min}")
+    show(f"-2^63 - 1 + 1 = {below_min + one}, same as S64_MIN: {below_min + one == s64_min}")
+    show(f"-S64_MIN = {-s64_min}, same as 2^63: {-s64_min == two_63}")
+    show(f"-(2^63) = {-two_63}, same as S64_MIN: {-two_63 == s64_min}")
+    show(f"|S64_MIN| = {s64_min.abs()}, |-2^63 - 1| = {below_min.abs()}")
+    show(f"S64_MIN // -1 = {s64_min // -1}, S64_MIN % -1 = {s64_min % -1}")
+    show(f"S64_MIN * -1 = {s64_min * -1}, S64_MAX * 2 = {s64_max * 2}, S64_MIN * 2 = {s64_min * 2}")
+    show(f"2^63 * -1 = {two_63 * -1}, 2^64 - 1 + 1 = {u64_max + one}, 2^64 - 1 = {two_64 - one}")
+    show(f"S64_MAX << 1 = {s64_max << 1}, 1 << 63 = {one << 63}, 1 << 64 = {one << 64}, S64_MIN >> 63 = {s64_min >> 63}")
+    show(f"2^63 >> 1 = {two_63 >> 1}, 2^64 >> 1 = {two_64 >> 1}, -2^63 - 1 >> 1 = {below_min >> 1}")
+
+    # Mixed signs and mixed forms.
+    show(f"2^64 + S64_MIN = {two_64 + s64_min}, S64_MIN - 2^64 = {s64_min - two_64}")
+    show(f"-2^63 - 1 + 2^63 = {below_min + two_63}, 2^63 + S64_MIN = {two_63 + s64_min}")
+    show(f"2^64 // -3 = {two_64 // -3}, 2^64 % -3 = {two_64 % -3}, -2^64 // 3 = {(-two_64) // 3}, -2^64 % 3 = {(-two_64) % 3}")
+    show(f"S64_MIN // 7 = {s64_min // 7}, S64_MIN % 7 = {s64_min % 7}, 2^63 // 2^63 = {two_63 // two_63}")
+    show(f"S64_MIN & 2^64 - 1 = {s64_min & u64_max}, S64_MIN | 1 = {s64_min | one}, 2^63 ^ S64_MIN = {two_63 ^ s64_min}")
+    show(f"compare: {s64_max < two_63} {s64_min > below_min} {two_63 > s64_min} {below_min < s64_max} {u64_max < two_64}")
+    show(f"to_index of 2^64 - 1: {u64_max.to_index()}, of 2^64: {two_64.to_index()}")
+    show(f"B64: {two_63.to[B64]()} {u64_max.to[B64]()} {s64_min.to[B64]()} {below_min.to[B64]()} {two_64.to[B64]()}")
+    show(f"B32: {two_63.to[B32]()} {s64_min.to[B32]()}")
+    show(f"hash 2^63 twice equal: {two_63.hash(k0: 1, k1: 2) == (s64_max + one).hash(k0: 1, k1: 2)}")
+    show(f"S128: {two_64.to[S128]()} {below_min.to[S128]()}, U128: {u64_max.to[U128]()}")
+    show(f"text: {two_63.to_text(radix: 16)} {below_min.to_text(radix: 16)} {s64_min.to_text(radix: 2)}")
+
+    # A literal outside the S64 range shares its list once per use and gives the share back when the value ends.
+    var start_holders = holders(v: two_64)
+    var total = sum_with_literal(times: 1000)
+    show(f"loop total: {total}")
+    show(f"holders of 2^64 balanced after the loop: {holders(v: two_64) == start_holders}")
+    var jobs = [sum_with_literal.to[Work](times: 2000), sum_with_literal.to[Work](times: 3000),
+        sum_with_literal.to[Work](times: 4000), sum_with_literal.to[Work](times: 5000)]
+    jobs.start_now()
+    var results = jobs.gather()
+    show(f"jobs: {results[0]} {results[1]} {results[2]} {results[3]}")
+    show(f"holders of 2^64 balanced after the jobs: {holders(v: two_64) == start_holders}")
+    var copy = two_64
+    show(f"a copy shares one more: {holders(v: two_64) == start_holders + 1}")
+    show(f"a value in the S64 range has no list: {holders(v: s64_max)}")
+    show(f"{copy == two_64}")
+    return
