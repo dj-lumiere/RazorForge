@@ -226,6 +226,19 @@ public static class TestHelpers
     }
 
     /// <summary>
+    /// SA-only analysis that also hands back the analyzed program, for tests that look at the lowered body.
+    /// </summary>
+    public static (AnalysisResult Result, Program Program) AnalyzeSaProgram(string source,
+        [CallerMemberName] string? fileName = null)
+    {
+        Program program = Parse(source: source, fileName: fileName);
+        var analyzer = new SemanticVerifier(
+            language: Language.RazorForge,
+            snapshot: _rfSnapshot.Value) { SaOnly = true };
+        return (analyzer.Analyze(program: program), program);
+    }
+
+    /// <summary>
     /// Asserts that SA-only analysis succeeds without errors.
     /// </summary>
     public static AnalysisResult AssertAnalyzesSa(string source,

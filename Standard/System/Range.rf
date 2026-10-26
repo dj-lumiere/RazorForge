@@ -214,6 +214,36 @@ routine Range[T].emitter() -> RangeEmitter[T]
         limit: limit,
     )
 
+### Returns the step's size for walking the range: its magnitude, after crashing when it is zero. An `each` over a
+### range written with `by` asks for it once, before the first round.
+### :returns: The resulting `T` value.
+@readonly
+routine Range[T].walk_stride() -> T
+    me.require_nonzero_step()
+    return me.stride()
+
+### Returns whether a walk that has reached `value` takes another step: whether one more step of `stride` from
+### `value` still lands inside the range. It never steps past the type's own limits to find out.
+### :param value: The value the walk has reached.
+### :param stride: The step's size, from `walk_stride()`.
+### :returns: `true` when another step fits.
+@readonly
+@inline
+routine Range[T].continues_after(value: T, stride: T) -> Bool
+    return step_fits(value: value, end: me.end, stride: stride, ascending: me.is_ascending(), inclusive: me.inclusive)
+
+### Returns the value one step of `stride` after `value`, in the range's direction. Call it only after
+### `continues_after` said the step fits.
+### :param value: The value the walk has reached.
+### :param stride: The step's size, from `walk_stride()`.
+### :returns: The next value.
+@readonly
+@inline
+routine Range[T].next_after(value: T, stride: T) -> T
+    if me.is_ascending()
+        return value + stride
+    return value - stride
+
 ### Returns the next value from this emitter.
 ### Each successful call yields the current value and advances by `step`.
 ### :returns: The resulting `T` value.
@@ -239,30 +269,37 @@ failable routine RangeEmitter[T].emit() -> T
 ### Takes one step of a walk whose end leaves no room for `limit`: how far the end still is decides whether another
 ### step fits, and the walk is done when none does.
 secret routine RangeEmitter[T].step_measured()
-    # How far the bound still is decides whether another step fits, before stepping: stepping first would go
-    # past the type's own limit at its edge (`4 to 0` over `U64` would compute `0 - 1`). The distance itself may
-    # not fit in the type when the two ends have opposite signs (`S64_MIN to S64_MAX`): then the step is compared
-    # from the end instead, which stays in range because the step is positive and the end is on the far side of 0.
-    var zero = me.current - me.current
-    var fits = false
-    if me.ascending
-        if me.current < zero and me.end >= zero
-            var last = me.end - me.step
-            fits = last > me.current or (me.inclusive and last == me.current)
-        else
-            var room = me.end - me.current
-            fits = room > me.step or (me.inclusive and room == me.step)
-        if fits
+    if step_fits(value: me.current, end: me.end, stride: me.step, ascending: me.ascending, inclusive: me.inclusive)
+        if me.ascending
             me.current = me.current + me.step
-    else
-        if me.current >= zero and me.end < zero
-            var last = me.end + me.step
-            fits = last < me.current or (me.inclusive and last == me.current)
         else
-            var room = me.current - me.end
-            fits = room > me.step or (me.inclusive and room == me.step)
-        if fits
             me.current = me.current - me.step
-    if not fits
+    else
         me.done = true
     return
+
+### Returns whether one more step of `stride` from `value` stays inside a range that ends at `end`.
+### How far the end still is decides it, before stepping: stepping first would go past the type's own limit at its
+### edge (`4 to 0` over `U64` would compute `0 - 1`). The distance itself may not fit in the type when the two ends
+### have opposite signs (`S64_MIN to S64_MAX`): then the step is compared from the end instead, which stays in range
+### because the step is positive and the end is on the far side of 0.
+### :param value: The value the walk has reached.
+### :param end: The range's end.
+### :param stride: The step's size, always positive.
+### :param ascending: `true` when the walk counts up.
+### :param inclusive: `true` when the end itself is part of the range.
+### :returns: `true` when another step fits.
+secret routine step_fits[T](value: T, end: T, stride: T, ascending: Bool, inclusive: Bool) -> Bool
+needs T obeys Comparable, Addable, Subtractable
+    var zero = value - value
+    if ascending
+        if value < zero and end >= zero
+            var last = end - stride
+            return last > value or (inclusive and last == value)
+        var room = end - value
+        return room > stride or (inclusive and room == stride)
+    if value >= zero and end < zero
+        var last = end + stride
+        return last < value or (inclusive and last == value)
+    var room = value - end
+    return room > stride or (inclusive and room == stride)
