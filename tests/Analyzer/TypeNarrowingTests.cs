@@ -123,7 +123,6 @@ public class TypeNarrowingTests
                             when value
                                 is None => return 0
                                 else as v => return v
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

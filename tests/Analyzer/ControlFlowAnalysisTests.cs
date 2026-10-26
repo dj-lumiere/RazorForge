@@ -50,7 +50,6 @@ public class ControlFlowAnalysisTests
                                 is ACTIVE => "Running"
                                 is INACTIVE => "Stopped"
                                 is PENDING => "Waiting"
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -68,7 +67,6 @@ public class ControlFlowAnalysisTests
                                 if item == target
                                     return item
                             throw AbsentValueError()
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -105,7 +103,6 @@ public class ControlFlowAnalysisTests
                         routine test() -> S32
                             return 42
                             var x = 10
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -122,7 +119,6 @@ public class ControlFlowAnalysisTests
                         failable routine test() -> S32
                             throw AbsentValueError()
                             var x = 10
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -138,7 +134,6 @@ public class ControlFlowAnalysisTests
                         failable routine test() -> S32
                             throw ValueError("error")
                             var x = 10
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -228,7 +223,6 @@ public class ControlFlowAnalysisTests
         string source = """
                         routine test() -> S32
                             throw ValueError("error")
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -243,7 +237,6 @@ public class ControlFlowAnalysisTests
         string source = """
                         failable routine test() -> S32
                             throw AbsentValueError()
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -370,7 +363,6 @@ public class ControlFlowAnalysisTests
         string source = """
                         failable routine test() -> S32
                             throw ValueError("error")
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

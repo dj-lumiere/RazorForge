@@ -24,6 +24,9 @@ When unsure, consult ground truth in the repo/package:
 2. **Normal routine completion uses an explicit `return`** — even void ones.
    This is load-bearing (destructor scheduling anchors at `return`), not style.
    Failable routines may also terminate with `throw`.
+   The declaration states the result type: a `return` with a value in a routine
+   without `->` (or `-> None`) is RF-S301, and so is a bare `return` in a routine
+   with `-> T`. The value never sets the result type.
 3. **Conditional expressions are top-level only.** `if c then a else b` is the
    whole value of `var x =` (also `preset`, `global`), a plain `x =`, or `return`.
    Anywhere else it is RF-G112 *by design*: inside parentheses, an argument

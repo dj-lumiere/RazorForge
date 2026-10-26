@@ -37,7 +37,6 @@ public class ExhaustivenessTests
                                 is Direction.SOUTH => 2
                                 is Direction.EAST => 3
                                 is Direction.WEST => 4
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -61,7 +60,6 @@ public class ExhaustivenessTests
                                 is Direction.NORTH => 1
                                 is Direction.SOUTH => 2
                                 is Direction.EAST => 3
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -84,7 +82,6 @@ public class ExhaustivenessTests
                             return when d
                                 is Direction.NORTH => 1
                                 else => 0
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -107,7 +104,6 @@ public class ExhaustivenessTests
                                 is RED => 1
                                 is GREEN => 2
                                 is BLUE => 3
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -227,7 +223,6 @@ public class ExhaustivenessTests
                             return when b
                                 true => 1
                                 false => 0
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -244,7 +239,6 @@ public class ExhaustivenessTests
                         routine test(b: Bool) -> S32
                             return when b
                                 true => 1
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -261,7 +255,6 @@ public class ExhaustivenessTests
                         routine test(b: Bool) -> S32
                             return when b
                                 false => 0
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -284,7 +277,6 @@ public class ExhaustivenessTests
                             return when value
                                 is None => 0
                                 else as v => v
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -307,7 +299,6 @@ public class ExhaustivenessTests
                             return when x
                                 == 1 => 10
                                 _ => 0
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -325,7 +316,6 @@ public class ExhaustivenessTests
                             return when x
                                 == 1 => 10
                                 else as v => v
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -344,7 +334,6 @@ public class ExhaustivenessTests
                             return when x
                                 == 1 => 10
                                 == 2 => 20
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -371,7 +360,6 @@ public class ExhaustivenessTests
                             return when s
                                 is Status.ACTIVE => 1
                                 is Status.INACTIVE => 2
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -390,7 +378,6 @@ public class ExhaustivenessTests
                         routine test(b: Bool) -> S32
                             return when b
                                 true => 1
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -444,7 +431,6 @@ public class ExhaustivenessTests
                         routine test(o: Only) -> S32
                             return when o
                                 is ONE => 1
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -534,7 +520,6 @@ public class ExhaustivenessTests
                                 is SOUTH => 2
                                 is EAST => 3
                                 is WEST => 4
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -559,7 +544,6 @@ public class ExhaustivenessTests
                                 is Direction.SOUTH => 2
                                 is Direction.EAST => 3
                                 is Direction.WEST => 4
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -583,7 +567,6 @@ public class ExhaustivenessTests
                                 is NORTH => 1
                                 is SOUTH => 2
                                 is EAST => 3
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -606,7 +589,6 @@ public class ExhaustivenessTests
                             return when d
                                 is NORTH => 1
                                 else => 0
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -679,7 +661,6 @@ public class ExhaustivenessTests
                                 is SOUTH => 2
                                 is EAST => 3
                                 is INVALID => 4
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

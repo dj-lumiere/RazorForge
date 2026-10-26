@@ -38,7 +38,6 @@ public class TypeProhibitionTests
         string source = """
                         routine bar() -> Maybe[None]
                             throw AbsentValueError()
-                            return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
