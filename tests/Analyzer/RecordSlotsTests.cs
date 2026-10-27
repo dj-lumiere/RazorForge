@@ -9,10 +9,11 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// A <c>record</c> is a value, so it holds neither an entity nor a type parameter that could be one (RF-S409); a
-/// <c>bundle</c> is the generic aggregate whose instances holding an entity are single-owner.
+/// A <c>record</c> is a value, so it holds neither an entity nor a type parameter that could be one (RF-S409). An
+/// entity is the declaration that may: <c>Slots[T, COUNT]</c> is the fixed run of places for any <c>T</c>, kept in one
+/// place, and <c>bundle</c> is a build error (RF-G228).
 /// </summary>
-public class BundleRecordTests
+public class RecordSlotsTests
 {
     private const string Entity = """
                                   entity Res
@@ -57,36 +58,23 @@ public class BundleRecordTests
     }
 
     [Fact]
-    public void Bundle_HoldingAnyParameter_IsFine()
+    public void BundleKeyword_IsABuildError()
     {
-        AnalysisResult result = AnalyzeSa(source: Entity + """
-                                                           bundle Pair[T]
-                                                               a: T
-                                                               b: T
-
-                                                           routine start()
-                                                               var p = Pair[Res](a: Res(n: 1), b: Res(n: 2))
-                                                               var q = Pair[S64](a: 1, b: 2)
-                                                               var r = q
-                                                               return
-                                                           """);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RecordHoldsEntity);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
+        (_, Builder.Parser.Parser parser) = ParseWithErrors(source: """
+                                                                bundle Pair[T]
+                                                                    a: T
+                                                                """);
+        Assert.Single(collection: parser.GetStructuredErrors()
+                                        .Where(predicate: e => e.Code == GrammarDiagnosticCode.BundleKeyword));
     }
 
     [Fact]
-    public void BundleInstance_HoldingAnEntity_IsSingleOwner()
+    public void Slots_OfEntities_IsKeptInOnePlace()
     {
         AnalysisResult result = AnalyzeSa(source: Entity + """
-                                                           bundle Pair[T]
-                                                               a: T
-                                                               b: T
-
                                                            routine start()
-                                                               var p = Pair[Res](a: Res(n: 1), b: Res(n: 2))
-                                                               var q = p
+                                                               var s: Slots[Res, 2] = [Res(n: 1), Res(n: 2)]
+                                                               var t = s
                                                                return
                                                            """);
         Assert.Contains(collection: result.Errors,
@@ -94,26 +82,28 @@ public class BundleRecordTests
     }
 
     [Fact]
-    public void Bundle_WithoutTypeParameters_IsAnError()
-    {
-        AnalysisResult result = AnalyzeSa(source: Entity + """
-                                                           bundle Doc
-                                                               r: Res
-                                                           """);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BundleWithoutParameters);
-    }
-
-    [Fact]
-    public void Bundle_ContainingItself_IsAnError()
+    public void Slots_OfValues_IsKeptInOnePlaceToo()
     {
         AnalysisResult result = AnalyzeSa(source: """
-                                                  bundle Tree[T]
-                                                      value: T
-                                                      child: Maybe[Tree[T]]
+                                                  routine start()
+                                                      var s: Slots[S64, 2] = [1, 2]
+                                                      var t = s
+                                                      return
                                                   """);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RecursiveBundle);
+            filter: e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
+    }
+
+    [Fact]
+    public void Array_OfEntities_IsAnError()
+    {
+        AnalysisResult result = AnalyzeSa(source: Entity + """
+                                                           routine start()
+                                                               var a: Array[Res, 2] = [Res(n: 1), Res(n: 2)]
+                                                               return
+                                                           """);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ValueTypeConstraintViolation);
     }
 
     [Fact]
@@ -155,39 +145,33 @@ public class BundleRecordTests
     }
 
     [Fact]
-    public void RecordTypeConstraint_RejectsABundleHoldingAnEntity()
+    public void RecordTypeConstraint_RejectsSlots()
     {
-        AnalysisResult result = AnalyzeSa(source: Entity + """
-                                                           bundle Pair[T]
-                                                               a: T
+        AnalysisResult result = AnalyzeSa(source: """
+                                                  record Cell[T]
+                                                  needs RecordType T
+                                                      v: T
 
-                                                           record Cell[T]
-                                                           needs RecordType T
-                                                               v: T
-
-                                                           routine start()
-                                                               var ok = Cell[Pair[S64]](v: Pair[S64](a: 1))
-                                                               var bad = Cell[Pair[Res]](v: Pair[Res](a: Res(n: 1)))
-                                                               return
-                                                           """);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ValueTypeConstraintViolation);
+                                                  routine start()
+                                                      var ok = Cell[Array[S64, 1]](v: [1])
+                                                      var bad = Cell[Slots[S64, 1]](v: [1])
+                                                      return
+                                                  """);
+        Assert.Single(collection: result.Errors,
+            predicate: e => e.Code == SemanticDiagnosticCode.ValueTypeConstraintViolation);
     }
 
     [Fact]
-    public void BundleHoldingAnEntity_DuplicatesOnlyWhenEveryMemberIsCopyable()
+    public void Slots_DuplicatesOnlyWhenTheElementIsCopyable()
     {
         AnalysisResult result = AnalyzeSa(source: Entity + """
                                                            entity Cop obeys Copyable
                                                                n: S64
 
-                                                           bundle Pair[T]
-                                                               a: T
-
                                                            routine start()
-                                                               var c = Pair[Cop](a: Cop(n: 1))
+                                                               var c: Slots[Cop, 1] = [Cop(n: 1)]
                                                                var c2 = c.duplicate()
-                                                               var r = Pair[Res](a: Res(n: 1))
+                                                               var r: Slots[Res, 1] = [Res(n: 1)]
                                                                var r2 = r.duplicate()
                                                                return
                                                            """);
@@ -195,7 +179,7 @@ public class BundleRecordTests
             predicate: e => e.Code == SemanticDiagnosticCode.ProtocolConstraintViolation);
     }
 
-    /// <summary>Every RazorForge stdlib record keeps to the rule: the ones that may hold an entity are bundles.</summary>
+    /// <summary>Every RazorForge stdlib record keeps to the rule: what may hold an entity is an entity.</summary>
     [Fact]
     public void StdlibRecords_HoldNoEntity()
     {
@@ -203,7 +187,7 @@ public class BundleRecordTests
         var offenders = new List<string>();
         foreach (RecordTypeSymbol record in result.Registry.GetAllTypes().OfType<RecordTypeSymbol>())
         {
-            if (record is VariantTypeSymbol || record.IsBundle || record.GenericDefinition != null ||
+            if (record is VariantTypeSymbol || record.IsInPlaceEntity || record.GenericDefinition != null ||
                 record.CarrierKind != global::TypeModel.Enums.CarrierKind.None || record.Realm != global::TypeModel.Realms.Shared)
             {
                 continue;

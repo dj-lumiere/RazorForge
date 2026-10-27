@@ -222,7 +222,8 @@ public class MarkerConformanceTests
     public void Analyze_GenericRecordInstance_SatisfiesRecordTypeConstraint()
     {
         string source = """
-                        bundle Algebra[T]
+                        record Algebra[T]
+                        needs RecordType T
                             value: T
 
                         entity Holder[M]

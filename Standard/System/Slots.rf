@@ -1,0 +1,263 @@
+module System
+
+import BuilderQuery
+### A fixed-size run of `COUNT` places laid out in place, for elements of any type, entities included.
+###
+### `Slots[T, COUNT]` has the same layout as `Array[T, COUNT]`: `COUNT` elements packed into its own footprint, with
+### no separate allocation, living wherever what holds it lives. It is an entity: it is kept in one place, never
+### copied by `=`, and handed over with `steal`. An element is read in place (`slots[i].field`, `each e in slots`),
+### replaced with `steal slots[i] as old inject fresh`, and two elements trade places with `swap`. No place is ever
+### empty: every element is torn down once, with the `Slots`.
+###
+### **When to use**
+### - The element count is a buildtime constant and the element type may be an entity (generic code over any `T`).
+### - Use {Array[T, COUNT]} when the elements are values: it is a record and copies with `=`.
+### - Use {List[T]} when the count is only known at runtime.
+###
+### :typeparam T: The element type stored in the places.
+### :typeparam COUNT: The buildtime element count, supplied as a `U64` literal.
+### :see: {Array[T, COUNT]} for a fixed-size run of values.
+@llvm("[{COUNT} x {T}]")
+entity Slots[T, COUNT]
+relates SlotsEmitter[T, COUNT] as Emitter
+obeys Emittable[T], ModifyingIndexable[T], Sized, Container
+needs U64 COUNT
+    # N elements of T stored inline by builder - no explicit member variables needed
+    nothing
+
+### Walks the elements of a `Slots[T, COUNT]` from index 0 to N - 1, reading each one where it is.
+### :typeparam T: The element type yielded by the emitter.
+### :typeparam COUNT: The buildtime element count.
+entity SlotsEmitter[T, COUNT]
+obeys Emitter[T]
+needs U64 COUNT
+    ### Points at the places being walked: each element is read in place, so the loop's binding only reads it.
+    secret data: Hijacked[Slots[T, COUNT]]
+    ### Stores the next logical index to read.
+    secret index: U64
+
+### Returns the element at `index`, as a holder of its own (a share for a counted value).
+### :param index: The zero-based position to read.
+### :returns: The element stored at that position.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
+@readonly
+@inline
+failable routine Slots[T, COUNT].getitem(index: U64) -> T
+needs RecordType T
+    if index >= COUNT
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        var element: T = LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), index)
+        return element.share()
+
+### Returns the element at `index` as the places hold it, without bounds checking and without a holder of its own.
+### Only call this when the index is already proven to be in range.
+@readonly
+@inline
+routine Slots[T, COUNT].get_raw(index: U64) -> T
+    danger
+        return LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), index)
+
+### Returns a write token on the entity stored at `index`, so one call or field write through it changes the
+### element in place: `cells[0].v = 5` lowers to `cells.modify_at(index: 0).v = 5`.
+### :param index: The zero-based position.
+### :returns: A write token on the element.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
+failable routine Slots[T, COUNT].modify_at(index: U64) -> Modifying[T]
+needs EntityType T
+    if index >= COUNT
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        return Modifying[T](LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), index).hijack())
+
+### Returns a read token on the entity stored at `index`, so one call or field read through it reads the element
+### without copying it: `cells[0].v` lowers to `cells.view_at(index: 0).v`.
+### :param index: The zero-based position.
+### :returns: A read token on the element.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
+@readonly
+failable routine Slots[T, COUNT].view_at(index: U64) -> Viewing[T]
+needs EntityType T
+    if index >= COUNT
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        return Viewing[T](LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), index).hijack())
+
+### Replaces the element at `index` with `value`, tearing the old one down first.
+### :param index: The zero-based position to update.
+### :param value: The replacement value.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
+@inline
+failable routine Slots[T, COUNT].setitem(index: U64, value: T)
+    if index >= COUNT
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), index).destruct()
+    me.put_raw(index: index, value: value)
+    return
+
+### Writes `value` at `index` without tearing down what is there: for a place that holds nothing yet.
+### :param index: The zero-based position, already known to be in range.
+### :param value: The value that goes in.
+@inline
+secret routine Slots[T, COUNT].put_raw(index: U64, value: T)
+    danger
+        LLVM::store_element_ref[Slots[T, COUNT], T](me.hijack(), index, value)
+    return
+
+### Puts `value` at `index` and gives back the element that was there, in one step. This is what
+### `steal slots[i] as old inject fresh` runs, so the place is never empty.
+### :param index: The zero-based position to exchange.
+### :param value: The element that goes in.
+### :returns: The element that was there.
+### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
+secret failable routine Slots[T, COUNT].exchange(index: U64, value: T) -> T
+    if index >= COUNT
+        throw IndexOutOfBoundsError(index: index, count: me.count())
+    danger
+        var old: T = LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), index)
+        LLVM::store_element_ref[Slots[T, COUNT], T](me.hijack(), index, value)
+        return old
+
+### Exchanges the elements at `first` and `second` in place. Each element moves, so neither place is ever empty.
+### The same index twice changes nothing.
+### :param first: The zero-based position of one element.
+### :param second: The zero-based position of the other element.
+### :throws: {IndexOutOfBoundsError} if `first >= COUNT` or `second >= COUNT`.
+failable routine Slots[T, COUNT].swap(first: U64, second: U64)
+    if first >= COUNT
+        throw IndexOutOfBoundsError(index: first, count: me.count())
+    if second >= COUNT
+        throw IndexOutOfBoundsError(index: second, count: me.count())
+    danger
+        var a: T = LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), first)
+        var b: T = LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), second)
+        LLVM::store_element_ref[Slots[T, COUNT], T](me.hijack(), first, b)
+        LLVM::store_element_ref[Slots[T, COUNT], T](me.hijack(), second, a)
+    return
+
+### Tears down each element once. Every place holds an element, so the full range is visited.
+@override
+routine Slots[T, COUNT].destruct()
+    var i: U64 = 0
+    until i >= COUNT
+        LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), i).destruct()
+        i = i + 1
+    return
+
+### Cycle-collector TRACE: reports every place to the collector (a `Roamed` element reports its controller, a value
+### element does nothing).
+@override
+dangerous routine Slots[T, COUNT].roam_trace()
+    var i: U64 = 0
+    until i >= COUNT
+        LLVM::load_element_ref[Slots[T, COUNT], T](me.hijack(), i).cyclic_visit()
+        i = i + 1
+    return
+
+### Cycle-collector FREE: does nothing. `Slots` has no allocation of its own, and the collector frees its elements
+### as part of the cycle, so tearing them down here would free them twice.
+@override
+dangerous routine Slots[T, COUNT].roam_free()
+    return
+
+### Returns an independent copy: each element duplicated through its own `duplicate`.
+### :returns: A new `Slots` holding a duplicate of each element.
+@readonly
+routine Slots[T, COUNT].duplicate() -> Slots[T, COUNT]
+needs T obeys Copyable
+    var result = Slots[T, COUNT]()
+    var i: U64 = 0
+    until i >= COUNT
+        result.put_raw(index: i, value: me.get_raw(index: i).duplicate())
+        i = i + 1
+    return result
+
+### Returns the fixed number of elements, always the buildtime parameter `COUNT`.
+### :returns: The element count `COUNT`.
+@readonly
+routine Slots[T, COUNT].count() -> U64
+    return COUNT
+
+### Returns true when the buildtime size is zero.
+### :returns: `true` if `COUNT == 0`.
+@readonly
+routine Slots[T, COUNT].is_empty() -> Bool
+    return COUNT == 0
+
+### Returns true if any element equals `value`.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found, `false` otherwise.
+@readonly
+routine Slots[T, COUNT].has(value: T) -> Bool
+needs T obeys Equatable
+    each i in 0 til COUNT
+        if me.get_raw(index: i) == value
+            return true
+    return false
+
+### Returns whether `value` is not in these places: the opposite of `has`.
+### :param value: The value to look for.
+### :returns: `true` when `value` is absent.
+@readonly
+routine Slots[T, COUNT].lacks(value: T) -> Bool
+needs T obeys Equatable
+    return not me.has(value)
+
+### Returns the index of the first element equal to `value`.
+### :param value: The value to search for.
+### :returns: The zero-based index of the first match.
+### :throws: {AbsentValueError} No element equals `value`.
+@readonly
+failable routine Slots[T, COUNT].index_of(value: T) -> U64
+needs T obeys Equatable
+    each i in 0 til COUNT
+        if me.get_raw(index: i) == value
+            return i
+    throw AbsentValueError()
+
+### Returns an emitter over the elements in ascending index order. It reads each element where it is, so the
+### `Slots` must stay where it is while the loop runs.
+### :returns: An emitter over the elements.
+@readonly
+routine Slots[T, COUNT].emitter() -> SlotsEmitter[T, COUNT]
+    danger
+        return SlotsEmitter[T, COUNT](data: me.hijack(), index: 0)
+
+### Returns the next element from the emitter in ascending index order, read in place: for an entity element it is
+### the element itself, which the loop only reads.
+### :returns: The element at the current index.
+### :throws: {AbsentValueError} All `COUNT` elements have been yielded.
+failable routine SlotsEmitter[T, COUNT].emit() -> T
+    if me.index >= COUNT
+        throw AbsentValueError()
+    danger
+        var value: T = LLVM::load_element_ref[Slots[T, COUNT], T](me.data, me.index)
+        me.index = me.index + 1
+        return value
+
+### Returns the display form: each element's own display form, between brackets.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Slots[T, COUNT].represent() -> Text
+    var result = "["
+    each i in 0 til COUNT
+        if i > 0
+            result = result + ", "
+        result = result + nested_repr(me.get_raw(index: i))
+    result = result + "]"
+    return result
+
+### Returns the diagnostic form: the type name, then each element's own diagnostic form.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine Slots[T, COUNT].diagnose() -> Text
+    var result = me.full_type_name() + "(["
+    each i in 0 til COUNT
+        if i > 0
+            result = result + ", "
+        result = result + nested_diagnose(me.get_raw(index: i))
+    result = result + "])"
+    return result

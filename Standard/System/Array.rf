@@ -1,15 +1,15 @@
 module System
 
 import BuilderQuery
-### A fixed-size, inline array of `COUNT` elements with value semantics.
+### A fixed-size, inline array of `COUNT` values.
 ###
 ### `Array[T, COUNT]` stores exactly `COUNT` elements packed directly into its own
 ### footprint: it makes no separate allocation for its slots, and it lives wherever
 ### what holds it lives (a local, a member variable of an entity, another array). An
-### element can still own memory of its own (a `Text`'s characters, an entity's
-### object). Because it is a record type, copying an `Array` copies all `COUNT`
-### elements, each the way its own type copies, and the size can never change
-### after construction.
+### element can still own memory of its own (a `Text`'s characters). Because it is a
+### record, its elements are values (`needs RecordType T`), copying an `Array` copies
+### all `COUNT` elements, each the way its own type copies, and the size can never
+### change after construction.
 ###
 ### Use this type when the number of elements is known at build time and you
 ### want the elements laid out inline, without the indirection of a separate buffer.
@@ -20,6 +20,7 @@ import BuilderQuery
 ### - You need a small fixed-size buffer (e.g., a 4×4 matrix, an RGBA colour, a SIMD lane).
 ### - Use {List[T]} when the count is only known at runtime or elements are added dynamically.
 ### - Use {BitArray[COUNT]} for a compact fixed-size sequence of boolean flags.
+### - Use {Slots[T, COUNT]} when the elements may be entities: the same layout, kept in one place.
 ###
 ### **Complexity**
 ### | Operation | Time |
@@ -35,10 +36,11 @@ import BuilderQuery
 ### :see: {List[T]} for a heap-backed growable sequence.
 ### :see: {BitArray[COUNT]} for a compact fixed-size bit sequence.
 @llvm("[{COUNT} x {T}]")
-bundle Array[T, COUNT]
+record Array[T, COUNT]
 relates ArrayEmitter[T, COUNT] as Emitter
 obeys Comparable, Emittable[T], ModifyingIndexable[T], Sized, Container
 needs U64 COUNT
+needs RecordType T
     # N elements of T stored inline by builder - no explicit member variables needed
     nothing
 
@@ -47,14 +49,13 @@ needs U64 COUNT
 # ============================================================================
 
 ### Walks the elements of a fixed-size `Array[T, COUNT]` from index 0 to N - 1.
-### Because `Array` is a record type, the emitter holds its own copy of the array data.
 ### :typeparam T: The element type yielded by the emitter.
 ### :typeparam COUNT: The buildtime element count.
 entity ArrayEmitter[T, COUNT]
 obeys Emitter[T]
 needs U64 COUNT
-    ### Points at the array being iterated, where it lives: each element is read in place, so iterating an array of
-    ### entities neither copies the array nor gives an element a second owner (the loop's binding only reads it).
+    ### Points at the array being iterated, where it lives: each element is read in place, so the walk does not copy
+    ### the array.
     secret data: Hijacked[Array[T, COUNT]]
     ### Stores the next logical index to read.
     secret index: U64
@@ -86,26 +87,6 @@ needs RecordType T
 routine Array[T, COUNT].get_raw(index: U64) -> T
     danger
         return LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
-
-### Returns a write token on the entity stored at `index`, so one call or field write through it changes the
-### element in place: `cells[0].v = 5` lowers to `cells.modify_at(index: 0).v = 5`. Entity elements only (a
-### plain `getitem` hands back a holder of its own, which a single-owner entity cannot have).
-failable routine Array[T, COUNT].modify_at(index: U64) -> Modifying[T]
-needs EntityType T
-    if index >= COUNT
-        throw IndexOutOfBoundsError(index: index, count: me.count())
-    danger
-        return Modifying[T](LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index).hijack())
-
-### Returns a read token on the entity stored at `index`, so one call or field read through it reads the
-### element without copying it: `cells[0].v` lowers to `cells.view_at(index: 0).v`. Entity elements only.
-@readonly
-failable routine Array[T, COUNT].view_at(index: U64) -> Viewing[T]
-needs EntityType T
-    if index >= COUNT
-        throw IndexOutOfBoundsError(index: index, count: me.count())
-    danger
-        return Viewing[T](LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index).hijack())
 
 ### Replaces the element at `index` with `value`, mutating this `Array` in place.
 ### `me` is received by reference (struct-record `setitem!`), so the single-element write through
@@ -162,10 +143,8 @@ needs RecordType T
             result.add_last(value: me[i])
     return result
 
-### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
-### entity elements. Invoked through an owning entity's generated `destruct` field-recursion when
-### the array is an entity field — all `COUNT` inline slots are live, so the full range is visited.
-### (`Array` is a value record, so it has no separate allocation of its own to free.)
+### Tears down each stored element. No-op for plain values, releases what a counted element holds. All `COUNT`
+### places hold an element, so the full range is visited. `Array` has no separate allocation of its own to free.
 @override
 routine Array[T, COUNT].destruct()
     var i: U64 = 0
@@ -298,8 +277,7 @@ routine Array[T, COUNT].emitter() -> ArrayEmitter[T, COUNT]
     danger
         return ArrayEmitter[T, COUNT](data: me.hijack(), index: 0)
 
-### Returns the next element from the emitter in ascending index order, read in place: for an entity element it is
-### the array's own element, which the loop only reads (as `List`'s emitter does).
+### Returns the next element from the emitter in ascending index order, read in place.
 ### :returns: The element at the current index.
 ### :throws: {AbsentValueError} All `COUNT` elements have been yielded.
 failable routine ArrayEmitter[T, COUNT].emit() -> T

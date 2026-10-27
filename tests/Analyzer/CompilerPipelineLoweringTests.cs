@@ -171,7 +171,8 @@ public class CompilerPipelineLoweringTests
     public void Analyze_MonomorphizedGenericBody_IsConcreteBeforeBackendEntry()
     {
         string source = """
-                        bundle Box[T]
+                        record Box[T]
+                        needs RecordType T
                         needs RecordType T
                             value: T
 
@@ -208,7 +209,8 @@ public class CompilerPipelineLoweringTests
     public void Analyze_MonomorphizedConstructorCall_BindsConcreteResolvedRoutine()
     {
         string source = """
-                        bundle Box[T]
+                        record Box[T]
+                        needs RecordType T
                         needs RecordType T
                             value: T
 
@@ -246,7 +248,8 @@ public class CompilerPipelineLoweringTests
     public void Analyze_MonomorphizedMemberRoutineCall_HasConcreteReturnMetadata()
     {
         string source = """
-                        bundle Box[T]
+                        record Box[T]
+                        needs RecordType T
                         needs RecordType T
                             value: T
 
@@ -943,7 +946,8 @@ public class CompilerPipelineLoweringTests
     public void LlvmEmitter_ChainedMemberRoutineCall_OnCallReceiver_GeneratesIr()
     {
         string source = """
-                        bundle Box[T]
+                        record Box[T]
+                        needs RecordType T
                         needs RecordType T
                             value: T
 

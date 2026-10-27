@@ -96,7 +96,8 @@ public class GenericParamCollisionTests
     public void memberRoutineGenericParam_CoexistsWith_UserRecordOfSameName()
     {
         AssertAnalyzes(source: """
-                               bundle Holder[A]
+                               record Holder[A]
+                               needs RecordType A
                                    value: A
 
                                routine Holder[A].mapped[U](u: U) -> U
@@ -124,7 +125,8 @@ public class GenericParamCollisionTests
                                record T
                                    a: S32
 
-                               bundle Box[T]
+                               record Box[T]
+                               needs RecordType T
                                    item: T
 
                                routine start()
@@ -143,7 +145,8 @@ public class GenericParamCollisionTests
     public void ReceiverPatternParam_ShadowsOwnerParamOfSameName()
     {
         AssertAnalyzes(source: """
-                               bundle Box[T]
+                               record Box[T]
+                               needs RecordType T
                                    item: T
 
                                routine List[Box[T]].items() -> List[T]

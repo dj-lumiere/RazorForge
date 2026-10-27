@@ -25,7 +25,8 @@ public class StabilizationPlanTests
                             @readonly
                             routine Me.sum(other: Me) -> Me
 
-                        bundle Total[T] obeys Summable
+                        record Total[T] obeys Summable
+                        needs RecordType T
                         needs RecordType T
                             value: T
 
@@ -52,7 +53,8 @@ public class StabilizationPlanTests
     {
         // Owner-level T and memberRoutine-level U should both resolve
         string source = """
-                        bundle Store[T]
+                        record Store[T]
+                        needs RecordType T
                         needs RecordType T
                             item: T
 
@@ -77,7 +79,8 @@ public class StabilizationPlanTests
     {
         // Return type T should resolve to the owner's type argument
         string source = """
-                        bundle Slot[T]
+                        record Slot[T]
+                        needs RecordType T
                         needs RecordType T
                             data: T
 
@@ -105,7 +108,8 @@ public class StabilizationPlanTests
                             @readonly
                             routine Me.duplicate() -> Me
 
-                        bundle Box[T] obeys Clonable
+                        record Box[T] obeys Clonable
+                        needs RecordType T
                         needs RecordType T
                             value: T
 
@@ -140,7 +144,8 @@ public class StabilizationPlanTests
                             @readonly
                             routine Me.label() -> Text
 
-                        bundle Pair[T] obeys Showable
+                        record Pair[T] obeys Showable
+                        needs RecordType T
                         needs RecordType T
                             first: T
                             second: T
@@ -209,7 +214,8 @@ public class StabilizationPlanTests
     {
         // using on a generic Enterable type (self pass-through binds the resource itself)
         string source = """
-                        bundle Guard[T] obeys Enterable
+                        record Guard[T] obeys Enterable
+                        needs RecordType T
                         needs RecordType T
                             resource: T
 
@@ -238,11 +244,13 @@ public class StabilizationPlanTests
     public void P3_UsingWithNestedGenericReturn_BindsResolvedType()
     {
         string source = """
-                        bundle Box[T]
+                        record Box[T]
+                        needs RecordType T
                         needs RecordType T
                             value: T
 
-                        bundle Guard[T] obeys Enterable
+                        record Guard[T] obeys Enterable
+                        needs RecordType T
                         needs RecordType T
                             resource: T
 
@@ -336,7 +344,8 @@ public class StabilizationPlanTests
     {
         // Body matching on generic owner should use resolved type names
         string source = """
-                        bundle Stack[T]
+                        record Stack[T]
+                        needs RecordType T
                         needs RecordType T
                             top: T
 
@@ -365,7 +374,8 @@ public class StabilizationPlanTests
     public void P4_GenericOwnerOverloads_SameArityDifferentTypes_MatchCorrectBody()
     {
         string source = """
-                        bundle Buffer[T]
+                        record Buffer[T]
+                        needs RecordType T
                         needs RecordType T
                             value: T
                             ready: Bool
@@ -395,7 +405,8 @@ public class StabilizationPlanTests
     public void P4_CreateOverload_WithOwnerTypedParameter_MatchesCorrectBody()
     {
         string source = """
-                        bundle Wrapper[T]
+                        record Wrapper[T]
+                        needs RecordType T
                         needs RecordType T
                             value: T
 
@@ -429,7 +440,8 @@ public class StabilizationPlanTests
         // Const generic value N should not be rewritten in AST
         // Codegen resolves via _typeSubstitutions
         string source = """
-                        bundle Wrapper[T]
+                        record Wrapper[T]
+                        needs RecordType T
                         needs RecordType T
                             value: T
 
@@ -459,7 +471,8 @@ public class StabilizationPlanTests
         // Nested generics like Wrapper[Wrapper[S32]] should resolve
         // through GenericDefinition, not Name.Contains('[') heuristics
         string source = """
-                        bundle Wrapper[T]
+                        record Wrapper[T]
+                        needs RecordType T
                         needs RecordType T
                             inner: T
 
@@ -485,7 +498,8 @@ public class StabilizationPlanTests
     public void P6_NestedGenericMemberType_ReturnsResolvedInnerType()
     {
         string source = """
-                        bundle Node[T]
+                        record Node[T]
+                        needs RecordType T
                         needs RecordType T
                             item: T
 
@@ -493,7 +507,8 @@ public class StabilizationPlanTests
                         routine Node[T].hash() -> U64
                             return 0
 
-                        bundle Holder[T]
+                        record Holder[T]
+                        needs RecordType T
                         needs RecordType T
                             node: Node[T]
 
@@ -530,7 +545,8 @@ public class StabilizationPlanTests
                         protocol Clearable
                             routine Me.clear() -> Me
 
-                        bundle Buffer[T] obeys Clearable
+                        record Buffer[T] obeys Clearable
+                        needs RecordType T
                         needs RecordType T
                             item: T
                             size: S32

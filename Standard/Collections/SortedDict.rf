@@ -10,8 +10,8 @@ secret preset MIN_KEYS_DICT: U64 = 31
 ### :typeparam TValue: The value type.
 entity BTreeDictNode[TKey, TValue]
 needs TKey obeys Comparable
-    entry_keys: Array[TKey, 63]
-    entry_values: Array[TValue, 63]
+    entry_keys: Slots[TKey, 63]
+    entry_values: Slots[TValue, 63]
     children: Array[Hijacked[BTreeDictNode[TKey, TValue]], 64]
     key_count: U64
     child_count: U64
@@ -48,7 +48,7 @@ needs TKey obeys Comparable
 ### :see: {SortedList[T]} for a sorted sequence that allows duplicates.
 entity SortedDict[TKey, TValue]
 relates SortedDictEmitter[TKey, TValue] as Emitter, TKey as Key, TValue as Value
-obeys Emittable[DictEntry[TKey, TValue]], KeyFindable, KeyContainer, DictLiteral[TKey, TValue]
+obeys Emittable[(TKey, TValue)], KeyFindable, KeyContainer, DictLiteral[TKey, TValue]
 needs TKey obeys Comparable
     secret root: Hijacked[BTreeDictNode[TKey, TValue]]?
     secret count: U64
@@ -60,7 +60,7 @@ needs TKey obeys Comparable
 ### :typeparam TKey: The key type.
 ### :typeparam TValue: The value type.
 entity SortedDictEmitter[TKey, TValue]
-obeys Emitter[DictEntry[TKey, TValue]]
+obeys Emitter[(TKey, TValue)]
     dict: Hijacked[SortedDict[TKey, TValue]]
     index: U64
 
@@ -132,17 +132,17 @@ secret routine BTreeDictNode[TKey, TValue].value_get(i: U64) -> TValue
             .stride(count: i.to[S64]())
             .peek()
 
-### Builds a {DictEntry[TKey, TValue]} from the entry at slot `i`, taking OWNED copies of the key and value.
+### Builds a `(TKey, TValue)` tuple from the entry at slot `i`, taking OWNED copies of the key and value.
 ### The key/value are bound to locals first so the copy pass injects a retaining `store` (a bare
 ### `key_get(i)` call-result argument would NOT be copied, leaving the entry aliasing the buffer's
 ### refcounted controller — a double-free when the entry is torn down). Mirrors Dict's emitter.
 ### :param i: Zero-based entry index.
-### :returns: An owning {DictEntry[TKey, TValue]} copy of the entry at position `i`.
+### :returns: An owning `(TKey, TValue)` tuple copy of the entry at position `i`.
 @readonly
-secret routine BTreeDictNode[TKey, TValue].entry_get(i: U64) -> DictEntry[TKey, TValue]
+secret routine BTreeDictNode[TKey, TValue].entry_get(i: U64) -> (TKey, TValue)
     var k = me.key_get(i)
     var v = me.value_get(i)
-    return DictEntry[TKey, TValue](key: k, value: v)
+    return (steal k, steal v)
 
 ### Writes `value` to the key slot at position `i`.
 ### :param i: Zero-based entry index.
@@ -469,8 +469,8 @@ secret routine BTreeDictNode[TKey, TValue].children_add_range_from(
 
 secret routine BTreeDictNode[TKey, TValue](is_leaf: Bool) -> BTreeDictNode[TKey, TValue]
     return BTreeDictNode[TKey, TValue](
-        entry_keys: LLVM::zero_value[Array[TKey, 63]](),
-        entry_values: LLVM::zero_value[Array[TValue, 63]](),
+        entry_keys: LLVM::zero_value[Slots[TKey, 63]](),
+        entry_values: LLVM::zero_value[Slots[TValue, 63]](),
         children: LLVM::zero_value[Array[Hijacked[BTreeDictNode[TKey, TValue]], 64]](),
         key_count: 0,
         child_count: 0,
@@ -483,16 +483,16 @@ routine SortedDict[TKey, TValue]() -> SortedDict[TKey, TValue]
 
 ### Creates a sorted dict containing the given key-value `pairs` (stored in sorted key order). Variadic
 ### constructor behind the `{k: v, …}` dict-literal syntax (the `DictLiteral` opt-in).
-### :param pairs: The key-value pairs as `DictEntry[TKey, TValue]` values; a later duplicate key overwrites.
+### :param pairs: The key-value pairs as `(TKey, TValue)` values; a later duplicate key overwrites.
 ### :returns: A sorted dict of the given pairs.
-common routine SortedDict[TKey, TValue].from_literal(pairs...: DictEntry[TKey, TValue]) -> SortedDict[TKey, TValue]
+common routine SortedDict[TKey, TValue].from_literal(pairs...: (TKey, TValue)) -> SortedDict[TKey, TValue]
 needs TKey obeys Comparable
     var result = SortedDict[TKey, TValue]()
     var i: U64 = 0
     # Each pair is read in place: `add` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
     until i >= pairs.count()
-        drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
+        drop result.put(key: pairs.get_raw(index: i).item0, value: pairs.get_raw(index: i).item1)
         i = i +% 1
     return result
 
@@ -828,16 +828,16 @@ secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDi
                 var right = node.children_get(i +% 1).as_entity()
                 if left.keys_count() > MIN_KEYS_DICT
                     var pred = me.get_predecessor(node: node, idx: i)
-                    node.key_set(i: i, value: pred.key)
-                    node.value_set(i: i, value: pred.value)
-                    drop me.remove_from_node(node: left, key: pred.key)
+                    node.key_set(i: i, value: pred.item0)
+                    node.value_set(i: i, value: pred.item1)
+                    drop me.remove_from_node(node: left, key: pred.item0)
                     node.subtree_size = node.subtree_size -% 1
                     return true
                 elseif right.keys_count() > MIN_KEYS_DICT
                     var succ = me.get_successor(node: node, idx: i)
-                    node.key_set(i: i, value: succ.key)
-                    node.value_set(i: i, value: succ.value)
-                    drop me.remove_from_node(node: right, key: succ.key)
+                    node.key_set(i: i, value: succ.item0)
+                    node.value_set(i: i, value: succ.item1)
+                    drop me.remove_from_node(node: right, key: succ.item0)
                     node.subtree_size = node.subtree_size -% 1
                     return true
                 else
@@ -866,7 +866,7 @@ secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDi
 secret routine SortedDict[TKey, TValue].get_predecessor(
     node: Viewing[BTreeDictNode[TKey, TValue]],
     idx: U64,
-) -> DictEntry[TKey, TValue]
+) -> (TKey, TValue)
     danger
         var current = node.children_get(idx).as_entity()
         until current.is_leaf
@@ -882,7 +882,7 @@ secret routine SortedDict[TKey, TValue].get_predecessor(
 secret routine SortedDict[TKey, TValue].get_successor(
     node: Viewing[BTreeDictNode[TKey, TValue]],
     idx: U64,
-) -> DictEntry[TKey, TValue]
+) -> (TKey, TValue)
     danger
         var current = node.children_get(idx +% 1).as_entity()
         until current.is_leaf
@@ -1023,10 +1023,10 @@ secret routine SortedDict[TKey, TValue].update_subtree_size(node: Modifying[BTre
 ### Returns the entry at the given zero-based sorted rank.
 ### Rank 0 is the entry with the smallest key; rank `count()-1` is the largest.
 ### :param i: The zero-based sorted rank to read.
-### :returns: The {DictEntry[TKey, TValue]} at that sorted position.
+### :returns: The `(TKey, TValue)` tuple at that sorted position.
 ### :throws: {IndexOutOfBoundsError} if `i >= count()`.
 @readonly
-failable routine SortedDict[TKey, TValue].get_by_rank(i: U64) -> DictEntry[TKey, TValue]
+failable routine SortedDict[TKey, TValue].get_by_rank(i: U64) -> (TKey, TValue)
     if i >= me.count
         throw IndexOutOfBoundsError(index: i, count: me.count)
     danger
@@ -1036,12 +1036,12 @@ failable routine SortedDict[TKey, TValue].get_by_rank(i: U64) -> DictEntry[TKey,
 ### Returns the entry at zero-based sorted rank `rank` within `node`'s subtree.
 ### :param node: The subtree root to search.
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
-### :returns: The {DictEntry[TKey, TValue]} at that rank.
+### :returns: The `(TKey, TValue)` tuple at that rank.
 @readonly
 secret routine SortedDict[TKey, TValue].get_by_rank_node(
     node: Viewing[BTreeDictNode[TKey, TValue]],
     rank: U64,
-) -> DictEntry[TKey, TValue]
+) -> (TKey, TValue)
     danger
         if node.is_leaf
             return node.entry_get(rank)
@@ -1100,10 +1100,10 @@ secret routine SortedDict[TKey, TValue].get_or_from_node(
 # ============================================================================
 
 ### Returns the entry with the smallest key.
-### :returns: A {DictEntry[TKey, TValue]} with the minimum key and its associated value.
+### :returns: A `(TKey, TValue)` tuple with the minimum key and its associated value.
 ### :throws: {AbsentValueError} The dictionary is empty.
 @readonly
-failable routine SortedDict[TKey, TValue].min() -> DictEntry[TKey, TValue]
+failable routine SortedDict[TKey, TValue].min() -> (TKey, TValue)
     if me.is_empty()
         throw AbsentValueError()
     danger
@@ -1113,10 +1113,10 @@ failable routine SortedDict[TKey, TValue].min() -> DictEntry[TKey, TValue]
         return node.entry_get(0)
 
 ### Returns the entry with the largest key.
-### :returns: A {DictEntry[TKey, TValue]} with the maximum key and its associated value.
+### :returns: A `(TKey, TValue)` tuple with the maximum key and its associated value.
 ### :throws: {AbsentValueError} The dictionary is empty.
 @readonly
-failable routine SortedDict[TKey, TValue].max() -> DictEntry[TKey, TValue]
+failable routine SortedDict[TKey, TValue].max() -> (TKey, TValue)
     if me.is_empty()
         throw AbsentValueError()
     danger
@@ -1130,14 +1130,14 @@ failable routine SortedDict[TKey, TValue].max() -> DictEntry[TKey, TValue]
 ### :returns: The first (minimum-key) entry.
 ### :throws: {AbsentValueError} The dictionary is empty.
 @readonly
-failable routine SortedDict[TKey, TValue].first() -> DictEntry[TKey, TValue]
+failable routine SortedDict[TKey, TValue].first() -> (TKey, TValue)
     return me.min()
 
 ### Returns the entry with the largest key. Alias for {SortedDict[TKey, TValue].max()}.
 ### :returns: The last (maximum-key) entry.
 ### :throws: {AbsentValueError} The dictionary is empty.
 @readonly
-failable routine SortedDict[TKey, TValue].last() -> DictEntry[TKey, TValue]
+failable routine SortedDict[TKey, TValue].last() -> (TKey, TValue)
     return me.max()
 
 # ============================================================================
@@ -1226,7 +1226,7 @@ secret routine SortedDict[TKey, TValue].collect_values(
 secret routine SortedDict[TKey, TValue].get_by_rank(
     node: Viewing[BTreeDictNode[TKey, TValue]],
     rank: U64,
-) -> DictEntry[TKey, TValue]
+) -> (TKey, TValue)
     danger
         if node.is_leaf
             return node.entry_get(rank)
@@ -1254,10 +1254,10 @@ routine SortedDict[TKey, TValue].emitter() -> SortedDictEmitter[TKey, TValue]
     danger
         return SortedDictEmitter[TKey, TValue](dict: me.hijack(), index: 0)
 
-### Creates a {List[DictEntry[TKey, TValue]]} from all entries of `from` in ascending key order.
+### Creates a `List[(TKey, TValue)]` from all entries of `from` in ascending key order.
 ### :returns: A new list of all entries in key-ascending order.
-routine SortedDict[TKey, TValue].to[List[DictEntry[TKey, TValue]]]() -> List[DictEntry[TKey, TValue]]
-    var result = List[DictEntry[TKey, TValue]](me.count)
+routine SortedDict[TKey, TValue].to[List[(TKey, TValue)]]() -> List[(TKey, TValue)]
+    var result = List[(TKey, TValue)](me.count)
     if me.root is None
         nothing
     else
@@ -1272,7 +1272,7 @@ routine SortedDict[TKey, TValue].to[List[DictEntry[TKey, TValue]]]() -> List[Dic
 @readonly
 secret routine SortedDict[TKey, TValue].collect_inorder(
     node: Viewing[BTreeDictNode[TKey, TValue]],
-    result: Modifying[List[DictEntry[TKey, TValue]]],
+    result: Modifying[List[(TKey, TValue)]],
 )
     danger
         var i: U64 = 0
@@ -1288,7 +1288,7 @@ secret routine SortedDict[TKey, TValue].collect_inorder(
             )
         return
 
-failable routine SortedDictEmitter[TKey, TValue].emit() -> DictEntry[TKey, TValue]
+failable routine SortedDictEmitter[TKey, TValue].emit() -> (TKey, TValue)
     danger
         if me.index >= me.dict.as_entity().count()
             throw AbsentValueError()
@@ -1311,7 +1311,7 @@ routine SortedDict[TKey, TValue].represent() -> Text
     each entry in me
         if i > 0
             result = result + ", "
-        result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
+        result = result + nested_repr(entry.item0) + ": " + nested_repr(entry.item1)
         i = i +% 1
     result = result + "}"
     return result
@@ -1326,7 +1326,7 @@ routine SortedDict[TKey, TValue].diagnose() -> Text
     each entry in me
         if i > 0
             result = result + ", "
-        result = result + nested_diagnose(entry.key) + ": " + nested_diagnose(entry.value)
+        result = result + nested_diagnose(entry.item0) + ": " + nested_diagnose(entry.item1)
         i = i +% 1
     result = result + "})"
     return result
@@ -1338,7 +1338,7 @@ routine SortedDict[TKey, TValue].diagnose() -> Text
 routine SortedDict[TKey, TValue].serialize() -> SerialValue
     var __sv = Dict[Text, SerialValue]()
     each __e in me
-        __sv[__e.key.represent()] = __e.value.serialize()
+        __sv[__e.item0.represent()] = __e.item1.serialize()
     return SerialValue(__sv)
 
 ### Builds the dictionary from its serialized entry table, the reverse of `serialize`.
@@ -1351,7 +1351,7 @@ failable common routine SortedDict[TKey, TValue].from_serial(value: SerialValue)
     when value
         is Dict[Text, SerialValue] as entries =>
             each entry in entries
-                result[serial_key[TKey](key: entry.key)] = serial_decode[TValue](value: entry.value)
+                result[serial_key[TKey](key: entry.item0)] = serial_decode[TValue](value: entry.item1)
         else =>
             throw SerialShapeError(detail: "expected an entry table")
     return result

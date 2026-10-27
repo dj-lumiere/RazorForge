@@ -284,7 +284,9 @@ public class FeatureCoverageTests
                               module Test/Feat/GenericRec
                               import IO/Console
 
-                              bundle Pair[A, B]
+                              record Pair[A, B]
+                              needs RecordType A
+                              needs RecordType B
                                   first: A
                                   second: B
 

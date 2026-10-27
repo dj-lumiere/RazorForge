@@ -80,7 +80,8 @@ public class WikiLanguageBreakageTests
     public void Parse_ColonGenericConstraint_ReportsError()
     {
         string source = """
-                        bundle Box[T: Hashable]
+                        record Box[T: Hashable]
+                        needs RecordType T
                             value: T
                         """;
 
@@ -94,7 +95,8 @@ public class WikiLanguageBreakageTests
     public void Parse_IndentedNeedsClause_ReportsError()
     {
         string source = """
-                        bundle Box[T]
+                        record Box[T]
+                        needs RecordType T
                             needs T obeys Hashable
                             value: T
                         """;

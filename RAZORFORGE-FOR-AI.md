@@ -399,7 +399,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   is a script. The overflow message is "Integer overflow error: The value does not fit in the target type."
 - A field-by-field construction infers type arguments (`Pair(first: 1, second: "one")` is `Pair[S64, Text]`). A type
   obeying `Emittable[T]` gets its `Emitter` from what its `emitter()` returns (no `relates` needed), so IterTools adapters
-  walk it. A bundle holding an entity moves with `steal` (no copy step). An element token from `each` converts like
+  walk it. An entity holding an entity moves with `steal` (no copy step). An element token from `each` converts like
   its value (`w.to[S64]()`). `CpuEventManager.when_interrupted`/`when_terminated` link and run.
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
   An empty flags value shows as `none`, a one-item tuple as `(1,)`. A global record's member can't be assigned
@@ -1024,7 +1024,6 @@ show(a === make_other())    # false — different objects
 
 > **Decided direction (2026-09-22, NOT yet built — do not assume the builder does this today).**
 > Full rationale in `internal-wiki/record-entity-finite-representation.md`.
-> (The `bundle` part below the note is BUILT.)
 > - **A recursive record is a build error; recursion belongs to entity.** Surface rule: *a record is a
 >   copied value, an infinitely-sized value cannot be copied, so a record cannot contain itself.*
 >   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
@@ -1035,31 +1034,39 @@ show(a === make_other())    # false — different objects
 > - Entity allocation is stack/inline by default; heap is induced by a wrapper (`Retained`/…) or recursion,
 >   not a marked concern.
 
-**`record` vs `bundle` (built, RazorForge only).** A `record` is a copied value, so it may hold neither an
+**`record` vs `entity` (built, RazorForge only).** A named type is a `record` or an `entity` (`bundle` is RF-G228,
+`migrate --step bundle` rewrites each one from what its uses hold). A `record` is a copied value, so it may hold neither an
 entity nor a type parameter that could be one (**RF-S409**): a copy would make two of the one entity. Fix it
-by declaring the type `entity`, holding a handle that copies (`Retained[E]`), keeping the parameter to values
-(`needs RecordType T`), or declaring it `bundle`. A `bundle` is the generic aggregate whose kind each
-instantiation decides: `bundle Pair[T]` with `T = S64` is a copyable value; with an entity `T` it is
-kept in one place like an entity (handed over with `steal`, RF-S413 on a copy), has no identity (`===` is an error), is laid out in
-place, is never copied by `=`, and has `duplicate()` only when every member is Copyable (RF-S150 naming the member
-otherwise). A bundle needs type parameters (**RF-S445**) and cannot contain itself (**RF-S446**; a recursive
-structure is an entity, as for records, RF-S960).
+by declaring the type `entity`, holding a handle that copies (`Retained[E]`), or keeping the parameter to values
+(`needs RecordType T`). Handle records (`Retained`, `Viewing`, `Guarded`, ...) take `needs EntityType T` and hold
+the entity elsewhere, so they are records. RF-S445/RF-S446 are retired.
+**`Array` and `Slots`.** `Array[T, COUNT]` is a record of `COUNT` values (`needs RecordType T`, RF-S151 points to
+`Slots` for an entity element). `Slots[T, COUNT]` is an entity with the same layout (`[COUNT x T]`, in place, no
+allocation) that takes any `T`: never copied by `=` (RF-S413, even for `Slots[S64, 2]`), handed over with `steal`,
+`duplicate()` when `T` obeys `Copyable`. Its elements are read in place (`s[0].level`, `each b in s`), written
+with `s[i] = x` (tears the old one down), replaced with `steal s[i] as old inject fresh`, and traded with
+`s.swap(first:, second:)`: no place is ever empty. A fixed-size literal follows the type written where it goes
+(`var s: Slots[Item, 2] = [a, b]`, `var a: Array[S64, 2] = [1, 2]`). With no type written, `Array[N](a, b)` is an
+`Array` when the elements are values and a `Slots` when one is or holds an entity, and the arguments of a
+variadic parameter (`xs...: T`) are always packed into a `Slots[T, N]` (so `from_literal` takes entities too).
+`SplitArray[T, COUNT]` is a record (`needs RecordType T`) with no entity counterpart.
+**`Maybe[T]` is a variant** of `T` and `None` (`T?`, `none`, `is None`, `when m is T as v`). The builder lays it out
+as a presence flag and the value (`{ i8, T }`, an entity `Node?` is `{ i8, ptr }`). A dictionary entry is the tuple
+`(TKey, TValue)`: `each (k, v) in d`, or `e.item0` / `e.item1` (there is no `DictEntry`).
 In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
 it (`var y = x`, `return me.value`, a tuple of it, handing it to a parameter of a type parameter as in
 `xs.add_last(value: x)`) is RF-S413 on the template's own line: `steal` it, keep the
 parameter to values (`needs RecordType T`), or work on it in place. An entity handed to a parameter written `x: T`
 belongs to the routine: one it does not keep (hand over, store, return) is torn down at its exits before it keeps
 it, a `throw` included (`try xs.add_at(index: 5, value: Item(n: 3))` that fails tears the `Item` down).
-`needs RecordType T` accepts only values: a bundle instance holding an entity does not satisfy it. Several
-kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. Stdlib bundles: `Maybe`, `Array`,
-`SplitArray`, `DictEntry` (tuples and variants follow their elements the same way). `Range[T]`,
+`needs RecordType T` accepts only values: a tuple or variant holding an entity, or a `Slots`, does not satisfy it.
+Several kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. `Range[T]`,
 `Unbroken[T]` and `SplitArray`'s element emitter are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
 asks only `TPriority obeys Comparable`. A queue is not walked directly: `pq.unordered()` and `pq.ordered()` copy its
 `(priority, element)` pairs (storage order / smallest priority first, `needs RecordType TElement`), `pq.drain()`
-empties it into them smallest first (`each (priority, element) in pq.drain()`). An
-`Array`'s emitter reads each element in place, so `each r in arr` works on an array of entities (the binding
-only reads; the array keeps owning each element). Suflae has no
-`bundle` (an SF entity is shared, so a record holding one copies the handle).
+empties it into them smallest first (`each (priority, element) in pq.drain()`). A
+`Slots`' emitter reads each element in place, so `each r in slots` works on entities (the binding only reads).
+Suflae has no `Slots` (an SF entity is shared, so a record holding one copies the handle).
 
 ## 8. Generics and protocols
 
@@ -1217,12 +1224,12 @@ that differ from other languages:
   conformance) that holds one more reference to the entity, so it is no token: it can be returned, kept in an
   entity's member variable, or used after `r` is given another entity. `each x in r` walks the same way. An emitter
   made from the entity itself (`r.view().emitter()`) is a token like one made from a local container.
-- An emitter is an emittable (`Emitter[T]` obeys `Emittable[T]`): terminals and adapters work on it and take the
-  values it has not handed out yet (`var it = xs.emitter()`, `drop it.emit()`, then `it.to[List]()`, `it.sum()`,
-  `it.where(...)`).
 - An emitter hands out each element once: an `each` over a named emitter after one that ended by itself (no `break`),
   or an `each` inside a loop over an emitter made outside it, is RF-S517 (it would run zero times). Make a new
   `xs.emitter()` just before the loop, or write `each x in xs` / `each x in xs.emitter()`.
+- An emitter is an emittable (`Emitter[T]` obeys `Emittable[T]`): terminals and adapters work on it and take the
+  values it has not handed out yet (`var it = xs.emitter()`, `drop it.emit()`, then `it.to[List]()`, `it.sum()`,
+  `it.where(...)`).
 - Emitter adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`, `chain`, `distinct`, `select_many`,
   `min_by`, … — lazily evaluated, chainable, lambdas like `x => x % 2 == 0`. An adapter points at the container it
   was made from, so it follows the same rule: `var big = xs.where(...)` is a token on `xs`'s elements.
@@ -1250,7 +1257,7 @@ that differ from other languages:
   (`var s: SortedSet[S64] = {3, 1, 2}`, `var pq: PriorityQueue[S32, Text] = {1: "high"}`).
   A literal takes its element types from where it goes, as a number does: `bytes.add_range(you: [3, 4])` on a
   `List[U8]` builds a `List[U8]`, `total(xs: [5, 6])` for `xs: Emittable[U8]` builds a `List[U8]`, and
-  `{1: "a"}` given to an `Emittable[DictEntry[U16, Text]]` builds a `Dict[U16, Text]`. With nothing to go by,
+  `{1: "a"}` given to an `Emittable[(U16, Text)]` builds a `Dict[U16, Text]`. With nothing to go by,
   `[1, 2]` is a `List[S64]`. The empty set literal is `{}` and the empty dict literal `{:}`
   (`var d: Dict[S32, S32] = {:}`, `steal s[b] as old inject {:}`). A `{}` where a dict is expected is RF-S558.
   An `Array` is also built from its elements: `Array[3](1, 2, 3)`.
@@ -1491,10 +1498,11 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-G224      | a loop written `while c`              | `until` with the condition that ends it, or `loop` (`migrate --step until`) |
 | RF-G225      | a line written `pass`                 | `nothing`, the line with no work (`migrate --step nothing`) |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
+| RF-S517      | `each` over an emitter that ran out   | a new `xs.emitter()` before the loop, or `each x in xs` |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 | RF-G227      | `@inline` and `@noinline` on one routine | keep the one you mean                            |
+| RF-G228      | `bundle` (not a keyword)                 | `record` (values only) or `entity`, `migrate --step bundle` |
 
-| RF-S517      | `each` over an emitter that ran out   | a new `xs.emitter()` before the loop, or `each x in xs` |
 ## 13. A complete worked example
 
 ```razorforge
@@ -1788,7 +1796,7 @@ you are writing another language.
 A keyword can still be a name when written between backticks (`` `check` ``), and so can words with one space
 between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 
-- **Declarations**: `routine` `entity` `record` `bundle`† `choice` `flags` `crashable`
+- **Declarations**: `routine` `entity` `record` `choice` `flags` `crashable`
   `variant` `protocol`
 - **Bindings**: `var` `preset` `lateinit`
 - **Visibility / receiver**: `secret` `posted` `common`

@@ -178,6 +178,14 @@ file only once its other old spellings are gone.
   because it reads the bits of `x` and gives another number. Convert with `x.to[T]()`, or write a number where the
   type is expected (`var b: U8 = 200`). `migrate --step numbers` rewrites the calls between binary integer and float
   types and lists the rest.
+- A named type is a `record` or an `entity`: `bundle` is `RF-G228`. `migrate --step bundle` makes a bundle that holds
+  no type parameter by value a `record`, one whose uses hold an entity an `entity`, one whose uses hold only values a
+  `record` with `needs RecordType T`, and lists the rest. RF-S445 and RF-S446 are retired.
+- `Array[T, COUNT]` holds values (`needs RecordType T`). `Slots[T, COUNT]` is the entity with the same layout for any
+  `T`: kept in one place, `steal slots[i] as old inject fresh`, `swap`, `duplicate()` when `T` is `Copyable`. The
+  arguments of a variadic parameter are a `Slots[T, N]`. `SplitArray[T, COUNT]` holds values.
+- `Maybe[T]` (`T?`) is a variant of `T` and `None`. `DictEntry` is gone: a dictionary entry is the tuple
+  `(TKey, TValue)` (`each (k, v) in d`, `e.item0`, `e.item1`).
 
 **Standard library**
 - A module is its folder. The base module is `System` (it was `Core`) and every file sees it and the modules under

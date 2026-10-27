@@ -33,7 +33,7 @@ secret preset ENTRY_LIVE: U8 = 1
 ### :see: {Set[T]} for the set counterpart.
 entity Dict[TKey, TValue]
 relates DictEmitter[TKey, TValue] as Emitter, TKey as Key, TValue as Value
-obeys Emittable[DictEntry[TKey, TValue]], KeyFindable, KeyContainer,
+obeys Emittable[(TKey, TValue)], KeyFindable, KeyContainer,
     Copyable when TKey obeys Copyable and TValue obeys Copyable, DictLiteral[TKey, TValue]
 needs TKey obeys Hashable, Equatable
     secret ctrl: Hijacked[U8]
@@ -51,7 +51,7 @@ needs TKey obeys Hashable, Equatable
 
 ### Emitter that walks the dense entries array of a {Dict[TKey, TValue]} in insertion order.
 entity DictEmitter[TKey, TValue]
-obeys Emitter[DictEntry[TKey, TValue]]
+obeys Emitter[(TKey, TValue)]
     secret keys: Hijacked[TKey]
     secret vals: Hijacked[TValue]
     secret entry_live: Hijacked[U8]
@@ -64,17 +64,17 @@ obeys Emitter[DictEntry[TKey, TValue]]
 
 ### Creates a dict containing the given key-value `pairs`. Variadic constructor behind the `{k: v, …}`
 ### dict-literal syntax (the `DictLiteral` opt-in): the builder packs the pairs into a fixed
-### `Array[DictEntry[TKey, TValue], N]` and monomorphizes one body per pair count. A later duplicate key overwrites.
-### :param pairs: The key-value pairs as `DictEntry[TKey, TValue]` values.
+### `Array[(TKey, TValue), N]` and monomorphizes one body per pair count. A later duplicate key overwrites.
+### :param pairs: The key-value pairs as `(TKey, TValue)` values.
 ### :returns: A dict of the given pairs.
-common routine Dict[TKey, TValue].from_literal(pairs...: DictEntry[TKey, TValue]) -> Dict[TKey, TValue]
+common routine Dict[TKey, TValue].from_literal(pairs...: (TKey, TValue)) -> Dict[TKey, TValue]
 needs TKey obeys Hashable, Equatable
     var result = Dict[TKey, TValue]()
     var i: U64 = 0
     # Each pair is read in place: `put` makes the dictionary's holders, and the caller releases the
     # literal's own afterwards.
     until i >= pairs.count()
-        drop result.put(key: pairs.get_raw(index: i).key, value: pairs.get_raw(index: i).value)
+        drop result.put(key: pairs.get_raw(index: i).item0, value: pairs.get_raw(index: i).item1)
         i = i +% 1
     return result
 
@@ -567,7 +567,7 @@ routine Dict[TKey, TValue].emitter() -> DictEmitter[TKey, TValue]
             pos: 0,
         )
 
-failable routine DictEmitter[TKey, TValue].emit() -> DictEntry[TKey, TValue]
+failable routine DictEmitter[TKey, TValue].emit() -> (TKey, TValue)
     danger
         until me.pos >= me.entries_used
             var p = me.pos
@@ -575,7 +575,7 @@ failable routine DictEmitter[TKey, TValue].emit() -> DictEntry[TKey, TValue]
             if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
                 var k = me.keys.offset(TKey.data_size() * p).peek()
                 var v = me.vals.offset(TValue.data_size() * p).peek()
-                return DictEntry[TKey, TValue](key: k, value: v)
+                return (steal k, steal v)
     throw AbsentValueError()
 
 # ============================================================================
@@ -592,7 +592,7 @@ needs RecordType TKey
 needs RecordType TValue
     var result = Dict[TKey, TValue]()
     each entry in me
-        result[entry.key] = entry.value
+        result[entry.item0] = entry.item1
     return result
 
 # ============================================================================
@@ -609,7 +609,7 @@ routine Dict[TKey, TValue].represent() -> Text
     each entry in me
         if not first
             result = result + ", "
-        result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
+        result = result + nested_repr(entry.item0) + ": " + nested_repr(entry.item1)
         first = false
     result = result + "}"
     return result
@@ -624,7 +624,7 @@ routine Dict[TKey, TValue].diagnose() -> Text
     each entry in me
         if not first
             result = result + ", "
-        result = result + nested_diagnose(entry.key) + ": " + nested_diagnose(entry.value)
+        result = result + nested_diagnose(entry.item0) + ": " + nested_diagnose(entry.item1)
         first = false
     result = result + "})"
     return result
@@ -661,5 +661,5 @@ needs TValue obeys Equatable
 routine Dict[TKey, TValue].serialize() -> SerialValue
     var __sv = Dict[Text, SerialValue]()
     each __e in me
-        __sv[__e.key.represent()] = __e.value.serialize()
+        __sv[__e.item0.represent()] = __e.item1.serialize()
     return SerialValue(__sv)
