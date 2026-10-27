@@ -1,0 +1,64 @@
+module Tests/Stdlib/RecoveredEntityTeardownApi
+
+import IO/Console
+# The value a recovery gives back (a `Maybe` or a `Check` holding an entity, or a tuple of entities) is torn down
+# once its `when` is done, under `try` and `check`, with `else as`, `is T as`, a plain `else`, and through a
+# variable. An entity an arm moves out with `steal` is torn down where it went, not by the `when`.
+
+entity Part
+    n: S64
+
+@override
+routine Part.destruct()
+    show(f"part {me.n} ends")
+    return
+
+failable routine one(n: S64) -> Part
+    if n < 0
+        throw IntegerOverflowError()
+    return Part(n: n)
+
+failable routine pair(n: S64) -> (Part, Part)
+    if n < 0
+        throw IntegerOverflowError()
+    return (Part(n: n), Part(n: n + 1))
+
+routine start()
+    when try one(n: 1)
+        is None => show("try else as: none")
+        else as p => show(f"try else as: {p.n}")
+    show("a")
+    when try one(n: 2)
+        is None => show("try else: none")
+        else => show("try else: made")
+    show("b")
+    when check one(n: 3)
+        is Part as p => show(f"check: {p.n}")
+        is Crashables => show("check: failed")
+    show("c")
+    when check one(n: -1)
+        is Part as p => show(f"check failing: {p.n}")
+        is Crashables => show("check failing: failed")
+    show("d")
+    when try pair(n: 10)
+        is None => show("try pair: none")
+        else as t => show(f"try pair: {t.item0.n} {t.item1.n}")
+    show("e")
+    when check pair(n: 20)
+        is (Part, Part) as t => show(f"check pair: {t.item0.n}")
+        is Crashables => show("check pair: failed")
+    show("f")
+    var kept: List[Part] = []
+    when try one(n: 30)
+        is None => show("moved: none")
+        else as p => kept.add_last(steal p)
+    when check one(n: 31)
+        is Part as p => kept.add_last(steal p)
+        is Crashables => show("moved: failed")
+    show(f"kept {kept.count()}: {kept[0].n} {kept[1].n}")
+    var m = try one(n: 40)
+    when m
+        is None => show("variable: none")
+        else as p => show(f"variable: {p.n}")
+    show("g")
+    return
