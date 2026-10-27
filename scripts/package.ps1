@@ -39,9 +39,10 @@ Pop-Location
 if ($nativeExit -ne 0) { throw "native build failed ($nativeExit)" }
 
 Write-Host '=== dotnet publish razorforge + suflae (self-contained, one directory) ==='
-# Both command lines share Anvila and the runtime, so they publish into the same directory.
+# Both command lines share Anvila and the runtime, so they publish into the same directory. ReadyToRun: the
+# assemblies ship precompiled, so a one-shot build does not spend its first second compiling the builder.
 foreach ($proj in 'RazorForge\RazorForge.csproj', 'Suflae\Suflae.csproj') {
-    dotnet publish $proj -c Release -r $Rid --self-contained true -o $Out --verbosity minimal
+    dotnet publish $proj -c Release -r $Rid --self-contained true -p:PublishReadyToRun=true -o $Out --verbosity minimal
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish $proj failed ($LASTEXITCODE)" }
 }
 

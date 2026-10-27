@@ -39,11 +39,12 @@ echo "=== build Ingrid's native runtime ==="
 (cd Ingrid/native && bash build.sh)
 
 echo "=== dotnet publish razorforge + suflae (self-contained, one directory) ==="
-# Both command lines share Anvila and the runtime, so they publish into the same directory.
-dotnet publish RazorForge/RazorForge.csproj -c Release -r "$RID" --self-contained true -o "$OUT" \
-    --verbosity minimal
-dotnet publish Suflae/Suflae.csproj -c Release -r "$RID" --self-contained true -o "$OUT" \
-    --verbosity minimal
+# Both command lines share Anvila and the runtime, so they publish into the same directory. ReadyToRun: the
+# assemblies ship precompiled, so a one-shot build does not spend its first second compiling the builder.
+dotnet publish RazorForge/RazorForge.csproj -c Release -r "$RID" --self-contained true -p:PublishReadyToRun=true \
+    -o "$OUT" --verbosity minimal
+dotnet publish Suflae/Suflae.csproj -c Release -r "$RID" --self-contained true -p:PublishReadyToRun=true \
+    -o "$OUT" --verbosity minimal
 
 echo "=== native runtime artifacts (installed layout) ==="
 # The installed layout — and the toolchain's own P/Invoke probing + buildandrun's prebuilt-layout
