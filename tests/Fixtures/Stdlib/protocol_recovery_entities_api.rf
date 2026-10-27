@@ -1,0 +1,63 @@
+module Tests/Stdlib/ProtocolRecoveryEntitiesApi
+
+import IO/Console
+import IterTools
+# The recovery variant of a protocol's own routine (`to[List]` under `try` and `check`) is built for the type that
+# obeys the protocol: the list it collects holds that type's elements, an entity element moved into the list stays
+# alive after the recovery, and the emitter the routine walks is torn down on every way out.
+
+entity Crate
+    n: S64
+
+@override
+routine Crate.destruct()
+    show(f"crate {me.n} ends")
+    return
+
+entity Counter
+relates CounterEmitter as Emitter
+obeys Emittable[S64]
+    upto: S64
+
+entity CounterEmitter
+obeys Emitter[S64]
+    at: S64
+    upto: S64
+
+@override
+routine CounterEmitter.destruct()
+    show(f"emitter ends at {me.at}")
+    return
+
+@readonly
+routine Counter.emitter() -> CounterEmitter
+    return CounterEmitter(at: 0, upto: me.upto)
+
+failable routine CounterEmitter.emit() -> S64
+    if me.at >= me.upto
+        throw AbsentValueError()
+    me.at = me.at + 1
+    return me.at
+
+routine start()
+    var src: List[S64] = [1, 2]
+    when try src.select_many(transform: x => [Crate(n: x * 10)]).to[List]()
+        is None => show("try: none")
+        else as all => show(f"try: {all.count()} first {all[0].n} second {all[1].n}")
+    show("after try")
+    when check src.select_many(transform: x => [Crate(n: 100 // (2 - x))]).to[List]()
+        is List[Crate] as made => show(f"check: {made.count()}")
+        is DivisionByZeroError as e => show(f"check: {e.crash_message()}")
+        is Crashables => show("check: other")
+    show("after check")
+
+    var c = Counter(upto: 3)
+    var plain = c.to[List]()
+    show(f"plain {plain}")
+    when try c.select(transform: x => 10 // (x - 2)).to[List]()
+        is None => show("try fails: none")
+        else as all => show(f"try fails: {all}")
+    when try c.select(transform: x => 10 // (x + 1)).to[List]()
+        is None => show("try works: none")
+        else as all => show(f"try works: {all}")
+    return
