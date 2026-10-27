@@ -389,10 +389,12 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - `Char.to_uppercase`/`to_lowercase`/`is_uppercase`/`is_lowercase` follow Unicode (simple one-to-one mapping,
   `ß` stays `ß`). `lines()` and `ask_lines()` start no new line after a final line ending.
 - Build errors where the emitter used to fail: a construction leaving out a member with no default (RF-S455, names
-  it), a slice of a `List` of entities, a protocol as a value or element type (`List[Named]`), a member write
+  it) or giving unnamed values that are not one per member (`Size(3)` for two members, RF-S455), `Int(1)` (RF-S646:
+  write `var n: Int = 1`, or `x.to[Int]()` for a variable), a slice of a `List` of entities, a protocol as a value or element type (`List[Named]`), a member write
   through an element read from a `Viewing` token, a variant built from a non-member type. `Check[T]` has
   `unwrap!()` (`check f() !!`), `strip_out()` works for entities, `br"..."` builds, a value assigned to a `T?`
-  variable becomes present (`port ??= 8080`).
+  variable becomes present (`port ??= 8080`), and `()` works as a type argument in an expression
+  (`List[Callable[(), S64]]()`).
 - A variant holding only values copies with `=` (one that may hold an entity is RF-S413). A file of only `var` lines
   is a script. The overflow message is "Integer overflow error: The value does not fit in the target type."
 - A field-by-field construction infers type arguments (`Pair(first: 1, second: "one")` is `Pair[S64, Text]`). A type

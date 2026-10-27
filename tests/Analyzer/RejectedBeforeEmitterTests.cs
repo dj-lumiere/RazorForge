@@ -51,6 +51,57 @@ public class RejectedBeforeEmitterTests
     }
 
     [Fact]
+    public void Analyze_PositionalConstructionWithTooFewValues_IsRejected()
+    {
+        AssertHasErrorSa(source: """
+                         record Size
+                             width: S64
+                             height: S64
+
+                         routine start()
+                             var s = Size(3)
+                             return
+                         """,
+            expectedErrorSubstring: "you give 1 value for its 2 member variables");
+    }
+
+    [Fact]
+    public void Analyze_IntBuiltFromALiteral_PointsToTheTypedDeclaration()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var a = Int(1)
+                             return
+                         """,
+            expectedErrorSubstring: "An 'Int' is not built from an 'S64'");
+    }
+
+    [Fact]
+    public void Analyze_IntBuiltFromAVariable_PointsToTheConversion()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var x: S64 = 4
+                             var a = Int(x)
+                             return
+                         """,
+            expectedErrorSubstring: "Convert the value with '.to[Int]()'");
+    }
+
+    [Fact]
+    public void Analyze_ListOfRoutinesTakingNothing_Builds()
+    {
+        AssertAnalyzes(source: """
+                       routine start()
+                           var fs = List[Callable[(), S64]]()
+                           fs.add_last(() => 7)
+                           var f = fs[0]
+                           drop f()
+                           return
+                       """);
+    }
+
+    [Fact]
     public void Analyze_SliceOfEntityList_IsRejected()
     {
         AssertHasErrorSa(source: """
