@@ -1,0 +1,39 @@
+module Tests/Stdlib/FailurePathTeardownApi
+
+import IO/Console
+# A value returned on the success path is moved on that path only: when the routine fails part way, the list it
+# was building and the entities already in it are torn down on the failure path, under `check`, under `try`, and
+# when the failure crashes nothing (the success path returns the list as it is).
+
+entity Part
+    n: S64
+
+@override
+routine Part.destruct()
+    show(f"part {me.n} ends")
+    return
+
+failable routine collect(fail_at: S64) -> List[Part]
+    var result: List[Part] = []
+    var i: S64 = 0
+    until i >= 3
+        if i == fail_at
+            throw IntegerOverflowError()
+        result.add_last(Part(n: i))
+        i = i + 1
+    return result
+
+routine start()
+    when check collect(fail_at: 2)
+        is List[Part] as made => show(f"check: {made.count()}")
+        is Crashables => show("check: failed")
+    show("after check")
+    when try collect(fail_at: 1)
+        is None => show("try: none")
+        else as made => show(f"try: {made.count()}")
+    show("after try")
+    when try collect(fail_at: 9)
+        is None => show("whole: none")
+        else as made => show(f"whole: {made.count()}")
+    show("after whole")
+    return

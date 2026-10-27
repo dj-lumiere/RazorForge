@@ -380,6 +380,8 @@ file only once its other old spellings are gone.
   place it came from. `ByteSize` multiplication checks for overflow. An entity a routine receives through a bare
   generic parameter and does not keep is torn down by that routine, on failure paths too, so it no longer leaks.
 - A range that reaches the ends of its type runs to the end and stops there.
+- A value a routine returns on one path is torn down on the routine's other exits, so a failing `check` or `try` no
+  longer leaks the list it was building and the entities in it.
 
 ### Removed
 - `Assignable`, `FrozenController`, `Accessing`, `Controlling`, `Consulting`, `Amending`, `multiamend`,
