@@ -51,11 +51,11 @@ When unsure, consult ground truth in the repo/package:
    arithmetic is `Int` and the decimals.
 6. **Data exists to be shared, and record and entity are the two ways.** The question that picks one: may each
    place that shares the value hold its own copy? Yes: a `record`, shared by handing out copies (`=` copies).
-   No, copies would be a problem: an `entity`, whose one legitimate version is the single source of truth, so it
-   follows that the entity lives in one place. Others reach it by permission for a while (`view()`/`modify()`
-   tokens, the builder checks them) or through a manager for longer (`Retained`, `Guarded`, ...). Keeping the
-   same entity in a second place with neither is RF-S413 ("would share one entity between two places with no
-   manager", `var s = obj.field_entity`). `steal` hands it to what keeps it from now on: `consume(r: steal b)`.
+   No, copies would be a problem: an `entity`, whose one legitimate version is the single source of truth: an
+   entity has one original. Others reach it by permission for a while (`view()`/`modify()` tokens, the builder
+   checks them) or through a manager for longer (`Retained`, `Guarded`, ...). Holding the original under a second
+   name with neither is RF-S413 ("An entity has one original, and this would hold it here too with no manager",
+   `var s = obj.field_entity`). `steal` hands it to what keeps it from now on: `consume(r: steal b)`.
    A manager type (`FileManager`, `PartitionManager`, `StorageManager`, `CpuEventManager`) is always an `entity`
    (a copy would keep its own record and diverge), a service (`Clock`, `CpuClock`, `Environment`, `Entropy`) a
    `record` with no member variables (body `nothing`, routines `common`, called on the type). The console is the
@@ -747,7 +747,7 @@ dangerous routine raw_poke(p: Addr)     # callable only inside danger blocks
   (`routine T.create(...)` is an ordinary member routine named `create`), and
   overload resolution picks the failable or plain one for you.
 - **Annotations are a fixed set.** `@readonly`, `@writable`, `@reshaping`, `@discardable`, `@positional`,
-  `@infix`, `@inline`, `@noinline`, `@no_optimize`, `@crash_only`, `@untraced`, `@blocking`, `@layout(...)`, `@link(...)`,
+  `@hands_over` (an emitter's `emit`), `@infix`, `@inline`, `@noinline`, `@no_optimize`, `@crash_only`, `@untraced`, `@blocking`, `@layout(...)`, `@link(...)`,
   `@target(...)`, `@test`/`@case`/`@skip`/`@time_limit` (routine tests, below) and the
   library's own (`@llvm`, `@llvm_ir`, `@rf`, `@innate`, `@generated`, `@override`, `@overridable`,
   `@self_locking`). Any other name is RF-G221 (a misspelling names the close one). `@noinline` keeps a routine
@@ -772,7 +772,7 @@ record Point          # VALUE type: copied, no identity, no destructor
 # construct memberwise, strictly named:
 var p = Point(x: 3, y: 4)
 
-entity Resource       # ONE legitimate version, so it lives in one place; deterministic destruct
+entity Resource       # ONE legitimate version: it has one original, deterministic destruct
     tag: S64
 
 var b = Resource(tag: 7)
@@ -809,7 +809,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   `steal … as old inject …`.
   Returning a bare entity hands it to the caller (`var a = make()` keeps it, torn down at scope exit). A routine
   handing back an entity that stays where it is (a container's element) returns an access token, never the bare
-  entity: the entity would otherwise be kept in two places, and torn down twice.
+  entity: the one original would otherwise be held twice, and torn down twice.
 - **Access tokens** (RF's answer to "borrow" — never call them borrows). A token
   remembers the object it was taken from (its SOURCE), and every rule below is
   checked at build time:
@@ -986,7 +986,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   parameters are dangerous callables in its body. A dangerous callable is called only inside `danger` or a dangerous
   routine. Putting one in a plain `Callable` place (a plain routine's argument, a member variable, a collection, a
   result, a lambda's value) is RF-S609.
-- No lifetime syntax; safety comes from the one-legitimate-version rule (an entity lives in one place), marked
+- No lifetime syntax. Safety comes from the one-legitimate-version rule (an entity has one original), marked
   hand-overs (`steal`), scope-bound access tokens and managers.
 
 ```razorforge
@@ -1011,7 +1011,7 @@ try modifying seats as s_entered     # a Maybe: none when this job has seats ope
   A value type (record/scalar) is a build error (**RF-S440**) — values have no identity;
   use `==`. An access token (`Viewing`/`Modifying`) is RF-S440 too: compare the entities
   it came from. It is a primitive pointer compare, never a `.eq()` call, so it is not overloadable.
-  For bare entities (each kept in one place) `a === b` is trivially `false` between distinct
+  For bare entities (each the one original) `a === b` is trivially `false` between distinct
   bindings; it earns its keep where aliasing exists — two `Retained[T]` handles that may
   point at the same entity.
 
@@ -1027,12 +1027,13 @@ show(a === make_other())    # false — different objects
 > - **A recursive record is a build error; recursion belongs to entity.** Surface rule: *a record is a
 >   copied value, an infinitely-sized value cannot be copied, so a record cannot contain itself.*
 >   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
->   nullable pointer; each node kept in one place makes the structure a tree = acyclic = deterministic teardown).
+>   nullable pointer. Each node has one original, which makes the structure a tree = acyclic = deterministic teardown).
 > - Generic param kinds: bare `[TKey, TValue]` = `AnyType`; annotate `T: record` / `T: entity` only to constrain.
 >   No copyability bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the managers
->   below name only *departures* from the bare-entity default (kept in one place, unnamed).
+>   below name only *departures* from the bare-entity default (one original, unnamed).
 > - Entity allocation is stack/inline by default; heap is induced by a wrapper (`Retained`/…) or recursion,
->   not a marked concern.
+>   not a marked concern. User-facing text never explains this (no stack/heap, no allocation): it says an entity
+>   has one original and names costs per construct.
 
 **`record` vs `entity` (built, RazorForge only).** A named type is a `record` or an `entity` (`bundle` is RF-G228,
 `migrate --step bundle` rewrites each one from what its uses hold). A `record` is a copied value, so it may hold neither an
@@ -1313,8 +1314,14 @@ the builder writes through a copy and stores it back.
 `p.a` read an entity their container still holds, so putting one anywhere that
 keeps what it holds (`x = boxes[0]`, `p.b = boxes[0]`,
 `take(b: boxes[0])`, `holder.add_last(value: boxes[0])`, `return boxes[0]`,
-`(boxes[0], 1)`, a lambda giving it back: `teams.select_many(transform: t => t.members)`) is RF-S413: it would share one entity between two places with no manager (a tuple
-keeps its items, so a variable goes in with `steal` too: `(steal z, 1)`). Take an
+`(boxes[0], 1)`, a lambda giving it back: `teams.select_many(transform: t => t.members)`) is RF-S413: it would hold the entity's one original there too with no manager (a tuple
+keeps its items, so a variable goes in with `steal` too: `(steal z, 1)`). The same goes for a terminal that keeps
+what a walk reaches in place: `xs.where(...).to[List]()` (any `to[...]`) or `.first()`/`.last()`/`.min_by(...)` over
+a walk of a `List[Crate]` is RF-S413 at that call; collect `(steal xs).where(...)` (the walk takes the list apart,
+`take_each`) or `xs.select(transform: c => c.duplicate())` instead. An emitter whose `emit` makes or takes out its
+values is marked `@hands_over` (`select`, `select_many`, `take_each`, a channel drain): its items are the walk's own,
+so `each` ends each one unless the step keeps it, `where`/`skip`/`take` over it end what they pass by, and collecting
+is allowed. Take an
 element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
 explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
 where it sits. A new variable (`var x = boxes[0]`) is the exception: it holds a
@@ -1610,8 +1617,8 @@ Verbs (methods on `Work[T]`, all failable):
   each one is made ready first (its thread too) and then all are let go at once, so none runs before the others are
   ready; a Work of the list started already is a `WorkStartError`. `gather` and `race` only collect: a Work nothing
   started is started with `start_now()` the same way, all together.
-- A Work is an entity kept in one place: `steal` hands it over, `var b = a` is RF-S413. When the place that
-  keeps it lets go of it before a verb took its value (`drop job`, or the end of the scope or list that holds it), the work is cancelled
+- A Work is an entity, so it has one original: `steal` hands it over, `var b = a` is RF-S413. When what holds it
+  lets go of it before a verb took its value (`drop job`, or the end of the scope or list that holds it), the work is cancelled
   and waited for. A started Work nothing retrieves, drops or hands on is warning RF-W009.
 - There is no fire-and-forget verb: start with `start_now()` and collect later with `retrieve()` or
   `gather()`. A Work thrown away before anything starts it (`f.to[Work]()` as a statement, or

@@ -526,6 +526,7 @@ routine List[T].take_each() -> ListTakingEmitter[T]
 ### Hands over the next element.
 ### :returns: The element.
 ### :throws: {AbsentValueError} The walk is over.
+@hands_over
 failable routine ListTakingEmitter[T].emit() -> T
     if me.index >= me.count
         throw AbsentValueError()
@@ -546,6 +547,22 @@ routine ListTakingEmitter[T].destruct()
                 .destruct()
         me.data.invalidate()
         return
+
+### A list a walk takes apart: what `(steal xs).where(...)` walks. Its walk hands each element over (`take_each`), and
+### the elements no walk took end with it.
+### :typeparam T: The element type.
+entity TakenList[T]
+relates ListTakingEmitter[T] as Emitter
+obeys Emittable[T]
+    ### Stores the list the walk takes apart.
+    list: List[T]
+
+### Starts the walk that takes the list apart. The list is left empty, so a second walk finds nothing.
+### :returns: The walk.
+@readonly
+routine TakenList[T].emitter() -> ListTakingEmitter[T]
+    danger
+        return me.list.hijack().referent().take_each()
 
 ### Returns true if both lists contain the same elements in the same order.
 ### :param you: The other list to compare against.
