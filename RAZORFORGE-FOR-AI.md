@@ -409,9 +409,9 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - Inside a `when` arm whose name reaches the variant's own value (`is Upload as u` on an entity branch, or a
   `Retained`/`Hijacked`/`Maybe` branch), giving the matched variable a new value is RF-S264: assign it after the
   `when`. A value branch's name is a copy, so assigning there is fine.
-- `each x in steal xs` takes a `List` apart (`take_each()`): the loop variable holds each element, a `break` ends the
-  rest with the walk, and using `xs` after the loop is RF-S615 naming the loop. Other collections can't be taken
-  apart that way (a build error says so).
+- `each x in steal xs` takes a `List` or a `Slots` apart (`take_each()`): the loop variable holds each element, a
+  `break` ends the rest with the walk, and using `xs` after the loop is RF-S615 naming the loop. Other collections
+  can't be taken apart that way (a build error says so).
 - A routine written outside its type may name the slots its own way (`routine Pair[TLeft, TRight].swapped() ->
   Pair[TRight, TLeft]` for `record Pair[TFirst, TSecond]`): the names bind by position.
 - A `Moment` shows as `2026-03-05 09:00:00` (each part zero-padded), a `LocalMoment` adds `Z` or `+09:00`.
@@ -422,7 +422,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
   fixed-size `Items[T, COUNT]`, `Bits[BITS]`
 - Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
-- Carriers: `Maybe[T]`, `Check[T]` (builder-synthesized only —
+- Carriers: `Maybe[T]` / `Optional[T]` (the two forms of `T?`), `Check[T]` (builder-synthesized only —
   user routines cannot declare them as return types; you obtain one by wrapping a
   failable call with the `try`/`check` keyword).
 - A number never names its type (no `7s32`, `0_u64`, `10n`: RF-G010). Unit suffixes stay: durations
@@ -434,8 +434,8 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   `inf_b64` spelling (RF-G010).
 
 **Optionals and `none`:**
-- **`T?` (postfix `?`)** = `Maybe[T]` optional shorthand — the ONLY `?`-on-a-type
-  form. There is no prefix `?T`.
+- **`T?` (postfix `?`)** = `Maybe[T]` for a value `T`, `Optional[T]` for an entity `T` (§7), the ONLY
+  `?`-on-a-type form. There is no prefix `?T`.
 - **`None` (capital)** is the type / pattern marker (`when x is None`, type
   position). **`none` (lowercase)** is the value literal (like `true`/`false`).
 - `none` is legal ONLY where the target type is a carrier with an absent arm
@@ -1026,8 +1026,9 @@ show(a === make_other())    # false — different objects
 > Full rationale in `internal-wiki/record-entity-finite-representation.md`.
 > - **A recursive record is a build error; recursion belongs to entity.** Surface rule: *a record is a
 >   copied value, an infinitely-sized value cannot be copied, so a record cannot contain itself.*
->   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
->   nullable pointer. Each node has one original, which makes the structure a tree = acyclic = deterministic teardown).
+>   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` is an `Optional[Node]`: the
+>   address of the next node, null for `none`. Each node has one original, which makes the structure a tree = acyclic =
+>   deterministic teardown).
 > - Generic param kinds: bare `[TKey, TValue]` = `AnyType`; annotate `T: record` / `T: entity` only to constrain.
 >   No copyability bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the managers
 >   below name only *departures* from the bare-entity default (one original, unnamed).
@@ -1052,8 +1053,15 @@ with `s[i] = x` (tears the old one down), replaced with `steal s[i] as old injec
 variadic parameter (`xs...: T`) are always packed into a `Slots[T, N]` (so `from_literal` takes entities too).
 `SplitItems[T, COUNT]` is a record (`needs RecordType T`) with no entity counterpart.
 `Array`, `SplitArray` and `BitArray` are unknown types whose error names `Items`, `SplitItems` and `Bits`
-(`migrate --step type-names` renames them, emitters included). **`Maybe[T]` is a variant** of `T` and `None` (`T?`, `none`, `is None`, `when m is T as v`). The builder lays it out
-as a presence flag and the value (`{ i8, T }`, an entity `Node?` is `{ i8, ptr }`). A dictionary entry is the tuple
+(`migrate --step type-names` renames them, emitters included). **`T?` is `Maybe[T]` or `Optional[T]`**, picked by the
+builder from `T`'s kind, both used as the variant of `T` and `None` (`none`, `is None`, `when m is T as v`, `??`, `!!`,
+`try`). For a value `T` it is `Maybe[T]`, a record laid out as `{ i1, T }` (presence flag, value): `=` copies it and it can
+be a preset. For an entity `T` it is `Optional[T]`, which holds the one original or nothing: never copied by `=`
+(RF-S413), handed over with `steal`, laid out as the entity's address alone (`ptr`, null for `none`). `try` over a
+routine returning an entity gives an `Optional`. Writing `Maybe[E]` with an entity `E` is RF-S817 (names
+`Optional[E]`, `migrate --step type-names` rewrites it when the file declares `E`), `Optional[T]` with a value `T`
+RF-S818. Both share `Maybe`'s routines (`is_present`, `strip_out`, `unwrap` for a `Copyable` entity, `represent`,
+`diagnose`, which names `Optional[...]`). A `Slots` is an entity kept in place, so `Slots[...]?` stays a `Maybe`. A dictionary entry is the tuple
 `(TKey, TValue)`: `each (k, v) in d`, or `e.item0` / `e.item1` (there is no `DictEntry`).
 In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
 it (`var y = x`, `return me.value`, a tuple of it, handing it to a parameter of a type parameter as in
@@ -1068,6 +1076,9 @@ asks only `TPriority obeys Comparable`. A queue is not walked directly: `pq.unor
 `(priority, element)` pairs (storage order / smallest priority first, `needs RecordType TElement`), `pq.drain()`
 empties it into them smallest first (`each (priority, element) in pq.drain()`). A
 `Slots`' emitter reads each element in place, so `each r in slots` works on entities (the binding only reads).
+`each x in steal slots` (and `(steal slots).emitter()`) takes it apart with `take_each()`: each element is handed over,
+and the ones a `break` leaves end with the walk. `Slots` has `==` and `<=>` when `T` obeys `Equatable` / `Comparable`,
+like `Items`.
 Suflae has no `Slots` (an SF entity is shared, so a record holding one copies the handle).
 
 ## 8. Generics and protocols
@@ -1239,8 +1250,10 @@ that differ from other languages:
   `xs.where(...).to[List]()`, `to[Set]()`, `to[Dict]()` (the values are `(key, value)` tuples), and in `Collections`
   `to[SortedList]()`, `to[SortedSet]()`, `to[SortedDict]()` (pairs), `to[RotatableList]()`, `to[BitList]()` (Bools),
   `to[PriorityQueue]()` (`(priority, element)` pairs). `to[Items[T, N]]()` names the size (`xs.to[Items[S64, 3]]()`)
-  and is failable: fewer or more than `N` values throw `ElementCountMismatchError`. `to[List]`/`to[Set]`/`to[Dict]`/
-  `to[Items]` need `import IterTools`.
+  and is failable: fewer or more than `N` values throw `ElementCountMismatchError`. `to[Slots[T, N]]()` is the same for
+  any `T`: each value goes in its own place, and a list of entities is taken so its walk hands them over
+  (`(steal items).to[Slots[Item, 3]]()`, a walk that only reaches them in place is RF-S413). `to[List]`/`to[Set]`/
+  `to[Dict]`/`to[Items]`/`to[Slots]` need `import IterTools`.
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive. Without
   `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`
   yields nothing, `(2 to 1).has(1)` is false). `by N` sets the step

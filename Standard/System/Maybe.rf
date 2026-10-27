@@ -3,9 +3,10 @@ module System
 import BuilderQuery
 ### Represents an optional value: a variant of `T` and `None`, written `T?`.
 ### `Maybe[T]` holds either a `T` or nothing, without carrying crash information. A `when` on it names the `T`
-### member and `None` (`is None`). The builder lays it out as a presence flag and the value, so an entity's
-### `Node?` is a flag and a pointer.
-### :typeparam T: The wrapped value type.
+### member and `None` (`is None`). For a value `T` it is a record: a presence flag and the value, copied by `=` and
+### usable in a preset. For an entity `T` the builder names it `Optional[T]`: it holds the one original or nothing,
+### is handed over with `steal`, and is the entity's address alone (`none` is the null address).
+### :typeparam T: The wrapped type.
 variant Maybe[T]
     T
     None
@@ -131,16 +132,17 @@ needs VariantType T
     danger
         return me.value.hijack().peek()
 
-### `strip_out` for an entity: the slot holds the handle, and the address of an entity is the address of the entity
-### itself, so the handle is made from that address instead of read from it.
+### `strip_out` for an entity (an `Optional[T]`): the optional is the entity's address, so the entity is made from
+### that address, and the optional is then left `none`.
 @override
 failable routine Maybe[T].strip_out() -> T
 needs EntityType T
     if not me.is_present()
         throw AbsentValueError()
-    me.present = false
     danger
-        return LLVM::reinterpret_bits[Hijacked[T], T](Hijacked[T](me.value.get_address()))
+        var taken = LLVM::reinterpret_bits[Hijacked[T], T](Hijacked[T](me.value.get_address()))
+        me.present = false
+        return taken
 
 routine Maybe[T].is_present() -> Bool
     return me.present

@@ -20,7 +20,7 @@ import BuilderQuery
 @llvm("[{COUNT} x {T}]")
 entity Slots[T, COUNT]
 relates SlotsEmitter[T, COUNT] as Emitter
-obeys Emittable[T], ModifyingIndexable[T], Sized, Container
+obeys Comparable, Emittable[T], ModifyingIndexable[T], Sized, Container
 needs U64 COUNT
     # N elements of T stored inline by builder - no explicit member variables needed
     nothing
@@ -34,6 +34,18 @@ needs U64 COUNT
     ### Points at the places being walked: each element is read in place, so the loop's binding only reads it.
     secret data: Hijacked[Slots[T, COUNT]]
     ### Stores the next logical index to read.
+    secret index: U64
+
+### Walks the elements of a `Slots[T, COUNT]` from index 0 to N - 1 and hands each one over: what
+### `each x in steal slots` walks. The elements it has not handed over end with it.
+### :typeparam T: The element type.
+### :typeparam COUNT: The buildtime element count.
+entity SlotsTakingEmitter[T, COUNT]
+obeys Emitter[T]
+needs U64 COUNT
+    ### Stores the elements the walk hands over.
+    secret data: Slots[T, COUNT]
+    ### Stores the position of the next element to hand over.
     secret index: U64
 
 ### Returns the element at `index`, as a holder of its own (a share for a counted value).
@@ -261,3 +273,59 @@ routine Slots[T, COUNT].diagnose() -> Text
         result = result + nested_diagnose(me.get_raw(index: i))
     result = result + "])"
     return result
+
+### Hands the elements over to a walk and leaves these places holding nothing (all zero), so their own teardown
+### ends nothing: what `each x in steal slots` and `(steal slots).emitter()` walk.
+### :returns: The walk.
+routine Slots[T, COUNT].take_each() -> SlotsTakingEmitter[T, COUNT]
+    danger
+        var walk = SlotsTakingEmitter[T, COUNT](data: me.hijack().peek(), index: 0)
+        me.hijack().poke(LLVM::zero_value[Slots[T, COUNT]]())
+        return walk
+
+### Hands over the next element.
+### :returns: The element.
+### :throws: {AbsentValueError} The walk is over.
+@hands_over
+failable routine SlotsTakingEmitter[T, COUNT].emit() -> T
+    if me.index >= COUNT
+        throw AbsentValueError()
+    danger
+        var value: T = LLVM::load_element_ref[Slots[T, COUNT], T](me.data.hijack(), me.index)
+        me.index = me.index + 1
+        return value
+
+### Ends the elements not handed over yet.
+@override
+routine SlotsTakingEmitter[T, COUNT].destruct()
+    danger
+        each i in me.index til COUNT
+            LLVM::load_element_ref[Slots[T, COUNT], T](me.data.hijack(), i).destruct()
+    return
+
+### Returns true when both hold equal elements in the same order.
+### :param you: The other places to compare against.
+### :returns: `true` if every corresponding pair of elements is equal.
+### :note: Requires `T` to obey `Equatable`: `==` on places of other elements is a build error.
+@readonly
+routine Slots[T, COUNT].eq(you: Viewing[Slots[T, COUNT]]) -> Bool
+needs T obeys Equatable
+    each i in 0 til COUNT
+        if me.get_raw(index: i) != you.get_raw(index: i)
+            return false
+    return true
+
+### Lexicographic comparison of two runs of places of equal length.
+### Compares element by element from index 0 using `T.compare`, and returns at the first pair that differs, or
+### `SAME` when every pair is equal.
+### :param you: The other places to compare against.
+### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
+### :note: Requires `T` to obey `Comparable`.
+@readonly
+routine Slots[T, COUNT].compare(you: Viewing[Slots[T, COUNT]]) -> ComparisonSign
+needs T obeys Comparable
+    each i in 0 til COUNT
+        var sign = me.get_raw(index: i).compare(you.get_raw(index: i))
+        if sign != SAME
+            return sign
+    return SAME

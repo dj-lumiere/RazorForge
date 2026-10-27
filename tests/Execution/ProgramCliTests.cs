@@ -429,6 +429,37 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateTypeNames_MaybeOverDeclaredEntity_BecomesOptional()
+    {
+        string dir = OldProject(name: "type-names-optional", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/TypeNamesOptional\n" +
+                "entity Node\n" +
+                "    next: Maybe[Node]\n" +
+                "\n" +
+                "routine start()\n" +
+                "    var count: Maybe[S64] = none\n" +
+                "    var head: Maybe[Node] = none  # Maybe[Node]\n" +
+                "    return\n")
+        ]);
+
+        (int code, string output) = RunMain("migrate", "--step", "type-names", dir);
+        Assert.Equal(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
+        Assert.Equal(
+            expected: "module Test/TypeNamesOptional\n" +
+                      "entity Node\n" +
+                      "    next: Optional[Node]\n" +
+                      "\n" +
+                      "routine start()\n" +
+                      "    var count: Maybe[S64] = none\n" +
+                      "    var head: Optional[Node] = none  # Maybe[Node]\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+    }
+
+    [Fact]
     public void MigrateDefault_IndentsFirst_RewritesReleaseSpellings_RenamesManifest()
     {
         string dir = OldProject(name: "release", oldManifest: true, files:

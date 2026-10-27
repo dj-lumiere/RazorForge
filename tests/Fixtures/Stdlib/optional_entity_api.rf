@@ -1,0 +1,78 @@
+module Tests/Stdlib/OptionalEntityApi
+
+import BuilderQuery
+import IO/Console
+
+# `T?` over an entity is `Optional[T]`: the entity's address, null for none.
+entity Node
+    value: S64
+    next: Node?
+
+entity Box
+obeys Copyable
+    label: Text
+
+@readonly
+routine Box.duplicate() -> Box
+    return Box(label: me.label)
+
+failable routine find(n: S64) -> Node
+    if n < 0
+        throw AbsentValueError()
+    return Node(value: n, next: none)
+
+routine total(head: Viewing[Node]) -> S64
+    var sum = head.value
+    when head.next
+        is None => return sum
+        else as rest => return sum + total(head: rest)
+
+routine start()
+    # A recursive chain: each `next` is an Optional[Node].
+    var head = Node(value: 1, next: Node(value: 2, next: Node(value: 3, next: none)))
+    show(f"total: {total(head: head)}")
+
+    # `try` over an entity result gives an Optional.
+    var found = try find(n: 7)
+    show(f"found type: {found.type_name()}")
+    when found
+        is None => show("found: none")
+        else as n => show(f"found: {n.value}")
+    var missing = try find(n: -1)
+    when missing
+        is None => show("missing: none")
+        else as n => show(f"missing: {n.value}")
+
+    # Taking the entity out leaves the place none.
+    steal head.next as second
+    show(f"after steal: {head.next}")
+    when second
+        is None => show("second: none")
+        else as s => show(f"second: {s.value}")
+
+    # Putting one back and replacing it with inject.
+    head.next = Node(value: 9, next: none)
+    steal head.next as old inject Node(value: 10, next: none)
+    when old
+        is None => show("old: none")
+        else as o => show(f"old: {o.value}")
+    show(f"total now: {total(head: head)}")
+
+    # strip_out moves the entity out of a written Optional.
+    var spare: Optional[Box] = Box(label: "spare")
+    var taken = spare.strip_out()
+    show(f"taken: {taken.label}, spare present: {spare.is_present()}")
+
+    # unwrap duplicates a Copyable entity and leaves the Optional as it was.
+    var kept: Box? = Box(label: "kept")
+    var copy = kept.unwrap()
+    show(f"copy: {copy.label}, kept present: {kept.is_present()}")
+    show(f"kept (diagnose): {kept:?}")
+    var empty: Box? = none
+    show(f"empty: {empty}, diagnose: {empty:?}")
+
+    # A value `?` stays Maybe.
+    var count: S64? = 4
+    show(f"count type: {count.type_name()}, {count}")
+    show("DONE")
+    return

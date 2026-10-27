@@ -1,0 +1,41 @@
+module Tests/Stdlib/SlotsConversionApi
+
+import IO/Console
+import IterTools
+
+entity Crate
+    weight: S64
+
+routine start()
+    # Values collect into Slots straight from a walk.
+    var numbers = [3, 1, 2]
+    var slots = numbers.select(transform: n => n * 10).to[Slots[S64, 3]]()
+    show(f"slots: {slots}")
+
+    # Entities: the list is taken, so its walk hands each one over.
+    var crates = [Crate(weight: 4), Crate(weight: 5)]
+    var held = (steal crates).to[Slots[Crate, 2]]()
+    show(f"held: {held[0].weight} {held[1].weight}")
+
+    # A count that does not match fails.
+    when try [1, 2].to[Slots[S64, 3]]()
+        is None => show("short: none")
+        else as s => show(f"short: {s}")
+    when try [1, 2, 3, 4].to[Slots[S64, 3]]()
+        is None => show("long: none")
+        else as s => show(f"long: {s}")
+    var spare = [Crate(weight: 1), Crate(weight: 2), Crate(weight: 3)]
+    when try (steal spare).to[Slots[Crate, 2]]()
+        is None => show("too many crates: none")
+        else as s => show(f"too many crates: {s[0].weight}")
+
+    # Slots compare like Items when their elements do.
+    var a = [1, 2, 3].to[Slots[S64, 3]]()
+    var b = [1, 2, 4].to[Slots[S64, 3]]()
+    show(f"a == a: {a == a}, a == b: {a == b}, a < b: {a < b}")
+
+    # Taking Slots apart hands each element over.
+    each c in steal held
+        show(f"taken: {c.weight}")
+    show("DONE")
+    return

@@ -136,6 +136,48 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
     }
 
+    /// <summary>
+    /// A written <c>Maybe[E]</c> over an entity is RF-S817: the optional over an entity is <c>Optional[E]</c>.
+    /// </summary>
+    [Fact]
+    public void Analyze_MaybeOverEntity_ReportsError()
+    {
+        string source = """
+                        entity Cell
+                            n: S64
+
+                        routine test(x: Maybe[Cell])
+                            nothing
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MaybeOverEntity && e.Message.Contains(value: "Optional[Cell]"));
+    }
+
+    /// <summary>
+    /// A written <c>Optional[T]</c> over a value is RF-S818, and <c>Optional[E]</c> and <c>E?</c> over an entity build.
+    /// </summary>
+    [Fact]
+    public void Analyze_OptionalOverValue_ReportsError_EntityForms_NoError()
+    {
+        string source = """
+                        entity Cell
+                            n: S64
+
+                        routine test(a: Optional[S64], b: Optional[Cell], c: Cell?)
+                            nothing
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Single(collection: result.Errors,
+            predicate: e => e.Code == SemanticDiagnosticCode.OptionalOverValue);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MaybeOverEntity);
+    }
+
     #endregion
 
     #region Additional nullable and collection prohibitions

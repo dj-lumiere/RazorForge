@@ -186,8 +186,13 @@ file only once its other old spellings are gone.
   is `Copyable`. The arguments of a variadic parameter are a `Slots[T, N]`. `SplitArray` is `SplitItems` (values
   only) and `BitArray` is `Bits`. The old names are unknown types whose error names the new one, and
   `migrate --step type-names` renames them.
-- `Maybe[T]` (`T?`) is a variant of `T` and `None`. `DictEntry` is gone: a dictionary entry is the tuple
-  `(TKey, TValue)` (`each (k, v) in d`, `e.item0`, `e.item1`).
+- `T?` is used as a variant of `T` and `None`, and the builder picks its type from `T`: `Maybe[T]` for a value (a record
+  laid out as `{ i1, T }`, copied by `=`), `Optional[T]` for an entity (it holds the one original or nothing, is
+  handed over with `steal`, and is the entity's address alone, null for `none`). `try` over a routine that returns
+  an entity gives an `Optional`. A written `Maybe[E]` over an entity is `RF-S817` and a written `Optional[T]` over a
+  value is `RF-S818`. `migrate --step type-names` rewrites `Maybe[E]` to `Optional[E]` when the file declares the
+  entity `E`. `DictEntry` is gone: a dictionary entry is the tuple `(TKey, TValue)` (`each (k, v) in d`, `e.item0`,
+  `e.item1`).
 
 **Standard library**
 - A module is its folder. The base module is `System` (it was `Core`) and every file sees it and the modules under
@@ -279,6 +284,9 @@ file only once its other old spellings are gone.
 - `T.hollow()` for every type, inside `danger`.
 
 **Standard library**
+- `to[Slots[T, N]]()` collects a walk into `Slots`, failing like `to[Items[T, N]]()` when the count differs. For a
+  list of entities, take the list: `(steal items).to[Slots[Item, 3]]()`. `each x in steal slots` takes a `Slots`
+  apart, and `Slots` has `==` and `<=>` when its elements do.
 - `x.rsqrt()` is 1 / sqrt(x) rounded once (not `1 / x.sqrt()`, which rounds twice) on `B16`, `BF16`, `B32`, `B64`,
   `B128`, `D32`, `D64`, `D128` and `Decimal`. `x <= 0` crashes like the other checked float math (raw:
   `rsqrt_unchecked`), and `Decimal.rsqrt` of `x <= 0` is a `NumericDomainError`.
@@ -360,7 +368,8 @@ file only once its other old spellings are gone.
   `incremental`.
 - `new`, `migrate`, `docs`, `fmt`, `lint`, `test`, `lsp` and `check --json`.
 - The language server: diagnostics, formatting, hover, go to definition, rename and quick fixes.
-- Rider plugin and VS Code extension.
+- Rider plugin and VS Code extension. The color of a carrier or variant whose kind follows its members and is not
+  decided yet is the semantic token `memberKindType`.
 - `[target] backend = "tessera"` (experimental, opt-in): builds through Tessera instead of LLVM IR directly. It does not cover every program yet.
 - Windows trace builds write CodeView and PDB files.
 - A crash trace holds the program's routines only: a standard library routine keeps no frame, and a crash

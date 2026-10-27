@@ -14,14 +14,15 @@ import javax.swing.Icon
 /**
  * RazorForge's own colors. Each starts as the C# color of its counterpart (record as struct, entity as class,
  * routine as method, module as namespace, preset as constant), so RazorForge reads like C# in any scheme until
- * Settings | Editor | Color Scheme | RazorForge says otherwise. A bundle takes the color of what each use makes it. A protocol, an annotation and an
- * undecided bundle are the exceptions: a protocol starts light blue and italic, an annotation yellow, a bundle whose
- * kind no instantiation has decided yet pink (colorSchemes/). A decided bundle takes the record or the entity color.
+ * Settings | Editor | Color Scheme | RazorForge says otherwise. A carrier or variant whose kind follows its members
+ * takes the color of what each use makes it. A protocol, an annotation and such a type not decided yet are the
+ * exceptions: a protocol starts light blue and italic, an annotation yellow, a carrier or variant whose kind no
+ * instantiation has decided yet pink (colorSchemes/). A decided one takes the record or the entity color.
  */
 object RazorForgeColors {
     val RECORD = key("RAZORFORGE_RECORD", TextAttributesKey.find("ReSharper.STRUCT_IDENTIFIER"))
     val ENTITY = key("RAZORFORGE_ENTITY", DefaultLanguageHighlighterColors.CLASS_NAME)
-    val BUNDLE = key("RAZORFORGE_BUNDLE", TextAttributesKey.find("ReSharper.STRUCT_IDENTIFIER"))
+    val MEMBER_KIND = key("RAZORFORGE_MEMBER_KIND", TextAttributesKey.find("ReSharper.STRUCT_IDENTIFIER"))
     val PROTOCOL = key("RAZORFORGE_PROTOCOL", DefaultLanguageHighlighterColors.INTERFACE_NAME)
     val GENERIC_PARAMETER = key("RAZORFORGE_GENERIC_PARAMETER", TextAttributesKey.find("ReSharper.TYPE_PARAMETER_IDENTIFIER"))
     val ROUTINE = key("RAZORFORGE_ROUTINE", DefaultLanguageHighlighterColors.INSTANCE_METHOD)
@@ -43,7 +44,7 @@ internal object RazorForgeSemanticTokens : LspSemanticTokensSupport() {
     private val keys = mapOf(
         "recordType" to RazorForgeColors.RECORD,
         "entityType" to RazorForgeColors.ENTITY,
-        "bundleType" to RazorForgeColors.BUNDLE,
+        "memberKindType" to RazorForgeColors.MEMBER_KIND,
         "interface" to RazorForgeColors.PROTOCOL,
         "typeParameter" to RazorForgeColors.GENERIC_PARAMETER,
         "function" to RazorForgeColors.ROUTINE,
@@ -67,7 +68,7 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
     private val descriptors = arrayOf(
         AttributesDescriptor(RazorForgeBundle.message("color.types.record"), RazorForgeColors.RECORD),
         AttributesDescriptor(RazorForgeBundle.message("color.types.entity"), RazorForgeColors.ENTITY),
-        AttributesDescriptor(RazorForgeBundle.message("color.types.bundle"), RazorForgeColors.BUNDLE),
+        AttributesDescriptor(RazorForgeBundle.message("color.types.member.kind"), RazorForgeColors.MEMBER_KIND),
         AttributesDescriptor(RazorForgeBundle.message("color.types.protocol"), RazorForgeColors.PROTOCOL),
         AttributesDescriptor(RazorForgeBundle.message("color.types.generic"), RazorForgeColors.GENERIC_PARAMETER),
         AttributesDescriptor(RazorForgeBundle.message("color.routine"), RazorForgeColors.ROUTINE),
@@ -82,7 +83,7 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
     private val tags = mapOf(
         "record" to RazorForgeColors.RECORD,
         "entity" to RazorForgeColors.ENTITY,
-        "bundle" to RazorForgeColors.BUNDLE,
+        "memberkind" to RazorForgeColors.MEMBER_KIND,
         "protocol" to RazorForgeColors.PROTOCOL,
         "generic" to RazorForgeColors.GENERIC_PARAMETER,
         "routine" to RazorForgeColors.ROUTINE,
@@ -117,7 +118,8 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
             x: <record>S64</record>
             y: <record>S64</record>
 
-        bundle <bundle>Pair</bundle>[<generic>A</generic>, <generic>B</generic>]
+        record <record>Pair</record>[<generic>A</generic>, <generic>B</generic>]
+        needs RecordType <generic>A</generic>, RecordType <generic>B</generic>
             first: <generic>A</generic>
             second: <generic>B</generic>
 
@@ -126,7 +128,7 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
             history: <entity>List</entity>[<record>Point</record>]
 
         <annotation>@positional</annotation>
-        routine <routine>largest</routine>[<generic>T</generic>](items: <entity>List</entity>[<generic>T</generic>]) -> <generic>T</generic>
+        routine <routine>largest</routine>[<generic>T</generic>](items: <entity>List</entity>[<generic>T</generic>], spare: <memberkind>Maybe</memberkind>[<generic>T</generic>]) -> <generic>T</generic>
             var best = items.<routine>first</routine>()
             return best
 
