@@ -4,7 +4,7 @@ import BuilderExpansion
 import BuilderQuery
 ### A fixed-size, struct-of-arrays (SoA) array of `COUNT` records with value semantics.
 ###
-### `SplitArray[T, COUNT]` is the SoA counterpart of {Array[T, COUNT]}: instead of storing `COUNT` whole `T`
+### `SplitArray[T, COUNT]` is the SoA counterpart of {Items[T, COUNT]}: instead of storing `COUNT` whole `T`
 ### values inline (array-of-structs), it stores each FIELD of the element record `T` in its own
 ### inline `Array[fieldType, COUNT]` column. Indexing copies a whole `T` out — gathering one value from
 ### each column — so the surface matches `Array[T, COUNT]`'s value-out `getitem`; the payoff is
@@ -21,7 +21,7 @@ import BuilderQuery
 ###
 ### **When to use**
 ### - The element count is a buildtime constant AND you scan/update fields in bulk (SoA wins on cache).
-### - Use {Array[T, COUNT]} for the array-of-structs layout (whole-element locality).
+### - Use {Items[T, COUNT]} for the array-of-structs layout (whole-element locality).
 ### - Use {SplitList[T]} when the count is only known at runtime.
 ###
 ### **Complexity**
@@ -33,17 +33,17 @@ import BuilderQuery
 ###
 ### :typeparam T: The record element type (must be `Splittable`).
 ### :typeparam COUNT: The buildtime element count, supplied as a `U64` literal.
-### :see: {Array[T, COUNT]} for the array-of-structs counterpart.
+### :see: {Items[T, COUNT]} for the array-of-structs counterpart.
 ### :see: {SplitList[T]} for the growable, heap-backed SoA sequence.
-record SplitArray[T, COUNT]
-relates SplitArrayEmitter[T, COUNT] as Emitter
+record SplitItems[T, COUNT]
+relates SplitItemsEmitter[T, COUNT] as Emitter
 obeys Comparable, Emittable[T], ModifyingIndexable[T], Sized, Container
 needs U64 COUNT
 needs RecordType T
 needs T obeys Splittable
     expand m in allmemvarof(T)
         ### One inline column holding this field across every element.
-        secret $nameof(m): Array[$typeof(m), COUNT]
+        secret $nameof(m): Items[$typeof(m), COUNT]
 
 # ============================================================================
 # Iteration Support
@@ -54,13 +54,13 @@ needs T obeys Splittable
 ### copy of the column data.
 ### :typeparam T: The element type yielded by the emitter.
 ### :typeparam COUNT: The buildtime element count.
-entity SplitArrayEmitter[T, COUNT]
+entity SplitItemsEmitter[T, COUNT]
 obeys Emitter[T]
 needs RecordType T
 needs U64 COUNT
 needs T obeys Splittable
     ### Stores the split array being iterated.
-    source: SplitArray[T, COUNT]
+    source: SplitItems[T, COUNT]
     ### Stores the next logical index to read.
     index: U64
 
@@ -73,7 +73,7 @@ needs T obeys Splittable
 ### :returns: The reconstructed element.
 ### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
 @readonly
-failable routine SplitArray[T, COUNT].getitem(index: U64) -> T
+failable routine SplitItems[T, COUNT].getitem(index: U64) -> T
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: COUNT)
     var result = T.blank()
@@ -88,7 +88,7 @@ failable routine SplitArray[T, COUNT].getitem(index: U64) -> T
 ### :param index: The zero-based position to update.
 ### :param value: The replacement element.
 ### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
-failable routine SplitArray[T, COUNT].setitem(index: U64, value: T)
+failable routine SplitItems[T, COUNT].setitem(index: U64, value: T)
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: COUNT)
     expand m in allmemvarof(T)
@@ -103,20 +103,20 @@ failable routine SplitArray[T, COUNT].setitem(index: U64, value: T)
 ### Returns the fixed number of elements, always equal to the buildtime parameter `COUNT`.
 ### :returns: The element count `COUNT`.
 @readonly
-routine SplitArray[T, COUNT].count() -> U64
+routine SplitItems[T, COUNT].count() -> U64
     return COUNT
 
 ### Returns true when the buildtime size is zero.
 ### :returns: `true` if `COUNT == 0`.
 @readonly
-routine SplitArray[T, COUNT].is_empty() -> Bool
+routine SplitItems[T, COUNT].is_empty() -> Bool
     return COUNT == 0
 
 ### Returns the first element of the array.
 ### :returns: The element at index `0`.
 ### :throws: {AbsentValueError} The array has zero elements (`COUNT == 0`).
 @readonly
-failable routine SplitArray[T, COUNT].first() -> T
+failable routine SplitItems[T, COUNT].first() -> T
 needs RecordType T
     if COUNT == 0
         throw AbsentValueError()
@@ -126,7 +126,7 @@ needs RecordType T
 ### :returns: The element at index `COUNT - 1`.
 ### :throws: {AbsentValueError} The array has zero elements (`COUNT == 0`).
 @readonly
-failable routine SplitArray[T, COUNT].last() -> T
+failable routine SplitItems[T, COUNT].last() -> T
 needs RecordType T
     if COUNT == 0
         throw AbsentValueError()
@@ -137,7 +137,7 @@ needs RecordType T
 ### :param value: The value to search for.
 ### :returns: `true` if a matching element is present.
 @readonly
-routine SplitArray[T, COUNT].has(value: T) -> Bool
+routine SplitItems[T, COUNT].has(value: T) -> Bool
 needs T obeys Equatable
     each i in 0 til COUNT
         if me[i] == value
@@ -148,7 +148,7 @@ needs T obeys Equatable
 ### :param value: The value to look for.
 ### :returns: `true` when `value` is absent.
 @readonly
-routine SplitArray[T, COUNT].lacks(value: T) -> Bool
+routine SplitItems[T, COUNT].lacks(value: T) -> Bool
 needs T obeys Equatable
     return not me.has(value)
 
@@ -157,7 +157,7 @@ needs T obeys Equatable
 ### :returns: The zero-based index of the first match.
 ### :throws: {AbsentValueError} No element equals `value`.
 @readonly
-failable routine SplitArray[T, COUNT].index_of(value: T) -> U64
+failable routine SplitItems[T, COUNT].index_of(value: T) -> U64
 needs T obeys Equatable
     each i in 0 til COUNT
         if me[i] == value
@@ -165,14 +165,14 @@ needs T obeys Equatable
     throw AbsentValueError()
 
 @readonly
-routine SplitArray[T, COUNT].emitter() -> SplitArrayEmitter[T, COUNT]
+routine SplitItems[T, COUNT].emitter() -> SplitItemsEmitter[T, COUNT]
 needs RecordType T
-    return SplitArrayEmitter[T, COUNT](source: me, index: 0)
+    return SplitItemsEmitter[T, COUNT](source: me, index: 0)
 
 ### Produces the next element and advances, or throws `AbsentValueError` when the sequence is exhausted.
 ### :returns: The element at the current index.
 ### :throws: {AbsentValueError} All `COUNT` elements have been yielded.
-failable routine SplitArrayEmitter[T, COUNT].emit() -> T
+failable routine SplitItemsEmitter[T, COUNT].emit() -> T
     if me.index >= COUNT
         throw AbsentValueError()
     var value = me.source[me.index]
@@ -185,7 +185,7 @@ failable routine SplitArrayEmitter[T, COUNT].emit() -> T
 
 @readonly
 @override
-routine SplitArray[T, COUNT].represent() -> Text
+routine SplitItems[T, COUNT].represent() -> Text
     var result = "["
     each i in 0 til COUNT
         if i > 0
@@ -196,7 +196,7 @@ routine SplitArray[T, COUNT].represent() -> Text
 
 @readonly
 @override
-routine SplitArray[T, COUNT].diagnose() -> Text
+routine SplitItems[T, COUNT].diagnose() -> Text
     var result = me.full_type_name() + "(["
     each i in 0 til COUNT
         if i > 0
@@ -214,7 +214,7 @@ routine SplitArray[T, COUNT].diagnose() -> Text
 ### :returns: `true` if every corresponding pair of elements is equal.
 ### :note: Requires `T` to obey `Equatable`.
 @readonly
-routine SplitArray[T, COUNT].eq(you: SplitArray[T, COUNT]) -> Bool
+routine SplitItems[T, COUNT].eq(you: SplitItems[T, COUNT]) -> Bool
 needs T obeys Equatable
     each i in 0 til COUNT
         if me[i] != you[i]
@@ -227,7 +227,7 @@ needs T obeys Equatable
 ### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
 ### :note: Requires `T` to obey `Comparable`.
 @readonly
-routine SplitArray[T, COUNT].compare(you: SplitArray[T, COUNT]) -> ComparisonSign
+routine SplitItems[T, COUNT].compare(you: SplitItems[T, COUNT]) -> ComparisonSign
 needs T obeys Comparable
     each i in 0 til COUNT
         var sign = me[i].compare(you[i])

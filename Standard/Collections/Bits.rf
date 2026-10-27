@@ -4,7 +4,7 @@ import BuilderQuery
 ### A fixed-size, inline sequence of `BITS` boolean flags packed into bytes.
 ###
 ### `BitArray[BITS]` stores exactly `BITS` bits compactly — each bit occupies only
-### one bit of storage rather than a full byte. Like {Array[T, BITS]}, it is a
+### one bit of storage rather than a full byte. Like {Items[T, BITS]}, it is a
 ### record type: copying a `BitArray` copies all `BITS` bits and the size is fixed
 ### at build time.
 ###
@@ -17,7 +17,7 @@ import BuilderQuery
 ### - You want value semantics (copy = full duplication of all bits).
 ### - You need a compact, cache-friendly fixed-size flag field.
 ### - Use {BitList} when the number of bits is only known at runtime or bits are appended dynamically.
-### - Use {Array[Bool, BITS]} when you need per-element mutability and don't mind the extra memory.
+### - Use {Items[Bool, BITS]} when you need per-element mutability and don't mind the extra memory.
 ###
 ### **Complexity**
 ### | Operation | Time |
@@ -30,10 +30,10 @@ import BuilderQuery
 ###
 ### :typeparam BITS: The buildtime bit count, supplied as a `U64` literal.
 ### :see: {BitList} for a heap-backed growable bit sequence.
-### :see: {Array[T, BITS]} for a fixed-size inline array of typed elements.
+### :see: {Items[T, BITS]} for a fixed-size inline array of typed elements.
 @llvm("[{(BITS+7)//8} x i8]")
-record BitArray[BITS]
-relates BitArrayEmitter[BITS] as Emitter
+record Bits[BITS]
+relates BitsEmitter[BITS] as Emitter
 obeys Comparable, Emittable[Bool], ModifyingIndexable[Bool]
 needs U64 BITS
     nothing
@@ -45,11 +45,11 @@ needs U64 BITS
 ### Walks the bits of a fixed-size `BitArray[BITS]` from index 0 to N - 1.
 ### Because `BitArray` is a record type, the emitter holds its own copy of the packed bits.
 ### :typeparam BITS: The buildtime bit count.
-entity BitArrayEmitter[BITS]
+entity BitsEmitter[BITS]
 obeys Emitter[Bool]
 needs U64 BITS
     ### Stores the bit array being iterated.
-    bits: BitArray[BITS]
+    bits: Bits[BITS]
     ### Stores the next logical bit index to read.
     index: U64
 
@@ -58,7 +58,7 @@ needs U64 BITS
 ### :param index: The zero-based byte position.
 ### :returns: The byte stored at `index`.
 @llvm_ir("{result} = alloca [{(BITS+7)//8} x i8]\nstore [{(BITS+7)//8} x i8] {array}, ptr {prev}\n{result} = getelementptr [{(BITS+7)//8} x i8], ptr {prev}, i32 0, i64 {index}\n{result} = load i8, ptr {prev}")
-routine LLVM::byte_at_bits[BITS](array: BitArray[BITS], index: U64) -> U8
+routine LLVM::byte_at_bits[BITS](array: Bits[BITS], index: U64) -> U8
 needs U64 BITS
 
 ### Writes `value` into the byte at `index` of a `BitArray[BITS]`'s packed storage.
@@ -67,7 +67,7 @@ needs U64 BITS
 ### :param value: The byte to store.
 ### :returns: A copy of `array` with the byte at `index` replaced by `value`.
 @llvm_ir("{result} = alloca [{(BITS+7)//8} x i8]\nstore [{(BITS+7)//8} x i8] {array}, ptr {prev}\n{result} = getelementptr [{(BITS+7)//8} x i8], ptr {prev}, i32 0, i64 {index}\nstore i8 {value}, ptr {prev}\n{result} = load [{(BITS+7)//8} x i8], ptr {first}")
-routine LLVM::set_byte_at_bits[BITS](array: BitArray[BITS], index: U64, value: U8) -> BitArray[BITS]
+routine LLVM::set_byte_at_bits[BITS](array: Bits[BITS], index: U64, value: U8) -> Bits[BITS]
 needs U64 BITS
 
 # ============================================================================
@@ -78,13 +78,13 @@ needs U64 BITS
 ### This is always equal to the buildtime parameter `BITS`.
 ### :returns: The bit count `BITS`.
 @readonly
-routine BitArray[BITS].count() -> U64
+routine Bits[BITS].count() -> U64
     return BITS
 
 ### Returns true when the buildtime bit count is zero.
 ### :returns: `true` if `BITS == 0`.
 @readonly
-routine BitArray[BITS].is_empty() -> Bool
+routine Bits[BITS].is_empty() -> Bool
     return BITS == 0
 
 # ============================================================================
@@ -96,7 +96,7 @@ routine BitArray[BITS].is_empty() -> Bool
 ### :returns: `true` if the bit at `index` is set; `false` if it is clear.
 ### :throws: {IndexOutOfBoundsError} if `index >= BITS`.
 @readonly
-failable routine BitArray[BITS].getitem(index: U64) -> Bool
+failable routine Bits[BITS].getitem(index: U64) -> Bool
     if index >= BITS
         throw IndexOutOfBoundsError(index: index, count: BITS)
     # Access bit at index within packed bytes
@@ -105,14 +105,14 @@ failable routine BitArray[BITS].getitem(index: U64) -> Bool
     var byte_val: U8 = 0
     # Read the packed byte in place through the storage pointer — no whole-array copy.
     danger
-        byte_val = LLVM::load_element_ref[BitArray[BITS], U8](me.hijack(), byte_idx)
+        byte_val = LLVM::load_element_ref[Bits[BITS], U8](me.hijack(), byte_idx)
     return (byte_val & (1 << bit_off)) != 0
 
 ### Writes `value` into the bit at `index`, mutating this `BitArray` in place.
 ### :param index: The zero-based bit position to update.
 ### :param value: The new bit value.
 ### :throws: {IndexOutOfBoundsError} if `index >= BITS`.
-failable routine BitArray[BITS].setitem(index: U64, value: Bool)
+failable routine Bits[BITS].setitem(index: U64, value: Bool)
     if index >= BITS
         throw IndexOutOfBoundsError(index: index, count: BITS)
     var byte_idx = LLVM::unsigned_div(index, 8)
@@ -120,15 +120,15 @@ failable routine BitArray[BITS].setitem(index: U64, value: Bool)
     # `me` is by reference (struct-record `setitem!`): read-modify-write the single packed byte in
     # place through `me.hijack()` so the bit change reaches the caller's storage — no whole-array copy.
     danger
-        var byte_val = LLVM::load_element_ref[BitArray[BITS], U8](me.hijack(), byte_idx)
+        var byte_val = LLVM::load_element_ref[Bits[BITS], U8](me.hijack(), byte_idx)
         if value
-            LLVM::store_element_ref[BitArray[BITS], U8](
+            LLVM::store_element_ref[Bits[BITS], U8](
                 me.hijack(),
                 byte_idx,
                 byte_val | (1 << bit_off),
             )
         else
-            LLVM::store_element_ref[BitArray[BITS], U8](
+            LLVM::store_element_ref[Bits[BITS], U8](
                 me.hijack(),
                 byte_idx,
                 byte_val & ~(1 << bit_off),
@@ -146,8 +146,8 @@ failable routine BitArray[BITS].setitem(index: U64, value: Bool)
 ### :param value: The new bit value.
 ### :returns: A copy of this array with the specified bit updated.
 @readonly
-routine BitArray[BITS].with_set(index: U64, value: Bool) -> BitArray[BITS]
-    # Returns a new BitArray with the bit at index changed
+routine Bits[BITS].with_set(index: U64, value: Bool) -> Bits[BITS]
+    # Returns a new Bits with the bit at index changed
     if index >= BITS
         return me
     var result = me
@@ -166,8 +166,8 @@ routine BitArray[BITS].with_set(index: U64, value: Bool) -> BitArray[BITS]
 ### :param index: The zero-based bit position to flip.
 ### :returns: A copy of this array with the specified bit inverted.
 @readonly
-routine BitArray[BITS].with_flipped(index: U64) -> BitArray[BITS]
-    # Returns a new BitArray with the bit at index toggled
+routine Bits[BITS].with_flipped(index: U64) -> Bits[BITS]
+    # Returns a new Bits with the bit at index toggled
     if index >= BITS
         return me
     var current = me[index]
@@ -180,7 +180,7 @@ routine BitArray[BITS].with_flipped(index: U64) -> BitArray[BITS]
 ### Returns the number of bits currently set to `true`.
 ### :returns: The count of one-bits in this array.
 @readonly
-routine BitArray[BITS].count_trues() -> U64
+routine Bits[BITS].count_trues() -> U64
     var count: U64 = 0
     var i: U64 = 0
     until i >= BITS
@@ -192,13 +192,13 @@ routine BitArray[BITS].count_trues() -> U64
 ### Returns the number of bits currently set to `false`.
 ### :returns: `BITS` minus the number of one-bits.
 @readonly
-routine BitArray[BITS].count_falses() -> U64
+routine Bits[BITS].count_falses() -> U64
     return BITS -% me.count_trues()
 
 ### Returns true when at least one stored bit is `true`.
 ### :returns: `true` if any bit is set; `false` if all bits are clear.
 @readonly
-routine BitArray[BITS].is_any_true() -> Bool
+routine Bits[BITS].is_any_true() -> Bool
     var i: U64 = 0
     until i >= BITS
         if me[i]
@@ -210,7 +210,7 @@ routine BitArray[BITS].is_any_true() -> Bool
 ### Empty arrays (`BITS == 0`) vacuously return `true`.
 ### :returns: `true` if all bits are set; `false` if any bit is clear.
 @readonly
-routine BitArray[BITS].is_all_true() -> Bool
+routine Bits[BITS].is_all_true() -> Bool
     var i: U64 = 0
     until i >= BITS
         if not me[i]
@@ -221,7 +221,7 @@ routine BitArray[BITS].is_all_true() -> Bool
 ### Returns true when no stored bit is `true`.
 ### :returns: `true` if all bits are clear; `false` if any bit is set.
 @readonly
-routine BitArray[BITS].is_none_true() -> Bool
+routine Bits[BITS].is_none_true() -> Bool
     return not me.is_any_true()
 
 ### Returns true if any stored bit equals `value`.
@@ -229,7 +229,7 @@ routine BitArray[BITS].is_none_true() -> Bool
 ### :param value: The bit value to search for.
 ### :returns: `true` if at least one stored bit matches `value`.
 @readonly
-routine BitArray[BITS].has(value: Bool) -> Bool
+routine Bits[BITS].has(value: Bool) -> Bool
     if value
         return me.is_any_true()
     return not me.is_all_true()
@@ -238,14 +238,14 @@ routine BitArray[BITS].has(value: Bool) -> Bool
 ### :param value: The value to look for.
 ### :returns: `true` when `value` is absent.
 @readonly
-routine BitArray[BITS].lacks(value: Bool) -> Bool
+routine Bits[BITS].lacks(value: Bool) -> Bool
     return not me.has(value)
 
 ### Returns the position of the first `true` bit.
 ### :returns: The lowest index whose bit is `true`.
 ### :throws: {AbsentValueError} when no bit is `true`.
 @readonly
-failable routine BitArray[BITS].first_true() -> U64
+failable routine Bits[BITS].first_true() -> U64
     var i: U64 = 0
     until i >= BITS
         if me[i]
@@ -258,7 +258,7 @@ failable routine BitArray[BITS].first_true() -> U64
 ### :returns: The lowest index above `after` whose bit is `true`.
 ### :throws: {AbsentValueError} when no bit after `after` is `true`.
 @readonly
-failable routine BitArray[BITS].next_true(after: U64) -> U64
+failable routine Bits[BITS].next_true(after: U64) -> U64
     var start: U64 = after
     if start >= BITS
         throw AbsentValueError()
@@ -273,7 +273,7 @@ failable routine BitArray[BITS].next_true(after: U64) -> U64
 ### :returns: The lowest index whose bit is `false`.
 ### :throws: {AbsentValueError} when no bit is `false`.
 @readonly
-failable routine BitArray[BITS].first_false() -> U64
+failable routine Bits[BITS].first_false() -> U64
     var i: U64 = 0
     until i >= BITS
         if not me[i]
@@ -286,7 +286,7 @@ failable routine BitArray[BITS].first_false() -> U64
 ### :returns: The lowest index above `after` whose bit is `false`.
 ### :throws: {AbsentValueError} when no bit after `after` is `false`.
 @readonly
-failable routine BitArray[BITS].next_false(after: U64) -> U64
+failable routine Bits[BITS].next_false(after: U64) -> U64
     var start: U64 = after
     if start >= BITS
         throw AbsentValueError()
@@ -303,7 +303,7 @@ failable routine BitArray[BITS].next_false(after: U64) -> U64
 
 @readonly
 @override
-routine BitArray[BITS].represent() -> Text
+routine Bits[BITS].represent() -> Text
     var result = "["
     var i: U64 = 0
     until i >= BITS
@@ -316,7 +316,7 @@ routine BitArray[BITS].represent() -> Text
 
 @readonly
 @override
-routine BitArray[BITS].diagnose() -> Text
+routine Bits[BITS].diagnose() -> Text
     var result = me.full_type_name() + "(["
     var i: U64 = 0
     until i >= BITS
@@ -328,13 +328,13 @@ routine BitArray[BITS].diagnose() -> Text
     return result
 
 @readonly
-routine BitArray[BITS].emitter() -> BitArrayEmitter[BITS]
-    return BitArrayEmitter[BITS](bits: me, index: 0)
+routine Bits[BITS].emitter() -> BitsEmitter[BITS]
+    return BitsEmitter[BITS](bits: me, index: 0)
 
 ### Returns the next bit from the emitter in ascending index order.
 ### :returns: The bit at the current index.
 ### :throws: {AbsentValueError} All `BITS` bits have been yielded.
-failable routine BitArrayEmitter[BITS].emit() -> Bool
+failable routine BitsEmitter[BITS].emit() -> Bool
     if me.index >= BITS
         throw AbsentValueError()
     var value = me.bits[me.index]
@@ -351,7 +351,7 @@ failable routine BitArrayEmitter[BITS].emit() -> Bool
 ### :note: Bit-by-bit comparison is required because the trailing bits of the
 ###        last byte are unspecified — a raw `memcmp` would compare padding.
 @readonly
-routine BitArray[BITS].eq(you: BitArray[BITS]) -> Bool
+routine Bits[BITS].eq(you: Bits[BITS]) -> Bool
     each i in 0 til BITS
         if me[i] != you[i]
             return false
@@ -362,7 +362,7 @@ routine BitArray[BITS].eq(you: BitArray[BITS]) -> Bool
 ### :param you: The other bit array to compare against.
 ### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
 @readonly
-routine BitArray[BITS].compare(you: BitArray[BITS]) -> ComparisonSign
+routine Bits[BITS].compare(you: Bits[BITS]) -> ComparisonSign
     each i in 0 til BITS
         var a = me[i]
         var b = you[i]

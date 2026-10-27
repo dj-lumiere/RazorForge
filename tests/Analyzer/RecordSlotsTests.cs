@@ -95,11 +95,22 @@ public class RecordSlotsTests
     }
 
     [Fact]
-    public void Array_OfEntities_IsAnError()
+    public void OldArrayName_NamesItems()
+    {
+        AnalysisResult result = AnalyzeSa(source: """
+                                                  routine start()
+                                                      var a: Array[S64, 2] = [1, 2]
+                                                      return
+                                                  """);
+        Assert.Contains(collection: result.Errors, filter: e => e.Message.Contains(value: "'Items'"));
+    }
+
+    [Fact]
+    public void Items_OfEntities_IsAnError()
     {
         AnalysisResult result = AnalyzeSa(source: Entity + """
                                                            routine start()
-                                                               var a: Array[Res, 2] = [Res(n: 1), Res(n: 2)]
+                                                               var a: Items[Res, 2] = [Res(n: 1), Res(n: 2)]
                                                                return
                                                            """);
         Assert.Contains(collection: result.Errors,
@@ -153,7 +164,7 @@ public class RecordSlotsTests
                                                       v: T
 
                                                   routine start()
-                                                      var ok = Cell[Array[S64, 1]](v: [1])
+                                                      var ok = Cell[Items[S64, 1]](v: [1])
                                                       var bad = Cell[Slots[S64, 1]](v: [1])
                                                       return
                                                   """);

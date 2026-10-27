@@ -309,7 +309,7 @@ public class RejectedBeforeEmitterTests
                          import Collections
 
                          routine start()
-                             var b = BitArray[4](true, false, true, false)
+                             var b = Bits[4](true, false, true, false)
                              return
                          """,
             expectedErrorSubstring: "is not built from its values in a call");

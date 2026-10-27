@@ -6,9 +6,9 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// RF-S641: <c>Array[T, N]()</c> fills every slot with zero, which is only a real value when T has one.
+/// RF-S641: <c>Items[T, N]()</c> fills every slot with zero, which is only a real value when T has one.
 /// An entity, a reference-counted handle, or a record holding one would get null slots that crash when
-/// read or torn down, so those arrays are built from their elements (<c>Array[N](a, b, ...)</c>).
+/// read or torn down, so those arrays are built from their elements (<c>Items[N](a, b, ...)</c>).
 /// Also RF-S150 on a generic construction whose type argument misses the type's <c>needs</c>.
 /// </summary>
 public class ArrayZeroFillTests
@@ -29,7 +29,7 @@ public class ArrayZeroFillTests
     {
         AnalysisResult result = AssertHasErrorSa(source: Prelude + """
                                                           routine start()
-                                                              var slots = Array[Slot, 2]()
+                                                              var slots = Items[Slot, 2]()
                                                               return
                                                           """,
             expectedErrorSubstring: "'Slot' has no zero value (its 'node'");
@@ -42,7 +42,7 @@ public class ArrayZeroFillTests
     {
         AssertHasErrorSa(source: Prelude + """
                                            routine start()
-                                               var nodes = Array[Node, 2]()
+                                               var nodes = Items[Node, 2]()
                                                return
                                            """,
             expectedErrorSubstring: "'Node' is an entity");
@@ -53,9 +53,9 @@ public class ArrayZeroFillTests
     {
         AnalysisResult result = AnalyzeSa(source: Prelude + """
                                                      routine start()
-                                                         var nums = Array[S64, 4]()
-                                                         var texts = Array[2]("a", "b")
-                                                         var slots = Array[2](Slot(node: Retained[Node](from: Node(n: 1))), Slot(node: Retained[Node](from: Node(n: 2))))
+                                                         var nums = Items[S64, 4]()
+                                                         var texts = Items[2]("a", "b")
+                                                         var slots = Items[2](Slot(node: Retained[Node](from: Node(n: 1))), Slot(node: Retained[Node](from: Node(n: 2))))
                                                          return
                                                      """);
         Assert.Empty(collection: result.Errors);

@@ -19,7 +19,7 @@ import BuilderQuery
 ### - You want value semantics (copy = full duplication of contents).
 ### - You need a small fixed-size buffer (e.g., a 4×4 matrix, an RGBA colour, a SIMD lane).
 ### - Use {List[T]} when the count is only known at runtime or elements are added dynamically.
-### - Use {BitArray[COUNT]} for a compact fixed-size sequence of boolean flags.
+### - Use {Bits[COUNT]} for a compact fixed-size sequence of boolean flags.
 ### - Use {Slots[T, COUNT]} when the elements may be entities: the same layout, kept in one place.
 ###
 ### **Complexity**
@@ -34,10 +34,10 @@ import BuilderQuery
 ### :typeparam T: The element type stored in the array.
 ### :typeparam COUNT: The buildtime element count, supplied as a `U64` literal.
 ### :see: {List[T]} for a heap-backed growable sequence.
-### :see: {BitArray[COUNT]} for a compact fixed-size bit sequence.
+### :see: {Bits[COUNT]} for a compact fixed-size bit sequence.
 @llvm("[{COUNT} x {T}]")
-record Array[T, COUNT]
-relates ArrayEmitter[T, COUNT] as Emitter
+record Items[T, COUNT]
+relates ItemsEmitter[T, COUNT] as Emitter
 obeys Comparable, Emittable[T], ModifyingIndexable[T], Sized, Container
 needs U64 COUNT
 needs RecordType T
@@ -51,12 +51,12 @@ needs RecordType T
 ### Walks the elements of a fixed-size `Array[T, COUNT]` from index 0 to N - 1.
 ### :typeparam T: The element type yielded by the emitter.
 ### :typeparam COUNT: The buildtime element count.
-entity ArrayEmitter[T, COUNT]
+entity ItemsEmitter[T, COUNT]
 obeys Emitter[T]
 needs U64 COUNT
     ### Points at the array being iterated, where it lives: each element is read in place, so the walk does not copy
     ### the array.
-    secret data: Hijacked[Array[T, COUNT]]
+    secret data: Hijacked[Items[T, COUNT]]
     ### Stores the next logical index to read.
     secret index: U64
 
@@ -71,22 +71,22 @@ needs U64 COUNT
 @readonly
 @inline
 @overridable
-failable routine Array[T, COUNT].getitem(index: U64) -> T
+failable routine Items[T, COUNT].getitem(index: U64) -> T
 needs RecordType T
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     # Read in place through the storage pointer — no whole-array copy.
     danger
-        var element: T = LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
+        var element: T = LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), index)
         return element.share()
 
 ### Returns the element at `index` as the array holds it, without bounds checking and without a holder of
 ### its own. Only call this when the index is already proven to be in range.
 @readonly
 @inline
-routine Array[T, COUNT].get_raw(index: U64) -> T
+routine Items[T, COUNT].get_raw(index: U64) -> T
     danger
-        return LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
+        return LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), index)
 
 ### Replaces the element at `index` with `value`, mutating this `Array` in place.
 ### `me` is received by reference (struct-record `setitem!`), so the single-element write through
@@ -95,11 +95,11 @@ routine Array[T, COUNT].get_raw(index: U64) -> T
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
 @inline
-failable routine Array[T, COUNT].setitem(index: U64, value: T)
+failable routine Items[T, COUNT].setitem(index: U64, value: T)
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
-        LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index).destruct()
+        LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), index).destruct()
     me.put_raw(index: index, value: value)
     return
 
@@ -107,9 +107,9 @@ failable routine Array[T, COUNT].setitem(index: U64, value: T)
 ### :param index: The zero-based position, already known to be in range.
 ### :param value: The value that goes in.
 @inline
-secret routine Array[T, COUNT].put_raw(index: U64, value: T)
+secret routine Items[T, COUNT].put_raw(index: U64, value: T)
     danger
-        LLVM::store_element_ref[Array[T, COUNT], T](me.hijack(), index, value)
+        LLVM::store_element_ref[Items[T, COUNT], T](me.hijack(), index, value)
     return
 
 ### Puts `value` at `index` and gives back the element that was there, in one step. This is what
@@ -118,12 +118,12 @@ secret routine Array[T, COUNT].put_raw(index: U64, value: T)
 ### :param value: The element that goes in.
 ### :returns: The element that was there.
 ### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
-secret failable routine Array[T, COUNT].exchange(index: U64, value: T) -> T
+secret failable routine Items[T, COUNT].exchange(index: U64, value: T) -> T
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
-        var old: T = LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), index)
-        LLVM::store_element_ref[Array[T, COUNT], T](me.hijack(), index, value)
+        var old: T = LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), index)
+        LLVM::store_element_ref[Items[T, COUNT], T](me.hijack(), index, value)
         return old
 
 ### Returns a `List[T]` holding independent copies of the elements in `range` — the slice form of
@@ -135,7 +135,7 @@ secret failable routine Array[T, COUNT].exchange(index: U64, value: T) -> T
 ### :param range: The index range to extract.
 ### :returns: A `List[T]` owning copies of the selected elements.
 @readonly
-routine Array[T, COUNT].getitem(range: Range[U64]) -> List[T]
+routine Items[T, COUNT].getitem(range: Range[U64]) -> List[T]
 needs RecordType T
     var result = List[T]()
     each i in range
@@ -146,13 +146,13 @@ needs RecordType T
 ### Tears down each stored element. No-op for plain values, releases what a counted element holds. All `COUNT`
 ### places hold an element, so the full range is visited. `Array` has no separate allocation of its own to free.
 @override
-routine Array[T, COUNT].destruct()
+routine Items[T, COUNT].destruct()
     var i: U64 = 0
     until i >= COUNT
         # Read element i in place through the storage pointer (element_at's by-VALUE form copies the whole
         # array — which also draws a spurious retaining `me.share()` at the copy-lowering pass; the pointer
         # form is what getitem/setitem use). The routine is already `dangerous`, so no nested `danger` block.
-        LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), i).destruct()
+        LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), i).destruct()
         i = i + 1
     return
 
@@ -160,10 +160,10 @@ routine Array[T, COUNT].destruct()
 ### controller; a value element is a no-op). Overrides the universal member-walk — `Array` is `@llvm`
 ### storage with no named members, so the generic walk sees nothing.
 @override
-dangerous routine Array[T, COUNT].roam_trace()
+dangerous routine Items[T, COUNT].roam_trace()
     var i: U64 = 0
     until i >= COUNT
-        LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), i).cyclic_visit()
+        LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), i).cyclic_visit()
         i = i + 1
     return
 
@@ -171,7 +171,7 @@ dangerous routine Array[T, COUNT].roam_trace()
 ### elements are freed by the collector as part of the white cycle — the default `roam_free` forwards to
 ### `destruct`, which WOULD tear down every element (a double-free here), so it must be overridden.
 @override
-dangerous routine Array[T, COUNT].roam_free()
+dangerous routine Items[T, COUNT].roam_free()
     return
 
 ### Returns a copy with each element STORED (refcount-bumped for managed element types like `Text`; a
@@ -180,9 +180,9 @@ dangerous routine Array[T, COUNT].roam_free()
 ### refcount 1 and double-free. Storability CASCADES: `Array[T, COUNT]` is Assignable iff `T` is.
 @readonly
 @override
-secret routine Array[T, COUNT].share() -> Array[T, COUNT]
+secret routine Items[T, COUNT].share() -> Items[T, COUNT]
 needs RecordType T
-    var result = Array[T, COUNT]()
+    var result = Items[T, COUNT]()
     var i: U64 = 0
     until i >= COUNT
         result.put_raw(index: i, value: me[i].share())
@@ -192,9 +192,9 @@ needs RecordType T
 ### Returns a deep, independent copy — each element deep-copied via its own `copy`. Copyability
 ### cascades: `Array[T, COUNT]` is copyable iff `T` is.
 @readonly
-routine Array[T, COUNT].duplicate() -> Array[T, COUNT]
+routine Items[T, COUNT].duplicate() -> Items[T, COUNT]
 needs RecordType T
-    var result = Array[T, COUNT]()
+    var result = Items[T, COUNT]()
     var i: U64 = 0
     until i >= COUNT
         result.put_raw(index: i, value: me[i])
@@ -209,41 +209,41 @@ needs RecordType T
 ### This is always equal to the buildtime parameter `COUNT`.
 ### :returns: The element count `COUNT`.
 @readonly
-routine Array[T, COUNT].count() -> U64
+routine Items[T, COUNT].count() -> U64
     return COUNT
 
 ### Returns true when the buildtime size is zero.
 ### :returns: `true` if `COUNT == 0`.
 @readonly
-routine Array[T, COUNT].is_empty() -> Bool
+routine Items[T, COUNT].is_empty() -> Bool
     return COUNT == 0
 
 ### Returns the first element of the array.
 ### :returns: The element at index `0`.
 ### :throws: {AbsentValueError} The array has zero elements (`COUNT == 0`).
 @readonly
-failable routine Array[T, COUNT].first() -> T
+failable routine Items[T, COUNT].first() -> T
     if COUNT == 0
         throw AbsentValueError()
     danger
-        return LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), 0)
+        return LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), 0)
 
 ### Returns the last element of the array.
 ### :returns: The element at index `COUNT - 1`.
 ### :throws: {AbsentValueError} The array has zero elements (`COUNT == 0`).
 @readonly
-failable routine Array[T, COUNT].last() -> T
+failable routine Items[T, COUNT].last() -> T
     if COUNT == 0
         throw AbsentValueError()
     danger
-        return LLVM::load_element_ref[Array[T, COUNT], T](me.hijack(), COUNT - 1)
+        return LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), COUNT - 1)
 
 ### Returns true if any element equals `value`.
 ### Scans from index 0 to N - 1 using the element type's equality operator.
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found; `false` otherwise.
 @readonly
-routine Array[T, COUNT].has(value: T) -> Bool
+routine Items[T, COUNT].has(value: T) -> Bool
 needs T obeys Equatable
     each i in 0 til COUNT
         if me[i] == value
@@ -254,7 +254,7 @@ needs T obeys Equatable
 ### :param value: The value to look for.
 ### :returns: `true` when `value` is absent.
 @readonly
-routine Array[T, COUNT].lacks(value: T) -> Bool
+routine Items[T, COUNT].lacks(value: T) -> Bool
 needs T obeys Equatable
     return not me.has(value)
 
@@ -263,7 +263,7 @@ needs T obeys Equatable
 ### :returns: The zero-based index of the first match.
 ### :throws: {AbsentValueError} No element equals `value`.
 @readonly
-failable routine Array[T, COUNT].index_of(value: T) -> U64
+failable routine Items[T, COUNT].index_of(value: T) -> U64
 needs T obeys Equatable
     each i in 0 til COUNT
         if me[i] == value
@@ -273,18 +273,18 @@ needs T obeys Equatable
 ### Returns an emitter over the elements in ascending index order. It reads each element where the array holds it,
 ### so the array must stay where it is while the loop runs (the builder keeps it from being reshaped, RF-S625).
 @readonly
-routine Array[T, COUNT].emitter() -> ArrayEmitter[T, COUNT]
+routine Items[T, COUNT].emitter() -> ItemsEmitter[T, COUNT]
     danger
-        return ArrayEmitter[T, COUNT](data: me.hijack(), index: 0)
+        return ItemsEmitter[T, COUNT](data: me.hijack(), index: 0)
 
 ### Returns the next element from the emitter in ascending index order, read in place.
 ### :returns: The element at the current index.
 ### :throws: {AbsentValueError} All `COUNT` elements have been yielded.
-failable routine ArrayEmitter[T, COUNT].emit() -> T
+failable routine ItemsEmitter[T, COUNT].emit() -> T
     if me.index >= COUNT
         throw AbsentValueError()
     danger
-        var value: T = LLVM::load_element_ref[Array[T, COUNT], T](me.data, me.index)
+        var value: T = LLVM::load_element_ref[Items[T, COUNT], T](me.data, me.index)
         me.index = me.index + 1
         return value
 
@@ -294,7 +294,7 @@ failable routine ArrayEmitter[T, COUNT].emit() -> T
 
 @readonly
 @override
-routine Array[T, COUNT].represent() -> Text
+routine Items[T, COUNT].represent() -> Text
     var result = "["
     each i in 0 til COUNT
         if i > 0
@@ -305,7 +305,7 @@ routine Array[T, COUNT].represent() -> Text
 
 @readonly
 @override
-routine Array[T, COUNT].diagnose() -> Text
+routine Items[T, COUNT].diagnose() -> Text
     var result = me.full_type_name() + "(["
     each i in 0 til COUNT
         if i > 0
@@ -321,7 +321,7 @@ routine Array[T, COUNT].diagnose() -> Text
 ###        (e.g. a `U` that is not equatable) do not get an `eq`
 ###        operator — `==` on such arrays is a build error.
 @readonly
-routine Array[T, COUNT].eq(you: Array[T, COUNT]) -> Bool
+routine Items[T, COUNT].eq(you: Items[T, COUNT]) -> Bool
 needs T obeys Equatable
     each i in 0 til COUNT
         if me[i] != you[i]
@@ -335,7 +335,7 @@ needs T obeys Equatable
 ### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
 ### :note: Requires `T` to obey `Comparable`.
 @readonly
-routine Array[T, COUNT].compare(you: Array[T, COUNT]) -> ComparisonSign
+routine Items[T, COUNT].compare(you: Items[T, COUNT]) -> ComparisonSign
 needs T obeys Comparable
     each i in 0 til COUNT
         var sign = me[i].compare(you[i])

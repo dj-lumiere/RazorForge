@@ -181,9 +181,11 @@ file only once its other old spellings are gone.
 - A named type is a `record` or an `entity`: `bundle` is `RF-G228`. `migrate --step bundle` makes a bundle that holds
   no type parameter by value a `record`, one whose uses hold an entity an `entity`, one whose uses hold only values a
   `record` with `needs RecordType T`, and lists the rest. RF-S445 and RF-S446 are retired.
-- `Array[T, COUNT]` holds values (`needs RecordType T`). `Slots[T, COUNT]` is the entity with the same layout for any
-  `T`: kept in one place, `steal slots[i] as old inject fresh`, `swap`, `duplicate()` when `T` is `Copyable`. The
-  arguments of a variadic parameter are a `Slots[T, N]`. `SplitArray[T, COUNT]` holds values.
+- `Array[T, COUNT]` is `Items[T, COUNT]` and holds values (`needs RecordType T`). `Slots[T, COUNT]` is the entity with
+  the same layout for any `T`: kept in one place, `steal slots[i] as old inject fresh`, `swap`, `duplicate()` when `T`
+  is `Copyable`. The arguments of a variadic parameter are a `Slots[T, N]`. `SplitArray` is `SplitItems` (values
+  only) and `BitArray` is `Bits`. The old names are unknown types whose error names the new one, and
+  `migrate --step type-names` renames them.
 - `Maybe[T]` (`T?`) is a variant of `T` and `None`. `DictEntry` is gone: a dictionary entry is the tuple
   `(TKey, TValue)` (`each (k, v) in d`, `e.item0`, `e.item1`).
 

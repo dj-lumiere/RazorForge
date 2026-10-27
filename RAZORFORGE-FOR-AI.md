@@ -241,7 +241,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   `where`** — `where` is not RF syntax. A constraint's protocol type arguments are
   checked too: a `List[Text]` given where `Emittable[S64]` is taken is RF-S150.
 - **Generic parameter names.** A type parameter is `T` alone only when it is the
-  only one and its role is obvious (`List[T]`, `Maybe[T]`, `Array[T, COUNT]`).
+  only one and its role is obvious (`List[T]`, `Maybe[T]`, `Items[T, COUNT]`).
   Otherwise every type parameter is `T` + a PascalCase role (`Dict[TKey, TValue]`,
   `select[TResult]`, `Guarded[T, TPolicy]`, `LLVM::sign_extend[TFrom, TTo]`), never
   another single letter (`K`, `V`, `U`, `E`, ...). A const generic is
@@ -420,7 +420,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   right after `ask_word()` skips the line end the word left.
 - Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `RotatableList[T]`, `BitList`,
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
-  fixed-size `Array[T, COUNT]`, `BitArray[BITS]`
+  fixed-size `Items[T, COUNT]`, `Bits[BITS]`
 - Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
 - Carriers: `Maybe[T]`, `Check[T]` (builder-synthesized only —
   user routines cannot declare them as return types; you obtain one by wrapping a
@@ -1040,17 +1040,18 @@ entity nor a type parameter that could be one (**RF-S409**): a copy would make t
 by declaring the type `entity`, holding a handle that copies (`Retained[E]`), or keeping the parameter to values
 (`needs RecordType T`). Handle records (`Retained`, `Viewing`, `Guarded`, ...) take `needs EntityType T` and hold
 the entity elsewhere, so they are records. RF-S445/RF-S446 are retired.
-**`Array` and `Slots`.** `Array[T, COUNT]` is a record of `COUNT` values (`needs RecordType T`, RF-S151 points to
+**`Items` and `Slots`.** `Items[T, COUNT]` is a record of `COUNT` values (an item comes out of `getitem` as a copy) (`needs RecordType T`, RF-S151 points to
 `Slots` for an entity element). `Slots[T, COUNT]` is an entity with the same layout (`[COUNT x T]`, in place, no
 allocation) that takes any `T`: never copied by `=` (RF-S413, even for `Slots[S64, 2]`), handed over with `steal`,
 `duplicate()` when `T` obeys `Copyable`. Its elements are read in place (`s[0].level`, `each b in s`), written
 with `s[i] = x` (tears the old one down), replaced with `steal s[i] as old inject fresh`, and traded with
 `s.swap(first:, second:)`: no place is ever empty. A fixed-size literal follows the type written where it goes
-(`var s: Slots[Item, 2] = [a, b]`, `var a: Array[S64, 2] = [1, 2]`). With no type written, `Array[N](a, b)` is an
-`Array` when the elements are values and a `Slots` when one is or holds an entity, and the arguments of a
+(`var s: Slots[Item, 2] = [a, b]`, `var a: Items[S64, 2] = [1, 2]`). With no type written, `Items[N](a, b)` builds
+`Items` when the elements are values and `Slots` when one is or holds an entity, and the arguments of a
 variadic parameter (`xs...: T`) are always packed into a `Slots[T, N]` (so `from_literal` takes entities too).
-`SplitArray[T, COUNT]` is a record (`needs RecordType T`) with no entity counterpart.
-**`Maybe[T]` is a variant** of `T` and `None` (`T?`, `none`, `is None`, `when m is T as v`). The builder lays it out
+`SplitItems[T, COUNT]` is a record (`needs RecordType T`) with no entity counterpart.
+`Array`, `SplitArray` and `BitArray` are unknown types whose error names `Items`, `SplitItems` and `Bits`
+(`migrate --step type-names` renames them, emitters included). **`Maybe[T]` is a variant** of `T` and `None` (`T?`, `none`, `is None`, `when m is T as v`). The builder lays it out
 as a presence flag and the value (`{ i8, T }`, an entity `Node?` is `{ i8, ptr }`). A dictionary entry is the tuple
 `(TKey, TValue)`: `each (k, v) in d`, or `e.item0` / `e.item1` (there is no `DictEntry`).
 In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
@@ -1061,7 +1062,7 @@ belongs to the routine: one it does not keep (hand over, store, return) is torn 
 it, a `throw` included (`try xs.add_at(index: 5, value: Item(n: 3))` that fails tears the `Item` down).
 `needs RecordType T` accepts only values: a tuple or variant holding an entity, or a `Slots`, does not satisfy it.
 Several kinds on one line repeat the kind: `needs RecordType TKey, RecordType TValue`. `Range[T]`,
-`Unbroken[T]` and `SplitArray`'s element emitter are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
+`Unbroken[T]` and `SplitItems`'s element emitter are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
 asks only `TPriority obeys Comparable`. A queue is not walked directly: `pq.unordered()` and `pq.ordered()` copy its
 `(priority, element)` pairs (storage order / smallest priority first, `needs RecordType TElement`), `pq.drain()`
 empties it into them smallest first (`each (priority, element) in pq.drain()`). A
@@ -1091,7 +1092,7 @@ relates ListEmitter[T] as Emitter     # associated type binding
   parameter (`routine List[T].sorted_by(...)` with `needs RecordType T`: it copies the elements). Calling it on an
   instance the kind leaves out (`sorted_by` on a `List` of entities) is RF-S151 at the call. `sorted()` and
   `sorted_by` copy, so a list of entities sorts in place with `sort()` / `sort_by`.
-- Const generics: `Array[T, COUNT]`.
+- Const generics: `Items[T, COUNT]`.
 - **Type arguments use `[...]`, never `<...>` — by design; do not propose `<>`.**
   `f < T > (x)` is already a valid chained comparison in RF, so angle brackets
   would force a parse-time guess (C#'s disambiguation rules, Rust's turbofish) plus
@@ -1196,8 +1197,8 @@ that differ from other languages:
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
   is `coll[^1]` (last element).
 - **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a
-  `List`/`RotatableList` yields a new `List`/`RotatableList`, on `Array[T, COUNT]` a `List[T]`
-  (slice length is a runtime value, so it cannot be a fixed `Array`). Mutating
+  `List`/`RotatableList` yields a new `List`/`RotatableList`, on `Items[T, COUNT]` a `List[T]`
+  (slice length is a runtime value, so it cannot be a fixed `Items`). Mutating
   the slice never touches the original. Open-ended `xs[a til ^0]` slices to the
   end. Element type must be `Copyable` (slicing a `List[Entity]` is a compile
   error). For a lazy, no-copy window use the emitter adapters
@@ -1236,9 +1237,9 @@ that differ from other languages:
 - **Collecting.** An emittable is collected with a conversion that names the collection without its element type:
   `xs.where(...).to[List]()`, `to[Set]()`, `to[Dict]()` (the values are `(key, value)` tuples), and in `Collections`
   `to[SortedList]()`, `to[SortedSet]()`, `to[SortedDict]()` (pairs), `to[RotatableList]()`, `to[BitList]()` (Bools),
-  `to[PriorityQueue]()` (`(priority, element)` pairs). `to[Array[T, N]]()` names the size (`xs.to[Array[S64, 3]]()`)
+  `to[PriorityQueue]()` (`(priority, element)` pairs). `to[Items[T, N]]()` names the size (`xs.to[Items[S64, 3]]()`)
   and is failable: fewer or more than `N` values throw `ElementCountMismatchError`. `to[List]`/`to[Set]`/`to[Dict]`/
-  `to[Array]` need `import IterTools`.
+  `to[Items]` need `import IterTools`.
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive. Without
   `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`
   yields nothing, `(2 to 1).has(1)` is false). `by N` sets the step
@@ -1252,7 +1253,7 @@ that differ from other languages:
 - `List`, `Set`, `Dict` live in **`System`** (always available — never suggest
   `using Collections`). Only these three canonical collections have literal
   syntax of their own (`[1, 2]`, `{1, 2}`, `{1: 10}`); a specialized container
-  (`SortedSet`, `RotatableList`, `Array`, `BitArray`, `BitList`, `PriorityQueue`, …)
+  (`SortedSet`, `RotatableList`, `Items`, `Bits`, `BitList`, `PriorityQueue`, …)
   takes the same literal when the variable names its type
   (`var s: SortedSet[S64] = {3, 1, 2}`, `var pq: PriorityQueue[S32, Text] = {1: "high"}`).
   A literal takes its element types from where it goes, as a number does: `bytes.add_range(you: [3, 4])` on a
@@ -1260,17 +1261,17 @@ that differ from other languages:
   `{1: "a"}` given to an `Emittable[(U16, Text)]` builds a `Dict[U16, Text]`. With nothing to go by,
   `[1, 2]` is a `List[S64]`. The empty set literal is `{}` and the empty dict literal `{:}`
   (`var d: Dict[S32, S32] = {:}`, `steal s[b] as old inject {:}`). A `{}` where a dict is expected is RF-S558.
-  An `Array` is also built from its elements: `Array[3](1, 2, 3)`.
+  An `Items` is also built from its elements: `Items[3](1, 2, 3)`.
 - **Showing a collection.** `show(xs)` and `f"{xs}"` write the elements, each in the form it has inside a
   collection (`Text` and `Bytes` quoted `"a"`, `Char` and `Byte` as `'a'`, everything else its `represent`):
-  `List`, `Array` and the other sequences `[1, 2, 3]`, sets `{1, 2}`, maps `{1: 10, 2: 20}`, the empty set `{}`
+  `List`, `Items` and the other sequences `[1, 2, 3]`, sets `{1, 2}`, maps `{1: 10, 2: 20}`, the empty set `{}`
   and the empty map `{:}`. `Dict` and `Set` show in insertion order, the sorted collections in order. A
   `PriorityQueue` shows its `priority: element` pairs in the order they come out, the next one first
   (`[1: "a", 2: "b", 4: "d"]`), from a sorted copy, so the queue does not change. A range shows as it is written:
   `0 to 10`, `0 til 10 by 2`, `10 to 0 by -2`. `f"{xs:?}"` (diagnose) puts the qualified type and the count around
   the same text: `System.List[System.S64](count: 3, [1, 2, 3])`, `System.Dict[System.S64, System.S64](count: 0,
-  {:})`, `System.Range[System.S64](0 til 10 by 2)`. A fixed-size `Array`, `BitArray` or `SplitArray` has its count
-  in its type: `System.Array[System.S64, 3]([1, 2, 3])`.
+  {:})`, `System.Range[System.S64](0 til 10 by 2)`. A fixed-size `Items`, `Bits` or `SplitItems` has its count
+  in its type: `System.Items[System.S64, 3]([1, 2, 3])`.
 - Tuple fields are accessed as `t.item0`, `t.item1`, … (NOT `t.0`/`t.first`);
   destructure with `var (q, r) = pair`. `(a, b) = (b, a)` swaps places (locals, member variables, entities
   included: values move, nothing is copied, no `steal`); any other tuple on the left is a build error.

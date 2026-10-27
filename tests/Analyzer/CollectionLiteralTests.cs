@@ -301,7 +301,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                            var items: Array[S64, 4] = [1, 2, 3, 4]
+                            var items: Items[S64, 4] = [1, 2, 3, 4]
                             return
                         """;
 
@@ -318,7 +318,7 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                            var items: BitArray[8] = [true, false, true, true, false, true, false, true]
+                            var items: Bits[8] = [true, false, true, true, false, true, false, true]
                             return
                         """;
 
@@ -443,7 +443,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                            var items: Array[S64, 4] = [1, 2, 3, 4, 5]
+                            var items: Items[S64, 4] = [1, 2, 3, 4, 5]
                             return
                         """;
 
@@ -461,7 +461,7 @@ public class CollectionLiteralTests
         string source = """
                         import Collections
                         routine test()
-                            var items: BitArray[4] = [true, false, true]
+                            var items: Bits[4] = [true, false, true]
                             return
                         """;
 

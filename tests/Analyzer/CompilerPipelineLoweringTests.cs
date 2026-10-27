@@ -669,7 +669,7 @@ public class CompilerPipelineLoweringTests
     public void LlvmEmitter_ConstGenericLlvmIntrinsicCall_SubstitutesConstValue()
     {
         string source = """
-                        routine test() -> Array[Byte, 8]
+                        routine test() -> Items[Byte, 8]
                             var one: U64 = 1
                             return one.to_bytes_le()
 
@@ -714,7 +714,7 @@ public class CompilerPipelineLoweringTests
                         import IO/Console
 
                         routine start()
-                            var grid = Array[2](Array[2]("a", "b"), Array[2]("c", "d"))
+                            var grid = Items[2](Items[2]("a", "b"), Items[2]("c", "d"))
                             grid[1][0] = "hi"
                             show(grid[1][0])
                             return
@@ -737,8 +737,8 @@ public class CompilerPipelineLoweringTests
 
         string llvmIr = generator.Generate();
         string body = ExtractFunctionDefinition(llvmIr: llvmIr, functionMarker: "start()\"");
-        int copies = body.Split(separator: "Array[System.Text, 2].assign()").Length - 1;
-        int reads = body.Split(separator: "Array[System.Array[System.Text, 2], 2].getitem(").Length - 1;
+        int copies = body.Split(separator: "Items[System.Text, 2].assign()").Length - 1;
+        int reads = body.Split(separator: "Items[System.Items[System.Text, 2], 2].getitem(").Length - 1;
         Assert.Equal(expected: 0, actual: copies);
         Assert.Equal(expected: 2, actual: reads);
     }

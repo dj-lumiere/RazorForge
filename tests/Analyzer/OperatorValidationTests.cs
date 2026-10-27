@@ -34,7 +34,7 @@ public class OperatorValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.OperatorWithoutProtocol);
     }
     /// <summary>
-    /// Records are indexable too (e.g. Array[T,N]/BitArray[N] are records), so a record that follows
+    /// Records are indexable too (e.g. Items[T,N]/Bits[N] are records), so a record that follows
     /// ViewingIndexable may define $getitem with no error — legality follows the protocol, not the type kind.
     /// </summary>
     [Fact]

@@ -16,7 +16,7 @@ using static TestHelpers;
 public class PresetAndOverloadRegressionTests
 {
     /// <summary>
-    /// An unsuffixed literal in an <c>Array[B32, N]</c> preset takes the element type. The preset becomes one
+    /// An unsuffixed literal in an <c>Items[B32, N]</c> preset takes the element type. The preset becomes one
     /// constant global that never passes through lowering, so an undecided literal used to reach the emitter
     /// and be emitted as a function-local temporary (invalid IR).
     /// </summary>
@@ -24,8 +24,8 @@ public class PresetAndOverloadRegressionTests
     public void FloatArrayPreset_UnsuffixedElements_TakeElementType()
     {
         Program program = Parse(source: """
-                                        preset SINGLES: Array[B32, 2] = [1.0, 0.25]
-                                        preset WORDS: Array[U16, 2] = [1, 65535]
+                                        preset SINGLES: Items[B32, 2] = [1.0, 0.25]
+                                        preset WORDS: Items[U16, 2] = [1, 65535]
 
                                         routine start()
                                             var a = SINGLES[0]
@@ -49,7 +49,7 @@ public class PresetAndOverloadRegressionTests
     public void ArrayPreset_ElementOutOfRange_IsReported()
     {
         AssertHasError(source: """
-                               preset BYTES: Array[U8, 2] = [1, 300]
+                               preset BYTES: Items[U8, 2] = [1, 300]
 
                                routine start()
                                    var a = BYTES[0]
@@ -63,7 +63,7 @@ public class PresetAndOverloadRegressionTests
     public void ArrayPreset_ElementOfWrongKind_IsReported()
     {
         AssertHasError(source: """
-                               preset VALUES: Array[B64, 2] = [1.0, "x"]
+                               preset VALUES: Items[B64, 2] = [1.0, "x"]
 
                                routine start()
                                    var a = VALUES[0]
@@ -125,14 +125,14 @@ public class PresetAndOverloadRegressionTests
     public void LoadElementRef_OnAPresetValue_IsReported()
     {
         AssertHasError(source: """
-                               preset TAB: Array[U64, 2] = [1, 2]
+                               preset TAB: Items[U64, 2] = [1, 2]
 
                                routine start()
                                    danger
-                                       var r = LLVM::load_element_ref[Array[U64, 2], U64](TAB, 0)
+                                       var r = LLVM::load_element_ref[Items[U64, 2], U64](TAB, 0)
                                    return
                                """,
-            expectedErrorSubstring: "cannot convert 'Array[U64, 2]' to 'Hijacked[Array[U64, 2]]'");
+            expectedErrorSubstring: "cannot convert 'Items[U64, 2]' to 'Hijacked[Items[U64, 2]]'");
     }
 
     /// <summary>
