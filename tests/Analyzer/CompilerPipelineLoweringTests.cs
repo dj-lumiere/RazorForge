@@ -1207,7 +1207,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test() -> Char
-                            return Char(65)
+                            return 'A'
                         """;
 
         Program program = Parse(source: source);

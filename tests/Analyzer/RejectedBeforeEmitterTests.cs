@@ -1,3 +1,4 @@
+using Builder.Diagnostics;
 using Builder.Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
@@ -126,6 +127,79 @@ public class RejectedBeforeEmitterTests
                              return
                          """,
             expectedErrorSubstring: "An 'S64' holds whole numbers");
+    }
+
+    /// <summary><c>T(x)</c> in a generic routine reads bits once an instance makes <c>T</c> a number of another
+    /// type: the instance is named and the message points to <c>x.to[T]()</c>.</summary>
+    [Fact]
+    public void Analyze_NumberBuiltFromBitsInAGenericInstance_NamesTheInstance()
+    {
+        AnalysisResult result = AssertHasError(source: """
+                                                   routine make[T](x: S64) -> T
+                                                       return T(x)
+
+                                                   routine start()
+                                                       var n = make[U8](x: 300)
+                                                       return
+                                                   """,
+            expectedErrorSubstring: "'T(x)' in 'make[U8]'");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NumberBuiltFromBits &&
+                         e.Message.Contains(value: "'x.to[T]()'", comparisonType: StringComparison.Ordinal));
+    }
+
+    /// <summary>An instance whose <c>T</c> is the value's own type, and a <c>T(x)</c> inside <c>danger</c>, read
+    /// nothing they should not.</summary>
+    [Fact]
+    public void Analyze_GenericInstanceOfTheSameTypeOrInDanger_Analyzes()
+    {
+        AssertAnalyzes(source: """
+                       routine keep[T](x: T) -> T
+                           return T(x)
+
+                       routine raw[T](x: S64) -> T
+                           danger
+                               return T(x)
+
+                       routine start()
+                           var a = keep[U8](x: 3)
+                           var b = raw[U8](x: 300)
+                           return
+                       """);
+    }
+
+    /// <summary><c>Char(n)</c> takes the bits as a codepoint without checking them: RF-S655, pointing to
+    /// <c>Char.from_codepoint</c>.</summary>
+    [Fact]
+    public void Analyze_CharBuiltFromAVariablesBits_PointsToFromCodepoint()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var n: U32 = 65
+                             var c = Char(n)
+                             return
+                         """,
+            expectedErrorSubstring: "'Char.from_codepoint(n: n)'");
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var n: S64 = 65
+                             var c = Char(n)
+                             return
+                         """,
+            expectedErrorSubstring: "'Char.from_codepoint(n: n.to[U32]())'");
+    }
+
+    /// <summary><c>Bool(x)</c> keeps the lowest bit (<c>Bool(2)</c> is false): RF-S655, pointing to a comparison.</summary>
+    [Fact]
+    public void Analyze_BoolBuiltFromAVariablesBits_PointsToTheComparison()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var two: U8 = 2
+                             var b = Bool(two)
+                             return
+                         """,
+            expectedErrorSubstring: "Compare the value instead: 'two != 0'");
     }
 
     [Fact]

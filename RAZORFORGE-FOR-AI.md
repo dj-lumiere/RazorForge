@@ -569,7 +569,10 @@ with -1.
   in a program file: it reads the bits of `x` and gives another number (`U8(300)` is 44, `Decimal(2)` is
   `2E-6176`). The message points to `x.to[T]()`, and for a literal to a declaration of the type
   (`var b: U8 = 200`), where the builder checks that it fits. Inside `danger` (and in the standard library and
-  builder-written bodies) `T(x)` still reads the bits. `migrate --step numbers` rewrites `T(x)` to `x.to[T]()`
+  builder-written bodies) `T(x)` still reads the bits. In a generic routine `T(x)` is checked per instance after
+  monomorphization: `make[U8](x: 300)` with `return T(x)` is RF-S655 naming `make[U8]` and pointing to `x.to[T]()`.
+  `Char(n)` (bits taken as a codepoint, unchecked) and `Bool(x)` (lowest bit only, `Bool(2)` is `false`) are RF-S655
+  too, pointing to `Char.from_codepoint(n: n)` (U32, failable) and `x != 0`. `migrate --step numbers` rewrites `T(x)` to `x.to[T]()`
   between binary integer and float types, types `var b = U8(200)` as `var b: U8 = 200`, and lists the rest
   (decimal types, `BF16`, a literal inside an expression).
 - Constructor or conversion, by one checkable rule: a constructor's arguments become parts of the new value as
