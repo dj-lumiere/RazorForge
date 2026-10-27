@@ -58,9 +58,29 @@ failable routine SelectManyEmitter[T, TResult, TInner, TSourceEmitter].emit() ->
             if me.buffer.count() > 0
                 return me.buffer.remove_last()
             var outer = me.source.emit()
-            var new_buffer = me.transform(outer).to[List]()
-            new_buffer.reverse_in_place()
-            me.buffer = steal new_buffer
+            var new_buffer = me.transform(outer).taken_values()
+            # The buffer is empty here. Taking the values off the end of the new list puts them in last one first.
+            until new_buffer.count() == 0
+                me.buffer.add_last(new_buffer.remove_last())
+
+### The values of this emittable in a list of their own, front to back, for the flat-map walk, which made this
+### emittable and tears it down after. A list moves its values out instead (see `List[T].taken_values`).
+### :returns: The values.
+@readonly
+secret routine Emittable[T].taken_values() -> List[T]
+    return me.to[List]()
+
+### The values of this list moved into a list of their own, front to back, for the flat-map walk, which made this list
+### and tears it down after. An entity value lives in one place, so it moves out instead of being copied, and this list
+### is left empty.
+### :returns: The values.
+@reshaping
+secret routine List[T].taken_values() -> List[T]
+    var result = List[T]()
+    me.reverse_in_place()
+    until me.count() == 0
+        result.add_last(me.remove_last())
+    return result
 
 ### Returns a lazy adapter that applies `transform` to each element and yields values from all
 ### resulting inner emittables in sequence. The inner-emittable type `TInner` is an explicit type

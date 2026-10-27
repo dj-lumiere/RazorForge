@@ -1,0 +1,95 @@
+module Tests/Stdlib/EntityTemporaryTeardownApi
+
+import IO/Console
+import IterTools
+# An entity made only to call one of its routines or read one of its member variables is torn down at the end of its
+# block, as a local the block declared would be: a call on a call's result, a chain of calls, a member variable read,
+# under `try` and `check`, in a loop's body (each time round), and in a return (before it leaves). What the call gives
+# back can point into the entity and be used later (an emitter a variable holds, an adapter an `each` walks).
+
+entity Crate
+    n: S64
+
+@override
+routine Crate.destruct()
+    show(f"crate {me.n} ends")
+    return
+
+entity Pair
+    items: List[Crate]
+
+routine Pair.count() -> U64
+    return me.items.count()
+
+routine Pair.again() -> Pair
+    return pair(x: me.items[0].n + 10)
+
+failable routine Pair.first_positive() -> S64
+    if me.items[0].n < 0
+        throw IntegerOverflowError()
+    return me.items[0].n
+
+routine pair(x: S64) -> Pair
+    return Pair(items: [Crate(n: x), Crate(n: x + 1)])
+
+entity Counter
+relates CounterEmitter as Emitter
+obeys Emittable[S64]
+    upto: S64
+
+@override
+routine Counter.destruct()
+    show(f"counter to {me.upto} ends")
+    return
+
+entity CounterEmitter
+obeys Emitter[S64]
+    at: S64
+    upto: S64
+
+@readonly
+routine Counter.emitter() -> CounterEmitter
+    return CounterEmitter(at: 0, upto: me.upto)
+
+failable routine CounterEmitter.emit() -> S64
+    if me.at >= me.upto
+        throw AbsentValueError()
+    me.at = me.at + 1
+    return me.at
+
+routine counter(upto: S64) -> Counter
+    return Counter(upto: upto)
+
+routine pair_total(x: S64) -> U64
+    return pair(x: x).count() + pair(x: x + 50).count()
+
+routine start()
+    show(f"count {pair(x: 1).count()}")
+    show("after count")
+    show(f"chain {pair(x: 3).again().again().count()}")
+    show("after chain")
+    show(f"member {pair(x: 5).items.count()}")
+    show("after member")
+    when try pair(x: 7).first_positive()
+        is None => show("try: none")
+        else as n => show(f"try: {n}")
+    show("after try")
+    when check pair(x: -9).first_positive()
+        is S64 as n => show(f"check: {n}")
+        is Crashables => show("check: failed")
+    show("after check")
+    show(f"returned {pair_total(x: 30)}")
+    each i in 0 til 2
+        show(f"loop {pair(x: 100 + i).count()}")
+    show("after loop")
+
+    var walk = counter(upto: 2).emitter()
+    show(f"walk {walk.emit()}")
+    show(f"walk {walk.emit()}")
+    each x in counter(upto: 3)
+        show(f"each {x}")
+    show("after each")
+    each y in counter(upto: 2).select(transform: v => v * 10)
+        show(f"select {y}")
+    show("after select")
+    return
