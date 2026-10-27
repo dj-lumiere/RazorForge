@@ -382,6 +382,8 @@ file only once its other old spellings are gone.
 - A range that reaches the ends of its type runs to the end and stops there.
 - A value a routine returns on one path is torn down on the routine's other exits, so a failing `check` or `try` no
   longer leaks the list it was building and the entities in it.
+- `fs[0]()` calls the routine value at that index (it was an internal build error), and a list literal of lambdas
+  builds.
 
 ### Removed
 - `Assignable`, `FrozenController`, `Accessing`, `Controlling`, `Consulting`, `Amending`, `multiamend`,

@@ -1,0 +1,34 @@
+module Tests/Stdlib/RoutineElementCallApi
+
+import IO/Console
+# A routine value held in a list is called where it sits: `fs[0]()`, `gs[i](4)`, a member variable's list
+# (`me.steps[0](n)`), through a token, in a generic routine, and beneath `try`. A list literal of lambdas holds
+# routine values too.
+
+entity Board
+    steps: List[Callable[(S64,), S64]]
+
+routine run(fs: Viewing[List[Callable[(), S64]]]) -> S64
+    return fs[0]()
+
+routine twice[T](gs: Viewing[List[Callable[(T,), T]]], x: T) -> T
+    return gs[0](gs[0](x))
+
+routine Board.first(n: S64) -> S64
+    return me.steps[0](n)
+
+routine start()
+    var base: S64 = 40
+    var fs = List[Callable[(), S64]]()
+    fs.add_last(() given base => base +% 2)
+    var gs: List[Callable[(S64,), S64]] = [x => x +% 1, x => x *% 2]
+    var i: S64 = 1
+    show(f"{fs[0]()} {gs[0](4)} {gs[i](4)} {run(fs: fs.view())}")
+    var steps = List[Callable[(S64,), S64]]()
+    steps.add_last(x => x *% 3)
+    var b = Board(steps: steal steps)
+    show(f"{b.steps[0](5)} {b.first(n: 2)} {twice(gs: b.steps.view(), x: 1)}")
+    when try fs[0]()
+        is None => show("try: none")
+        else as v => show(f"try: {v}")
+    return
