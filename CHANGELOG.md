@@ -171,6 +171,10 @@ file only once its other old spellings are gone.
   `Addr` have `is_hollow()`.
 - `Byte.to_hex()` writes two digits. The widest signed integer is `S256`. `Vector[T, N]` arithmetic does not check
   for overflow.
+- A number type built from one number with `T(x)` (`U8(x)`, `S64(1.5)`, `Decimal(2)`) is `RF-S655` outside `danger`,
+  because it reads the bits of `x` and gives another number. Convert with `x.to[T]()`, or write a number where the
+  type is expected (`var b: U8 = 200`). `migrate --step numbers` rewrites the calls between binary integer and float
+  types and lists the rest.
 
 **Standard library**
 - A module is its folder. The base module is `System` (it was `Core`) and every file sees it and the modules under

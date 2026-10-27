@@ -565,6 +565,13 @@ with -1.
   Converting a value to its own type is RF-S646 too (use the value as it is), and so is `.to[...]()` on a
   value of a type parameter: conversions are written per concrete type, so take the parameter as the
   target type or convert where the type is known.
+- A number type built from one number with `T(x)` (`U8(x)` with an `S64` `x`, `S64(1.5)`, `Decimal(2)`) is RF-S655
+  in a program file: it reads the bits of `x` and gives another number (`U8(300)` is 44, `Decimal(2)` is
+  `2E-6176`). The message points to `x.to[T]()`, and for a literal to a declaration of the type
+  (`var b: U8 = 200`), where the builder checks that it fits. Inside `danger` (and in the standard library and
+  builder-written bodies) `T(x)` still reads the bits. `migrate --step numbers` rewrites `T(x)` to `x.to[T]()`
+  between binary integer and float types, types `var b = U8(200)` as `var b: U8 = 200`, and lists the rest
+  (decimal types, `BF16`, a literal inside an expression).
 - Constructor or conversion, by one checkable rule: a constructor's arguments become parts of the new value as
   they are (`Point(x: 1, y: 2)`, `Retained(from: steal e)`, `SerialValue(from: hp)` putting an `S64` in an arm);
   a value computed from one value of another type is a conversion, `x.to[T]()` (`"hi".to[CStr]()`,

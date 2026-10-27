@@ -328,6 +328,37 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateNumbers_DecidesEachCallFromTheTypesAnalysisGave()
+    {
+        const string source = "    var a = U8(x)\n    var b = U8(200)\n    var c = B32(n * 2) + U8(7)\n    var d = Decimal(x)\n";
+        int At(string text) => source.IndexOf(value: text, comparisonType: StringComparison.Ordinal);
+
+        (string? a, int aStart, int aLength, _) =
+            Program.DecideNumberCall(source: source, position: At(text: "U8(x)"), target: "U8", from: "S64", literal: false);
+        Assert.Equal(expected: "x.to[U8]()", actual: a);
+        Assert.Equal(expected: "U8(x)".Length, actual: aLength);
+        Assert.Equal(expected: At(text: "U8(x)"), actual: aStart);
+
+        (string? b, _, _, _) =
+            Program.DecideNumberCall(source: source, position: At(text: "U8(200)"), target: "U8", from: "S64", literal: true);
+        Assert.Equal(expected: "    var b: U8 = 200", actual: b);
+
+        (string? c, _, _, _) =
+            Program.DecideNumberCall(source: source, position: At(text: "B32("), target: "B32", from: "S64", literal: false);
+        Assert.Equal(expected: "(n * 2).to[B32]()", actual: c);
+
+        (string? seven, _, _, string sevenWhy) =
+            Program.DecideNumberCall(source: source, position: At(text: "U8(7)"), target: "U8", from: "S64", literal: true);
+        Assert.Null(@object: seven);
+        Assert.Contains(expectedSubstring: "'var n: U8 = 7'", actualString: sevenWhy);
+
+        (string? d, _, _, string dWhy) =
+            Program.DecideNumberCall(source: source, position: At(text: "Decimal("), target: "Decimal", from: "S64", literal: false);
+        Assert.Null(@object: d);
+        Assert.Contains(expectedSubstring: "decide which one you meant", actualString: dWhy);
+    }
+
+    [Fact]
     public void MigratePierce_RewritesTheOldStatement_LeavesPierceAsAName()
     {
         string dir = OldProject(name: "pierce", oldManifest: false, files:

@@ -89,6 +89,58 @@ public class RejectedBeforeEmitterTests
     }
 
     [Fact]
+    public void Analyze_NumberBuiltFromAVariablesBits_PointsToTheConversion()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var x: S64 = 300
+                             var a = U8(x)
+                             return
+                         """,
+            expectedErrorSubstring: "Convert the value with 'x.to[U8]()'");
+    }
+
+    [Fact]
+    public void Analyze_NumberBuiltFromALiteralsBits_PointsToTheTypedDeclaration()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var c = U8(300)
+                             return
+                         """,
+            expectedErrorSubstring: "'var n: U8 = 300'");
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var d = Decimal(2)
+                             return
+                         """,
+            expectedErrorSubstring: "'var n: Decimal = 2'");
+    }
+
+    [Fact]
+    public void Analyze_IntegerBuiltFromAFraction_SaysItHoldsWholeNumbers()
+    {
+        AssertHasErrorSa(source: """
+                         routine start()
+                             var d = S64(1.5)
+                             return
+                         """,
+            expectedErrorSubstring: "An 'S64' holds whole numbers");
+    }
+
+    [Fact]
+    public void Analyze_NumberBuiltFromBitsInDanger_Analyzes()
+    {
+        AssertAnalyzes(source: """
+                       routine start()
+                           var x: S64 = 300
+                           danger
+                               var a = U8(x)
+                           return
+                       """);
+    }
+
+    [Fact]
     public void Analyze_ListOfRoutinesTakingNothing_Builds()
     {
         AssertAnalyzes(source: """
