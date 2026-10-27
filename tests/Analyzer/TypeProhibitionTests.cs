@@ -13,12 +13,12 @@ public class TypeProhibitionTests
     #region None as Type Argument (rejected)
 
     /// <summary>
-    /// `None?` desugars to Maybe[None], which COLLAPSES to Bool (present|absent, no payload) — no error.
+    /// `None?` desugars to Optional[None], which COLLAPSES to Bool (present|absent, no payload) — no error.
     /// </summary>
     [Fact]
     public void Analyze_NoneNullable_CollapsesToBool()
     {
-        // None? desugars to Maybe[None] ≡ Bool (carrier None-collapse)
+        // None? desugars to Optional[None] ≡ Bool (carrier None-collapse)
         string source = """
                         routine foo(x: None?)
                             nothing
@@ -30,13 +30,13 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
     /// <summary>
-    /// `Maybe[None]` COLLAPSES to Bool (present|absent with no payload = a 2-state) — no error.
+    /// `Optional[None]` COLLAPSES to Bool (present|absent with no payload = a 2-state) — no error.
     /// </summary>
     [Fact]
     public void Analyze_ExplicitMaybeNone_CollapsesToBool()
     {
         string source = """
-                        routine bar() -> Maybe[None]
+                        routine bar() -> Optional[None]
                             throw AbsentValueError()
                         """;
 
@@ -101,7 +101,7 @@ public class TypeProhibitionTests
     }
     #endregion
 
-    #region Nested Maybe Prohibition
+    #region Nested Optional Prohibition
 
     /// <summary>
     /// Verifies semantic analysis behavior for nested maybe and reports the expected error.
@@ -110,7 +110,7 @@ public class TypeProhibitionTests
     public void Analyze_NestedMaybe_ReportsError()
     {
         string source = """
-                        routine test(x: Maybe[Maybe[S32]])
+                        routine test(x: Optional[Optional[S32]])
                             nothing
                             return
                         """;
@@ -137,45 +137,32 @@ public class TypeProhibitionTests
     }
 
     /// <summary>
-    /// A written <c>Maybe[E]</c> over an entity is RF-S817: the optional over an entity is <c>Optional[E]</c>.
+    /// <c>Optional[T]</c> and <c>T?</c> build over a value and over an entity alike, and the name <c>Optional</c> is gone:
+    /// writing it is an unknown type that names <c>Optional[T]</c> and <c>T?</c>.
     /// </summary>
     [Fact]
-    public void Analyze_MaybeOverEntity_ReportsError()
+    public void Analyze_OptionalOverAnyKind_NoError_MaybeNamesOptional()
     {
         string source = """
                         entity Cell
                             n: S64
 
-                        routine test(x: Maybe[Cell])
+                        routine test(a: Optional[S64], b: Optional[Cell], c: Cell?, d: S64?)
                             nothing
                             return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MaybeOverEntity && e.Message.Contains(value: "Optional[Cell]"));
-    }
+        Assert.Empty(collection: result.Errors);
 
-    /// <summary>
-    /// A written <c>Optional[T]</c> over a value is RF-S818, and <c>Optional[E]</c> and <c>E?</c> over an entity build.
-    /// </summary>
-    [Fact]
-    public void Analyze_OptionalOverValue_ReportsError_EntityForms_NoError()
-    {
-        string source = """
-                        entity Cell
-                            n: S64
-
-                        routine test(a: Optional[S64], b: Optional[Cell], c: Cell?)
-                            nothing
-                            return
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Single(collection: result.Errors,
-            predicate: e => e.Code == SemanticDiagnosticCode.OptionalOverValue);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MaybeOverEntity);
+        AnalysisResult old = AnalyzeSa(source: """
+                                               routine test(a: Optional[S64])
+                                                   nothing
+                                                   return
+                                               """);
+        Assert.Contains(collection: old.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownType && e.Message.Contains(value: "'Optional[T]'") &&
+                         e.Message.Contains(value: "'T?'"));
     }
 
     #endregion
@@ -201,13 +188,13 @@ public class TypeProhibitionTests
     }
 
     /// <summary>
-    /// Verifies that Maybe[S32?] (explicit nested Maybe) is rejected.
+    /// Verifies that Optional[S32?] (explicit nested Optional) is rejected.
     /// </summary>
     [Fact]
     public void Analyze_ExplicitNestedMaybe_ReportsError()
     {
         string source = """
-                        routine test(x: Maybe[S32?])
+                        routine test(x: Optional[S32?])
                             nothing
                             return
                         """;

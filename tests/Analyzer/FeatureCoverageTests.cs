@@ -166,7 +166,7 @@ public class FeatureCoverageTests
                               import IO/Console
 
                               routine start()
-                                  var m: Maybe[S64] = 42
+                                  var m: Optional[S64] = 42
                                   when m
                                       is None => show("none")
                                       else as v  => show(f"bound:{v}")

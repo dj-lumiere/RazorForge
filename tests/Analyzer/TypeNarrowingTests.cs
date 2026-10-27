@@ -20,7 +20,7 @@ public class TypeNarrowingTests
     {
         // unless desugars to: if Not(value is None) { body }
         // The body runs when value is NOT None, so value
-        // is narrowed from Maybe[S32] to S32 inside the block
+        // is narrowed from Optional[S32] to S32 inside the block
         string source = """
                         routine process(value: S32?) -> S32
                             if not (value is None)
@@ -134,7 +134,7 @@ public class TypeNarrowingTests
     #region Multi-Parameter Guard Narrowing
 
     /// <summary>
-    /// Verifies that two independent guard clauses narrow two separate Maybe parameters.
+    /// Verifies that two independent guard clauses narrow two separate Optional parameters.
     /// </summary>
     [Fact]
     public void Analyze_TwoGuardClauses_BothNarrowed_NoError()

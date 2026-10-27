@@ -427,7 +427,7 @@ public class AccessBlockAnalysisTests
         Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.AccessEnterWithoutToken);
     }
 
-    /// <summary>In a try block the name is a Maybe of the token, branched with when.</summary>
+    /// <summary>In a try block the name is an Optional of the token, branched with when.</summary>
     [Fact]
     public void Analyze_TryBlockNameIsMaybe()
     {

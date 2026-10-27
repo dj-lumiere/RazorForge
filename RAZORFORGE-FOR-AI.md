@@ -66,7 +66,7 @@ When unsure, consult ground truth in the repo/package:
    write anything (`parse(...)`, `try parse(...)`). A BARE call
    crashes LOUDLY on failure. To RECOVER, prefix the whole expression with a
    keyword and match the carrier with `when`:
-   `try EXPR` → `Maybe[T]` (present | absent, no error kept);
+   `try EXPR` → `T?` (`Optional[T]`: present | absent, no error kept);
    `check EXPR` → `Check[T]` (T | the caught `Crashables`).
    A routine with no value to give throws `AbsentValueError()`, an ordinary
    stdlib crashable: `throw AbsentValueError()`. To tell "not found" apart from
@@ -151,7 +151,7 @@ When unsure, consult ground truth in the repo/package:
    the trace from the stack when a crash asks for it (every routine keeps a frame record, the builder writes a table
    of return addresses), so while the program runs it only keeps the frame records. Elsewhere, and in the debug JIT, the program
    keeps a shadow stack as it runs.
-   `is None` is a `Maybe` arm only (a `Check` has no absent state: "not found" in a
+   `is None` is an `Optional` arm only (a `Check` has no absent state: "not found" in a
    `Check` is the arm `is AbsentValueError`). When the value is itself a variant, an arm may name the types it holds instead of the
    whole value (`when check parse(...)` with `is Deposit as d`, `is Withdraw as w`, `is Crashables as e`),
    and those arms together must name every one of them. The same holds on a plain variant that holds another
@@ -230,7 +230,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   is all of them, `perms.has_any(READ and WRITE)` at least one, `perms.lacks(READ and WRITE)` none), and drops
   members with `without` (`perms.without(WRITE)`: where a value of the flags type goes, its members are named bare).
   The flags value with no member on is `none` where the flags type is expected (`var marks: CellMarks = none`,
-  `marks == none`, a preset or record preset). A `CellMarks?` slot takes `none` as the absent Maybe. There is no
+  `marks == none`, a preset or record preset). A `CellMarks?` slot takes `none` as the absent Optional. There is no
   `all_off()`. Choice values (`OK: 200`) and flags bits (`MINE: 0`, 0 to 63) are written on every member or on none
   (then 0, 1, 2, ... in order): some with and some without is RF-S417.
   A `choice` auto-provides `Equatable`/`Comparable`/`Hashable` — no `obeys` and no
@@ -241,7 +241,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   `where`** — `where` is not RF syntax. A constraint's protocol type arguments are
   checked too: a `List[Text]` given where `Emittable[S64]` is taken is RF-S150.
 - **Generic parameter names.** A type parameter is `T` alone only when it is the
-  only one and its role is obvious (`List[T]`, `Maybe[T]`, `Items[T, COUNT]`).
+  only one and its role is obvious (`List[T]`, `Optional[T]`, `Items[T, COUNT]`).
   Otherwise every type parameter is `T` + a PascalCase role (`Dict[TKey, TValue]`,
   `select[TResult]`, `Guarded[T, TPolicy]`, `LLVM::sign_extend[TFrom, TTo]`), never
   another single letter (`K`, `V`, `U`, `E`, ...). A const generic is
@@ -407,7 +407,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   back with `sv.to[T]()` (`Dict`, `Set`, `SortedDict`, `SortedList`, `SortedSet`, `RotatableList`), a dictionary's keys
   from their text. A type holding a `secret` member variable, at any depth, can't be read back: RF-S813.
 - Inside a `when` arm whose name reaches the variant's own value (`is Upload as u` on an entity branch, or a
-  `Retained`/`Hijacked`/`Maybe` branch), giving the matched variable a new value is RF-S264: assign it after the
+  `Retained`/`Hijacked`/`Optional` branch), giving the matched variable a new value is RF-S264: assign it after the
   `when`. A value branch's name is a copy, so assigning there is fine.
 - `each x in steal xs` takes a `List` or a `Slots` apart (`take_each()`): the loop variable holds each element, a
   `break` ends the rest with the walk, and using `xs` after the loop is RF-S615 naming the loop. Other collections
@@ -422,7 +422,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
   fixed-size `Items[T, COUNT]`, `Bits[BITS]`
 - Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
-- Carriers: `Maybe[T]` / `Optional[T]` (the two forms of `T?`), `Check[T]` (builder-synthesized only —
+- Carriers: `Optional[T]` (written `T?`), `Check[T]` (builder-synthesized only —
   user routines cannot declare them as return types; you obtain one by wrapping a
   failable call with the `try`/`check` keyword).
 - A number never names its type (no `7s32`, `0_u64`, `10n`: RF-G010). Unit suffixes stay: durations
@@ -434,15 +434,15 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   `inf_b64` spelling (RF-G010).
 
 **Optionals and `none`:**
-- **`T?` (postfix `?`)** = `Maybe[T]` for a value `T`, `Optional[T]` for an entity `T` (§7), the ONLY
-  `?`-on-a-type form. There is no prefix `?T`.
+- **`T?` (postfix `?`)** = `Optional[T]` (§7), the ONLY `?`-on-a-type form. There is no prefix `?T`. `Maybe` is
+  an unknown type whose error names `Optional[T]` and `T?` (`migrate --step type-names` renames it).
 - **`None` (capital)** is the type / pattern marker (`when x is None`, type
   position). **`none` (lowercase)** is the value literal (like `true`/`false`).
 - `none` is legal ONLY where the target type is a carrier with an absent arm
-  (`Maybe[T]`) or a variant with a `None` member.
+  (`T?`) or a variant with a `None` member.
   `var x = none`, `var x: S64 = none`, `foo(none)` into a non-carrier slot are all
   errors — `none` has no free-standing type.
-- Absent is matched by `is None` on `Maybe[T]` / a variant's zero
+- Absent is matched by `is None` on `T?` / a variant's zero
   tag. `Check[T]` has no absent state (only `Crashables | T`).
 
 **Variants written in place:** `-> S64 | Text`, `List[Circle | Square]`, `x: S64 | Text | Bool`. The same types in
@@ -689,7 +689,7 @@ when cell                                     # record patterns, written like co
 The same record pattern works after `if`: `if cell is Monster(hp: 0) as m`.
 
 `else as name` is allowed only when one type is left after the earlier arms, and `name` has that type: the value
-of a `Maybe` after `is None`, the last member type of a variant, or (on a `Check`) every error left, taken as one
+of an `Optional` after `is None`, the last member type of a variant, or (on a `Check`) every error left, taken as one
 type. When more than one type is left it is `RF-S359`: write an arm for each.
 
 In a `when` statement an arm may be a block: break the line after `=>` and indent
@@ -731,7 +731,7 @@ dangerous routine raw_poke(p: Addr)     # callable only inside danger blocks
 ```
 
 - Call with named args: `add(a: 1, b: 2)`. Recover a failable call with a keyword:
-  `try get_text(n: 0)` → `Maybe[Text]`/`Text?`; `check get_text(n: 0)` → `Check[Text]`
+  `try get_text(n: 0)` → `Text?` (`Optional[Text]`); `check get_text(n: 0)` → `Check[Text]`
   (keeps the `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
   the constructor `T(...)`, `destruct`, `copy`, `eq`, `compare`, `represent` (to-text), `diagnose`
@@ -816,13 +816,13 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   - Use one inline, keep it in a variable (`var v = a.view()`,
     `var m = a.modify()`, re-pointable to another object of the same type), or
     open it for a block with `viewing a as v` / `modifying a as m`. A token is never part of another value: a field,
-    a variant branch, or a type argument (`List[Viewing[T]]`, `Maybe[Viewing[T]]`, a tuple holding one, a generic type
+    a variant branch, or a type argument (`List[Viewing[T]]`, `Optional[Viewing[T]]`, a tuple holding one, a generic type
     given one, `var xs = [a.view()]`, a variant written in place `Viewing[Cell] | S64`, a global) is RF-S601, written
     or inferred. A generic routine whose type parameter a call makes a token (`same(x: l.view())` with
     `routine same[T](x: T)`) is RF-S601 too: pass what you need from the token, or give the routine a
     `Viewing[T]` parameter and pass the entity. The one value that carries a token for a moment
     is what `try` gives on a routine returning a token (`try xs.view_at(index: i)`, an `each` step, `enumerate`'s
-    `(index, token)` pair): unpack it with `when` right there. Binding that `Maybe` to a name is RF-S601. A lambda
+    `(index, token)` pair): unpack it with `when` right there. Binding that `Optional` to a name is RF-S601. A lambda
     never captures a token (RF-S606).
   - The source is free to change. Replacing it (`a = …`, `h.inner = …`), moving
     it out (`steal a`), leaving its scope, or calling a routine that replaces it
@@ -895,9 +895,9 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     a block the targets' tokens are known to be different entities, so holding an element of one while another
     grows, or walking one while another grows, is allowed (RF-S640 / RF-S625 otherwise point here).
   - **`try viewing` / `try modifying`**: `try viewing x as v` is `try x.view_enter()`: inside the block `v` is a
-    `Maybe` of the token, present when the block entered `x`, and the body branches with `when v` (`is None => ...`,
+    `Optional` of the token, present when the block entered `x`, and the body branches with `when v` (`is None => ...`,
     `else as t => ...`). Only an entered target is exited. A block has no `else` (RF-G226). With several targets each
-    name is its own `Maybe`. A Guarded's enter fails with `ReenterDuringAccessError` when this job has the access
+    name is its own `Optional`. A Guarded's enter fails with `ReenterDuringAccessError` when this job has the access
     open already (a routine called from inside the block that opened it), so `try` gives none there and a plain
     block crashes. `try` on a target the block doesn't enter (a token, an entity without the pair) is RF-S611.
     `using ... fallback` is gone (a grammar error that names this form).
@@ -997,7 +997,7 @@ modifying c as m             # Modifying[Counter], write intent
 modifying payer, payee       # payer entered first, then payee: the names are the tokens
     payer.balance -= amount
     payee.balance += amount
-try modifying seats as s_entered     # a Maybe: none when this job has seats open already
+try modifying seats as s_entered     # an Optional: none when this job has seats open already
     when s_entered
         is None =>
             show("busy")
@@ -1053,15 +1053,13 @@ with `s[i] = x` (tears the old one down), replaced with `steal s[i] as old injec
 variadic parameter (`xs...: T`) are always packed into a `Slots[T, N]` (so `from_literal` takes entities too).
 `SplitItems[T, COUNT]` is a record (`needs RecordType T`) with no entity counterpart.
 `Array`, `SplitArray` and `BitArray` are unknown types whose error names `Items`, `SplitItems` and `Bits`
-(`migrate --step type-names` renames them, emitters included). **`T?` is `Maybe[T]` or `Optional[T]`**, picked by the
-builder from `T`'s kind, both used as the variant of `T` and `None` (`none`, `is None`, `when m is T as v`, `??`, `!!`,
-`try`). For a value `T` it is `Maybe[T]`, a record laid out as `{ i1, T }` (presence flag, value): `=` copies it and it can
-be a preset. For an entity `T` it is `Optional[T]`, which holds the one original or nothing: never copied by `=`
-(RF-S413), handed over with `steal`, laid out as the entity's address alone (`ptr`, null for `none`). `try` over a
-routine returning an entity gives an `Optional`. Writing `Maybe[E]` with an entity `E` is RF-S817 (names
-`Optional[E]`, `migrate --step type-names` rewrites it when the file declares `E`), `Optional[T]` with a value `T`
-RF-S818. Both share `Maybe`'s routines (`is_present`, `strip_out`, `unwrap` for a `Copyable` entity, `represent`,
-`diagnose`, which names `Optional[...]`). A `Slots` is an entity kept in place, so `Slots[...]?` stays a `Maybe`. A dictionary entry is the tuple
+(`migrate --step type-names` renames them, emitters included). **`T?` is `Optional[T]`**, used as the variant of `T`
+and `None` (`none`, `is None`, `when m is T as v`, `??`, `!!`, `try`). `Optional` is the one named type whose kind
+follows what it holds, and the builder lays it out by `T`'s kind. For a value `T` it is a record laid out as `{ i1, T }`
+(presence flag, value): `=` copies it and it can be a preset. For an entity `T` it holds the one original or nothing:
+never copied by `=` (RF-S413), handed over with `steal`, laid out as the entity's address alone (`ptr`, null for
+`none`). The routines are the same for both (`is_present`, `strip_out`, `unwrap` for a `Copyable` entity,
+`represent`, `diagnose`). A `Slots` is an entity kept in place, so `Slots[...]?` has the value layout. A dictionary entry is the tuple
 `(TKey, TValue)`: `each (k, v) in d`, or `e.item0` / `e.item1` (there is no `DictEntry`).
 In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
 it (`var y = x`, `return me.value`, a tuple of it, handing it to a parameter of a type parameter as in
@@ -1202,10 +1200,10 @@ that differ from other languages:
 
 - `list.add_last(value: v)`, `list.remove_first!()`, `list.remove_at!(0)` —
   removal is failable (empty/out-of-range throws); `try list.remove_first()`
-  returns `Maybe`.
+  returns `Optional`.
 - `set.add(value: v)` returns Bool, `@discardable`: no `drop` needed.
 - `dict[k] = v` puts a value: it replaces the value of a key that is there and adds the key otherwise (there is
-  no `dict.add`). Reading `dict[k]` is failable under the hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Maybe[TValue]`.
+  no `dict.add`). Reading `dict[k]` is failable under the hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Optional[TValue]`.
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
   is `coll[^1]` (last element).
 - **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a
@@ -1498,7 +1496,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-W008      | a Work nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-W009      | a started Work nothing collects      | `retrieve()` it, or `drop job` to stop it          |
-| RF-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Maybe[...]` kept in a name, a tuple) | keep the entity or a manager's handle, unpack `try` of a token with `when` at once |
+| RF-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Optional[...]` kept in a name, a tuple) | keep the entity or a manager's handle, unpack `try` of a token with `when` at once |
 | RF-S632      | `to[Work]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Unbroken`/`Guarded`/…, or `start_here()` |
 | RF-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or open both with `modifying x, y` |

@@ -6,9 +6,9 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// A token (<c>Viewing[T]</c> / <c>Modifying[T]</c>) is never a type argument (RF-S601): a container, a <c>Maybe</c>, a
+/// A token (<c>Viewing[T]</c> / <c>Modifying[T]</c>) is never a type argument (RF-S601): a container, a <c>Optional</c>, a
 /// tuple, a variant or a generic type holding one could keep it after the place it points at is gone. A routine may
-/// return <c>Maybe</c> of a token (an iterator's <c>emit</c> under <c>try</c>), and the caller unpacks it with
+/// return <c>Optional</c> of a token (an iterator's <c>emit</c> under <c>try</c>), and the caller unpacks it with
 /// <c>when</c> where it gets it. A lambda never captures a token (RF-S606). The first five cases are the analogs of
 /// Rust #164250 that read a dead entity before.
 /// </summary>
@@ -73,7 +73,7 @@ public class TokenTypeArgumentTests
     {
         AssertHasErrorS601(source: """
                                         routine start()
-                                            var m: Maybe[Viewing[Cell]] = none
+                                            var m: Optional[Viewing[Cell]] = none
                                             if true
                                                 var l = Cell(n: 42)
                                                 m = l.view()
@@ -202,6 +202,6 @@ public class TokenTypeArgumentTests
                                             var m = try cells.view_at(index: 0)
                                             return
                                         """,
-            expected: "You keep `Maybe[Viewing[Cell]]` in 'm'");
+            expected: "You keep `Optional[Viewing[Cell]]` in 'm'");
     }
 }

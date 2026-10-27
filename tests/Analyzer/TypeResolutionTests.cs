@@ -614,7 +614,7 @@ public class TypeResolutionTests
     public void Analyze_RoutineReturnsMaybe_ReportsError()
     {
         string source = """
-                        routine foo() -> Maybe[S32]
+                        routine foo() -> Optional[S32]
                             nothing
                             return
                         """;
@@ -680,7 +680,7 @@ public class TypeResolutionTests
                             y: B32
 
                         @readonly
-                        routine Point.foo() -> Maybe[B32]
+                        routine Point.foo() -> Optional[B32]
                             nothing
                             return
                         """;

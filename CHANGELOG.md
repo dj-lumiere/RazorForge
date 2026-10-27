@@ -34,7 +34,7 @@ file only once its other old spellings are gone.
 **Failure and recovery**
 - A routine that can fail says so on its declaration: `failable routine parse(...)`. `routine parse!(...)` is
   `RF-G222` (`migrate --step failable`). A call never writes `!`: `f!(x)` and `job.retrieve!()` are `RF-G211`.
-- Recovery is a keyword at the call: `try f(x)` gives a `Maybe[T]`, `check f(x)` gives a `Check[T]`. The generated
+- Recovery is a keyword at the call: `try f(x)` gives a `T?` (`Optional[T]`), `check f(x)` gives a `Check[T]`. The generated
   `try_f` / `check_f` / `lookup_f` routines are gone. Default `migrate` writes `try f(x)` for `try_f(x)` (and
   `try r.f(x)` for `r.try_f(x)`) and `check f(x)` for `check_f(x)` and `lookup_f(x)`, and the build error on an old
   name names the keyword.
@@ -123,7 +123,7 @@ file only once its other old spellings are gone.
   block calls the target's `view_enter()` / `modify_enter()` before it (the token they give is the `as` name) and
   `view_exit()` / `modify_exit()` on every way out, so any type with those pairs is a block target (`Guarded`,
   `FileStorage`, a type of your own). Using the block on a `Retained`, a `Roamed` or a weak handle is `RF-S651` (use
-  it directly, or `hold()` first). `try viewing g as v` gives `v` as a `Maybe` of the token, which the body takes
+  it directly, or `hold()` first). `try viewing g as v` gives `v` as an `Optional` of the token, which the body takes
   apart with `when`. `modifying a, b` enters in the written order and leaves in the reverse one. `consult()`,
   `amend()`, `Consulting`, `Amending`, `multiamend` and the `using` access blocks are gone: a `using` over an access
   is `RF-S612`, and `migrate --step access` rewrites the 0.4 forms.
@@ -144,7 +144,7 @@ file only once its other old spellings are gone.
 - A routine that returns a token may return one from `me` or from any of its token parameters. The caller's token
   ends when any of the arguments it came from changes shape or ends (`RF-S643`).
 - A Work that receives a token or a `Retained` starts with `start_here()` (`RF-S632`).
-- A token is never a type argument: `List[Viewing[T]]`, `Maybe[Viewing[T]]` kept in a name, a tuple or a generic type
+- A token is never a type argument: `List[Viewing[T]]`, `Optional[Viewing[T]]` kept in a name, a tuple or a generic type
   holding one, written or inferred (`var xs = [a.view()]`), is `RF-S601`. What `try` gives on a routine that returns a
   token is unpacked with `when` where it is made. A lambda capturing a token is `RF-S606`, and `steal` on a token is
   `RF-S604`.
@@ -186,13 +186,12 @@ file only once its other old spellings are gone.
   is `Copyable`. The arguments of a variadic parameter are a `Slots[T, N]`. `SplitArray` is `SplitItems` (values
   only) and `BitArray` is `Bits`. The old names are unknown types whose error names the new one, and
   `migrate --step type-names` renames them.
-- `T?` is used as a variant of `T` and `None`, and the builder picks its type from `T`: `Maybe[T]` for a value (a record
-  laid out as `{ i1, T }`, copied by `=`), `Optional[T]` for an entity (it holds the one original or nothing, is
-  handed over with `steal`, and is the entity's address alone, null for `none`). `try` over a routine that returns
-  an entity gives an `Optional`. A written `Maybe[E]` over an entity is `RF-S817` and a written `Optional[T]` over a
-  value is `RF-S818`. `migrate --step type-names` rewrites `Maybe[E]` to `Optional[E]` when the file declares the
-  entity `E`. `DictEntry` is gone: a dictionary entry is the tuple `(TKey, TValue)` (`each (k, v) in d`, `e.item0`,
-  `e.item1`).
+- `Maybe[T]` is `Optional[T]`, written `T?`, used as a variant of `T` and `None`. It is the one named type whose kind
+  follows what it holds: for a value `T` it is a record laid out as `{ i1, T }`, copied by `=`, and for an entity `T`
+  it holds the one original or nothing, is handed over with `steal`, and is the entity's address alone, null for
+  `none`. `try f(x)` gives a `T?`. `Maybe` is an unknown type whose error names `Optional[T]` and `T?`, and
+  `migrate --step type-names` renames it. `DictEntry` is gone: a dictionary entry is the tuple `(TKey, TValue)`
+  (`each (k, v) in d`, `e.item0`, `e.item1`).
 
 **Standard library**
 - A module is its folder. The base module is `System` (it was `Core`) and every file sees it and the modules under

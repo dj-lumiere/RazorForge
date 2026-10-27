@@ -12,7 +12,7 @@ using static TestHelpers;
 /// </summary>
 public class ErrorVariantGenerationTests
 {
-    #region Maybe Variant (absent only)
+    #region Optional Variant (absent only)
 
     /// <summary>
     /// Verifies semantic analysis behavior for failable with absent only generates try variant.
@@ -46,7 +46,7 @@ public class ErrorVariantGenerationTests
         // Variants are synthesized ON DEMAND — the `try` keyword above generates try_get.
         RoutineInfo? tryVariant = result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "get")!, kind: RecoveryKind.Try);
         Assert.NotNull(@object: tryVariant);
-        // Return type should be Maybe[User] / User?
+        // Return type should be Optional[User] / User?
     }
 
     #endregion

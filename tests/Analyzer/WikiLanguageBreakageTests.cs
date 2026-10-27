@@ -219,13 +219,13 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Verifies that user routines cannot directly return Maybe.
+    /// Verifies that user routines cannot directly return Optional.
     /// </summary>
     [Fact]
     public void Analyze_UserRoutineReturningMaybe_ReportsError()
     {
         string source = """
-                        routine test() -> Maybe[S32]
+                        routine test() -> Optional[S32]
                             return none
                         """;
 

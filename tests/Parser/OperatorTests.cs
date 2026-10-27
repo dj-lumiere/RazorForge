@@ -18,7 +18,7 @@ public class OperatorTests
     public void Parse_IsNotNone_And_Condition()
     {
         string source = """
-                        routine test(x: Maybe[S64], c: Bool) -> Bool
+                        routine test(x: Optional[S64], c: Bool) -> Bool
                             return x isnot None and c
                         """;
 

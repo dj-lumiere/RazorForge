@@ -126,9 +126,10 @@ class RazorForgeColorSettingsPage : ColorSettingsPage {
         entity <entity>Account</entity> obeys <protocol>Displayable</protocol>
             owner: <record>Text</record>
             history: <entity>List</entity>[<record>Point</record>]
+            backup: <entity>Account</entity><entity>?</entity>
 
         <annotation>@positional</annotation>
-        routine <routine>largest</routine>[<generic>T</generic>](items: <entity>List</entity>[<generic>T</generic>], spare: <memberkind>Maybe</memberkind>[<generic>T</generic>]) -> <generic>T</generic>
+        routine <routine>largest</routine>[<generic>T</generic>](items: <entity>List</entity>[<generic>T</generic>], spare: <memberkind>Optional</memberkind>[<generic>T</generic>]) -> <generic>T</generic>
             var best = items.<routine>first</routine>()
             return best
 

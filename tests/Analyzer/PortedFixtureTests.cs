@@ -15,7 +15,7 @@ public class PortedFixtureTests
 {
     // ── playground/rc_test.rf ────────────────────────────────────────────────
     // Source memory: is_none_pattern_inversion_fix.md (2026-05-13).
-    // `is None` on a Maybe-carrier produced by Tracked.try_recover() must resolve,
+    // `is None` on an Optional-carrier produced by Tracked.try_recover() must resolve,
     // and the else-arm must bind the inner Retained[T] cleanly.
 
     [Fact]
@@ -40,7 +40,7 @@ public class PortedFixtureTests
 
     // ── playground/maybe_entity_test.rf ──────────────────────────────────────
     // Source memory: maybe_entity_auto_own.md + failable_entity_return_sa_check_2026_05_14.md.
-    // After the bound-T-is-pointer redesign, Maybe[entity] is the natural carrier
+    // After the bound-T-is-pointer redesign, Optional[entity] is the natural carrier
     // for a failable returning an entity. `try` recovery + `is None` must resolve.
 
     [Fact]

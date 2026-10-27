@@ -46,7 +46,7 @@ routine start()
     var b = Resource(tag: 7)
     consume(r: steal b)             # `b` moves into the call, using it afterwards is a build error
 
-    var d = try parse_digit(c: 'x') # `try` recovers the failure as Maybe[S64]
+    var d = try parse_digit(c: 'x') # `try` recovers the failure as S64? (Optional[S64])
     when d
         is None => show("not a digit")
         else as n => show(f"digit {n}")
@@ -84,7 +84,7 @@ scope exit, with no lifetime syntax to write.
 **Failure is loud by default, and recovery takes one keyword.** A routine that can `throw` is declared
 `failable routine`, and its call sites look like any other call. A bare call that fails crashes the
 program with a message and a stack trace (exit status 82). To recover, put a keyword in front of the
-call: `try` gives `Maybe[T]`, and `check` gives `Check[T]` (which keeps the error). There are no
+call: `try` gives `T?` (`Optional[T]`), and `check` gives `Check[T]` (which keeps the error). There are no
 exceptions to declare or catch.
 
 **Numbers mean what they say.** `+ - *` are checked and crash on overflow, while wrapping (`+%`) and

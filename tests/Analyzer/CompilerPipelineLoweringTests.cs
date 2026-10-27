@@ -121,7 +121,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine test()
-                            var maybe = Maybe[S32](present: true, value: 1)
+                            var maybe = Optional[S32](present: true, value: 1)
                             return
                         """;
 
@@ -133,7 +133,7 @@ public class CompilerPipelineLoweringTests
         CreatorExpression creator = GetVariableInitializerCreator(program: program,
             variableName: "maybe");
         Assert.Equal(expected: CallLoweringKind.TypeConstructor, actual: creator.LoweringKind);
-        Assert.Equal(expected: "Maybe[System.S32]", actual: creator.ConstructedType?.Name);
+        Assert.Equal(expected: "Optional[System.S32]", actual: creator.ConstructedType?.Name);
     }
 
     /// <summary>
@@ -499,10 +499,10 @@ public class CompilerPipelineLoweringTests
         Assert.Contains(expectedSubstring: "@\"[member, try] System.S32.add(you: System.S32)\"(i32 %me, i32 %you)",
             actualString: llvmIr);
         Assert.DoesNotContain(
-            expectedSubstring: "declare %\"Record.System.Maybe[System.S32]\" @\"[member, try] System.S32.sub",
+            expectedSubstring: "declare %\"Record.System.Optional[System.S32]\" @\"[member, try] System.S32.sub",
             actualString: llvmIr);
         Assert.DoesNotContain(
-            expectedSubstring: "declare %\"Record.System.Maybe[System.S32]\" @\"[member, try] System.S32.add",
+            expectedSubstring: "declare %\"Record.System.Optional[System.S32]\" @\"[member, try] System.S32.add",
             actualString: llvmIr);
     }
 
@@ -786,7 +786,7 @@ public class CompilerPipelineLoweringTests
         string llvmIr = generator.Generate();
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
             functionMarker:
-            "define internal %\"Record.System.Maybe[System.U8]\" @\"[member, try] Collections.BitList.to_u8");
+            "define internal %\"Record.System.Optional[System.U8]\" @\"[member, try] Collections.BitList.to_u8");
         Assert.Contains(
             expectedSubstring: "call i64 @\"[dangerous, member] System.Hijacked[System.U64].peek()\"",
             actualString: tryToU8Body);
@@ -816,7 +816,7 @@ public class CompilerPipelineLoweringTests
         TypeSymbol? s64Type = result.Registry.LookupType(name: "S64");
         TypeSymbol? s8Type = result.Registry.LookupType(name: "S8");
         TypeSymbol? textType = result.Registry.LookupType(name: "Text");
-        TypeSymbol? maybeDef = result.Registry.LookupType(name: "Maybe");
+        TypeSymbol? maybeDef = result.Registry.LookupType(name: "Optional");
         Assert.NotNull(@object: s64Type);
         Assert.NotNull(@object: s8Type);
         Assert.NotNull(@object: textType);

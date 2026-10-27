@@ -429,7 +429,7 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
-    public void MigrateTypeNames_MaybeOverDeclaredEntity_BecomesOptional()
+    public void MigrateTypeNames_Maybe_BecomesOptional()
     {
         string dir = OldProject(name: "type-names-optional", oldManifest: false, files:
         [
@@ -453,7 +453,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    next: Optional[Node]\n" +
                       "\n" +
                       "routine start()\n" +
-                      "    var count: Maybe[S64] = none\n" +
+                      "    var count: Optional[S64] = none\n" +
                       "    var head: Optional[Node] = none  # Maybe[Node]\n" +
                       "    return\n",
             actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));

@@ -2,12 +2,12 @@ module System
 
 import BuilderQuery
 ### Represents an optional value: a variant of `T` and `None`, written `T?`.
-### `Maybe[T]` holds either a `T` or nothing, without carrying crash information. A `when` on it names the `T`
-### member and `None` (`is None`). For a value `T` it is a record: a presence flag and the value, copied by `=` and
-### usable in a preset. For an entity `T` the builder names it `Optional[T]`: it holds the one original or nothing,
-### is handed over with `steal`, and is the entity's address alone (`none` is the null address).
+### `Optional[T]` holds either a `T` or nothing, without carrying crash information. A `when` on it names the `T`
+### member and `None` (`is None`). It is the one named type whose kind follows what it holds. For a value `T` it is
+### a record: a presence flag and the value, copied by `=` and usable in a preset. For an entity `T` it holds the one
+### original or nothing, is handed over with `steal`, and is the entity's address alone (`none` is the null address).
 ### :typeparam T: The wrapped type.
-variant Maybe[T]
+variant Optional[T]
     T
     None
 
@@ -15,16 +15,16 @@ variant Maybe[T]
 ### Present values are rendered using the wrapped value's text form.
 ### :returns: The resulting `Text` value.
 @override
-routine Maybe[T].represent() -> Text
+routine Optional[T].represent() -> Text
     if not me.is_present()
         return "none"
     return f"{me.value}"
 
 ### Returns the diagnostic form of this optional value.
-### This form keeps the `Maybe` wrapper visible for debugging and logs.
+### This form keeps the `Optional` wrapper visible for debugging and logs.
 ### :returns: The resulting `Text` value.
 @override
-routine Maybe[T].diagnose() -> Text
+routine Optional[T].diagnose() -> Text
     if not me.is_present()
         return f"{me.full_type_name()}(none)"
     return f"{me.full_type_name()}({me.value})"
@@ -33,7 +33,7 @@ routine Maybe[T].diagnose() -> Text
 ### auto-derived) so the per-instantiation body is monomorphized and emitted like the other carrier
 ### routines, and so the `value` field is only touched when actually present.
 @override
-routine Maybe[T].destruct()
+routine Optional[T].destruct()
     if me.is_present()
         me.value.destruct()
     return
@@ -46,9 +46,9 @@ routine Maybe[T].destruct()
 ### the caller gets an independent value. A single-owner ENTITY that did not opt into `Copyable` cannot be
 ### duplicated; use `strip_out` to MOVE it out instead.
 ### :returns: The contained `T` value (an independent duplicate).
-### :throws: {AbsentValueError} if this `Maybe` is absent.
+### :throws: {AbsentValueError} if this `Optional` is absent.
 @overridable
-failable routine Maybe[T].unwrap() -> T
+failable routine Optional[T].unwrap() -> T
 needs RecordType T
     if not me.is_present()
         throw AbsentValueError()
@@ -57,7 +57,7 @@ needs RecordType T
 ### `unwrap` for a single-owner entity: it cannot be shared, so the caller gets an independent duplicate,
 ### which needs the entity to declare it can be copied.
 @override
-failable routine Maybe[T].unwrap() -> T
+failable routine Optional[T].unwrap() -> T
 needs EntityType T
 needs T obeys Copyable
     if not me.is_present()
@@ -66,7 +66,7 @@ needs T obeys Copyable
 
 ### `unwrap` for a variant: one with an entity arm cannot be shared, so the caller gets a duplicate.
 @override
-failable routine Maybe[T].unwrap() -> T
+failable routine Optional[T].unwrap() -> T
 needs VariantType T
 needs T obeys Copyable
     if not me.is_present()
@@ -78,9 +78,9 @@ needs T obeys Copyable
 ### present-case result is a retaining copy (co-owned); `fallback` goes unused and is torn down at scope
 ### exit like any other unconsumed local.
 ### :param fallback: The fallback value to return when absent.
-### :returns: The contained `T` value (a co-owning copy), or `fallback` if this `Maybe` is absent.
+### :returns: The contained `T` value (a co-owning copy), or `fallback` if this `Optional` is absent.
 @overridable
-routine Maybe[T].unwrap_or(fallback: T) -> T
+routine Optional[T].unwrap_or(fallback: T) -> T
 needs RecordType T
     if not me.is_present()
         return fallback
@@ -88,7 +88,7 @@ needs RecordType T
 
 ### `unwrap_or` for a single-owner entity: the present value comes back as a duplicate (see `unwrap`).
 @override
-routine Maybe[T].unwrap_or(fallback: T) -> T
+routine Optional[T].unwrap_or(fallback: T) -> T
 needs EntityType T
 needs T obeys Copyable
     if not me.is_present()
@@ -97,7 +97,7 @@ needs T obeys Copyable
 
 ### `unwrap_or` for a variant: the present value comes back as a duplicate (see `unwrap`).
 @override
-routine Maybe[T].unwrap_or(fallback: T) -> T
+routine Optional[T].unwrap_or(fallback: T) -> T
 needs VariantType T
 needs T obeys Copyable
     if not me.is_present()
@@ -106,25 +106,25 @@ needs T obeys Copyable
 
 ### MOVES the wrapped value out, CONSUMING this optional (marks it absent). Unlike `unwrap` (which
 ### co-owns via a retaining copy and leaves the optional intact), this hands the payload's SINGLE
-### reference to the caller and empties the carrier — the model a `Maybe[Entity]` requires (an entity is
+### reference to the caller and empties the carrier — the model an `Optional[Entity]` requires (an entity is
 ### single-owner: it cannot be co-owned/retained, only moved). The carrier's own `destruct` then no-ops on
 ### `value` (guarded by `is_present()`), so the moved-out payload is freed exactly once by its new owner.
 ### A re-`strip_out` of the now-absent optional fails LOUDLY (AbsentValueError), never silently corrupts.
 ### :returns: The contained `T` value, moved out.
-### :throws: {AbsentValueError} if this `Maybe` is absent.
+### :throws: {AbsentValueError} if this `Optional` is absent.
 @overridable
-failable routine Maybe[T].strip_out() -> T
+failable routine Optional[T].strip_out() -> T
 needs RecordType T
     if not me.is_present()
         throw AbsentValueError()
     me.present = false
-    # The value moves out: `present` is cleared first, so this Maybe no longer owns it.
+    # The value moves out: `present` is cleared first, so this Optional no longer owns it.
     danger
         return me.value.hijack().peek()
 
 ### `strip_out` for a variant: the value moves out of its slot, as a record's does.
 @override
-failable routine Maybe[T].strip_out() -> T
+failable routine Optional[T].strip_out() -> T
 needs VariantType T
     if not me.is_present()
         throw AbsentValueError()
@@ -135,7 +135,7 @@ needs VariantType T
 ### `strip_out` for an entity (an `Optional[T]`): the optional is the entity's address, so the entity is made from
 ### that address, and the optional is then left `none`.
 @override
-failable routine Maybe[T].strip_out() -> T
+failable routine Optional[T].strip_out() -> T
 needs EntityType T
     if not me.is_present()
         throw AbsentValueError()
@@ -144,14 +144,14 @@ needs EntityType T
         me.present = false
         return taken
 
-routine Maybe[T].is_present() -> Bool
+routine Optional[T].is_present() -> Bool
     return me.present
 
 ### Returns whether both optionals are equal: both absent, or both present with equal values.
 ### :param you: The other optional to compare against.
 ### :returns: `true` when both are absent or both hold equal values, `false` when only one is absent.
 @readonly
-routine Maybe[T].eq(you: Viewing[Maybe[T]]) -> Bool
+routine Optional[T].eq(you: Viewing[Optional[T]]) -> Bool
 needs T obeys Equatable
     if not me.present
         return not you.present
@@ -165,7 +165,7 @@ needs T obeys Equatable
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Maybe[T].hash(k0: U64, k1: U64) -> U64
+routine Optional[T].hash(k0: U64, k1: U64) -> U64
 needs T obeys Hashable
     if not me.present
         var absent_tag: U64 = 0x6E6F6E65

@@ -545,7 +545,7 @@ public sealed class MultiFileModuleImportTests
         List<SemanticError> errors = RunProject(entrySource: """
                                                              import IO/Console
                                                              routine start()
-                                                                 var m: Maybe[S64] = None
+                                                                 var m: Optional[S64] = None
                                                                  show("DONE")
                                                                  return
                                                              """,

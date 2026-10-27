@@ -164,7 +164,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
     }
     /// <summary>
-    /// Verifies that `all_on()` and the `none` literal give a flags value, and `none` stays the absent `Maybe` in a
+    /// Verifies that `all_on()` and the `none` literal give a flags value, and `none` stays the absent `Optional` in a
     /// `Permissions?` slot.
     /// </summary>
     [Fact]

@@ -142,7 +142,7 @@ public class ErrorHandlingTests
 
     #endregion
 
-    #region Maybe Type (?)
+    #region Optional Type (?)
 
     /// <summary>
     /// Verifies that the parser accepts maybe return type.
@@ -160,7 +160,7 @@ public class ErrorHandlingTests
         Program program = AssertParses(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
 
-        // Return type should be Maybe[User] or User?
+        // Return type should be Optional[User] or User?
         Assert.NotNull(@object: routine.ReturnType);
     }
     /// <summary>

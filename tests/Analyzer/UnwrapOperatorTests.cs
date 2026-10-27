@@ -16,7 +16,7 @@ public class UnwrapOperatorTests
     #region Built-in error handling infrastructure -> try_ variant generation
 
     /// <summary>
-    /// Verifies that the test validates variant generated and returns the generated Maybe type.
+    /// Verifies that the test validates variant generated and returns the generated Optional type.
     /// </summary>
     [Fact]
     public void TryVariant_Generated_ReturnsMaybeType()
@@ -70,7 +70,7 @@ public class UnwrapOperatorTests
     [Fact]
     public void NoneCoalesce_DirectCallInFailable_ReturnsInnerType()
     {
-        // get!() in a failable context returns S64, not Maybe[S64].
+        // get!() in a failable context returns S64, not Optional[S64].
         // ?? on S64 should report TypeDoesNotSupportOperator.
         string source = """
                         failable routine get(flag: Bool) -> S64

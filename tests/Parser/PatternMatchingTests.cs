@@ -371,7 +371,7 @@ public class PatternMatchingTests
 
     #endregion
 
-    #region Maybe/Result/Lookup Pattern Tests
+    #region Optional/Result/Lookup Pattern Tests
 
     /// <summary>
     /// Verifies that the parser accepts when maybe.
@@ -566,7 +566,7 @@ public class PatternMatchingTests
     public void Parse_WhenElseWithBinding()
     {
         string source = """
-                        routine handle(value: Maybe[User])
+                        routine handle(value: Optional[User])
                             when value
                                 is None => show("Not found")
                                 else as u => show(u.name)
@@ -582,7 +582,7 @@ public class PatternMatchingTests
     public void Parse_WhenElseWithBlock()
     {
         string source = """
-                        routine handle(value: Maybe[User])
+                        routine handle(value: Optional[User])
                             when value
                                 is None =>
                                     show("Not found")
