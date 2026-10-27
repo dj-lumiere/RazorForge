@@ -55,11 +55,13 @@ foreach ($sub in 'Ingrid\native\build\bin', 'Ingrid\native\build\lib') {
 }
 
 Write-Host "=== Ingrid's Tessera library (installed layout) ==="
-# Every build links ingrid_tessera.ll from next to the executable. An installed layout has no Tessera sources to
-# compile it from, so the package ships it: the packaged builder compiles it here, finding Ingrid\tessera up the tree.
+# Every build links ingrid_tessera.bc (made from ingrid_tessera.ll) from next to the executable. An installed layout
+# has no Tessera sources to compile it from, so the package ships both: the packaged builder compiles them here,
+# finding Ingrid\tessera up the tree.
 & "$Out\RazorForge.exe" emit-ingrid
 if ($LASTEXITCODE -ne 0) { throw "emit-ingrid failed ($LASTEXITCODE)" }
 if (-not (Test-Path "$Out\ingrid_tessera.ll")) { throw "emit-ingrid wrote no ingrid_tessera.ll" }
+if (-not (Test-Path "$Out\ingrid_tessera.bc")) { throw "emit-ingrid wrote no ingrid_tessera.bc" }
 
 Write-Host '=== prune dev-only artifacts ==='
 foreach ($dir in 'RazorForge-Wiki', 'Suflae-Wiki') {
