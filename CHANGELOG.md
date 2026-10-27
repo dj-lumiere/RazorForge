@@ -110,6 +110,9 @@ file only once its other old spellings are gone.
 - A local handed over inside a `return` (`return Shelf(book: book)`) moves without `steal`. `steal` there is a
   warning, `RF-W259`, whose quick fix removes it (`migrate --step return-steal`).
 - The same routine declared twice in one standard library or program file is a build error (`RF-S406`).
+- An `each` over an emitter that has run out is `RF-S517`: a second `each` over a named emitter after one that ended
+  by itself, or an `each` inside a loop over an emitter made outside it. Such a loop ran zero times. Make a new
+  `xs.emitter()` just before the loop, or write `each x in xs`.
 
 **Sharing and access**
 - `Assignable` is gone. `=` copies a record, and copying a handle makes one more handle to the same entity. Default

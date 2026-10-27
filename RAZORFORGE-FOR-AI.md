@@ -1217,6 +1217,9 @@ that differ from other languages:
 - An emitter is an emittable (`Emitter[T]` obeys `Emittable[T]`): terminals and adapters work on it and take the
   values it has not handed out yet (`var it = xs.emitter()`, `drop it.emit()`, then `it.to[List]()`, `it.sum()`,
   `it.where(...)`).
+- An emitter hands out each element once: an `each` over a named emitter after one that ended by itself (no `break`),
+  or an `each` inside a loop over an emitter made outside it, is RF-S517 (it would run zero times). Make a new
+  `xs.emitter()` just before the loop, or write `each x in xs` / `each x in xs.emitter()`.
 - Emitter adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`, `chain`, `distinct`, `select_many`,
   `min_by`, … — lazily evaluated, chainable, lambdas like `x => x % 2 == 0`. An adapter points at the container it
   was made from, so it follows the same rule: `var big = xs.where(...)` is a token on `xs`'s elements.
@@ -1488,6 +1491,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 | RF-G227      | `@inline` and `@noinline` on one routine | keep the one you mean                            |
 
+| RF-S517      | `each` over an emitter that ran out   | a new `xs.emitter()` before the loop, or `each x in xs` |
 ## 13. A complete worked example
 
 ```razorforge
