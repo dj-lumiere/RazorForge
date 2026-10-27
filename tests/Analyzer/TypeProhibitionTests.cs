@@ -156,8 +156,8 @@ public class TypeProhibitionTests
         Assert.Empty(collection: result.Errors);
 
         AnalysisResult old = AnalyzeSa(source: """
-                                               routine test(a: Optional[S64])
-                                                   nothing
+                                               routine test()
+                                                   var a: Maybe[S64] = 3
                                                    return
                                                """);
         Assert.Contains(collection: old.Errors,
