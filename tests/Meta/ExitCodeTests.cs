@@ -296,6 +296,19 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "after the cancelled work", actualString: stdout);
     }
 
+    /// <summary>A program built on its own whose only failure is a recovered serial rebuild links: every routine
+    /// an earlier collection round made live is walked again in its lowered form, so the callees of a crashable's
+    /// derived diagnose (an each-loop's text emitter) are defined.</summary>
+    [Fact]
+    public void RecoveredSerialRebuild_LinksWhenBuiltAlone()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "recovered_serial_rebuild_alone.rf");
+
+        Assert.True(condition: exit == 0,
+            userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "bad element: none", actualString: stdout);
+    }
+
     /// <summary><c>destruct</c> is never failable, so a failure inside it crashes with status 82 even beneath
     /// <c>check</c> (safety matrix C45, rf-fail-destruct-callee).</summary>
     [Fact]
