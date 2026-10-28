@@ -69,4 +69,47 @@ public class UseAfterStealMessageTests
                                  """,
             expectedErrorSubstring: "'steal' on line 7 handed what it held over to 'slot'. Use 'slot'");
     }
+
+    /// <summary>A lambda parameter is a new name: one named like an earlier <c>each</c> variable that was stolen is not
+    /// that variable, so reading it in the lambda is no use after the steal.</summary>
+    [Fact]
+    public void Analyze_LambdaParameterNamedLikeStolenEachVariable_IsANewName()
+    {
+        AssertAnalyzesSa(source: """
+                                 import IterTools
+
+                                 entity Crate
+                                     n: S64
+
+                                 routine start()
+                                     var crates: List[Crate] = [Crate(n: 1), Crate(n: 2)]
+                                     var kept = List[Crate]()
+                                     each c in steal crates
+                                         kept.add_last(steal c)
+                                     var big = kept.where(c => c.n > 1).get_count()
+                                     return
+                                 """);
+    }
+
+    /// <summary>The lambda parameter shadows the stolen name only inside the lambda: after it, the outer name is still
+    /// the one the steal ended.</summary>
+    [Fact]
+    public void Analyze_StolenNameAfterLambdaWithSameParameter_IsStillEnded()
+    {
+        AssertHasErrorSa(source: """
+                                 import IterTools
+
+                                 entity Crate
+                                     n: S64
+
+                                 routine start()
+                                     var c = Crate(n: 1)
+                                     var kept = List[Crate]()
+                                     kept.add_last(steal c)
+                                     var big = kept.where(c => c.n > 1).get_count()
+                                     var v = c.n
+                                     return
+                                 """,
+            expectedErrorSubstring: "You use 'c' here, but 'steal' on line 9 handed what it held over");
+    }
 }
