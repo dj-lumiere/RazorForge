@@ -1,0 +1,62 @@
+module Tests/Stdlib/StealCountedRecordApi
+
+import IO/Console
+# `steal` on a local holding a counted record (here a record holding a `Retained` handle) handed to a routine's
+# parameter: the routine copies what it keeps of it (a list slot, a member variable, a Work's arguments) and leaves
+# the parameter alone, so the local's own value is still torn down. Each cell is destroyed exactly once, when its
+# last holder ends. A construction or a variable takes the stolen value as it is.
+
+entity Cell
+    n: S64
+
+routine Cell.destruct()
+    show(f"destruct cell {me.n}")
+    return
+
+record Held
+    cell: Retained[Cell]
+
+entity Shelf
+    items: List[Held]
+
+routine Shelf.keep(value: Held)
+    me.items.add_last(value)
+    return
+
+routine read(value: Held) -> S64
+    return value.cell.view().n
+
+failable routine checked_read(value: Held) -> S64
+    if value.cell.view().n > 9
+        throw AbsentValueError()
+    return value.cell.view().n
+
+routine make(n: S64) -> Held
+    return Held(cell: Retained[Cell](from: Cell(n: n)))
+
+routine start()
+    var kept = List[Held]()
+    var a = make(n: 1)
+    kept.add_last(steal a)
+    show(f"kept {kept.count()}")
+    var shelf = Shelf(items: List[Held]())
+    var b = make(n: 2)
+    shelf.keep(value: steal b)
+    var c = make(n: 3)
+    show(f"read {read(value: steal c)}")
+    var d = make(n: 4)
+    var job = read.to[Work](value: steal d)
+    job.start_here()
+    show(f"work {job.retrieve()}")
+    var e = make(n: 5)
+    var moved = steal e
+    show(f"moved {moved.cell.view().n}")
+    each i in 6 til 9
+        var looped = make(n: i)
+        kept.add_last(steal looped)
+    show(f"kept {kept.count()}")
+    var f = make(n: 9)
+    show(f"try {try checked_read(value: steal f)}")
+    var g = make(n: 10)
+    show(f"check {check checked_read(value: steal g)}")
+    return
