@@ -1,0 +1,36 @@
+module Tests/Stdlib/RecoveredTextWalkApi
+
+import IO/Console
+import IterTools
+# Texts a walk makes under `try` and `check` end once: the lambda's text moves out of the carrier it comes back in,
+# the adapter the walk runs over ends with the statement, the pieces a recovery variant builds its result from end,
+# and a text moved with `steal` into a name of its own is not copied. Each runs many times in a loop, so a text left
+# behind would pile up.
+
+failable routine label(n: S64) -> Text
+    if n < 0
+        throw AbsentValueError()
+    return f"label {n} with a tail long enough to live on the heap"
+
+routine start()
+    var nums: List[S64] = [1, 2, 3]
+    var zeros: List[S64] = [1, 0, 3]
+    var total: U64 = 0
+    each i in 0 til 200
+        when try nums.select(transform: x => f"number {x} with a tail long enough to live on the heap").to[List]()
+            is None => total = total + 1000
+            else as texts => total = total + texts.count()
+        when check zeros.select(transform: x => f"number {10 // x} with a tail long enough").to[List]()
+            is Crashables as e => total = total + 10
+            else as texts => total = total + texts.count()
+        when check label(n: i)
+            is Crashables as e => total = total + 1000
+            else as text => total = total + text.count()
+        var made = f"kept {i} with a tail long enough to live on the heap"
+        var kept = steal made
+        total = total + kept.count()
+    show(f"{try nums.select(transform: x => f"t{x}").where(t => t != "t2").to[List]()}")
+    show(f"{check zeros.select(transform: x => f"t{10 // x}").to[List]()}")
+    show(f"{try label(n: -1)}")
+    show(f"total {total}")
+    return
