@@ -90,7 +90,7 @@ public class RustUnsoundPortTests
                            routine start()
                                var xs = List[Cell]()
                                xs.add_last(value: Cell(n: 42))
-                               each c in xs
+                               for c in xs
                                    xs[0] = Cell(n: 7)
                                    show(f"{c.n}")
                                return

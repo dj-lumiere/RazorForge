@@ -299,6 +299,47 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateFor_RewritesEachLoops_InCodeOnly()
+    {
+        string dir = OldProject(name: "for", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/ForRf\n" +
+                "routine start()\n" +
+                "    each x in xs  # each x in xs\n" +
+                "        show(\"each {x}\")\n" +
+                "    each (i, x) in xs.enumerate()\n" +
+                "        nothing\n" +
+                "    each i in 0 til 10 by 2\n" +
+                "        nothing\n" +
+                "    return\n"),
+            ("old.sf",
+                "module Test/ForSf\n" +
+                "routine start()\n" +
+                "    each k: U64 in 0 til n\n" +
+                "        show(k)\n")
+        ]);
+
+        (int code, string output) = RunMain("migrate", "--step", "for", dir);
+        Assert.Equal(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "2 file(s) changed", actualString: output);
+        Assert.Equal(
+            expected: "module Test/ForRf\n" +
+                      "routine start()\n" +
+                      "    for x in xs  # each x in xs\n" +
+                      "        show(\"each {x}\")\n" +
+                      "    for (i, x) in xs.enumerate()\n" +
+                      "        nothing\n" +
+                      "    for i in 0 til 10 by 2\n" +
+                      "        nothing\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+        Assert.Equal(
+            expected: "module Test/ForSf\nroutine start()\n    for k: U64 in 0 til n\n        show(k)\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.sf")));
+    }
+
+    [Fact]
     public void MigrateWork_RenamesAgent_KeepsTheStartVerbs()
     {
         string dir = OldProject(name: "work", oldManifest: false, files:
@@ -543,7 +584,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    var w = (-p.x) ** 2\n" +
                       "    var n = 5_s64 + (-2_s64) ** 2\n" +
                       "    var hits = Unbroken[S64](initial: 0)\n" +
-                      "    each i in n to 1\n" +
+                      "    for i in n to 1\n" +
                       "        nothing\n" +
                       "    return\n",
             actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));

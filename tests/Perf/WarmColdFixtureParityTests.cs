@@ -113,7 +113,7 @@ public sealed partial class WarmColdFixtureParityTests
     /// <summary>The daemon's second build of a program reuses the stdlib files the first one analyzed
     /// (<see cref="SemanticVerifier.CompiledStdlibState.AnalyzedFileCache"/>). That cache-hit build must still
     /// clone protocol defaults from analyzed bodies: `Iterable[T].List` reached through `SelectManyIterable` came
-    /// out of the lowered cached program, its `each` already a `when` nobody had typed, and the LLVM emitter
+    /// out of the lowered cached program, its `for` already a `when` nobody had typed, and the LLVM emitter
     /// rejected the leftover `when`.</summary>
     [Theory]
     [InlineData("itertools_more_api")]

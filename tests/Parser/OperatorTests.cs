@@ -887,7 +887,7 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                            each i in 0 til 10
+                            for i in 0 til 10
                                 show(i)
                             return
                         """;
@@ -902,7 +902,7 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                            each i in 0 til 100 by 5
+                            for i in 0 til 100 by 5
                                 show(i)
                             return
                         """;

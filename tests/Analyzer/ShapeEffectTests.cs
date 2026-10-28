@@ -6,7 +6,7 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for the build-time shape check (RazorForge). While an `each` loop goes through a container, or a
+/// Tests for the build-time shape check (RazorForge). While a `for` loop goes through a container, or a
 /// statement works on one of its entity elements in place, nothing in that loop or statement may add to or
 /// remove from the container, even through another routine: every routine carries the set of parameters
 /// (and <c>me</c>) it may reshape, propagated through calls. Handing the container to a routine value, or
@@ -31,7 +31,7 @@ public class ShapeEffectTests
 
                                    routine total(xs: Viewing[List[S64]]) -> S64
                                        var sum = 0
-                                       each x in xs
+                                       for x in xs
                                            sum = sum + x
                                        return sum
 
@@ -43,7 +43,7 @@ public class ShapeEffectTests
         string source = Prelude + """
                                   routine start()
                                       var nums = List[S64]()
-                                      each x in nums
+                                      for x in nums
                                           grow(xs: nums.modify())
                                       return
                                   """;
@@ -60,7 +60,7 @@ public class ShapeEffectTests
         string source = Prelude + """
                                   routine start()
                                       var nums = List[S64]()
-                                      each x in nums
+                                      for x in nums
                                           outer(ys: nums.modify())
                                       return
                                   """;
@@ -80,7 +80,7 @@ public class ShapeEffectTests
 
                                   routine start()
                                       var nums = List[S64]()
-                                      each x in nums
+                                      for x in nums
                                           nums.push_two()
                                       return
                                   """;
@@ -94,7 +94,7 @@ public class ShapeEffectTests
     {
         string source = Prelude + """
                                   routine run_each(xs: Modifying[List[S64]], action: Callable[(Modifying[List[S64]]), None])
-                                      each x in xs
+                                      for x in xs
                                           action(xs)
                                       return
 
@@ -114,7 +114,7 @@ public class ShapeEffectTests
                                       var nums = List[S64]()
                                       var r = Retained[List[S64]](from: steal nums)
                                       var r2 = r.share()
-                                      each x in r
+                                      for x in r
                                           r2.add_last(value: 5)
                                       return
                                   """;
@@ -151,7 +151,7 @@ public class ShapeEffectTests
                                       var nums = List[S64]()
                                       nums.add_last(value: 1)
                                       var other = List[S64]()
-                                      each x in nums
+                                      for x in nums
                                           drop total(xs: nums.view())
                                           nums[0] = 5
                                           grow(xs: other.modify())
@@ -171,7 +171,7 @@ public class ShapeEffectTests
                                   routine start()
                                       var grid = List[List[S64]]()
                                       grid.add_last(value: List[S64]())
-                                      each x in grid[0]
+                                      for x in grid[0]
                                           grid[0].add_last(value: x)
                                       return
                                   """;
@@ -190,7 +190,7 @@ public class ShapeEffectTests
                                       items: List[S64]
 
                                   routine Bag.spin()
-                                      each x in me.items
+                                      for x in me.items
                                           me.items.add_last(value: x)
                                       return
 
@@ -224,9 +224,9 @@ public class ShapeEffectTests
 
                                   routine start()
                                       var nums = List[S64]()
-                                      each x in nums
+                                      for x in nums
                                           ping(xs: nums.modify(), n: 0)
-                                      each y in nums
+                                      for y in nums
                                           pong(xs: nums.modify(), n: 0)
                                       return
                                   """;
@@ -259,17 +259,17 @@ public class ShapeEffectTests
                        """;
         AssertAnalyzesSa(source: robot + """
                                           routine Robot.run()
-                                              each c in me.commands
+                                              for c in me.commands
                                                   me.note(text: c)
                                               return
                                           """);
         AssertHasErrorSa(source: robot + """
                                          routine Robot.run()
-                                             each c in me.commands
+                                             for c in me.commands
                                                  me.enqueue(text: c)
                                              return
                                          """,
-            expectedErrorSubstring: "while an `each` loop is going through 'me.commands'");
+            expectedErrorSubstring: "while a `for` loop is going through 'me.commands'");
     }
 
     [Fact]
@@ -321,14 +321,14 @@ public class ShapeEffectTests
     {
         AssertHasErrorSa(source: """
                                  routine merge_set(into: Modifying[Set[S64]], from: Viewing[Set[S64]])
-                                     each v in from
+                                     for v in from
                                          into.add(value: v + 1)
                                      return
 
                                  routine start()
                                      return
                                  """,
-            expectedErrorSubstring: "while an `each` loop is going through 'from'");
+            expectedErrorSubstring: "while a `for` loop is going through 'from'");
     }
 
     [Fact]
@@ -337,7 +337,7 @@ public class ShapeEffectTests
         AssertAnalyzesSa(source: """
                                  routine merge_set(into: Modifying[Set[S64]], from: Viewing[Set[S64]])
                                      modifying into, viewing from
-                                         each v in from
+                                         for v in from
                                              into.add(value: v + 1)
                                      return
 

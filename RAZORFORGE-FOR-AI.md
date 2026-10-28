@@ -95,8 +95,8 @@ When unsure, consult ground truth in the repo/package:
    routine value take it as `failable Callable[...]` (`select`, `where`, `take_while`, `skip_while`, `distinct_by`,
    `select_many`, `any`, `all`, `accumulate`, `get_count`, `min_by`, `max_by`, `sort_by`, `sorted_by`). An adapter
    holds the lambda in a `failable Callable` member variable and calls it later: a call that works on such an
-   adapter (its terminal, `s.to[List]()`, or the `each` loop over it) can fail through it, so
-   `try xs.select(transform: x => 10 // x).to[List]()` is received, and an `each` loop over such an adapter passes
+   adapter (its terminal, `s.to[List]()`, or the `for` loop over it) can fail through it, so
+   `try xs.select(transform: x => 10 // x).to[List]()` is received, and a `for` loop over such an adapter passes
    the lambda's failure on in a failable routine and crashes anywhere else. The handlers of `CpuEventManager`
    (`Callable[(), None]?`) are not marked: a handler's failure crashes the program.
    **`todo`** is a statement for code not written yet (`routine parse(bytes: Bytes) -> Header` with the body
@@ -288,7 +288,7 @@ statements, plus top-level `var`s, run top to bottom as the body of an implicit
 import IO/Console
 
 var total = 0
-each n in 1 to 5
+for n in 1 to 5
     total += n
 show(f"total = {total}")
 ```
@@ -399,7 +399,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   is a script. The overflow message is "Integer overflow error: The value does not fit in the target type."
 - A field-by-field construction infers type arguments (`Pair(first: 1, second: "one")` is `Pair[S64, Text]`). A type
   obeying `Emittable[T]` gets its `Emitter` from what its `emitter()` returns (no `relates` needed), so IterTools adapters
-  walk it. An entity holding an entity moves with `steal` (no copy step). An element token from `each` converts like
+  walk it. An entity holding an entity moves with `steal` (no copy step). An element token from `for` converts like
   its value (`w.to[S64]()`). `CpuEventManager.when_interrupted`/`when_terminated` link and run.
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
   An empty flags value shows as `none`, a one-item tuple as `(1,)`. A global record's member can't be assigned
@@ -409,7 +409,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - Inside a `when` arm whose name reaches the variant's own value (`is Upload as u` on an entity branch, or a
   `Retained`/`Hijacked`/`Optional` branch), giving the matched variable a new value is RF-S264: assign it after the
   `when`. A value branch's name is a copy, so assigning there is fine.
-- `each x in steal xs` takes a `List` or a `Slots` apart (`take_each()`): the loop variable holds each element, a
+- `for x in steal xs` takes a `List` or a `Slots` apart (`take_each()`): the loop variable holds each element, a
   `break` ends the rest with the walk, and using `xs` after the loop is RF-S615 naming the loop. Other collections
   can't be taken apart that way (a build error says so).
 - A routine written outside its type may name the slots its own way (`routine Pair[TLeft, TRight].swapped() ->
@@ -619,7 +619,7 @@ Mixing `and` with `or`, or two different bitwise operators, without parentheses 
 if x == 3
     show("three")
 
-each x in 1 to 5          # range iteration
+for x in 1 to 5          # range iteration
     if x == 3
         continue
     if x > 4
@@ -635,18 +635,19 @@ loop                      # doesn't end by itself: break, return or throw leaves
         break
 ```
 
-Loops are `until c` and `loop` (plus `each` and `expand`). `until c` stops when `c` becomes true, tested before each
+Loops are `until c` and `loop` (plus `for` and `expand`). `until c` stops when `c` becomes true, tested before each
 round: write the condition that ends the loop. `loop` doesn't end by itself: only a `break`, `return` or `throw`
 leaves it, so the lines after a `loop` without a `break` never run (RF-S786) and a routine whose last statement is
 such a loop needs no `return` after it. `while` is not a keyword: a loop written with it is RF-G224, and
 `migrate --step until` rewrites it (`while true` → `loop`, `while not c` → `until c`, an integer comparison turned
-around, `while i < n` → `until i >= n`, a float comparison and anything else → `until not (c)`, listed). An `until`,
-`each` or `loop` may end with a `then` block. It runs once whenever the loop is left for the line after it: when the loop ends by itself
+around, `while i < n` → `until i >= n`, a float comparison and anything else → `until not (c)`, listed). `each` is
+a reserved word: a loop written `each x in xs` is RF-G229, and `migrate --step for` rewrites it to `for`. An `until`,
+`for` or `loop` may end with a `then` block. It runs once whenever the loop is left for the line after it: when the loop ends by itself
 and after its own `break` (a `break` of a loop inside only leaves that loop). A `return` or `throw` leaves the
 routine and skips it. A loop whose `then` ends in `return` always returns, so the routine needs nothing after it.
 Loops have no `else` (RF-G219): the case where the loop would not run even once is an `if` before the loop.
 A loop may carry values from one round to the next: `until n <= 1 with n: U64 = start, steps: U64 = 0`
-(`each x in xs with sum: S64 = 0` and `loop with i: S64 = 0` too). Each carried value is bound anew every round, from what the round's
+(`for x in xs with sum: S64 = 0` and `loop with i: S64 = 0` too). Each carried value is bound anew every round, from what the round's
 `continue with n: after, steps: steps + 1` passes (every carried name once, in any order, all computed before
 any is stored, so `continue with x: y, y: x % y` swaps). The names are visible in the condition, the body and
 the `then` block, and nowhere after the loop. A body that carries values must not run off its end: every path
@@ -821,7 +822,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     or inferred. A generic routine whose type parameter a call makes a token (`same(x: l.view())` with
     `routine same[T](x: T)`) is RF-S601 too: pass what you need from the token, or give the routine a
     `Viewing[T]` parameter and pass the entity. The one value that carries a token for a moment
-    is what `try` gives on a routine returning a token (`try xs.view_at(index: i)`, an `each` step, `enumerate`'s
+    is what `try` gives on a routine returning a token (`try xs.view_at(index: i)`, a `for` step, `enumerate`'s
     `(index, token)` pair): unpack it with `when` right there. Binding that `Optional` to a name is RF-S601. A lambda
     never captures a token (RF-S606).
   - The source is free to change. Replacing it (`a = …`, `h.inner = …`), moving
@@ -834,7 +835,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     RF-S639 (`h.replace_with(t: h.inner.view())`).
   - A name a pattern binds to an entity in place is a token on the matched place: `else as c` of `when s.item`,
     `is Cell as c`, a member name in a record pattern (`if ch is Chest(item: as c)` reads `ch.item`), and the element
-    an `each` loop over entities hands out (from the walked container). Replacing that place (`s.item = none`,
+    a `for` loop over entities hands out (from the walked container). Replacing that place (`s.item = none`,
     `ch.item = ...`, `xs[0] = ...`), moving it out (`steal ch.item as old`) or dropping it ends the name, and a later
     use is RF-S643. A value element or member is a copy and is not affected.
   - Two names that may be the same entity without the builder knowing it are treated as maybe the same: two token
@@ -1045,7 +1046,7 @@ the entity elsewhere, so they are records. RF-S445/RF-S446 are retired.
 **`Items` and `Slots`.** `Items[T, COUNT]` is a record of `COUNT` values (an item comes out of `getitem` as a copy) (`needs RecordType T`, RF-S151 points to
 `Slots` for an entity element). `Slots[T, COUNT]` is an entity with the same layout (`[COUNT x T]`, in place, no
 allocation) that takes any `T`: never copied by `=` (RF-S413, even for `Slots[S64, 2]`), handed over with `steal`,
-`duplicate()` when `T` obeys `Copyable`. Its elements are read in place (`s[0].level`, `each b in s`), written
+`duplicate()` when `T` obeys `Copyable`. Its elements are read in place (`s[0].level`, `for b in s`), written
 with `s[i] = x` (tears the old one down), replaced with `steal s[i] as old inject fresh`, and traded with
 `s.swap(first:, second:)`: no place is ever empty. A fixed-size literal follows the type written where it goes
 (`var s: Slots[Item, 2] = [a, b]`, `var a: Items[S64, 2] = [1, 2]`). With no type written, `Items[N](a, b)` builds
@@ -1060,7 +1061,7 @@ follows what it holds, and the builder lays it out by `T`'s kind. For a value `T
 never copied by `=` (RF-S413), handed over with `steal`, laid out as the entity's address alone (`ptr`, null for
 `none`). The routines are the same for both (`is_present`, `strip_out`, `unwrap` for a `Copyable` entity,
 `represent`, `diagnose`). A `Slots` is an entity kept in place, so `Slots[...]?` has the value layout. A dictionary entry is the tuple
-`(TKey, TValue)`: `each (k, v) in d`, or `e.item0` / `e.item1` (there is no `DictEntry`).
+`(TKey, TValue)`: `for (k, v) in d`, or `e.item0` / `e.item1` (there is no `DictEntry`).
 In a generic body, a value of an unconstrained type parameter may be an entity, so keeping a second copy of
 it (`var y = x`, `return me.value`, a tuple of it, handing it to a parameter of a type parameter as in
 `xs.add_last(value: x)`) is RF-S413 on the template's own line: `steal` it, keep the
@@ -1072,9 +1073,9 @@ Several kinds on one line repeat the kind: `needs RecordType TKey, RecordType TV
 `Unbroken[T]` and `SplitItems`'s element emitter are `needs RecordType`. `PriorityQueue[TPriority, TElement]`
 asks only `TPriority obeys Comparable`. A queue is not walked directly: `pq.unordered()` and `pq.ordered()` copy its
 `(priority, element)` pairs (storage order / smallest priority first, `needs RecordType TElement`), `pq.drain()`
-empties it into them smallest first (`each (priority, element) in pq.drain()`). A
-`Slots`' emitter reads each element in place, so `each r in slots` works on entities (the binding only reads).
-`each x in steal slots` (and `(steal slots).emitter()`) takes it apart with `take_each()`: each element is handed over,
+empties it into them smallest first (`for (priority, element) in pq.drain()`). A
+`Slots`' emitter reads each element in place, so `for r in slots` works on entities (the binding only reads).
+`for x in steal slots` (and `(steal slots).emitter()`) takes it apart with `take_each()`: each element is handed over,
 and the ones a `break` leaves end with the walk. `Slots` has `==` and `<=>` when `T` obeys `Equatable` / `Comparable`,
 like `Items`.
 Suflae has no `Slots` (an SF entity is shared, so a record holding one copies the handle).
@@ -1224,8 +1225,8 @@ that differ from other languages:
 - `SortedList`/`SortedSet` have **no positional indexing** — rank access is
   `get_by_rank!(...)`.
 - **Emitters.** What walks a value is an emitter (`Emitter[T]`, one `emit()` at a time); what can be walked is an
-  emittable (`Emittable[T]`, it has `emitter()`). `each x in xs` takes `xs.emitter()` for you, and you may call it
-  yourself: `var it = xs.emitter()`, then `it.emit()` (failable, `AbsentValueError` at the end) or `each x in it`,
+  emittable (`Emittable[T]`, it has `emitter()`). `for x in xs` takes `xs.emitter()` for you, and you may call it
+  yourself: `var it = xs.emitter()`, then `it.emit()` (failable, `AbsentValueError` at the end) or `for x in it`,
   which goes on from where `it` is. An emitter made from a local container (directly, or from its `view()` /
   `modify()`) is itself a token on the container's elements: a local variable may hold it, and it ends when the
   container may change shape or ends (a later use is RF-S643, `xs.add_last(...)` ends it). It hands out what the
@@ -1233,15 +1234,15 @@ that differ from other languages:
   from `me` or from a token parameter (`routine big(xs: Viewing[List[S64]]) -> WhereEmittable[S64, List[S64]]` returning
   `xs.where(...)`), and the caller's result is a token on what it passed there. Keeping it in a field, or returning one
   made from anything else, is RF-S644. `(steal xs).emitter()` takes the list's elements into the emitter (each one
-  comes out as the value itself, like `each x in steal xs`), so it holds what it walks and can go anywhere, returned
+  comes out as the value itself, like `for x in steal xs`), so it holds what it walks and can go anywhere, returned
   from a routine too. A range (`var r = 0 til 10`) points at nothing and can be kept. `r.emitter()` on a
   `Retained[T]` gives a `RetainedEmitter[TElement, T/Emitter, T]` (the element type comes from `T`'s `Emittable`
   conformance) that holds one more reference to the entity, so it is no token: it can be returned, kept in an
-  entity's member variable, or used after `r` is given another entity. `each x in r` walks the same way. An emitter
+  entity's member variable, or used after `r` is given another entity. `for x in r` walks the same way. An emitter
   made from the entity itself (`r.view().emitter()`) is a token like one made from a local container.
-- An emitter hands out each element once: an `each` over a named emitter after one that ended by itself (no `break`),
-  or an `each` inside a loop over an emitter made outside it, is RF-S517 (it would run zero times). Make a new
-  `xs.emitter()` just before the loop, or write `each x in xs` / `each x in xs.emitter()`.
+- An emitter hands out each element once: a `for` over a named emitter after one that ended by itself (no `break`),
+  or a `for` inside a loop over an emitter made outside it, is RF-S517 (it would run zero times). Make a new
+  `xs.emitter()` just before the loop, or write `for x in xs` / `for x in xs.emitter()`.
 - An emitter is an emittable (`Emitter[T]` obeys `Emittable[T]`): terminals and adapters work on it and take the
   values it has not handed out yet (`var it = xs.emitter()`, `drop it.emit()`, then `it.to[List]()`, `it.sum()`,
   `it.where(...)`).
@@ -1292,23 +1293,23 @@ that differ from other languages:
   destructure with `var (q, r) = pair`. `(a, b) = (b, a)` swaps places (locals, member variables, entities
   included: values move, nothing is copied, no `steal`); any other tuple on the left is a build error.
 
-**Mutating a collection while `each`-looping it is banned** (RF-S625): calling a
+**Mutating a collection while `for`-looping it is banned** (RF-S625): calling a
 `@reshaping` mutator (`add`/`remove`/…) on the variable being iterated is a
 build-time error — after a structural change the loop can no longer trust its
 next element. Finish the loop, then mutate. A map's `d[k] = v` (and `d[k] += 1`) counts: it may add the key,
-so it is banned inside `each` over `d` even when the key is already there. A list's `xs[i] = v` only replaces
+so it is banned inside `for` over `d` even when the key is already there. A list's `xs[i] = v` only replaces
 an element and stays allowed.
 The ban also covers a mutation hidden behind a call
-(`each x in xs { grow(xs: xs.modify()) }`) and a loop over an adapter of the collection
-(`each x in xs.where(...)` walks `xs` itself): the builder works out which
+(`for x in xs { grow(xs: xs.modify()) }`) and a loop over an adapter of the collection
+(`for x in xs.where(...)` walks `xs` itself): the builder works out which
 parameters each routine can add to or remove from, following its calls, and
 rejects handing `xs` to one. Handing `xs` to a routine value, or changing another
 token, `Retained` or `Tracked` handle to the same kind of container
-(`each v in from { into.add(value: v) }`), is rejected too, because the builder
+(`for v in from { into.add(value: v) }`), is rejected too, because the builder
 cannot tell whether it is the same container. Open both with
 `modifying into, viewing from` to loop over `from` and change `into`.
 A loop over a token walks the container the token is on: `var w = xs.view()` (or `viewing xs as w`) then
-`each x in w { xs.add_last(value: x) }` is RF-S625, and so is a change of any container a routine that gave the token
+`for x in w { xs.add_last(value: x) }` is RF-S625, and so is a change of any container a routine that gave the token
 may have taken it from (`var w = shorter(x: a.view(), y: b.view())` keeps both `a` and `b` still).
 Every stdlib collection marks its adding/removing routines `@reshaping`.
 The same holds while a member routine of a collection calls a lambda it is handed: a lambda that can add to or
@@ -1335,7 +1336,7 @@ what a walk reaches in place: `xs.where(...).to[List]()` (any `to[...]`) or `.fi
 a walk of a `List[Crate]` is RF-S413 at that call; collect `(steal xs).where(...)` (the walk takes the list apart,
 `take_each`) or `xs.select(transform: c => c.duplicate())` instead. An emitter whose `emit` makes or takes out its
 values is marked `@hands_over` (`select`, `select_many`, `take_each`, a channel drain): its items are the walk's own,
-so `each` ends each one unless the step keeps it, `where`/`skip`/`take` over it end what they pass by, and collecting
+so `for` ends each one unless the step keeps it, `where`/`skip`/`take` over it end what they pass by, and collecting
 is allowed. Take an
 element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
 explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
@@ -1524,8 +1525,9 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-G216      | `and`/`or`, or `&`/`\|`/shifts, mixed bare | add parentheses: `a or (b and c)`, `(a & b) \| c` |
 | RF-G224      | a loop written `while c`              | `until` with the condition that ends it, or `loop` (`migrate --step until`) |
 | RF-G225      | a line written `pass`                 | `nothing`, the line with no work (`migrate --step nothing`) |
+| RF-G229      | a loop written `each x in xs`         | `for x in xs` (`migrate --step for`)               |
 | RF-S516      | `by 0` on a range                     | a non-zero step, negative to count down            |
-| RF-S517      | `each` over an emitter that ran out   | a new `xs.emitter()` before the loop, or `each x in xs` |
+| RF-S517      | `for` over an emitter that ran out   | a new `xs.emitter()` before the loop, or `for x in xs` |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 4-space indent blocks; conditionals top-level only |
 | RF-G227      | `@inline` and `@noinline` on one routine | keep the one you mean                            |
 | RF-G228      | `bundle` (not a keyword)                 | `record` (values only) or `entity`, `migrate --step bundle` |
@@ -1541,7 +1543,7 @@ record Item
     qty: S64
 
 failable routine find_qty(items: Viewing[List[Item]], name: Text) -> S64
-    each item in items
+    for item in items
         if item.name == name
             return item.qty
     throw AbsentValueError()
@@ -1701,7 +1703,7 @@ one works on the caller's cell, and sharing one counter across jobs just works:
 
 ```razorforge
 routine bump(cell: Unbroken[S64], times: S64)
-    each i in 0 til times
+    for i in 0 til times
         drop cell.fetch_add(delta: 1)
     return
 
@@ -1726,7 +1728,7 @@ opening a `FileSource`/`FileSink` inside a job.
   `transmitter.transmit_if_room(item: x) -> Bool` never waits: `true` when it went in, `false` when the channel was full
   (the item is destroyed), `ChannelClosedError` like `transmit`.
   `transmitter.duplicate()` clones a producer for fan-in; `transmitter.close()` / `is_closed()`.
-- `Receiver`/`SharedReceiver` are `Emittable[T]` — drain with `each x in rx` (ends when closed + empty).
+- `Receiver`/`SharedReceiver` are `Emittable[T]` — drain with `for x in rx` (ends when closed + empty).
   `rx.close()` closes from the receiving side: buffered items are destroyed unreceived, a later `transmit` throws
   `ChannelClosedError`, and a transmitter waiting for room wakes with it (an early stop travels up a pipeline).
 
@@ -1735,7 +1737,7 @@ var (tx, rx) = make_channel[S64](capacity: 4)
 tx.transmit(item: 10)
 tx.transmit(item: 20)
 tx.close()
-each n in rx
+for n in rx
     show(f"{n}")
 ```
 
@@ -1830,7 +1832,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Self**: `me` `Me`
 - **Protocols & constraints**: `obeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `when` `is` `isnot` `until` `loop` `with`
-  `each` `break` `continue` `return` `throw` `todo` `becomes`
+  `for` `break` `continue` `return` `throw` `todo` `becomes`
 - **Iteration / range / hand-over**: `in` (loops only) `to` `til` `by` `steal`†
 - **Module system**: `import` `module`
 - **Other statements**: `using` `as` `define` `nothing` `given` `drop`
@@ -1842,7 +1844,7 @@ between them (`` `total count` ``); `` `count` `` and `count` are the same name.
 - **Buildtime reflection**†: `expand` (loop) — the ONLY reflection keyword.
 
 The word operators `to` `til` `by` `is` `isnot` `in` `as` `and` `or` are keywords only where an
-operator stands, right after something that ends an expression (`0 to 10`, `a and b`, `each x in xs`). Anywhere
+operator stands, right after something that ends an expression (`0 to 10`, `a and b`, `for x in xs`). Anywhere
 else they are names: `var to = 3`, `routine step(by: S64, to: S64)`, `by + to`. Two places keep them keywords: a
 `when` arm that starts with `is`/`isnot`, and `else as p`. `not` starts an expression, so it is always a keyword.
 `inject` is a keyword only after `steal … as …`.

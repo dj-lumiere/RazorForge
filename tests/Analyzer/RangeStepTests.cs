@@ -43,7 +43,7 @@ public sealed class RangeStepTests
     {
         string source = """
                         routine walk(step: S64)
-                            each i in 10 til 0 by step
+                            for i in 10 til 0 by step
                                 nothing
                             return
                         """;
@@ -67,7 +67,7 @@ public sealed class RangeStepTests
     private static string Walk(string range)
     {
         return "routine walk()\n" +
-               $"    each i in {range}\n" +
+               $"    for i in {range}\n" +
                "        nothing\n" +
                "    return\n";
     }

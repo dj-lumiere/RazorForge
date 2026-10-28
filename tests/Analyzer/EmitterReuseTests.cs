@@ -6,37 +6,37 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// An emitter hands out each item once, so an <c>each</c> over a named emitter that has certainly run out would run zero
-/// times: RF-S517. That is a second <c>each</c> after one that ended by itself on every path, or an <c>each</c> inside a
+/// An emitter hands out each item once, so a <c>for</c> over a named emitter that has certainly run out would run zero
+/// times: RF-S517. That is a second <c>for</c> after one that ended by itself on every path, or a <c>for</c> inside a
 /// loop over an emitter made outside it. An emitter left with <c>break</c> goes on where it stopped, and anything that
 /// may refill the name (a new value, a line naming it or its collection) makes it usable again.
 /// </summary>
 public sealed class EmitterReuseTests
 {
     [Fact]
-    public void Analyze_SecondEachAfterFullWalk_ReportsError()
+    public void Analyze_SecondForAfterFullWalk_ReportsError()
     {
         AnalysisResult result = AnalyzeSa(source: Routine(body: """
                                                                     var it = xs.emitter()
-                                                                    each x in it
+                                                                    for x in it
                                                                         nothing
-                                                                    each x in it
+                                                                    for x in it
                                                                         nothing
                                                                 """));
         SemanticError error = Assert.Single(collection: result.Errors,
             predicate: e => e.Code == SemanticDiagnosticCode.EmitterRunOut);
-        Assert.Contains(expectedSubstring: "runs zero times: the each on line 4", actualString: error.Message);
+        Assert.Contains(expectedSubstring: "runs zero times: the for loop on line 4", actualString: error.Message);
         Assert.Contains(expectedSubstring: "var it = xs.emitter()", actualString: error.Message);
-        Assert.Contains(expectedSubstring: "each x in xs", actualString: error.Message);
+        Assert.Contains(expectedSubstring: "for x in xs", actualString: error.Message);
     }
 
     [Fact]
-    public void Analyze_EachInLoopOverEmitterMadeOutside_ReportsError()
+    public void Analyze_ForInLoopOverEmitterMadeOutside_ReportsError()
     {
         AnalysisResult result = AnalyzeSa(source: Routine(body: """
                                                                     var points = xs.emitter()
-                                                                    each q in 0 til 3
-                                                                        each point in points
+                                                                    for q in 0 til 3
+                                                                        for point in points
                                                                             nothing
                                                                 """));
         SemanticError error = Assert.Single(collection: result.Errors,
@@ -46,14 +46,14 @@ public sealed class EmitterReuseTests
     }
 
     [Fact]
-    public void Analyze_EachInUntilLoopOverEmitterMadeOutside_ReportsError()
+    public void Analyze_ForInUntilLoopOverEmitterMadeOutside_ReportsError()
     {
         AnalysisResult result = AnalyzeSa(source: Routine(body: """
                                                                     var steps = xs.emitter()
                                                                     var n: S64 = 0
                                                                     until n == 2
                                                                         n += 1
-                                                                        each s in steps
+                                                                        for s in steps
                                                                             nothing
                                                                 """));
         Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.EmitterRunOut);
@@ -63,59 +63,59 @@ public sealed class EmitterReuseTests
     // Left with break: the emitter goes on where it stopped.
     [InlineData("""
                     var it = xs.emitter()
-                    each x in it
+                    for x in it
                         if x == 2
                             break
-                    each x in it
+                    for x in it
                         nothing
                 """)]
     // A new emitter on each pass.
     [InlineData("""
-                    each q in 0 til 2
+                    for q in 0 til 2
                         var fresh = xs.emitter()
-                        each x in fresh
+                        for x in fresh
                             nothing
                 """)]
     // An emitter made in place on each pass, and the collection itself.
     [InlineData("""
-                    each q in 0 til 2
-                        each x in xs.emitter()
+                    for q in 0 til 2
+                        for x in xs.emitter()
                             nothing
-                        each x in xs
+                        for x in xs
                             nothing
                 """)]
     // Emptied on one path only.
     [InlineData("""
                     var it = xs.emitter()
                     if xs.count() > 10
-                        each x in it
+                        for x in it
                             nothing
-                    each x in it
+                    for x in it
                         nothing
                 """)]
     // Each pass leaves with break, so the emitter is not empty on the next.
     [InlineData("""
                     var it = xs.emitter()
-                    each q in 0 til 2
-                        each x in it
+                    for q in 0 til 2
+                        for x in it
                             break
                 """)]
     // A new value for the name.
     [InlineData("""
                     var it = xs.emitter()
-                    each x in it
+                    for x in it
                         nothing
                     it = xs.emitter()
-                    each x in it
+                    for x in it
                         nothing
                 """)]
     // A line naming the collection the emitter was made from may refill it.
     [InlineData("""
                     var it = xs.emitter()
-                    each x in it
+                    for x in it
                         nothing
                     drop xs.count()
-                    each x in it
+                    for x in it
                         nothing
                 """)]
     public void Analyze_EmitterUsableAgain_NoError(string body)

@@ -66,7 +66,7 @@ public sealed class WarmLeakDiagTests
         SemanticVerifier.CompiledStdlibState warm =
             SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
 
-        // Exercise the each/til → Range[U64] iterator chain: the field-init Range creator inside the
+        // Exercise the for/til → Range[U64] iterator chain: the field-init Range creator inside the
         // (generic-def) Range iterator template is exactly the +1 define that leaked across warm builds
         // when the shared snapshot template was mutated in place by on-demand SA.
         const string user = """
@@ -74,7 +74,7 @@ public sealed class WarmLeakDiagTests
                             import IO/Console
                             routine start()
                                 var total: U64 = 0
-                                each i in 0 til 5
+                                for i in 0 til 5
                                     total = total + i
                                 show(f"{total}")
                                 return

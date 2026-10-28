@@ -379,7 +379,7 @@ public class RejectedBeforeEmitterTests
                          routine start()
                              var s = Set[S64]()
                              drop s.add(1)
-                             each n in steal s
+                             for n in steal s
                                  show(n)
                              return
                          """,

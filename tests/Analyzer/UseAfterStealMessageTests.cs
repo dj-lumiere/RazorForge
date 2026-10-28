@@ -70,10 +70,10 @@ public class UseAfterStealMessageTests
             expectedErrorSubstring: "'steal' on line 7 handed what it held over to 'slot'. Use 'slot'");
     }
 
-    /// <summary>A lambda parameter is a new name: one named like an earlier <c>each</c> variable that was stolen is not
+    /// <summary>A lambda parameter is a new name: one named like an earlier <c>for</c> variable that was stolen is not
     /// that variable, so reading it in the lambda is no use after the steal.</summary>
     [Fact]
-    public void Analyze_LambdaParameterNamedLikeStolenEachVariable_IsANewName()
+    public void Analyze_LambdaParameterNamedLikeStolenForVariable_IsANewName()
     {
         AssertAnalyzesSa(source: """
                                  import IterTools
@@ -84,7 +84,7 @@ public class UseAfterStealMessageTests
                                  routine start()
                                      var crates: List[Crate] = [Crate(n: 1), Crate(n: 2)]
                                      var kept = List[Crate]()
-                                     each c in steal crates
+                                     for c in steal crates
                                          kept.add_last(steal c)
                                      var big = kept.where(c => c.n > 1).get_count()
                                      return

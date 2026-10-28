@@ -221,7 +221,7 @@ so `cd` into a solution and run `razorforge buildandrun`.
   quaternions, vectors, and SIMD `Vector[T, N]`, with checked, wrapping, and clamping arithmetic.
 - **Collections:** `List`, `Dict`, `Set`, `RotatableList`, `BitList`, `PriorityQueue`, the sorted
   collections, `SplitList` (struct of arrays), fixed-size `Array[T, N]`, and lazy iterator adapters
-  (`select`, `where`, `zip`, `enumerate`, …). Changing a collection while an `each` loop walks it is
+  (`select`, `where`, `zip`, `enumerate`, …). Changing a collection while a `for` loop walks it is
   a build error, including when the change is hidden behind a call.
 - **Text:** UTF-32 `Text`, f-strings, `Bytes` with UTF-8 helpers, and range slicing
   (`text[a til b]`). Ranges (`to` inclusive, `til` exclusive, `by` for the step) work over any ordered

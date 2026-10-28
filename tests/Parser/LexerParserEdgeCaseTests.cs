@@ -402,7 +402,7 @@ public class LexerParserEdgeCaseTests
                         routine test(items: List[S32]) -> S32
                             if true
                                 loop
-                                    each item in items
+                                    for item in items
                                         when item
                                             == 0 => return 0
                                             else => return item

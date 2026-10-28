@@ -397,7 +397,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                            each i in 0 til 10
+                            for i in 0 til 10
                                 show(i)
                             return
                         """;
@@ -406,10 +406,10 @@ public class ControlFlowTests
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         var body = routine.Body as BlockStatement;
         Assert.NotNull(@object: body);
-        EachStatement? eachStmt = body.Statements
-                                      .OfType<EachStatement>()
+        ForStatement? forStmt = body.Statements
+                                      .OfType<ForStatement>()
                                       .FirstOrDefault();
-        Assert.NotNull(@object: eachStmt);
+        Assert.NotNull(@object: forStmt);
     }
     /// <summary>
     /// Verifies that the parser accepts for range with step.
@@ -419,7 +419,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine test()
-                            each i in 0 til 100 by 5
+                            for i in 0 til 100 by 5
                                 show(i)
                             return
                         """;
@@ -435,7 +435,7 @@ public class ControlFlowTests
         string source = """
                         routine test()
                             var items = [1, 2, 3, 4, 5]
-                            each item in items
+                            for item in items
                                 show(item)
                             return
                         """;
@@ -451,7 +451,7 @@ public class ControlFlowTests
         string source = """
                         routine test()
                             var items = ["a", "b", "c"]
-                            each (index, item) in items.enumerate()
+                            for (index, item) in items.enumerate()
                                 show(f"{index}: {item}")
                             return
                         """;
@@ -466,7 +466,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine find_first(items: List[S32], target: S32)
-                            each item in items
+                            for item in items
                                 if item == target
                                     show("Found!")
                                     break
@@ -483,7 +483,7 @@ public class ControlFlowTests
     {
         string source = """
                         routine process_valid(items: List[S32])
-                            each item in items
+                            for item in items
                                 if item < 0
                                     continue
                                 process(item)
@@ -500,8 +500,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine matrix()
-                            each i in 0 til 10
-                                each j in 0 til 10
+                            for i in 0 til 10
+                                for j in 0 til 10
                                     show(f"{i},{j}")
                             return
                         """;
@@ -605,6 +605,57 @@ public class ControlFlowTests
             Assert.Equal(expected: GrammarDiagnosticCode.PassLine, actual: e.Code);
             Assert.Equal(expected: "nothing", actual: e.Fix?.Edits[index: 0].NewText);
         });
+    }
+
+    /// <summary>
+    /// A loop written with <c>each</c> is RF-G229 with the quick fix <c>for</c>, and the parser reads it as the
+    /// <c>for</c> loop it means, so the rest of the file is still checked.
+    /// </summary>
+    [Fact]
+    public void Parse_EachLoopIsG229WithForFix()
+    {
+        string source = """
+                        routine total(xs: List[S64]) -> S64
+                            var sum: S64 = 0
+                            each x in xs
+                                sum += x
+                            each (i, x) in xs.enumerate()
+                                sum += x
+                            return sum
+                        """;
+
+        (Program program, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
+        IReadOnlyList<GrammarException> errors = parser.GetStructuredErrors();
+        Assert.Equal(expected: 2, actual: errors.Count);
+        Assert.All(collection: errors, action: e =>
+        {
+            Assert.Equal(expected: GrammarDiagnosticCode.EachKeyword, actual: e.Code);
+            Assert.Contains(expectedSubstring: "written `for x in xs`", actualString: e.Message);
+            Assert.Equal(expected: "for", actual: e.Fix?.Edits[index: 0].NewText);
+        });
+        RoutineDeclaration routine = program.Declarations.OfType<RoutineDeclaration>().Single();
+        Assert.Equal(expected: 2, actual: ((BlockStatement)routine.Body).Statements.OfType<ForStatement>().Count());
+    }
+
+    /// <summary>
+    /// <c>for</c> is the loop over a range or a collection, with a tuple pattern and a step too.
+    /// </summary>
+    [Fact]
+    public void Parse_ForLoopForms()
+    {
+        string source = """
+                        routine total(xs: List[S64]) -> S64
+                            var sum: S64 = 0
+                            for x in xs
+                                sum += x
+                            for (i, x) in xs.enumerate()
+                                sum += x
+                            for i in 0 til 10 by 2
+                                sum += i
+                            return sum
+                        """;
+
+        AssertParses(source: source);
     }
 
     /// <summary>
@@ -715,8 +766,8 @@ public class ControlFlowTests
     {
         string source = """
                         routine process_matrix(matrix: List[List[S32]])
-                            each row in matrix
-                                each cell in row
+                            for row in matrix
+                                for cell in row
                                     if cell < 0
                                         continue
                                     if cell > 100
@@ -736,7 +787,7 @@ public class ControlFlowTests
     {
         string source = """
                         failable routine search(items: List[S32], target: S32) -> S32
-                            each (index, item) in items.enumerate()
+                            for (index, item) in items.enumerate()
                                 if item == target
                                     return index
                             throw AbsentValueError()

@@ -90,7 +90,7 @@ Wide renames that make the surface read as intended. Same programs, clearer word
 - **A generic parameter's identity is its slot, not its name.** A user type whose name collides with a
   stdlib generic's parameter (`record T` vs `List[T]`) no longer breaks that generic — the whole
   `record T` / `record N` / `record M` collision class is fixed.
-- **`@migratable` → `@reshaping`** (the container-mutation marker driving the each-loop reshaping ban).
+- **`@migratable` → `@reshaping`** (the container-mutation marker driving the for-loop reshaping ban).
 - **`Field` → `MemberVariable`, `Method` → `MemberRoutine`, `Copy` → `Store`, `Blank` → `None`.**
 - Routine names are canonically **bare**: failability (`!`) and type arguments (`[...]`) are structured
   attributes, not part of the name string.

@@ -149,12 +149,12 @@ public class TupleTests
     /// Verifies semantic analysis behavior for for loop destructuring non tuple and reports the expected error.
     /// </summary>
     [Fact]
-    public void Analyze_EachLoopDestructuring_NonTuple_ReportsError()
+    public void Analyze_ForLoopDestructuring_NonTuple_ReportsError()
     {
         // Destructuring on non-tuple iterable (range produces integers, not tuples)
         string source = """
                         routine test()
-                            each (a, b) in 0 til 10
+                            for (a, b) in 0 til 10
                                 var x = a
                             return
                         """;

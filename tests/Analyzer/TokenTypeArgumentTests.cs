@@ -40,7 +40,7 @@ public class TokenTypeArgumentTests
 
                                         routine Q.destruct()
                                             modifying KEPT as k
-                                                each v in me.held
+                                                for v in me.held
                                                     k.add_last(value: v)
                                             return
 
@@ -185,9 +185,9 @@ public class TokenTypeArgumentTests
                                                        show("none")
                                                    else as c =>
                                                        show(f"{c.n}")
-                                               each pair in cells.enumerate()
+                                               for pair in cells.enumerate()
                                                    show(f"{pair.item0}")
-                                               each (i, c) in cells.enumerate()
+                                               for (i, c) in cells.enumerate()
                                                    show(f"{i} {c.n}")
                                                return
                                            """);

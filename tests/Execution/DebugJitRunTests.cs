@@ -24,7 +24,7 @@ public sealed partial class DebugJitRunTests
 
                                    routine total(upto: S64) -> S64
                                        var sum: S64 = 0
-                                       each i in 1 to upto
+                                       for i in 1 to upto
                                            sum += i
                                        return sum
 

@@ -7,9 +7,9 @@ using static TestHelpers;
 
 /// <summary>
 /// Regression coverage for the RF-S625 (<see cref="SemanticDiagnosticCode.ReshapingDuringIteration"/>)
-/// ban: calling a <c>@reshaping</c> member routine on the very collection an <c>each</c> loop is iterating
+/// ban: calling a <c>@reshaping</c> member routine on the very collection a <c>for</c> loop is iterating
 /// is rejected (the next element could no longer be the real next element). This check was DEAD CODE for a
-/// while — the surface <c>EachStatement</c> is lowered to an iterator+<c>while</c> before body analysis, so
+/// while — the surface <c>ForStatement</c> is lowered to an iterator+<c>while</c> before body analysis, so
 /// the iteration-source set was never populated on real loops — and was revived by threading
 /// <c>LoopStatement.IterationSourceName</c> through the lowering. These tests lock that revival: the ban
 /// must fire on the iterated collection, and must NOT fire on a different collection, a read-only call, or
@@ -23,7 +23,7 @@ public sealed class ReshapingIterationTests
     {
         string source = """
                         routine grow(items: List[S32])
-                            each item in items
+                            for item in items
                                 items.add_last(value: item)
                             return
                         """;
@@ -39,7 +39,7 @@ public sealed class ReshapingIterationTests
     {
         string source = """
                         routine copy_into(items: List[S32], other: List[S32])
-                            each item in items
+                            for item in items
                                 other.add_last(value: item)
                             return
                         """;
@@ -56,7 +56,7 @@ public sealed class ReshapingIterationTests
         string source = """
                         routine count_while_iterating(items: List[S32]) -> U64
                             var n: U64 = 0
-                            each item in items
+                            for item in items
                                 n = items.count()
                             return n
                         """;
@@ -73,7 +73,7 @@ public sealed class ReshapingIterationTests
         string source = """
                         routine grow_after(items: List[S32])
                             var n: U64 = 0
-                            each item in items
+                            for item in items
                                 n = n + 1
                             items.add_last(value: 0)
                             return

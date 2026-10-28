@@ -63,6 +63,8 @@ file only once its other old spellings are gone.
 - A loop is `until c` (it stops when `c` becomes true) or `loop` (it ends only with `break`, `return` or `throw`).
   `while` is not a keyword: `while c` is `RF-G224` (`migrate --step until` turns integer comparisons around and
   lists the rest). A loop takes no `else` (`RF-G219`). A loop's `then` block runs after `break` too.
+- The loop over a range or a collection is `for x in xs`. `each` is a reserved word: `each x in xs` is `RF-G229`
+  (default `migrate`, `migrate --step for`).
 - A line with no work is `nothing`. `pass` is `RF-G225` (`migrate --step nothing`). A type declaration with an empty
   body is `RF-S211` (write `nothing` under the header).
 - A number takes its type from where it goes or from its declaration (`var x: U8 = 5`). Type suffixes (`0_s64`,
@@ -110,9 +112,9 @@ file only once its other old spellings are gone.
 - A local handed over inside a `return` (`return Shelf(book: book)`) moves without `steal`. `steal` there is a
   warning, `RF-W259`, whose quick fix removes it (`migrate --step return-steal`).
 - The same routine declared twice in one standard library or program file is a build error (`RF-S406`).
-- An `each` over an emitter that has run out is `RF-S517`: a second `each` over a named emitter after one that ended
-  by itself, or an `each` inside a loop over an emitter made outside it. Such a loop ran zero times. Make a new
-  `xs.emitter()` just before the loop, or write `each x in xs`.
+- A `for` over an emitter that has run out is `RF-S517`: a second `for` over a named emitter after one that ended
+  by itself, or a `for` inside a loop over an emitter made outside it. Such a loop ran zero times. Make a new
+  `xs.emitter()` just before the loop, or write `for x in xs`.
 
 **Sharing and access**
 - `Assignable` is gone. `=` copies a record, and copying a handle makes one more handle to the same entity. Default
@@ -135,10 +137,10 @@ file only once its other old spellings are gone.
 - Keeping an entity in a second place without a manager is `RF-S413`. Hand it over with `steal`, on every path or
   on none (`RF-S616`). A name `steal` emptied takes a new value with `=`, and the builder tears that value down at
   the end of the scope.
-- Changing a container's shape while an `each` loop or an element statement uses it is a build error (`RF-S625`,
+- Changing a container's shape while a `for` loop or an element statement uses it is a build error (`RF-S625`,
   `RF-S639`), and so is holding an element while another token changes a container of the same kind (`RF-S640`) or
-  passing one container twice in a call (`RF-S623`). An `each` over a token (`var w = a.view()`, `viewing a as w`, a
-  token a routine gives back) guards the containers it is on: `a.add_last(...)` inside `each x in w` is `RF-S625`.
+  passing one container twice in a call (`RF-S623`). A `for` over a token (`var w = a.view()`, `viewing a as w`, a
+  token a routine gives back) guards the containers it is on: `a.add_last(...)` inside `for x in w` is `RF-S625`.
 - `Array[T, N]()` with a `T` that has no zero value is `RF-S641`.
 - A lazy adapter is used in the statement that makes it. The elements of a loop over a read token are read-only.
 - A routine that returns a token may return one from `me` or from any of its token parameters. The caller's token
@@ -154,7 +156,7 @@ file only once its other old spellings are gone.
   takes `steal` (`RF-S413`). `RF-S632` follows a Work's argument into an entity's member variables, a collection's
   elements, a channel end's items, a lambda's captures and a routine value handed on to a Work, and a global holding
   `Retained` or `Tracked` is `RF-S632`. `modifying G` on a global entity that is not a `Guarded` is `RF-S256`, `steal G`
-  is `RF-S421`. An `each` over an adapter (`xs.where(...)`) guards `xs` against reshaping (`RF-S625`), and so does a
+  is `RF-S421`. A `for` over an adapter (`xs.where(...)`) guards `xs` against reshaping (`RF-S625`), and so does a
   lambda that reshapes the container its routine walks. A binding taken in a loop turn that reaches `continue` is
   `RF-S616`.
 - A routine value taken from a `dangerous` routine is a dangerous callable. It goes only to a `Callable` parameter of
@@ -191,7 +193,7 @@ file only once its other old spellings are gone.
   it holds the one original or nothing, is handed over with `steal`, and is the entity's address alone, null for
   `none`. `try f(x)` gives a `T?`. `Maybe` is an unknown type whose error names `Optional[T]` and `T?`, and
   `migrate --step type-names` renames it. `DictEntry` is gone: a dictionary entry is the tuple `(TKey, TValue)`
-  (`each (k, v) in d`, `e.item0`, `e.item1`).
+  (`for (k, v) in d`, `e.item0`, `e.item1`).
 
 **Standard library**
 - A module is its folder. The base module is `System` (it was `Core`) and every file sees it and the modules under
@@ -229,7 +231,7 @@ file only once its other old spellings are gone.
   in `[0, 1)` (the top 24 / 53 bits of a draw). `next[U32]()` and `next[B64]()` give the same values the old routines
   did for the same seed. An old name is a build error that names the new form, and default `migrate` and
   `migrate --step random` rewrite it.
-- `Dict.items()` gives `(key, value)` tuples: `each (k, v) in d.items()` (default `migrate` lists the `entries()`
+- `Dict.items()` gives `(key, value)` tuples: `for (k, v) in d.items()` (default `migrate` lists the `entries()`
   loops). `d[k] = v` adds a missing key, and `d.add(key:, value:)` is rewritten to it.
 - `PriorityQueue` holds `(priority, element)` tuples and has `unordered`, `ordered` and `drain`. `PQEntry` is
   gone.
@@ -289,7 +291,7 @@ file only once its other old spellings are gone.
 
 **Standard library**
 - `to[Slots[T, N]]()` collects a walk into `Slots`, failing like `to[Items[T, N]]()` when the count differs. For a
-  list of entities, take the list: `(steal items).to[Slots[Item, 3]]()`. `each x in steal slots` takes a `Slots`
+  list of entities, take the list: `(steal items).to[Slots[Item, 3]]()`. `for x in steal slots` takes a `Slots`
   apart, and `Slots` has `==` and `<=>` when its elements do.
 - `x.rsqrt()` is 1 / sqrt(x) rounded once (not `1 / x.sqrt()`, which rounds twice) on `B16`, `BF16`, `B32`, `B64`,
   `B128`, `D32`, `D64`, `D128` and `Decimal`. `x <= 0` crashes like the other checked float math (raw:
@@ -407,7 +409,7 @@ file only once its other old spellings are gone.
 - `S128_MIN.to[B128]()` and `S256_MIN.to[B128]()` crashed. `B128.rem` crashed on operands near the top of the
   range.
 - Soundness holes are closed: a global that reads itself in its initializer, a preset defined from itself and two
-  globals whose `destruct`s read each other are `RF-S436`. A name bound by a pattern or an `each` loop ends with the
+  globals whose `destruct`s read each other are `RF-S436`. A name bound by a pattern or a `for` loop ends with the
   place it came from. `ByteSize` multiplication checks for overflow. An entity a routine receives through a bare
   generic parameter and does not keep is torn down by that routine, on failure paths too, so it no longer leaks.
 - A range that reaches the ends of its type runs to the end and stops there.

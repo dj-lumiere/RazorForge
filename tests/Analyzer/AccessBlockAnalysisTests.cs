@@ -361,7 +361,7 @@ public class AccessBlockAnalysisTests
         string source = """
                         routine merge(into: Modifying[List[S64]], from: Viewing[List[S64]])
                             modifying into, viewing from
-                                each v in from
+                                for v in from
                                     into.add_last(value: v)
                             return
                         """;

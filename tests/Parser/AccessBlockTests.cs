@@ -297,7 +297,7 @@ public class AccessBlockTests
         string source = """
                         failable routine test()
                             using open_file("data.txt") as file
-                                each line in file.lines()
+                                for line in file.lines()
                                     if line.starts_with("#")
                                         continue
                                     process_line(line)
@@ -314,7 +314,7 @@ public class AccessBlockTests
     {
         string source = """
                         failable routine process_files(paths: List[Text])
-                            each path in paths
+                            for path in paths
                                 using open_file(path) as file
                                     var content = file.read_all()
                                     if not (content.is_empty())
@@ -379,7 +379,7 @@ public class AccessBlockTests
 
                             viewing local as l
                                 modifying shared as s
-                                    each item in l.items
+                                    for item in l.items
                                         s.add(item.clone())
 
                             viewing shared as r

@@ -5,7 +5,7 @@ import BuilderQuery
 ###
 ### `Slots[T, COUNT]` has the same layout as `Items[T, COUNT]`: `COUNT` elements packed into its own footprint, kept
 ### wherever what holds it is kept. It is an entity: it has one original, never
-### copied by `=`, and handed over with `steal`. An element is read in place (`slots[i].field`, `each e in slots`),
+### copied by `=`, and handed over with `steal`. An element is read in place (`slots[i].field`, `for e in slots`),
 ### replaced with `steal slots[i] as old inject fresh`, and two elements trade places with `swap`. No place is ever
 ### empty: every element is torn down once, with the `Slots`.
 ###
@@ -37,7 +37,7 @@ needs U64 COUNT
     secret index: U64
 
 ### Walks the elements of a `Slots[T, COUNT]` from index 0 to N - 1 and hands each one over: what
-### `each x in steal slots` walks. The elements it has not handed over end with it.
+### `for x in steal slots` walks. The elements it has not handed over end with it.
 ### :typeparam T: The element type.
 ### :typeparam COUNT: The buildtime element count.
 entity SlotsTakingEmitter[T, COUNT]
@@ -203,7 +203,7 @@ routine Slots[T, COUNT].is_empty() -> Bool
 @readonly
 routine Slots[T, COUNT].has(value: T) -> Bool
 needs T obeys Equatable
-    each i in 0 til COUNT
+    for i in 0 til COUNT
         if me.get_raw(index: i) == value
             return true
     return false
@@ -223,7 +223,7 @@ needs T obeys Equatable
 @readonly
 failable routine Slots[T, COUNT].index_of(value: T) -> U64
 needs T obeys Equatable
-    each i in 0 til COUNT
+    for i in 0 til COUNT
         if me.get_raw(index: i) == value
             return i
     throw AbsentValueError()
@@ -254,7 +254,7 @@ failable routine SlotsEmitter[T, COUNT].emit() -> T
 @override
 routine Slots[T, COUNT].represent() -> Text
     var result = "["
-    each i in 0 til COUNT
+    for i in 0 til COUNT
         if i > 0
             result = result + ", "
         result = result + nested_repr(me.get_raw(index: i))
@@ -267,7 +267,7 @@ routine Slots[T, COUNT].represent() -> Text
 @override
 routine Slots[T, COUNT].diagnose() -> Text
     var result = me.full_type_name() + "(["
-    each i in 0 til COUNT
+    for i in 0 til COUNT
         if i > 0
             result = result + ", "
         result = result + nested_diagnose(me.get_raw(index: i))
@@ -275,7 +275,7 @@ routine Slots[T, COUNT].diagnose() -> Text
     return result
 
 ### Hands the elements over to a walk and leaves these places holding nothing (all zero), so their own teardown
-### ends nothing: what `each x in steal slots` and `(steal slots).emitter()` walk.
+### ends nothing: what `for x in steal slots` and `(steal slots).emitter()` walk.
 ### :returns: The walk.
 routine Slots[T, COUNT].take_each() -> SlotsTakingEmitter[T, COUNT]
     danger
@@ -299,7 +299,7 @@ failable routine SlotsTakingEmitter[T, COUNT].emit() -> T
 @override
 routine SlotsTakingEmitter[T, COUNT].destruct()
     danger
-        each i in me.index til COUNT
+        for i in me.index til COUNT
             LLVM::load_element_ref[Slots[T, COUNT], T](me.data.hijack(), i).destruct()
     return
 
@@ -310,7 +310,7 @@ routine SlotsTakingEmitter[T, COUNT].destruct()
 @readonly
 routine Slots[T, COUNT].eq(you: Viewing[Slots[T, COUNT]]) -> Bool
 needs T obeys Equatable
-    each i in 0 til COUNT
+    for i in 0 til COUNT
         if me.get_raw(index: i) != you.get_raw(index: i)
             return false
     return true
@@ -324,7 +324,7 @@ needs T obeys Equatable
 @readonly
 routine Slots[T, COUNT].compare(you: Viewing[Slots[T, COUNT]]) -> ComparisonSign
 needs T obeys Comparable
-    each i in 0 til COUNT
+    for i in 0 til COUNT
         var sign = me.get_raw(index: i).compare(you.get_raw(index: i))
         if sign != SAME
             return sign

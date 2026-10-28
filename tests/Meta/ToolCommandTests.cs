@@ -131,7 +131,7 @@ public sealed class ToolCommandTests : IDisposable
             @memory_limit(64kib)
             routine small_heap()
                 var xs = List[S64]()
-                each i in 0 til 100
+                for i in 0 til 100
                     xs.add_last(i)
                 verify(xs.count() == 100)
                 return
@@ -140,7 +140,7 @@ public sealed class ToolCommandTests : IDisposable
             @memory_limit(64kib)
             routine large_heap()
                 var xs = List[S64]()
-                each i in 0 til 100_000
+                for i in 0 til 100_000
                     xs.add_last(i)
                 verify(xs.count() == 100_000)
                 return

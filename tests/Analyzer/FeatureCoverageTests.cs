@@ -229,7 +229,7 @@ public class FeatureCoverageTests
     }
 
     [Fact]
-    public void EachLoop_OverRangeAndCollection_Compiles()
+    public void ForLoop_OverRangeAndCollection_Compiles()
     {
         const string source = """
                               module Test/Feat/Each
@@ -237,10 +237,10 @@ public class FeatureCoverageTests
 
                               routine start()
                                   var total = 0
-                                  each x in 1 to 5
+                                  for x in 1 to 5
                                       total = total + x
                                   var xs: List[S64] = [10, 20, 30]
-                                  each v in xs
+                                  for v in xs
                                       total = total + v
                                   show(f"{total}")
                                   return
@@ -261,7 +261,7 @@ public class FeatureCoverageTests
                               needs RecordType T
                               needs T obeys Equatable, Hashable
                                   var s: Set[T] = Set[T]()
-                                  each x in items
+                                  for x in items
                                       drop s.add(value: x)
                                   return s.has(target)
 
@@ -525,7 +525,7 @@ public class FeatureCoverageTests
                               import IO/Console
 
                               routine start()
-                                  each x in 1 to 10
+                                  for x in 1 to 10
                                       if x == 3
                                           continue
                                       if x > 5

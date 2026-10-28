@@ -48,7 +48,7 @@ public sealed class WarmRestoreReproTests
                             import Collections.RotatableList
                             routine start()
                                 var d: RotatableList[S32] = [1, 2, 3]
-                                each v in d
+                                for v in d
                                     show(f"{v}")
                                 return
                             """;

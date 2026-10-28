@@ -152,7 +152,7 @@ public class GenericParamCollisionTests
                                routine List[Box[T]].items() -> List[T]
                                needs RecordType T
                                    var out = List[T]()
-                                   each b in me
+                                   for b in me
                                        out.add_last(value: b.item)
                                    return steal out
 

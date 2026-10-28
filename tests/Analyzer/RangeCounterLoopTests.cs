@@ -6,7 +6,7 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// An `each` over a range literal of an integer type counts with a local instead of walking a range emitter, so the
+/// A `for` over a range literal of an integer type counts with a local instead of walking a range emitter, so the
 /// lowered body asks no emitter for values. A range over another type, and a range kept in a variable, still walk
 /// one. What the loops yield is checked by tests/Fixtures/Stdlib/range_counter_api.rf.
 /// </summary>
@@ -38,7 +38,7 @@ public sealed class RangeCounterLoopTests
         string source = """
                         routine walk(n: S64)
                             var kept = 0 til n
-                            each i in kept
+                            for i in kept
                                 nothing
                             return
                         """;
@@ -51,7 +51,7 @@ public sealed class RangeCounterLoopTests
     private static RoutineDeclaration AnalyzedWalk(string range)
     {
         string source = "routine walk(n: S64, step: S64)\n" +
-                        $"    each i in {range}\n" +
+                        $"    for i in {range}\n" +
                         "        nothing\n" +
                         "    return\n";
         (AnalysisResult result, Program program) = AnalyzeSaProgram(source: source);

@@ -29,12 +29,12 @@ public class IterPrivacyTests
     }
 
     [Fact]
-    public void EachLoop_OverList_Resolves()
+    public void ForLoop_OverList_Resolves()
     {
         string source = """
                         routine start()
                             var xs = [1, 2, 3]
-                            each x in xs
+                            for x in xs
                                 return
                             return
                         """;

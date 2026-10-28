@@ -1700,8 +1700,8 @@ public class CompilerPipelineLoweringTests
             WhileStatement whileStmt => ContainsLambda(expression: whileStmt.Condition) ||
                                         ContainsLambda(statement: whileStmt.Body),
             LoopStatement loop => ContainsLambda(statement: loop.Body),
-            EachStatement eachStmt => ContainsLambda(expression: eachStmt.Iterable) ||
-                                      ContainsLambda(statement: eachStmt.Body),
+            ForStatement forStmt => ContainsLambda(expression: forStmt.Iterable) ||
+                                      ContainsLambda(statement: forStmt.Body),
             WhenStatement whenStmt => ContainsLambda(expression: whenStmt.Expression) ||
                                       whenStmt.Clauses.Any(predicate: clause =>
                                           ContainsLambda(statement: clause.Body)),
@@ -2026,8 +2026,8 @@ public class CompilerPipelineLoweringTests
                 }
 
                 yield break;
-            case EachStatement eachStmt:
-                foreach (Expression e in EnumerateExpressions(statement: eachStmt.Body))
+            case ForStatement forStmt:
+                foreach (Expression e in EnumerateExpressions(statement: forStmt.Body))
                 {
                     yield return e;
                 }

@@ -27,7 +27,7 @@ public class EmitterTokenTests
                                       var xs: List[S64] = [1, 2, 3]
                                       var it = xs.emitter()
                                       show(f"{it.emit()}")
-                                      each x in it
+                                      for x in it
                                           show(f"{x}")
                                       return
                                   """;
@@ -61,7 +61,7 @@ public class EmitterTokenTests
                                       var xs: List[S64] = [1, 2, 3]
                                       var big = xs.where(predicate: v => v > 1)
                                       xs.add_last(value: 4)
-                                      each b in big
+                                      for b in big
                                           show(f"{b}")
                                       return
                                   """;
@@ -79,7 +79,7 @@ public class EmitterTokenTests
                                       var xs: List[S64] = [1, 2, 3]
                                       var taken = (steal xs).emitter()
                                       xs = [9]
-                                      each t in taken
+                                      for t in taken
                                           show(f"{t}")
                                       return
                                   """;
@@ -102,7 +102,7 @@ public class EmitterTokenTests
                                       var xs: List[S64] = [1, 2, 3]
                                       var it = walk(xs: xs)
                                       show(f"{it.emit()}")
-                                      each b in big(xs: xs)
+                                      for b in big(xs: xs)
                                           show(f"{b}")
                                       return
                                   """;
@@ -155,7 +155,7 @@ public class EmitterTokenTests
 
                                   routine start()
                                       var t = taken()
-                                      each n in t
+                                      for n in t
                                           show(n)
                                       return
                                   """;
@@ -176,7 +176,7 @@ public class EmitterTokenTests
 
                                   routine start()
                                       var it = walk()
-                                      each x in it
+                                      for x in it
                                           show(f"{x}")
                                       return
                                   """;

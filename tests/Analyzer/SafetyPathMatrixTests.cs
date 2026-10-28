@@ -237,7 +237,7 @@ public class SafetyPathMatrixTests
         AssertHasErrorCode(source: """
                            routine work(rx: Receiver[Retained[Cell]]) -> S64
                                var sum = 0
-                               each c in rx
+                               for c in rx
                                    sum += c.n
                                return sum
 
@@ -308,7 +308,7 @@ public class SafetyPathMatrixTests
         AssertHasErrorCode(source: """
                            routine start()
                                var xs: List[S64] = [1, 2, 3]
-                               each x in xs.where(predicate: y => y > 0)
+                               for x in xs.where(predicate: y => y > 0)
                                    xs.add_last(value: x)
                                return
                            """,
@@ -395,7 +395,7 @@ public class SafetyPathMatrixTests
 
                            routine start()
                                var a = Cell(n: 42)
-                               each i in 0 til 3
+                               for i in 0 til 3
                                    if i == 1
                                        consume(c: steal a)
                                        continue
@@ -459,7 +459,7 @@ public class SafetyPathMatrixTests
 
                                            routine start()
                                                var xs: List[S64] = [1, 2, 3]
-                                               each x in xs.duplicate()
+                                               for x in xs.duplicate()
                                                    xs.add_last(value: x)
                                                var kept = keep(x: Cell(n: 2))
                                                var c = Cell(n: 3)

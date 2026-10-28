@@ -6,7 +6,7 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// An <c>each</c> loop over a token goes through the container the token is on (intent C68): changing that container's
+/// A <c>for</c> loop over a token goes through the container the token is on (intent C68): changing that container's
 /// shape in the loop is RF-S625, for a token from <c>xs.view()</c>, from a <c>viewing</c> block, and from a routine that
 /// may give back any of the tokens handed to it.
 /// </summary>
@@ -26,7 +26,7 @@ public class TokenLoopShapeTests
                            routine start()
                                var a: List[S64] = [1, 2, 3]
                                var w = a.view()
-                               each x in w
+                               for x in w
                                    a.add_last(value: x)
                                return
                            """, expected: "'w' is a token on 'a'");
@@ -39,7 +39,7 @@ public class TokenLoopShapeTests
                            routine start()
                                var a: List[S64] = [1, 2, 3]
                                viewing a as w
-                                   each x in w
+                                   for x in w
                                        a.add_last(value: x)
                                return
                            """, expected: "'w' is a token on 'a'");
@@ -58,7 +58,7 @@ public class TokenLoopShapeTests
                                var a: List[S64] = [1, 2, 3]
                                var b: List[S64] = [4]
                                var w = shorter(x: a.view(), y: b.view())
-                               each x in w
+                               for x in w
                                    b.add_last(value: x)
                                return
                            """, expected: "'w' is a token on 'b'");
@@ -72,7 +72,7 @@ public class TokenLoopShapeTests
                              var a: List[S64] = [1, 2, 3]
                              var b: List[S64] = []
                              var w = a.view()
-                             each x in w
+                             for x in w
                                  b.add_last(value: x)
                              return
                          """);

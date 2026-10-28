@@ -63,7 +63,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         failable routine find(items: List[S32], target: S32) -> S32
-                            each item in items
+                            for item in items
                                 if item == target
                                     return item
                             throw AbsentValueError()
@@ -152,7 +152,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                            each i in 0 til 10
+                            for i in 0 til 10
                                 if i == 5
                                     break
                             return
@@ -169,7 +169,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                            each i in 0 til 10
+                            for i in 0 til 10
                                 if i == 5
                                     continue
                                 show(i)

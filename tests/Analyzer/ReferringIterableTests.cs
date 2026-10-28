@@ -59,7 +59,7 @@ public class ReferringIterableTests
 
     /// <summary>Verifies for-loop over Viewing[Iterable[T]] does not trigger S205.</summary>
     [Fact]
-    public void EachLoop_Over_Referring_Iterable_NoS205()
+    public void ForLoop_Over_Referring_Iterable_NoS205()
     {
         // The transparent-protocol unwrap in GetIterableElementType lets us
         // iterate a `Viewing[Iterable[T]]` directly — the for-loop sees
@@ -69,7 +69,7 @@ public class ReferringIterableTests
                         import IO/Console
                         routine sum_it(xs: Viewing[Emittable[S64]]) -> S64
                             var total = 0
-                            each x in xs
+                            for x in xs
                                 total = total + x
                             return total
                         """;
@@ -81,7 +81,7 @@ public class ReferringIterableTests
 
     /// <summary>Verifies for-loop over bare Iterable[T] does not trigger S205.</summary>
     [Fact]
-    public void EachLoop_Over_Bare_Iterable_NoS205()
+    public void ForLoop_Over_Bare_Iterable_NoS205()
     {
         // Bare Iterable[T] (no Viewing wrap) must also iterate — the element
         // type comes from the protocol's first type-argument.
@@ -90,7 +90,7 @@ public class ReferringIterableTests
                         import IO/Console
                         routine count_it(xs: Emittable[S64]) -> S64
                             var n = 0
-                            each x in xs
+                            for x in xs
                                 n = n + 1
                             return n
                         """;

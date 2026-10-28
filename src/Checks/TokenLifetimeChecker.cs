@@ -864,17 +864,17 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
     {
         private readonly HashSet<string> _reported = new(comparer: StringComparer.Ordinal);
 
-        /// <summary>The iterators of `each` loops over a read token (`each item in v` with `v: Viewing[List[T]]`).</summary>
+        /// <summary>The iterators of `for` loops over a read token (`for item in v` with `v: Viewing[List[T]]`).</summary>
         private readonly HashSet<string> _readIterators = new(comparer: StringComparer.Ordinal);
 
         /// <summary>The loop variables those iterators hand out, while their loop body runs: an element seen
         /// through a read token is read-only too.</summary>
         private readonly HashSet<string> _readElements = new(comparer: StringComparer.Ordinal);
 
-        /// <summary>The containers each `each` loop's iterator (`_lf_iter_N`) walks, as source paths.</summary>
+        /// <summary>The containers each `for` loop's iterator (`_lf_iter_N`) walks, as source paths.</summary>
         private readonly Dictionary<string, HashSet<string>> _iteratorSources = new(comparer: StringComparer.Ordinal);
 
-        /// <summary>The step value of an `each` loop (`_lf_elem_M` of `each (i, d) in xs.enumerate()`) with the
+        /// <summary>The step value of a `for` loop (`_lf_elem_M` of `for (i, d) in xs.enumerate()`) with the
         /// containers its tokens come from: `d`, read as `_lf_elem_M.item1`, is an element of `xs`.</summary>
         private readonly Dictionary<string, HashSet<string>> _stepElements = new(comparer: StringComparer.Ordinal);
         private readonly Stack<(List<State?> Breaks, List<State?> Continues)> _loops = new();
@@ -1216,7 +1216,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     bool walkToken = !v.Name.StartsWith(value: "_lf_", comparisonType: StringComparison.Ordinal) &&
                                      v.Initializer is { } walkInit && IsWalkToken(walk: walkInit);
 
-                    // `each item in v` over a read token starts with `var _lf_iter_N = v.iter()`.
+                    // `for item in v` over a read token starts with `var _lf_iter_N = v.iter()`.
                     if (v.Initializer is CallExpression
                         {
                             Callee: MemberExpression { Object: var iterated, MemberName: "emitter" }
@@ -1227,14 +1227,14 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                         _readIterators.Add(item: v.Name);
                     }
 
-                    // An `each` loop over a chain (`xs.enumerate()`) names the chain first (`_lf_src_N`).
+                    // A `for` loop over a chain (`xs.enumerate()`) names the chain first (`_lf_src_N`).
                     if (v.Name.StartsWith(value: "_lf_src_", comparisonType: StringComparison.Ordinal) &&
                         v.Initializer is { } chain && WalkedContainers(walked: chain) is { } chainPaths)
                     {
                         _iteratorSources[key: v.Name] = chainPaths;
                     }
 
-                    // An `each` loop's iterator remembers what it walks, so a token in its step value comes from there.
+                    // A `for` loop's iterator remembers what it walks, so a token in its step value comes from there.
                     if (v.Initializer is CallExpression
                         {
                             Callee: MemberExpression { Object: var walked, MemberName: "emitter" }
@@ -1341,7 +1341,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     Expr(expr: whenStmt.Expression);
                     State entry = _state.Clone();
                     State? merged = entry.Clone();
-                    // The step of an `each` loop over a read token (`try _lf_iter_N.emit()`) binds a read-only element.
+                    // The step of a `for` loop over a read token (`try _lf_iter_N.emit()`) binds a read-only element.
                     Expression step = whenStmt.Expression is RecoveryExpression recovery
                         ? recovery.LoweredCall ?? recovery.Inner
                         : whenStmt.Expression;
@@ -1355,7 +1355,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     HashSet<string>? stepSources = stepIter != null
                         ? _iteratorSources.GetValueOrDefault(key: stepIter)
                         : null;
-                    // What the arms' names reach in place: an element of what an `each` loop walks, or the place
+                    // What the arms' names reach in place: an element of what a `for` loop walks, or the place
                     // being matched (`when slot.item`, `when v`).
                     HashSet<string>? matched = stepSources != null
                         ? stepSources.Select(selector: w => Join(path: w, suffix: "[]"))
@@ -1623,7 +1623,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 return;
             }
 
-            // A token in an `each` step value (`var d = _lf_elem_M.item1`) is an element of what the loop walks.
+            // A token in a `for` step value (`var d = _lf_elem_M.item1`) is an element of what the loop walks.
             HashSet<string> origins = Unwrap(expr: value) is MemberExpression
             {
                 Object: IdentifierExpression { Name: var stepName }
@@ -1679,7 +1679,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             return paths;
         }
 
-        /// <summary>The containers an `each` loop walks, from what its iterator is made of: `xs` for `xs.iter()`, and
+        /// <summary>The containers a `for` loop walks, from what its iterator is made of: `xs` for `xs.iter()`, and
         /// for an adapter chain on a held place (`xs.enumerate().iter()`, `xs.view().where(...)`) the place the chain
         /// starts from. Null when the chain starts from anything else (a temporary, a call result), whose source the
         /// builder cannot tell.</summary>

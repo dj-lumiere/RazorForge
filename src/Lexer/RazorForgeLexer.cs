@@ -46,9 +46,11 @@ public partial class RazorForgeLexer
     /// </summary>
     private readonly Dictionary<string, TokenType> _keywords;
 
-    /// <summary>Every word this lexer reserves as a keyword (what the Language Server offers as completions).</summary>
+    /// <summary>Every word this lexer reserves as a keyword (what the Language Server offers as completions). The retired
+    /// <c>for</c> stays reserved but is not offered.</summary>
     public static IReadOnlyList<string> KeywordSpellings { get; } =
-        new RazorForgeLexer(source: "", fileName: "<keywords>")._keywords.Keys.Order(comparer: StringComparer.Ordinal).ToList();
+        new RazorForgeLexer(source: "", fileName: "<keywords>")._keywords
+            .Where(predicate: k => k.Value != TokenType.Each).Select(selector: k => k.Key).Order(comparer: StringComparer.Ordinal).ToList();
 
     #endregion
 
@@ -201,6 +203,8 @@ public partial class RazorForgeLexer
             [key: "when"] = TokenType.When,
             [key: "is"] = TokenType.Is,
             [key: "loop"] = TokenType.Loop,
+            [key: "for"] = TokenType.For,
+            // Reserved: a loop over a range or a collection is written `for` (RF-G229).
             [key: "each"] = TokenType.Each,
             [key: "break"] = TokenType.Break,
             [key: "continue"] = TokenType.Continue,
