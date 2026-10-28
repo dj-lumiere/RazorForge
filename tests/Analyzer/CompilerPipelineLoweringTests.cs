@@ -548,6 +548,60 @@ public class CompilerPipelineLoweringTests
     /// <summary>
     /// Verifies code generation behavior for stdlib bit list add last and emits the expected definition.
     /// </summary>
+    /// <summary>
+    /// A list instance that holds a routine the builder wrote for it alone (`List[S32].where`, a protocol default)
+    /// still has its definition's teardown: a failing `try` over `to[List]()` tears the list it built down, in the
+    /// terminal of each adapter.
+    /// </summary>
+    [Fact]
+    public void LlvmEmitter_RecoveredTerminalList_IsTornDownOnFailure()
+    {
+        string source = """
+                        import IO/Console
+                        import IterTools
+
+                        routine start()
+                            var bad = List[S32]()
+                            bad.add_last(value: 5)
+                            bad.add_last(value: 0)
+                            show(f"{try bad.select(transform: x => 10 // x).to[List]()}")
+                            show(f"{try bad.where(predicate: x => 10 // x > 1).to[List]()}")
+                            return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+
+        Assert.Empty(collection: result.Errors);
+
+        var generator = new LlvmEmitter(program: program,
+            registry: result.Registry,
+            options: new LlvmEmitterOptions
+            {
+                StdlibPrograms = result.Registry.StdlibPrograms,
+                SynthesizedBodies = result.SynthesizedBodies,
+                InstantiatedGenericBodies = result.InstantiatedGenericBodies
+            });
+
+        string llvmIr = generator.Generate();
+        foreach (string adapter in new[]
+                 {
+                     "SelectEmittable[System.S32, System.S32, System.List[System.S32]]",
+                     "WhereEmittable[System.S32, System.List[System.S32]]"
+                 })
+        {
+            string? function = llvmIr.Split(separator: "\n}\n")
+                                     .Where(predicate: f => f.Contains(value: "define ", comparisonType: StringComparison.Ordinal))
+                                     .Select(selector: f => f[f.IndexOf(value: "define ", comparisonType: StringComparison.Ordinal)..])
+                                     .FirstOrDefault(predicate: f => f.Split(separator: '\n')[0].Contains(
+                                          value: $"@\"[member, try] IterTools.{adapter}.to()\"(",
+                                          comparisonType: StringComparison.Ordinal));
+            Assert.True(condition: function != null, userMessage: $"the try variant of {adapter}.to() is not defined");
+            Assert.Contains(expectedSubstring: "System.List[System.S32].destruct()", actualString: function);
+        }
+    }
+
     [Fact]
     public void LlvmEmitter_StdlibBitListAddLast_IsDefined()
     {
