@@ -1127,7 +1127,9 @@ as `Text(count: 9, "say \"hi\"\t")` with `"`, `\`, line breaks, tabs and other c
 trailing space before the closing quote, a tuple quotes its text items (`System.Tuple[System.S64, System.Text](1, "1")`),
 a container's diagnose quotes its text elements with the same escapes (`["a\", \"b"]` is one text), and a variant
 names the member type its value has (`S32(1)`, `Text("a")`, `none`), in a container too
-(`System.List[System.S32 | S64](count: 2, [S32(1), S64(1)])`).
+(`System.List[System.S32 | S64](count: 2, [S32(1), S64(1)])`). A record or entity member (or element) whose type
+writes no `represent` of its own is its short type name and its members in the same form, so a text inside it is
+quoted too (`Pair(left: Tag(name: "left"), note: "note")`).
 
 The only f-text format specs are `=`, `?` and `=?`. Everything else is a member routine you call
 inside the braces:

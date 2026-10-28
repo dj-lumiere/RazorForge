@@ -69,12 +69,14 @@ secret routine quoted_source(text: Text) -> Text
 ### The form a value takes as a container element in a `diagnose()`: the container's type names the element's type, so
 ### an element is written the way a literal is, a text quoted with its escapes (`"a\", \"b"` is one text, not two) and a
 ### character quoted, while a variant element names the member type its value has (`S32(1)`, `Text("a")`), which the
-### container's type does not say.
+### container's type does not say. A record or entity whose `represent()` the builder derives is its type name and its
+### member variables in this form (`Tag(name: "left")`, see `member_diagnose`).
 routine nested_diagnose(value: T) -> Text
 needs AnyType T
     when T
         is Text => return quoted_source(text: value.represent())
         is VariantType => return value.diagnose()
+        is DerivedDisplay => return value.member_diagnose()
         else => return nested_repr(value)
 
 ### A container element's form in a `represent()` (`nested_repr`) or a `diagnose()` (`nested_diagnose`).
@@ -339,12 +341,34 @@ needs RoutineType T
 ### The auto-derived default `diagnose()` for any record: `Module.TypeName(field: value, …)`. Uses the
 ### fully-qualified name and shows ALL fields (secret ones prefixed `[secret] ` via `visibilityof`); each
 ### value is written in its container-element form (`nested_diagnose`): a text quoted with its escapes, a variant
-### naming its member type, and a record by its `represent` (never its `diagnose`, which would nest every type name).
+### naming its member type, and a record or entity whose `represent` is derived by its short type name and members
+### (`member_diagnose`, never its `diagnose`, which would name every module again).
 @readonly
 @overridable
 routine T.diagnose() -> Text
 needs AnyType T
     var result = me.full_type_name() + "("
+    var first = true
+    expand m in allmemvarof(T)
+        if not first
+            result = result + ", "
+        if visibilityof(m) == SECRET
+            result = result + "[secret] "
+        result = result + nameof(m) + ": " + nested_diagnose(me.$nameof(m))
+        first = false
+    result = result + ")"
+    return result
+
+### The form a record or entity whose `represent()` the builder derives takes as a member or an element inside a
+### `diagnose()`: its type name (the outer type names its module already) and every member variable in its container
+### element form (`nested_diagnose`), secret ones prefixed `[secret] ` as the derived `diagnose()` writes them:
+### `Tag(name: "left")`.
+### :returns: The resulting `Text` value.
+@readonly
+@overridable
+routine T.member_diagnose() -> Text
+needs AnyType T
+    var result = me.type_name() + "("
     var first = true
     expand m in allmemvarof(T)
         if not first
