@@ -1,0 +1,83 @@
+module Tests/Stdlib/RandomNextTypesApi
+
+# next[T]() for every type it takes, at seed 2026: the first three draws, then the smallest and largest of 20000 more
+# (an integer type reaches both ends of its range, a float stays in [0, 1)), and how 20000 draws of U8, B32, and B64
+# spread over eight equal buckets. Tessera's tests/random_next_types prints the same lines for the same seed. Entropy
+# draws the same types from the operating system.
+
+import IO/Console
+import Random
+
+preset SEED: U64 = 2026
+preset DRAWS: U64 = 20000
+
+### Writes the first three draws of a T from a fresh generator and the extremes of 20000 more.
+### :param name: The type's name for the line.
+routine extremes[T](name: Text)
+needs RecordType T, T obeys Comparable
+    var rng = make_random(seed: SEED)
+    var a: T = rng.next[T]()
+    var b: T = rng.next[T]()
+    var c: T = rng.next[T]()
+    var low = a
+    var high = a
+    each i in 0 til DRAWS
+        var v: T = rng.next[T]()
+        if v < low
+            low = v
+        if v > high
+            high = v
+    show(f"{name}: {a} {b} {c}, min {low}, max {high}")
+    return
+
+### Writes eight counts, one per bucket.
+### :param name: What the buckets split.
+### :param counts: The counts.
+routine show_counts(name: Text, counts: List[U64])
+    var line = f"{name}:"
+    each n in counts
+        line = f"{line} {n}"
+    show(line)
+    return
+
+### Writes how many of 20000 U8, B32, and B64 draws fall in each eighth of their range.
+routine eighths()
+    var bytes = make_random(seed: SEED)
+    var singles = make_random(seed: SEED)
+    var doubles = make_random(seed: SEED)
+    var byte_counts: List[U64] = [0, 0, 0, 0, 0, 0, 0, 0]
+    var single_counts: List[U64] = [0, 0, 0, 0, 0, 0, 0, 0]
+    var double_counts: List[U64] = [0, 0, 0, 0, 0, 0, 0, 0]
+    each i in 0 til DRAWS
+        var b = (bytes.next[U8]() >>> 5).to[U64]()
+        byte_counts[b] += 1
+        var s = (singles.next[B32]() * 8).floor().to[U64]()
+        single_counts[s] += 1
+        var d = (doubles.next[B64]() * 8).floor().to[U64]()
+        double_counts[d] += 1
+    show_counts(name: "U8 eighths", counts: steal byte_counts)
+    show_counts(name: "B32 eighths", counts: steal single_counts)
+    show_counts(name: "B64 eighths", counts: steal double_counts)
+    return
+
+routine start()
+    extremes[U8](name: "U8")
+    extremes[U16](name: "U16")
+    extremes[U32](name: "U32")
+    extremes[U64](name: "U64")
+    extremes[U128](name: "U128")
+    extremes[S8](name: "S8")
+    extremes[S16](name: "S16")
+    extremes[S32](name: "S32")
+    extremes[S64](name: "S64")
+    extremes[S128](name: "S128")
+    extremes[B32](name: "B32")
+    extremes[B64](name: "B64")
+    eighths()
+    var single = Entropy.next[B32]()
+    var double = Entropy.next[B64]()
+    show(f"Entropy floats in [0, 1): {single >= 0.0 and single < 1.0 and double >= 0.0 and double < 1.0}")
+    var first: U128 = Entropy.next[U128]()
+    var second: U128 = Entropy.next[U128]()
+    show(f"Entropy U128 draws differ: {first != second}")
+    return

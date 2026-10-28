@@ -328,6 +328,37 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateRandom_NamesTheDrawnType_InCodeAndHoles()
+    {
+        string dir = OldProject(name: "random", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/RandomRf\n" +
+                "routine start()\n" +
+                "    var a = rng.next_u64()\n" +
+                "    var b = rng.next_u32() + 1  # rng.next_u32()\n" +
+                "    show(f\"{rng.next_b64()} and next_b64()\")\n" +
+                "    show(\"rng.next_u64()\")\n" +
+                "    var e = Entropy.next_u64()\n" +
+                "    return\n")
+        ]);
+
+        (int code, string output) = RunMain("migrate", "--step", "random", dir);
+        Assert.Equal(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
+        Assert.Equal(
+            expected: "module Test/RandomRf\n" +
+                      "routine start()\n" +
+                      "    var a = rng.next[U64]()\n" +
+                      "    var b = rng.next[U32]() + 1  # rng.next_u32()\n" +
+                      "    show(f\"{rng.next[B64]()} and next_b64()\")\n" +
+                      "    show(\"rng.next_u64()\")\n" +
+                      "    var e = Entropy.next[U64]()\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+    }
+
+    [Fact]
     public void MigrateNumbers_DecidesEachCallFromTheTypesAnalysisGave()
     {
         const string source = "    var a = U8(x)\n    var b = U8(200)\n    var c = B32(n * 2) + U8(7)\n    var d = Decimal(x)\n";

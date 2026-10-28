@@ -1420,8 +1420,12 @@ operator (`/` is division).
   arguments, no variables. There is no way to change the working directory (`set_current_directory` is gone): keep
   a `Directory` and build paths from it, and a child process gets its own through
   `run_program(file:, args:, working_directory: Directory, env:)` (`Subprocess`).
-- **Randomness (`System`):** `Entropy.next_u64()` is the OS's random source (hash keys come from it),
-  `Random.from_entropy()` (`Random`) seeds a generator with it.
+- **Randomness (`System`):** `Entropy.next[T]()` draws from the OS's random source (hash keys come from it),
+  `Random.from_entropy()` (`Random`) seeds a generator with it. A draw names its type, on a generator
+  (`make_random(seed:)`) too: `rng.next[T]()` gives an integer `T` (`U8` to `U128`, `S8` to `S128`) over its full
+  range, and a `B32` / `B64` in `[0, 1)` (the top 24 / 53 bits of a draw). `next_u64()` / `next_u32()` / `next_b64()`
+  are build errors that name the new form (`migrate --step random`). `rng.chance(probability:)` and
+  `rng.range(low:, high:)` stay.
 - **migrate:** `migrate --step files` rewrites `OsFileManager` / `OsEnvironment` / `OsEntropy` → `FileManager` /
   `Environment` / `Entropy`, the directory routines →
   `Environment` (import added), `subdir` → `go_to`, `expose`/`wield`/`open_storage` → `storage` and `Exposed`/`Wielded` →

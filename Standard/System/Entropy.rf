@@ -2,11 +2,78 @@ module System
 
 ### The operating system's random source (getrandom on Linux, arc4random_buf on macOS, ProcessPrng on Windows): bits
 ### no one can guess, drawn anew on every call. Hash tables key their hashing with it, and `Random.from_entropy()`
-### seeds a generator with it. Its routines are called on the type (`Entropy.next_u64()`).
+### seeds a generator with it. Its routines are called on the type: `Entropy.next[T]()` gives any integer type over
+### its full range, or a `B32` / `B64` in `[0.0, 1.0)`.
 record Entropy
     nothing
 
-### 64 random bits from the operating system's random source.
+### 64 random bits from the operating system's random source: `Entropy.next[U64]()`.
 ### :returns: The random bits.
-common routine Entropy.next_u64() -> U64
+common routine Entropy.next[U64]() -> U64
     return C::rf_random_u64()
+
+### A random `S64` over its full range from the operating system's random source.
+### :returns: The random value.
+common routine Entropy.next[S64]() -> S64
+    return Entropy.next[U64]().to_wrap[S64]()
+
+### A random `U8` over its full range from the operating system's random source: the high 8 bits of 64 random
+### bits.
+### :returns: The random value.
+common routine Entropy.next[U8]() -> U8
+    return (Entropy.next[U64]() >>> 56).to_wrap[U8]()
+
+### A random `U16` over its full range from the operating system's random source: the high 16 bits of 64 random
+### bits.
+### :returns: The random value.
+common routine Entropy.next[U16]() -> U16
+    return (Entropy.next[U64]() >>> 48).to_wrap[U16]()
+
+### A random `U32` over its full range from the operating system's random source: the high 32 bits of 64 random
+### bits.
+### :returns: The random value.
+common routine Entropy.next[U32]() -> U32
+    return (Entropy.next[U64]() >>> 32).to_wrap[U32]()
+
+### A random `S8` over its full range from the operating system's random source: the high 8 bits of 64 random
+### bits.
+### :returns: The random value.
+common routine Entropy.next[S8]() -> S8
+    return (Entropy.next[U64]() >>> 56).to_wrap[S8]()
+
+### A random `S16` over its full range from the operating system's random source: the high 16 bits of 64 random
+### bits.
+### :returns: The random value.
+common routine Entropy.next[S16]() -> S16
+    return (Entropy.next[U64]() >>> 48).to_wrap[S16]()
+
+### A random `S32` over its full range from the operating system's random source: the high 32 bits of 64 random
+### bits.
+### :returns: The random value.
+common routine Entropy.next[S32]() -> S32
+    return (Entropy.next[U64]() >>> 32).to_wrap[S32]()
+
+### A random `U128` over its full range from the operating system's random source: two draws of 64 bits, the first
+### the high half.
+### :returns: The random value.
+common routine Entropy.next[U128]() -> U128
+    var high = Entropy.next[U64]()
+    var low = Entropy.next[U64]()
+    return LLVM::bit_or(LLVM::shift_left(LLVM::zero_extend[U64, U128](high), 64), LLVM::zero_extend[U64, U128](low))
+
+### A random `S128` over its full range from the operating system's random source: the bits of `next[U128]()`.
+### :returns: The random value.
+common routine Entropy.next[S128]() -> S128
+    return Entropy.next[U128]().to_wrap[S128]()
+
+### A random `B64` in `[0.0, 1.0)` from the operating system's random source: the top 53 bits of 64 random bits times
+### 2^-53.
+### :returns: The random value.
+common routine Entropy.next[B64]() -> B64
+    return C::ingrid_random_unit_b64(bits: Entropy.next[U64]())
+
+### A random `B32` in `[0.0, 1.0)` from the operating system's random source: the top 24 bits of 64 random bits times
+### 2^-24.
+### :returns: The random value.
+common routine Entropy.next[B32]() -> B32
+    return C::ingrid_random_unit_b32(bits: Entropy.next[U64]())

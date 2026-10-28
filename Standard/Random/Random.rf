@@ -44,22 +44,22 @@ routine make_random(seed: U64) -> Random
 ### run gets a stream of its own.
 ### :returns: A fresh `Random` generator.
 common routine Random.from_entropy() -> Random
-    var s0 = Entropy.next_u64()
-    var s1 = Entropy.next_u64()
-    var s2 = Entropy.next_u64()
-    var s3 = Entropy.next_u64()
+    var s0 = Entropy.next[U64]()
+    var s1 = Entropy.next[U64]()
+    var s2 = Entropy.next[U64]()
+    var s3 = Entropy.next[U64]()
     # An all-zero state gives zeros forever, so such a draw is drawn again.
     until (s0 | s1 | s2 | s3) != 0
-        s0 = Entropy.next_u64()
-        s1 = Entropy.next_u64()
-        s2 = Entropy.next_u64()
-        s3 = Entropy.next_u64()
+        s0 = Entropy.next[U64]()
+        s1 = Entropy.next[U64]()
+        s2 = Entropy.next[U64]()
+        s3 = Entropy.next[U64]()
     return Random(s0: s0, s1: s1, s2: s2, s3: s3)
 
-### Advances the generator and returns the next 64-bit output.
-### This is the core primitive; all other draws derive from it.
+### Advances the generator and returns the next 64 random bits: `rng.next[U64]()`.
+### This is the core draw, and every other one is built from it.
 ### :returns: The next uniformly distributed `U64` in the full 64-bit range.
-routine Random.next_u64() -> U64
+routine Random.next[U64]() -> U64
     var result = C::ingrid_xoshiro256ss_output(s0: me.s0, s1: me.s1, s2: me.s2, s3: me.s3)
     var stepped = C::ingrid_xoshiro256ss_step(s0: me.s0, s1: me.s1, s2: me.s2, s3: me.s3)
     me.s0 = stepped.w0
@@ -68,19 +68,71 @@ routine Random.next_u64() -> U64
     me.s3 = stepped.w3
     return result
 
-### Advances the generator and returns the next 32-bit output.
-### Uses the high 32 bits of a fresh 64-bit draw, which carry the strongest
-### statistical quality in xoshiro256**.
-### :returns: The next uniformly distributed `U32` in the full 32-bit range.
-routine Random.next_u32() -> U32
-    return LLVM::int_truncate[U64, U32](me.next_u64() >>> 32)
+### Advances the generator and returns the next `U8` over its full range: the high 8 bits of one 64-bit draw,
+### which carry the strongest statistical quality in xoshiro256**.
+### :returns: The next uniformly distributed `U8`.
+routine Random.next[U8]() -> U8
+    return (me.next[U64]() >>> 56).to_wrap[U8]()
 
-### Advances the generator and returns the next double in the half-open unit
-### interval `[0.0, 1.0)`.
-### Uses the top 53 bits of a fresh draw, matching the mantissa width of `B64`.
+### Advances the generator and returns the next `U16` over its full range: the high 16 bits of one 64-bit draw,
+### which carry the strongest statistical quality in xoshiro256**.
+### :returns: The next uniformly distributed `U16`.
+routine Random.next[U16]() -> U16
+    return (me.next[U64]() >>> 48).to_wrap[U16]()
+
+### Advances the generator and returns the next `U32` over its full range: the high 32 bits of one 64-bit draw,
+### which carry the strongest statistical quality in xoshiro256**.
+### :returns: The next uniformly distributed `U32`.
+routine Random.next[U32]() -> U32
+    return (me.next[U64]() >>> 32).to_wrap[U32]()
+
+### Advances the generator and returns the next `S8` over its full range: the high 8 bits of one 64-bit draw,
+### which carry the strongest statistical quality in xoshiro256**.
+### :returns: The next uniformly distributed `S8`.
+routine Random.next[S8]() -> S8
+    return (me.next[U64]() >>> 56).to_wrap[S8]()
+
+### Advances the generator and returns the next `S16` over its full range: the high 16 bits of one 64-bit draw,
+### which carry the strongest statistical quality in xoshiro256**.
+### :returns: The next uniformly distributed `S16`.
+routine Random.next[S16]() -> S16
+    return (me.next[U64]() >>> 48).to_wrap[S16]()
+
+### Advances the generator and returns the next `S32` over its full range: the high 32 bits of one 64-bit draw,
+### which carry the strongest statistical quality in xoshiro256**.
+### :returns: The next uniformly distributed `S32`.
+routine Random.next[S32]() -> S32
+    return (me.next[U64]() >>> 32).to_wrap[S32]()
+
+### Advances the generator and returns the next `S64` over its full range: the 64 bits of one draw.
+### :returns: The next uniformly distributed `S64`.
+routine Random.next[S64]() -> S64
+    return me.next[U64]().to_wrap[S64]()
+
+### Advances the generator twice and returns the next `U128` over its full range: the first draw is the high 64
+### bits, the second the low 64 bits.
+### :returns: The next uniformly distributed `U128`.
+routine Random.next[U128]() -> U128
+    var high = me.next[U64]()
+    var low = me.next[U64]()
+    return LLVM::bit_or(LLVM::shift_left(LLVM::zero_extend[U64, U128](high), 64), LLVM::zero_extend[U64, U128](low))
+
+### Advances the generator twice and returns the next `S128` over its full range: the bits of `next[U128]()`.
+### :returns: The next uniformly distributed `S128`.
+routine Random.next[S128]() -> S128
+    return me.next[U128]().to_wrap[S128]()
+
+### Advances the generator and returns the next `B64` in the half-open unit interval `[0.0, 1.0)`: the top 53 bits of
+### a draw (the width of a `B64` mantissa) times 2^-53, so every multiple of 2^-53 below 1 is equally likely.
 ### :returns: A uniformly distributed `B64` in `[0.0, 1.0)`.
-routine Random.next_b64() -> B64
-    return C::ingrid_random_unit_b64(bits: me.next_u64())
+routine Random.next[B64]() -> B64
+    return C::ingrid_random_unit_b64(bits: me.next[U64]())
+
+### Advances the generator and returns the next `B32` in the half-open unit interval `[0.0, 1.0)`: the top 24 bits of
+### a draw (the width of a `B32` mantissa) times 2^-24, so every multiple of 2^-24 below 1 is equally likely.
+### :returns: A uniformly distributed `B32` in `[0.0, 1.0)`.
+routine Random.next[B32]() -> B32
+    return C::ingrid_random_unit_b32(bits: me.next[U64]())
 
 ### Returns whether a Bernoulli trial with the given success probability
 ### succeeds. A probability of `0.0` never succeeds and `1.0` always does.
@@ -89,7 +141,7 @@ routine Random.next_b64() -> B64
 ###   succeeds).
 ### :returns: `true` with the given probability, otherwise `false`.
 routine Random.chance(probability: B64) -> Bool
-    return me.next_b64() < probability
+    return me.next[B64]() < probability
 
 ### Returns a uniformly distributed value in the half-open range
 ### `[low, high)`, advancing the generator once.
@@ -99,7 +151,7 @@ routine Random.chance(probability: B64) -> Bool
 ### :throws: if `high <= low` (empty range) — the modulo has no valid width.
 failable routine Random.range(low: U64, high: U64) -> U64
     var span = high -% low
-    return low +% me.next_u64() % span
+    return low +% me.next[U64]() % span
 
 ### Returns a uniformly chosen element from any indexable collection, drawing
 ### one value from `rng` to select the position.
@@ -115,7 +167,7 @@ needs RecordType T
     var n = me.count()
     if n == 0
         throw AbsentValueError()
-    return me[rng.next_u64() % n]
+    return me[rng.next[U64]() % n]
 
 ### Shuffles this list in place using an unbiased Fisher-Yates pass, drawing one
 ### value from `rng` per element.
@@ -131,7 +183,7 @@ routine List[T].shuffle(rng: Modifying[Random])
         # modulo cannot divide by zero.
         var j: U64 = 0
         danger
-            j = rng.next_u64().mod_unchecked(you: i +% 1)
+            j = rng.next[U64]().mod_unchecked(you: i +% 1)
         if j != i
             var a = me.get_raw(index: i)
             var b = me.get_raw(index: j)

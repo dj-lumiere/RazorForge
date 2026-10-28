@@ -95,6 +95,23 @@ public class ReleaseHintTests
         Assert.Contains(expectedSubstring: "write 'try x.halve(...)'", actualString: errors);
     }
 
+    [Theory]
+    [InlineData("make_random(seed: 1).next_u64()", "It is 'next[U64]()' now")]
+    [InlineData("make_random(seed: 1).next_u32()", "It is 'next[U32]()' now")]
+    [InlineData("make_random(seed: 1).next_b64()", "It is 'next[B64]()' now")]
+    [InlineData("Entropy.next_u64()", "(migrate --step random rewrites it)")]
+    public void TypedDraw_NamesTheTypeArgument(string call, string hint)
+    {
+        string errors = Errors(source: $"""
+                                        import Random
+
+                                        routine start()
+                                            var r = {call}
+                                            return
+                                        """);
+        Assert.Contains(expectedSubstring: hint, actualString: errors);
+    }
+
     [Fact]
     public void MomentNow_NamesTheClock()
     {

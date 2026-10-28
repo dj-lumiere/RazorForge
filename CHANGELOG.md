@@ -224,6 +224,11 @@ file only once its other old spellings are gone.
   and there is no `touch`. The working, temporary and home directories and the environment variables are
   `Environment`'s, random bytes are `Entropy`'s.
 - `ask_line` and `ask_word` fail with `EndOfInputError` at the end of input.
+- A random draw names its type: `rng.next[T]()` and `Entropy.next[T]()` replace `next_u64()`, `next_u32()` and
+  `next_b64()`. An integer `T` (`U8` to `U128`, `S8` to `S128`) covers its full range, and `B32` / `B64` give a value
+  in `[0, 1)` (the top 24 / 53 bits of a draw). `next[U32]()` and `next[B64]()` give the same values the old routines
+  did for the same seed. An old name is a build error that names the new form, and default `migrate` and
+  `migrate --step random` rewrite it.
 - `Dict.items()` gives `(key, value)` tuples: `each (k, v) in d.items()` (default `migrate` lists the `entries()`
   loops). `d[k] = v` adds a missing key, and `d.add(key:, value:)` is rewritten to it.
 - `PriorityQueue` holds `(priority, element)` tuples and has `unordered`, `ordered` and `drain`. `PQEntry` is
@@ -380,6 +385,11 @@ file only once its other old spellings are gone.
 
 ### Fixed
 
+- A member of a specialization family called through an entity's `Modifying` token (`rng.next[U64]()` with
+  `rng: Modifying[Random]`) stopped the build, and through a `Viewing` the error now says the member changes the
+  entity.
+- The `common` members of one specialization family (`Entropy.next[U64]()`, `Entropy.next[B64]()`) shared one symbol,
+  so a call reached the wrong one.
 - A write to a value element (`m[i][j] = v`, `pts[k].x = v`) changed a temporary copy.
 - A variant's payload was not zero-filled, so optimized builds could lose the arm's value.
 - The cycle collector skipped the effects of a written `destroy`.
