@@ -7,8 +7,8 @@ preset BYTE_NEWLINE: Byte = b'\n'
 preset BYTE_TAB: Byte = b'\t'
 
 ### Represents one raw 8-bit byte.
-### `Byte` is a binary payload type, not a text character, so its display form
-### always uses an escaped hexadecimal representation.
+### `Byte` is a binary payload type, not a text character. It displays as the byte literal that makes it
+### (`b'L'`, `b'\x0A'`).
 @llvm("i8")
 record Byte
 obeys ConstCompatible, Copyable, StorageCell, Bitwiseable, Invertible
@@ -160,40 +160,47 @@ failable routine Byte.hex_value() -> U8
         else => throw InvalidHexDigitError()
 
 # ============================================================================
-# Display — always \xHH format (raw bytes have no encoding)
+# Display — the byte literal that makes the same byte
 # ============================================================================
 
-### Returns the display form of this byte.
-### Raw bytes are rendered as `\\xHH` so output remains unambiguous regardless of
-### encoding context.
+### Returns the display form of this byte: the byte literal that makes it. A printable ASCII byte shows as its
+### letter (`b'L'`), the quote and the backslash as `b'\''` and `b'\\'`, and any other byte as two uppercase hex digits
+### (`b'\x0A'`, `b'\xFF'`).
 ### :returns: The resulting `Text` value.
 @readonly
 @override
 routine Byte.represent() -> Text
-    var digits = List[Char]()
-    digits.add_last('\\')  # \
-    digits.add_last('x')  # x
+    var letters = List[Char]()
+    letters.add_last('b')
+    letters.add_last('\'')
     var v = me.value().to[U32]()
-    var high = (v >> 4) & 0x0F
-    var low = v & 0x0F
-    if high < 10
-        digits.add_last(Char(0x0030 + high))
+    if v == 0x27 or v == 0x5C
+        letters.add_last('\\')
+        letters.add_last(Char(v))
+    elseif 0x20 <= v <= 0x7E
+        letters.add_last(Char(v))
     else
-        digits.add_last(Char(0x0041 + high - 10))
-    if low < 10
-        digits.add_last(Char(0x0030 + low))
-    else
-        digits.add_last(Char(0x0041 + low - 10))
-    return Text(from_list: digits)
+        letters.add_last('\\')
+        letters.add_last('x')
+        letters.add_last(hex_digit_char(digit: v >> 4))
+        letters.add_last(hex_digit_char(digit: v & 0x0F))
+    letters.add_last('\'')
+    return Text(from_list: letters)
 
-### Returns the diagnostic form of this byte.
-### The diagnostic form includes both the unsigned numeric value and the escaped
-### byte representation.
+### Returns the diagnostic form of this byte, the same byte literal as its display form (`b'L'`, `b'\x0A'`).
 ### :returns: The resulting `Text` value.
 @readonly
 @override
 routine Byte.diagnose() -> Text
-    return "Byte(" + me.value().represent() + ", " + me.represent() + ")"
+    return me.represent()
+
+### Returns the uppercase hex digit for a value from 0 to 15.
+### :param digit: The value, 0 to 15.
+### :returns: `0`-`9` or `A`-`F`.
+secret routine hex_digit_char(digit: U32) -> Char
+    if digit < 10
+        return Char(0x0030 + digit)
+    return Char(0x0041 + digit - 10)
 
 # ============================================================================
 # Hashing

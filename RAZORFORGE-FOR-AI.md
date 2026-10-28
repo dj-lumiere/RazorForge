@@ -1149,7 +1149,9 @@ inside the braces:
 
 `Text` is UTF-32, a record (value type). `Bytes` is a record for raw byte
 sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
-`Byte`; `b"..."` has type `Bytes`.
+`Byte`; `b"..."` has type `Bytes`. A `Byte` shows (`represent` and `diagnose` alike, alone or in a
+`List[Byte]`) as the byte literal that makes it: `b'L'`, `b'\''`, `b'\\'`, and `b'\x0A'` / `b'\xFF'` (two
+uppercase hex digits) for any byte that is not printable ASCII. `Bytes` shows `\xHH` per byte.
 
 - **`Text` slicing** uses a range subscript: `text[a til b]` / `text[a to b]`
   (subscript forces `U64` indices), open-ended `text[a til ^0]` to the end.
