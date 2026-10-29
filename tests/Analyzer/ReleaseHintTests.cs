@@ -37,6 +37,10 @@ public class ReleaseHintTests
     [InlineData("CircularList[S64]", "It is called 'RotatableList' now (migrate --step type-names rewrites it)")]
     [InlineData("MemoryAllocationError", "It is called 'OutOfMemoryError' now (migrate --step type-names rewrites it)")]
     [InlineData("Integer", "It is called 'Int' now (migrate --step type-names rewrites it)")]
+    [InlineData("Array[S64, 3]", "It is called 'Items' now (migrate --step type-names rewrites it)")]
+    [InlineData("BitArray[8]", "It is called 'Bits' now (migrate --step type-names rewrites it)")]
+    [InlineData("Maybe[S64]", "The optional type is 'Optional[T]', written 'T?'")]
+    [InlineData("DictEntry[S64, S64]", "'DictEntry' is gone: a dictionary entry is the tuple")]
     public void RetiredType_NamesWhatIsWrittenNow(string type, string hint)
     {
         string errors = Errors(source: $"""

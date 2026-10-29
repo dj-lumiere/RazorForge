@@ -596,6 +596,35 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateDefault_CurrentManifest_MovesOnlyTheFileThatDoesNotReadAsThisRelease()
+    {
+        string dir = OldProject(name: "marked", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/MarkedOld\n" +
+                "routine start()\n" +
+                "    var xs = [1, 2]\n" +
+                "    each x in xs\n" +
+                "        nothing\n" +
+                "    return\n"),
+            ("new.rf",
+                "module Test/MarkedNew\n" +
+                "routine run()\n" +
+                "    return\n")
+        ]);
+        File.WriteAllText(path: Path.Combine(path1: dir, path2: "config.toml"),
+            contents: "[package]\nname = \"marked\"\nrazorforge-version = \"0.5.0\"\n");
+        string untouched = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf"));
+
+        (_, string output) = RunMain("migrate", dir);
+        Assert.Contains(expectedSubstring: "    for x in xs\n",
+            actualString: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+        Assert.Equal(expected: untouched, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf")));
+        Assert.Contains(expectedSubstring: "does not read as it", actualString: output);
+        Assert.Contains(expectedSubstring: "1 file(s) skipped", actualString: output);
+    }
+
+    [Fact]
     public void MigrateDefault_WithoutManifest_ListsComplexNames_KeepsDeclaredPrefixedRoutines()
     {
         string dir = OldProject(name: "nomanifest", oldManifest: false, files:
