@@ -642,4 +642,85 @@ public class ProtocolImplementationTests
     }
 
     #endregion
+
+    #region A protocol of the program's own module
+
+    /// <summary>
+    /// A protocol a program module declares is found by the module's own name for it when a generic routine asks
+    /// for it (<c>needs T obeys Unit</c>): a record that obeys it passes, its <c>Me</c> return included.
+    /// </summary>
+    [Fact]
+    public void Analyze_OwnModuleProtocol_AsGenericConstraint_NoError()
+    {
+        string source = """
+                        module Tests/OwnProtocol
+
+                        protocol Unit
+                            @readonly
+                            routine Me.scaled(by: S64) -> Me
+
+                        record Meter
+                        obeys Unit
+                            value: S64
+
+                        @readonly
+                        routine Meter.scaled(by: S64) -> Meter
+                            return Meter(value: me.value * by)
+
+                        routine ten[T](x: T) -> T
+                        needs T obeys Unit
+                            return x.scaled(by: 10)
+
+                        routine start()
+                            var m = ten(x: Meter(value: 1))
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ProtocolConstraintViolation);
+    }
+
+    /// <summary>
+    /// A program protocol named like a library one (<c>Scalable</c>) is the program's: a record that obeys the
+    /// program's passes, and one that obeys neither is still refused.
+    /// </summary>
+    [Fact]
+    public void Analyze_OwnProtocolNamedLikeLibraryOne_IsTheModulesOwn()
+    {
+        string source = """
+                        module Tests/OwnScalable
+
+                        protocol Scalable
+                            @readonly
+                            routine Me.grown() -> Me
+
+                        record Box
+                        obeys Scalable
+                            side: S64
+
+                        @readonly
+                        routine Box.grown() -> Box
+                            return Box(side: me.side + 1)
+
+                        record Plain
+                            side: S64
+
+                        routine twice[T](x: T) -> T
+                        needs T obeys Scalable
+                            return x.grown().grown()
+
+                        routine start()
+                            var b = twice(x: Box(side: 1))
+                            var p = twice(x: Plain(side: 1))
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Single(collection: result.Errors,
+            predicate: e => e.Code == SemanticDiagnosticCode.ProtocolConstraintViolation);
+        Assert.Contains(collection: result.Errors, filter: e => e.Message.Contains(value: "'Plain' does not obey"));
+    }
+
+    #endregion
 }
