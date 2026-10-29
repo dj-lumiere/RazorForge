@@ -532,6 +532,35 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateTypeNames_KeepsATypeTheFileDeclaresUnderAnOldName()
+    {
+        string dir = OldProject(name: "type-names-own", oldManifest: false, files:
+        [
+            ("old.rf",
+                "module Test/TypeNamesOwn\n" +
+                "record SplitArray[T, N]\n" +
+                "    first: T\n" +
+                "\n" +
+                "routine start()\n" +
+                "    var runs = Array[S64, 2](1, 2)\n" +
+                "    var own = SplitArray[S64, 2](first: 1)\n" +
+                "    return\n")
+        ]);
+
+        RunMain("migrate", "--step", "type-names", dir);
+        Assert.Equal(
+            expected: "module Test/TypeNamesOwn\n" +
+                      "record SplitArray[T, N]\n" +
+                      "    first: T\n" +
+                      "\n" +
+                      "routine start()\n" +
+                      "    var runs = Items[S64, 2](1, 2)\n" +
+                      "    var own = SplitArray[S64, 2](first: 1)\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+    }
+
+    [Fact]
     public void MigrateDefault_IndentsFirst_RewritesReleaseSpellings_RenamesManifest()
     {
         string dir = OldProject(name: "release", oldManifest: true, files:
