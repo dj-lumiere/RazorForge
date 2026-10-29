@@ -722,5 +722,38 @@ public class ProtocolImplementationTests
         Assert.Contains(collection: result.Errors, filter: e => e.Message.Contains(value: "'Plain' does not obey"));
     }
 
+    /// <summary>
+    /// A type with every routine a protocol lists obeys it without saying so, a routine that gives back <c>Me</c>
+    /// included: it gives back the type itself.
+    /// </summary>
+    [Fact]
+    public void Analyze_StructuralConformance_WithMeReturn_NoError()
+    {
+        string source = """
+                        module Tests/StructuralMe
+
+                        protocol Defaulted
+                            common routine Me.make_default() -> Me
+
+                        record Point
+                            x: S64
+
+                        common routine Point.make_default() -> Point
+                            return Point(x: 0)
+
+                        routine fresh[T]() -> T
+                        needs T obeys Defaulted
+                            return T.make_default()
+
+                        routine start()
+                            var p = fresh[Point]()
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ProtocolConstraintViolation);
+    }
+
     #endregion
 }
