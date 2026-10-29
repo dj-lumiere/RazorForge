@@ -653,6 +653,9 @@ a reserved word: a loop written `each x in xs` is RF-G229, and `migrate --step f
 and after its own `break` (a `break` of a loop inside only leaves that loop). A `return` or `throw` leaves the
 routine and skips it. A loop whose `then` ends in `return` always returns, so the routine needs nothing after it.
 Loops have no `else` (RF-G219): the case where the loop would not run even once is an `if` before the loop.
+A `for` loop variable (and each name of a destructured element) is bound again every round, so assigning it is
+RF-S251 (over a range too): put the new value in a variable of its own, or write the element through the
+collection (`xs[i] = ...`).
 A loop may carry values from one round to the next: `until n <= 1 with n: U64 = start, steps: U64 = 0`
 (`for x in xs with sum: S64 = 0` and `loop with i: S64 = 0` too). Each carried value is bound anew every round, from what the round's
 `continue with n: after, steps: steps + 1` passes (every carried name once, in any order, all computed before
