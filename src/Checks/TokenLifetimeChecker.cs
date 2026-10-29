@@ -230,6 +230,16 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
     private RoutineDeclaration? FindUserDeclaration(RoutineInfo routine)
     {
+        // A call through a token (`o.part()` on a `Modifying[Outer]`) binds the builder's forwarder on the token,
+        // which runs the inner type's routine on what the token reaches. That routine's declaration says what the
+        // call changes and where a token it returns comes from.
+        RoutineInfo? forwarded = routine.WrapperForwarderInnerMemberRoutine ??
+                                 routine.GenericDefinition?.WrapperForwarderInnerMemberRoutine;
+        if (forwarded != null && !ReferenceEquals(objA: forwarded, objB: routine))
+        {
+            return FindUserDeclaration(routine: forwarded);
+        }
+
         if (_userRoutineDeclarations.TryGetValue(key: routine.RegistryKey, value: out RoutineDeclaration? d))
         {
             return d;
@@ -966,7 +976,10 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
         // -- ending tokens --
 
-        private void End(string written, string why, SourceLocation at)
+        /// <summary>Ends every token whose source <paramref name="written"/> replaces. <paramref name="spared"/> is the
+        /// token a call made its change through, as its receiver: the call changes what is inside the token's object,
+        /// never the object itself, so that token stays alive.</summary>
+        private void End(string written, string why, SourceLocation at, string? spared = null)
         {
             _callEnds?.Add(item: written);
             if (_state == null)
@@ -996,7 +1009,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             {
                 foreach ((string name, TokenState t) in _state.Tokens.ToList())
                 {
-                    if (t.EndedBy == null &&
+                    if (t.EndedBy == null && name != spared &&
                         !(_pinnedSubjects.TryGetValue(key: name, value: out string? subject) && subject == path) &&
                         t.Origins.FirstOrDefault(predicate: o => Ends(written: path, origin: o)) is { } ended)
                     {
@@ -1998,6 +2011,16 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             }
 
             _callEnds = outer;
+
+            // A token the call is made on (`part.put(key: "a")`) is the one its receiver writes go through.
+            string? receiverToken = call.Callee is MemberExpression { Object: var onToken } &&
+                                    Unwrap(expr: onToken) is IdentifierExpression { Name: var tokenName } &&
+                                    Held(name: tokenName) != null
+                ? tokenName
+                : null;
+            HashSet<string> receiverWrites = receiverToken != null
+                ? owner.ReceiverWrites(call: call, tokenOrigins: Held)
+                : [];
             foreach ((string path, string callee) in writes)
             {
                 string why = callee.Length == 0
@@ -2005,7 +2028,8 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                     : IsDeep(path: path)
                         ? $"may have changed: '{callee}()' can change what is inside '{Shown(path: path)}'"
                         : $"may have been replaced by '{callee}()', which replaces '{Shown(path: path)}'";
-                End(written: path, why: why, at: call.Location);
+                End(written: path, why: why, at: call.Location,
+                    spared: receiverWrites.Contains(item: path) ? receiverToken : null);
             }
         }
     }
