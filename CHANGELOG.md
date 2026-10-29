@@ -90,6 +90,11 @@ file only once its other old spellings are gone.
 - A range counts down only with a negative step: `10 to 1` is empty, write `10 to 1 by -1`. Default `migrate` adds
   the step where both ends are literals and lists the ranges whose start is not a literal.
 - A chained comparison goes one way. `!=` or `<=>` after another comparison is a parse error.
+- A conditional value `if c then a else b` stands only as the whole value of `var x =`, `x =`, `preset`, `global`
+  or `return`. Inside parentheses, an argument, an operand, a subscript, an f-text slot, a branch of another
+  conditional or right after `try` / `check` it is `RF-G112`: give it a name first, or choose the value with `when`.
+- A routine's `return` matches its `->`: a `return` with a value in a routine without `->` (or with `-> None`), and a
+  bare `return` in a routine with `-> T`, is `RF-S301`. The return type is never taken from the returned values.
 - There is no `<<<`: `<<` fills with zeros.
 - A constructor is `routine T(...)`. `routine T.create(...)` declares an ordinary member routine named `create`.
   Default `migrate` rewrites it to `routine T(...)` (and a call `T.create(...)` to `T(...)`), and a member routine
@@ -97,7 +102,7 @@ file only once its other old spellings are gone.
 - A `var` that hides a parameter or an outer local is `RF-S008`. An unknown annotation is `RF-G221`.
 - A memberwise construction that sets `secret` or `posted` member variables works only inside their module
   (`RF-S403`, `RF-S404`).
-- The right side of a compound assignment is checked like a binary expression (`Integer += S64` is `RF-S502`).
+- The right side of a compound assignment is checked like a binary expression (`Int += S64` is `RF-S502`).
 - `===` and `!==` take entities and handles. An access token is `RF-S440`, like a value.
 - `destroy` is `destruct` (default `migrate`). The builder calls it: a program that calls `x.destruct()` gets
   `RF-S812`, which points to `drop x`. `dangerous routine T.destruct` is `RF-S807` (default `migrate` removes
@@ -134,7 +139,7 @@ file only once its other old spellings are gone.
 - `RetainController`, `GuardController` and `RoamController` are `RetainManager`, `GuardManager` and
   `RoamManager`. `FrozenController` is gone.
 - A `Guarded[T, ReadOnly]` is read directly. Reaching a locking `Guarded` without an access block is `RF-S649`.
-- Keeping an entity in a second place without a manager is `RF-S413`. Hand it over with `steal`, on every path or
+- An entity has one original. Holding it under a second name without a token or a manager is `RF-S413`. Hand it over with `steal`, on every path or
   on none (`RF-S616`). A name `steal` emptied takes a new value with `=`, and the builder tears that value down at
   the end of the scope.
 - Changing a container's shape while a `for` loop or an element statement uses it is a build error (`RF-S625`,
@@ -164,6 +169,9 @@ file only once its other old spellings are gone.
   called only inside a `dangerous` routine or a `danger` block. Anywhere else it is `RF-S609`. A lambda body is
   outside the `danger` block it is written in, and an operator or f-text insertion whose routine is `dangerous` needs
   `danger` (`RF-S609`).
+- Collecting the entities a walk shows in place (`xs.where(...).to[List]()`, `first`, `last`, `min_by`, ... on a list
+  of entities) is `RF-S413` at that call: copy them with `select(e => e.duplicate())`, take the list with
+  `(steal xs).where(...)`, or keep tokens.
 - A started Work nobody retrieves is cancelled where it is dropped, and a failure its work came to crashes the
   program there. `job.cancel()` throws the failure away.
 
@@ -174,6 +182,8 @@ file only once its other old spellings are gone.
   `CWStrView`. `CStr` at the C boundary is `RF-S814`.
 - `blank[T]()` is gone and `hollow[T]()` is `T.hollow()`, a `dangerous` routine every type has. The handle types and
   `Addr` have `is_hollow()`.
+- A `Byte` shows as the byte literal that makes it, alone or inside a collection: `b'L'`, `b'\x0A'`, `b'\''`,
+  `b'\\'` (0.4 wrote `\x4C`). `Bytes` still shows its text with `\xHH` escapes.
 - `Byte.to_hex()` writes two digits. The widest signed integer is `S256`. `Vector[T, N]` arithmetic does not check
   for overflow.
 - A number type built from one number with `T(x)` (`U8(x)`, `S64(1.5)`, `Decimal(2)`) is `RF-S655` outside `danger`,
@@ -184,7 +194,7 @@ file only once its other old spellings are gone.
   no type parameter by value a `record`, one whose uses hold an entity an `entity`, one whose uses hold only values a
   `record` with `needs RecordType T`, and lists the rest. RF-S445 and RF-S446 are retired.
 - `Array[T, COUNT]` is `Items[T, COUNT]` and holds values (`needs RecordType T`). `Slots[T, COUNT]` is the entity with
-  the same layout for any `T`: kept in one place, `steal slots[i] as old inject fresh`, `swap`, `duplicate()` when `T`
+  the same layout for any `T`: it has one original, `steal slots[i] as old inject fresh`, `swap`, `duplicate()` when `T`
   is `Copyable`. The arguments of a variadic parameter are a `Slots[T, N]`. `SplitArray` is `SplitItems` (values
   only) and `BitArray` is `Bits`. The old names are unknown types whose error names the new one, and
   `migrate --step type-names` renames them.
@@ -266,7 +276,6 @@ file only once its other old spellings are gone.
 - `global`: module-level state, initialized in order before `start()` runs and torn down at its end. A global
   binding is read-only, so state that changes is an `Unbroken` or a `Guarded`. Globals of one name in two modules
   stay apart.
-- `bundle`: a generic group whose kind is chosen per instance.
 - Loops carry values: `until c with total: S64 = 0`, `continue with total: v`, and `then` sees them.
 - A `when` that gives a value ends a block arm with `becomes value`. One arm can match several values
   (`== 4, 6, 9, 11 =>`). An arm can be `throw ...`.
@@ -279,6 +288,8 @@ file only once its other old spellings are gone.
   variants `A | B`, `define` type aliases, generic variants, `@infix` routines.
 - Named and short arguments can mix: `area(width, height: 4)`.
 - `todo` statement.
+- `@noinline` keeps a routine out of its callers (its own body is still optimized). `@inline` with `@noinline` on one
+  routine is `RF-G227`.
 - Presets are computed at buildtime, including presets that call routines.
 - Hex float literals (`0x1.8p3`) for binary floats.
 - `@throws([...])` lists what a routine throws and the builder checks it (`RF-S712`, `RF-S713`).
@@ -333,7 +344,7 @@ file only once its other old spellings are gone.
   is an emittable, so terminals and adapters work on it.
 - An emittable collects into any collection with `to[...]`: `to[List]`, `to[Set]`, `to[Dict]` (of `(key, value)`
   pairs), `to[SortedList]`, `to[SortedSet]`, `to[SortedDict]`, `to[RotatableList]`, `to[BitList]`,
-  `to[PriorityQueue]` (of `(priority, element)` pairs), and `to[Array[T, N]]` (`ElementCountMismatchError` when the
+  `to[PriorityQueue]` (of `(priority, element)` pairs), and `to[Items[T, N]]` (`ElementCountMismatchError` when the
   count differs).
 - `Math3D` has `Matrix2R2C` and `Matrix3R3C` beside `Matrix4R4C`, with the same routines, `vec2` and `vec3`, a 2D
   `rotation`, `rotation_x`, `rotation_y`, `rotation_z` and `from_quaternion` on `Matrix3R3C`, and `scaling`. All three
@@ -433,6 +444,9 @@ file only once its other old spellings are gone.
 - `F256`, `F512`, `U192`, `U384` and the other in-between widths.
 - Number type suffixes, `inf_bNN`, the `B*_INFINITY` / `B*_NAN` presets.
 - `blank[T]()`.
+- `bundle` (a named type is a `record` or an `entity`), `Array`, `SplitArray` and `BitArray` (now `Items`, `SplitItems`
+  and `Bits`), `Maybe` (now `Optional[T]`, written `T?`), `DictEntry` (now a `(key, value)` tuple).
+- The `each` loop keyword (now `for`), `next_u64()`, `next_u32()` and `next_b64()` (now `next[T]()`).
 - Flags' `all_off()` (write `none`).
 
 ## [0.4.0] — 2026-08-28 · RazorForge 0.4.0 · Suflae 0.1.0

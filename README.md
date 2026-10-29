@@ -56,8 +56,8 @@ routine start()
     return
 ```
 
-> **Early alpha.** The builder, runtime, and standard library work, and every commit passes about
-> 1,500 unit tests and 240+ end-to-end programs (RazorForge and Suflae) on Windows, Linux, and
+> **Early alpha.** The builder, runtime, and standard library work, and every commit passes over
+> 2,000 unit tests and about 460 end-to-end programs (RazorForge and Suflae) on Windows, Linux, and
 > macOS in CI. APIs will still change between releases, and you will find bugs.
 
 ## What we are trying to keep
@@ -75,9 +75,9 @@ And for RazorForge, the feeling of finishing something the way you meant it, and
 
 **Copy or share, and say how you share.** `=` copies a record. An entity is something a copy would get
 wrong, because two copies leave you unsure which one is legitimate, or because copying costs too much, so you
-share it instead, and RazorForge asks for how long. For a moment: the entity lives in one place, you give a
+share it instead, and RazorForge asks for how long. For a moment: the entity has one original, you give a
 routine or a block permission (`view()` / `modify()`), and the builder checks that the permission ends with its
-call or `using` block. Moving it to another place is written `steal`. For longer: a manager such as `Retained[T]` or `Guarded[T, P]` (or the watching `Tracked[T]` / `Witnessed[T]`)
+call or its `viewing` / `modifying` block. Handing the original over is written `steal`. For longer: a manager such as `Retained[T]` or `Guarded[T, P]` (or the watching `Tracked[T]` / `Witnessed[T]`)
 holds the entity while each part keeps a handle. Cleanup follows from that choice and runs deterministically at
 scope exit, with no lifetime syntax to write.
 
@@ -176,14 +176,16 @@ compact list of where those guesses go wrong, with pointers to the CI-verified p
 ## Command line
 
 ```
-razorforge buildandrun [entry-file]       Build, link, and run
-razorforge build [entry-file]             Build a native executable for this OS (no run)
-razorforge check [entry-file]             Type-check only
-razorforge codegen [entry-file] [out.ll]  Stop at LLVM IR
-razorforge parse <source-file>            Parse and show an AST summary
-razorforge tokenize <source-file>         Show the tokens
-razorforge validate-stdlib [language]     Check the standard library's routine bodies
-razorforge --lsp                          Run the language server over stdio
+razorforge new [folder]                    Start a project (config.toml, main.rf, editor files)
+razorforge migrate [--check] <paths>...    Move sources from the previous release to this one
+razorforge check [--json] [entry-file]     Check the program without building it
+razorforge build [entry-file]              Build a native executable for this OS (no run)
+razorforge run [entry-file]                Build the program and run it
+razorforge test <dir-or-file>...           Run test programs against their expected output
+razorforge fmt [--check] <file-or-dir>...  Format sources in place
+razorforge lint <file-or-dir>...           Report code that is not in the canonical style
+razorforge docs <source-dir> <output-dir>  Write the API reference pages of a library
+razorforge lsp                             Run the language server (for an editor)
 razorforge help | version
 ```
 
@@ -201,7 +203,7 @@ mode = "debug"                     # debug -O0 | release -O2 | release-time -O3 
 ```
 
 With no entry file, the command looks for `config.toml` in the current directory and its parents,
-so `cd` into a solution and run `razorforge buildandrun`.
+so `cd` into a solution and run `razorforge run`.
 
 ## What works today
 
@@ -220,18 +222,19 @@ so `cd` into a solution and run `razorforge buildandrun`.
   `D128`, arbitrary-precision `Int`, 34-digit `Decimal`, complex `C64` / `C128` / `C256`,
   quaternions, vectors, and SIMD `Vector[T, N]`, with checked, wrapping, and clamping arithmetic.
 - **Collections:** `List`, `Dict`, `Set`, `RotatableList`, `BitList`, `PriorityQueue`, the sorted
-  collections, `SplitList` (struct of arrays), fixed-size `Array[T, N]`, and lazy iterator adapters
+  collections, `SplitList` (struct of arrays), fixed-size `Items[T, N]` (values) and `Slots[T, N]` (entities),
+  and lazy emitter adapters
   (`select`, `where`, `zip`, `enumerate`, …). Changing a collection while a `for` loop walks it is
   a build error, including when the change is hidden behind a call.
 - **Text:** UTF-32 `Text`, f-strings, `Bytes` with UTF-8 helpers, and range slicing
   (`text[a til b]`). Ranges (`to` inclusive, `til` exclusive, `by` for the step) work over any ordered
   type, such as integers, `Char`, decimals and floats.
 - **Generics and protocols:** type parameters with protocol constraints (`needs T obeys P`), const
-  generics (`Array[T, N]`), associated types. Everything monomorphizes, so there is no runtime dispatch.
+  generics (`Items[T, N]`), associated types. Everything monomorphizes, so there is no runtime dispatch.
 - **Concurrency:** any routine becomes concurrent work with `f.to[Work](args)`, a `Work[T]` that
   runs on the runtime's thread pool (`start_now()`), takes turns on the current thread (`start_here()`)
   or gets an OS thread of its own (`start_apart()`). Also `gather` / `race`, typed channels with
-  backpressure, async file I/O, and OS signal handlers. Async networking is not implemented yet.
+  backpressure, async file I/O, and CPU event handlers (`CpuEventManager`). Async networking is not implemented yet.
 - **Interop and build:** realm-qualified `C::` foreign routines and linking against C libraries,
   file-level conditional compilation (`@target`), and buildtime reflection (`expand`).
 - **Tooling:** a language server (diagnostics, hover, go-to-definition, rename, completion, inlay
@@ -308,12 +311,12 @@ The builder itself (parser, analysis, lowering, LLVM emission) is
 - Native builds on Windows and Linux x86-64 and macOS ARM64, with prebuilt packages
 - Copy-or-share memory model, failable routines with recovery keywords, generics, collections, 256-bit
   integers, decimal and 128-bit floats
-- Concurrent work behind `Work[T]`, channels, async file I/O, signals
+- Concurrent work behind `Work[T]`, channels, async file I/O, CPU event handlers
+- A build daemon and a JIT edit loop (`[target] mode = "debug-jit"`)
 - Language server with VS Code and Rider integration
 
 **Next**
 
-- A fast edit-and-rerun loop
 - Async networking (TCP, then HTTP)
 - Linux ARM64
 - Package management
