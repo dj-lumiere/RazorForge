@@ -327,8 +327,8 @@ routine WorkState[T].task_handle() -> Addr
 
 ### Whether the work has finished (its value is ready to `retrieve!` without waiting). A racy snapshot
 ### for polling/heuristics, not a synchronization decision — it can flip to true the instant after you
-### read it. A fiber is done at status COMPLETED (3), a thread at COMPLETED (4), and a Work no verb started is
-### done only once it is cancelled.
+### read it. A fiber is done at status COMPLETED (3) or CANCELLED (4, stopped at a wait on the cancel request), a
+### thread at COMPLETED (4), and a Work no verb started is done only once it is cancelled.
 ### :returns: `true` if the work has completed.
 routine WorkState[T].is_done() -> Bool
     # Work nothing started is done once it is cancelled: it never runs.
@@ -340,7 +340,8 @@ routine WorkState[T].is_done() -> Bool
         if me.coro().is_hollow()
             return true
         danger
-            return C::rf_coro_status_get(coro: me.coro()) == 3
+            var status = C::rf_coro_status_get(coro: me.coro())
+            return status == 3 or status == 4
     danger
         return C::rf_task_status_get(task: me.task()) == 4
 
@@ -350,9 +351,9 @@ routine WorkState[T].is_running() -> Bool
     return me.place() != WorkPlace.WAITING and not me.is_done()
 
 ### Requests cooperative cancellation of this job: sets a flag in NATIVE memory (reached through the handle)
-### and returns. It never frees or unwinds. A fiber observes the request at its next wait (`waitfor` returns
-### early) or through `cancellation_requested()`, a thread of its own only through
-### `cancellation_requested()` (a thread cannot be killed). A Work no verb started yet records the request in its
+### and returns. It never frees or unwinds. A fiber's next wait (`waitfor`, a channel) returns early, and a wait
+### after that stops it, where its Work abandons it. A thread of its own sees it only through
+### `cancellation_requested()` (a thread cannot be killed), and each of its waits returns early. A Work no verb started yet records the request in its
 ### cell, and sees it as soon as it starts.
 dangerous routine WorkState[T].request_cancel()
     if me.place() == WorkPlace.DONE
@@ -380,6 +381,10 @@ dangerous routine WorkState[T].wind_down(reports_failure: Bool)
         return
     if me.place() != WorkPlace.APART
         C::rf_sched_run_until_default(coro: me.coro())
+        # A fiber that stopped at a wait came to nothing: reaping abandons it.
+        if me.stopped()
+            me.reap()
+            return
     elseif C::rf_in_coroutine() != 0
         until C::rf_task_await_coro(task: me.task()) != 0
             C::rf_sched_park_external()
@@ -422,6 +427,10 @@ dangerous routine WorkState[T].take_outcome() -> Check[T]
 ### :returns: The value the work returned.
 failable routine WorkState[T].settle() -> T
     danger
+        # A fiber that stopped at a wait on the cancel request came to nothing: reaping abandons it.
+        if me.stopped()
+            me.reap()
+            throw CancelRequested()
         var outcome = me.take_outcome()
         me.reap()
         if me.cancelled()
@@ -431,6 +440,13 @@ failable routine WorkState[T].settle() -> T
                 return value
             is Crashables as error =>
                 throw error
+
+### Whether the work is a fiber that stopped at a wait on the cancel request: it is over, and came to nothing.
+### :returns: `true` once it stopped that way.
+dangerous routine WorkState[T].stopped() -> Bool
+    if me.place() == WorkPlace.APART or me.coro().is_hollow()
+        return false
+    return C::rf_coro_status_get(coro: me.coro()) == 4  # RF_CORO_CANCELLED
 
 ### Whether `cancel` was called on this Work.
 ### :returns: `true` once cancellation was requested.
@@ -555,6 +571,9 @@ dangerous routine WorkState[T].reap()
                 # completion and the worker frees it — its own scope teardown replaces the abandon walk.
                 if C::rf_sched_dispose_default(coro: me.coro()) == 1
                     C::rf_coro_abandon(coro: me.coro())
+                    # The routine that runs the recipe frees it as it finishes, which an abandoned fiber never
+                    # does.
+                    C::rf_invalidate(ptr: me.recipe)
             C::rf_task_destroy(task: me.task())
         # The fiber and task are freed: the cell forgets them, so a query on this Work after it was consumed
         # (`is_done()` / `is_running()`) reports "done" instead of reading freed memory.
@@ -893,15 +912,17 @@ routine List[Work[T]].take_finished() -> List[Work[T]]
 ### thing in either context, which is why it is preferable to a raw `sleep`.
 ### :param duration: How long to wait.
 routine waitfor(duration: Duration)
-    # Interruptible: once cancellation has been requested for this job, waitfor is a no-op so a
-    # cooperative loop (`until ...: waitfor(...); if cancellation_requested(): return`) exits promptly
-    # instead of sleeping out the full duration.
-    if C::rf_cancel_requested() != 0
-        return
+    # A job asked to stop is told by its first wait after the request, which returns early (a cancel also ends a
+    # wait in progress), so its body can poll `cancellation_requested()` and return. A fiber that waits again stops
+    # at that wait for good: its Work abandons it, tearing down what it built. A thread can't be stopped from
+    # outside, so each of its waits returns early.
     danger
+        if C::rf_coro_cancel_at_wait() != 0
+            return
         var total = duration.total_nanoseconds()
         if C::rf_in_coroutine() != 0
             C::rf_sched_park_timer(delay_ns: total.to[U64]())
+            drop C::rf_coro_cancel_at_wait()
         else
             var secs = total // 1000000000
             var nanos = (total - secs * 1000000000).to[U32]()

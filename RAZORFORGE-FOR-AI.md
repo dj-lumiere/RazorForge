@@ -1616,8 +1616,10 @@ Verbs (methods on `Work[T]`, all failable):
   scope that holds it, RF-W009 warns). A failure its work came to crashes the program there with the failure's
   message. Call `job.cancel()` first to throw away what it comes to, a failure included.
 - `cancel()` — asks the work to stop. Work nothing started yet never runs. Running work sees the request at
-  its next wait (`waitfor`, `retrieve`, a channel) or through `cancellation_requested()`, and stops there
-  (a thread of its own cannot be stopped from outside). Retrieving a cancelled Work waits for it to stop,
+  its next wait (`waitfor`, `retrieve`, a channel), which returns early, or through `cancellation_requested()`.
+  A job started with `start_now()`/`start_here()` that waits again after that stops at that wait, its owned
+  values torn down, so a loop of waits that never polls still ends (a thread of its own cannot be stopped from
+  outside, each of its waits only returns early). Retrieving a cancelled Work waits for it to stop,
   then throws `CancelRequested` (a crashable, no `Error` in the name because cancelling is not a failure),
   recovered with `check`/`try`.
 - `job.waitfor(5s).retrieve()` — retrieve with a deadline, throws `TaskTimeoutError` when it passes
@@ -1646,7 +1648,8 @@ Verbs (methods on `Work[T]`, all failable):
   `drop f.to[Work]()`) never runs its work, and is warning RF-W008.
 - Free routines: `waitfor(d)` waits `d` (parks inside a job, sleeps elsewhere; `50ms`, `5s`, or
   `Duration.from_milliseconds(ms: n)`), `yield_now()` lets other jobs run, `cancellation_requested()`
-  tells a long loop to stop early. Cancellation is cooperative: `waitfor` returns early once it is asked.
+  tells a long loop to stop early. Cancellation is cooperative: `waitfor` returns early once it is asked, and a
+  `start_now()`/`start_here()` job that waits again stops there.
 
 ```razorforge
 failable routine checked(n: S64) -> S64

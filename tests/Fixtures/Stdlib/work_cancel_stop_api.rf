@@ -1,0 +1,57 @@
+module Tests/Stdlib/WorkCancelStopApi
+
+# A cancelled fiber is told by its next wait, which returns early, and a wait after that stops it: a loop of waits
+# that never polls cancellation_requested() still ends, its owned values torn down. A start_here() job takes its
+# turns while start() waits on a channel or in waitfor.
+
+import IO/Console
+
+routine spin()
+    loop
+        waitfor(50ms)
+
+routine spin_holding() -> S64
+    var items = List[S64]()
+    items.add_last(value: 1)
+    var label = f"items {items.count()}"
+    loop
+        waitfor(50ms)
+        items.add_last(value: label.count().to[S64]())
+
+routine feed(out: Transmitter[S64])
+    out.transmit(item: 7)
+    return
+
+routine note()
+    show("here job ran")
+    return
+
+routine start()
+    var job = spin.to[Work]()
+    job.start_now()
+    waitfor(100ms)
+    job.cancel()
+    when check job.retrieve()
+        is CancelRequested => show("spin cancelled")
+        else => show("spin finished")
+    var holding = spin_holding.to[Work]()
+    holding.start_now()
+    waitfor(100ms)
+    holding.cancel()
+    when check holding.retrieve()
+        is S64 as n => show(f"holding finished {n}")
+        is CancelRequested => show("holding cancelled")
+        is Crashables as e => show(e.crash_message())
+    var (tx, rx) = make_channel[S64](capacity: 1)
+    var feeder = feed.to[Work](out: steal tx)
+    feeder.start_here()
+    for n in rx
+        show(f"got {n}")
+    feeder.retrieve()
+    var noting = note.to[Work]()
+    noting.start_here()
+    waitfor(20ms)
+    show("after waitfor")
+    noting.retrieve()
+    show("DONE")
+    return
