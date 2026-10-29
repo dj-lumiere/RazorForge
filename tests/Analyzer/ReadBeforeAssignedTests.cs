@@ -51,6 +51,48 @@ public class ReadBeforeAssignedTests
     }
 
     [Fact]
+    public void Analyze_WhenArmsAssignOrThrow_Builds()
+    {
+        AssertAnalyzesSa(source: """
+                                 crashable UnknownWordError
+                                     word: Text
+
+                                 routine UnknownWordError.crash_message() -> Text
+                                     return f"'{me.word}' is not a word"
+
+                                 failable routine size(word: Text) -> S64
+                                     lateinit var n: S64
+                                     when word
+                                         == "one" => n = 1
+                                         == "two" => n = 2
+                                         else => throw UnknownWordError(word: word)
+                                     return n
+
+                                 routine start()
+                                     drop try size(word: "one")
+                                     return
+                                 """);
+    }
+
+    [Fact]
+    public void Analyze_WhenWithoutElseAssigningInArms_IsRejected()
+    {
+        AssertHasErrorSa(source: """
+                         routine size(word: Text) -> S64
+                             lateinit var n: S64
+                             when word
+                                 == "one" => n = 1
+                                 == "two" => n = 2
+                             return n
+
+                         routine start()
+                             drop size(word: "one")
+                             return
+                         """,
+            expectedErrorSubstring: "'n' was declared without a value");
+    }
+
+    [Fact]
     public void Analyze_ReadBeforeAnyAssignment_IsRejected()
     {
         AnalysisResult result = AssertHasErrorSa(source: """
