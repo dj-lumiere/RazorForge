@@ -681,6 +681,159 @@ public sealed class MultiFileModuleImportTests
                          e.Message.Contains(value: "secret to module 'Garden/Tools'"));
     }
 
+    // A module with two routines and two types, for the narrowed and aliased imports below.
+    private static readonly (string RelPath, string Source)[] PriceFiles =
+    [
+        ("Prices.rf", """
+                      module Prices
+
+                      record Coin
+                          value: S64
+
+                      record Note
+                          value: S64
+
+                      routine cents(n: S64) -> S64
+                          return n * 100
+
+                      routine euros(n: S64) -> S64
+                          return n // 100
+
+                      routine label(n: S64) -> Text
+                          return "S64"
+
+                      routine label(t: Text) -> Text
+                          return "Text"
+
+                      preset RATE: S64 = 7
+                      """)
+    ];
+
+    /// <summary>
+    /// <c>import Prices.cents as to_cents</c>: the member is named both <c>to_cents</c> and <c>Prices.cents</c>, a
+    /// type and a preset take an alias the same way, and the bare <c>cents</c> is not brought.
+    /// </summary>
+    [Fact]
+    public void MemberAlias_NamesTheMemberBothWays()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import IO/Console
+                                                             import Prices.cents as to_cents
+                                                             import Prices.Coin as Money
+                                                             import Prices.RATE as rate
+
+                                                             routine start()
+                                                                 var m = Money(value: to_cents(n: 2) + Prices.cents(n: rate))
+                                                                 var f = to_cents
+                                                                 show(m.value)
+                                                                 return
+                                                             """,
+            moduleFiles: PriceFiles);
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+
+        errors = RunProject(entrySource: """
+                                         import Prices.cents as to_cents
+
+                                         routine start()
+                                             var c = cents(n: 2)
+                                             return
+                                         """,
+            moduleFiles: PriceFiles);
+        SemanticError error = Assert.Single(collection: errors);
+        Assert.Contains(expectedSubstring: "'to_cents'", actualString: error.Message);
+    }
+
+    /// <summary>
+    /// <c>import Prices.[cents, Coin]</c> brings only those names: <c>euros</c> and <c>Note</c> stay unknown, and the
+    /// message says the import left them out.
+    /// </summary>
+    [Fact]
+    public void SelectiveImport_BringsOnlyTheNamedMembers_Reported()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import Prices.[cents, Coin]
+
+                                                             routine start()
+                                                                 var c = Coin(value: cents(n: 1))
+                                                                 var e = euros(n: 300)
+                                                                 var n = Note(value: 1)
+                                                                 return
+                                                             """,
+            moduleFiles: PriceFiles);
+
+        Assert.Equal(expected: 2, actual: errors.Count);
+        Assert.Contains(collection: errors,
+            filter: e => e.Message.StartsWith(value: "Unknown identifier 'euros'") &&
+                         e.Message.Contains(value: "brings only"));
+        Assert.Contains(collection: errors, filter: e => e.Message.StartsWith(value: "Unknown identifier 'Note'"));
+    }
+
+    /// <summary><c>import Prices.euros</c> brings that one routine.</summary>
+    [Fact]
+    public void MemberImport_BringsOnlyThatMember_Reported()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import Prices.euros
+
+                                                             routine start()
+                                                                 var e = euros(n: 300)
+                                                                 var c = cents(n: 1)
+                                                                 return
+                                                             """,
+            moduleFiles: PriceFiles);
+
+        SemanticError error = Assert.Single(collection: errors);
+        Assert.Contains(expectedSubstring: "'cents'", actualString: error.Message);
+    }
+
+    /// <summary>
+    /// <c>import Prices as P</c>: the module is reached as <c>P.</c> and as <c>Prices.</c>, the overload the arguments
+    /// fit is the one called, and its names are not bare.
+    /// </summary>
+    [Fact]
+    public void AliasImport_ReachesTheModuleThroughTheAlias()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import IO/Console
+                                                             import Prices as P
+
+                                                             routine start()
+                                                                 show(P.label(n: P.cents(n: 2)))
+                                                                 show(Prices.label(t: "x"))
+                                                                 return
+                                                             """,
+            moduleFiles: PriceFiles);
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+
+        errors = RunProject(entrySource: """
+                                         import Prices as P
+
+                                         routine start()
+                                             var c = cents(n: 2)
+                                             return
+                                         """,
+            moduleFiles: PriceFiles);
+        SemanticError error = Assert.Single(collection: errors);
+        Assert.Contains(expectedSubstring: "'P.cents'", actualString: error.Message);
+    }
+
+    /// <summary>A whole import next to a narrowed one of the same module brings every name.</summary>
+    [Fact]
+    public void WholeImport_BesideSelectiveImport_BringsEverything_NoErrors()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             import Prices.[cents]
+                                                             import Prices
+
+                                                             routine start()
+                                                                 var e = euros(n: cents(n: 3))
+                                                                 return
+                                                             """,
+            moduleFiles: PriceFiles);
+
+        Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
+    }
+
     private static List<SemanticError> RunProject(string entrySource,
         IReadOnlyList<(string RelPath, string Source)> moduleFiles,
         string entryRelPath = "ImportProbe.rf")

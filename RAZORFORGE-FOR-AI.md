@@ -320,6 +320,13 @@ a type/routine/preset in module `Foo`). An import brings the module it names, ne
 modules under it (`import IO` doesn't bring `IO/Console`). `System` and every module under
 it are seen everywhere without an import.
 
+A member import narrows: `import Foo.bar` / `import Foo.[bar, Baz]` brings only those names
+bare (another name of `Foo` used bare is RF-S007 with a hint), unless the file also imports
+`Foo` whole. A routine is always reachable with its module in front (`Foo.qux(...)`, the
+last path segment, overloads picked by the arguments). `as` adds a second name and both work:
+`import Foo.bar as b` → `b` and `Foo.bar`, no bare `bar`; `import Foo as F` → `F.qux(...)` and
+`Foo.qux(...)`, no bare names of `Foo`.
+
 **The standard library's modules.** A standard library module is its folder
 (`Standard/RazorForge/System/Text/` is `System/Text`), and a `module` line that names another
 module is a build error. `System` is the base: the built-in types, `List` / `Dict` / `Set`,
