@@ -444,8 +444,8 @@ file only once its other old spellings are gone.
 - `F256`, `F512`, `U192`, `U384` and the other in-between widths.
 - Number type suffixes, `inf_bNN`, the `B*_INFINITY` / `B*_NAN` presets.
 - `blank[T]()`.
-- `bundle` (a named type is a `record` or an `entity`), `Array`, `SplitArray` and `BitArray` (now `Items`, `SplitItems`
-  and `Bits`), `Maybe` (now `Optional[T]`, written `T?`), `DictEntry` (now a `(key, value)` tuple).
+- `Array`, `SplitArray` and `BitArray` (now `Items`, `SplitItems` and `Bits`),
+  `Maybe` (now `Optional[T]`, written `T?`), `DictEntry` (now a `(key, value)` tuple).
 - The `each` loop keyword (now `for`), `next_u64()`, `next_u32()` and `next_b64()` (now `next[T]()`).
 - Flags' `all_off()` (write `none`).
 
