@@ -3,13 +3,13 @@ module Collections
 import BuilderQuery
 ### A fixed-size, inline sequence of `BITS` boolean flags packed into bytes.
 ###
-### `BitArray[BITS]` stores exactly `BITS` bits compactly — each bit occupies only
+### `Bits[BITS]` stores exactly `BITS` bits compactly — each bit occupies only
 ### one bit of storage rather than a full byte. Like {Items[T, BITS]}, it is a
-### record type: copying a `BitArray` copies all `BITS` bits and the size is fixed
+### record type: copying a `Bits` copies all `BITS` bits and the size is fixed
 ### at build time.
 ###
 ### Because modification returns a new copy (via `with_set` and `with_flipped`)
-### rather than mutating in place, `BitArray` is well-suited for immutable flag
+### rather than mutating in place, `Bits` is well-suited for immutable flag
 ### sets or small bit masks that are passed around by value.
 ###
 ### **When to use**
@@ -42,8 +42,8 @@ needs U64 BITS
 # Iteration Support
 # ============================================================================
 
-### Walks the bits of a fixed-size `BitArray[BITS]` from index 0 to N - 1.
-### Because `BitArray` is a record type, the emitter holds its own copy of the packed bits.
+### Walks the bits of a fixed-size `Bits[BITS]` from index 0 to N - 1.
+### Because `Bits` is a record type, the emitter holds its own copy of the packed bits.
 ### :typeparam BITS: The buildtime bit count.
 entity BitsEmitter[BITS]
 obeys Emitter[Bool]
@@ -53,7 +53,7 @@ needs U64 BITS
     ### Stores the next logical bit index to read.
     index: U64
 
-### Reads the byte at `index` from a `BitArray[BITS]`'s packed storage.
+### Reads the byte at `index` from a `Bits[BITS]`'s packed storage.
 ### :param array: The bit array to read from.
 ### :param index: The zero-based byte position.
 ### :returns: The byte stored at `index`.
@@ -61,7 +61,7 @@ needs U64 BITS
 routine LLVM::byte_at_bits[BITS](array: Bits[BITS], index: U64) -> U8
 needs U64 BITS
 
-### Writes `value` into the byte at `index` of a `BitArray[BITS]`'s packed storage.
+### Writes `value` into the byte at `index` of a `Bits[BITS]`'s packed storage.
 ### :param array: The bit array to update.
 ### :param index: The zero-based byte position.
 ### :param value: The byte to store.
@@ -108,7 +108,7 @@ failable routine Bits[BITS].getitem(index: U64) -> Bool
         byte_val = LLVM::load_element_ref[Bits[BITS], U8](me.hijack(), byte_idx)
     return (byte_val & (1 << bit_off)) != 0
 
-### Writes `value` into the bit at `index`, mutating this `BitArray` in place.
+### Writes `value` into the bit at `index`, mutating this `Bits` in place.
 ### :param index: The zero-based bit position to update.
 ### :param value: The new bit value.
 ### :throws: {IndexOutOfBoundsError} if `index >= BITS`.
@@ -139,8 +139,8 @@ failable routine Bits[BITS].setitem(index: U64, value: Bool)
 # Functional Modification (returns new copy)
 # ============================================================================
 
-### Returns a new `BitArray` identical to this one but with the bit at `index` set to `value`.
-### The original value is unchanged because `BitArray` has value semantics.
+### Returns a new `Bits` identical to this one but with the bit at `index` set to `value`.
+### The original value is unchanged because `Bits` has value semantics.
 ### If `index >= BITS`, the original array is returned unmodified.
 ### :param index: The zero-based bit position to change.
 ### :param value: The new bit value.
@@ -161,7 +161,7 @@ routine Bits[BITS].with_set(index: U64, value: Bool) -> Bits[BITS]
         result = LLVM::set_byte_at_bits[BITS](result, byte_idx, byte_val & ~(1 << bit_off))
     return result
 
-### Returns a new `BitArray` identical to this one but with the bit at `index` toggled.
+### Returns a new `Bits` identical to this one but with the bit at `index` toggled.
 ### If `index >= BITS`, the original array is returned unmodified.
 ### :param index: The zero-based bit position to flip.
 ### :returns: A copy of this array with the specified bit inverted.

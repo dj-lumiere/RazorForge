@@ -3,11 +3,11 @@ module System
 import BuilderQuery
 ### A fixed-size, inline array of `COUNT` values.
 ###
-### `Array[T, COUNT]` stores exactly `COUNT` elements packed directly into its own
+### `Items[T, COUNT]` stores exactly `COUNT` elements packed directly into its own
 ### footprint: it makes no separate allocation for its slots, and it lives wherever
 ### what holds it lives (a local, a member variable of an entity, another array). An
 ### element can still own memory of its own (a `Text`'s characters). Because it is a
-### record, its elements are values (`needs RecordType T`), copying an `Array` copies
+### record, its elements are values (`needs RecordType T`), copying an `Items` copies
 ### all `COUNT` elements, each the way its own type copies, and the size can never
 ### change after construction.
 ###
@@ -48,7 +48,7 @@ needs RecordType T
 # Iteration Support
 # ============================================================================
 
-### Walks the elements of a fixed-size `Array[T, COUNT]` from index 0 to N - 1.
+### Walks the elements of a fixed-size `Items[T, COUNT]` from index 0 to N - 1.
 ### :typeparam T: The element type yielded by the emitter.
 ### :typeparam COUNT: The buildtime element count.
 entity ItemsEmitter[T, COUNT]
@@ -88,7 +88,7 @@ routine Items[T, COUNT].get_raw(index: U64) -> T
     danger
         return LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), index)
 
-### Replaces the element at `index` with `value`, mutating this `Array` in place.
+### Replaces the element at `index` with `value`, mutating this `Items` in place.
 ### `me` is received by reference (struct-record `setitem!`), so the single-element write through
 ### `me.hijack()` reaches the caller's storage directly — no whole-array copy.
 ### :param index: The zero-based position to update.
@@ -127,8 +127,8 @@ secret failable routine Items[T, COUNT].exchange(index: U64, value: T) -> T
         return old
 
 ### Returns a `List[T]` holding independent copies of the elements in `range` — the slice form of
-### indexing (`array[a til b]`). Unlike scalar indexing this returns a `List`, NOT an `Array[T, M]`: the
-### slice length is a runtime value, whereas an `Array`'s size is a buildtime parameter, so it cannot
+### indexing (`array[a til b]`). Unlike scalar indexing this returns a `List`, NOT an `Items[T, M]`: the
+### slice length is a runtime value, whereas an `Items`'s size is a buildtime parameter, so it cannot
 ### type as a fixed-size array. A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields
 ### `[a, b]`; a range that counts down (`by -1`) reverses. Positions at or past `COUNT` are skipped. Each element is copied
 ### through `copy`.
@@ -144,7 +144,7 @@ needs RecordType T
     return result
 
 ### Tears down each stored element. No-op for plain values, releases what a counted element holds. All `COUNT`
-### places hold an element, so the full range is visited. `Array` has no separate allocation of its own to free.
+### places hold an element, so the full range is visited. `Items` has no separate allocation of its own to free.
 @override
 routine Items[T, COUNT].destruct()
     var i: U64 = 0
@@ -157,7 +157,7 @@ routine Items[T, COUNT].destruct()
     return
 
 ### Cycle-collector TRACE: report every inline slot to the collector (a `Roamed` element reports its
-### controller; a value element is a no-op). Overrides the universal member-walk — `Array` is `@llvm`
+### controller; a value element is a no-op). Overrides the universal member-walk — `Items` is `@llvm`
 ### storage with no named members, so the generic walk sees nothing.
 @override
 dangerous routine Items[T, COUNT].roam_trace()
@@ -167,7 +167,7 @@ dangerous routine Items[T, COUNT].roam_trace()
         i = i + 1
     return
 
-### Cycle-collector FREE: a NO-OP. `Array` is a value record with no allocation of its own, and its
+### Cycle-collector FREE: a NO-OP. `Items` is a value record with no allocation of its own, and its
 ### elements are freed by the collector as part of the white cycle — the default `roam_free` forwards to
 ### `destruct`, which WOULD tear down every element (a double-free here), so it must be overridden.
 @override
@@ -177,7 +177,7 @@ dangerous routine Items[T, COUNT].roam_free()
 ### Returns a copy with each element STORED (refcount-bumped for managed element types like `Text`; a
 ### plain bitwise duplicate for trivially-copyable elements). Element-wise so the per-element `destruct`
 ### at scope teardown stays balanced — a whole-array bitwise copy would alias element handles at
-### refcount 1 and double-free. Storability CASCADES: `Array[T, COUNT]` is Assignable iff `T` is.
+### refcount 1 and double-free. Storability CASCADES: `Items[T, COUNT]` is Assignable iff `T` is.
 @readonly
 @override
 secret routine Items[T, COUNT].share() -> Items[T, COUNT]
@@ -190,7 +190,7 @@ needs RecordType T
     return result
 
 ### Returns a deep, independent copy — each element deep-copied via its own `copy`. Copyability
-### cascades: `Array[T, COUNT]` is copyable iff `T` is.
+### cascades: `Items[T, COUNT]` is copyable iff `T` is.
 @readonly
 routine Items[T, COUNT].duplicate() -> Items[T, COUNT]
 needs RecordType T
