@@ -158,7 +158,7 @@ public partial class RazorForgeLexer
             {
                 throw new GrammarException(code: GrammarDiagnosticCode.InvalidEscapeSequence,
                     message: $"Non-ASCII character '{c}' (U+{(int)c:X4}) in byte literal. " +
-                             "Byte literals only accept ASCII (0x00-0x7F). Use \"text\".encode_as(UTF8) instead.",
+                             "Byte literals only accept ASCII (0x00-0x7F). Use \"text\".encode_as_utf8() instead.",
                     fileName: _fileName,
                     line: _line,
                     column: _column,
