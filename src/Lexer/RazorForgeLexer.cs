@@ -262,9 +262,7 @@ public partial class RazorForgeLexer
             [key: "everywhere"] = TokenType.Everywhere,
             // `until cond` loops while the condition is false, `becomes v` gives a block arm of a value `when` its value.
             [key: "until"] = TokenType.Until,
-            [key: "becomes"] = TokenType.Becomes,
-            // Reserved for a keyword a later release uses: it can't name anything now.
-            [key: "inject"] = TokenType.ReservedWord
+            [key: "becomes"] = TokenType.Becomes
         };
 
         // RazorForge-only keywords

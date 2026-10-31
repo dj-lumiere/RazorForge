@@ -157,6 +157,32 @@ public sealed class MultiFileModuleImportTests
     }
 
     /// <summary>
+    /// Importing a folder prefix (<c>import Shop</c> where only <c>Shop/Cart</c> exists) says that Shop is a
+    /// folder of modules and names the module to import.
+    /// </summary>
+    [Fact]
+    public void FolderPrefixImport_NamesTheModulesBelow()
+    {
+        List<SemanticError> errors = RunProject(entrySource: """
+                                                             module ImportProbe
+                                                             import Shop
+
+                                                             routine start()
+                                                                 return
+                                                             """,
+            moduleFiles: [("Shop/Cart.rf", """
+                                           module Shop/Cart
+                                           routine cart_total() -> S32
+                                               return 3
+                                           """)]);
+
+        SemanticError error = Assert.Single(collection: errors.Where(predicate: e =>
+            e.Code == SemanticDiagnosticCode.ModuleNotFound));
+        Assert.Contains(expectedSubstring: "'Shop' is a folder of modules (Shop/Cart)", actualString: error.Message);
+        Assert.Contains(expectedSubstring: "`import Shop/Cart`", actualString: error.Message);
+    }
+
+    /// <summary>
     /// A generic free routine in an imported module is callable cross-module with EXPLICIT type
     /// arguments (<c>gen_id[S32](7)</c>). Concrete free routines always resolved; generic ones used
     /// to fail because the explicit-generic call path missed the generic-overload index.

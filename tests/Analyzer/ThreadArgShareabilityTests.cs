@@ -289,6 +289,25 @@ public class ThreadArgShareabilityTests
             expectedErrorSubstring: "not 'start_now()'");
     }
 
+    /// <summary>A start verb the Work may not use is reported there, and the retrieve after it adds no second error.</summary>
+    [Fact]
+    public void Analyze_TokenArgStartedOnAnotherThread_ReportsOnce()
+    {
+        AnalysisResult result = AnalyzeSa(source: Prelude + """
+                                                          routine bump(n: Modifying[Node]) -> S64
+                                                              return n.value
+
+                                                          routine start()
+                                                              var node = Node(value: 1)
+                                                              var job = bump.to[Work](n: node.modify())
+                                                              job.start_now()
+                                                              var got = job.retrieve()
+                                                              return
+                                                          """);
+        Assert.Single(collection: result.Errors.Where(predicate: e =>
+            e.Code == SemanticDiagnosticCode.ThreadArgNotShareable));
+    }
+
     [Fact]
     public void Analyze_TokenArgWorkLeavingTheRoutine_Errors()
     {

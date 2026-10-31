@@ -317,7 +317,8 @@ the last executable that built.
 **Two import forms, distinct meaning:** `import Foo/Bar` is a **module** import
 (`Bar` is a submodule of `Foo`). `import Foo.bar` is a **member** import (`bar` is
 a type/routine/preset in module `Foo`). An import brings the module it names, never the
-modules under it (`import IO` doesn't bring `IO/Console`). `System` and every module under
+modules under it (`import IO` doesn't bring `IO/Console`). A folder that holds modules but is no module itself
+(`import IO`) is RF-S105 listing the modules in it. `System` and every module under
 it are seen everywhere without an import.
 
 A member import narrows: `import Foo.bar` / `import Foo.[bar, Baz]` brings only those names
@@ -589,7 +590,8 @@ with -1.
   `local.to[Moment]()`, `ratio.to[Q128]()` from a `B32`). So `S64(from: x)` is not a routine. A variant's arm comes out
   the same way: `sv.to[S64]()` / `sv.to[Dict]()` is failable (another arm is active → crash, `try` gives
   `None`). The old spellings `sv.S64()`, `S64(from: sv)`, `Dict[Text, SerialValue](from: sv)` are gone (RF-S458 /
-  RF-S646 point at `.to[...]()`).
+  RF-S646 point at `.to[...]()`). A `SerialValue` shows as the JSON it encodes to (`show(p.serialize())` prints
+  `{"x":1,"y":2}`).
 - Each conversion is its own routine, a specialization written with the target type in the bracket:
 
   ```razorforge

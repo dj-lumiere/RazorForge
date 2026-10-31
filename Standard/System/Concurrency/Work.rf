@@ -780,13 +780,15 @@ dangerous routine List[Work[T]].release_all()
 ### winner's value. Works on the list in place — call it `jobs.race()`. A coroutine loser is disposed/abandoned here, a
 ### threaded loser's block is freed through the worker↔consumer rendezvous (its worker frees it on exit).
 ### Mixed coroutine/thread sets are supported.
-### :throws: {TaskSpawnError} if the set is empty (there is nothing to race).
+### :throws: {WorkStartError} if the list is empty (there is no work to race).
+### :throws: {TaskSpawnError} if a Work could not be started.
 ### :returns: The value produced by the first Work to finish.
 failable routine List[Work[T]].race() -> T
     danger
         var n = me.count()
         if n == 0
-            throw TaskSpawnError()
+            throw WorkStartError(reason: "You called race() on an empty list, so there is no work to race. " +
+                "Put the Works in the list first.")
 
         # Start the whole set together so it runs CONCURRENTLY, then race.
         if not me.launch_together()
@@ -859,13 +861,15 @@ routine List[Work[T]].cancel_all()
 ### Waits until one of the jobs finishes, takes it out of the list and returns it, starting the ones nothing
 ### started. Called again and again it hands the jobs over in the order they finish, so each result is handled as
 ### soon as it is there. `retrieve` the returned Work for its value or its failure.
-### :throws: {TaskSpawnError} if the list is empty or a Work cannot be started.
+### :throws: {WorkStartError} if the list is empty (there is no work to wait for).
+### :throws: {TaskSpawnError} if a Work cannot be started.
 ### :returns: The first Work of the list to finish.
 failable routine List[Work[T]].next_finished() -> Work[T]
     danger
         var n = me.count()
         if n == 0
-            throw TaskSpawnError()
+            throw WorkStartError(reason: "You called next_finished() on an empty list, so there is no work to wait " +
+                "for. Put the Works in the list first.")
         if not me.launch_together()
             throw TaskSpawnError()
         var race = C::rf_race_begin()
