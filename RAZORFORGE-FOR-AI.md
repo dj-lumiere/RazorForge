@@ -233,8 +233,8 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   `marks == none`, a preset or record preset). A `CellMarks?` slot takes `none` as the absent Optional. There is no
   `all_off()`. Choice values (`OK: 200`) and flags bits (`MINE: 0`, 0 to 63) are written on every member or on none
   (then 0, 1, 2, ... in order): some with and some without is RF-S417.
-  A `choice` auto-provides `Equatable`/`Comparable`/`Hashable` — no `obeys` and no
-  method bodies needed.
+  A `choice` auto-provides `Equatable`/`Hashable` — no `obeys` and no
+  method bodies needed. It has no ordering: `<` on a choice is RF-S418, cases compare with `==` / `!=`.
 - **`Me` (capital) = the receiver's TYPE (the Self type); `me` (lowercase) = the
   receiver INSTANCE.** Do not conflate them.
 - The generic-constraint keyword is **`needs`** (e.g. `needs T obeys P`), **not
@@ -392,7 +392,8 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   `Duration` and `Moment` are both `S64` seconds + `U32` nanoseconds. The time is read from `Clock`, called on the
   type: `Clock.now()` (a `Moment`, follows the system clock), `Clock.monotonic()` (a `Duration` that only goes
   forward, for measuring and deadlines), `CpuClock.now()` (processor time used, a `Duration`). There is no
-  `Moment.now()` or `LocalMoment.now_utc()`.
+  `Moment.now()` or `LocalMoment.now_utc()`. A `LocalMoment`'s moment and offset are `secret`: read them with
+  `to[Moment]()` and `utc_offset()`.
 - `Char.to_uppercase`/`to_lowercase`/`is_uppercase`/`is_lowercase` follow Unicode (simple one-to-one mapping,
   `ß` stays `ß`). `lines()` and `ask_lines()` start no new line after a final line ending.
 - Build errors where the emitter used to fail: a construction leaving out a member with no default (RF-S455, names
