@@ -45,6 +45,17 @@ public sealed class TesseraBackendNameTests
             actual: BuildAndRun(fixture: "TesseraBackendStealRefill").ReplaceLineEndings(replacementText: "\n"));
     }
 
+    /// <summary>
+    /// <c>gather()</c> on a <c>List[Work[None]]</c> of more jobs than a list first has room for, on the Tessera
+    /// backend: <c>me[i].state</c> reads the Work through the token <c>modify_at</c> gives, and the list of the jobs'
+    /// None results keeps no storage, so its address is zero and moving it by nothing must not stop the program.
+    /// </summary>
+    [Fact]
+    public void GatherOfWorkNone_RunsOnTheTesseraBackend()
+    {
+        Assert.Equal(expected: "9", actual: BuildAndRun(fixture: "TesseraBackendGatherNone"));
+    }
+
     /// <summary>Builds and runs <c>tests/Fixtures/{fixture}/main.rf</c> and returns what it printed.</summary>
     private static string BuildAndRun(string fixture)
     {

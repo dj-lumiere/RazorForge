@@ -1872,7 +1872,10 @@ no `memvarof`) and the metadata **accessors** `nameof` `orderof` `placeof` `size
 keywords** — they tokenize as ordinary identifiers and are recognized in SA only when
 `import BuilderExpansion` is in effect (bare `nameof(m)` or `$`-spliced `me.$nameof(m)`),
 each reading a buildtime property off the active `expand` handle or a type. Without that
-import, using `expand` or any source/accessor is a build error (RF-S952).
+import, using `expand` or any source/accessor is a build error (RF-S952). Over a type parameter (`allmemvarof(T)`) a
+comparison, `hash` or `compare` on a member needs `needs P everywhere` (RF-S633). Over a concrete type in a routine
+that is not generic (`allmemvarof(Settings)`) the builder unrolls the body during analysis and checks each copy with
+its member's own type, so `before.$nameof(m) != after.$nameof(m)` needs no `needs` line.
 
 `$` (`${…}` buildtime splice) is a structural sigil, not a keyword. Failability is the `failable` keyword on the
 declaration, and the name stays bare (RoutineInfo carries `IsFailable`). See §1b.
