@@ -102,8 +102,32 @@ failable routine ask_line() -> Text
     var ptr = C::rf_console_ask_line()
     if ptr.is_hollow()
         throw EndOfInputError(reader: "ask_line")
-    var bytes = Bytes(ptr: ptr)
-    return bytes.decode_as_utf8_lossy()
+    return input_text(ptr: ptr)
+
+### The bytes the runtime read from standard input as text, decoded once. The runtime's block is given back.
+### :param ptr: The block the runtime handed over: the count of the bytes, a `U64`, then the bytes.
+### :returns: The text.
+secret routine input_text(ptr: Hijacked[Byte]) -> Text
+    danger
+        var text = Text(from_utf8_lossy: ptr.stride(count: 8), count: input_count(ptr: ptr))
+        C::rf_invalidate(ptr: ptr.address())
+        return text
+
+### The bytes the runtime read from standard input, copied once. The runtime's block is given back.
+### :param ptr: The block the runtime handed over: the count of the bytes, a `U64`, then the bytes.
+### :returns: The bytes.
+secret routine input_bytes(ptr: Hijacked[Byte]) -> Bytes
+    danger
+        var bytes = Bytes(ptr: ptr.stride(count: 8), count: input_count(ptr: ptr))
+        C::rf_invalidate(ptr: ptr.address())
+        return bytes
+
+### The count at the front of a block the runtime read from standard input.
+### :param ptr: The block.
+### :returns: How many bytes follow the count.
+secret routine input_count(ptr: Hijacked[Byte]) -> U64
+    danger
+        return Hijacked[U64](ptr.address()).peek()
 
 ### Reads one line of standard input as a `T`: `var n: S64 = ask()` (the type the value goes to), or `ask[S64]()`.
 ### The line becomes the value the way `line.to[T]()` makes it, so a line that isn't one fails like that does.
@@ -121,8 +145,7 @@ failable routine ask_word() -> Text
     var ptr = C::rf_console_ask_word()
     if ptr.is_hollow()
         throw EndOfInputError(reader: "ask_word")
-    var bytes = Bytes(ptr: ptr)
-    return bytes.decode_as_utf8_lossy()
+    return input_text(ptr: ptr)
 
 ### Reads all remaining text from standard input.
 ### :returns: The resulting `Text` value.
@@ -130,8 +153,7 @@ routine ask_all() -> Text
     var ptr = C::rf_console_ask_all()
     if ptr.is_hollow()
         return ""
-    var bytes = Bytes(ptr: ptr)
-    return bytes.decode_as_utf8_lossy()
+    return input_text(ptr: ptr)
 
 ### Reads all remaining input and splits it into lines, as {Text.lines} does: the line ending after the last line
 ### starts no new one.
@@ -155,7 +177,7 @@ routine ask_raw() -> Bytes
     var ptr = C::rf_console_ask_all()
     if ptr.is_hollow()
         return Bytes()
-    return Bytes(ptr: ptr)
+    return input_bytes(ptr: ptr)
 
 ### Reads up to `count` bytes from standard input.
 ### :param count: The maximum number of bytes to read.
@@ -164,7 +186,7 @@ routine ask_bytes(count: U64) -> Bytes
     var ptr = C::rf_console_ask_bytes(count)
     if ptr.is_hollow()
         return Bytes()
-    return Bytes(ptr: ptr)
+    return input_bytes(ptr: ptr)
 
 ### The standard-input source.
 ### :returns: A {ConsoleIn} over stdin.
@@ -188,7 +210,7 @@ routine ConsoleIn.pull(max: U64) -> Bytes
     var ptr = C::rf_console_ask_bytes(max)
     if ptr.is_hollow()
         return Bytes()
-    return Bytes(ptr: ptr)
+    return input_bytes(ptr: ptr)
 
 ### Pushes `data` to the underlying standard stream, returning the number of bytes accepted.
 ### :param data: The bytes to push.

@@ -274,15 +274,15 @@ routine Bytes.add(other: Bytes) -> Bytes
 
 ### Returns whether both values are equal.
 ### Equality requires the same length and the same byte at each position.
-### :param other: The other byte sequence to compare against.
+### :param you: The other byte sequence to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Bytes.eq(other: Bytes) -> Bool
-    if me.count != other.count
+routine Bytes.eq(you: Bytes) -> Bool
+    if me.count != you.count
         return false
     var i: U64 = 0
     for i in 0 til me.count
-        if me[i] != other[i]
+        if me[i] != you[i]
             return false
     return true
 
@@ -681,13 +681,24 @@ routine Text.encode_as_utf8() -> Bytes
 ### :returns: The resulting `Text` value.
 @readonly
 routine Bytes.decode_as_utf8_lossy() -> Text
-    var result = List[Char]()
-    var len = me.count
+    return Text(from_utf8_lossy: me.data, count: me.count)
+
+### Creates text by decoding `count` bytes of UTF-8 at `from_utf8_lossy`, replacing malformed subsequences with the
+### Unicode replacement character. The characters go into one list made for `count` of them, so the bytes are read once
+### and nothing grows. The caller guarantees `count` readable bytes there.
+### :param from_utf8_lossy: The first byte.
+### :param count: How many bytes.
+### :returns: The resulting `Text` value.
+routine Text(from_utf8_lossy: Hijacked[Byte], count: U64) -> Text
+    if count == 0
+        return Text()
+    var result = List[Char](capacity: count)
+    var len = count
     var i: U64 = 0
     loop
         if i >= len
             break
-        var b0 = me[i].value().to[U32]()
+        var b0 = utf8_byte(at: from_utf8_lossy, index: i)
         var codepoint: U32 = 0
         when
             (b0 & 0x80) == 0 =>
@@ -695,7 +706,7 @@ routine Bytes.decode_as_utf8_lossy() -> Text
                 i += 1
             (b0 & 0xE0) == 0xC0 =>
                 if i + 1 < len
-                    var b1 = me[i + 1].value().to[U32]()
+                    var b1 = utf8_byte(at: from_utf8_lossy, index: i + 1)
                     if (b1 & 0xC0) == 0x80 and b0 >= 0xC2
                         codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
                         i += 2
@@ -707,8 +718,8 @@ routine Bytes.decode_as_utf8_lossy() -> Text
                     i += 1
             (b0 & 0xF0) == 0xE0 =>
                 if i + 2 < len
-                    var b1 = me[i + 1].value().to[U32]()
-                    var b2 = me[i + 2].value().to[U32]()
+                    var b1 = utf8_byte(at: from_utf8_lossy, index: i + 1)
+                    var b2 = utf8_byte(at: from_utf8_lossy, index: i + 2)
                     var is_valid = (b1 & 0xC0) == 0x80 and (b2 & 0xC0) == 0x80
                     if is_valid
                         var candidate = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
@@ -727,9 +738,9 @@ routine Bytes.decode_as_utf8_lossy() -> Text
                     i += 1
             (b0 & 0xF8) == 0xF0 =>
                 if i + 3 < len
-                    var b1 = me[i + 1].value().to[U32]()
-                    var b2 = me[i + 2].value().to[U32]()
-                    var b3 = me[i + 3].value().to[U32]()
+                    var b1 = utf8_byte(at: from_utf8_lossy, index: i + 1)
+                    var b2 = utf8_byte(at: from_utf8_lossy, index: i + 2)
+                    var b3 = utf8_byte(at: from_utf8_lossy, index: i + 3)
                     var is_valid = (b1 & 0xC0) == 0x80
                         and (b2 & 0xC0) == 0x80
                         and (b3 & 0xC0) == 0x80
@@ -752,6 +763,14 @@ routine Bytes.decode_as_utf8_lossy() -> Text
                 i += 1
         result.add_last(Char(codepoint))
     return Text(from_list: result)
+
+### The byte at `index` after `at`, as a `U32`, for the decoder.
+### :param at: The first byte.
+### :param index: How far past it.
+### :returns: The byte's value.
+secret routine utf8_byte(at: Hijacked[Byte], index: U64) -> U32
+    danger
+        return at.stride(count: LLVM::reinterpret_bits[U64, S64](index)).peek().value().to[U32]()
 
 ### Decodes this byte sequence as UTF-8.
 ### Malformed input causes a `MalformedUtf8Error` instead of lossy replacement.
