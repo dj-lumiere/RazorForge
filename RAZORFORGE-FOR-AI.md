@@ -966,6 +966,19 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     Every `Unbroken` routine is `@readonly` (each change synchronizes itself): `stats.open.fetch_add(delta: 1)`
     works through a read token or a `ReadOnly` Guarded.
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
+- **`Stamped[E]`** (System/Memory, `Stamped.rf`) — a link an entity's member variable, a list or any value can keep
+  (a tree node's `parent: Stamped[Node]?`), where a token can't be (RF-S601 points to it first). `e.stamp()` takes
+  one (on an entity or a token), `s.fetch()` (failable, `StaleStampError`) gives a `Modifying[E]` while the entity
+  lives: a bare `fetch()` crashes once it has ended, `try s.fetch()` gives `none`. A record of 8 bytes (a slot of the
+  runtime's stamp table, shared with Tessera's `PoolManager`, and the slot's generation), copied with `=`, `==` for
+  the same entity. It doesn't keep the entity alive and counts nothing. The token `fetch()` gives has no source the
+  token rules follow (changing the stamp variable doesn't end it). The builder gives an entity type 8 hidden bytes
+  after its member variables (the slot and its generation, zero until the first `stamp()`) only when a program file
+  writes `Stamped[Name]` with that type (stdlib entities never): `stamp()` on any other entity is RF-S656. The slot
+  ends first thing in the entity's `destruct` (the derived one and a written one alike), so every stamp of it fails
+  from then on, and a freed slot goes to the next entity with a higher generation. An RF entity stays at one address
+  from construction to `destruct` (`steal`, a list, a `Retained` move only the reference), so no move ends a stamp.
+  Threads: nothing orders a `fetch()` on one job against the entity's end on another yet. Not in Suflae.
 - **`Hijacked[T]`** — a raw handle that manages nothing (no-op destruct); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
 - **`Addr`** — an address with no pointee type, LLVM `ptr` (C's `void*`): what the allocator and native code
@@ -1518,12 +1531,13 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-W007      | ignored result                        | `drop expr`                                        |
 | RF-W008      | a Work nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RF-W009      | a started Work nothing collects      | `retrieve()` it, or `drop job` to stop it          |
-| RF-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Optional[...]` kept in a name, a tuple) | keep the entity or a manager's handle, unpack `try` of a token with `when` at once |
+| RF-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Optional[...]` kept in a name, a tuple) | keep a `Stamped[E]` (`e.stamp()`, `fetch()`), the entity or a manager's handle, unpack `try` of a token with `when` at once |
 | RF-S632      | `to[Work]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Unbroken`/`Guarded`/…, or `start_here()` |
 | RF-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or open both with `modifying x, y` |
 | RF-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
 | RF-S654      | a `view_enter` / `modify_enter` that gives no `Viewing` / `Modifying`, or has no matching exit | return the token, declare the exit |
+| RF-S656      | `e.stamp()` on an entity type no program file writes as `Stamped[...]`'s argument (reached through a type parameter, a stdlib entity) | write the type where the stamp is kept: `var s: Stamped[Node] = n.stamp()` |
 | RF-S612      | `using` given a non-`Enterable` (also `using g.view()`) | `viewing g as v` / `modifying g as m` |
 | RF-S630      | a `Guarded` opened again inside a block of the same routine that has it open | use the outer block's token |
 | RF-S650      | one block names a target (or a token name) twice | name it once |

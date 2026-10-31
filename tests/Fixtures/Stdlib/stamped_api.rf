@@ -1,0 +1,85 @@
+module Tests/Stdlib/StampedApi
+
+import IO/Console
+# Stamped[E]: a link to an entity that a member variable or a list can keep. `fetch()` gives a write token
+# while the entity lives and fails with StaleStampError once its destruct ran (drop, the end of its scope, a written
+# destruct). Handing the entity over (into a list, a member variable, a Retained) keeps its stamps. A slot freed by
+# one entity goes to the next with a newer generation, so the old stamp still fails.
+
+entity Node
+    value: S64
+    parent: Stamped[Node]?
+
+entity Counted
+    hits: S64
+
+routine Counted.destruct()
+    show(f"counted ends with {me.hits}")
+    return
+
+entity Box[T]
+    item: T
+
+routine value_of(s: Stamped[Node]) -> S64
+    when try s.fetch()
+        is None => return -1
+        else as n => return n.value
+
+routine parent_value(n: Viewing[Node]) -> S64
+    when n.parent
+        is None => return -1
+        else as p => return value_of(s: p)
+
+routine stamp_of_local() -> Stamped[Node]
+    var n = Node(value: 5, parent: none)
+    return n.stamp()
+
+routine start()
+    var a = Node(value: 1, parent: none)
+    var s = a.stamp()
+    var again = a.stamp()
+    show(f"fetch: {value_of(s: s)}, same: {s == again}")
+    var m = s.fetch()
+    m.value = 10
+    show(f"changed through the stamp: {a.value}")
+
+    var child = Node(value: 2, parent: a.stamp())
+    show(f"parent: {parent_value(n: child)}")
+
+    # Handed over into a list and a Retained: the stamps go on working.
+    var kept = List[Node]()
+    kept.add_last(value: steal a)
+    show(f"in a list: {value_of(s: s)}")
+    var shared = Retained(from: steal child)
+    var t = shared.stamp()
+    show(f"in a Retained: {value_of(s: t)}")
+
+    # The entity ends: its stamps fail.
+    kept.clear()
+    show(f"after it ended: {value_of(s: s)}")
+    show(f"a local at its scope's end: {value_of(s: stamp_of_local())}")
+
+    # The freed slot goes to the next entity, a generation later.
+    var b = Node(value: 3, parent: none)
+    var u = b.stamp()
+    show(f"new: {value_of(s: u)}, old: {value_of(s: s)}, different: {u != s}")
+
+    # A written destruct ends the stamp first.
+    var c = Counted(hits: 0)
+    var w: Stamped[Counted] = c.stamp()
+    w.fetch().hits = 4
+    drop c
+    when try w.fetch()
+        is None => show("counted: stale")
+        else => show("counted: alive")
+
+    # A generic entity the source writes as Stamped[Box[...]].
+    var box = Box[S64](item: 7)
+    var bs: Stamped[Box[S64]] = box.stamp()
+    show(f"box: {bs.fetch().item}")
+    drop box
+    when try bs.fetch()
+        is None => show("box: stale")
+        else => show("box: alive")
+    show("DONE")
+    return

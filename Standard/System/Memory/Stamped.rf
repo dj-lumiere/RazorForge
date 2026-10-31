@@ -1,0 +1,79 @@
+module System/Memory
+
+import BuilderQuery
+
+### A link to an entity that a member variable, a global or a collection can keep, and that doesn't keep the entity
+### alive: the entity's slot in the runtime's stamp table and the slot's generation when the stamp was taken. Made with
+### `e.stamp()`, read with `fetch()`, which gives a `Modifying[T]` while the entity lives and fails with
+### `StaleStampError` once it has ended. A record of 8 bytes, copied with `=`.
+###
+### The builder gives an entity type four bytes for its slot only when the program's source writes `Stamped[T]` with
+### that type: every other entity keeps its layout. The slot ends in the entity's `destruct`, so a stamp taken before
+### fails from then on, and a slot that is free again goes to the next entity with a higher generation.
+### :typeparam T: The entity's type.
+record Stamped[T]
+obeys Equatable
+needs EntityType T
+    ### The entity's slot in the stamp table.
+    secret slot: U32
+    ### The slot's generation when the stamp was taken.
+    secret generation: U32
+
+### The entity of a stamp has ended: its slot has a newer generation now.
+crashable StaleStampError
+    nothing
+
+### The message a stale stamp's fetch reports.
+### :returns: The message.
+@readonly
+@override
+routine StaleStampError.crash_message() -> Text
+    return "The entity this stamp was taken of has ended."
+
+### A stamp of this entity: its slot, taken on the first stamp and kept by the entity, and the slot's generation.
+### :returns: The stamp.
+### :throws: Crashes when `T` has no stamp slot (a type the source writes as `Stamped[...]` gets one) or the table
+###     has no memory for a new slot.
+@readonly
+routine T.stamp() -> Stamped[T]
+needs EntityType T
+    if not T.keeps_stamp()
+        throw VerificationFailedError()
+    danger
+        # The entity keeps its slot and the slot's generation, a U32 each, from its first stamp on.
+        var kept = Hijacked[U32](from: me.get_address() +% ByteSize(bytes: LLVM::reinterpret_bits[S64, U64](
+            T.stamp_slot_offset())))
+        var slot = kept.peek()
+        if slot != 0
+            return Stamped[T](slot: slot, generation: kept.stride(count: 1).peek())
+        var bits: U64 = C::rf_stamp_take(at: me.get_address(), offset: T.stamp_slot_offset())
+        return Stamped[T](slot: LLVM::int_truncate[U64, U32](bits),
+            generation: LLVM::int_truncate[U64, U32](bits >>> 32))
+
+### Write access to the entity the stamp was taken of, while it lives.
+### :returns: A write token on the entity.
+### :throws: {StaleStampError} when the entity has ended.
+@readonly
+failable routine Stamped[T].fetch() -> Modifying[T]
+    danger
+        var at: Addr = C::rf_stamp_fetch(slot: me.slot, generation: me.generation)
+        if at.is_hollow()
+            throw StaleStampError()
+        return Modifying[T](Hijacked[T](from: at))
+
+### Whether two stamps are of the same entity: the same slot and generation.
+### :param you: The other stamp.
+### :returns: `true` for the same slot and generation.
+@readonly
+routine Stamped[T].eq(you: Stamped[T]) -> Bool
+    return me.slot == you.slot and me.generation == you.generation
+
+### Ends the stamp slot of an entity the program stamps: the builder calls it first thing in the entity's `destruct`,
+### so every stamp of it fails from then on.
+@untraced
+routine T.release_stamp()
+needs EntityType T
+    if T.keeps_stamp()
+        danger
+            C::rf_stamp_release(at: me.get_address(), offset: T.stamp_slot_offset())
+    return

@@ -292,6 +292,13 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             return null;
         }
 
+        // A stamp's fetch takes its token from the stamp table, not from the stamp: nothing the routine does to a
+        // local ends it, and the fetch itself fails once the entity has ended.
+        if (callee is { Name: "fetch", OwnerType.BareName: "Stamped" })
+        {
+            return [];
+        }
+
         if (FindUserDeclaration(routine: callee) is { } decl &&
             _returnOrigins.TryGetValue(key: decl, value: out HashSet<(string, string)>? known))
         {
