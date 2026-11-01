@@ -1,0 +1,39 @@
+module Tests/Stdlib/ViewingReadsInPlaceApi
+
+import IO/Console
+# Nothing that changes comes out of a Viewing. A stamp or a Retained inside a record is read where it is, and what
+# `fetch()` or `view()` gives is a read token. A Modifying takes the same links and changes through them.
+
+entity Counter
+    n: S64
+
+record Link
+    target: Stamped[Counter]
+    keep: Retained[Counter]
+    weight: S64
+
+routine total(links: Viewing[List[Link]]) -> S64
+    var sum: S64 = links[0].target.fetch().n
+    for l in links
+        sum += l.target.fetch().n
+        sum += l.keep.view().n
+        sum += l.weight
+    return sum
+
+routine bump(links: Modifying[List[Link]])
+    for l in links
+        l.target.fetch().n += 1
+        var held = l.keep
+        held.modify().n += 10
+    return
+
+routine start()
+    var a = Counter(n: 1)
+    var b = Retained[Counter](from: Counter(n: 100))
+    var links = List[Link]()
+    links.add_last(value: Link(target: a.stamp(), keep: b, weight: 1000))
+    show(total(links: links))
+    bump(links: links)
+    show(f"{a.n} {b.view().n}")
+    show(total(links: links))
+    return

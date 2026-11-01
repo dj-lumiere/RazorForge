@@ -878,8 +878,21 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     list), and `boxes.view_at(index: 0)` when `boxes` is reached read-only (a
     `Viewing` parameter, a `@readonly` routine's `me`). Anything that can add to
     or remove from `boxes` ends it.
-  - **`Viewing[T]` / `Modifying[T]`** — the only two tokens: read / write permission, wherever
-    they come from. `a.view()` / `a.modify()` on an entity give them directly.
+  - **`Modifying[T]` / `Viewing[T]`** — the only two tokens: write / read permission, wherever
+    they come from. `a.modify()` / `a.view()` on an entity give them directly. `Modifying[T]` is the usual way a
+    routine takes an entity: it reads it and changes it in place. `Viewing[T]` is the narrow promise that nothing
+    reachable from it is changed (printing, comparing, counting), and "reachable" includes the entities a stamp or a
+    manager handle inside it points at. So nothing that changes comes out of a `Viewing`:
+    - A routine called through a `Viewing` that hands out a `Modifying[X]` hands out a `Viewing[X]`:
+      `links[0].target.fetch()` with `links: Viewing[List[Link]]` gives a `Viewing[Creature]`, and `c.y = 5` on it is
+      RF-S631.
+    - A value that holds a way to change an entity is read in place from a `Viewing`, never copied out of it
+      (RF-S657): a `Stamped`, a manager handle (`Retained`, `Tracked`, `Guarded`, `Witnessed`, except a
+      `ReadOnly` one), a `Modifying`, and a record, tuple, `Optional` or variant with such a member variable, decided by
+      the type. `var l = links[0]` (a `Link` with a `target: Stamped[Creature]`), `take(l: links[0])`,
+      `return links[0]`, `kept.add_last(value: links[0])`, a `when` over `links[0]` binding its stamp and keeping it
+      are RF-S657. `links[0].target.fetch().x` reads it where it is. Take the list as `Modifying`, or read in place.
+      Not recommended: a routine that takes `Viewing` only to copy stamps or handles out of it (take `Modifying`).
   - **Access blocks: `viewing` / `modifying`** (keywords, RF only). `viewing x as v` calls `x.view_enter()` before
     the block, binds the `Viewing[...]` it returns to `v`, and calls `x.view_exit()` on every way out (its end,
     `return` (whose value is computed first), `throw`, `break`, `continue`); `modifying` is `modify_enter()` /
@@ -967,9 +980,10 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   runtime's stamp table, shared with Tessera's `PoolManager`, and the slot's generation), copied with `=`, `===` /
   `!==` for the same entity. It has no `==` (RF-S061 points to `===`) and is not `Hashable`: a set that groups by
   "same entity" keys on a number the program assigns. It doesn't keep the entity alive and counts nothing. The token `fetch()` gives has no source the
-  token rules follow: changing the stamp variable doesn't end it, a write through it (`c.y = 5`) ends nothing, and
-  `fetch()` works through a read token on the stamp too (`for at in stamps` with `stamps: Viewing[List[Stamped[E]]]`
-  still gives a `Modifying[E]`, since the entity is not part of what the read token reaches). The builder gives an
+  token rules follow: changing the stamp variable doesn't end it, and a write through it (`c.y = 5`) ends nothing.
+  Through a `Viewing` the stamp is read in place and `fetch()` gives a `Viewing[E]` (`for at in stamps` with
+  `stamps: Viewing[List[Stamped[E]]]`, then `at.fetch()`), so the entity can't be changed there, and a stamp can't be
+  copied out of a `Viewing` (RF-S657). The builder gives an
   entity type of the program 8 hidden bytes after its member variables (the slot and its generation, zero until the
   first `stamp()`) when the program stamps it: a file writes `Stamped[Name]`, or calls `stamp()` on it, the stamp's
   type written or inferred (`var at = b.stamp()`). A stdlib entity has none: `stamp()` on one, or through a type
@@ -1537,6 +1551,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
 | RF-S654      | a `view_enter` / `modify_enter` that gives no `Viewing` / `Modifying`, or has no matching exit | return the token, declare the exit |
 | RF-S656      | `e.stamp()` on a stdlib entity, or one reached only through a type parameter | keep a link another way: the entity itself, or a manager's handle (`Retained[T]`) |
+| RF-S657      | a value that holds a way to change an entity (a `Stamped`, a manager handle, a `Modifying`, a record or tuple with one) copied out of a `Viewing` | read it in place (`links[0].target.fetch()`), or take the container as `Modifying` |
 | RF-S612      | `using` given a non-`Enterable` (also `using g.view()`) | `viewing g as v` / `modifying g as m` |
 | RF-S630      | a `Guarded` opened again inside a block of the same routine that has it open | use the outer block's token |
 | RF-S650      | one block names a target (or a token name) twice | name it once |

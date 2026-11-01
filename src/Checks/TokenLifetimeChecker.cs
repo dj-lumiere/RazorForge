@@ -2242,11 +2242,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         }
 
         Dictionary<string, HashSet<string>> effects = CalleeEffects(callee: callee);
-        // A write token taken from somewhere other than the receiver (a stamp's `fetch()` takes it from the stamp table:
-        // the stamp names an entity of its own, not a part of the value read) gives no write into what the read token
-        // reaches.
-        bool mintsWriteToken = callee.ReturnType?.BareName is RuntimeContract.Modifying &&
-                               CalleeReturnOrigin(callee: callee) is not { Count: 0 };
+        bool mintsWriteToken = callee.ReturnType?.BareName is RuntimeContract.Modifying;
         if (TakesReceiver(callee: callee) && call.Callee is MemberExpression { Object: var receiver } &&
             (IsReadToken(type: receiver.ResolvedType) || isReadElement(arg: receiver)) &&
             (effects.ContainsKey(key: MeSlot) || mintsWriteToken))
