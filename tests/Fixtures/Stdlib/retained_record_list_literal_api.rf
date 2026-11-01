@@ -1,0 +1,45 @@
+module Tests/Stdlib/RetainedRecordListLiteralApi
+
+import IO/Console
+# A list literal of values built in place from a Retained (a record holding one, a tuple holding one) takes one more
+# share for the value it builds, and the list copies it once more, so the count matches add_last's and every share is
+# given back at the end. Run in a loop, a missing share would free the Counter twice.
+
+entity Counter
+    n: S64
+
+record Link
+    keep: Retained[Counter]
+    weight: S64
+
+routine literal_record(b: Retained[Counter])
+    var links = [Link(keep: b, weight: 1000)]
+    show(f"record literal, strong {b.strong_count()}, count {links.count()}")
+    return
+
+routine literal_tuple(b: Retained[Counter])
+    var pairs = [(b, 7)]
+    show(f"tuple literal, strong {b.strong_count()}, count {pairs.count()}")
+    return
+
+routine added(b: Retained[Counter])
+    var links = List[Link]()
+    links.add_last(value: Link(keep: b, weight: 1000))
+    show(f"add_last, strong {b.strong_count()}, count {links.count()}")
+    return
+
+routine literal_bare(b: Retained[Counter])
+    var kept = [b, b]
+    show(f"bare literal, strong {b.strong_count()}, count {kept.count()}")
+    return
+
+routine start()
+    var b = Retained[Counter](from: Counter(n: 100))
+    for round in 0 til 4
+        literal_record(b: b)
+        literal_tuple(b: b)
+        added(b: b)
+        literal_bare(b: b)
+        show(f"after round {round}, strong {b.strong_count()}")
+    show(b.view().n)
+    return
