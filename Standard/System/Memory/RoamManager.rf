@@ -58,8 +58,9 @@ needs EntityType T
     secret depth: U64
     ### Cycle-collector state (Bacon-Rajan). Touched only by the single-threaded collector.
     secret state: RoamState
-    ### `true` while this controller sits in the collector's roots buffer — dedups `mark_cycle_candidate`.
-    secret buffered: Bool
+    ### Where this controller sits in the collector's roots buffer, as its index plus one, or `0` when it is not
+    ### in the buffer. Dedups `mark_cycle_candidate` and lets a removal skip the search.
+    secret buffered_at: U32
     ### Address of the builder-generated per-type trace function for `T` (visits `T`'s `Roamed`
     ### fields). `Addr.hollow()` = no trace wired yet / `T` has no `Roamed` fields (cannot form a cycle).
     ### Called as `fn(controller_address)`; reinterprets and reports each `Roamed` field through `ingrid_cyclic_visit_child`.
@@ -112,7 +113,7 @@ dangerous routine RoamManager[T](data: Hijacked[T]) -> RoamManager[T]
         holder_task: Unbroken[U64](initial: 0),
         depth: 0,
         state: RoamState.LIVE,
-        buffered: false,
+        buffered_at: 0,
         trace_hook: data.as_entity().roam_trace_ref(),
         free_hook: data.as_entity().roam_free_ref(),
         drop_hook: data.as_entity().roam_drop_ref(),
