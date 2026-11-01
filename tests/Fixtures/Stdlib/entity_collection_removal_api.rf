@@ -1,0 +1,104 @@
+module Tests/Stdlib/EntityCollectionRemovalApi
+
+import IO/Console
+import Collections
+# A collection ends the elements it lets go of without handing them back: `Dict.remove`, every `clear()`,
+# `List.truncate`. Each Box says when it ends, and a stamp of a removed Box no longer fetches.
+
+entity Box
+    n: S64
+
+routine Box.destruct()
+    show(f"ends {me.n}")
+    return
+
+routine stale(at: Stamped[Box]) -> Text
+    when try at.fetch()
+        is None => return "stale"
+        else as live => return f"live {live.n}"
+
+entity Quiet
+    n: S64
+
+routine ended(marks: Viewing[List[Stamped[Quiet]]]) -> S64
+    var count: S64 = 0
+    for at in marks
+        when try at.fetch()
+            is None => count += 1
+            else => nothing
+    return count
+
+routine start()
+    show("Dict.remove")
+    var boxes: Dict[S64, Box] = {:}
+    var b = Box(n: 1)
+    var at: Stamped[Box] = b.stamp()
+    boxes[1] = steal b
+    boxes[2] = Box(n: 2)
+    drop boxes.remove(key: 1)
+    show(stale(at: at))
+    show(boxes.count())
+
+    show("Dict.clear")
+    boxes[3] = Box(n: 3)
+    boxes.clear()
+    show(boxes.count())
+
+    show("Dict end")
+    boxes[4] = Box(n: 4)
+    boxes = {:}
+
+    show("PriorityQueue.clear")
+    var queue = PriorityQueue[S64, Box]()
+    queue.add(element: Box(n: 5), priority: 2)
+    queue.add(element: Box(n: 6), priority: 1)
+    queue.clear()
+    show(queue.count())
+
+    show("RotatableList.clear")
+    var ring = RotatableList[Box]()
+    ring.add_last(value: Box(n: 7))
+    ring.add_first(value: Box(n: 8))
+    ring.clear()
+    show(ring.count())
+
+    show("List.truncate")
+    var list: List[Box] = []
+    list.add_last(value: Box(n: 9))
+    list.add_last(value: Box(n: 10))
+    list.add_last(value: Box(n: 11))
+    list.truncate(new_count: 1)
+    show(list.count())
+
+    show("SortedDict.remove, a tree of several levels")
+    var many = SortedDict[S64, Quiet]()
+    var marks: List[Stamped[Quiet]] = []
+    for i in 1 to 300
+        var q = Quiet(n: i)
+        marks.add_last(value: q.stamp())
+        many[i] = steal q
+    for i in 1 to 300
+        if i % 10 == 0
+            drop many.remove(key: i)
+    show(f"{many.count()} kept, {ended(marks: marks)} ended")
+    for i in 1 to 300
+        if i % 3 == 0
+            drop many.remove(key: i)
+    show(f"{many.count()} kept, {ended(marks: marks)} ended")
+    for i in 1 to 300
+        drop many.remove(key: i)
+    show(f"{many.count()} kept, {ended(marks: marks)} ended")
+
+    show("SortedDict.remove")
+    var sorted = SortedDict[S64, Box]()
+    for i in 12 to 14
+        sorted[i] = Box(n: i)
+    drop sorted.remove(key: 13)
+    show(sorted.count())
+
+    show("SortedDict.clear")
+    sorted.clear()
+    show(sorted.count())
+
+    show("done")
+    return

@@ -388,6 +388,11 @@ routine SortedList[T].is_empty() -> Bool
 ### Removes all elements, resetting the list to an empty state.
 @reshaping
 routine SortedList[T].clear()
+    # The whole tree ends here (every node, key and value), as the collection's own destruct ends it.
+    if me.root is None
+        return
+    danger
+        me.root!!.as_entity().destruct()
     me.root = none
     me.count = 0
     return
@@ -654,7 +659,7 @@ routine SortedList[T].remove(value: T) -> Bool
     var removed = false
     danger
         var root_ref = me.root!!.as_entity()
-        removed = me.remove_from_node(node: root_ref, value: value)
+        removed = me.remove_from_node(node: root_ref, value: value, ending: true)
     if removed
         me.count = me.count -% 1
         danger
@@ -669,12 +674,14 @@ routine SortedList[T].remove(value: T) -> Bool
 ### :param value: The value to remove.
 ### :returns: `true` if a matching element was found and removed.
 @inline
-secret routine SortedList[T].remove_from_node(node: Modifying[BTreeListNode[T]], value: T) -> Bool
+secret routine SortedList[T].remove_from_node(node: Modifying[BTreeListNode[T]], value: T, ending: Bool) -> Bool
     danger
         var i = me.lower_bound(node: node, value: value)
 
         if i < node.keys_count() and value == node.keys_get(i)
             if node.is_leaf
+                if ending
+                    node.keys_get(i).destruct()
                 node.keys_remove_at(i)
                 node.subtree_size = node.subtree_size -% 1
                 return true
@@ -683,14 +690,20 @@ secret routine SortedList[T].remove_from_node(node: Modifying[BTreeListNode[T]],
                 var right = node.children_get(i +% 1).as_entity()
                 if left.keys_count() > MIN_KEYS_LIST
                     var pred = me.get_predecessor(node: node, idx: i)
+                    # The separator ends here, the entry moved up in its place is not ended below.
+                    if ending
+                        node.keys_get(i).destruct()
                     node.keys_set(i: i, value: pred)
-                    me.remove_from_node(node: left, value: pred)
+                    me.remove_from_node(node: left, value: pred, ending: false)
                     node.subtree_size = node.subtree_size -% 1
                     return true
                 elseif right.keys_count() > MIN_KEYS_LIST
                     var succ = me.get_successor(node: node, idx: i)
+                    # The separator ends here, the entry moved up in its place is not ended below.
+                    if ending
+                        node.keys_get(i).destruct()
                     node.keys_set(i: i, value: succ)
-                    me.remove_from_node(node: right, value: succ)
+                    me.remove_from_node(node: right, value: succ, ending: false)
                     node.subtree_size = node.subtree_size -% 1
                     return true
                 else
@@ -698,6 +711,7 @@ secret routine SortedList[T].remove_from_node(node: Modifying[BTreeListNode[T]],
                     var removed = me.remove_from_node(
                         node: node.children_get(i).as_entity(),
                         value: value,
+                        ending: ending,
                     )
                     if removed
                         node.subtree_size = node.subtree_size -% 1
@@ -706,7 +720,7 @@ secret routine SortedList[T].remove_from_node(node: Modifying[BTreeListNode[T]],
             if node.is_leaf
                 return false
             i = me.fix_child(node: node, i: i)
-            var removed = me.remove_from_node(node: node.children_get(i).as_entity(), value: value)
+            var removed = me.remove_from_node(node: node.children_get(i).as_entity(), value: value, ending: ending)
             if removed
                 node.subtree_size = node.subtree_size -% 1
             return removed

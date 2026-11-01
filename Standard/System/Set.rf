@@ -270,6 +270,15 @@ routine Set[T].is_empty() -> Bool
 @reshaping
 routine Set[T].clear()
     danger
+        # Each live element ends here (an entity's destruct, a Text's release), as the set's own destruct ends them.
+        var p: U64 = 0
+        until p >= me.entries_used
+            if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+                me.slots
+                    .offset(T.data_size() * p)
+                    .peek()
+                    .destruct()
+            p = p + 1
         C::rf_set_bytes_at(
             dest: me.ctrl.address(),
             value: CTRL_EMPTY,
@@ -315,6 +324,11 @@ routine Set[T].remove(value: T) -> Bool
         return false
     var ei = me.read_index(slot)
     danger
+        # The removed element ends here (an entity's destruct, a Text's release).
+        me.slots
+            .offset(T.data_size() * ei)
+            .peek()
+            .destruct()
         me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
         me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
     me.count = me.count -% 1

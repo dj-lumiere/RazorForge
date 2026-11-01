@@ -294,7 +294,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
         // A stamp's fetch takes its token from the stamp table, not from the stamp: nothing the routine does to a
         // local ends it, and the fetch itself fails once the entity has ended.
-        if (callee is { Name: "fetch", OwnerType.BareName: "Stamped" })
+        if (IsStampFetch(callee: callee))
         {
             return [];
         }
@@ -312,6 +312,22 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             _ when callee.OwnerType != null => [(MeSlot, Inside)],
             _ => null
         };
+    }
+
+    /// <summary>Whether <paramref name="callee"/> is <c>Stamped[T].fetch</c>, called on the stamp or through a token on
+    /// it (<c>at.fetch()</c> with <c>at</c> a <c>for</c> element over a <c>List[Stamped[T]]</c> runs the token's forwarder
+    /// of it).</summary>
+    private static bool IsStampFetch(RoutineInfo callee)
+    {
+        for (RoutineInfo? r = callee; r != null; r = r.WrapperForwarderInnerMemberRoutine)
+        {
+            if (r is { Name: "fetch", OwnerType.BareName: RuntimeContract.StampedTypeName })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The argument of <paramref name="call"/> bound to each parameter of <paramref name="callee"/>.</summary>
@@ -1791,11 +1807,33 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
             if (owner.PathsOf(expr: target, tokenOrigins: Held) is { } written)
             {
+                // A write to a member through a token (`c.y = 5`) changes what is inside the token's object, never the
+                // object itself, so that token stays alive. The message names the place written as the source writes it.
+                string? through = target is MemberExpression or IndexExpression &&
+                                  RootIdentifier(expr: target) is { } writtenRoot && Held(name: writtenRoot) != null
+                    ? writtenRoot
+                    : null;
                 foreach (string w in written)
                 {
-                    End(written: w, why: $"was replaced by the assignment to '{Shown(path: w)}'", at: at);
+                    string place = through != null && WrittenText(target: target) is { } text
+                        ? text
+                        : Shown(path: w);
+                    End(written: w, why: $"was replaced by the assignment to '{place}'", at: at, spared: through);
                 }
             }
+        }
+
+        /// <summary>An assignment target as the source writes it (<c>c.y</c>, <c>xs[...]</c>), or null for another
+        /// shape.</summary>
+        private static string? WrittenText(Expression target)
+        {
+            return target switch
+            {
+                IdentifierExpression id => id.Name,
+                MemberExpression m => WrittenText(target: m.Object) is { } owner ? $"{owner}.{m.MemberName}" : null,
+                IndexExpression ix => WrittenText(target: ix.Object) is { } container ? $"{container}[...]" : null,
+                _ => null
+            };
         }
 
         private static string? RootIdentifier(Expression expr)
@@ -2204,7 +2242,11 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         }
 
         Dictionary<string, HashSet<string>> effects = CalleeEffects(callee: callee);
-        bool mintsWriteToken = callee.ReturnType?.BareName is RuntimeContract.Modifying;
+        // A write token taken from somewhere other than the receiver (a stamp's `fetch()` takes it from the stamp table:
+        // the stamp names an entity of its own, not a part of the value read) gives no write into what the read token
+        // reaches.
+        bool mintsWriteToken = callee.ReturnType?.BareName is RuntimeContract.Modifying &&
+                               CalleeReturnOrigin(callee: callee) is not { Count: 0 };
         if (TakesReceiver(callee: callee) && call.Callee is MemberExpression { Object: var receiver } &&
             (IsReadToken(type: receiver.ResolvedType) || isReadElement(arg: receiver)) &&
             (effects.ContainsKey(key: MeSlot) || mintsWriteToken))

@@ -820,7 +820,9 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
 - Writing over a place (`slot.item = Item(name: "b")`, `items[0] = item`,
   `d[k] = v` on a key that is there) tears the old value down first, an entity
   included, so a token on it ends. To keep the old one, take it out with
-  `steal … as old inject …`.
+  `steal … as old inject …`. A collection routine that lets elements go without handing them back ends them the same
+  way: `d.remove(key: k)` (the key and the value), every `clear()`, `xs.truncate(new_count: n)`, so an entity
+  element's destruct runs and its stamps stop fetching.
   Returning a bare entity hands it to the caller (`var a = make()` keeps it, torn down at scope exit). A routine
   handing back an entity that stays where it is (a container's element) returns an access token, never the bare
   entity: the one original would otherwise be held twice, and torn down twice.
@@ -972,9 +974,13 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   lives: a bare `fetch()` crashes once it has ended, `try s.fetch()` gives `none`. A record of 8 bytes (a slot of the
   runtime's stamp table, shared with Tessera's `PoolManager`, and the slot's generation), copied with `=`, `==` for
   the same entity. It doesn't keep the entity alive and counts nothing. The token `fetch()` gives has no source the
-  token rules follow (changing the stamp variable doesn't end it). The builder gives an entity type 8 hidden bytes
-  after its member variables (the slot and its generation, zero until the first `stamp()`) only when a program file
-  writes `Stamped[Name]` with that type (stdlib entities never): `stamp()` on any other entity is RF-S656. The slot
+  token rules follow: changing the stamp variable doesn't end it, a write through it (`c.y = 5`) ends nothing, and
+  `fetch()` works through a read token on the stamp too (`for at in stamps` with `stamps: Viewing[List[Stamped[E]]]`
+  still gives a `Modifying[E]`, since the entity is not part of what the read token reaches). The builder gives an
+  entity type of the program 8 hidden bytes after its member variables (the slot and its generation, zero until the
+  first `stamp()`) when the program stamps it: a file writes `Stamped[Name]`, or calls `stamp()` on it, the stamp's
+  type written or inferred (`var at = b.stamp()`). A stdlib entity has none: `stamp()` on one, or through a type
+  parameter only, is RF-S656. The slot
   ends first thing in the entity's `destruct` (the derived one and a written one alike), so every stamp of it fails
   from then on, and a freed slot goes to the next entity with a higher generation. An RF entity stays at one address
   from construction to `destruct` (`steal`, a list, a `Retained` move only the reference), so no move ends a stamp.
@@ -1537,7 +1543,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or open both with `modifying x, y` |
 | RF-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
 | RF-S654      | a `view_enter` / `modify_enter` that gives no `Viewing` / `Modifying`, or has no matching exit | return the token, declare the exit |
-| RF-S656      | `e.stamp()` on an entity type no program file writes as `Stamped[...]`'s argument (reached through a type parameter, a stdlib entity) | write the type where the stamp is kept: `var s: Stamped[Node] = n.stamp()` |
+| RF-S656      | `e.stamp()` on a stdlib entity, or one reached only through a type parameter | keep a link another way: the entity itself, or a manager's handle (`Retained[T]`) |
 | RF-S612      | `using` given a non-`Enterable` (also `using g.view()`) | `viewing g as v` / `modifying g as m` |
 | RF-S630      | a `Guarded` opened again inside a block of the same routine that has it open | use the outer block's token |
 | RF-S650      | one block names a target (or a token name) twice | name it once |

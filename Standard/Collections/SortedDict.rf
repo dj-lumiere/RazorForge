@@ -515,6 +515,11 @@ routine SortedDict[TKey, TValue].is_empty() -> Bool
 ### Removes all entries, resetting the dictionary to an empty state.
 @reshaping
 routine SortedDict[TKey, TValue].clear()
+    # The whole tree ends here (every node, key and value), as the collection's own destruct ends it.
+    if me.root is None
+        return
+    danger
+        me.root!!.as_entity().destruct()
     me.root = none
     me.count = 0
     return
@@ -799,7 +804,7 @@ routine SortedDict[TKey, TValue].remove(key: TKey) -> Bool
     var removed = false
     danger
         var root_ref = me.root!!.as_entity()
-        removed = me.remove_from_node(node: root_ref, key: key)
+        removed = me.remove_from_node(node: root_ref, key: key, ending: true)
     if removed
         me.count = me.count -% 1
         danger
@@ -814,12 +819,15 @@ routine SortedDict[TKey, TValue].remove(key: TKey) -> Bool
 ### :param key: The key to remove.
 ### :returns: `true` if the key was found and removed.
 @inline
-secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDictNode[TKey, TValue]], key: TKey) -> Bool
+secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDictNode[TKey, TValue]], key: TKey, ending: Bool) -> Bool
     danger
         var i = me.lower_bound(node: node, key: key)
 
         if i < node.keys_count() and key == node.key_get(i)
             if node.is_leaf
+                if ending
+                    node.key_get(i).destruct()
+                    node.value_get(i).destruct()
                 node.entries_remove_at(i)
                 node.subtree_size = node.subtree_size -% 1
                 return true
@@ -828,16 +836,24 @@ secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDi
                 var right = node.children_get(i +% 1).as_entity()
                 if left.keys_count() > MIN_KEYS_DICT
                     var pred = me.get_predecessor(node: node, idx: i)
+                    # The separator ends here, the entry moved up in its place is not ended below.
+                    if ending
+                        node.key_get(i).destruct()
+                        node.value_get(i).destruct()
                     node.key_set(i: i, value: pred.item0)
                     node.value_set(i: i, value: pred.item1)
-                    drop me.remove_from_node(node: left, key: pred.item0)
+                    drop me.remove_from_node(node: left, key: pred.item0, ending: false)
                     node.subtree_size = node.subtree_size -% 1
                     return true
                 elseif right.keys_count() > MIN_KEYS_DICT
                     var succ = me.get_successor(node: node, idx: i)
+                    # The separator ends here, the entry moved up in its place is not ended below.
+                    if ending
+                        node.key_get(i).destruct()
+                        node.value_get(i).destruct()
                     node.key_set(i: i, value: succ.item0)
                     node.value_set(i: i, value: succ.item1)
-                    drop me.remove_from_node(node: right, key: succ.item0)
+                    drop me.remove_from_node(node: right, key: succ.item0, ending: false)
                     node.subtree_size = node.subtree_size -% 1
                     return true
                 else
@@ -845,6 +861,7 @@ secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDi
                     var removed = me.remove_from_node(
                         node: node.children_get(i).as_entity(),
                         key: key,
+                        ending: ending,
                     )
                     if removed
                         node.subtree_size = node.subtree_size -% 1
@@ -853,7 +870,7 @@ secret routine SortedDict[TKey, TValue].remove_from_node(node: Modifying[BTreeDi
             if node.is_leaf
                 return false
             i = me.fix_child(node: node, i: i)
-            var removed = me.remove_from_node(node: node.children_get(i).as_entity(), key: key)
+            var removed = me.remove_from_node(node: node.children_get(i).as_entity(), key: key, ending: ending)
             if removed
                 node.subtree_size = node.subtree_size -% 1
             return removed

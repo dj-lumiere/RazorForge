@@ -1,0 +1,54 @@
+module Tests/Stdlib/EntityElementFailableApi
+
+import IO/Console
+# Reading an entity element (`var b = me.boxes[key]`, `me.boxes[key].n`) inside a failable routine passes a missing
+# key or an index out of range on to the caller, as any subscript does: `try` receives it.
+
+entity Box
+    n: S64
+
+entity Shelf
+    boxes: Dict[S64, Box]
+    row: List[Box]
+
+failable routine Shelf.peek(key: S64) -> S64
+    var b = me.boxes[key]
+    return b.n
+
+failable routine Shelf.peek_path(key: S64) -> S64
+    return me.boxes[key].n
+
+failable routine Shelf.at(index: U64) -> S64
+    var b = me.row[index]
+    return b.n
+
+failable routine Shelf.bump(key: S64)
+    me.boxes[key].n += 1
+    return
+
+routine start()
+    var s = Shelf(boxes: {:}, row: [])
+    s.boxes[1] = Box(n: 5)
+    s.row.add_last(value: Box(n: 7))
+    when try s.peek(key: 1)
+        is None => show("none")
+        else as v => show(v)
+    when try s.peek(key: 2)
+        is None => show("none")
+        else as v => show(v)
+    when try s.peek_path(key: 2)
+        is None => show("none")
+        else as v => show(v)
+    when try s.at(index: 0)
+        is None => show("none")
+        else as v => show(v)
+    when try s.at(index: 3)
+        is None => show("none")
+        else as v => show(v)
+    when check s.bump(key: 9)
+        is AbsentValueError => show("absent")
+        is Crashables => show("other")
+        else => show("bumped")
+    s.bump(key: 1)
+    show(s.peek(key: 1))
+    return

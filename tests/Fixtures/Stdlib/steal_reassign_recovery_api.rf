@@ -1,0 +1,50 @@
+module Tests/Stdlib/StealReassignRecoveryApi
+
+import IO/Console
+# A failable routine that builds a tree in a loop, `left = steal node` each round, hands back a live tree whether it is
+# called bare or under `try`: the recovery variant moves `node` into `left` as the routine does.
+
+entity Node
+    value: S64
+    children: List[Node]
+
+routine Node.destruct()
+    show(f"ends {me.value}")
+    me.children.destruct()
+    return
+
+failable routine leaf(v: S64) -> Node
+    if v < 0
+        throw AbsentValueError()
+    return Node(value: v, children: [])
+
+failable routine chain(n: S64) -> Node
+    var left = leaf(v: 1)
+    var i: S64 = 0
+    loop
+        if i >= n
+            break
+        i += 1
+        var right = leaf(v: 10 + i)
+        var node = Node(value: 100 + i, children: [])
+        node.children.add_last(value: steal left)
+        node.children.add_last(value: steal right)
+        left = steal node
+    return left
+
+routine sum(tree: Viewing[Node]) -> S64
+    var total = tree.value
+    for child in tree.children
+        total += sum(tree: child)
+    return total
+
+routine start()
+    when try chain(n: 2)
+        is None => show("none")
+        else as tree => show(f"try: value={tree.value} children={tree.children.count()} sum={sum(tree: tree)}")
+    show("bare")
+    var again = chain(n: 1)
+    show(f"bare: value={again.value} sum={sum(tree: again)}")
+    drop again
+    show("done")
+    return

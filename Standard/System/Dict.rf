@@ -348,6 +348,20 @@ routine Dict[TKey, TValue].is_empty() -> Bool
 @reshaping
 routine Dict[TKey, TValue].clear()
     danger
+        # Each live key and value ends here (an entity's destruct, a Text's release), as the dictionary's own
+        # destruct ends them.
+        var p: U64 = 0
+        until p >= me.entries_used
+            if me.entry_live.offset(ByteSize(bytes: p)).peek() == ENTRY_LIVE
+                me.keys
+                    .offset(TKey.data_size() * p)
+                    .peek()
+                    .destruct()
+                me.vals
+                    .offset(TValue.data_size() * p)
+                    .peek()
+                    .destruct()
+            p = p + 1
         C::rf_set_bytes_at(
             dest: me.ctrl.address(),
             value: CTRL_EMPTY,
@@ -428,6 +442,15 @@ routine Dict[TKey, TValue].remove(key: TKey) -> Bool
         return false
     var ei = me.read_index(slot)
     danger
+        # The removed key and value end here (an entity's destruct, a Text's release).
+        me.keys
+            .offset(TKey.data_size() * ei)
+            .peek()
+            .destruct()
+        me.vals
+            .offset(TValue.data_size() * ei)
+            .peek()
+            .destruct()
         me.ctrl.offset(ByteSize(bytes: slot)).poke(CTRL_TOMBSTONED)
         me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_DEAD)
     me.count = me.count -% 1
