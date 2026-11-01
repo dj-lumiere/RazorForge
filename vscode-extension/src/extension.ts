@@ -10,7 +10,7 @@ import { registerRun } from "./run";
  * build folder, so it never holds the files a rebuild overwrites, and a rebuild restarts it.
  */
 let client: LanguageClient | undefined;
-let watcher: vscode.FileSystemWatcher | undefined;
+let watcher: fs.FSWatcher | undefined;
 let restartTimer: NodeJS.Timeout | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -25,12 +25,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export async function deactivate(): Promise<void> {
-    watcher?.dispose();
+    watcher?.close();
     await client?.stop();
 }
 
 async function restart(context: vscode.ExtensionContext): Promise<void> {
-    watcher?.dispose();
+    watcher?.close();
     await client?.stop();
     client = undefined;
     await start(context);
@@ -125,13 +125,12 @@ function newest(folder: string): number {
 
 /** Restarts the server when its build folder changes and then stays the same for a few seconds. */
 function watchBuild(context: vscode.ExtensionContext, folder: string): void {
-    watcher?.dispose();
-    watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(folder), "*.dll"));
-    const changed = () => {
+    watcher?.close();
+    // Node's own watcher, since the editor's skips folders `files.watcherExclude` names, and build folders are there.
+    watcher = fs.watch(folder, (_event, name) => {
+        if (name && !name.endsWith(".dll")) return;
         if (restartTimer) clearTimeout(restartTimer);
         restartTimer = setTimeout(() => void restart(context), 3000);
-    };
-    watcher.onDidChange(changed);
-    watcher.onDidCreate(changed);
-    context.subscriptions.push(watcher);
+    });
+    context.subscriptions.push({ dispose: () => watcher?.close() });
 }
