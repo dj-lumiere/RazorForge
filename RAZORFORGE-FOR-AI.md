@@ -511,8 +511,8 @@ declare their own `i`.
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
   idiom is `try x.abs()!!`
 - Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
-  compares whether two references are the SAME object (entities, handles, and `Addr`
-  only — RF-S440 on value types and access tokens). See §7.
+  compares whether two references are the SAME object (entities, handles, `Addr`, and a `Stamped[E]`, which names an
+  entity — RF-S440 on value types and access tokens). See §7.
 - **`==` and hashing are automatic, `Comparable` is opt-in.** Every record and every entity has `==`/`!=`
   with no `obeys` line when each member variable has `==` (the builder writes `eq` comparing them in
   order, a hand-written `eq` takes its place), so two distinct `Player(name: "Ada")` entities are `==` and
@@ -972,8 +972,9 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   (a tree node's `parent: Stamped[Node]?`), where a token can't be (RF-S601 points to it first). `e.stamp()` takes
   one (on an entity or a token), `s.fetch()` (failable, `StaleStampError`) gives a `Modifying[E]` while the entity
   lives: a bare `fetch()` crashes once it has ended, `try s.fetch()` gives `none`. A record of 8 bytes (a slot of the
-  runtime's stamp table, shared with Tessera's `PoolManager`, and the slot's generation), copied with `=`, `==` for
-  the same entity. It doesn't keep the entity alive and counts nothing. The token `fetch()` gives has no source the
+  runtime's stamp table, shared with Tessera's `PoolManager`, and the slot's generation), copied with `=`, `===` /
+  `!==` for the same entity. It has no `==` (RF-S061 points to `===`) and is not `Hashable`: a set that groups by
+  "same entity" keys on a number the program assigns. It doesn't keep the entity alive and counts nothing. The token `fetch()` gives has no source the
   token rules follow: changing the stamp variable doesn't end it, a write through it (`c.y = 5`) ends nothing, and
   `fetch()` works through a read token on the stamp too (`for at in stamps` with `stamps: Viewing[List[Stamped[E]]]`
   still gives a `Modifying[E]`, since the entity is not part of what the read token reaches). The builder gives an
@@ -1040,10 +1041,12 @@ try modifying seats as s_entered     # an Optional: none when this job has seats
 
 - **Identity comparison `===` / `!==`** — "are these two the SAME object?", distinct
   from value equality `==`. Valid only on reference-carrying operands: an `entity`, a
-  handle (`Retained`/`Guarded`/`Tracked`/`Witnessed`/`Watched`/`Hijacked`), or an `Addr`.
+  handle (`Retained`/`Guarded`/`Tracked`/`Witnessed`/`Watched`/`Hijacked`), an `Addr`, or a `Stamped[E]` (the same
+  slot and generation, the same entity).
   A value type (record/scalar) is a build error (**RF-S440**) — values have no identity;
   use `==`. An access token (`Viewing`/`Modifying`) is RF-S440 too: compare the entities
-  it came from. It is a primitive pointer compare, never a `.eq()` call, so it is not overloadable.
+  it came from. It is a primitive pointer compare (a stamp compares its slot and generation), never a `.eq()` call, so it is not
+  overloadable.
   For bare entities (each the one original) `a === b` is trivially `false` between distinct
   bindings; it earns its keep where aliasing exists — two `Retained[T]` handles that may
   point at the same entity.

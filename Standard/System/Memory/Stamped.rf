@@ -5,7 +5,9 @@ import BuilderQuery
 ### A link to an entity that a member variable, a global or a collection can keep, and that doesn't keep the entity
 ### alive: the entity's slot in the runtime's stamp table and the slot's generation when the stamp was taken. Made with
 ### `e.stamp()`, read with `fetch()`, which gives a `Modifying[T]` while the entity lives and fails with
-### `StaleStampError` once it has ended. A record of 8 bytes, copied with `=`.
+### `StaleStampError` once it has ended. A record of 8 bytes, copied with `=`. Two stamps compare with `===` / `!==`
+### (the same entity), never `==`, and a stamp is not a `Set` or `Dict` key: group by "same entity" with a number the
+### program gives each entity.
 ###
 ### The builder gives an entity type of the program eight bytes for its slot and the slot's generation only when the
 ### program stamps it (its source writes `Stamped[T]` with that type, or calls `stamp()` on one): every other entity
@@ -13,7 +15,6 @@ import BuilderQuery
 ### fails from then on, and a slot that is free again goes to the next entity with a higher generation.
 ### :typeparam T: The entity's type.
 record Stamped[T]
-obeys Equatable
 needs EntityType T
     ### The entity's slot in the stamp table.
     secret slot: U32
@@ -62,12 +63,20 @@ failable routine Stamped[T].fetch() -> Modifying[T]
             throw StaleStampError()
         return Modifying[T](Hijacked[T](from: at))
 
-### Whether two stamps are of the same entity: the same slot and generation.
+### Whether two stamps are of the same entity: the same slot and generation. What `a === b` runs (`other_entity` is
+### `a !== b`): a stamp names an entity, so it is compared by identity, and it has no `==`.
 ### :param you: The other stamp.
 ### :returns: `true` for the same slot and generation.
 @readonly
-routine Stamped[T].eq(you: Stamped[T]) -> Bool
+secret routine Stamped[T].same_entity(you: Stamped[T]) -> Bool
     return me.slot == you.slot and me.generation == you.generation
+
+### Whether two stamps are of different entities: the slot or the generation differs. What `a !== b` runs.
+### :param you: The other stamp.
+### :returns: `true` when the slot or the generation differs.
+@readonly
+secret routine Stamped[T].other_entity(you: Stamped[T]) -> Bool
+    return me.slot != you.slot or me.generation != you.generation
 
 ### Ends the stamp slot of an entity the program stamps: the builder calls it first thing in the entity's `destruct`,
 ### so every stamp of it fails from then on.
