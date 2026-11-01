@@ -25,7 +25,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine BadError.crash_message() -> Text
                             return "BadError"
-                        failable routine test() -> S32
+                        routine test() -> S32
                             throw BadError(message: "oops")
                         """;
 
@@ -44,7 +44,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine MyError.crash_message() -> Text
                             return "MyError"
-                        failable routine test() -> S32
+                        routine test() -> S32
                             throw MyError(message: "oops")
                         """;
 
@@ -58,21 +58,6 @@ public class ErrorHandlingValidationTests
     #region Failable Without Throw or Absent
 
     /// <summary>
-    /// Verifies semantic analysis behavior for failable without throw or absent and reports the expected warning.
-    /// </summary>
-    [Fact]
-    public void Analyze_FailableWithoutThrow_ReportsWarning()
-    {
-        string source = """
-                        failable routine useless() -> S32
-                            return 42
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrow);
-    }
-    /// <summary>
     /// Verifies semantic analysis behavior for failable with throw without unexpected diagnostics.
     /// </summary>
     [Fact]
@@ -83,7 +68,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine MyError.crash_message() -> Text
                             return "MyError"
-                        failable routine useful() -> S32
+                        routine useful() -> S32
                             throw MyError(message: "bad")
                         """;
 
@@ -98,7 +83,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_FailableWithAbsent_NoError()
     {
         string source = """
-                        failable routine find() -> S32
+                        routine find() -> S32
                             throw AbsentValueError()
                             return 0
                         """;
@@ -120,7 +105,7 @@ public class ErrorHandlingValidationTests
     {
         string source = """
                         @crash_only
-                        routine safe_routine() -> S32
+                        infallible routine safe_routine() -> S32
                             return 42
                         """;
 
@@ -140,7 +125,7 @@ public class ErrorHandlingValidationTests
                         routine MyError.crash_message() -> Text
                             return "MyError"
                         @crash_only
-                        failable routine crash_routine() -> S32
+                        routine crash_routine() -> S32
                             throw MyError(message: "fatal")
                         """;
 
@@ -160,7 +145,7 @@ public class ErrorHandlingValidationTests
                         routine MyError.crash_message() -> Text
                             return "MyError"
                         @crash_only
-                        failable routine crash_routine() -> S32
+                        routine crash_routine() -> S32
                             throw MyError(message: "fatal")
                         """;
 
@@ -181,7 +166,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine MyError.crash_message() -> Text
                             return "MyError"
-                        failable routine normal_routine() -> S32
+                        routine normal_routine() -> S32
                             throw MyError(message: "error")
 
                         routine trigger_variants() -> S32?
@@ -211,7 +196,7 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine ParseError.crash_message() -> Text
                             return "ParseError"
-                        failable routine parse(data: S32) -> S32
+                        routine parse(data: S32) -> S32
                             throw ParseError(message: "bad")
                         routine caller() -> S32
                             parse(data: 1)
@@ -233,9 +218,9 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine ParseError.crash_message() -> Text
                             return "ParseError"
-                        failable routine parse(data: S32) -> S32
+                        routine parse(data: S32) -> S32
                             throw ParseError(message: "bad")
-                        failable routine caller() -> S32
+                        routine caller() -> S32
                             parse(data: 1)
                             return 0
                         """;
@@ -262,7 +247,7 @@ public class ErrorHandlingValidationTests
                         routine ParseError.crash_message() -> Text
                             return me.message
 
-                        failable routine validate(value: S32) -> S32
+                        routine validate(value: S32) -> S32
                             if value < 0
                                 throw ParseError(message: "negative")
                             return value
@@ -289,7 +274,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_ThrowPrimitive_ReportsError()
     {
         string source = """
-                        failable routine test() -> S32
+                        routine test() -> S32
                             throw 42
                         """;
 
@@ -299,7 +284,7 @@ public class ErrorHandlingValidationTests
     }
 
     /// <summary>
-    /// Verifies that a failable routine can throw different crashable types on different paths.
+    /// Verifies that a routine can throw different crashable types on different paths.
     /// </summary>
     [Fact]
     public void Analyze_MultipleCrashableTypes_AllThrow_NoError()
@@ -313,7 +298,7 @@ public class ErrorHandlingValidationTests
                             code: S32
                         routine ErrB.crash_message() -> Text
                             return "ErrB"
-                        failable routine test(flag: Bool) -> S32
+                        routine test(flag: Bool) -> S32
                             if flag
                                 throw ErrA(message: "a")
                             throw ErrB(code: 1)
@@ -327,7 +312,7 @@ public class ErrorHandlingValidationTests
     }
 
     /// <summary>
-    /// Verifies that a failable routine calling another failable propagates failability without error.
+    /// Verifies that a routine calling another failable propagates failability without error.
     /// </summary>
     [Fact]
     public void Analyze_FailableCallingFailable_Propagates_NoError()
@@ -337,11 +322,11 @@ public class ErrorHandlingValidationTests
                             message: Text
                         routine MyErr.crash_message() -> Text
                             return "MyErr"
-                        failable routine inner(value: S32) -> S32
+                        routine inner(value: S32) -> S32
                             if value < 0
                                 throw MyErr(message: "bad")
                             return value
-                        failable routine outer(value: S32) -> S32
+                        routine outer(value: S32) -> S32
                             return inner(value: value)
                         """;
 

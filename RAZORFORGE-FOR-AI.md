@@ -23,7 +23,7 @@ When unsure, consult ground truth in the repo/package:
    `area(width: width, height: 4)`); it counts as named.
 2. **Normal routine completion uses an explicit `return`** — even void ones.
    This is load-bearing (destructor scheduling anchors at `return`), not style.
-   Failable routines may also terminate with `throw`.
+   A routine may also end with `throw`.
    The declaration states the result type: a `return` with a value in a routine
    without `->` (or `-> None`) is RF-S301, and so is a bare `return` in a routine
    with `-> T`. The value never sets the result type.
@@ -60,48 +60,43 @@ When unsure, consult ground truth in the repo/package:
    (a copy would keep its own record and diverge), a service (`Clock`, `CpuClock`, `Environment`, `Entropy`) a
    `record` with no member variables (body `nothing`, routines `common`, called on the type). The console is the
    free routines `show` / `ask` / `alert`. The builder does not check this by name: the stdlib follows it.
-7. **A routine that can fail is declared `failable`** (`failable routine parse(...)`, and
-   `failable dangerous routine` / `failable common routine`: `failable` goes first, after a visibility).
-   `routine parse!(...)` is RF-G222 (fix and `migrate --step failable` write the keyword), and call sites never
-   write anything (`parse(...)`, `try parse(...)`). A BARE call
-   crashes LOUDLY on failure. To RECOVER, prefix the whole expression with a
-   keyword and match the carrier with `when`:
+7. **Every routine passes its failures to its caller.** There is no `failable` keyword (written, it is RF-G230,
+   and `migrate --step failable` removes it), and call sites never write anything (`parse(...)`, `try parse(...)`;
+   `routine parse!(...)` is RF-G222). A failure nobody receives stops the program LOUDLY at the point it happened,
+   with the error's report and trace. To RECOVER, prefix the whole expression with a keyword and match the carrier
+   with `when`:
    `try EXPR` → `T?` (`Optional[T]`: present | absent, no error kept);
    `check EXPR` → `Check[T]` (T | the caught `Crashables`).
    A routine with no value to give throws `AbsentValueError()`, an ordinary
    stdlib crashable: `throw AbsentValueError()`. To tell "not found" apart from
    other failures, match it by type: `is AbsentValueError => ...` on a `check`.
-   **Failures rise only through failable routines.** A `throw` in a `failable` routine gives the failure to the
-   caller: a bare call crashes loudly, `try`/`check` in front receive it, and a bare call inside another failable
-   routine passes it on to that routine's caller. A `throw` in a routine that is NOT failable crashes on the spot
-   with the crashable's message (status 82, like an unrecovered failure): use it for a broken invariant, never for a
-   condition a caller could handle. A routine that is not failable is a wall: a failure inside it (its own `throw`,
-   a checked operator, a bare call of a failable routine) crashes there, even under `try`/`check` above its caller
-   (`try audit()` with `audit` failable calling a plain `share` that divides by zero crashes). Checked operators,
-   subscripts and conversions are failable routines, so `try a + b`, `check a // b`, `-x` of the minimum,
-   `try xs[9]` (a subscript out of range, a missing key), `check big.to[S8]()` and `"x".to[S64]()` are received.
-   `try`/`check` in front of an expression that reaches no failable call is RF-S760 (remove the keyword, or declare
-   the routine `failable`). Evaluation stops at the first failure, which becomes the carrier's (`try`: absent,
-   `check`: the error). A failure inside a `destruct` (a `destruct` is never `failable`, RF-S815, and runs at a
-   scope's end where nothing takes a failure) crashes even under `try`/`check`, and native runtime fatal errors,
-   out of memory and running out of stack are fatal everywhere.
-   **Routine values.** A lambda whose body can fail (a checked operator, a subscript, a call of a failable routine)
-   and a failable routine named as a value are routine values that may fail, of a type written
-   `failable Callable[(T,), U]`. They go only to a parameter or member variable of such a type: handing one to a
-   plain `Callable[...]` is RF-S761 (mark the parameter `failable`, or hand it a value that cannot fail: `+%`/`*%`
-   wrapping, `+^` clamping, float arithmetic, a routine that is not failable). A call that hands a routine value
-   that may fail to a `failable Callable` parameter can fail through it, so
-   `try apply(f: x => 10 // x, x: 0)` gives `none` and a bare one crashes loudly. The stdlib routines that take a
-   routine value take it as `failable Callable[...]` (`select`, `where`, `take_while`, `skip_while`, `distinct_by`,
-   `select_many`, `any`, `all`, `accumulate`, `get_count`, `min_by`, `max_by`, `sort_by`, `sorted_by`). An adapter
-   holds the lambda in a `failable Callable` member variable and calls it later: a call that works on such an
-   adapter (its terminal, `s.to[List]()`, or the `for` loop over it) can fail through it, so
-   `try xs.select(transform: x => 10 // x).to[List]()` is received, and a `for` loop over such an adapter passes
-   the lambda's failure on in a failable routine and crashes anywhere else. The handlers of `CpuEventManager`
-   (`Callable[(), None]?`) are not marked: a handler's failure crashes the program.
+   **`try`/`check` receive a failure from any depth below them.** Inside, code calls plainly (`var l =
+   eval(e: e.left)` in a recursive `eval`): a failure anywhere under the keyword (a `throw`, a checked `+ - *` that
+   overflows (`IntegerOverflowError`), `//` by zero (`DivisionByZeroError`), a subscript out of range
+   (`IndexOutOfBoundsError`), a missing key, a conversion that does not fit) comes back to the keyword, and the error
+   type tells them apart. Evaluation stops at the first failure, which becomes the carrier's (`try`: absent, `check`:
+   the error). The builder does this with recovery variants: `try f()` calls `f`'s recovery variant, and a recovery
+   variant calls the recovery variants of the calls inside it, so a failure comes back only on the path under a
+   keyword. A call with no keyword above it runs the plain routine, which stops where the failure happens and costs
+   nothing more. `try`/`check` over an expression that cannot fail gives the value (`try 5` is present 5).
+   **`infallible routine` is the only wall.** `infallible routine close(...)` (`infallible` goes first, after a
+   visibility: `infallible dangerous routine`, `infallible common routine`) promises not to fail: a failure inside
+   it (its own `throw`, a checked operator, a call that fails) breaks the promise and stops the program there (status
+   82), even under `try`/`check` above its caller. A `destruct` is a wall without the marker (it runs at a scope's end
+   where nothing takes a failure). `start()` is not marked: a failure nobody receives that reaches it ends the
+   program with the error's report and a non-zero exit. A Work's or a thread's failure goes to its `retrieve()`.
+   Running out of memory, running out of stack and native runtime fatal errors are never received: they stop the
+   program anywhere. ✗ Marking a routine infallible so you don't have to think about failures: a failure the caller
+   could have received becomes a stop at that point.
+   **Routine values.** A lambda and a routine named as a value pass their failures on like any call: a call through
+   a routine value made under `try`/`check` (or inside a routine called under one) goes through the value's
+   recovering entry, so `try apply(f: x => 10 // x, x: 0)` gives `none` and
+   `try xs.select(transform: x => 10 // x).to[List]()` is received; with no keyword above it the routine value runs
+   plainly and stops where it fails. Every `Callable[...]` takes any routine value. The handlers of
+   `CpuEventManager` (`Callable[(), None]?`) run with nothing above them: a handler's failure stops the program.
    **`todo`** is a statement for code not written yet (`routine parse(bytes: Bytes) -> Header` with the body
-   `todo`): running it crashes with `NotImplementedError` naming the routine, even under `try`/`check`. It does not make
-   the routine failable and ends its path, so a body that is only `todo` needs no `return`. The build warns
+   `todo`): running it crashes with `NotImplementedError` naming the routine, even under `try`/`check`. It ends its
+   path, so a body that is only `todo` needs no `return`. The build warns
    once per routine that still has one (RF-W303). `nothing` is an empty body on purpose, a different thing.
    The keyword takes the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
    a trailing `!!` applies to the recovery result. There is no `try_foo` name form —
@@ -130,17 +125,16 @@ When unsure, consult ground truth in the repo/package:
    the type id over the crashables the program throws: nothing about it is looked up at
    run time.
    **The list a routine throws** is collected by the builder (its own `throw`s and those
-   of the failable routines it calls). `@throws([NotFoundError, ParseError])` above a
-   failable routine fixes it, for a routine others build on: a crashable the routine can
-   throw that the list leaves out is RF-S712, and the annotation on a routine that isn't
-   failable (or naming a type that isn't a crashable) is RF-S713. The language server marks
-   a bare call of a failable routine with a `may stop` hint.
+   of the routines it calls). `@throws([NotFoundError, ParseError])` above a
+   routine fixes it, for a routine others build on: a crashable the routine can
+   throw that the list leaves out is RF-S712, and the annotation on a routine that passes
+   no failure on (an `infallible` one, or naming a type that isn't a crashable) is RF-S713.
    **Matching a carrier.** `Check[T]` is the variant `T | Crashables`. A `when` on one MUST have the `T` arm (build error
    otherwise). `is Crashables as e` takes any error; `is NopeError as e` takes only that
    crashable and binds it as a `NopeError` (fields readable); `x is NopeError` works
-   as an expression too. A `when` with NO error arm passes the error on: in a
-   failable routine as if `is Crashables as e => throw e` were written (it propagates),
-   anywhere else it crashes loudly. `throw e` of a caught `Crashables` rethrows it. A caught error keeps the
+   as an expression too. A `when` with NO error arm passes the error on, as if
+   `is Crashables as e => throw e` were written: a `try`/`check` above receives it, and with none above it the
+   program stops there. `throw e` of a caught `Crashables` rethrows it. A caught error keeps the
    trace of its first throw: if it ends the program after being rethrown or passed on, the report shows that
    trace (the routines between the throw and the catcher included) and a `Thrown again at file:line:col` line.
    Every crash report is headed by the error's crash title (`Division error: ...`, the type name in sentence
@@ -545,7 +539,7 @@ var why: Check[S64] = check line.to()
 
 **A byte's and a character's numbers are named routines, not conversions.** `b.value()` is a `Byte`'s `U8`
 (`b.value().to[S64]()` for another type), `Byte(v)` makes one from a `U8` (never fails). `c.codepoint()` is a
-`Char`'s `U32`, `Char.from_codepoint(n: v)` (a `failable common routine`, takes a `U32`) fails on a surrogate
+`Char`'s `U32`, `Char.from_codepoint(n: v)` (a `common routine`, takes a `U32`) fails on a surrogate
 (0xD800..0xDFFF) or above 0x10FFFF. `c.to_byte()` is an ASCII character's byte (failable, throws for non-ASCII).
 `c.digit_value()` (`base: 10` default, `base: 16` also takes `a-f`/`A-F`) is a failable `U8`, ASCII only, throws
 `InvalidDigitError` for a character that is no digit of the base. `b.to[U8]()`, `c.to[U32]()`, `v.to[Byte]()`,
@@ -600,7 +594,7 @@ with -1.
   ```
 
   A call picks the one whose bracket matches (`f.to[Celsius]()`, or `var c: Celsius = f.to()`). A
-  conversion that can fail is declared `failable routine Text.to[S64]() -> S64`. A routine written for every
+  conversion that can fail throws from its body: `routine Text.to[S64]() -> S64`. A routine written for every
   choice (`routine T.to[S32]() needs ChoiceType T`) reaches every choice type.
 
 **Precedence**, tightest first:
@@ -722,8 +716,8 @@ A `when` that gives a value (`var label = when …`) takes one expression per ar
 or a block arm that ends with `becomes value` (its lines run, then `value` is the
 arm's value). A block arm without `becomes` is RF-S307, `becomes` elsewhere RF-S308.
 An arm may also be `throw ...` (`else => throw InvalidValueError(message: word)`): it gives no value, so the other
-arms decide the type. In a `failable` routine the failure goes to the caller, where `try` / `check` take it like
-any other, and in a routine that is not failable it crashes on the spot.
+arms decide the type. The failure goes to the caller, where `try` / `check` take it like any other (in an
+`infallible` routine it stops the program on the spot).
 
 ## 6. Routines
 
@@ -734,7 +728,7 @@ routine add(a: S64, b: S64) -> S64
 routine Point.magnitude() -> B64        # method: Type.name, receiver is `me`
     return (me.x * me.x + me.y * me.y).to[B64]().sqrt()
 
-failable routine get_text(n: S64) -> Text      # can throw
+routine get_text(n: S64) -> Text               # can throw
     when n
         == 0 => throw DivisionByZeroError()
         else => return "ok"
@@ -744,22 +738,20 @@ dangerous routine raw_poke(p: Addr)     # callable only inside danger blocks
     return
 ```
 
-- Call with named args: `add(a: 1, b: 2)`. Recover a failable call with a keyword:
+- Call with named args: `add(a: 1, b: 2)`. Recover a call that can fail with a keyword:
   `try get_text(n: 0)` → `Text?` (`Optional[Text]`); `check get_text(n: 0)` → `Check[Text]`
   (keeps the `Crashables`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are builder-synthesized lifecycle/operator hooks (NO sigil):
   the constructor `T(...)`, `destruct`, `copy`, `eq`, `compare`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `emitter`/`emit` (walking), `add`
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
-- Failure inside a failable routine: `throw SomeError(...)`. A routine with no
+- Failure inside a routine: `throw SomeError(...)`. A routine with no
   value to give throws `AbsentValueError()`.
-- Failability is on the DECLARATION only (`failable routine S64.from_digit_bytes_at(...)`,
-  `failable routine Celsius(from: Text)`). Calls never mark it:
-  `S64.from_digit_bytes_at(bytes: bs)`, `x.divmod(other: m)`, `t.to[Celsius]()`.
-  `foo!(...)`, `x.foo!(...)` and `T![..](...)` are RF-G211; `foo(args)!` is a parse
-  error too. A constructor is declared `routine T(...)` / `failable routine T(...)`
-  (`routine T.create(...)` is an ordinary member routine named `create`), and
-  overload resolution picks the failable or plain one for you.
+- Neither the declaration nor the call marks failability: `routine S64.from_digit_bytes_at(...)`,
+  `routine Celsius(from: Text)`, called as `S64.from_digit_bytes_at(bytes: bs)`, `x.divmod(other: m)`,
+  `t.to[Celsius]()`. `foo!(...)`, `x.foo!(...)` and `T![..](...)` are RF-G211; `foo(args)!` is a parse
+  error too. A constructor is declared `routine T(...)` (`routine T.create(...)` is an ordinary member routine
+  named `create`). Only a wall is marked: `infallible routine T.close()`.
 - **Annotations are a fixed set.** `@readonly`, `@writable`, `@reshaping`, `@discardable`, `@positional`,
   `@hands_over` (an emitter's `emit`), `@infix`, `@inline`, `@noinline`, `@no_optimize`, `@crash_only`, `@untraced`, `@blocking`, `@layout(...)`, `@link(...)`,
   `@target(...)`, `@test`/`@case`/`@skip`/`@time_limit` (routine tests, below) and the
@@ -802,7 +794,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
 - A `return` ends the routine's own variables: a local handed over inside the returned value moves without
   `steal` (`return Shelf(book: book)`, `return (a, b)`, `return xs`). `steal` on such a local there is RF-W259 (quick
   fix and `migrate --step return-steal` remove it). A parameter handed over in a `return` still takes `steal`.
-- A written `destruct` (a plain `routine T.destruct()`, never `dangerous`: RF-S807, never `failable`: RF-S815) tears down what the entity
+- A written `destruct` (a plain `routine T.destruct()`, never `dangerous`: RF-S807, a wall without `infallible`) tears down what the entity
   owns (its member variables, buffers it holds) and nothing else: the builder gives back the entity's own box
   before each of its returns, so one `destruct` call still ends the entity. Do not write
   `me.hijack().invalidate()` in it. A step that handles raw memory sits in a `danger` block inside the body.
@@ -1244,7 +1236,7 @@ that differ from other languages:
 - `set.add(value: v)` returns Bool, `@discardable`: no `drop` needed.
 - `dict[k] = v` puts a value: it replaces the value of a key that is there and adds the key otherwise (there is
   no `dict.add`). Reading `dict[k]` is failable under the hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Optional[TValue]`.
-- Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
+- Indexing `coll[i]` can fail (`IndexOutOfBoundsError`, received by `try`/`check` above); back-indexing
   is `coll[^1]` (last element).
 - **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a
   `List`/`RotatableList` yields a new `List`/`RotatableList`, on `Items[T, COUNT]` a `List[T]`
@@ -1398,7 +1390,7 @@ partition fails loudly). **`FileManager` is the operating system's file manager,
 (`FileManager.read_text(at: f)`). It reaches every mounted partition (one OS file manager per partition):
 `FileManager.partition(at: dir)` (→ `PartitionManager`: `name`, `storage`, `root`, `file_system`, `size`),
 `PartitionManager.all()`, `StorageManager.all()` (`name`, `size`), `storage.partitions()` are read-only queries.
-Making partitions and formatting are not in 0.5 (they will be `failable`, not `dangerous`). `File(at:)` and
+Making partitions and formatting are not in 0.5 (their failures will be crashables, not `dangerous` routines). `File(at:)` and
 `Directory(at:)` (in `import IO/File`) only say where: cheap values wrapping a path (`at: Text`), constructing one
 touches nothing. There is no `IO/FileSystem` module, no free `read_text`/`temp_dir`/`join_path`, and no `/` path
 operator (`/` is division).
@@ -1530,9 +1522,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 |--------------|---------------------------------------|----------------------------------------------------|
 | RF-S510/S512 | positional args in a multi-param call | name every argument                                |
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
-| RF-S753      | failable call left unhandled          | recover with `try`/`check` + `when`                 |
-| RF-S760      | `try`/`check` over nothing failable   | remove the keyword, or declare the routine `failable` |
-| RF-S761      | failable routine value to a plain `Callable` | write the parameter `failable Callable[...]`  |
+| RF-G230      | `failable` written on a routine       | remove it (`migrate --step failable`): every routine passes failures on |
 | RF-S712      | `@throws` leaves out a crashable the routine throws | add it to the list, or recover it inside |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-S558      | `{}` (empty set) where a dict is expected | write `{:}`                                    |
@@ -1578,7 +1568,7 @@ record Item
     name: Text
     qty: S64
 
-failable routine find_qty(items: Viewing[List[Item]], name: Text) -> S64
+routine find_qty(items: Viewing[List[Item]], name: Text) -> S64
     for item in items
         if item.name == name
             return item.qty
@@ -1688,7 +1678,7 @@ Verbs (methods on `Work[T]`, all failable):
   `start_now()`/`start_here()` job that waits again stops there.
 
 ```razorforge
-failable routine checked(n: S64) -> S64
+routine checked(n: S64) -> S64
     if n < 0
         throw VerificationFailedError()
     return n
@@ -1833,7 +1823,7 @@ routine start()
 - **`@blocking`** on a `C::` routine marks a call that may block its thread for long (a read from a pipe, a
   sleep, a network wait). Inside a job started with `start_now()` or `start_here()` such a call runs on one of
   the runtime's I/O threads while the job parks, so its thread goes on with other jobs, and anywhere else it is
-  an ordinary call. A variadic or failable foreign routine cannot be marked. To put your own long work on an
+  an ordinary call. A variadic foreign routine cannot be marked. To put your own long work on an
   OS thread, start it with `start_apart()`.
 - **C strings.** `CStrView` / `CWStrView` are C's `char*` / `wchar_t*`, never freed by RazorForge (a string C
   returns, and the type of every C string parameter). `text.to[CStr]()` / `text.to[CWStr]()` copy a `Text` into
@@ -1900,8 +1890,8 @@ comparison, `hash` or `compare` on a member needs `needs P everywhere` (RF-S633)
 that is not generic (`allmemvarof(Settings)`) the builder unrolls the body during analysis and checks each copy with
 its member's own type, so `before.$nameof(m) != after.$nameof(m)` needs no `needs` line.
 
-`$` (`${…}` buildtime splice) is a structural sigil, not a keyword. Failability is the `failable` keyword on the
-declaration, and the name stays bare (RoutineInfo carries `IsFailable`). See §1b.
+`$` (`${…}` buildtime splice) is a structural sigil, not a keyword. A routine is not marked as failable at all
+(every routine passes its failures on, only `infallible` marks a wall), and the name stays bare. See §1b.
 
 ---
 

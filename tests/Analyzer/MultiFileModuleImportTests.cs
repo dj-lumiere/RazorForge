@@ -327,7 +327,7 @@ public sealed class MultiFileModuleImportTests
     }
 
     /// <summary>
-    /// A sibling whose unindented line starts with `failable routine` (or any other declaration modifier) is a
+    /// A sibling whose unindented line starts with `routine` (or any other declaration modifier) is a
     /// module file, not a script: it is gathered, so the entry sees its routines.
     /// </summary>
     [Fact]
@@ -349,7 +349,7 @@ public sealed class MultiFileModuleImportTests
                                       routine double(n: S64) -> S64
                                           return n * 2
 
-                                      failable routine half(n: S64) -> S64
+                                      routine half(n: S64) -> S64
                                           if n % 2 != 0
                                               throw AbsentValueError()
                                           return n // 2

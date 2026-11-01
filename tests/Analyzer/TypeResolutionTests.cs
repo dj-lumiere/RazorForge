@@ -193,14 +193,14 @@ public class TypeResolutionTests
         Assert.Equal(expected: RoutineKind.MemberRoutine, actual: routine.Kind);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for failable routine and marks the routine as failable.
+    /// Verifies semantic analysis behavior for routine and marks the routine as failable.
     /// </summary>
     [Fact]
     public void Analyze_FailableRoutine_RegistersAsFailable()
     {
         string source = """
-                        failable routine get_value() -> S32
-                            return 42
+                        routine get_value() -> S32
+                            return 40 + 2
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -654,13 +654,13 @@ public class TypeResolutionTests
             filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for failable routine no error handling return type error.
+    /// Verifies semantic analysis behavior for routine no error handling return type error.
     /// </summary>
     [Fact]
     public void Analyze_FailableRoutine_NoErrorHandlingReturnTypeError()
     {
         string source = """
-                        failable routine get_value() -> S32
+                        routine get_value() -> S32
                             return 42
                         """;
 

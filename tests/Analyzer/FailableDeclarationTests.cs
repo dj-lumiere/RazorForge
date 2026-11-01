@@ -42,7 +42,7 @@ public class FailableDeclarationTests
     {
         string source = """
                         module L/Test
-                        failable routine risky(n: S64) -> S64
+                        routine risky(n: S64) -> S64
                             if n == 0
                                 throw DivisionByZeroError()
                             return n

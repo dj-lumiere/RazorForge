@@ -24,7 +24,7 @@ public sealed class ExitCodeTests
     }
 
     /// <summary>A throw in a routine that is not failable crashes where it stands with its crashable's message (status
-    /// 82), even when a failable routine calls it under <c>try</c>, after the same <c>try</c> received the failable
+    /// 82), even when a routine calls it under <c>try</c>, after the same <c>try</c> received the failable
     /// routine's own throw.</summary>
     [Fact]
     public void GlobalReadByAnotherGlobalsDestruct_IsTornDownAfterIt()
@@ -98,9 +98,9 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "Division by zero error", actualString: stdout + stderr);
     }
 
-    /// <summary>Failures rise only through failable routines: <c>try</c> receives a lambda's failure handed through a
-    /// <c>failable Callable</c> parameter and a failable routine's throw, but a division by zero inside a routine that
-    /// is not failable crashes there (status 82), even under <c>try</c>.</summary>
+    /// <summary>Every routine passes its failures on: <c>try</c> receives a lambda's failure handed through a
+    /// <c>Callable</c> parameter and a routine's throw, but a division by zero inside an <c>infallible</c> routine
+    /// stops the program there (status 82), even under <c>try</c>.</summary>
     [Fact]
     public void FailureInsidePlainHelperUnderTry_CrashesLoudly()
     {
@@ -322,6 +322,24 @@ public sealed class ExitCodeTests
         Assert.DoesNotContain(expectedSubstring: "recovered", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
         Assert.Contains(expectedSubstring: "Verification failed error", actualString: stdout + stderr);
+    }
+
+    /// <summary>A failure no <c>try</c> or <c>check</c> receives stops the program at the point it happened, deep in a
+    /// recursion: the report names that line and the trace shows every routine between it and <c>start</c>.</summary>
+    [Fact]
+    public void FailureWithoutKeyword_StopsWhereItHappened()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "unreceived_deep_failure.rf");
+
+        Assert.True(condition: exit == 82,
+            userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "received: none", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        string report = stdout + stderr;
+        Assert.Contains(expectedSubstring: "Division by zero error", actualString: report);
+        Assert.Contains(expectedSubstring: "unreceived_deep_failure.rf:9:", actualString: report);
+        Assert.Contains(expectedSubstring: "UnreceivedDeepFailure.eval", actualString: report);
+        Assert.Contains(expectedSubstring: "UnreceivedDeepFailure.start", actualString: report);
     }
 
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)

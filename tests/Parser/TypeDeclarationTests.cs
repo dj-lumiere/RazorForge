@@ -510,14 +510,14 @@ public class TypeDeclarationTests
         Assert.Single(collection: routine.Parameters);
     }
     /// <summary>
-    /// Verifies that the parser accepts failable routine.
+    /// Verifies that the parser accepts routine.
     /// </summary>
     [Fact]
     public void Parse_FailableRoutine()
     {
         string source = """
-                        failable routine get_value() -> S32
-                            return 42
+                        routine get_value() -> S32
+                            return 40 + 2
                         """;
 
         Program program = AssertParses(source: source);

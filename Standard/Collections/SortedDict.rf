@@ -217,7 +217,7 @@ routine BTreeDictNode[TKey, TValue].destruct()
 ### collector. Overrides the universal member-walk (keys/values live in fixed inline arrays the generic
 ### walk cannot iterate).
 @override
-dangerous routine BTreeDictNode[TKey, TValue].roam_trace()
+infallible dangerous routine BTreeDictNode[TKey, TValue].roam_trace()
     if not me.is_leaf
         var ci: U64 = 0
         until ci >= me.child_count
@@ -236,7 +236,7 @@ dangerous routine BTreeDictNode[TKey, TValue].roam_trace()
 ### Cycle-collector FREE: recurse into every child node freeing the subtree, then free this node's own
 ### box — but NOT the stored keys/values (the collector frees the whole white cycle directly).
 @override
-dangerous routine BTreeDictNode[TKey, TValue].roam_free()
+infallible dangerous routine BTreeDictNode[TKey, TValue].roam_free()
     if not me.is_leaf
         var ci: U64 = 0
         until ci >= me.child_count
@@ -258,7 +258,7 @@ routine SortedDict[TKey, TValue].destruct()
 
 ### Cycle-collector TRACE: delegate to the root node's recursive trace (reports every key/value).
 @override
-dangerous routine SortedDict[TKey, TValue].roam_trace()
+infallible dangerous routine SortedDict[TKey, TValue].roam_trace()
     if me.root is None
         return
     me.root!!.as_entity().roam_trace()
@@ -267,7 +267,7 @@ dangerous routine SortedDict[TKey, TValue].roam_trace()
 ### Cycle-collector FREE: free the whole B-tree via the root's recursive free, then free this dict's own
 ### box — but NOT the stored keys/values (the collector frees the whole white cycle directly).
 @override
-dangerous routine SortedDict[TKey, TValue].roam_free()
+infallible dangerous routine SortedDict[TKey, TValue].roam_free()
     if me.root is None
         return
     me.root!!.as_entity().roam_free()
@@ -588,7 +588,7 @@ secret routine SortedDict[TKey, TValue].search_node(node: Viewing[BTreeDictNode[
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
 @overridable
-failable routine SortedDict[TKey, TValue].getitem(key: Viewing[TKey]) -> TValue
+routine SortedDict[TKey, TValue].getitem(key: Viewing[TKey]) -> TValue
 needs RecordType TValue
     if me.root is None
         throw KeyNotFoundError(key: key.represent())
@@ -602,7 +602,7 @@ needs RecordType TValue
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
-secret failable routine SortedDict[TKey, TValue].get_from_node(node: Viewing[BTreeDictNode[TKey, TValue]], key: TKey) -> TValue
+secret routine SortedDict[TKey, TValue].get_from_node(node: Viewing[BTreeDictNode[TKey, TValue]], key: TKey) -> TValue
     danger
         var i = me.lower_bound(node: node, key: key)
         if i < node.keys_count() and key == node.key_get(i)
@@ -1043,7 +1043,7 @@ secret routine SortedDict[TKey, TValue].update_subtree_size(node: Modifying[BTre
 ### :returns: The `(TKey, TValue)` tuple at that sorted position.
 ### :throws: {IndexOutOfBoundsError} if `i >= count()`.
 @readonly
-failable routine SortedDict[TKey, TValue].get_by_rank(i: U64) -> (TKey, TValue)
+routine SortedDict[TKey, TValue].get_by_rank(i: U64) -> (TKey, TValue)
     if i >= me.count
         throw IndexOutOfBoundsError(index: i, count: me.count)
     danger
@@ -1120,7 +1120,7 @@ secret routine SortedDict[TKey, TValue].get_or_from_node(
 ### :returns: A `(TKey, TValue)` tuple with the minimum key and its associated value.
 ### :throws: {AbsentValueError} The dictionary is empty.
 @readonly
-failable routine SortedDict[TKey, TValue].min() -> (TKey, TValue)
+routine SortedDict[TKey, TValue].min() -> (TKey, TValue)
     if me.is_empty()
         throw AbsentValueError()
     danger
@@ -1133,7 +1133,7 @@ failable routine SortedDict[TKey, TValue].min() -> (TKey, TValue)
 ### :returns: A `(TKey, TValue)` tuple with the maximum key and its associated value.
 ### :throws: {AbsentValueError} The dictionary is empty.
 @readonly
-failable routine SortedDict[TKey, TValue].max() -> (TKey, TValue)
+routine SortedDict[TKey, TValue].max() -> (TKey, TValue)
     if me.is_empty()
         throw AbsentValueError()
     danger
@@ -1147,14 +1147,14 @@ failable routine SortedDict[TKey, TValue].max() -> (TKey, TValue)
 ### :returns: The first (minimum-key) entry.
 ### :throws: {AbsentValueError} The dictionary is empty.
 @readonly
-failable routine SortedDict[TKey, TValue].first() -> (TKey, TValue)
+routine SortedDict[TKey, TValue].first() -> (TKey, TValue)
     return me.min()
 
 ### Returns the entry with the largest key. Alias for {SortedDict[TKey, TValue].max()}.
 ### :returns: The last (maximum-key) entry.
 ### :throws: {AbsentValueError} The dictionary is empty.
 @readonly
-failable routine SortedDict[TKey, TValue].last() -> (TKey, TValue)
+routine SortedDict[TKey, TValue].last() -> (TKey, TValue)
     return me.max()
 
 # ============================================================================
@@ -1305,7 +1305,7 @@ secret routine SortedDict[TKey, TValue].collect_inorder(
             )
         return
 
-failable routine SortedDictEmitter[TKey, TValue].emit() -> (TKey, TValue)
+routine SortedDictEmitter[TKey, TValue].emit() -> (TKey, TValue)
     danger
         if me.index >= me.dict.as_entity().count()
             throw AbsentValueError()
@@ -1363,7 +1363,7 @@ routine SortedDict[TKey, TValue].serialize() -> SerialValue
 ### :returns: The rebuilt dictionary.
 ### :throws: {SerialShapeError} when the value is not a table or an entry does not fit, or a parse error when a key
 ### does not read as a `TKey`.
-failable common routine SortedDict[TKey, TValue].from_serial(value: SerialValue) -> SortedDict[TKey, TValue]
+common routine SortedDict[TKey, TValue].from_serial(value: SerialValue) -> SortedDict[TKey, TValue]
     var result = SortedDict[TKey, TValue]()
     when value
         is Dict[Text, SerialValue] as entries =>

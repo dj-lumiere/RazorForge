@@ -141,31 +141,14 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Verifies that a failable routine must contain throw or absent.
+    /// Verifies that @crash_only does not go on an infallible routine (it promises not to fail).
     /// </summary>
     [Fact]
-    public void Analyze_FailableRoutineWithoutThrowOrAbsent_ReportsError()
-    {
-        string source = """
-                        failable routine test() -> S32
-                            return 1
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrow);
-    }
-
-    /// <summary>
-    /// Verifies that @crash_only only applies to failable routines.
-    /// </summary>
-    [Fact]
-    public void Analyze_CrashOnlyOnNonFailableRoutine_ReportsError()
+    public void Analyze_CrashOnlyOnInfallibleRoutine_ReportsError()
     {
         string source = """
                         @crash_only
-                        routine test()
+                        infallible routine test()
                             return
                         """;
 
@@ -352,7 +335,7 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// A recovery form of a failable routine is not a name: `try_parse`, `check_parse` and `lookup_parse` are
+    /// A recovery form of a routine is not a name: `try_parse`, `check_parse` and `lookup_parse` are
     /// ordinary routines even next to a failable `parse!` whose `try`/`check`/`lookup` forms the builder
     /// generates, and calling either never reaches the other.
     /// </summary>
@@ -364,7 +347,7 @@ public class WikiLanguageBreakageTests
     public void Analyze_RecoveryFormNamedRoutine_IsOrdinary(string routineName)
     {
         string source = $"""
-                         failable routine parse(x: S32) -> S32
+                         routine parse(x: S32) -> S32
                              if x < 0
                                  throw AbsentValueError()
                              return x

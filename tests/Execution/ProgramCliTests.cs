@@ -573,7 +573,7 @@ public sealed class ProgramCliTests : IDisposable
                 "routine Pt.create(x: S64) -> Pt\n" +
                 "  return Pt(x: x)\n" +
                 "\n" +
-                "failable routine halve(n: S64) -> S64\n" +
+                "routine halve(n: S64) -> S64\n" +
                 "  return n // 2\n" +
                 "\n" +
                 "routine spin(z: C64) -> C128\n" +
@@ -600,7 +600,7 @@ public sealed class ProgramCliTests : IDisposable
                       "routine Pt(x: S64) -> Pt\n" +
                       "    return Pt(x: x)\n" +
                       "\n" +
-                      "failable routine halve(n: S64) -> S64\n" +
+                      "routine halve(n: S64) -> S64\n" +
                       "    return n // 2\n" +
                       "\n" +
                       "routine spin(z: C128) -> C256\n" +

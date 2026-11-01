@@ -71,7 +71,7 @@ public class ErrorHandlingPatternTests
                         routine NopeError.crash_message() -> Text
                             return "nope"
 
-                        failable routine fails(n: S64) -> S64
+                        routine fails(n: S64) -> S64
                             if n > 0
                                 throw NopeError()
                             return n
@@ -87,7 +87,7 @@ public class ErrorHandlingPatternTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
 
-    /// <summary>The error arm may be left out: the error then passes on (or crashes outside a failable routine).</summary>
+    /// <summary>The error arm may be left out: the error then passes on (or crashes outside a routine).</summary>
     [Fact]
     public void Analyze_CheckWhenWithoutErrorArm_IsFine()
     {
@@ -98,12 +98,12 @@ public class ErrorHandlingPatternTests
                         routine NopeError.crash_message() -> Text
                             return "nope"
 
-                        failable routine fails(n: S64) -> S64
+                        routine fails(n: S64) -> S64
                             if n > 0
                                 throw NopeError()
                             return n
 
-                        failable routine passes(n: S64) -> S64
+                        routine passes(n: S64) -> S64
                             when check fails(n: n)
                                 is S64 as v => return v
                             return 0

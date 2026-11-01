@@ -36,7 +36,7 @@ public class AttributeTests
     {
         string source = """
                         @crash_only
-                        failable routine internal_divide(a: S32, b: S32) -> S32
+                        routine internal_divide(a: S32, b: S32) -> S32
                             if b == 0
                                 throw DivisionByZeroError()
                             return a // b
@@ -127,7 +127,7 @@ public class AttributeTests
     {
         string source = """
                         @[readonly, crash_only]
-                        failable routine validate(value: S32) -> S32
+                        routine validate(value: S32) -> S32
                             if value < 0
                                 throw ValidationError()
                             return value

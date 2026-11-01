@@ -1,0 +1,73 @@
+module Tests/Stdlib/FailurePropagationApi
+
+import IO/Console
+# Every routine passes its failures to its caller: a `try` or `check` above a call receives a failure from any depth
+# below it, through plain calls. Checked arithmetic that overflows and an index out of range are failures like a
+# `throw`, told apart by their error type. A lambda passes its failure on through the routine that calls it.
+
+choice Op
+    NUM
+    ADD
+    DIV
+    AT
+
+entity Node
+    op: Op
+    value: S64
+    kids: List[Node]
+
+routine leaf(value: S64) -> Node
+    return Node(op: Op.NUM, value: value, kids: List[Node]())
+
+routine join(op: Op, left: Node, right: Node) -> Node
+    var kids = List[Node]()
+    kids.add_last(value: steal left)
+    kids.add_last(value: steal right)
+    return Node(op: op, value: 0, kids: kids)
+
+# A tree evaluator that calls itself plainly: no `try`, no `when check` on the way down.
+routine eval(e: Viewing[Node]) -> S64
+    if e.op == Op.NUM
+        return e.value
+    var l = eval(e: e.kids.view_at(index: 0))
+    var r = eval(e: e.kids.view_at(index: 1))
+    if e.op == Op.ADD
+        return l + r
+    if e.op == Op.DIV
+        return l // r
+    var table = [10, 20, 30]
+    return table[r.to[U64]()] + l
+
+routine apply(f: Callable[(S64,), S64], x: S64) -> S64
+    return f(x)
+
+routine twice(f: Callable[(S64,), S64], x: S64) -> S64
+    return apply(f: f, x: apply(f: f, x: x))
+
+routine show_check(label: Text, e: Viewing[Node])
+    when check eval(e: e)
+        is S64 as v => show(f"{label}: {v}")
+        is DivisionByZeroError => show(f"{label}: division by zero")
+        is IntegerOverflowError => show(f"{label}: overflow")
+        is IndexOutOfBoundsError as x => show(f"{label}: index {x.index} out of range")
+        is Crashables as other => show(f"{label}: {other.crash_title()}")
+    return
+
+routine start()
+    var ok = join(op: Op.ADD, left: leaf(value: 2), right: join(op: Op.ADD, left: leaf(value: 3), right: leaf(value: 4)))
+    show_check(label: "ok", e: ok.view())
+    var deep = join(op: Op.ADD, left: leaf(value: 1),
+        right: join(op: Op.ADD, left: leaf(value: 2), right: join(op: Op.DIV, left: leaf(value: 7), right: leaf(value: 0))))
+    show_check(label: "deep", e: deep.view())
+    var big = join(op: Op.ADD, left: leaf(value: S64_MAX), right: leaf(value: 1))
+    show_check(label: "big", e: big.view())
+    var far = join(op: Op.AT, left: leaf(value: 0), right: leaf(value: 9))
+    show_check(label: "far", e: far.view())
+    show(f"try deep: {try eval(e: deep.view())}")
+    show(f"lambda: {try twice(f: x => 100 // x, x: 0)}")
+    show(f"lambda value: {try twice(f: x => x + 1, x: 5)}")
+    show(f"plain value: {try apply(f: x => x *% 2, x: 21)}")
+    var n: S64 = S64_MAX
+    show(f"overflow: {try n + 1}")
+    show(f"nothing to fail: {try 5}")
+    return

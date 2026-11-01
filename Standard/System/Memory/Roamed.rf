@@ -61,7 +61,7 @@ needs EntityType T
 ### :returns: A new handle sharing the same underlying entity.
 @readonly
 @override
-secret routine Roamed[T].share() -> Roamed[T]
+secret infallible routine Roamed[T].share() -> Roamed[T]
     danger
         if me.controller_address().is_not_hollow()
             var ctrl = Hijacked[RoamManager[T]](me).as_entity()
@@ -78,7 +78,7 @@ secret routine Roamed[T].share() -> Roamed[T]
 # ============================================================================
 
 ### Escapes this object to ESCAPED mode (atomic refcount + armed lock). Idempotent.
-dangerous routine Roamed[T].promote()
+infallible dangerous routine Roamed[T].promote()
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.promote()
     return
@@ -95,7 +95,7 @@ routine Roamed[T].is_escaped() -> Bool
 ### `@reshaping` routine), since the loop or the call could no longer trust where the elements are. A change
 ### hidden behind other calls is caught too: it reaches the entity through a handle as well.
 @readonly
-failable routine Roamed[T].require_shape_free()
+routine Roamed[T].require_shape_free()
     danger
         var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         if ctrl.shape_users != 0
@@ -108,7 +108,7 @@ failable routine Roamed[T].require_shape_free()
 ### plain name (an element `rows[0]`, a call result), and in expressions that hold no statement of their own.
 ### :returns: The inner entity as `T`.
 ### :throws: {ReshapingWhileInUseError} while a use of the entity's shape is open.
-failable routine Roamed[T].control_to_reshape() -> T
+routine Roamed[T].control_to_reshape() -> T
     danger
         var ctrl = Hijacked[RoamManager[T]](me).as_entity()
         if ctrl.shape_users != 0
@@ -120,7 +120,7 @@ failable routine Roamed[T].control_to_reshape() -> T
 ### behind a handle, since the creator's caller makes the handle itself.
 ### :returns: The entity.
 ### :throws: {SharedEntityHandOffError} when another handle or a weak observer still reaches the entity.
-failable dangerous routine Roamed[T].release_inner() -> T
+dangerous routine Roamed[T].release_inner() -> T
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     var data = ctrl.release_inner()
     if data.is_hollow()
@@ -129,27 +129,27 @@ failable dangerous routine Roamed[T].release_inner() -> T
 
 ### Marks one more `for` loop or element call as using this entity's element positions. Only the builder
 ### calls this, paired with `end_shape_use` when that use ends.
-dangerous routine Roamed[T].begin_shape_use()
+infallible dangerous routine Roamed[T].begin_shape_use()
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.shape_users = ctrl.shape_users +% 1
     return
 
 ### Ends one use started by `begin_shape_use`.
-dangerous routine Roamed[T].end_shape_use()
+infallible dangerous routine Roamed[T].end_shape_use()
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.shape_users = ctrl.shape_users -% 1
     return
 
 ### Enters the access lock: a no-op in LOCAL mode, a reentrant task-keyed acquire in ESCAPED mode.
 @inline
-dangerous routine Roamed[T].lock_enter()
+infallible dangerous routine Roamed[T].lock_enter()
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.guard_enter()
     return
 
 ### Leaves the access lock: a no-op in LOCAL mode, a reentrant release in ESCAPED mode.
 @inline
-dangerous routine Roamed[T].lock_exit()
+infallible dangerous routine Roamed[T].lock_exit()
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     ctrl.guard_exit()
     return
@@ -191,7 +191,7 @@ dangerous routine Roamed[T].cyclic_visit()
 ### collector rather than walking it as a struct. Overrides the universal member-walk default
 ### (`T.roam_trace` in DeriveText.rf) — a bare walk over a handle's internal pointer would be wrong.
 @override
-dangerous routine Roamed[T].roam_trace()
+infallible dangerous routine Roamed[T].roam_trace()
     me.cyclic_visit()
     return
 
@@ -199,7 +199,7 @@ dangerous routine Roamed[T].roam_trace()
 ### must NOT tear down its pointee here — doing so would double-free a sibling reaped in the same batch.
 ### Overrides the universal `T.roam_free` default (which forwards to `destruct`).
 @override
-dangerous routine Roamed[T].roam_free()
+infallible dangerous routine Roamed[T].roam_free()
     return
 
 ### The address of the underlying {RoamManager[T]} — the collector's currency and a Stage-1 test
@@ -224,7 +224,7 @@ dangerous routine Roamed[T].keep(source: Addr)
 ### lowering around the enclosing access scope, so this coercion is safe: it is the deref half, the
 ### bracket pass is the lock half. Kept as the low-level plumbing name behind `access`/`control`.
 ### :returns: The inner entity.
-dangerous routine Roamed[T].raw_inner() -> T
+infallible dangerous routine Roamed[T].raw_inner() -> T
     var ctrl = Hijacked[RoamManager[T]](me).as_entity()
     return ctrl.data_ptr().as_entity()
 
@@ -313,7 +313,7 @@ needs T obeys Equatable
 ### handle that holds nothing.
 ### :returns: The text.
 @readonly
-routine Roamed[T].handle_represent() -> Text
+infallible routine Roamed[T].handle_represent() -> Text
     if me.is_hollow()
         return "none"
     return me.access().represent()
@@ -321,7 +321,7 @@ routine Roamed[T].handle_represent() -> Text
 ### The debug text of a handle that may hold nothing: `none` when it holds nothing, else the entity's own `diagnose()`.
 ### :returns: The debug text.
 @readonly
-routine Roamed[T].handle_diagnose() -> Text
+infallible routine Roamed[T].handle_diagnose() -> Text
     if me.is_hollow()
         return "none"
     return me.access().diagnose()

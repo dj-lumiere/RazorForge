@@ -79,7 +79,7 @@ secret routine dec_of_canonical(x: D128) -> Decimal
 ### Crashes if `d` is non-finite, else wraps it as a Decimal. The single guard that keeps
 ### Decimal finite-only on every conversion from a possibly infinite/NaN source.
 ### :throws: {NumericOverflowError} if `d` is +-infinity; {NumericDomainError} if `d` is NaN.
-failable routine dec_of_d128_finite(d: D128) -> Decimal
+routine dec_of_d128_finite(d: D128) -> Decimal
     if d.is_finite()
         return dec_of_d128(x: d)
     if d.is_nan()
@@ -89,7 +89,7 @@ failable routine dec_of_d128_finite(d: D128) -> Decimal
 ### Crashes if `d` is non-finite, else wraps it bit-for-bit: `d` is already in Decimal's one form (a result of
 ### Ingrid's Decimal exports).
 ### :throws: {NumericOverflowError} if `d` is +-infinity; {NumericDomainError} if `d` is NaN.
-secret failable routine dec_of_canonical_finite(d: D128) -> Decimal
+secret routine dec_of_canonical_finite(d: D128) -> Decimal
     if d.is_finite()
         return dec_of_canonical(x: d)
     if d.is_nan()
@@ -123,7 +123,7 @@ routine Decimal.to_bytes_be() -> Items[Byte, 16]
 
 ### Parses a decimal literal into a Decimal.
 ### :throws: {InvalidValueError} if the text is not a valid FINITE decimal literal.
-failable routine Text.to[Decimal]() -> Decimal
+routine Text.to[Decimal]() -> Decimal
     var w = decimal_bits_parse(text: me, width: 0)
     if w.w0 != 0
         throw InvalidValueError(input: me, target: "decimal number")
@@ -239,7 +239,7 @@ routine B64.to[Decimal]() -> Decimal
 ### Converts a `Decimal` to the nearest `B32`, correctly rounded in one step.
 ### :returns: The `B32` closest to this value.
 ### :throws: {NumericOverflowError} if this value is beyond the range of `B32`.
-failable routine Decimal.to[B32]() -> B32
+routine Decimal.to[B32]() -> B32
     var x = dec_to_d128(x: me)
     var r = B32.from_bits(bits: LLVM::int_truncate[U64, U32](C::ingrid_d128_to_binary(x_low: d128_low(v: x), x_high: d128_high(v: x), which: 32).w0))
     if r.is_infinite()
@@ -249,7 +249,7 @@ failable routine Decimal.to[B32]() -> B32
 ### Converts a `Decimal` to the nearest `B64`, correctly rounded in one step.
 ### :returns: The `B64` closest to this value.
 ### :throws: {NumericOverflowError} if this value is beyond the range of `B64`.
-failable routine Decimal.to[B64]() -> B64
+routine Decimal.to[B64]() -> B64
     var x = dec_to_d128(x: me)
     var r = B64.from_bits(bits: C::ingrid_d128_to_binary(x_low: d128_low(v: x), x_high: d128_high(v: x), which: 64).w0)
     if r.is_infinite()
@@ -312,7 +312,7 @@ routine Decimal.eq(you: Decimal) -> Bool
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 @readonly
-routine Decimal.hash(k0: U64, k1: U64) -> U64
+infallible routine Decimal.hash(k0: U64, k1: U64) -> U64
     return __secure_hash_u128(v: me.to_bits(), k0: k0, k1: k1)
 
 # ============================================================================
@@ -328,7 +328,7 @@ routine Decimal.hash(k0: U64, k1: U64) -> U64
 ### :param what: The result's name for the crash message (`sum`, `difference`, `product`).
 ### :returns: The exact result.
 ### :throws: {NumericOverflowError} when the exact result needs more than 34 significant digits, or is out of range.
-secret failable routine dec_exact(w: IngridWords, what: Text) -> Decimal
+secret routine dec_exact(w: IngridWords, what: Text) -> Decimal
     if w.w2 != 0
         throw NumericOverflowError(
             description: f"the exact {what} has more significant digits than a Decimal holds (34)")
@@ -340,7 +340,7 @@ secret failable routine dec_exact(w: IngridWords, what: Text) -> Decimal
 ### Returns `me * you`, exactly.
 ### :throws: {NumericOverflowError} when the exact product needs more than 34 significant digits.
 @readonly
-failable routine Decimal.mul(you: Decimal) -> Decimal
+routine Decimal.mul(you: Decimal) -> Decimal
     var a = dec_to_d128(x: me)
     var b = dec_to_d128(x: you)
     return dec_exact(w: C::ingrid_decimal_mul_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
@@ -349,7 +349,7 @@ failable routine Decimal.mul(you: Decimal) -> Decimal
 ### Returns `me + you`, exactly.
 ### :throws: {NumericOverflowError} when the exact sum needs more than 34 significant digits.
 @readonly
-failable routine Decimal.add(you: Decimal) -> Decimal
+routine Decimal.add(you: Decimal) -> Decimal
     var a = dec_to_d128(x: me)
     var b = dec_to_d128(x: you)
     return dec_exact(w: C::ingrid_decimal_add_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
@@ -358,7 +358,7 @@ failable routine Decimal.add(you: Decimal) -> Decimal
 ### Returns `me - you`, exactly.
 ### :throws: {NumericOverflowError} when the exact difference needs more than 34 significant digits.
 @readonly
-failable routine Decimal.sub(you: Decimal) -> Decimal
+routine Decimal.sub(you: Decimal) -> Decimal
     var a = dec_to_d128(x: me)
     var b = dec_to_d128(x: you)
     return dec_exact(w: C::ingrid_decimal_sub_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
@@ -367,7 +367,7 @@ failable routine Decimal.sub(you: Decimal) -> Decimal
 ### Returns `me / you`, rounded to 34 digits, half up.
 ### :throws: {DivisionByZeroError} when `you` is zero; {NumericOverflowError} when the quotient is out of range.
 @readonly
-failable routine Decimal.truediv(you: Decimal) -> Decimal
+routine Decimal.truediv(you: Decimal) -> Decimal
     var a = dec_to_d128(x: me)
     var b = dec_to_d128(x: you)
     var r = d128_of_words(w: C::ingrid_decimal_div(a_low: d128_low(v: a), a_high: d128_high(v: a),
@@ -383,7 +383,7 @@ failable routine Decimal.truediv(you: Decimal) -> Decimal
 ### `me op you` (op 0 add, 1 subtract, 2 multiply) computed exactly, then rounded once to `places` digits after the
 ### point by `rule`.
 ### :throws: {NumericOverflowError} when even the rounded result needs more than 34 significant digits.
-secret failable routine dec_places_op(op: U32, a: Decimal, b: Decimal, places: U64, rule: RoundingRule) -> Decimal
+secret routine dec_places_op(op: U32, a: Decimal, b: Decimal, places: U64, rule: RoundingRule) -> Decimal
     var x = dec_to_d128(x: a)
     var y = dec_to_d128(x: b)
     var w = C::ingrid_decimal_places_op(op: op, a_low: d128_low(v: x), a_high: d128_high(v: x), b_low: d128_low(v: y),
@@ -401,7 +401,7 @@ secret failable routine dec_places_op(op: U32, a: Decimal, b: Decimal, places: U
 ### :returns: The rounded sum.
 ### :throws: {NumericOverflowError} when even the rounded sum needs more than 34 significant digits.
 @readonly
-failable routine Decimal.add(you: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+routine Decimal.add(you: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
     return dec_places_op(op: 0, a: me, b: you, places: places, rule: rule)
 
 ### Returns `me - you` computed exactly, then rounded once to `places` digits after the point by `rule` (half up when
@@ -412,7 +412,7 @@ failable routine Decimal.add(you: Decimal, places: U64, rule: RoundingRule = Rou
 ### :returns: The rounded difference.
 ### :throws: {NumericOverflowError} when even the rounded difference needs more than 34 significant digits.
 @readonly
-failable routine Decimal.subtract(you: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+routine Decimal.subtract(you: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
     return dec_places_op(op: 1, a: me, b: you, places: places, rule: rule)
 
 ### Returns `me * by` computed exactly, then rounded once to `places` digits after the point by `rule` (half up when
@@ -423,7 +423,7 @@ failable routine Decimal.subtract(you: Decimal, places: U64, rule: RoundingRule 
 ### :returns: The rounded product.
 ### :throws: {NumericOverflowError} when even the rounded product needs more than 34 significant digits.
 @readonly
-failable routine Decimal.multiply(by: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+routine Decimal.multiply(by: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
     return dec_places_op(op: 2, a: me, b: by, places: places, rule: rule)
 
 ### Returns `me / by` rounded once to `places` digits after the point by `rule` (half up when left out):
@@ -435,7 +435,7 @@ failable routine Decimal.multiply(by: Decimal, places: U64, rule: RoundingRule =
 ### :throws: {DivisionByZeroError} when `by` is zero; {NumericOverflowError} when the quotient at that place needs more
 ###     than 34 significant digits.
 @readonly
-failable routine Decimal.divide(by: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+routine Decimal.divide(by: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
     if by.is_zero()
         throw DivisionByZeroError()
     var a = dec_to_d128(x: me)

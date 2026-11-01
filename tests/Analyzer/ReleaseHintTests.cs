@@ -63,7 +63,7 @@ public class ReleaseHintTests
     public void RetiredRoutine_NamesWhatIsWrittenNow(string call, string hint)
     {
         string errors = Errors(source: $"""
-                                        failable routine halve(n: S64) -> S64
+                                        routine halve(n: S64) -> S64
                                             return n // 2
 
                                         routine start()

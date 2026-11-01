@@ -269,6 +269,7 @@ public partial class RazorForgeLexer
         _keywords[key: "danger"] = TokenType.Danger;
         _keywords[key: "dangerous"] = TokenType.Dangerous;
         _keywords[key: "failable"] = TokenType.Failable;
+        _keywords[key: "infallible"] = TokenType.Infallible;
         _keywords[key: "steal"] = TokenType.Steal;
         // Buildtime reflection is RF's model (monomorph unroll). Suflae's reflection is the runtime
         // ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via wholesale System

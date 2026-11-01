@@ -33,14 +33,14 @@ public sealed class ToolCommandTests : IDisposable
                                 routine NopeError.crash_message() -> Text
                                     return f"nope: {me.what}"
 
-                                failable routine fails(n: S64) -> S64
+                                routine fails(n: S64) -> S64
                                     if n > 0
                                         throw NopeError(what: f"too big {n}")
                                     return n
 
                                 """;
 
-    /// <summary>A <c>when</c> on a <c>Check</c> with no error arm, outside a failable routine, crashes loudly with
+    /// <summary>A <c>when</c> on a <c>Check</c> with no error arm, outside a routine, crashes loudly with
     /// the caught error's title and message.</summary>
     [Fact]
     public void UnhandledErrorArm_OutsideAFailableRoutine_Crashes()

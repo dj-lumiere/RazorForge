@@ -23,7 +23,7 @@ public class ErrorVariantGenerationTests
         // Routine with 'absent' only generates:
         // - try_get() -> T?
         string source = """
-                        failable routine get(id: U64) -> User
+                        routine get(id: U64) -> User
                             if not (has_user(id))
                                 throw AbsentValueError()
                             return fetch_user(id)
@@ -74,7 +74,7 @@ public class ErrorVariantGenerationTests
                             @readonly
                             routine Me.crash_message() -> Text
 
-                        failable routine validate(value: S32) -> S32
+                        routine validate(value: S32) -> S32
                             if value < 0
                                 throw ValidationError(message: "negative")
                             return value
@@ -123,7 +123,7 @@ public class ErrorVariantGenerationTests
                         entity User
                             name: Text
 
-                        failable routine get_user(id: U64) -> User
+                        routine get_user(id: U64) -> User
                             if id == 0
                                 throw DatabaseError(code: 1)
                             if not (user_exists(id))
@@ -166,7 +166,7 @@ public class ErrorVariantGenerationTests
                         entity Cache
                             data: Dict[Text, S32]
 
-                        failable routine Cache.get(key: Text) -> S32
+                        routine Cache.get(key: Text) -> S32
                             if not (me.data.has(key))
                                 throw AbsentValueError()
                             return me.data.get(key)
@@ -187,7 +187,7 @@ public class ErrorVariantGenerationTests
     #region No Variant Generation
 
     /// <summary>
-    /// Verifies semantic analysis behavior for non failable routine no variants generated.
+    /// Verifies semantic analysis behavior for non routine no variants generated.
     /// </summary>
     [Fact]
     public void Analyze_NonFailableRoutine_NoVariantsGenerated()
@@ -202,23 +202,6 @@ public class ErrorVariantGenerationTests
         // Should NOT generate try or check variants
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Try));
         Assert.Null(@object: result.Registry.FindRecoveryVariant(recovered: result.Registry.GetRoutine(name: "add")!, kind: RecoveryKind.Check));
-    }
-    /// <summary>
-    /// Verifies semantic analysis behavior for failable with no throw or absent warns or errors.
-    /// </summary>
-    [Fact]
-    public void Analyze_FailableWithNoThrowOrAbsent_WarnsOrErrors()
-    {
-        // Failable routine that never throws or returns absent
-        string source = """
-                        failable routine get_value() -> S32
-                            return 42
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-
-        // Should warn that failable routine never fails
-        Assert.True(condition: result.Warnings.Count > 0 || result.Errors.Count > 0);
     }
 
     #endregion
@@ -264,7 +247,7 @@ public class ErrorVariantGenerationTests
                         record NotAnError
                             value: S32
 
-                        failable routine fail()
+                        routine fail()
                             throw NotAnError(value: 42)
                         """;
 
@@ -297,7 +280,7 @@ public class ErrorVariantGenerationTests
                             @readonly
                             routine Me.crash_message() -> Text
 
-                        failable routine parse_number(text: Text) -> S32
+                        routine parse_number(text: Text) -> S32
                             throw SomeError(msg: "parse failed")
 
                         routine trigger_variants(text: Text) -> S32?

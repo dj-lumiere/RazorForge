@@ -592,7 +592,7 @@ public class ParserErrorTests
     public void Parse_ValueWhen_ThrowArm_Parses()
     {
         string source = """
-                        failable routine pick(word: Text) -> S64
+                        routine pick(word: Text) -> S64
                             var n = when word
                                 == "a" => 1
                                 else => throw InvalidValueError(message: word)

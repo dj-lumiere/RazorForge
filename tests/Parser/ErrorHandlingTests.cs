@@ -12,14 +12,14 @@ public class ErrorHandlingTests
     #region Failable Routine Declaration
 
     /// <summary>
-    /// Verifies that the parser accepts failable routine with bang.
+    /// Verifies that the parser accepts routine with bang.
     /// </summary>
     [Fact]
     public void Parse_FailableRoutine_WithBang()
     {
         string source = """
-                        failable routine get_value() -> S32
-                            return 42
+                        routine get_value() -> S32
+                            return 40 + 2
                         """;
 
         Program program = AssertParses(source: source);
@@ -29,14 +29,14 @@ public class ErrorHandlingTests
         Assert.True(condition: routine.IsFailable);
     }
     /// <summary>
-    /// Verifies that the parser accepts failable routine with parameter.
+    /// Verifies that the parser accepts routine with parameter.
     /// </summary>
     [Fact]
     public void Parse_FailableRoutine_WithParameter()
     {
         string source = """
-                        failable routine parse_int(text: Text) -> S32
-                            return 42
+                        routine parse_int(text: Text) -> S32
+                            return text.count().to[S32]()
                         """;
 
         Program program = AssertParses(source: source);
@@ -52,8 +52,8 @@ public class ErrorHandlingTests
     public void Parse_FailableMemberRoutine_WithBang()
     {
         string source = """
-                        failable routine User.validate() -> bool
-                            return true
+                        routine User.validate() -> bool
+                            return me.is_valid()
                         """;
 
         Program program = AssertParses(source: source);
@@ -68,14 +68,14 @@ public class ErrorHandlingTests
         Assert.True(condition: routine.IsFailable);
     }
     /// <summary>
-    /// Verifies that the parser accepts non failable routine.
+    /// Verifies that the parser accepts non routine.
     /// </summary>
     [Fact]
     public void Parse_NonFailableRoutine()
     {
         string source = """
-                        routine get_value() -> S32
-                            return 42
+                        infallible routine get_value() -> S32
+                            return 40 + 2
                         """;
 
         Program program = AssertParses(source: source);
@@ -95,7 +95,7 @@ public class ErrorHandlingTests
     public void Parse_ThrowStatement_Simple()
     {
         string source = """
-                        failable routine validate(x: S32) -> S32
+                        routine validate(x: S32) -> S32
                             if x < 0
                                 throw ValidationError("negative value")
                             return x
@@ -124,7 +124,7 @@ public class ErrorHandlingTests
     public void Parse_ThrowStatement_WithExpression()
     {
         string source = """
-                        failable routine fail() -> S32
+                        routine fail() -> S32
                             throw CustomError(code: 123, message: "failed")
                             return
                         """;
@@ -267,7 +267,7 @@ public class ErrorHandlingTests
     #region Error Cases
 
     /// <summary>
-    /// Verifies that the parser accepts throw in non failable routine so semantic analysis can validate it.
+    /// Verifies that the parser accepts throw in non routine so semantic analysis can validate it.
     /// </summary>
     [Fact]
     public void Parse_ThrowInNonFailableRoutine_ShouldParse()
@@ -290,7 +290,7 @@ public class ErrorHandlingTests
     public void Parse_ThrowWithoutExpression_Throws()
     {
         string source = """
-                        failable routine fail()
+                        routine fail()
                             throw
                             return
                         """;

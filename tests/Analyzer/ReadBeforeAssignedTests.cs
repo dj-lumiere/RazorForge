@@ -60,7 +60,7 @@ public class ReadBeforeAssignedTests
                                  routine UnknownWordError.crash_message() -> Text
                                      return f"'{me.word}' is not a word"
 
-                                 failable routine size(word: Text) -> S64
+                                 routine size(word: Text) -> S64
                                      lateinit var n: S64
                                      when word
                                          == "one" => n = 1

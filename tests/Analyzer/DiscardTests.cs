@@ -176,7 +176,7 @@ public class DiscardTests
                         record Wrapper
                             value: S32
 
-                        failable routine Wrapper.get_value(self: Wrapper) -> S32
+                        routine Wrapper.get_value(self: Wrapper) -> S32
                             return self.value
 
                         routine test()
@@ -193,18 +193,18 @@ public class DiscardTests
     #region RazorForge - Discard In Failable Context
 
     /// <summary>
-    /// Verifies that drop on a failable call inside a failable routine produces no error.
+    /// Verifies that drop on a failable call inside a routine produces no error.
     /// </summary>
     [Fact]
     public void Analyze_DiscardFailableCallInFailableContext_NoError()
     {
         string source = """
-                        failable routine get(flag: Bool) -> S32
+                        routine get(flag: Bool) -> S32
                             if flag
                                 throw AbsentValueError()
                             return 42
 
-                        failable routine test()
+                        routine test()
                             drop get(flag: true)
                             return
                         """;
@@ -214,7 +214,7 @@ public class DiscardTests
     }
 
     /// <summary>
-    /// Verifies that calling a failable routine without handling inside a non-failable routine
+    /// Verifies that calling a routine without handling inside a non-routine
     /// is currently suppressed (UnhandledCrashableCall is in SuppressedWarnings alongside SW007).
     /// When enforcement is wanted, remove UnhandledCrashableCall from SuppressedWarnings.
     /// </summary>
@@ -222,7 +222,7 @@ public class DiscardTests
     public void Analyze_DiscardFailableCallInNonFailableContext_CurrentlySuppressed()
     {
         string source = """
-                        failable routine get(flag: Bool) -> S32
+                        routine get(flag: Bool) -> S32
                             if flag
                                 throw AbsentValueError()
                             return 42
@@ -244,7 +244,7 @@ public class DiscardTests
     public void Analyze_DiscardTryVariantInNonFailableContext_NoError()
     {
         string source = """
-                        failable routine get(flag: Bool) -> S32
+                        routine get(flag: Bool) -> S32
                             if flag
                                 throw AbsentValueError()
                             return 42

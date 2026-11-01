@@ -71,7 +71,7 @@ needs U64 COUNT
 @readonly
 @inline
 @overridable
-failable routine Items[T, COUNT].getitem(index: U64) -> T
+routine Items[T, COUNT].getitem(index: U64) -> T
 needs RecordType T
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
@@ -84,7 +84,7 @@ needs RecordType T
 ### its own. Only call this when the index is already proven to be in range.
 @readonly
 @inline
-routine Items[T, COUNT].get_raw(index: U64) -> T
+infallible routine Items[T, COUNT].get_raw(index: U64) -> T
     danger
         return LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), index)
 
@@ -95,7 +95,7 @@ routine Items[T, COUNT].get_raw(index: U64) -> T
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
 @inline
-failable routine Items[T, COUNT].setitem(index: U64, value: T)
+routine Items[T, COUNT].setitem(index: U64, value: T)
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
@@ -118,7 +118,7 @@ secret routine Items[T, COUNT].put_raw(index: U64, value: T)
 ### :param value: The element that goes in.
 ### :returns: The element that was there.
 ### :throws: {IndexOutOfBoundsError} if `index >= COUNT`.
-secret failable routine Items[T, COUNT].exchange(index: U64, value: T) -> T
+secret routine Items[T, COUNT].exchange(index: U64, value: T) -> T
     if index >= COUNT
         throw IndexOutOfBoundsError(index: index, count: me.count())
     danger
@@ -160,7 +160,7 @@ routine Items[T, COUNT].destruct()
 ### controller; a value element is a no-op). Overrides the universal member-walk — `Items` is `@llvm`
 ### storage with no named members, so the generic walk sees nothing.
 @override
-dangerous routine Items[T, COUNT].roam_trace()
+infallible dangerous routine Items[T, COUNT].roam_trace()
     var i: U64 = 0
     until i >= COUNT
         LLVM::load_element_ref[Items[T, COUNT], T](me.hijack(), i).cyclic_visit()
@@ -171,7 +171,7 @@ dangerous routine Items[T, COUNT].roam_trace()
 ### elements are freed by the collector as part of the white cycle — the default `roam_free` forwards to
 ### `destruct`, which WOULD tear down every element (a double-free here), so it must be overridden.
 @override
-dangerous routine Items[T, COUNT].roam_free()
+infallible dangerous routine Items[T, COUNT].roam_free()
     return
 
 ### Returns a copy with each element STORED (refcount-bumped for managed element types like `Text`; a
@@ -180,7 +180,7 @@ dangerous routine Items[T, COUNT].roam_free()
 ### refcount 1 and double-free. Storability CASCADES: `Items[T, COUNT]` is Assignable iff `T` is.
 @readonly
 @override
-secret routine Items[T, COUNT].share() -> Items[T, COUNT]
+secret infallible routine Items[T, COUNT].share() -> Items[T, COUNT]
 needs RecordType T
     var result = Items[T, COUNT]()
     var i: U64 = 0
@@ -222,7 +222,7 @@ routine Items[T, COUNT].is_empty() -> Bool
 ### :returns: The element at index `0`.
 ### :throws: {AbsentValueError} The array has zero elements (`COUNT == 0`).
 @readonly
-failable routine Items[T, COUNT].first() -> T
+routine Items[T, COUNT].first() -> T
     if COUNT == 0
         throw AbsentValueError()
     danger
@@ -232,7 +232,7 @@ failable routine Items[T, COUNT].first() -> T
 ### :returns: The element at index `COUNT - 1`.
 ### :throws: {AbsentValueError} The array has zero elements (`COUNT == 0`).
 @readonly
-failable routine Items[T, COUNT].last() -> T
+routine Items[T, COUNT].last() -> T
     if COUNT == 0
         throw AbsentValueError()
     danger
@@ -263,7 +263,7 @@ needs T obeys Equatable
 ### :returns: The zero-based index of the first match.
 ### :throws: {AbsentValueError} No element equals `value`.
 @readonly
-failable routine Items[T, COUNT].index_of(value: T) -> U64
+routine Items[T, COUNT].index_of(value: T) -> U64
 needs T obeys Equatable
     for i in 0 til COUNT
         if me[i] == value
@@ -280,7 +280,7 @@ routine Items[T, COUNT].emitter() -> ItemsEmitter[T, COUNT]
 ### Returns the next element from the emitter in ascending index order, read in place.
 ### :returns: The element at the current index.
 ### :throws: {AbsentValueError} All `COUNT` elements have been yielded.
-failable routine ItemsEmitter[T, COUNT].emit() -> T
+routine ItemsEmitter[T, COUNT].emit() -> T
     if me.index >= COUNT
         throw AbsentValueError()
     danger

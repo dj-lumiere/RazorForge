@@ -6,10 +6,10 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// One error kind, and failures that rise only through failable routines (C81): a <c>throw</c> in a routine that is
-/// not failable crashes where it stands, <c>try</c>/<c>check</c> over an expression that reaches no failable call is
-/// RF-S760, a routine value that may fail goes only to a <c>failable Callable[...]</c> (RF-S761), and <c>pierce</c> is
-/// an ordinary name.
+/// One error kind, and failures that pass to the caller from every routine but an <c>infallible</c> one (C151, C152):
+/// <c>try</c>/<c>check</c> take a failure from any depth below, a keyword over a value that cannot fail gives the value,
+/// every routine value may go to any <c>Callable[...]</c>, <c>failable</c> is a grammar error, and <c>pierce</c> is an
+/// ordinary name.
 /// </summary>
 public class FailureWallTests
 {
@@ -31,9 +31,9 @@ public class FailureWallTests
         AssertAnalyzesSa(source: source);
     }
 
-    /// <summary><c>try</c> over a call of a routine that is not failable is RF-S760, pointing at the call.</summary>
+    /// <summary><c>try</c> over a call of a routine that cannot fail builds: it gives the value, present.</summary>
     [Fact]
-    public void Try_OverPlainCall_IsError()
+    public void Try_OverCallThatCannotFail_Builds()
     {
         string source = """
                         module L/Test
@@ -41,16 +41,15 @@ public class FailureWallTests
                             return n *% 2
                         routine start()
                             var a = try double(n: 1)
+                            var b = check 5
                             return
                         """;
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.NothingToRecover && e.Message.Contains(value: "'double'"));
+        AssertAnalyzesSa(source: source);
     }
 
-    /// <summary><c>check</c> over a plain routine that throws inside is RF-S760 too: the throw crashes there.</summary>
+    /// <summary><c>check</c> over a routine that throws, written without any marker, builds: its failure passes on.</summary>
     [Fact]
-    public void Check_OverPlainRoutineThatThrows_IsError()
+    public void Check_OverUnmarkedRoutineThatThrows_Builds()
     {
         string source = """
                         module L/Test
@@ -62,8 +61,7 @@ public class FailureWallTests
                             var r = check require_positive(n: 0)
                             return
                         """;
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.NothingToRecover);
+        AssertAnalyzesSa(source: source);
     }
 
     /// <summary>Checked operators, subscripts and conversions are failable routines, so a keyword over them
@@ -87,7 +85,7 @@ public class FailureWallTests
         AssertAnalyzesSa(source: source);
     }
 
-    /// <summary>A lambda that can fail handed to a <c>failable Callable</c> parameter makes the call recoverable:
+    /// <summary>A lambda that can fail handed to a <c>Callable</c> parameter makes the call recoverable:
     /// <c>try</c> over it builds.</summary>
     [Fact]
     public void FailableLambda_ToFailableParameter_IsRecoverable()
@@ -95,7 +93,7 @@ public class FailureWallTests
         string source = """
                         module L/Test
                         import IterTools
-                        routine apply(f: failable Callable[(S64,), S64], x: S64) -> S64
+                        routine apply(f: Callable[(S64,), S64], x: S64) -> S64
                             return f(x)
                         routine start()
                             var a = try apply(f: x => 10 // x, x: 0)
@@ -106,7 +104,7 @@ public class FailureWallTests
         AssertAnalyzesSa(source: source);
     }
 
-    /// <summary>An adapter holding a lambda that cannot fail still holds a <c>failable Callable</c> member variable, so
+    /// <summary>An adapter holding a lambda that cannot fail still holds a <c>Callable</c> member variable, so
     /// a keyword over its terminal builds (the terminal may fail through it).</summary>
     [Fact]
     public void Terminal_OverAdapter_IsRecoverable()
@@ -123,9 +121,9 @@ public class FailureWallTests
         AssertAnalyzesSa(source: source);
     }
 
-    /// <summary>A lambda that can fail handed to a plain <c>Callable</c> parameter is RF-S761.</summary>
+    /// <summary>A lambda that can fail goes to any <c>Callable</c> parameter: there is no RF-S761 any more.</summary>
     [Fact]
-    public void FailableLambda_ToPlainParameter_IsError()
+    public void LambdaThatCanFail_ToCallableParameter_Builds()
     {
         string source = """
                         module L/Test
@@ -135,27 +133,34 @@ public class FailureWallTests
                             var a = apply(f: x => 10 // x, x: 2)
                             return
                         """;
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableValueToPlainParameter);
+        AssertAnalyzesSa(source: source);
     }
 
-    /// <summary>A lambda that cannot fail goes to a plain <c>Callable</c>, and <c>try</c> over a call handing only
-    /// such a lambda to a routine that is not failable is RF-S760.</summary>
+    /// <summary><c>failable</c> is a grammar error that points to the new rule, and <c>infallible</c> marks a routine
+    /// that promises not to fail.</summary>
     [Fact]
-    public void PlainLambda_ToPlainParameter_Builds_TryIsError()
+    public void FailableWord_IsGrammarError_InfallibleBuilds()
     {
-        string source = """
-                        module L/Test
-                        routine apply(f: failable Callable[(S64,), S64], x: S64) -> S64
-                            return f(x)
-                        routine start()
-                            var a = apply(f: x => x *% 2, x: 2)
-                            var b = try apply(f: x => x *% 2, x: 2)
-                            return
-                        """;
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Single(collection: result.Errors, predicate: e => e.Code == SemanticDiagnosticCode.NothingToRecover);
+        string failable = """
+                          module L/Test
+                          failable routine parse(n: S64) -> S64
+                              return n
+                          routine start()
+                              return
+                          """;
+        (_, Builder.Parser.Parser parser) = ParseWithErrors(source: failable);
+        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RF-G230") &&
+                                                                   e.Contains(value: "infallible"));
+
+        string infallible = """
+                            module L/Test
+                            infallible routine close(n: S64) -> S64
+                                return n *% 2
+                            routine start()
+                                var a = try close(n: 3)
+                                return
+                            """;
+        AssertAnalyzesSa(source: infallible);
     }
 
     /// <summary><c>pierce</c> is not a keyword: it names a variable, a routine and a field like any other

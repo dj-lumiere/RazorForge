@@ -152,7 +152,7 @@ public class AccessBlockTests
     public void Parse_SimpleGuardedView()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             var shared = data.share[MultiRead]()
                             viewing shared as r
                                 show(r.value)
@@ -168,7 +168,7 @@ public class AccessBlockTests
     public void Parse_GuardedViewMultipleReaders()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             var shared = data.share[MultiRead]()
                             viewing shared as r1
                                 viewing shared as r2
@@ -190,7 +190,7 @@ public class AccessBlockTests
     public void Parse_SimpleSeizing()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             var shared = data.share[Mutex]()
                             modifying shared as w
                                 w.value = 42
@@ -206,7 +206,7 @@ public class AccessBlockTests
     public void Parse_SeizingWithMultipleMutations()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             var shared = counter.share[Mutex]()
                             modifying shared as s
                                 s.count += 1
@@ -224,7 +224,7 @@ public class AccessBlockTests
     public void Parse_SeizingDowngradeToViewing()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             var shared = data.share[MultiRead]()
                             modifying shared as w
                                 w.value = 42
@@ -247,7 +247,7 @@ public class AccessBlockTests
     public void Parse_SimpleUsing()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             using open_file("file.txt", mode: FileIO.Read) as file
                                 var content = file.read_all()
                                 process(content)
@@ -263,7 +263,7 @@ public class AccessBlockTests
     public void Parse_UsingMultipleResources()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             using open_file("input.txt") as input, open_file("output.txt", mode: FileIO.Write) as output
                                 var data = input.read_all()
                                 output.write(transform(data))
@@ -279,7 +279,7 @@ public class AccessBlockTests
     public void Parse_NestedUsing()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             using acquire_lock() as lock
                                 using open_connection() as conn
                                     process(conn)
@@ -295,7 +295,7 @@ public class AccessBlockTests
     public void Parse_UsingWithControlFlow()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             using open_file("data.txt") as file
                                 for line in file.lines()
                                     if line.starts_with("#")
@@ -313,7 +313,7 @@ public class AccessBlockTests
     public void Parse_UsingWithErrorHandling()
     {
         string source = """
-                        failable routine process_files(paths: List[Text])
+                        routine process_files(paths: List[Text])
                             for path in paths
                                 using open_file(path) as file
                                     var content = file.read_all()
@@ -355,7 +355,7 @@ public class AccessBlockTests
     public void Parse_UsingWithViewing()
     {
         string source = """
-                        failable routine test()
+                        routine test()
                             var cache = Cache()
                             using open_file("config.json") as file
                                 var config = parse_json(file.read_all())
@@ -373,7 +373,7 @@ public class AccessBlockTests
     public void Parse_ComplexAccessPattern()
     {
         string source = """
-                        failable routine sync_data()
+                        routine sync_data()
                             var local = LocalData()
                             var shared = remote.share[MultiRead]()
 

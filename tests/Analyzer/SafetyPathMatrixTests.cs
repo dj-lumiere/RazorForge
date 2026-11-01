@@ -404,23 +404,6 @@ public class SafetyPathMatrixTests
             code: SemanticDiagnosticCode.StealOnSomePaths, expected: "goes on to the next turn");
     }
 
-    [Fact]
-    public void Analyze_FailableDestruct_Errors()
-    {
-        AssertHasErrorCode(source: """
-                           entity Q
-                               n: S64
-
-                           failable routine Q.destruct()
-                               throw VerificationFailedError()
-
-                           routine start()
-                               var q = Q(n: 1)
-                               return
-                           """,
-            code: SemanticDiagnosticCode.DestructNotFailable, expected: "with `failable`");
-    }
-
     // ---- messages ----------------------------------------------------------------------------------------------
 
     [Fact]

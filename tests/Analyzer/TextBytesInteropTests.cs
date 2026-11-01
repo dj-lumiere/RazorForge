@@ -74,7 +74,7 @@ public class TextBytesInteropTests
         // decode_as_utf8 is failable (strict validation) → `decode_as_utf8!()` from a failable
         // routine; the non-failable counterpart is `decode_as_utf8_lossy()`. RF-S458 otherwise.
         AnalysisResult result = AnalyzeSa(source: """
-                                                  failable routine test()
+                                                  routine test()
                                                       var text: Text = "Hello, 계"
                                                       var bytes: Bytes = text.encode_as_utf8()
                                                       var roundtrip: Text = bytes.decode_as_utf8()
@@ -91,10 +91,10 @@ public class TextBytesInteropTests
     public void BytesInterpretAsUtf8_ProducesCharacters()
     {
         // interpret_as_utf8 is failable (strict UTF-8 validation), so it must be called as
-        // `interpret_as_utf8!()` from a failable routine — the non-failable `interpret_as_utf8()`
+        // `interpret_as_utf8!()` from a routine — the non-failable `interpret_as_utf8()`
         // form does not exist (the lossy counterpart is `interpret_as_utf8_lossy()`). RF-S458.
         AnalysisResult result = AnalyzeSa(source: """
-                                                  failable routine test()
+                                                  routine test()
                                                       var bytes: Bytes = "Hi".encode_as_utf8()
                                                       for ch in bytes.interpret_as_utf8()
                                                           var cp: U32 = ch.codepoint()
@@ -123,13 +123,13 @@ public class TextBytesInteropTests
     }
 
     /// <summary>
-    /// Verifies that the test validates strict utf8 apis analyze inside failable routine.
+    /// Verifies that the test validates strict utf8 apis analyze inside routine.
     /// </summary>
     [Fact]
     public void BytesStrictUtf8Apis_AnalyzeInsideFailableRoutine()
     {
         AnalysisResult result = AnalyzeSa(source: """
-                                                  failable routine test()
+                                                  routine test()
                                                       var bytes: Bytes = b"ABC"
                                                       var text: Text = bytes.decode_as_utf8()
                                                       var view = bytes.interpret_as_utf8()

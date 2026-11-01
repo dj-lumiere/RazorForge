@@ -1183,7 +1183,7 @@ public class CompilerPipelineLoweringTests
                         routine helper(value: S32) -> S32
                             return value
 
-                        failable routine test(text: Text) -> S32
+                        routine test(text: Text) -> S32
                             return helper(text.count().to[S32]())
                         """;
 
