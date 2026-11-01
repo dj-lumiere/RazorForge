@@ -1,0 +1,36 @@
+module Tests/Stdlib/RetainedGetitemChainApi
+
+import IO/Console
+
+# Reading through a handle held by a list element (`links[0].keep.view().n`) copies the element for the read and ends
+# the copy with the statement, so the handle's share count is the same after every read. A handle that is kept
+# (added to another list) holds a share of its own.
+entity Counter
+    n: S64
+
+record Link
+    keep: Retained[Counter]
+    weight: S64
+
+routine read_it(links: Viewing[List[Link]]) -> S64
+    return links[0].keep.view().n
+
+routine read_var(links: Viewing[List[Link]]) -> S64
+    var seen = links[0].keep.view().n
+    return seen
+
+routine start()
+    var b = Retained[Counter](from: Counter(n: 100))
+    var links = List[Link]()
+    links.add_last(value: Link(keep: b, weight: 1000))
+    show(f"before {b.strong_count()}")
+    var s: S64 = 0
+    for round in 0 til 3
+        s += read_it(links: links)
+        s += read_var(links: links)
+    show(f"after reads {b.strong_count()} {s}")
+    var kept = List[Retained[Counter]]()
+    kept.add_last(value: links[0].keep)
+    show(f"after keep {b.strong_count()}")
+    show("DONE")
+    return

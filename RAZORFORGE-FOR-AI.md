@@ -437,7 +437,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   `inf_b64` spelling (RF-G010).
 
 **Optionals and `none`:**
-- **`T?` (postfix `?`)** = `Optional[T]` (§7), the ONLY `?`-on-a-type form. There is no prefix `?T`. `Maybe` is
+- **`T?` (postfix `?`)** = `Optional[T]` (§7), the ONLY `?`-on-a-type form, also inside type arguments of a call (`List[Box?]()`). There is no prefix `?T`. `Maybe` is
   an unknown type whose error names `Optional[T]` and `T?` (`migrate --step type-names` renames it).
 - **`None` (capital)** is the type / pattern marker (`when x is None`, type
   position). **`none` (lowercase)** is the value literal (like `true`/`false`).
@@ -806,7 +806,8 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   old one to `old` in one step (`fresh` is computed first, so the place is never
   seen empty). Without `inject`, a `T?` place is left `none` (`steal slot.spare as
   kept`), and any other place is RF-S647. An element goes through its container
-  (`steal items[0] as first inject Item(name: "y")`). A whole variable still moves
+  (`steal items[0] as first inject Item(name: "y")`, the index may be any integer type as in
+  `items[i]`). A whole variable still moves
   as an expression (`consume(r: steal b)`). The statement takes only a place
   (RF-S648 otherwise).
 - Writing over a place (`slot.item = Item(name: "b")`, `items[0] = item`,
