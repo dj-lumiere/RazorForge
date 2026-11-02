@@ -452,6 +452,10 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   (`T?`) or a variant with a `None` member.
   `var x = none`, `var x: S64 = none`, `foo(none)` into a non-carrier slot are all
   errors — `none` has no free-standing type.
+- A check narrows a field path as it does a name: after `if a.b is None` leaves (or inside `if a.b isnot None`, or
+  after a `when a.b` whose `is None` arm leaves), `a.b` (any depth, `a.b.c`) is the `T` until the path or a name in
+  front of it is given a new value. A call in between does not end it, and if another name set the field to `none`
+  meanwhile, the read crashes loudly.
 - Absent is matched by `is None` on `T?` / a variant's zero
   tag. `Check[T]` has no absent state (only `Crashables | T`).
 

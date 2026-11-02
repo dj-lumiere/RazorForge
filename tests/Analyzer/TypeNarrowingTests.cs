@@ -220,4 +220,99 @@ public class TypeNarrowingTests
     }
 
     #endregion
+
+    #region Member path narrowing
+
+    private const string PathPrelude = """
+                                       record Leaf
+                                           name: Text
+
+                                       record Mid
+                                           leaf: Leaf?
+
+                                       record Top
+                                           mid: Mid?
+                                           note: Text?
+
+                                       """;
+
+    /// <summary>A field path left by `if a.b is None` has the payload type, at any depth.</summary>
+    [Fact]
+    public void Analyze_MemberPathGuardClause_NarrowsAtAnyDepth()
+    {
+        string source = PathPrelude + """
+                                      routine deep(t: Top) -> Text
+                                          if t.mid is None
+                                              return "no mid"
+                                          if t.mid.leaf is None
+                                              return "no leaf"
+                                          return t.mid.leaf.name
+                                      """;
+
+        Assert.Empty(collection: AnalyzeSa(source: source).Errors);
+    }
+
+    /// <summary>The `isnot None` branch narrows the path, and a `when` whose `is None` arm leaves does too.</summary>
+    [Fact]
+    public void Analyze_MemberPathIsNotNoneAndWhen_NarrowsPath()
+    {
+        string source = PathPrelude + """
+                                      routine inside(t: Top) -> Text
+                                          if t.note isnot None
+                                              return t.note
+                                          return ""
+
+                                      routine after_when(t: Top) -> Text
+                                          when t.note
+                                              is None => return "n"
+                                          return t.note
+                                      """;
+
+        Assert.Empty(collection: AnalyzeSa(source: source).Errors);
+    }
+
+    /// <summary>A call in between does not end the narrowing.</summary>
+    [Fact]
+    public void Analyze_MemberPathNarrowing_SurvivesCalls()
+    {
+        string source = PathPrelude + """
+                                      routine other(t: Top) -> S64
+                                          return 1
+
+                                      routine keep(t: Top) -> Text
+                                          if t.note is None
+                                              return "n"
+                                          drop other(t: t)
+                                          return t.note
+                                      """;
+
+        Assert.Empty(collection: AnalyzeSa(source: source).Errors);
+    }
+
+    /// <summary>Assigning the path, or a name in front of it, ends the narrowing.</summary>
+    [Fact]
+    public void Analyze_MemberPathAssigned_EndsNarrowing()
+    {
+        string path = PathPrelude + """
+                                    routine again(t: Top) -> Text
+                                        var u = t
+                                        if u.note is None
+                                            return "n"
+                                        u.note = none
+                                        return u.note
+                                    """;
+        string prefix = PathPrelude + """
+                                      routine again(t: Top) -> Text
+                                          var u = t
+                                          if u.note is None
+                                              return "n"
+                                          u = Top(mid: none, note: none)
+                                          return u.note
+                                      """;
+
+        Assert.Contains(collection: AnalyzeSa(source: path).Errors, filter: e => e.Code == SemanticDiagnosticCode.ReturnTypeMismatch || e.Message.Contains(value: "Optional"));
+        Assert.Contains(collection: AnalyzeSa(source: prefix).Errors, filter: e => e.Code == SemanticDiagnosticCode.ReturnTypeMismatch || e.Message.Contains(value: "Optional"));
+    }
+
+    #endregion
 }
