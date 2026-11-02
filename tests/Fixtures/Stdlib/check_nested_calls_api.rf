@@ -1,0 +1,42 @@
+module Tests/Stdlib/CheckNestedCallsApi
+
+import IO/Console
+# A failing call in an argument of a failing call, under one `check`: the failure of the argument and the failure
+# of the callee each arrive by their own error type.
+
+crashable EndOfLinesError
+    reason: Text
+
+crashable BadWordError
+    reason: Text
+
+routine EndOfLinesError.crash_message() -> Text
+    return me.reason
+
+routine BadWordError.crash_message() -> Text
+    return me.reason
+
+routine next_line(index: S64) -> Text
+    when index
+        == 0 => return "ok"
+        == 1 => return "bad"
+        else => throw EndOfLinesError(reason: "no more lines")
+
+routine to_word(line: Text) -> S64
+    if line == "bad"
+        throw BadWordError(reason: f"'{line}' is not a word")
+    return line.count().to[S64]()
+
+routine run(index: S64)
+    when check to_word(next_line(index))
+        is S64 as word => show(f"word {word}")
+        is BadWordError as e => show(f"bad word: {e.reason}")
+        is EndOfLinesError as e => show(f"end: {e.reason}")
+    return
+
+routine start()
+    run(index: 0)
+    run(index: 1)
+    run(index: 2)
+    show("DONE")
+    return
