@@ -61,7 +61,7 @@ public sealed class ScriptModeTests
                                                           return
                                                       bump(n: 3)
                                                       """,
-            expectedErrorSubstring: "of a type threads may share");
+            expectedErrorSubstring: "A global can change");
 
         // Reported once for `total = total + n`, not once per side.
         Assert.Single(collection: result.Errors,

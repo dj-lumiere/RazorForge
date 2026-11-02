@@ -403,8 +403,8 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - `Char.to_uppercase`/`to_lowercase`/`is_uppercase`/`is_lowercase` follow Unicode (simple one-to-one mapping,
   `ß` stays `ß`). `lines()` and `ask_lines()` start no new line after a final line ending.
 - Build errors where the emitter used to fail: a construction leaving out a member with no default (RF-S455, names
-  it) or giving unnamed values that are not one per member (`Size(3)` for two members, RF-S455), `Int(1)` (RF-S646:
-  write `var n: Int = 1`, or `x.to[Int]()` for a variable), a slice of a `List` of entities, a protocol as a value or element type (`List[Named]`), a member write
+  it) or giving unnamed values that are not one per member (`Size(3)` for two members, RF-S455), `Int(x)` of a variable (RF-S646:
+  write `x.to[Int]()`), a slice of a `List` of entities, a protocol as a value or element type (`List[Named]`), a member write
   through an element read from a `Viewing` token, a variant built from a non-member type. `Check[T]` has
   `unwrap!()` (`check f() !!`), `strip_out()` works for entities, `br"..."` builds, a value assigned to a `T?`
   variable becomes present (`port ??= 8080`), and `()` works as a type argument in an expression

@@ -67,14 +67,13 @@ public class RejectedBeforeEmitterTests
     }
 
     [Fact]
-    public void Analyze_IntBuiltFromALiteral_PointsToTheTypedDeclaration()
+    public void Analyze_IntBuiltFromALiteral_ReadsTheLiteralAsAnInt()
     {
-        AssertHasErrorSa(source: """
+        AssertAnalyzesSa(source: """
                          routine start()
                              var a = Int(1)
                              return
-                         """,
-            expectedErrorSubstring: "An 'Int' is not built from an 'S64'");
+                         """);
     }
 
     [Fact]
@@ -102,20 +101,19 @@ public class RejectedBeforeEmitterTests
     }
 
     [Fact]
-    public void Analyze_NumberBuiltFromALiteralsBits_PointsToTheTypedDeclaration()
+    public void Analyze_NumberBuiltFromALiteral_ReadsItAsTheTypeAndChecksTheRange()
     {
         AssertHasErrorSa(source: """
                          routine start()
                              var c = U8(300)
                              return
                          """,
-            expectedErrorSubstring: "'var n: U8 = 300'");
-        AssertHasErrorSa(source: """
+            expectedErrorSubstring: "overflows type 'U8'");
+        AssertAnalyzesSa(source: """
                          routine start()
                              var d = Decimal(2)
                              return
-                         """,
-            expectedErrorSubstring: "'var n: Decimal = 2'");
+                         """);
     }
 
     [Fact]
