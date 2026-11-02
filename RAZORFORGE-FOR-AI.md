@@ -65,8 +65,8 @@ When unsure, consult ground truth in the repo/package:
    `routine parse!(...)` is RF-G222). A failure nobody receives stops the program LOUDLY at the point it happened,
    with the error's report and trace. To RECOVER, prefix the whole expression with a keyword and match the carrier
    with `when`:
-   `try EXPR` → `T?` (`Optional[T]`: present | absent, no error kept);
-   `check EXPR` → `Check[T]` (T | the caught `Crashables`).
+   `try EXPR` → `T?` (`Optional[T]`: a value is there or not, no error kept);
+   `check EXPR` → `Check[T]` (one value, or the reason it is absent: the caught `Crashables`).
    A routine with no value to give throws `AbsentValueError()`, an ordinary
    stdlib crashable: `throw AbsentValueError()`. To tell "not found" apart from
    other failures, match it by type: `is AbsentValueError => ...` on a `check`.
@@ -893,6 +893,10 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
       the type. `var l = links[0]` (a `Link` with a `target: Stamped[Creature]`), `take(l: links[0])`,
       `return links[0]`, `kept.add_last(value: links[0])`, a `when` over `links[0]` binding its stamp and keeping it
       are RF-S657. `links[0].target.fetch().x` reads it where it is. Take the list as `Modifying`, or read in place.
+    - The `me` of a `@readonly` member routine promises the same: `me.link.target.fetch()` gives a `Viewing`, and a value
+      that holds a way to change an entity is read in place from `me`, never copied out of it (RF-S657). Drop `@readonly`
+      from a routine that has to hand such a value out. The routines of the handle types themselves (`Retained.share`,
+      `Stamped.fetch`) are the verbs that give a handle out, so their `me` is the handle and not a place one is reached through.
       Not recommended: a routine that takes `Viewing` only to copy stamps or handles out of it (take `Modifying`).
   - **Access blocks: `viewing` / `modifying`** (keywords, RF only). `viewing x as v` calls `x.view_enter()` before
     the block, binds the `Viewing[...]` it returns to `v`, and calls `x.view_exit()` on every way out (its end,
@@ -1282,6 +1286,9 @@ that differ from other languages:
   conformance) that holds one more reference to the entity, so it is no token: it can be returned, kept in an
   entity's member variable, or used after `r` is given another entity. `for x in r` walks the same way. An emitter
   made from the entity itself (`r.view().emitter()`) is a token like one made from a local container.
+- `for x in xs` over a list of values gives `x: Modifying[S64]`, a token on the element. A token reads as the value
+  wherever a value is wanted: an index (`seen[x]`), arithmetic, a comparison, a declared-type variable
+  (`var z: S64 = x` copies it). `var y = x` keeps the token, and assigning a value to `y` is RF-S252.
 - An emitter hands out each element once: a `for` over a named emitter after one that ended by itself (no `break`),
   or a `for` inside a loop over an emitter made outside it, is RF-S517 (it would run zero times). Make a new
   `xs.emitter()` just before the loop, or write `for x in xs` / `for x in xs.emitter()`.

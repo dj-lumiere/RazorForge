@@ -1789,7 +1789,13 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             }
             else if (target is IdentifierExpression id && _state?.Tokens.ContainsKey(key: id.Name) == true)
             {
-                Bind(name: id.Name, value: value, index: index);
+                // A value is no token to point at (SA reported the assignment, RF-S252): the name keeps where it points,
+                // or its uses would be reported against the local the value was read from.
+                if (IsTrackedToken(type: value.ResolvedType))
+                {
+                    Bind(name: id.Name, value: value, index: index);
+                }
+
                 return;
             }
 

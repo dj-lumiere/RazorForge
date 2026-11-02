@@ -371,7 +371,7 @@ public class PatternMatchingTests
 
     #endregion
 
-    #region Optional/Result/Lookup Pattern Tests
+    #region Optional/Check Pattern Tests
 
     /// <summary>
     /// Verifies that the parser accepts when maybe.

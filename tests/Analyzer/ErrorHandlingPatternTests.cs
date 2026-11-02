@@ -45,7 +45,7 @@ public class ErrorHandlingPatternTests
 
     /// <summary>
     /// Verifies that Optional[T] (T?) IS allowed as a routine parameter type — it is a Assignable
-    /// presence-carrying value, unlike Result/Lookup.
+    /// presence-carrying value, unlike Check.
     /// </summary>
     [Fact]
     public void Analyze_MaybeAsParameter_NoError()
