@@ -56,6 +56,23 @@ public sealed class FormatterTests
         Assert.Equal(expected: once.Output, actual: twice.Output);
     }
 
+    /// <summary>
+    /// Verifies that the module line, the import group and the body are three groups with exactly one blank line
+    /// between them and none inside the import group, whichever groups are present, in both languages.
+    /// </summary>
+    [Theory]
+    [InlineData("module Demo\nimport IO/Console\n\n\nimport Numerics\nroutine start()\n    return\n", "module Demo\n\nimport IO/Console\nimport Numerics\n\nroutine start()\n    return\n")]
+    [InlineData("import IO/Console\nroutine start()\n    return\n", "import IO/Console\n\nroutine start()\n    return\n")]
+    [InlineData("module Demo\nroutine start()\n    return\n", "module Demo\n\nroutine start()\n    return\n")]
+    public void SeparatesModuleImportsAndBody_ByOneBlankLine(string source, string expected)
+    {
+        FormatResult result = SourceFormatter.Format(source: source, fileName: "groups.rf",
+            language: Language.RazorForge);
+
+        Assert.True(condition: result.Succeeded, userMessage: result.Refusal);
+        Assert.Equal(expected: expected, actual: result.Output);
+    }
+
     /// <summary>Verifies that a file that does not parse is refused, not rewritten.</summary>
     [Fact]
     public void Refuses_FileThatDoesNotParse()
