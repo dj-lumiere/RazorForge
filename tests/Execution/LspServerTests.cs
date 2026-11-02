@@ -436,6 +436,53 @@ public sealed class LspServerTests
     }
 
     [Fact]
+    public void InlayHintsAndColors_AreEmptyWhileTheCurrentTextDoesNotAnalyze()
+    {
+        // A line indented by 3 spaces does not tokenize, so no analysis of this text exists: the one of the text before
+        // it must not be sent, its positions no longer match the text.
+        const string valid = "routine start()\n    var total = 1\n    return\n";
+        const string broken = "routine start()\n   var total = 1\n    return\n";
+        (string uri, string folder) = OnDisk(text: valid);
+        string Hint(int id)
+        {
+            return JsonSerializer.Serialize(value: new
+            {
+                jsonrpc = "2.0",
+                id,
+                method = "textDocument/inlayHint",
+                @params = new
+                {
+                    textDocument = new { uri },
+                    range = new { start = new { line = 0, character = 0 }, end = new { line = 20, character = 0 } }
+                }
+            });
+        }
+
+        IReadOnlyList<JsonDocument> replies;
+        try
+        {
+            replies = LspTestHarness.Run(
+                Initialize(id: 1),
+                LspTestHarness.DidOpen(uri: uri, text: valid),
+                Hint(id: 71),
+                LspTestHarness.DidChange(uri: uri, text: broken),
+                Hint(id: 72),
+                LspTestHarness.DocRequest(id: 73, method: "textDocument/semanticTokens/full", uri: uri),
+                Exit);
+        }
+        finally
+        {
+            Directory.Delete(path: folder, recursive: true);
+        }
+
+        Assert.True(condition: LspTestHarness.ReplyWithId(replies: replies, id: 71)!.Value.GetProperty(propertyName: "result").GetArrayLength() > 0);
+        Assert.Equal(expected: 0, actual: LspTestHarness.ReplyWithId(replies: replies, id: 72)!.Value.GetProperty(propertyName: "result").GetArrayLength());
+        Assert.Equal(expected: 0,
+            actual: LspTestHarness.ReplyWithId(replies: replies, id: 73)!.Value.GetProperty(propertyName: "result")
+                                  .GetProperty(propertyName: "data").GetArrayLength());
+    }
+
+    [Fact]
     public void CodeAction_Answers()
     {
         string action = JsonSerializer.Serialize(value: new
