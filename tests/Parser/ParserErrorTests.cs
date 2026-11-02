@@ -666,4 +666,24 @@ public class ParserErrorTests
     }
 
     #endregion
+
+    #region Misspelled tests
+
+    /// <summary><c>x is not None</c> is a mistake for <c>x isnot None</c>, and the message says so.</summary>
+    [Fact]
+    public void Parse_IsNotAsTwoWords_PointsAtIsnot()
+    {
+        string source = """
+                        routine start()
+                            var x: S64? = 5
+                            if x is not None
+                                return
+                            return
+                        """;
+
+        (Program _, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
+        Assert.Contains(collection: parser.GetStructuredErrors(), filter: e => e.Message.Contains(value: "`isnot`"));
+    }
+
+    #endregion
 }
