@@ -15,7 +15,7 @@ public class EmitterTokenTests
 {
     private const string Prelude = """
                                    import IO/Console
-                                   import IterTools
+                                   import EmitterTools
 
                                    """;
 

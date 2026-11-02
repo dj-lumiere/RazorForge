@@ -15,7 +15,7 @@ public class LentEntityCollectingTests
 {
     private const string Prelude = """
                                    import IO/Console
-                                   import IterTools
+                                   import EmitterTools
 
                                    entity Crate
                                        n: S64

@@ -14,7 +14,7 @@ public class SafetyPathMatrixTests
 {
     private const string Prelude = """
                                    import IO/Console
-                                   import IterTools
+                                   import EmitterTools
 
                                    entity Cell
                                        n: S64

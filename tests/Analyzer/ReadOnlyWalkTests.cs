@@ -13,7 +13,7 @@ using static TestHelpers;
 public class ReadOnlyWalkTests
 {
     private const string Box = """
-                               import IterTools
+                               import EmitterTools
                                entity Box
                                    n: S64
                                entity Shelf

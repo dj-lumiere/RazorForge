@@ -76,7 +76,7 @@ public class UseAfterStealMessageTests
     public void Analyze_LambdaParameterNamedLikeStolenForVariable_IsANewName()
     {
         AssertAnalyzesSa(source: """
-                                 import IterTools
+                                 import EmitterTools
 
                                  entity Crate
                                      n: S64
@@ -97,7 +97,7 @@ public class UseAfterStealMessageTests
     public void Analyze_StolenNameAfterLambdaWithSameParameter_IsStillEnded()
     {
         AssertHasErrorSa(source: """
-                                 import IterTools
+                                 import EmitterTools
 
                                  entity Crate
                                      n: S64

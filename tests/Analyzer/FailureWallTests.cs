@@ -92,7 +92,7 @@ public class FailureWallTests
     {
         string source = """
                         module L/Test
-                        import IterTools
+                        import EmitterTools
                         routine apply(f: Callable[(S64,), S64], x: S64) -> S64
                             return f(x)
                         routine start()
@@ -111,7 +111,7 @@ public class FailureWallTests
     {
         string source = """
                         module L/Test
-                        import IterTools
+                        import EmitterTools
                         routine start()
                             var xs = List[S64]()
                             var s = xs.select(transform: x => 10 // x)

@@ -562,7 +562,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         import IO/Console
-                        import IterTools
+                        import EmitterTools
 
                         routine start()
                             var bad = List[S32]()
@@ -599,7 +599,7 @@ public class CompilerPipelineLoweringTests
                                      .Where(predicate: f => f.Contains(value: "define ", comparisonType: StringComparison.Ordinal))
                                      .Select(selector: f => f[f.IndexOf(value: "define ", comparisonType: StringComparison.Ordinal)..])
                                      .FirstOrDefault(predicate: f => f.Split(separator: '\n')[0].Contains(
-                                          value: $"@\"[member, try] IterTools.{adapter}.to()\"(",
+                                          value: $"@\"[member, try] EmitterTools.{adapter}.to()\"(",
                                           comparisonType: StringComparison.Ordinal));
             Assert.True(condition: function != null, userMessage: $"the try variant of {adapter}.to() is not defined");
             Assert.Contains(expectedSubstring: "System.List[System.S32].destruct()", actualString: function);

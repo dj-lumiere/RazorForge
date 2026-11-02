@@ -207,15 +207,15 @@ public class FeatureCoverageTests
         _ = GenerateIr(source: source);
     }
 
-    // ---- iterator inlining / IterTools ----------------------------------------------------------
+    // ---- iterator inlining / EmitterTools ----------------------------------------------------------
 
     [Fact]
-    public void IterTools_WhereSelectTakeChain_Compiles()
+    public void EmitterTools_WhereSelectTakeChain_Compiles()
     {
         const string source = """
                               module Test/Feat/Emitter
                               import IO/Console
-                              import IterTools
+                              import EmitterTools
 
                               routine start()
                                   var src: List[S64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

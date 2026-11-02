@@ -339,7 +339,7 @@ the protocols and the errors, with `System/Numerics` (every number type and its 
 wrappers and controllers, `ByteSize`), `System/Temporal` (`Duration`, `Moment`, `Clock`),
 `System/Concurrency`, `System/Serialization`, `System/Cpu` (`CpuEventManager`) and `System/CSubSystem` (C types
 and strings).
-The rest takes an import: `Collections`, `IO/Console`, `IO/Environment`, `IO/File`, `IterTools`, `Math3D`,
+The rest takes an import: `Collections`, `IO/Console`, `IO/Environment`, `IO/File`, `EmitterTools`, `Math3D`,
 `Random`, `Simd`, `Subprocess`, `Text/Patterns`, `BuilderQuery`, `BuilderExpansion`.
 `migrate --step modules` drops imports of `Core` and `Numerics` and rewrites `Core.X` to
 `System.X`.
@@ -410,7 +410,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
 - A variant holding only values copies with `=` (one that may hold an entity is RF-S413). A file of only `var` lines
   is a script. The overflow message is "Integer overflow error: The value does not fit in the target type."
 - A field-by-field construction infers type arguments (`Pair(first: 1, second: "one")` is `Pair[S64, Text]`). A type
-  obeying `Emittable[T]` gets its `Emitter` from what its `emitter()` returns (no `relates` needed), so IterTools adapters
+  obeying `Emittable[T]` gets its `Emitter` from what its `emitter()` returns (no `relates` needed), so EmitterTools adapters
   walk it. An entity holding an entity moves with `steal` (no copy step). An element token from `for` converts like
   its value (`w.to[S64]()`). `CpuEventManager.when_interrupted`/`when_terminated` link and run.
 - A bare number that fits two members of a variant (`S32` and `S64`) is RF-S201: state its type in a declaration.
@@ -1316,7 +1316,7 @@ that differ from other languages:
 - An emitter is an emittable (`Emitter[T]` obeys `Emittable[T]`): terminals and adapters work on it and take the
   values it has not handed out yet (`var it = xs.emitter()`, `drop it.emit()`, then `it.to[List]()`, `it.sum()`,
   `it.where(...)`).
-- Emitter adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`, `chain`, `distinct`, `select_many`,
+- Emitter adapters (from `EmitterTools`): `select`, `where`, `zip`, `enumerate`, `chain`, `distinct`, `select_many`,
   `min_by`, … — lazily evaluated, chainable, lambdas like `x => x % 2 == 0`. An adapter points at the container it
   was made from, so it follows the same rule: `var big = xs.where(...)` is a token on `xs`'s elements.
 - **Collecting.** An emittable is collected with a conversion that names the collection without its element type:
@@ -1326,7 +1326,7 @@ that differ from other languages:
   and is failable: fewer or more than `N` values throw `ElementCountMismatchError`. `to[Slots[T, N]]()` is the same for
   any `T`: each value goes in its own place, and a list of entities is taken so its walk hands them over
   (`(steal items).to[Slots[Item, 3]]()`, a walk that only reaches them in place is RF-S413). `to[List]`/`to[Set]`/
-  `to[Dict]`/`to[Items]`/`to[Slots]` need `import IterTools`.
+  `to[Dict]`/`to[Items]`/`to[Slots]` need `import EmitterTools`.
 - Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive. Without
   `by` a range counts UP: when the end is below the start it is EMPTY (`2 to 1`
   yields nothing, `(2 to 1).has(1)` is false). `by N` sets the step

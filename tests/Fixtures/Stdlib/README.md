@@ -64,7 +64,7 @@ Covered today (see `*.rf` files in this directory):
 - Cross-type composition: `cross_type`
 - Stress / memory invariants: `stress_memory`
 - Property checks: `property_collections`
-- IterTools (LINQ chain): `itertools` — `where`/`select`/`take`/`skip`/`reverse`/`distinct`/`enumerate`/`zip`/`any`/
+- EmitterTools (LINQ chain): `itertools` — `where`/`select`/`take`/`skip`/`reverse`/`distinct`/`enumerate`/`zip`/`any`/
   `all`/`sum`/`min`/`max`/`accumulate`/`intersect`
 - Ranges: `range` — `to`/`til` with optional `by`
 - Conversions: `numeric_conversion_failures` — narrowing, float→int, text→number
@@ -76,7 +76,7 @@ Covered today (see `*.rf` files in this directory):
 - Numeric literals: `numeric_literals` — decimal/hex/binary/scientific + digit separators
 - Pattern matching: `pattern_matching` — `when` with literals, types, ranges, binding
 - List sort: `list_sort` — `sort`/`sort_by`/`sorted`/`sorted_by` + stability
-- IterTools (more): `itertools_more` — `select_many`/`min_by`/`max_by`/`exclude`/`get_count(pred)`/`*_or_default`/
+- EmitterTools (more): `itertools_more` — `select_many`/`min_by`/`max_by`/`exclude`/`get_count(pred)`/`*_or_default`/
   `accumulate`
 - Calling conventions: `named_arguments`, `overload_resolution`
 - Math: `float_math` — sqrt/pow/exp/log/trig/rounding/clamp/classification

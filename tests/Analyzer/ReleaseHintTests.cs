@@ -74,6 +74,18 @@ public class ReleaseHintTests
     }
 
     [Fact]
+    public void ImportOfIterTools_NamesEmitterTools()
+    {
+        string errors = Errors(source: """
+                                       import IterTools
+
+                                       routine start()
+                                           return
+                                       """);
+        Assert.Contains(expectedSubstring: "is now EmitterTools: write 'import EmitterTools'", actualString: errors);
+    }
+
+    [Fact]
     public void UnknownPrefixedName_WithoutTheRoutine_GetsNoRecoveryHint()
     {
         string errors = Errors(source: """
