@@ -83,9 +83,11 @@ When unsure, consult ground truth in the repo/package:
    with `maybe_pt: Pt?`) is allowed, for every `T?` and every routine the optional has none of itself: a none
    receiver counts as an `AbsentValueError` failure that the same keyword receives (`try`: absent, `check`: the
    `AbsentValueError`), otherwise the call runs on the value, and a failure below the call is received as usual.
-   `?` asks whether there is a link, the call asks whether what it points at still lives. The value must be a record
-   (a `Stamped`, a record, a Suflae-shared handle): an entity inside a `T?` is read with `when`, and the call is
-   RF-S458. Without a keyword a call on a `T?` is still an error.
+   `?` asks whether there is a link, the call asks whether what it points at still lives. A record is copied out. An
+   entity or a variant is reached where the optional keeps it (a write token on the original), so a call that changes
+   it (`try xs.add_last(value: 3)` with `xs: List[S64]?`) acts on the original. Without a keyword a call on a `T?` is
+   still an error. A chain that ends in a `T?` of a record (`try optionals.first()` over a `List[S64?]`) gives `T?`, not
+   `T??`: a none end is the one absence, `None` under `try`, an `AbsentValueError` under `check`.
    **`infallible routine` is the only wall.** `infallible routine close(...)` (`infallible` goes first, after a
    visibility: `infallible dangerous routine`, `infallible common routine`) promises not to fail: a failure inside
    it (its own `throw`, a checked operator, a call that fails) breaks the promise and stops the program there (status
@@ -433,8 +435,10 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   fixed-size `Items[T, COUNT]`, `Bits[BITS]`
 - Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
 - Carriers: `Optional[T]` (written `T?`), `Check[T]` (builder-synthesized only —
-  user routines cannot declare them as return types; you obtain one by wrapping a
-  failable call with the `try`/`check` keyword).
+  a routine cannot declare either as its return type, RF-S806; you obtain one by wrapping a
+  failable call with the `try`/`check` keyword). A routine that has "a link or nothing" to give
+  (`Node.parent_of() -> Stamped[Node]?`) returns the value itself and throws `AbsentValueError()` where
+  there is none: the caller writes `try node.parent_of()` and gets the `Stamped[Node]?`.
 - A number never names its type (no `7s32`, `0_u64`, `10n`: RF-G010). Unit suffixes stay: durations
   (`50ms 5s 2m 1h 1d 1w us ns`), sizes (`4kb 4kib 2mb ...`), and the imaginary `i`.
 - `inf` and `nan` are number literals (reserved words) that take their type from where they go: `var x: B64 = inf`,
@@ -1576,6 +1580,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
 | RF-S654      | a `view_enter` / `modify_enter` that gives no `Viewing` / `Modifying`, or has no matching exit | return the token, declare the exit |
 | RF-S656      | `e.stamp()` on a stdlib entity, or one reached only through a type parameter | keep a link another way: the entity itself, or a manager's handle (`Retained[T]`) |
+| RF-S806      | a routine declares `T?` or `Check[T]` as its result | return the value and `throw` where it fails: the caller writes `try f(...)` |
 | RF-S657      | a value that holds a way to change an entity (a `Stamped`, a manager handle, a `Modifying`, a record or tuple with one) copied out of a `Viewing` | read it in place (`links[0].target.fetch()`), or take the container as `Modifying` |
 | RF-S612      | `using` given a non-`Enterable` (also `using g.view()`) | `viewing g as v` / `modifying g as m` |
 | RF-S630      | a `Guarded` opened again inside a block of the same routine that has it open | use the outer block's token |

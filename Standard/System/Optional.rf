@@ -99,7 +99,7 @@ needs T obeys Copyable
     return me.value.duplicate()
 
 ### The held value for a call under `try` or `check` on a `T?` receiver (`try link.fetch()`): the builder calls this
-### first, so a none receiver is an `AbsentValueError` that the same keyword receives. Only for a record `T`.
+### first, so a none receiver is an `AbsentValueError` that the same keyword receives. A record `T` is copied out.
 ### :returns: The held `T` value.
 ### :throws: {AbsentValueError} if this `Optional` is absent.
 routine Optional[T].reach() -> T
@@ -107,6 +107,26 @@ needs RecordType T
     if not me.is_present()
         throw AbsentValueError()
     return me.value.share()
+
+### `reach` for an entity: the call acts on the original, so it gets a write token on it, not a copy.
+### :returns: A write token on the held entity.
+### :throws: {AbsentValueError} if this `Optional` is absent.
+routine Optional[T].reach_in_place() -> Modifying[T]
+needs EntityType T
+    if not me.is_present()
+        throw AbsentValueError()
+    return me.value.modify()
+
+### `reach` for a variant: the call acts on the value where the optional keeps it, so it gets a write token on that
+### place, not a copy.
+### :returns: A write token on the held variant.
+### :throws: {AbsentValueError} if this `Optional` is absent.
+routine Optional[T].reach_in_place() -> Modifying[T]
+needs VariantType T
+    if not me.is_present()
+        throw AbsentValueError()
+    danger
+        return Modifying[T](me.value.hijack())
 
 ### Returns the wrapped value or `fallback` when absent, leaving this optional intact (NON-consuming).
 ### This avoids branching at the call site when a fixed fallback is acceptable. As with `unwrap`, the

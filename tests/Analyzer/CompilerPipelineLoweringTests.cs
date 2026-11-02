@@ -120,8 +120,12 @@ public class CompilerPipelineLoweringTests
     public void Analyze_GenericTypeConstructor_PreservesLoweringKindThroughLowering()
     {
         string source = """
+                        record Holder[T]
+                        needs RecordType T
+                            value: T
+
                         routine test()
-                            var maybe = Optional[S32](present: true, value: 1)
+                            var maybe = Holder[S32](value: 1)
                             return
                         """;
 
@@ -133,7 +137,7 @@ public class CompilerPipelineLoweringTests
         CreatorExpression creator = GetVariableInitializerCreator(program: program,
             variableName: "maybe");
         Assert.Equal(expected: CallLoweringKind.TypeConstructor, actual: creator.LoweringKind);
-        Assert.Equal(expected: "Optional[System.S32]", actual: creator.ConstructedType?.Name);
+        Assert.Equal(expected: "Holder[System.S32]", actual: creator.ConstructedType?.Name);
     }
 
     /// <summary>
