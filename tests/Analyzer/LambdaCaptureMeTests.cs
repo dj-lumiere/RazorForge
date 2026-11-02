@@ -4,7 +4,8 @@ using static TestHelpers;
 
 /// <summary>
 /// A lambda written in a member routine may read <c>me</c> of a record (it keeps a copy). An entity's <c>me</c> is
-/// reached for the call only, so capturing it is RF-S606, as for a token.
+/// reached for the call only, so a lambda that captures it is bound to it: used in the routine it is fine, returned or
+/// kept it is RF-S607, as for a token.
 /// </summary>
 public class LambdaCaptureMeTests
 {
@@ -21,7 +22,7 @@ public class LambdaCaptureMeTests
     }
 
     [Fact]
-    public void EntityMe_Captured_IsRfS606()
+    public void EntityMe_CapturedAndReturned_IsRfS607()
     {
         AssertHasError(source: """
                                entity Counter
@@ -33,3 +34,4 @@ public class LambdaCaptureMeTests
             expectedErrorSubstring: "You capture 'me' in this lambda");
     }
 }
+

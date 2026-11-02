@@ -1,0 +1,68 @@
+module Tests/Stdlib/LambdaBoundApi
+
+import IO/Console
+import EmitterTools
+# A lambda that reaches `me`, a token, a local collection or a `for` element is bound to it: it can sit in a local,
+# go to a routine and be called, but it can't be kept in a member variable or returned.
+
+entity Board
+    cells: List[S64]
+    limit: S64
+
+routine Board.big_count() -> U64
+    return me.cells.get_count(predicate: v => v > me.limit)
+
+routine Board.add_big(extra: S64)
+    var grow = (v: S64) => me.cells.add_last(v + me.limit)
+    grow(extra)
+    grow(extra + 1)
+    return
+
+routine apply(f: Callable[(S64,), S64], x: S64) -> S64
+    return f(x)
+
+routine fill(items: Modifying[List[S64]], count: S64)
+    var push = (v: S64) given items => items.add_last(v)
+    for i in 0 til count
+        push(i)
+    return
+
+routine sum_with(items: Viewing[List[S64]]) -> S64
+    var total: S64 = 0
+    var scale = (v: S64) given items => v * items.count().to[S64]()
+    for v in items
+        total += scale(v)
+    return total
+
+entity Tile
+    n: S64
+
+routine tile_sums(tiles: Viewing[List[Tile]]) -> List[S64]
+    var sums = List[S64]()
+    for tile in tiles
+        var plus = (k: S64) given tile => tile.n + k
+        sums.add_last(apply(f: plus, x: 100))
+    return sums
+
+routine start()
+    var board = Board(cells: [1, 5, 9, 3], limit: 4)
+    show(f"big: {board.big_count()}")
+    board.add_big(extra: 10)
+    show(f"cells: {board.cells}")
+    var xs = [10, 20, 30]
+    var add_first = (v: S64) given xs => v + xs[0]
+    show(f"add_first: {add_first(1)}")
+    show(f"apply: {apply(f: add_first, x: 5)}")
+    var n = xs.get_count(predicate: v given xs => v > xs[0])
+    show(f"after first: {n}")
+    fill(items: xs.modify(), count: 3)
+    show(f"xs: {xs}")
+    show(f"sum_with: {sum_with(items: xs.view())}")
+    var picked = xs.select(transform: v given xs => v - xs[0]).to[List]()
+    show(f"picked: {picked}")
+    var tiles = List[Tile]()
+    tiles.add_last(Tile(n: 1))
+    tiles.add_last(Tile(n: 2))
+    show(f"tile_sums: {tile_sums(tiles: tiles.view())}")
+    show("DONE")
+    return

@@ -847,7 +847,10 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     `Viewing[T]` parameter and pass the entity. The one value that carries a token for a moment
     is what `try` gives on a routine returning a token (`try xs.view_at(index: i)`, a `for` step, `enumerate`'s
     `(index, token)` pair): unpack it with `when` right there. Binding that `Optional` to a name is RF-S601. A lambda
-    never captures a token (RF-S606).
+    that captures a token (or `me`, a local collection, a `for` element) is a token itself, bound to it: a local may
+    hold it and a routine may be handed it and call it, but keeping it in a member variable or returning it is
+    RF-S606 (RF-S607 for an entity). The error names what it is bound to and where that was made, `check --json`
+    gives it as `boundTo`, and the editor marks such a name `bound`. To keep a callback, capture a `Retained`.
   - The source is free to change. Replacing it (`a = …`, `h.inner = …`), moving
     it out (`steal a`), leaving its scope, or calling a routine that replaces it
     (`h.reset()` whose body assigns `me.inner`, followed through its calls) ENDS

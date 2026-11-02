@@ -475,6 +475,145 @@ public sealed class LspServerTests
         Assert.Equal(expected: JsonValueKind.Array, actual: data.ValueKind);
     }
 
+    /// <summary>A document on disk in a folder of its own (the server resolves a name from where the file is), and its
+    /// URI. Dispose the folder when the test is done.</summary>
+    private static (string Uri, string Folder) OnDisk(string text)
+    {
+        string folder = Path.Combine(path1: Path.GetTempPath(), path2: "lsp-names-" + Guid.NewGuid().ToString(format: "N"));
+        Directory.CreateDirectory(path: folder);
+        File.WriteAllText(path: Path.Combine(path1: folder, path2: "config.toml"),
+            contents: "[package]\nrazorforge-version = \"0.5.0\"\nname = \"names\"\n\n[target]\nexecutable = \"names.rf\"\nmode = \"debug\"\n");
+        string file = Path.Combine(path1: folder, path2: "names.rf");
+        File.WriteAllText(path: file, contents: text);
+        return (new System.Uri(uriString: file).AbsoluteUri, folder);
+    }
+
+    /// <summary>The semantic tokens of <paramref name="text"/>: line (1-based), column (1-based), the text, its kind and
+    /// its modifier bits.</summary>
+    private static List<(int Line, int Column, string Text, string Kind, int Mods)> SemanticTokensOf(string text)
+    {
+        (string uri, string folder) = OnDisk(text: text);
+        IReadOnlyList<JsonDocument> replies;
+        try
+        {
+            replies = LspTestHarness.Run(
+                Initialize(id: 1),
+                LspTestHarness.DidOpen(uri: uri, text: text),
+                LspTestHarness.DocRequest(id: 60, method: "textDocument/semanticTokens/full", uri: uri),
+                Exit);
+        }
+        finally
+        {
+            Directory.Delete(path: folder, recursive: true);
+        }
+
+        JsonElement legend = LspTestHarness.ReplyWithId(replies: replies, id: 1)!.Value.GetProperty(propertyName: "result")
+                                           .GetProperty(propertyName: "capabilities")
+                                           .GetProperty(propertyName: "semanticTokensProvider")
+                                           .GetProperty(propertyName: "legend");
+        List<string> kinds = legend.GetProperty(propertyName: "tokenTypes").EnumerateArray()
+                                   .Select(selector: k => k.GetString()!).ToList();
+        int[] data = LspTestHarness.ReplyWithId(replies: replies, id: 60)!.Value.GetProperty(propertyName: "result")
+                                   .GetProperty(propertyName: "data").EnumerateArray()
+                                   .Select(selector: n => n.GetInt32()).ToArray();
+        string[] lines = text.Split(separator: '\n');
+        var tokens = new List<(int, int, string, string, int)>();
+        int line = 0;
+        int column = 0;
+        for (int i = 0; i + 4 < data.Length; i += 5)
+        {
+            line += data[i];
+            column = data[i] == 0 ? column + data[i + 1] : data[i + 1];
+            tokens.Add(item: (line + 1, column + 1, lines[line].Substring(startIndex: column, length: data[i + 2]),
+                kinds[data[i + 3]], data[i + 4]));
+        }
+
+        return tokens;
+    }
+
+    private const string NamesSource =
+        "module Test/Names\n" +
+        "import IO/Console\n" +
+        "\n" +
+        "record Point\n" +
+        "    x: S64\n" +
+        "    y: S64\n" +
+        "\n" +
+        "routine gcd(a: S64, b: S64) -> S64\n" +
+        "    return a + b\n" +
+        "\n" +
+        "routine start()\n" +
+        "    var p = Point(x: 1, y: 2)\n" +
+        "    var total = gcd(a: p.x, b: p.y)\n" +
+        "    show(f\"{total}\")\n" +
+        "    return\n";
+
+    [Fact]
+    public void SemanticTokens_FieldsParametersAndVariablesAreNamedWhereTheyAreWritten()
+    {
+        List<(int Line, int Column, string Text, string Kind, int Mods)> tokens = SemanticTokensOf(text: NamesSource);
+        string KindOf(int line, string text, int occurrence = 1)
+        {
+            return tokens.Where(predicate: t => t.Line == line && t.Text == text).ElementAt(index: occurrence - 1).Kind;
+        }
+
+        Assert.Equal(expected: "property", actual: KindOf(line: 5, text: "x"));
+        Assert.Equal(expected: "parameter", actual: KindOf(line: 8, text: "a"));
+        Assert.Equal(expected: "parameter", actual: KindOf(line: 9, text: "a"));
+        Assert.Equal(expected: "variable", actual: KindOf(line: 12, text: "p"));
+        Assert.Equal(expected: "property", actual: KindOf(line: 12, text: "x"));
+        Assert.Equal(expected: "variable", actual: KindOf(line: 13, text: "total"));
+        Assert.Equal(expected: "parameter", actual: KindOf(line: 13, text: "a"));
+        Assert.Equal(expected: "variable", actual: KindOf(line: 13, text: "p"));
+        Assert.Equal(expected: "property", actual: KindOf(line: 13, text: "x"));
+        Assert.Equal(expected: "variable", actual: KindOf(line: 14, text: "total"));
+    }
+
+    private const string BoundSource =
+        "module Test/Bound\n" +
+        "import IO/Console\n" +
+        "\n" +
+        "routine start()\n" +
+        "    var xs = [10, 20, 30]\n" +
+        "    var add_first = (v: S64) given xs => v + xs[0]\n" +
+        "    show(f\"{add_first(1)}\")\n" +
+        "    return\n";
+
+    [Fact]
+    public void SemanticTokens_NameHoldingABoundLambda_CarriesTheBoundModifier()
+    {
+        List<(int Line, int Column, string Text, string Kind, int Mods)> tokens = SemanticTokensOf(text: BoundSource);
+
+        Assert.Equal(expected: 4, actual: tokens.Single(predicate: t => t.Line == 6 && t.Text == "add_first").Mods);
+        Assert.Equal(expected: 4, actual: tokens.Single(predicate: t => t.Line == 7 && t.Text == "add_first").Mods);
+        Assert.Equal(expected: 0, actual: tokens.First(predicate: t => t.Line == 5 && t.Text == "xs").Mods);
+    }
+
+    [Fact]
+    public void Hover_NameHoldingABoundLambda_SaysWhatItIsBoundTo()
+    {
+        (int line, int character) = LspTestHarness.PositionOf(text: BoundSource, needle: "add_first(1)");
+        (string uri, string folder) = OnDisk(text: BoundSource);
+        IReadOnlyList<JsonDocument> replies;
+        try
+        {
+            replies = LspTestHarness.Run(
+                LspTestHarness.DidOpen(uri: uri, text: BoundSource),
+                LspTestHarness.Positional(id: 61, method: "textDocument/hover", uri: uri, line: line, character: character),
+                Exit);
+        }
+        finally
+        {
+            Directory.Delete(path: folder, recursive: true);
+        }
+
+        string value = LspTestHarness.ReplyWithId(replies: replies, id: 61)!.Value.GetProperty(propertyName: "result")
+                                     .GetProperty(propertyName: "contents").GetProperty(propertyName: "value")
+                                     .GetString()!;
+        Assert.Contains(expectedSubstring: "bound to `xs`: can't be kept in a member variable or returned",
+            actualString: value);
+    }
+
     [Fact]
     public void UnknownRequest_AnsweredWithNullResult()
     {
