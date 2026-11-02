@@ -264,20 +264,25 @@ public class SafetyPathMatrixTests
             code: SemanticDiagnosticCode.ThreadArgNotShareable, expected: "Every running job reaches a global");
     }
 
-    // ---- globals are only read (RF-S256, RF-S421) ----------------------------------------------------------------
+    // ---- globals (RF-S256, RF-S421, RF-S448) ----------------------------------------------------------------------
 
     [Fact]
-    public void Analyze_ModifyingBlockOnPlainEntityGlobal_Errors()
+    public void Analyze_ModifyingBlockOnPlainEntityGlobalUsedByWork_Errors()
     {
         AssertHasErrorCode(source: """
                            global G: Cell = Cell(n: 1)
 
-                           routine start()
+                           routine change() -> S64
                                modifying G as m
                                    m.n = 5
+                               return 0
+
+                           routine start()
+                               var job = change.to[Work]()
+                               job.start_now()
                                return
                            """,
-            code: SemanticDiagnosticCode.ModifyingCallOnImmutable, expected: "a global is only read");
+            code: SemanticDiagnosticCode.GlobalChangedAcrossThreads, expected: "uses the global 'G'");
     }
 
     [Fact]

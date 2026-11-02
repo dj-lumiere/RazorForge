@@ -302,7 +302,7 @@ show(f"total = {total}")
   file are an error (RF-S443) — they would start a second program.
 - A top-level `var` lives in the script's top-level scope, not the module:
   routines in the file cannot see it (RF-S444). Pass it as an argument. A
-  `global` is read-only, so state that changes goes in an `Unbroken`/`Guarded` global.
+  `global` can change, but not on another thread (RF-S448, see Globals).
 - Routines you define are still their own scopes and still end with `return`.
 
 `module <Path>` is optional. Without it the module path is derived from the file's
@@ -348,11 +348,13 @@ The rest takes an import: `Collections`, `IO/Console`, `IO/Environment`, `IO/Fil
 initialized in dependency order when `start()` begins (a cycle is RF-S436, one reading itself too:
 `global A: S64 = A + 1`, no `start()` is RF-S438), torn down at every exit of `start()` in the opposite order. A
 global the `destruct` of another global's type reads (or the destruct of an entity it holds) is initialized before
-it and torn down after it, whatever order they are written in, and two whose destructs read each other are RF-S436. Every thread reaches it, so the binding is
-never assigned again: shared changing state is an `Unbroken` (`hits.fetch_add(delta: 1)`) or a
-`Guarded` (`modifying cache as c`), any other global is only read (writes are RF-S251 /
-RF-S256, `modifying G` on a global entity that is not a `Guarded` is RF-S256, `steal G` in any routine is
-RF-S421). A global never holds a token (RF-S601) or a single-thread handle (`Retained`, `Tracked`, at any depth:
+it and torn down after it, whatever order they are written in, and two whose destructs read each other are RF-S436. A global is a place the program changes (`global count: S32 = 0`, `count += 1`). The one
+refusal is RF-S448: a routine a Work runs on another thread (`start_now()`/`start_apart()`, any routine it
+calls too) uses a plain global that is changed anywhere in the program. The error points at the global and the
+line the Work starts at. Shared changing state is an `Unbroken` (`hits.fetch_add(delta: 1)`) or a
+`Guarded` (`modifying cache as c`), and a global nothing changes is read from anywhere. A Work started with
+`start_here()` crosses nothing. `steal G` in any routine is
+RF-S421. A global never holds a token (RF-S601) or a single-thread handle (`Retained`, `Tracked`, at any depth:
 RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows are `preset`.
 
 ## 3. Types
@@ -585,8 +587,9 @@ with -1.
   target type or convert where the type is known.
 - A number type built from one number with `T(x)` (`U8(x)` with an `S64` `x`, `S64(1.5)`, `Decimal(2)`) is RF-S655
   in a program file: it reads the bits of `x` and gives another number (`U8(300)` is 44, `Decimal(2)` is
-  `2E-6176`). The message points to `x.to[T]()`, and for a literal to a declaration of the type
-  (`var b: U8 = 200`), where the builder checks that it fits. Inside `danger` (and in the standard library and
+  `2E-6176`). The message points to `x.to[T]()`. A number written out is different: `S32(3)`, `U8(255)`,
+  `B64(0.5)` read that literal as the type (checked against its range, RF-S010 when it does not fit), so
+  `[(Step.CALL, S32(3), 'a')]` is a `List[(Step, S32, Char)]`. Inside `danger` (and in the standard library and
   builder-written bodies) `T(x)` still reads the bits. In a generic routine `T(x)` is checked per instance after
   monomorphization: `make[U8](x: 300)` with `return T(x)` is RF-S655 naming `make[U8]` and pointing to `x.to[T]()`.
   `Char(n)` (bits taken as a codepoint, unchecked) and `Bool(x)` (lowest bit only, `Bool(2)` is `false`) are RF-S655

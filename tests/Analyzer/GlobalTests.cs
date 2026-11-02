@@ -6,8 +6,9 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// RazorForge <c>global</c>: reached from every thread, so the binding is never assigned again after its
-/// initialization. An Unbroken or a Guarded changes what it holds through its own routines, any other value is only read.
+/// RazorForge <c>global</c>: a place the program changes (<c>count += 1</c>). The one refusal is a plain global that is
+/// changed somewhere and is used by a routine a Work reaches on another thread. An Unbroken or a Guarded changes what it
+/// holds through its own routines, and a global nothing changes is read from anywhere.
 /// </summary>
 public class GlobalTests
 {
@@ -36,48 +37,105 @@ public class GlobalTests
     }
 
     [Fact]
-    public void Analyze_ValueGlobalWrite_IsRejected()
+    public void Analyze_ValueGlobalWrite_IsAllowed()
+    {
+        AssertAnalyzesSa(source: """
+                                 global count: S64 = 0
+
+                                 routine start()
+                                     count += 1
+                                     count = 5
+                                     return
+                                 """);
+    }
+
+    [Fact]
+    public void Analyze_RecordGlobalMemberWrite_IsAllowed()
+    {
+        AssertAnalyzesSa(source: """
+                                 record Settings
+                                     volume: S64
+
+                                 global settings: Settings = Settings(volume: 3)
+
+                                 routine start()
+                                     settings.volume = 5
+                                     return
+                                 """);
+    }
+
+    [Fact]
+    public void Analyze_ChangedGlobalUsedByWork_IsRejected()
     {
         AnalysisResult result = AssertHasErrorSa(source: """
                                                          global count: S64 = 0
 
-                                                         routine start()
+                                                         routine bump() -> S64
                                                              count += 1
-                                                             return
-                                                         """,
-            expectedErrorSubstring: "'count' is a global, which every thread reaches, so it is only read");
-        Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.AssignmentToImmutable);
-    }
-
-    [Fact]
-    public void Analyze_RecordGlobalMemberWrite_IsRejected()
-    {
-        AnalysisResult result = AssertHasErrorSa(source: """
-                                                         record Settings
-                                                             volume: S64
-
-                                                         global settings: Settings = Settings(volume: 3)
+                                                             return count
 
                                                          routine start()
-                                                             settings.volume = 5
+                                                             var job = bump.to[Work]()
+                                                             job.start_now()
                                                              return
                                                          """,
-            expectedErrorSubstring: "its member variable 'volume' can't be assigned");
+            expectedErrorSubstring: "uses the global 'count'");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MemberVariableAssignmentOnImmutable);
+            filter: e => e.Code == SemanticDiagnosticCode.GlobalChangedAcrossThreads);
     }
 
     [Fact]
-    public void Analyze_EntityGlobalChange_IsRejected()
+    public void Analyze_ChangedGlobalReachedThroughACall_IsRejected()
     {
         AssertHasErrorSa(source: """
-                                 global names: List[Text] = List[Text]()
+                                 global count: S64 = 0
+
+                                 routine read() -> S64
+                                     return count
+
+                                 routine outer() -> S64
+                                     return read()
 
                                  routine start()
-                                     names.add_last(value: "a")
+                                     count = 2
+                                     var job = outer.to[Work]()
+                                     job.start_now()
                                      return
                                  """,
-            expectedErrorSubstring: "it can't be changed by 'add_last'");
+            expectedErrorSubstring: "'read', which 'outer' calls, uses the global 'count'");
+    }
+
+    [Fact]
+    public void Analyze_GlobalNothingChanges_IsReadByWork()
+    {
+        AssertAnalyzesSa(source: """
+                                 global limit: S64 = 5
+
+                                 routine read() -> S64
+                                     return limit
+
+                                 routine start()
+                                     var job = read.to[Work]()
+                                     job.start_now()
+                                     return
+                                 """);
+    }
+
+    [Fact]
+    public void Analyze_ChangedGlobalUsedByWorkStartedHere_IsAllowed()
+    {
+        AssertAnalyzesSa(source: """
+                                 global count: S64 = 0
+
+                                 routine bump() -> S64
+                                     count += 1
+                                     return count
+
+                                 routine start()
+                                     var job = bump.to[Work]()
+                                     job.start_here()
+                                     return
+                                 """);
     }
 
     [Fact]
