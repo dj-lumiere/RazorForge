@@ -1,0 +1,59 @@
+module Tests/Stdlib/TryOptionalReceiverApi
+
+import IO/Console
+# try and check reach through a T? receiver: a none receiver is an AbsentValueError the same keyword receives,
+# otherwise the call runs on the value. Nothing changes without the keyword. A link that may be missing is a
+# Stamped[E]?, and check tells a missing link (AbsentValueError) from an ended entity (StaleStampError).
+
+record Pt
+    x: S64
+
+routine Pt.twice(k: S64) -> S64
+    return me.x * k
+
+routine Pt.boom() -> S64
+    throw DivisionByZeroError()
+
+routine Pt.deep(k: S64) -> S64
+    return me.twice(k: k) + me.boom()
+
+entity Node
+    value: S64
+    parent: Stamped[Node]?
+
+routine value_of(link: Stamped[Node]?) -> S64
+    when try link.fetch()
+        is None => return -1
+        else as n => return n.value
+
+routine what_happened(link: Stamped[Node]?) -> Text
+    when check link.fetch()
+        is Modifying[Node] as n => return f"node {n.value}"
+        is AbsentValueError => return "no link"
+        is StaleStampError => return "ended"
+        else => return "other"
+
+routine start()
+    var some: Pt? = Pt(x: 21)
+    var none_pt: Pt? = none
+    show(f"try on a value: {try some.twice(k: 2)}")
+    show(f"try on none: {try none_pt.twice(k: 2)}")
+    show(f"try below the receiver: {try some.deep(k: 2)}")
+    when check none_pt.twice(k: 3)
+        is S64 as v => show(f"check on none gave {v}")
+        else as e => show(f"check on none: {e.crash_message()}")
+    when check some.twice(k: 3)
+        is S64 as v => show(f"check on a value: {v}")
+        else as e => show(f"check on a value failed: {e.crash_message()}")
+
+    var a = Node(value: 7, parent: none)
+    var b = Node(value: 8, parent: a.stamp())
+    var link: Stamped[Node]? = a.stamp()
+    var missing: Stamped[Node]? = none
+    show(f"link: {value_of(link: link)}, missing: {value_of(link: missing)}")
+    show(f"parent of b: {value_of(link: b.parent)}, of a: {value_of(link: a.parent)}")
+    show(f"split: {what_happened(link: link)}, {what_happened(link: missing)}")
+    drop a
+    show(f"after a ended: {value_of(link: link)}, {what_happened(link: link)}, {what_happened(link: b.parent)}")
+    show("DONE")
+    return

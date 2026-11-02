@@ -304,4 +304,66 @@ public class StampedTokenTests
 
         AssertAnalyzesSa(source: source);
     }
+
+    /// <summary>A stamp is never empty: its member variables are secret, so a program can't build one (RF-S403).</summary>
+    [Fact]
+    public void Analyze_StampBuiltFromItsMemberVariables_IsReported()
+    {
+        string source = Prelude + """
+                                  routine start()
+                                      var empty = Stamped[Creature](slot: 0, generation: 0)
+                                      return
+                                  """;
+
+        AssertHasErrorSa(source: source, expectedErrorSubstring: "'slot' is secret");
+    }
+
+    /// <summary>A call on a Stamped[E]? under try is allowed (a none link is an AbsentValueError the keyword receives).</summary>
+    [Fact]
+    public void Analyze_TryFetchOnOptionalStamp_NoError()
+    {
+        string source = Prelude + """
+                                  routine x_of(link: Stamped[Creature]?) -> S64
+                                      when try link.fetch()
+                                          is None => return -1
+                                          else as c => return c.x
+
+                                  routine start()
+                                      var a = Creature(x: 1, y: 1)
+                                      show(x_of(link: a.stamp()))
+                                      return
+                                  """;
+
+        AssertAnalyzesSa(source: source);
+    }
+
+    /// <summary>Without try or check a call on a T? is still an error.</summary>
+    [Fact]
+    public void Analyze_FetchOnOptionalStampWithoutKeyword_IsReported()
+    {
+        string source = Prelude + """
+                                  routine x_of(link: Stamped[Creature]?) -> S64
+                                      var c = link.fetch()
+                                      return c.x
+                                  """;
+
+        AssertHasErrorSa(source: source, expectedErrorSubstring: "No routine 'fetch()' is defined on");
+    }
+
+    /// <summary>An entity inside the optional is not reached through it (a copy would be changed).</summary>
+    [Fact]
+    public void Analyze_TryCallOnOptionalEntity_IsReported()
+    {
+        string source = Prelude + """
+                                  routine Creature.bump() -> S64
+                                      return me.x
+
+                                  routine start()
+                                      var maybe: Creature? = none
+                                      show(try maybe.bump())
+                                      return
+                                  """;
+
+        AssertHasErrorSa(source: source, expectedErrorSubstring: "is not a record");
+    }
 }

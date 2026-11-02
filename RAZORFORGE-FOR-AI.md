@@ -79,6 +79,13 @@ When unsure, consult ground truth in the repo/package:
    variant calls the recovery variants of the calls inside it, so a failure comes back only on the path under a
    keyword. A call with no keyword above it runs the plain routine, which stops where the failure happens and costs
    nothing more. `try`/`check` over an expression that cannot fail gives the value (`try 5` is present 5).
+   **A call on a `T?` under the keyword.** `try link.fetch()` with `link: Stamped[E]?` (or `try maybe_pt.twice(k: 2)`
+   with `maybe_pt: Pt?`) is allowed, for every `T?` and every routine the optional has none of itself: a none
+   receiver counts as an `AbsentValueError` failure that the same keyword receives (`try`: absent, `check`: the
+   `AbsentValueError`), otherwise the call runs on the value, and a failure below the call is received as usual.
+   `?` asks whether there is a link, the call asks whether what it points at still lives. The value must be a record
+   (a `Stamped`, a record, a Suflae-shared handle): an entity inside a `T?` is read with `when`, and the call is
+   RF-S458. Without a keyword a call on a `T?` is still an error.
    **`infallible routine` is the only wall.** `infallible routine close(...)` (`infallible` goes first, after a
    visibility: `infallible dangerous routine`, `infallible common routine`) promises not to fail: a failure inside
    it (its own `throw`, a checked operator, a call that fails) breaks the promise and stops the program there (status
@@ -979,7 +986,11 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     works through a read token or a `ReadOnly` Guarded.
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
 - **`Stamped[E]`** (System/Memory, `Stamped.rf`) — a link an entity's member variable, a list or any value can keep
-  (a tree node's `parent: Stamped[Node]?`), where a token can't be (RF-S601 points to it first). `e.stamp()` takes
+  (a tree node's `parent: Stamped[Node]?`), where a token can't be (RF-S601 points to it first). A `Stamped[E]` always
+  points at an entity that existed: there is no empty stamp (its member variables are `secret`, so
+  `Stamped[E](slot: 0, ...)` is RF-S403), and `fetch()` fails only once the entity has ended. A link that may be
+  missing is written `Stamped[E]?` and taken with one `try link.fetch()` (`none` for no link and for an ended entity),
+  and `check link.fetch()` tells `AbsentValueError` (no link) from `StaleStampError` (ended). `e.stamp()` takes
   one (on an entity or a token), `s.fetch()` (failable, `StaleStampError`) gives a `Modifying[E]` while the entity
   lives: a bare `fetch()` crashes once it has ended, `try s.fetch()` gives `none`. A record of 8 bytes (a slot of the
   runtime's stamp table, shared with Tessera's `PoolManager`, and the slot's generation), copied with `=`, `===` /
@@ -1014,7 +1025,9 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   its own routine and is NOT dangerous. `is_hollow()` exists only on the nine handle types (`Retained`, `Tracked`,
   `Guarded`, `Witnessed`, `Roamed`, `Watched`, `Hijacked`, `Viewing`, `Modifying`) and `Addr`, never dangerous.
   Every `destruct` leaves a hollow value alone (an entity's `destruct` returns at once on a zero reference). The old
-  free `hollow[T]()` is `T.hollow()`. Not in Suflae (SF-S447).
+  free `hollow[T]()` is `T.hollow()`. Not in Suflae (SF-S447). A program says "no link" with `?`
+  (`Tracked[Node]?`, `Stamped[Node]?`) and takes it with `when` or `try`, never with a hollow handle: `is_hollow()` and
+  `T.hollow()` belong to the stdlib's and the runtime's own zero handles (a `lateinit` binding starts as one).
 - Records never use tokens or `as_entity` — those are entity concepts.
 - `danger` blocks / `dangerous` routines mark **only** operations that can
   ACTUALLY cause memory-unsafety — UB, a memory race, use-after-free,
