@@ -128,6 +128,30 @@ needs VariantType T
     danger
         return Modifying[T](me.value.hijack())
 
+### `reach` for an entity at the end of a `try` / `check` chain: the optional is a value the last call made and
+### nothing else keeps it, so the entity moves out of it into the keyword's `T?` (a copy would be a second holder).
+### :returns: The held entity, moved out.
+### :throws: {AbsentValueError} if this `Optional` is absent.
+routine Optional[T].reach_out_entity() -> T
+needs EntityType T
+    if not me.is_present()
+        throw AbsentValueError()
+    danger
+        var taken = LLVM::reinterpret_bits[Hijacked[T], T](Hijacked[T](me.value.get_address()))
+        me.present = false
+        return taken
+
+### The same for a variant: the value moves out of its slot.
+### :returns: The held variant, moved out.
+### :throws: {AbsentValueError} if this `Optional` is absent.
+routine Optional[T].reach_out_variant() -> T
+needs VariantType T
+    if not me.is_present()
+        throw AbsentValueError()
+    me.present = false
+    danger
+        return me.value.hijack().peek()
+
 ### Returns the wrapped value or `fallback` when absent, leaving this optional intact (NON-consuming).
 ### This avoids branching at the call site when a fixed fallback is acceptable. As with `unwrap`, the
 ### present-case result is a retaining copy (co-owned); `fallback` goes unused and is torn down at scope

@@ -1,0 +1,80 @@
+module Tests/Stdlib/TryChainEndFlattenApi
+
+import IO/Console
+# A `try` or `check` chain that ends in a `T?` gives one `T?`, not a `T??`: a none end is the one absence (`None` under
+# `try`, an `AbsentValueError` under `check`), and a failure on the way is the same absence. A record is copied out, an
+# entity or a variant moves out of the value the last call made.
+
+entity Node
+    n: S64
+
+variant Shape
+    S64
+    Text
+
+crashable StopError
+    reason: Text
+
+routine StopError.crash_message() -> Text
+    return me.reason
+
+routine pass[T](x: T, stop: Bool) -> T
+    if stop
+        throw StopError(reason: "stop")
+    return x
+
+routine show_node(label: Text, node: Node?)
+    when node
+        is Node as held => show(f"{label}: node {held.n}")
+        is None => show(f"{label}: none")
+    return
+
+routine show_shape(label: Text, shape: Shape?)
+    when shape
+        is S64 as number => show(f"{label}: number {number}")
+        is Text as text => show(f"{label}: text {text}")
+        is None => show(f"{label}: none")
+    return
+
+routine start()
+    var present: S64? = 7
+    var absent: S64? = none
+    var count_a: S64? = try pass(x: present, stop: false)
+    var count_b: S64? = try pass(x: absent, stop: false)
+    var count_c: S64? = try pass(x: present, stop: true)
+    show(f"record: {count_a} {count_b} {count_c}")
+
+    var held: Node? = Node(n: 3)
+    var node_a: Node? = try pass(x: steal held, stop: false)
+    show_node(label: "entity a", node: node_a)
+    var missing: Node? = none
+    var node_b: Node? = try pass(x: steal missing, stop: false)
+    show_node(label: "entity b", node: node_b)
+    var stopped: Node? = Node(n: 4)
+    var node_c: Node? = try pass(x: steal stopped, stop: true)
+    show_node(label: "entity c", node: node_c)
+
+    var five: Shape = 5
+    var seen: Shape? = five
+    var shape_a: Shape? = try pass(x: seen, stop: false)
+    show_shape(label: "variant a", shape: shape_a)
+    var unseen: Shape? = none
+    var shape_b: Shape? = try pass(x: unseen, stop: false)
+    show_shape(label: "variant b", shape: shape_b)
+    var box: Shape = "box"
+    var named: Shape? = box
+    var shape_c: Shape? = try pass(x: named, stop: true)
+    show_shape(label: "variant c", shape: shape_c)
+
+    var checked_held: Node? = Node(n: 9)
+    when check pass(x: steal checked_held, stop: false)
+        is Node as value => show(f"check entity: node {value.n}")
+        is AbsentValueError => show("check entity: absent")
+        else as error => show(f"check entity: {error}")
+    var checked_missing: Node? = none
+    when check pass(x: steal checked_missing, stop: false)
+        is Node as value => show(f"check entity: node {value.n}")
+        is AbsentValueError => show("check entity: absent")
+        else as error => show(f"check entity: {error}")
+    show("DONE")
+    return
