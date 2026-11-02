@@ -45,7 +45,16 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
                 : "The RazorForge language server isn't built or set. Set razorforge.serverPath, or build RazorForge.");
         return;
     }
-    const staged = server.endsWith(".dll") ? stage(context, server) : server;
+    watchBuild(context, path.dirname(server));
+    let staged: string;
+    try {
+        staged = server.endsWith(".dll") ? stage(context, server) : server;
+    } catch {
+        // A rebuild is still writing the folder: try again once it has been quiet for a moment.
+        if (restartTimer) clearTimeout(restartTimer);
+        restartTimer = setTimeout(() => void restart(context), 3000);
+        return;
+    }
     const serverOptions: ServerOptions = {
         command: staged.endsWith(".dll") ? "dotnet" : staged,
         args: staged.endsWith(".dll") ? [staged, "lsp"] : ["lsp"],
@@ -65,7 +74,6 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
     };
     client = new LanguageClient("razorforge", "RazorForge", serverOptions, clientOptions);
     await client.start();
-    watchBuild(context, path.dirname(server));
 }
 
 /** The server the setting names, else the dev build in a workspace folder, else `RazorForge` on the PATH. */
@@ -117,7 +125,9 @@ function newest(folder: string): number {
     let latest = 0;
     for (const entry of fs.readdirSync(folder, { withFileTypes: true, recursive: true })) {
         if (!entry.isFile()) continue;
-        const time = fs.statSync(path.join(entry.parentPath, entry.name)).mtimeMs;
+        // A rebuild may remove a file between listing it and reading its time.
+        let time = 0;
+        try { time = fs.statSync(path.join(entry.parentPath, entry.name)).mtimeMs; } catch { continue; }
         if (time > latest) latest = time;
     }
     return Math.floor(latest);
