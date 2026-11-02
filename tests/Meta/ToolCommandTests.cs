@@ -175,9 +175,9 @@ public sealed class ToolCommandTests : IDisposable
     public void Lint_ReportsStyleErrors()
     {
         string messy = Write(name: "messy.rf",
-            source: "module ToolMessy\n\nimport IO/Console\nroutine start()\n    show( \"hi\" )\n    return\n");
+            source: "module ToolMessy\n\nimport IO/Console\n\nroutine start()\n    show( \"hi\" )\n    return\n");
         string tidy = Write(name: "tidy.rf",
-            source: "module ToolTidy\n\nimport IO/Console\nroutine start()\n    show(\"hi\")\n    return\n");
+            source: "module ToolTidy\n\nimport IO/Console\n\nroutine start()\n    show(\"hi\")\n    return\n");
 
         (int messyExit, string messyOut, _) = Tool("lint", messy);
         (int tidyExit, string tidyOut, _) = Tool("lint", tidy);
