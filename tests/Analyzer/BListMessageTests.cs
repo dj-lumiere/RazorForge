@@ -11,9 +11,9 @@ using static TestHelpers;
 /// </summary>
 public sealed class BListMessageTests
 {
-    /// <summary>A routine with three parameters called positionally reports RF-S510 once, not once per argument.</summary>
+    /// <summary>A routine with three parameters called positionally takes the arguments in order.</summary>
     [Fact]
-    public void Analyze_PositionalCallOfThreeParameters_ReportsNamedArgumentOnce()
+    public void Analyze_PositionalCallOfThreeParameters_TakesArgumentsInOrder()
     {
         string source = """
                         routine add3(a: S64, b: S64, c: S64) -> S64
@@ -25,8 +25,8 @@ public sealed class BListMessageTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Single(collection: result.Errors.Where(predicate: e =>
-            e.Code == SemanticDiagnosticCode.NamedArgumentRequired));
+        Assert.DoesNotContain(collection: result.Errors, filter: e =>
+            e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
 
     /// <summary>Assigning to a preset points at the line that assigns, not at the preset's own line.</summary>

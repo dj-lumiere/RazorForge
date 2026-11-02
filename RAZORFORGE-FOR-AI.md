@@ -14,13 +14,12 @@ When unsure, consult ground truth in the repo/package:
 
 ## 1. The rules most likely to break your assumptions
 
-1. **Calls with three or more parameters REQUIRE named arguments (RF-S510).** Two parameters may be positional
-   (no warning), naming them is still clearer: `gcd(a: 252, b: 105)`.
-   Single-argument calls may be positional. A few stdlib routines annotated
-   `@positional` (e.g. `x.clamp(0, 100)`) accept all-positional; mixing named
-   and positional in one call is always an error (RF-S512). A variable named
-   like its parameter goes by its name alone (`area(width, height: 4)` =
-   `area(width: width, height: 4)`); it counts as named.
+1. **Arguments without a label fill the parameters in order from the first** (`volume(2, 3, 4)`), labels pick a
+   parameter (`gcd(a: 252, b: 105)`) and follow the unlabeled ones: an unlabeled argument after a labeled one is
+   RF-S512. A bare variable named like ANOTHER parameter of the routine, sitting in a different parameter's place,
+   is RF-S510 (`f(n - 1, from, to, tmp)`: write `f(n - 1, from, tmp: to, to: tmp)`). A variable named like its
+   parameter may stand alone after a label (`area(width: 3, height)`). Routines annotated `@positional`
+   (e.g. `x.clamp(0, 100)`) skip the place check.
 2. **Normal routine completion uses an explicit `return`** — even void ones.
    This is load-bearing (destructor scheduling anchors at `return`), not style.
    A routine may also end with `throw`.
@@ -1567,7 +1566,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 
 | Code         | Usual cause                           | Fix                                                |
 |--------------|---------------------------------------|----------------------------------------------------|
-| RF-S510/S512 | positional args in a multi-param call | name every argument                                |
+| RF-S510/S512 | a bare name in another parameter's place / an unlabeled argument after a labeled one | label the argument, put unlabeled ones first |
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
 | RF-G230      | `failable` written on a routine       | remove it (`migrate --step failable`): every routine passes failures on |
 | RF-S712      | `@throws` leaves out a crashable the routine throws | add it to the list, or recover it inside |

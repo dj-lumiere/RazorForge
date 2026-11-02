@@ -238,18 +238,34 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for two params mixed positional named reports s510.
+    /// Arguments without a label come first and fill the parameters in order, the labeled ones follow.
     /// </summary>
     [Fact]
-    public void Analyze_TwoParams_MixedPositionalNamed_ReportsMixed()
+    public void Analyze_TwoParams_PositionalThenNamed_NoError()
     {
-        // Any mix of positional and named args is a build error (all-or-nothing), even at
-        // 2 params where all-positional would only warn.
         string source = """
                         routine add(a: S32, b: S32) -> S32
                             return a
                         routine main()
                             add(1, b: 2)
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MixedPositionalAndNamedArguments);
+    }
+    /// <summary>
+    /// An argument without a label after a labeled one has no place the call says.
+    /// </summary>
+    [Fact]
+    public void Analyze_TwoParams_NamedThenPositional_ReportsMixed()
+    {
+        string source = """
+                        routine add(a: S32, b: S32) -> S32
+                            return a
+                        routine main()
+                            add(a: 1, 2)
                             return
                         """;
 
@@ -321,12 +337,11 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for member routine two non me params positional reports s510.
+    /// Arguments without a label fill the parameters in order, however many there are.
     /// </summary>
     [Fact]
-    public void Analyze_memberRoutine_ThreeNonMeParams_Positional_ReportsS510()
+    public void Analyze_memberRoutine_ThreeNonMeParams_Positional_NoError()
     {
-        // `me` is excluded from the param count; 3 explicit positional args trip S510.
         string source = """
                         record Point
                             x: S32
@@ -342,8 +357,49 @@ public class NamedArgumentTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+    /// <summary>
+    /// A bare variable named like another parameter, in a place that is not that parameter's, needs a label.
+    /// </summary>
+    [Fact]
+    public void Analyze_PositionalNameOfAnotherParameter_ReportsLabelNeeded()
+    {
+        string source = """
+                        routine move(count: S32, from: S32, tmp: S32, to: S32) -> S32
+                            return count
+                        routine main()
+                            var from: S32 = 1
+                            var tmp: S32 = 2
+                            var to: S32 = 3
+                            move(1, from, to, tmp)
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired && e.Message.Contains(value: "label it"));
+    }
+    /// <summary>
+    /// The same names in the places of their own parameters, or labeled where they differ, are fine.
+    /// </summary>
+    [Fact]
+    public void Analyze_PositionalNamesInTheirOwnPlaces_NoError()
+    {
+        string source = """
+                        routine move(count: S32, from: S32, tmp: S32, to: S32) -> S32
+                            return count
+                        routine main()
+                            var from: S32 = 1
+                            var tmp: S32 = 2
+                            var to: S32 = 3
+                            move(1, from, tmp, to)
+                            move(1, from, tmp: to, to: tmp)
+                            return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for two params named out of order no s510.
@@ -411,17 +467,17 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.MixedPositionalAndNamedArguments);
     }
     /// <summary>
-    /// Mixing positional and named in a single `@positional` call is rejected (S512).
+    /// An argument without a label after a labeled one in a `@positional` call is rejected (S512).
     /// </summary>
     [Fact]
-    public void Analyze_Positional_Mixed_ReportsS512()
+    public void Analyze_Positional_PositionalAfterNamed_ReportsS512()
     {
         string source = """
                         @positional
                         routine make(a: S32, b: S32, c: S32) -> S32
                             return a
                         routine main()
-                            make(1, b: 2, c: 3)
+                            make(a: 1, b: 2, 3)
                             return
                         """;
 
@@ -433,10 +489,10 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.PositionalAfterNamed);
     }
     /// <summary>
-    /// Without `@positional`, a 3-param all-positional call still reports S510 (regression guard).
+    /// Without `@positional`, a 3-param all-positional call takes the arguments in order.
     /// </summary>
     [Fact]
-    public void Analyze_NoPositional_ThreeParams_AllPositional_ReportsS510()
+    public void Analyze_NoPositional_ThreeParams_AllPositional_NoError()
     {
         string source = """
                         routine make(a: S32, b: S32, c: S32) -> S32
@@ -447,8 +503,7 @@ public class NamedArgumentTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+        Assert.Empty(collection: result.Errors);
     }
     /// <summary>
     /// Foreign (C::) routines are positional by nature — their parameter identity is argument
