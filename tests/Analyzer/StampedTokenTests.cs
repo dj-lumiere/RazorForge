@@ -350,9 +350,9 @@ public class StampedTokenTests
         AssertHasErrorSa(source: source, expectedErrorSubstring: "No routine 'fetch()' is defined on");
     }
 
-    /// <summary>An entity inside the optional is not reached through it (a copy would be changed).</summary>
+    /// <summary>An entity inside the optional is reached where it is kept (a write token), not through a copy.</summary>
     [Fact]
-    public void Analyze_TryCallOnOptionalEntity_IsReported()
+    public void Analyze_TryCallOnOptionalEntity_ReachesTheOriginal()
     {
         string source = Prelude + """
                                   routine Creature.bump() -> S64
@@ -364,6 +364,6 @@ public class StampedTokenTests
                                       return
                                   """;
 
-        AssertHasErrorSa(source: source, expectedErrorSubstring: "is not a record");
+        AssertAnalyzesSa(source: source);
     }
 }
