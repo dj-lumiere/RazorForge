@@ -37,7 +37,7 @@ routine consume(r: Resource)
     return
     # r is destroyed here, exactly once
 
-failable routine parse_digit(c: Char) -> S64
+routine parse_digit(c: Char) -> S64
     if "0123456789".lacks(c)
         throw InvalidDigitError()   # the failure carries the error that says why
     return c.to[Text]().to[S64]()
@@ -81,8 +81,8 @@ call or its `viewing` / `modifying` block. Handing the original over is written 
 holds the entity while each part keeps a handle. Cleanup follows from that choice and runs deterministically at
 scope exit, with no lifetime syntax to write.
 
-**Failure is loud by default, and recovery takes one keyword.** A routine that can `throw` is declared
-`failable routine`, and its call sites look like any other call. A bare call that fails crashes the
+**Failure is loud by default, and recovery takes one keyword.** A `throw` passes the failure to the
+caller, and nothing marks a routine that can fail or a call to it. A bare call that fails crashes the
 program with a message and a stack trace (exit status 82). To recover, put a keyword in front of the
 call: `try` gives `T?` (`Optional[T]`), and `check` gives `Check[T]` (which keeps the error). There are no
 exceptions to declare or catch.
@@ -215,15 +215,15 @@ so `cd` into a solution and run `razorforge run`.
   scope-bound permissions (`view()` / `modify()`), for longer through the
   `Retained` / `Guarded` / `Tracked` / `Witnessed` sharing managers. Entities move with `steal` and end
   deterministically (`destruct`), and `danger` blocks mark memory-unsafe code.
-- **Error handling:** `failable` routines (`throw`), the `try` / `check` recovery keywords, and `when`
-  pattern matching with exhaustiveness checks. A variant shows the value it holds (`40`, or `none` when
+- **Error handling:** `throw` passes a failure to the caller, the `try` / `check` recovery keywords
+  receive it, an `infallible` routine stops it, and `when` pattern matching with exhaustiveness checks. A variant shows the value it holds (`40`, or `none` when
   empty), and choices compare with `==` and by their order (`<`, `>=`).
 - **Numerics:** `S8` to `S256`, `U8` to `U256`, `B16` to `B128` (plus `BF16` for storage), `D32` / `D64` /
   `D128`, arbitrary-precision `Int`, 34-digit `Decimal`, complex `C64` / `C128` / `C256`,
   quaternions, vectors, and SIMD `Vector[T, N]`, with checked, wrapping, and clamping arithmetic.
 - **Collections:** `List`, `Dict`, `Set`, `RotatableList`, `BitList`, `PriorityQueue`, the sorted
   collections, `SplitList` (struct of arrays), fixed-size `Items[T, N]` (values) and `Slots[T, N]` (entities),
-  and lazy emitter adapters
+  `PartialItems[T, N]` and `PartialSlots[T, N]` (up to N elements kept in place), and lazy emitter adapters
   (`select`, `where`, `zip`, `enumerate`, …). Changing a collection while a `for` loop walks it is
   a build error, including when the change is hidden behind a call.
 - **Text:** UTF-32 `Text`, f-strings, `Bytes` with UTF-8 helpers, and range slicing
@@ -309,7 +309,7 @@ The builder itself (parser, analysis, lowering, LLVM emission) is
 **Shipped** (RazorForge 0.5.0)
 
 - Native builds on Windows and Linux x86-64 and macOS ARM64, with prebuilt packages
-- Copy-or-share memory model, failable routines with recovery keywords, generics, collections, 256-bit
+- Copy-or-share memory model, loud failures with recovery keywords, generics, collections, 256-bit
   integers, decimal and 128-bit floats
 - Concurrent work behind `Work[T]`, channels, async file I/O, CPU event handlers
 - A build daemon and a JIT edit loop (`[target] mode = "debug-jit"`)
