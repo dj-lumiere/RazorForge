@@ -696,6 +696,13 @@ routine collatz_steps(start: U64) -> U64
         return steps
 ```
 
+**Named loops.** `for y in 0 til h as rows` (also `until c as name`, `loop as name`; `as` comes before `with`) names a
+loop, and `break to rows` / `continue to rows` act on it from inside loops nested in it. `break to rows` is `rows`' own
+`break`: `rows`' `then` runs and the `then` of the loops inside it is skipped. `continue to rows` starts `rows`' next
+round (with carried values: `continue to rows with total: total + 1`). A plain `break` / `continue` stays with the
+innermost loop. A name no loop around the statement has, or a name an enclosing loop already has, is RF-G231. A loop
+name nothing uses is warning RF-W010.
+
 `when` is the pattern match:
 
 ```razorforge
