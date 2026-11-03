@@ -1125,9 +1125,71 @@ routine FileStorage[T].destruct()
 ### :param max: The maximum byte count to pull.
 ### :returns: The bytes pulled.
 routine FileSource.pull(max: U64) -> Bytes
-    var ptr = C::rf_file_read_bytes(me.fd, max)
-    var len = C::rf_get_result_len()
-    return Bytes(ptr: ptr, count: len)
+    return taken_bytes(ptr: C::rf_file_read_bytes(me.fd, max))
+
+### Reads one line as text (UTF-8, lossy), without its line ending.
+### :returns: The line.
+### :throws: {EndOfInputError} when the file has ended before another line.
+routine FileSource.read_line() -> Text
+    if C::rf_file_is_eof(me.fd)
+        throw EndOfInputError(reader: "read_line")
+    return taken_bytes(ptr: C::rf_file_read_line(me.fd)).decode_as_utf8_lossy()
+
+### Reads one line as a `T`: `var n: S64 = f.read()` (the type the value goes to), or `f.read[S64]()`. The line
+### becomes the value the way `line.to[T]()` makes it, so a line that isn't one fails like that does.
+### :typeparam T: The type the line becomes.
+### :returns: The line as a `T`.
+### :throws: {InvalidValueError} or what else `to[T]()` throws when the line isn't a `T`, {EndOfInputError} when the
+### file has ended.
+routine FileSource.read[T]() -> T
+    return me.read_line().to[T]()
+
+### Reads one whitespace-delimited word as text (UTF-8, lossy).
+### :returns: The word.
+### :throws: {EndOfInputError} when the file has ended before another word.
+routine FileSource.read_word() -> Text
+    var word = taken_bytes(ptr: C::rf_file_read_word(me.fd))
+    if word.is_empty()
+        throw EndOfInputError(reader: "read_word")
+    return word.decode_as_utf8_lossy()
+
+### Reads the rest of the file as text (UTF-8, lossy).
+### :returns: The text, empty at the end of the file.
+routine FileSource.read_all() -> Text
+    return me.read_raw().decode_as_utf8_lossy()
+
+### Reads the rest of the file and splits it into lines, as {Text.lines} does: the line ending after the last line
+### starts no new one.
+### :returns: The lines.
+routine FileSource.read_lines() -> List[Text]
+    return me.read_all().lines()
+
+### Reads the rest of the file and splits it into whitespace-delimited words.
+### :returns: The words.
+routine FileSource.read_words() -> List[Text]
+    var all = me.read_all()
+    return all.words()
+
+### Reads the rest of the file as raw bytes.
+### :returns: The bytes, empty at the end of the file.
+routine FileSource.read_raw() -> Bytes
+    return taken_bytes(ptr: C::rf_file_read_all(me.fd))
+
+### Reads up to `count` bytes: fewer only at the end of the file.
+### :param count: The most bytes to read.
+### :returns: The bytes, empty at the end of the file.
+routine FileSource.read_bytes(count: U64) -> Bytes
+    return me.pull(max: count)
+
+### The bytes of a block the runtime read from a file, copied once. The runtime's block is given back.
+### :param ptr: The block (its length is the runtime's last result length), or a hollow pointer.
+### :returns: The bytes.
+secret routine taken_bytes(ptr: Hijacked[Byte]) -> Bytes
+    var bytes = Bytes(ptr: ptr, count: C::rf_get_result_len())
+    if not ptr.is_hollow()
+        danger
+            C::rf_invalidate(ptr: ptr.address())
+    return bytes
 
 ### Closes the descriptor. Idempotent — `close()`, scope-exit `exit`, and teardown `destruct` never
 ### double-close.
@@ -1161,6 +1223,34 @@ routine FileSource.destruct()
 routine FileSink.push(data: Bytes) -> U64
     danger
         return C::rf_file_write(me.fd, data.raw_buffer(), data.count())
+
+### Writes `value` and then `end` at the current position, encoded as UTF-8.
+### :param value: The text to write.
+### :param end: The text written after it.
+### :throws: {IOError} when the file can't take the bytes.
+routine FileSink.write(value: Text, end: Text = "\n")
+    var data = f"{value}{end}".encode_as_utf8()
+    if me.push(data: data) < data.count()
+        throw IOError(description: "Cannot write to the file")
+    return
+
+### Writes raw bytes and then `end` (encoded as UTF-8) at the current position.
+### :param value: The bytes to write.
+### :param end: The text written after them.
+### :throws: {IOError} when the file can't take the bytes.
+routine FileSink.write(value: Bytes, end: Text = "\n")
+    var tail = end.encode_as_utf8()
+    if me.push(data: value) < value.count() or me.push(data: tail) < tail.count()
+        throw IOError(description: "Cannot write to the file")
+    return
+
+### Writes a value in its representable form and then `end` at the current position, encoded as UTF-8.
+### :param value: The value to write.
+### :param end: The text written after it.
+### :throws: {IOError} when the file can't take the bytes.
+routine FileSink.write[T](value: T, end: Text = "\n")
+    me.write(value: value.represent(), end: end)
+    return
 
 ### Flushes buffered output to the underlying file.
 routine FileSink.flush()

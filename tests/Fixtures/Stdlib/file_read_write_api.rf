@@ -1,0 +1,41 @@
+module Tests/Stdlib/FileReadWriteApi
+
+# A FileSink writes text, values in their representable form and raw bytes with `write` (each followed by `end`,
+# "\n" unless given), and a FileSource reads them back with the read family: a line, a line as a value, a word, the
+# rest as text, lines or words, raw bytes, and `EndOfInputError` once the file has ended. The output path uses the
+# gitignored `.out` extension so the test leaves no tracked artifact.
+
+import IO/Console
+import IO/File
+import IO/Errors
+
+routine start()
+    var file = FileManager.make_file(at: File(at: "tests/Fixtures/Stdlib/file_read_write.out"), replacing: true)
+    var total: D128 = 2.5
+    using FileManager.open_write(at: file) as f
+        f.write("first line")
+        f.write(total)
+        f.write(42, end: " ")
+        f.write("words  here")
+        f.write(7)
+        f.write("tail".encode_as_utf8())
+    using FileManager.open_read(at: file) as r
+        show(r.read_line())
+        var d: D128 = r.read()
+        show(d)
+        show(r.read_word())
+        show(r.read_line())
+        var n: S64 = r.read[S64]()
+        show(n)
+        show(r.read_words())
+        show(r.read_all().count())
+        when check r.read_line()
+            is EndOfInputError => show("end")
+            else => show("more")
+        show(try r.read_word())
+    using FileManager.open_read(at: file) as r
+        show(r.read_bytes(count: 5).decode_as_utf8_lossy())
+        show(r.read_lines())
+    using FileManager.open_read(at: file) as r
+        show(r.read_raw().count())
+    return

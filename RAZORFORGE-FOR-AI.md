@@ -1496,7 +1496,11 @@ operator (`/` is division).
   `name`/`is_directory`/`modified` in ONE read, no per-entry stat on Windows), `walk(at:)` (→ full descendant paths,
   recursive, symlink-safe).
 - **Sessions:** `open_read` (→ `FileSource`, `pull(max:)`), `open_write`/`open_append` (→ `FileSink`, `push(data:)`), bound by
-  `using`.
+  `using`. Text over a session: `FileSink.write(value, end: "\n")` works like `show` (Text as UTF-8, any value in its
+  representable form, `Bytes` as they are). `FileSource` reads like the console's `ask` family: `read_line()`,
+  `read[T]()` (a line as a `T`), `read_word()`, `read_all()`, `read_lines()`, `read_words()`, `read_raw()` (the rest
+  as `Bytes`), `read_bytes(count)`. At the end `read_line`/`read[T]`/`read_word` throw `EndOfInputError`, the others
+  give an empty result. There is no bare `read()` without a type.
 - **Verbs by job:** `load` / `store` read and write a PLACE (`Memory`, `Box`, `Unbroken`: reading again gives the same
   value). `pull` / `push` move bytes through a FLOW (the `Source` / `Sink` protocols: `FileSource`, `FileSink`,
   `stdin()`, `stdout()`, subprocess pipes). `transmit` / `receive` move one message at a time (channels:
