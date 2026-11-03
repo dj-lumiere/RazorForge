@@ -56,7 +56,7 @@ When unsure, consult ground truth in the repo/package:
    name with neither is RF-S413 ("An entity has one original, and this would hold it here too with no manager",
    `var s = obj.field_entity`). `steal` hands it to what keeps it from now on: `consume(r: steal b)`.
    A manager type (`FileManager`, `PartitionManager`, `StorageManager`, `CpuEventManager`) is always an `entity`
-   (a copy would keep its own record and diverge), a service (`Clock`, `CpuClock`, `Environment`, `Entropy`) a
+   (a copy would keep its own record and diverge), a stateless service (`Clock`, `CpuClock`, `Environment`, `Entropy`) a
    `record` with no member variables (body `nothing`, routines `common`, called on the type). The console is the
    free routines `show` / `ask` / `alert`. The builder does not check this by name: the stdlib follows it.
    Kinds of type (a way to read a type, nothing is marked): a **data type** is its fields and each routine answers
@@ -64,7 +64,8 @@ When unsure, consult ground truth in the repo/package:
    *stateless* service answers only from something outside (`Clock`, `Entropy`). A *stateful* service keeps part of
    its state itself: a **manager** hands out a resource, takes it back and answers for its end (`FileManager`: access,
    contents in memory, disk, bytes), and an **emitter** reads a source and gives the next value on each request. A
-   channel's `Receiver` mixes both (`count()` from what waits, `for x in rx` waits for another job). No `Service`
+   channel mixes both: `make_channel` gives a `Transmitter`/`Receiver` pair, and the `Receiver` answers `count()` from
+   what waits in the channel while `for x in rx` waits for another job to transmit. No `Service`
    suffix; `Manager` stays; no annotation, no builder check.
 7. **Every routine passes its failures to its caller.** There is no `failable` keyword (written, it is RF-G230,
    and `migrate --step failable` removes it), and call sites never write anything (`parse(...)`, `try parse(...)`;
