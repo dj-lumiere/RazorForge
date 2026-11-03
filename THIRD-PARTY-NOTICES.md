@@ -17,9 +17,9 @@ projects, their copyright notices and license terms are retained here as require
 
 ## LibBF — tiny arbitrary-precision floating-point library
 
-Used by the RazorForge arbitrary-precision **`Int`** engine (`IntEngine`, built on the limb
-layer in `LimbEngine`). The limb primitives, the NTT multiplication over five ~2^62 primes, and
-Newton-reciprocal division and square root are ports of LibBF (64-bit limb configuration).
+Used by the arbitrary-precision **`Int`** engine, which runs in Ingrid (`tessera/integer/`). The limb
+primitives, the NTT multiplication over five ~2^62 primes, and Newton-reciprocal division and square root are
+ports of LibBF (64-bit limb configuration).
 
 - Project: **LibBF** — https://bellard.org/libbf/
 - Copyright © 2017-2025 Fabrice Bellard.
@@ -51,7 +51,7 @@ THE SOFTWARE.
 
 ## LibTomMath — multiple-precision integer library
 
-Used by the RazorForge **`Int`** engine (`IntEngine`, `Int`). The engine replaced the
+Used by the arbitrary-precision **`Int`** engine, which runs in Ingrid (`tessera/integer/`). The engine replaced the
 LibTomMath-backed runtime and follows its integer semantics and algorithms: sign-magnitude values,
 Euclidean division, binary GCD, two's-complement bitwise operations on negative values, and the radix
 text conversion with its digit map (`0-9 A-Z a-z + /`, case-insensitive up to radix 36).
