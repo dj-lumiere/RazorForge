@@ -143,7 +143,7 @@ public sealed class ExitCodeTests
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "shallow 100", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "Stack overflow error", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Call depth error", actualString: stdout + stderr);
     }
 
     /// <summary>The same in a Work: the coroutine's stack runs out on a worker thread, which reports it too.</summary>
@@ -156,7 +156,7 @@ public sealed class ExitCodeTests
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "work [100]", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "Stack overflow error", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "Call depth error", actualString: stdout + stderr);
     }
 
     /// <summary>A thread reading a channel whose sender its own scope still holds, with no other work running, crashes

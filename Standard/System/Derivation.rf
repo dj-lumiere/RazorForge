@@ -734,6 +734,25 @@ needs RecordType T
         me.$nameof(m).destruct()
     return
 
+### Takes the first present member of the entity's own type (the `next` of a node, the first child of a tree node) out of
+### its place and gives its address, leaving the place empty. The address is the hollow `Addr` when the entity has none.
+### The entity's `destruct` ends what this took in a loop, so a chain of nodes ends in constant stack.
+### :returns: The address of the entity taken out, or the hollow address.
+infallible dangerous routine T.lift_own_child() -> Addr
+needs EntityType T
+    var lifted = Addr.hollow()
+    expand m in selfmemvarof(T)
+        var place = Hijacked[Addr](from: me.get_address() +% ByteSize(bytes: placeof(m)))
+        var child = place.peek()
+        if lifted.is_hollow() and child.is_not_hollow()
+            lifted = child
+            place.poke(value: Addr.hollow())
+    return lifted
+
+### The auto-derived entity `destruct()`. The first own-type child of each entity (a list node's `next`) is taken out before the
+### entity ends and is ended after it, in a loop, so a chain of a million nodes needs no deeper stack than one. The other
+### own-type children of a node (a tree node's second child) end with the node's members, one nested call each, so a tree is as
+### deep as its second and later children go.
 @override
 infallible routine T.destruct()
 needs EntityType T
@@ -741,12 +760,17 @@ needs EntityType T
         # A hollow entity (all zero, the member variable of a hollow value) has nothing to tear down.
         if me.hijack().is_hollow()
             return
+        var chain = me.lift_own_child()
         # An entity the program stamps ends its slot first: every stamp of it fails from here on.
         if T.keeps_stamp()
             C::rf_stamp_release(at: me.get_address(), offset: T.stamp_slot_offset())
-    expand m in allmemvarof(T)
-        me.$nameof(m).destruct()
-    me.hijack().invalidate()
+        expand m in allmemvarof(T)
+            me.$nameof(m).destruct()
+        me.hijack().invalidate()
+        until chain.is_hollow()
+            var after = hijacked_from[T](chain).as_entity().lift_own_child()
+            hijacked_from[T](chain).as_entity().destruct()
+            chain = after
     return
 
 ### Variant `destruct()`: TAG-dispatch — tear down ONLY the live arm's payload (a variant is a union,

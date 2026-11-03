@@ -1,0 +1,62 @@
+module Tests/Stdlib/DeepEntityChainApi
+
+import IO/Console
+
+# A chain of a million entities ends without a nested call per node: the first own-type child of an entity is taken out and
+# ended after the entity, in a loop. A tree ends the same way along its first children and by nested calls along the others.
+# Every node holds a Mark whose own destruct counts, so the totals show each node ended exactly once.
+
+global ENDED: S64 = 0
+
+entity Mark
+    id: S64
+
+routine Mark.destruct()
+    ENDED += 1
+    return
+
+entity Link
+    mark: Mark
+    next: Link?
+
+entity Cell
+    mark: Mark
+    left: Cell?
+    right: Cell?
+
+routine build_chain(length: S64) -> Link
+    var holder = List[Link]()
+    holder.add_last(Link(mark: Mark(id: 0), next: none))
+    for i in 1 til length
+        var top = holder.remove_last()
+        holder.add_last(Link(mark: Mark(id: i), next: steal top))
+    return holder.remove_last()
+
+routine build_tree(low: S64, high: S64) -> Cell
+    var middle = (low + high) // 2
+    var cell = Cell(mark: Mark(id: middle), left: none, right: none)
+    if low < middle
+        cell.left = build_tree(low: low, high: middle - 1)
+    if middle < high
+        cell.right = build_tree(low: middle + 1, high: high)
+    return cell
+
+routine chain_of(length: S64) -> S64
+    var head = build_chain(length: length)
+    return head.mark.id
+
+routine tree_of(size: S64) -> S64
+    var root = build_tree(low: 1, high: size)
+    return root.mark.id
+
+routine start()
+    ENDED = 0
+    show(f"chain head: {chain_of(length: 1000000)}")
+    show(f"chain ended: {ENDED}")
+    ENDED = 0
+    show(f"tree root: {tree_of(size: 65535)}")
+    show(f"tree ended: {ENDED}")
+    ENDED = 0
+    show(f"short chain head: {chain_of(length: 3)}")
+    show(f"short chain ended: {ENDED}")
+    return
