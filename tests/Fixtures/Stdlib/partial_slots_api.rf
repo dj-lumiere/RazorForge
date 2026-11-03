@@ -1,0 +1,53 @@
+module Tests/Stdlib/PartialSlotsApi
+
+import IO/Console
+# PartialSlots[T, N] holds up to N elements of any type in place: it is an entity, so it is handed over with steal,
+# and ending it ends only the places that hold an element.
+
+entity Task
+    id: S64
+    level: S64
+
+@override
+routine Task.destruct()
+    show(f"end {me.id}")
+    return
+
+routine start()
+    var stack = PartialSlots[Task, 4]()
+    show(f"empty={stack.is_empty()} count={stack.count()} capacity={stack.capacity()} full={stack.is_full()}")
+    stack.add_last(value: Task(id: 1, level: 0))
+    stack.add_next(Task(id: 2, level: 1), Task(id: 3, level: 1))
+    show(f"count={stack.count()}")
+    for t in stack
+        show(f"walk {t.id}")
+    stack[0].level = 5
+    show(f"level {stack[0].level}")
+
+    # remove_last hands the element over: the steps added together come back in the order they were written.
+    var next = stack.remove_last()
+    show(f"next {next.id}")
+    var after = stack.remove_last()
+    show(f"after {after.id}")
+
+    # Adding when every place holds an element is a failure, and the element that did not fit ends.
+    stack.add_last(value: Task(id: 4, level: 0))
+    stack.add_last(value: Task(id: 5, level: 0))
+    stack.add_last(value: Task(id: 6, level: 0))
+    var overflow = check stack.add_last(value: Task(id: 7, level: 0))
+    when overflow
+        is Crashables as e => show(f"{e.crash_message()}")
+        else => show("added")
+    var out_of_range = check stack[9]
+    when out_of_range
+        is Crashables as e => show(f"{e.crash_message()}")
+        else => show("in range")
+
+    # A PartialSlots of values takes the same calls.
+    var numbers = PartialSlots[S64, 3]()
+    numbers.add_next(1, 2, 3)
+    show(f"{numbers} has2={numbers.has(2)}")
+    numbers[0] = 9
+    show(f"{numbers.remove_last()} {numbers}")
+    show("done")
+    return

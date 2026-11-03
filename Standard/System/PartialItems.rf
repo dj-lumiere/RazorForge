@@ -1,0 +1,319 @@
+module System
+
+import BuilderQuery
+### A run of up to `COUNT` values laid out in place, whose count changes while the program runs.
+###
+### `PartialItems[T, COUNT]` is `Items[T, COUNT]` with a count: the room for `COUNT` elements is fixed at build
+### time and lives inside the value itself (no allocation), and the first `count()` of them hold an element.
+### `add_last` fills the next place and `remove_last` gives the last element back. Adding to a full
+### `PartialItems` is an ordinary failure (`FullCollectionError`), so `try` and `check` can receive it. Because it is
+### a record, its elements are values (`needs RecordType T`) and `=` copies the filled places. Ending it ends the
+### filled places only.
+###
+### **When to use**
+### - The most elements that can ever be held is known at build time, and the count is only known while running
+###   (a stack of known greatest depth, a small buffer, a path of bounded length).
+### - Use {Items[T, COUNT]} when every place always holds an element.
+### - Use {PartialSlots[T, COUNT]} when the elements may be entities.
+### - Use {List[T]} when there is no greatest count.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add_last` / `remove_last` | O(1) |
+### | `getitem` / `setitem` | O(1) |
+### | `has` | O(count) |
+### | Iteration | O(count) |
+###
+### :typeparam T: The element type stored in the places.
+### :typeparam COUNT: The most elements held, a `U64` fixed at build time.
+### :see: {Items[T, COUNT]} for a fixed number of values.
+### :see: {List[T]} for a growable sequence.
+record PartialItems[T, COUNT]
+relates PartialItemsEmitter[T, COUNT] as Emitter
+obeys Emittable[T], ModifyingIndexable[T], Sized, Container
+needs U64 COUNT
+needs RecordType T
+    ### Stores the places, of which the first `used` hold an element.
+    secret places: Items[T, COUNT]
+    ### Stores how many places hold an element.
+    secret used: U64
+
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+### Walks the elements of a `PartialItems[T, COUNT]` that are held, from index 0 up.
+### :typeparam T: The element type yielded by the emitter.
+### :typeparam COUNT: The most elements the walked value holds.
+entity PartialItemsEmitter[T, COUNT]
+obeys Emitter[T]
+needs U64 COUNT
+    ### Points at the places being walked: each element is read in place, so the walk does not copy them.
+    secret data: Hijacked[Items[T, COUNT]]
+    ### Stores how many elements the walk reaches.
+    secret held: U64
+    ### Stores the next index to read.
+    secret index: U64
+
+# ============================================================================
+# Construction
+# ============================================================================
+
+### Builds a `PartialItems` that holds no element yet.
+### :returns: An empty `PartialItems` with room for `COUNT` elements.
+routine PartialItems[T, COUNT]() -> PartialItems[T, COUNT]
+needs RecordType T
+    return PartialItems[T, COUNT](places: Items[T, COUNT](), used: 0)
+
+# ============================================================================
+# Query Operations
+# ============================================================================
+
+### Returns how many places hold an element.
+### :returns: The number of elements held, at most `COUNT`.
+@readonly
+routine PartialItems[T, COUNT].count() -> U64
+    return me.used
+
+### Returns the most elements this value holds, the buildtime parameter `COUNT`.
+### :returns: `COUNT`.
+@readonly
+routine PartialItems[T, COUNT].capacity() -> U64
+    return COUNT
+
+### Returns true when no place holds an element.
+### :returns: `true` if `count()` is zero.
+@readonly
+routine PartialItems[T, COUNT].is_empty() -> Bool
+    return me.used == 0
+
+### Returns true when every place holds an element, so `add_last` would fail.
+### :returns: `true` if `count()` equals `capacity()`.
+@readonly
+routine PartialItems[T, COUNT].is_full() -> Bool
+    return me.used >= COUNT
+
+# ============================================================================
+# Adding and removing
+# ============================================================================
+
+### Puts `value` in the next place, after the elements held.
+### :param value: The value to add.
+### :throws: {FullCollectionError} All `COUNT` places hold an element.
+@reshaping
+routine PartialItems[T, COUNT].add_last(value: T)
+    if me.used >= COUNT
+        throw FullCollectionError(capacity: COUNT)
+    me.places.put_raw(index: me.used, value: value)
+    me.used = me.used + 1
+    return
+
+### Adds the steps that run next, given in the order they run, so that `remove_last` gives them back in that order.
+### `stack.add_next(a, b, c)` leaves `a` at the back, then `b`, then `c`: the steps go in last to first. When they
+### do not all fit, none is added.
+### :param steps: The steps in the order they should come back out.
+### :throws: {FullCollectionError} There is not room for every step.
+### :see: {PartialItems[T, COUNT].remove_last}
+@reshaping
+routine PartialItems[T, COUNT].add_next(steps...: T)
+    if steps.count() > COUNT - me.used
+        throw FullCollectionError(capacity: COUNT)
+    var i = steps.count()
+    until i == 0
+        i = i -% 1
+        me.add_last(value: steps.get_raw(index: i))
+    return
+
+### Removes the last element and gives it back.
+### :returns: The element that was last.
+### :throws: {AbsentValueError} No place holds an element.
+@reshaping
+routine PartialItems[T, COUNT].remove_last() -> T
+    if me.used == 0
+        throw AbsentValueError()
+    me.used = me.used - 1
+    return me.places.get_raw(index: me.used)
+
+### Removes every element. The places that held one are free for `add_last` again.
+@reshaping
+routine PartialItems[T, COUNT].clear()
+    var i: U64 = 0
+    until i >= me.used
+        danger
+            me.places.get_raw(index: i).destruct()
+        i = i + 1
+    me.used = 0
+    return
+
+# ============================================================================
+# Indexing
+# ============================================================================
+
+### Returns the element at `index`, as a holder of its own (a share for a counted value).
+### :param index: The zero-based position to read.
+### :returns: The element stored at that position.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+@readonly
+routine PartialItems[T, COUNT].getitem(index: U64) -> T
+needs RecordType T
+    if index >= me.used
+        throw IndexOutOfBoundsError(index: index, count: me.used)
+    return me.places.get_raw(index: index).share()
+
+### Replaces the element at `index` with `value`, tearing the old one down first.
+### :param index: The zero-based position to update.
+### :param value: The replacement value.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+routine PartialItems[T, COUNT].setitem(index: U64, value: T)
+    if index >= me.used
+        throw IndexOutOfBoundsError(index: index, count: me.used)
+    me.places.setitem(index: index, value: value)
+    return
+
+### Returns the first element held.
+### :returns: The element at index `0`.
+### :throws: {AbsentValueError} No place holds an element.
+@readonly
+routine PartialItems[T, COUNT].first() -> T
+    if me.used == 0
+        throw AbsentValueError()
+    return me.places.get_raw(index: 0).share()
+
+### Returns the last element held, leaving it in place.
+### :returns: The element at index `count() - 1`.
+### :throws: {AbsentValueError} No place holds an element.
+@readonly
+routine PartialItems[T, COUNT].last() -> T
+    if me.used == 0
+        throw AbsentValueError()
+    return me.places.get_raw(index: me.used - 1).share()
+
+### Returns true if any element held equals `value`.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found, `false` otherwise.
+@readonly
+routine PartialItems[T, COUNT].has(value: T) -> Bool
+needs T obeys Equatable
+    var i: U64 = 0
+    until i >= me.used
+        if me.places.get_raw(index: i) == value
+            return true
+        i = i + 1
+    return false
+
+### Returns whether `value` is not among the elements held: the opposite of `has`.
+### :param value: The value to look for.
+### :returns: `true` when `value` is absent.
+@readonly
+routine PartialItems[T, COUNT].lacks(value: T) -> Bool
+needs T obeys Equatable
+    return not me.has(value)
+
+# ============================================================================
+# Iteration
+# ============================================================================
+
+### Returns an emitter over the elements held, in ascending index order. It reads each element where it is, so the
+### value must stay as it is while the loop runs (the builder keeps it from being reshaped, RF-S625).
+@readonly
+routine PartialItems[T, COUNT].emitter() -> PartialItemsEmitter[T, COUNT]
+    danger
+        return PartialItemsEmitter[T, COUNT](data: me.places.hijack(), held: me.used, index: 0)
+
+### Returns the next element held, read in place.
+### :returns: The element at the current index.
+### :throws: {AbsentValueError} Every element held has been yielded.
+routine PartialItemsEmitter[T, COUNT].emit() -> T
+    if me.index >= me.held
+        throw AbsentValueError()
+    danger
+        var value: T = LLVM::load_element_ref[Items[T, COUNT], T](me.data, me.index)
+        me.index = me.index + 1
+        return value
+
+# ============================================================================
+# Teardown and copying
+# ============================================================================
+
+### Tears down the elements held. The places that hold none are not touched.
+@override
+routine PartialItems[T, COUNT].destruct()
+    var i: U64 = 0
+    until i >= me.used
+        danger
+            me.places.get_raw(index: i).destruct()
+        i = i + 1
+    return
+
+### Cycle-collector TRACE: reports each element held to the collector.
+@override
+infallible dangerous routine PartialItems[T, COUNT].roam_trace()
+    var i: U64 = 0
+    until i >= me.used
+        me.places.get_raw(index: i).cyclic_visit()
+        i = i + 1
+    return
+
+### Cycle-collector FREE: does nothing. A `PartialItems` has no allocation of its own, and the collector frees its
+### elements as part of the cycle.
+@override
+infallible dangerous routine PartialItems[T, COUNT].roam_free()
+    return
+
+### Returns a copy with each element held shared (a counted element gets one more holder).
+@readonly
+@override
+secret infallible routine PartialItems[T, COUNT].share() -> PartialItems[T, COUNT]
+needs RecordType T
+    var result = PartialItems[T, COUNT]()
+    var i: U64 = 0
+    until i >= me.used
+        result.add_last(value: me.places.get_raw(index: i).share())
+        i = i + 1
+    return result
+
+### Returns a deep, independent copy: each element held is copied through its own `copy`.
+@readonly
+routine PartialItems[T, COUNT].duplicate() -> PartialItems[T, COUNT]
+needs RecordType T
+    var result = PartialItems[T, COUNT]()
+    var i: U64 = 0
+    until i >= me.used
+        result.add_last(value: me.places.get_raw(index: i))
+        i = i + 1
+    return result
+
+# ============================================================================
+# Display
+# ============================================================================
+
+### Returns the display form: each element held in its own display form, between brackets.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine PartialItems[T, COUNT].represent() -> Text
+    var result = "["
+    var i: U64 = 0
+    until i >= me.used
+        if i > 0
+            result = result + ", "
+        result = result + nested_repr(me.places.get_raw(index: i))
+        i = i + 1
+    result = result + "]"
+    return result
+
+### Returns the diagnostic form: the type name, then each element held in its own diagnostic form.
+### :returns: The resulting `Text` value.
+@readonly
+@override
+routine PartialItems[T, COUNT].diagnose() -> Text
+    var result = me.full_type_name() + "(["
+    var i: U64 = 0
+    until i >= me.used
+        if i > 0
+            result = result + ", "
+        result = result + nested_diagnose(me.places.get_raw(index: i))
+        i = i + 1
+    result = result + "])"
+    return result

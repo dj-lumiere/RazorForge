@@ -1,0 +1,62 @@
+module Tests/Stdlib/PartialItemsApi
+
+import IO/Console
+# PartialItems[T, N] holds up to N values in place: the count changes while the program runs, nothing is allocated,
+# and ending it ends only the places that hold a value.
+
+routine start()
+    var p = PartialItems[S64, 4]()
+    show(f"empty={p.is_empty()} count={p.count()} capacity={p.capacity()} full={p.is_full()}")
+    p.add_last(value: 10)
+    p.add_last(value: 20)
+    show(f"{p} count={p.count()} first={p.first()} last={p.last()}")
+    p[0] = 7
+    show(f"{p[0]} {p[1]} has20={p.has(20)} lacks5={p.lacks(5)}")
+    for x in p
+        show(f"walk {x}")
+    show(f"{p.diagnose()}")
+
+    # remove_last gives the elements back, last first.
+    show(f"removed {p.remove_last()}")
+    show(f"{p}")
+
+    # A copy is its own value.
+    var q = p
+    q.add_last(value: 99)
+    show(f"{p} {q}")
+
+    # Reading past the count fails like a List does, and so does removing from an empty one.
+    var out_of_range = check p[3]
+    when out_of_range
+        is Crashables as e => show(f"{e.crash_message()}")
+        else => show("in range")
+    var none_left = PartialItems[S64, 2]()
+    var empty_pop = check none_left.remove_last()
+    when empty_pop
+        is Crashables as e => show(f"{e.crash_message()}")
+        else => show("popped")
+
+    # Adding when every place holds a value is a failure try and check can receive.
+    var small = PartialItems[Text, 2]()
+    small.add_last(value: "a")
+    small.add_last(value: "bb")
+    var overflow = check small.add_last(value: "ccc")
+    when overflow
+        is Crashables as e => show(f"{e.crash_message()}")
+        else => show("added")
+    show(f"{small} full={small.is_full()}")
+    small.clear()
+    show(f"{small} count={small.count()}")
+
+    # add_next takes the steps in the order they run, and remove_last gives them back in that order.
+    var steps = PartialItems[Text, 6]()
+    steps.add_next("first", "second", "third")
+    steps.add_next("a", "b")
+    show(f"{steps}")
+    until steps.is_empty()
+        show(f"run {steps.remove_last()}")
+    var single = PartialItems[S64, 2]()
+    single.add_last(value: 1)
+    var taken = try single.remove_last()
+    show(f"{taken}")
+    return
