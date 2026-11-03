@@ -86,6 +86,23 @@ public class ReleaseHintTests
     }
 
     [Fact]
+    public void OldEmitterToolsRoutineNames_NameTheNewOnes()
+    {
+        string errors = Errors(source: """
+                                       import EmitterTools
+
+                                       routine start()
+                                           var a = [1, 2]
+                                           var b = [3]
+                                           var j = a.extend(b).to[List]()
+                                           var m = a.select_many(transform: x => [x]).to[List]()
+                                           return
+                                       """);
+        Assert.Contains(expectedSubstring: "Joining two emittables is 'a.chain(b)' now", actualString: errors);
+        Assert.Contains(expectedSubstring: "It is called 'select_chained' now", actualString: errors);
+    }
+
+    [Fact]
     public void UnknownPrefixedName_WithoutTheRoutine_GetsNoRecoveryHint()
     {
         string errors = Errors(source: """

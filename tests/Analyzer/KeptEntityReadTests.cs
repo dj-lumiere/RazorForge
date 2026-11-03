@@ -110,7 +110,7 @@ public class KeptEntityReadTests
                                     routine start()
                                         var teams = List[Team]()
                                         teams.add_last(value: Team(members: [1, 2]))
-                                        var all = teams.select_many(transform: t => t.members).to[List]()
+                                        var all = teams.select_chained(transform: t => t.members).to[List]()
                                         return
                                     """,
             expected: "This lambda gives back a 'List[S64]' that the value it belongs to still holds"));

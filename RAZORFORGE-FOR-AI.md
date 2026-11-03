@@ -1322,7 +1322,7 @@ that differ from other languages:
 - An emitter is an emittable (`Emitter[T]` obeys `Emittable[T]`): terminals and adapters work on it and take the
   values it has not handed out yet (`var it = xs.emitter()`, `drop it.emit()`, then `it.to[List]()`, `it.sum()`,
   `it.where(...)`).
-- Emitter adapters (from `EmitterTools`): `select`, `where`, `zip`, `enumerate`, `chain`, `distinct`, `select_many`,
+- Emitter adapters (from `EmitterTools`): `select`, `where`, `zip`, `enumerate`, `chain`, `distinct`, `select_chained`,
   `min_by`, … — lazily evaluated, chainable, lambdas like `x => x % 2 == 0`. An adapter points at the container it
   was made from, so it follows the same rule: `var big = xs.where(...)` is a token on `xs`'s elements.
 - **Collecting.** An emittable is collected with a conversion that names the collection without its element type:
@@ -1406,12 +1406,12 @@ the builder writes through a copy and stores it back.
 `p.a` read an entity their container still holds, so putting one anywhere that
 keeps what it holds (`x = boxes[0]`, `p.b = boxes[0]`,
 `take(b: boxes[0])`, `holder.add_last(value: boxes[0])`, `return boxes[0]`,
-`(boxes[0], 1)`, a lambda giving it back: `teams.select_many(transform: t => t.members)`) is RF-S413: it would hold the entity's one original there too with no manager (a tuple
+`(boxes[0], 1)`, a lambda giving it back: `teams.select_chained(transform: t => t.members)`) is RF-S413: it would hold the entity's one original there too with no manager (a tuple
 keeps its items, so a variable goes in with `steal` too: `(steal z, 1)`). The same goes for a terminal that keeps
 what a walk reaches in place: `xs.where(...).to[List]()` (any `to[...]`) or `.first()`/`.last()`/`.min_by(...)` over
 a walk of a `List[Crate]` is RF-S413 at that call; collect `(steal xs).where(...)` (the walk takes the list apart,
 `take_each`) or `xs.select(transform: c => c.duplicate())` instead. An emitter whose `emit` makes or takes out its
-values is marked `@hands_over` (`select`, `select_many`, `take_each`, a channel drain): its items are the walk's own,
+values is marked `@hands_over` (`select`, `select_chained`, `take_each`, a channel drain): its items are the walk's own,
 so `for` ends each one unless the step keeps it, `where`/`skip`/`take` over it end what they pass by, and collecting
 is allowed. Take an
 element out with a removing routine (`boxes.remove_at(index: 0)`), copy it

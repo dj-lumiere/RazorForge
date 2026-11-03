@@ -8,8 +8,8 @@ module EmitterTools
 ###   emitter dispatches `.to[List]()` against a real type — RazorForge has no runtime dispatch, so a
 ###   bare `Emittable[TResult]` transform return would leave `Emittable[TResult].List` unresolvable).
 ### :typeparam TSource: The concrete source emittable type (borrowed; enables build-time dispatch).
-entity SelectManyEmittable[T, TResult, TInner, TSource]
-relates SelectManyEmitter[T, TResult, TInner, TSource/Emitter] as Emitter
+entity SelectChainedEmittable[T, TResult, TInner, TSource]
+relates SelectChainedEmitter[T, TResult, TInner, TSource/Emitter] as Emitter
 obeys Emittable[TResult]
 needs TSource obeys Emittable[T]
 needs TInner obeys Emittable[TResult]
@@ -24,7 +24,7 @@ needs TInner obeys Emittable[TResult]
 ### :typeparam TResult: The element type yielded by each inner emittable.
 ### :typeparam TInner: The concrete inner-emittable type returned by the transform.
 ### :typeparam TSourceEmitter: The concrete source emitter type (owned).
-entity SelectManyEmitter[T, TResult, TInner, TSourceEmitter]
+entity SelectChainedEmitter[T, TResult, TInner, TSourceEmitter]
 obeys Emitter[TResult]
 needs TSourceEmitter obeys Emitter[T]
 needs TInner obeys Emittable[TResult]
@@ -37,12 +37,12 @@ needs TInner obeys Emittable[TResult]
     secret buffer: List[TResult]
 
 ### Returns the stateful emitter that drives the flat-map expansion.
-### :returns: The resulting `SelectManyEmitter[T, TResult, TInner, TSource/Emitter]` value.
+### :returns: The resulting `SelectChainedEmitter[T, TResult, TInner, TSource/Emitter]` value.
 @readonly
-routine SelectManyEmittable[T, TResult, TInner, TSource].emitter() -> SelectManyEmitter[T, TResult, TInner, TSource/Emitter]
+routine SelectChainedEmittable[T, TResult, TInner, TSource].emitter() -> SelectChainedEmitter[T, TResult, TInner, TSource/Emitter]
     var buffer = List[TResult]()
     danger
-        return SelectManyEmitter[T, TResult, TInner, TSource/Emitter](
+        return SelectChainedEmitter[T, TResult, TInner, TSource/Emitter](
             source: me.source.referent().emitter(),
             transform: me.transform,
             buffer: buffer,
@@ -54,7 +54,7 @@ routine SelectManyEmittable[T, TResult, TInner, TSource].emitter() -> SelectMany
 ### :returns: The resulting `TResult` value.
 @hands_over
 @reshaping
-routine SelectManyEmitter[T, TResult, TInner, TSourceEmitter].emit() -> TResult
+routine SelectChainedEmitter[T, TResult, TInner, TSourceEmitter].emit() -> TResult
     danger
         loop
             if me.buffer.count() > 0
@@ -86,12 +86,12 @@ secret routine List[T].taken_values() -> List[T]
 
 ### Returns a lazy adapter that applies `transform` to each element and yields values from all
 ### resulting inner emittables in sequence. The inner-emittable type `TInner` is an explicit type
-### argument (e.g. `select_many[S64, List[S64]]`) because RazorForge resolves the dispatch on it
+### argument (e.g. `select_chained[S64, List[S64]]`) because RazorForge resolves the dispatch on it
 ### at build time.
 ### :param transform: The routine that maps each source element to an inner emittable.
-### :returns: The resulting `SelectManyEmittable[T, TResult, TInner, Me]` value.
+### :returns: The resulting `SelectChainedEmittable[T, TResult, TInner, Me]` value.
 @readonly
-routine Emittable[T].select_many[TResult, TInner](transform: Callable[(T,), TInner]) -> SelectManyEmittable[T, TResult, TInner, Me]
+routine Emittable[T].select_chained[TResult, TInner](transform: Callable[(T,), TInner]) -> SelectChainedEmittable[T, TResult, TInner, Me]
 needs TInner obeys Emittable[TResult]
     danger
-        return SelectManyEmittable[T, TResult, TInner, Me](source: me.hijack(), transform: transform)
+        return SelectChainedEmittable[T, TResult, TInner, Me](source: me.hijack(), transform: transform)
