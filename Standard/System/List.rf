@@ -159,20 +159,29 @@ routine List[T].is_empty() -> Bool
 ### shared `next_grow_capacity` policy (double while small, 1.5x once large).
 ### :param value: The value to append.
 @reshaping
+@inline
 routine List[T].add_last(value: T)
     if me.count >= me.capacity
-        me.reserve(
-            next_grow_capacity(
-                current: me.capacity,
-                min_needed: me.count +% 1,
-                element_size: T.data_size().byte_size(),
-            ),
-        )
+        me.grow_by_one()
 
     var byte_offset = T.data_size() * me.count
     danger
         me.data.offset(byte_offset).poke(value)
     me.count = me.count +% 1
+    return
+
+### Makes room for one more element. Kept out of `add_last` so that routine stays small enough to be inlined at
+### each call, with the growth as the one call it makes when the buffer is full.
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
+@reshaping
+secret routine List[T].grow_by_one()
+    me.reserve(
+        next_grow_capacity(
+            current: me.capacity,
+            min_needed: me.count +% 1,
+            element_size: T.data_size().byte_size(),
+        ),
+    )
     return
 
 ### Appends every element of `other` to the back of this list, in order.
