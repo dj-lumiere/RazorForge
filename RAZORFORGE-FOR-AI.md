@@ -373,7 +373,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   widen exactly, `x.to[BF16]()` (from `B32`/`B64`) narrows with ONE round-to-nearest-even (from `B64` directly,
   never through `B32`), `represent`/`t.to[BF16]()`, `==`/`<`. Arithmetic (`obeys Numeric`, the B16 surface:
   `+ - * /`, `sqrt`, `floor`..., `mul_add`, `next_up`...) works on the B32 values and rounds once (correctly rounded for
-  `+ - * /`/`sqrt`), and the library functions (`exp`, `ln`, `sin`, `pow`, `atan2`, `hypot`, `sin_pi`...) call
+  `+ - * /`/`sqrt`), and the library routines (`exp`, `ln`, `sin`, `pow`, `atan2`, `hypot`, `sin_pi`...) call
   Tessera's correctly rounded BF16 routines through Ingrid (`ingrid_bf16_*`, bits as `U16`). No literals of its own.
 - Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `var eps: B32 = 0x1p-23`,
   `0x1.fffffep+127` where a `B32` goes. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
@@ -386,7 +386,7 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   `i` (also `_i`): `3 + 4i`. Width comes from context (a `C64`/`C256` slot), and with no context it
   defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
   `* / abs norm reciprocal` round each part once from the exact value (no overflow on the way when the result
-  fits). `sqrt`, `ln`, the inverse functions, `tan`/`tanh` take principal branches with C99 Annex G signed-zero cuts
+  fits). `sqrt`, `ln`, the inverse routines, `tan`/`tanh` take principal branches with C99 Annex G signed-zero cuts
   (`sqrt` of `-4 - 0i` is `0-2i`), within a few ulps. `exp_unchecked`/`sinh_unchecked`/`cosh_unchecked` give inf past
   the range, the checked forms crash. All of it is Ingrid's (`Ingrid/tessera/complex.te`).
 - Geometry (`import Math3D`, `B32` elements): `Vector2D`/`Vector3D`/`Vector4D`, the quaternions `Q128` (B32 parts)
@@ -1889,10 +1889,10 @@ routine start()
 - The `Signals` module is gone: `migrate --step cpu-events` drops `import Signals` and writes
   `CpuEventManager.when_interrupted(h)`, and lists the calls that passed a `context:`.
 
-## 15. Foreign functions and conditional compilation
+## 15. Foreign routines and conditional compilation
 
 - **Foreign routines are realm-qualified**, not an `external` keyword (there is no
-  `external` keyword). Declare a C function as `routine C::name(...)` and an LLVM
+  `external` keyword). Declare a C routine as `routine C::name(...)` and an LLVM
   intrinsic as `routine LLVM::name(...)`. `dangerous routine C::name(...)` works
   (the `dangerous` prefix precedes). Call sites use the same qualifier:
   `C::labs(n: x)`. External calls are positional.
@@ -1905,7 +1905,7 @@ routine start()
   returns, and the type of every C string parameter). `text.to[CStr]()` / `text.to[CWStr]()` copy a `Text` into
   new memory with a zero at the end (UTF-8, and UTF-16 on Windows or code points elsewhere for the wide one), torn
   down at the end of the scope. A `CStr` argument to a `CStrView` parameter is passed as `arg.view()` by the
-  builder, and `steal arg` as `arg.leak()`, so C keeps memory that is never torn down (for C functions that keep
+  builder, and `steal arg` as `arg.leak()`, so C keeps memory that is never torn down (for C routines that keep
   the pointer, such as `putenv`). `Bytes(ptr: view)` / `view.to[Text]()` copy a C string back.
 - **`@link("SDL2")`** on a `C::` extern names the C library that resolves its
   symbols (Rust `#[link]` style); merged with `[target] c_libraries` in the
