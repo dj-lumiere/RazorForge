@@ -1361,7 +1361,9 @@ that differ from other languages:
   `by 0` is RF-S516; a zero step held in a variable crashes with
   `RangeStepZeroError` when the range is iterated. `has`/`lacks` follow the
   same rule (`(10 to 0 by -2).has(4)` is true). Slicing with a counting-down range
-  reverses: `text[4 to 0 by -1]`.
+  reverses: `text[4 to 0 by -1]`. A type after the loop's name types the bounds of the range written in the
+  loop: `for i: S64 in 1 to 10**10`, `for k: U8 in 250 to 255` (stops at 255, a bound that doesn't fit is RF-S010).
+  Only with a range literal: `for x: S64 in xs` is RF-G150 (a collection's elements already have their type).
 - `List`, `Set`, `Dict` live in **`System`** (always available — never suggest
   `using Collections`). Only these three canonical collections have literal
   syntax of their own (`[1, 2]`, `{1, 2}`, `{1: 10}`); a specialized container
