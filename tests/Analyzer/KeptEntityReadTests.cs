@@ -55,6 +55,38 @@ public class KeptEntityReadTests
                                                        """).Errors);
     }
 
+    /// <summary>A local entity that may be absent (<c>Node?</c>) handed to a constructor's <c>Node?</c> field is a
+    /// second name for the same original: RF-S413 asks for <c>steal</c>.</summary>
+    [Fact]
+    public void Analyze_OptionalEntityLocalIntoCreatorOptionalField_Errors()
+    {
+        IEnumerable<SemanticError> errors = ErrorsFor(body: """
+                                                          entity Link
+                                                              value: S64
+                                                              next: Link?
+
+                                                          routine make() -> Link
+                                                              var tail: Link? = Link(value: 0, next: none)
+                                                              return Link(value: 1, next: tail)
+                                                          """,
+            expected: "tail");
+        Assert.Contains(collection: errors, filter: IsKeptEntityError);
+    }
+
+    [Fact]
+    public void Analyze_StolenOptionalEntityLocalIntoCreatorOptionalField_IsFine()
+    {
+        Assert.Empty(collection: AnalyzeSa(source: Prelude + """
+                                                       entity Link
+                                                           value: S64
+                                                           next: Link?
+
+                                                       routine make() -> Link
+                                                           var tail: Link? = Link(value: 0, next: none)
+                                                           return Link(value: 1, next: steal tail)
+                                                       """).Errors);
+    }
+
     [Fact]
     public void Analyze_EntityElementIntoConsumingOperatorParameter_Errors()
     {
