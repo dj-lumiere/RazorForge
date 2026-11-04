@@ -277,27 +277,25 @@ public sealed class BaseEmissionTests
         (string source, string fileName) = Builder.Execution.BaseObjectCache.SeedFor(language: Language.Revare);
         string dir = Path.Combine(path1: Path.GetTempPath(), path2: "rf_seed_test_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path: dir);
-        TextWriter savedOut = Console.Out;
-        TextWriter savedErr = Console.Error;
-        var captured = new StringWriter();
+        // The seed build's own diagnostics, not the shared console: tests running in parallel write their
+        // diagnostics to the console too.
+        List<(string Severity, string Header)> diagnostics = Builder.Diagnostics.DiagnosticRenderer.BeginCapture();
+        int rc;
         try
         {
             string file = Path.Combine(path1: dir, path2: fileName);
             File.WriteAllText(path: file, contents: source);
-            Console.SetOut(newOut: captured);
-            Console.SetError(newError: captured);
-            int rc = Builder.Execution.Program.CompileEntryToIrForTests(entryFile: file, ir: out _);
-            Assert.True(condition: rc == 0, userMessage: captured.ToString());
+            rc = Builder.Execution.Program.CompileEntryToIrForTests(entryFile: file, ir: out _);
         }
         finally
         {
-            Console.SetOut(newOut: savedOut);
-            Console.SetError(newError: savedErr);
+            Builder.Diagnostics.DiagnosticRenderer.EndCapture();
             Directory.Delete(path: dir, recursive: true);
         }
 
-        Assert.DoesNotContain(expectedSubstring: "warning[", actualString: captured.ToString());
-        Assert.DoesNotContain(expectedSubstring: "error[", actualString: captured.ToString());
+        string reported = string.Join(separator: "\n", values: diagnostics.Select(selector: d => d.Header));
+        Assert.True(condition: rc == 0, userMessage: reported);
+        Assert.DoesNotContain(collection: diagnostics, filter: d => d.Severity is "error" or "warning");
     }
 
     /// <summary>
