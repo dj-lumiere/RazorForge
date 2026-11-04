@@ -202,10 +202,10 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Verifies that user routines cannot directly return Optional.
+    /// Verifies that user routines may directly return Optional.
     /// </summary>
     [Fact]
-    public void Analyze_UserRoutineReturningMaybe_ReportsError()
+    public void Analyze_UserRoutineReturningOptional_ReportsNoError()
     {
         string source = """
                         routine test() -> Optional[S32]
@@ -214,7 +214,7 @@ public class WikiLanguageBreakageTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
 

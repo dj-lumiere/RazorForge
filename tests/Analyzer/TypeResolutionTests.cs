@@ -611,7 +611,7 @@ public class TypeResolutionTests
     /// Verifies semantic analysis behavior for routine returns maybe and reports the expected error.
     /// </summary>
     [Fact]
-    public void Analyze_RoutineReturnsMaybe_ReportsError()
+    public void Analyze_RoutineReturnsMaybe_ReportsNoError()
     {
         string source = """
                         routine foo() -> Optional[S32]
@@ -620,7 +620,7 @@ public class TypeResolutionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
     /// <summary>
@@ -672,7 +672,7 @@ public class TypeResolutionTests
     /// Verifies semantic analysis behavior for memberRoutine returns maybe and reports the expected error.
     /// </summary>
     [Fact]
-    public void Analyze_memberRoutineReturnsMaybe_ReportsError()
+    public void Analyze_memberRoutineReturnsMaybe_ReportsNoError()
     {
         string source = """
                         record Point
@@ -686,7 +686,7 @@ public class TypeResolutionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
 

@@ -15,7 +15,7 @@ preset DATE: TextPattern = TextPattern.of(
 )
 
 routine show_find(label: Text, pattern: TextPattern, value: Text)
-    when try pattern.find(value)
+    when pattern.find(value)
         is None => show(f"{label}: none")
         else as found => show(f"{label}: {found}")
     return
@@ -27,8 +27,8 @@ routine show_regex(regex: Text)
     return
 
 routine start()
-    var found = DATE.find("Due 2026-10-20, paid.")
-    show(f"year {found.group("year")}, month {found.group("month")}, day {found.group("day")}")
+    var found = DATE.find("Due 2026-10-20, paid.").unwrap()
+    show(f"year {found.group("year").unwrap()}, month {found.group("month").unwrap()}, day {found.group("day").unwrap()}")
     when check found.group("hour")
         is Text as hour => show(hour)
         is Crashables as e => show(e.crash_message())
@@ -72,30 +72,30 @@ routine start()
         [text("<b>"), capture("inner", any_number_of(none_of("<"))), text("</b>")],
     )
     for m in bold.find_all("<b>가</b><b>나</b>")
-        show(f"inner {m.group("inner")}")
+        show(f"inner {m.group("inner").unwrap()}")
 
     var month = TextPattern.from_regex("(?<year>\\d{4})-(?<month>\\d{2})")
-    show(f"regex month {month.find("on 2026-10-20").group("month")}")
-    var mail = TextPattern.from_regex("(\\w+)@(\\w+)\\.com").find("mail lumi@example.com now")
-    show(f"regex groups {mail.group("1")} {mail.group("2")}")
+    show(f"regex month {month.find("on 2026-10-20").unwrap().group("month").unwrap()}")
+    var mail = TextPattern.from_regex("(\\w+)@(\\w+)\\.com").find("mail lumi@example.com now").unwrap()
+    show(f"regex groups {mail.group("1").unwrap()} {mail.group("2").unwrap()}")
     show_regex("(a)\\1")
     show_regex("(?<=a)b")
     show_regex("a+?")
     show_regex("(ab")
 
     var png = BytesPattern.of([byte(0x89), bytes(b"PNG"), capture("ending", bytes(b"\r\n\x1A\n"))])
-    var header = png.find(b"\x89PNG\r\n\x1A\n\0\0")
-    show(f"png {header.start()} til {header.end()}, ending of {header.group("ending").count()} bytes")
-    show(f"control bytes: {BytesPattern.of([one_or_more(byte_range(0x00 to 0x1F))]).find(b"ab\x01\x02c").bytes()}")
+    var header = png.find(b"\x89PNG\r\n\x1A\n\0\0").unwrap()
+    show(f"png {header.start()} til {header.end()}, ending of {header.group("ending").unwrap().count()} bytes")
+    show(f"control bytes: {BytesPattern.of([one_or_more(byte_range(0x00 to 0x1F))]).find(b"ab\x01\x02c").unwrap().bytes()}")
 
     var pathological = TextPattern.of(
         [any_number_of(either_longer([text("a"), text("aa")])), text("b")],
     )
     var many = "a".repeat(times: 10000)
     var started = Clock.monotonic()
-    when try pathological.find(many)
+    when pathological.find(many)
         is None => show("pathological without b: none")
         else as m => show(f"pathological without b: {m.start()}")
-    show(f"pathological with b: {pathological.find(many + "b").end()}")
+    show(f"pathological with b: {pathological.find(many + "b").unwrap().end()}")
     show(f"finished within 2s: {Clock.monotonic() - started < 2s}")
     return

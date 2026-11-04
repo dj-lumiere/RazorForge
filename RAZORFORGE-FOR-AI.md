@@ -74,9 +74,10 @@ When unsure, consult ground truth in the repo/package:
    with `when`:
    `try EXPR` → `T?` (`Optional[T]`: a value is there or not, no error kept);
    `check EXPR` → `Check[T]` (one value, or the reason it is absent: the caught `Crashables`).
-   A routine with no value to give throws `AbsentValueError()`, an ordinary
-   stdlib crashable: `throw AbsentValueError()`. To tell "not found" apart from
-   other failures, match it by type: `is AbsentValueError => ...` on a `check`.
+   A routine may return `T?` itself. It should only when having nothing is a normal result (a find, a lookup):
+   `return none`, and the caller takes it apart with `when`. Something gone wrong is a `throw`, and a routine with
+   no value to give for that reason throws `AbsentValueError()`, an ordinary stdlib crashable. To tell "not found"
+   apart from other failures, match it by type: `is AbsentValueError => ...` on a `check`.
    **`try`/`check` receive a failure from any depth below them.** Inside, code calls plainly (`var l =
    eval(e: e.left)` in a recursive `eval`): a failure anywhere under the keyword (a `throw`, a checked `+ - *` that
    overflows (`IntegerOverflowError`), `//` by zero (`DivisionByZeroError`), a subscript out of range
@@ -442,13 +443,14 @@ RF-S632). A module-level `var` is an error (RF-S435). Constants the build knows 
   right after `ask_word()` skips the line end the word left.
 - Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `RotatableList[T]`, `BitList`,
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
-  fixed-size `Items[T, COUNT]`, `Bits[BITS]`
+  fixed-size `Items[T, COUNT]`, `Bits[BITS]`. Searches return `U64?` (`none` where there is no match): `index_of`
+  on `Items`, `Slots` and `SplitItems`, and `first_true`, `next_true`, `first_false`, `next_false` on `Bits` and `BitList`.
 - Tuples: `(TFirst, TSecond)` / `Tuple[TFirst, TSecond]`, with fields `item0`, `item1`, ...
-- Carriers: `Optional[T]` (written `T?`), `Check[T]` (builder-synthesized only —
-  a routine cannot declare either as its return type, RF-S806; you obtain one by wrapping a
-  failable call with the `try`/`check` keyword). A routine that has "a link or nothing" to give
-  (`Node.parent_of() -> Stamped[Node]?`) returns the value itself and throws `AbsentValueError()` where
-  there is none: the caller writes `try node.parent_of()` and gets the `Stamped[Node]?`.
+- Carriers: `Optional[T]` (written `T?`), `Check[T]` (builder-synthesized only: a routine cannot declare
+  it as its return type, RF-S806, and you obtain one by wrapping a call with the `check` keyword). A routine
+  may return `T?`, and it should only when having nothing is a normal result: a routine that has "a link or
+  nothing" to give (`Node.parent_of() -> Stamped[Node]?`) returns `none` where there is none, and the caller
+  takes it apart with `when`. Something gone wrong is a `throw`, received with `try` or `check`.
 - A number never names its type (no `7s32`, `0_u64`, `10n`: RF-G010). Unit suffixes stay: durations
   (`50ms 5s 2m 1h 1d 1w us ns`), sizes (`4kb 4kib 2mb ...`), and the imaginary `i`.
 - `inf` and `nan` are number literals (reserved words) that take their type from where they go: `var x: B64 = inf`,
@@ -778,8 +780,9 @@ dangerous routine raw_poke(p: Addr)     # callable only inside danger blocks
   the constructor `T(...)`, `destruct`, `copy`, `eq`, `compare`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `emitter`/`emit` (walking), `add`
   etc. (operator overloads). Wired-ness is inferred from protocol conformance.
-- Failure inside a routine: `throw SomeError(...)`. A routine with no
-  value to give throws `AbsentValueError()`.
+- Failure inside a routine: `throw SomeError(...)`. A routine whose result is normally absent (a find, a lookup)
+  returns `T?` and says `return none`. A routine with no value to give because something went wrong throws
+  `AbsentValueError()`.
 - Neither the declaration nor the call marks failability: `routine S64.from_digit_bytes_at(...)`,
   `routine Celsius(from: Text)`, called as `S64.from_digit_bytes_at(bytes: bs)`, `x.divmod(other: m)`,
   `t.to[Celsius]()`. `foo!(...)`, `x.foo!(...)` and `T![..](...)` are RF-G211; `foo(args)!` is a parse
@@ -1245,7 +1248,7 @@ uppercase hex digits) for any byte that is not printable ASCII. `Bytes` shows `\
 - **`Text` slicing** uses a range subscript: `text[a til b]` / `text[a to b]`
   (subscript forces `U64` indices), open-ended `text[a til ^0]` to the end.
   Beyond the basics, `Text` carries a rich pure-RF method set (search, split,
-  case, padding) — e.g. `count_of`, `find!`/`find_last!`, `split_once!`,
+  case, padding) — e.g. `count_of`, `find`/`find_last` (a `U64?`, `none` where nothing is found), `split_once`,
   `replace_first`, `capitalize`, `center`, `eq_ignore_case`. Verify exact names
   in `Standard/RazorForge/System/Text/Text.rf`.
 - **`Bytes` `obeys Comparable, Hashable`** — usable as a `Dict` key and sortable.
@@ -1267,10 +1270,10 @@ digit.repeat(4)), text("-"), capture("month", digit.repeat(2))])` (a `preset` pa
 - Alternatives name their rule, there is no default: `either_longer([...])` (the longest match there),
   `either_shorter([...])` (the shortest), the first written winning a tie.
 - `capture("name", p)`, `ignoring_case(p)`, and `TextPattern.of(pieces: [...], ignore_case: true)`.
-- Searches: `p.matches(text)` (whole text), failable `p.find(text)` (`try p.find(t)` gives `none`), `p.find_all(text)`
+- Searches: `p.matches(text)` (whole text), `p.find(text)` (a `TextMatch?`, `none` where nothing matches), `p.find_all(text)`
   (non-overlapping, `List[TextMatch]`), `p.replace(text: t, with: "#")`, `p.split(text)`. A `TextMatch` has `start()`,
-  `end()` (character positions, `U64`), `text()`, failable `group("name")` (`CaptureNameError` for an unknown name,
-  `AbsentValueError` for a capture that took no part).
+  `end()` (character positions, `U64`), `text()`, `group("name")` (a `Text?`: `none` for a capture that took no part,
+  `CaptureNameError` for an unknown name).
 - `BytesPattern` over `Bytes`: `byte(0x89)`, `bytes(b"PNG")`, `any_byte`, `byte_range(0x00 to 0x1F)`, `start_of_bytes`,
   `end_of_bytes`; `BytesMatch.bytes()`. Text and bytes pieces never mix (a type error).
 - Failable `TextPattern.from_regex(text)` / `BytesPattern.from_regex` read the usual regex syntax (unnamed groups
@@ -1518,7 +1521,7 @@ operator (`/` is division).
   `InvalidValueError`. `T` is limited by the `StorageCell` protocol (only `Byte` and `Char` obey it).
   `migrate --step files` renames `open_storage` / `open_storage_range` to `storage` and lists the lines.
 - **The environment (`import IO/Environment`):** `Environment` reads what the OS gives the program, nothing is set:
-  `arguments()` (→ `List[Text]`, the program's own name left out), `variable(name:)` (failable, `AbsentValueError`
+  `arguments()` (→ `List[Text]`, the program's own name left out), `variable(name:)` (a `Text?`, `none`
   when unset, asked of the OS so Windows names are case-insensitive), `to[Dict[Text, Text]]()` (a snapshot),
   `working_directory()`, `home_directory()`, `temp_directory()` (never fails). On a target without an OS: no
   arguments, no variables. There is no way to change the working directory (`set_current_directory` is gone): keep
@@ -1611,7 +1614,7 @@ warning. A diagnostic in a Suflae file spells the same number with `SF-`
 | RF-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
 | RF-S654      | a `view_enter` / `modify_enter` that gives no `Viewing` / `Modifying`, or has no matching exit | return the token, declare the exit |
 | RF-S656      | `e.stamp()` on a stdlib entity, or one reached only through a type parameter | keep a link another way: the entity itself, or a manager's handle (`Retained[T]`) |
-| RF-S806      | a routine declares `T?` or `Check[T]` as its result | return the value and `throw` where it fails: the caller writes `try f(...)` |
+| RF-S806      | a routine declares `Check[T]` as its result | return the value and `throw` where it fails: the caller writes `check f(...)` |
 | RF-S657      | a value that holds a way to change an entity (a `Stamped`, a manager handle, a `Modifying`, a record or tuple with one) copied out of a `Viewing` | read it in place (`links[0].target.fetch()`), or take the container as `Modifying` |
 | RF-S612      | `using` given a non-`Enterable` (also `using g.view()`) | `viewing g as v` / `modifying g as m` |
 | RF-S630      | a `Guarded` opened again inside a block of the same routine that has it open | use the outer block's token |
@@ -1644,18 +1647,18 @@ record Item
     name: Text
     qty: S64
 
-routine find_qty(items: Viewing[List[Item]], name: Text) -> S64
+routine find_qty(items: Viewing[List[Item]], name: Text) -> S64?
     for item in items
         if item.name == name
             return item.qty
-    throw AbsentValueError()
+    return none
 
 routine start()
     var items = List[Item]()
     items.add_last(value: Item(name: "bolt", qty: 40))
     items.add_last(value: Item(name: "nut", qty: 0))
 
-    var q = try find_qty(items: items.view(), name: "bolt")
+    var q = find_qty(items: items.view(), name: "bolt")
     when q
         is None => show("not found")
         else as n  => show(f"bolt qty: {n}")
