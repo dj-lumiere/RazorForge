@@ -69,14 +69,12 @@ obeys Emitter[T]
 
 # Creators
 
+### Creates an empty list with no allocated storage.
+### :returns: The empty list.
 routine List[T]() -> List[T]
     danger
         return List[T](data: Hijacked[T].hollow(), count: 0, capacity: 0)
 
-### Creates an empty list with storage reserved for at least `capacity` elements.
-### No elements are initialized, but the backing allocation is made immediately to
-### avoid the first few growth steps.
-### :param capacity: The initial capacity to reserve.
 ### A list over `count` elements already in `over`, a buffer allocated for exactly them that the list takes over
 ### (its capacity is `count`). The list frees the buffer when it ends.
 ### :param over: The buffer, holding `count` initialized elements.
@@ -85,6 +83,11 @@ routine List[T]() -> List[T]
 dangerous routine List[T](over: Hijacked[T], count: U64) -> List[T]
     return List[T](data: over, count: count, capacity: count)
 
+### Creates an empty list with storage reserved for at least `capacity` elements.
+### No elements are initialized, but the backing allocation is made immediately to
+### avoid the first few growth steps.
+### :param capacity: The initial capacity to reserve.
+### :returns: The empty list.
 ### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
 routine List[T](capacity: U64) -> List[T]
     danger
@@ -384,6 +387,8 @@ secret routine List[T].exchange(index: U64, value: T) -> T
 ### element in place: `grid[0].add_last(value: 1)` lowers to `grid.modify_at(index: 0).add_last(value: 1)`. A
 ### plain `getitem` hands back a copy, and a call on that copy would change only the copy. The token lives
 ### while the list keeps its shape (RF-S639).
+### :param index: The position of the element.
+### :returns: A write token on the element.
 @overridable
 routine List[T].modify_at(index: U64) -> Modifying[T]
 needs AnyType T
@@ -394,6 +399,8 @@ needs AnyType T
         return Modifying[T](me.data.offset(T.data_size() * index))
 
 ### `modify_at` for a single-owner entity: the slot holds the entity's address, which is the token.
+### :param index: The position of the element.
+### :returns: A write token on the element.
 @override
 routine List[T].modify_at(index: U64) -> Modifying[T]
 needs EntityType T
@@ -405,6 +412,8 @@ needs EntityType T
 ### Returns a read token on the element stored at `index`, so a read through it does not copy the element
 ### first: `grid[0].count()` lowers to `grid.view_at(index: 0).count()`. A plain `getitem` hands back a copy.
 ### The token lives while the list keeps its shape (RF-S639).
+### :param index: The position of the element.
+### :returns: A read token on the element.
 @readonly
 @overridable
 routine List[T].view_at(index: U64) -> Viewing[T]
@@ -416,6 +425,8 @@ needs AnyType T
         return Viewing[T](me.data.offset(T.data_size() * index))
 
 ### `view_at` for a single-owner entity: the slot holds the entity's address, which is the token.
+### :param index: The position of the element.
+### :returns: A read token on the element.
 @readonly
 @override
 routine List[T].view_at(index: U64) -> Viewing[T]
@@ -448,6 +459,8 @@ needs RecordType T
 
 ### Returns the element at `index` without bounds checking.
 ### Only call this when the index is already proven to be in range.
+### :param index: The position to read. It must be in range.
+### :returns: The element at `index`.
 @readonly
 @inline
 infallible routine List[T].get_raw(index: U64) -> T
@@ -456,6 +469,8 @@ infallible routine List[T].get_raw(index: U64) -> T
 
 ### Writes `value` at `index` without bounds checking.
 ### Only call this when the index is already proven to be in range.
+### :param index: The position to write. It must be in range.
+### :param value: The element to store.
 @inline
 routine List[T].set_raw(index: U64, value: T)
     danger
@@ -506,6 +521,8 @@ routine List[T].clear()
     me.count = 0
     return
 
+### Returns an emitter that walks the elements of `me` in order, for a `for` loop.
+### :returns: The emitter, positioned before the first element.
 @readonly
 routine List[T].emitter() -> ListEmitter[T]
     danger
@@ -619,6 +636,8 @@ needs T obeys Equatable
 
 ### `eq` for single-owner entity elements: each pair is read through tokens, since an entity can't be copied out of
 ### the list.
+### :param you: The list to compare against.
+### :returns: `true` if the lengths match and every pair of elements is equal.
 @readonly
 @override
 routine List[T].eq(you: Viewing[List[T]]) -> Bool
@@ -659,6 +678,8 @@ routine List[T].lacks(value: Viewing[T]) -> Bool
 needs T obeys Equatable
     return not me.has(value)
 
+### Returns the text form of `me`: the elements of the list in brackets, separated by commas.
+### :returns: The text form of `me`.
 @readonly
 @override
 routine List[T].represent() -> Text
@@ -672,6 +693,8 @@ routine List[T].represent() -> Text
     result = result + "]"
     return result
 
+### Returns the diagnostic text of `me`: its type, count and elements.
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 routine List[T].diagnose() -> Text

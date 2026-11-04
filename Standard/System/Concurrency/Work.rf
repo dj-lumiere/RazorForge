@@ -69,12 +69,16 @@ routine recipe_slot_size() -> ByteSize
 
 ### Allocates a recipe with `slots` Addr slots (slot 0 is the task, the rest are the arguments).
 ### Builder plumbing for `to[Work]` conversions.
+### :param slots: The number of slots.
 ### :returns: the recipe's address.
 dangerous routine recipe_new(slots: U64) -> Addr
     return rf_allocate_dynamic(size: recipe_slot_size() * slots)
 
 ### Moves `value` into its own heap cell and stores the cell in recipe slot `slot` (like
 ### `List.add_last` storing an element). Builder plumbing for `to[Work]` conversions.
+### :param recipe: The recipe to fill.
+### :param slot: The slot to store into.
+### :param value: The argument to store.
 dangerous routine recipe_put[T](recipe: Addr, slot: U64, value: T)
     var cell = Hijacked[T](rf_allocate_dynamic(size: T.data_size()))
     cell.poke(value)
@@ -83,6 +87,8 @@ dangerous routine recipe_put[T](recipe: Addr, slot: U64, value: T)
 
 ### Moves the value out of recipe slot `slot` and frees its cell (like `List.remove_last`). Builder
 ### plumbing for the routine that runs a recipe.
+### :param recipe: The recipe to read.
+### :param slot: The slot to take from.
 ### :returns: the argument value.
 dangerous routine recipe_take[T](recipe: Addr, slot: U64) -> T
     var cell = Hijacked[Addr](recipe).peek_at_offset(offset: recipe_slot_size() * slot)
@@ -93,16 +99,21 @@ dangerous routine recipe_take[T](recipe: Addr, slot: U64) -> T
 ### Runs `entry(recipe)` for a call of a foreign routine marked `@blocking`: inside a coroutine on one of the
 ### runtime's I/O threads while the coroutine parks, so its worker goes on with other coroutines, anywhere else
 ### right here. Builder plumbing for `@blocking` routines.
+### :param entry: The routine that runs the recipe.
+### :param recipe: The recipe that holds the arguments.
 dangerous routine blocking_call(entry: Addr, recipe: Addr)
     C::rf_blocking_call(entry: entry, arg: recipe)
     return
 
 ### The task block of a recipe (slot 0).
+### :param recipe: The recipe to read.
 ### :returns: the rf_task* as an Addr.
 dangerous routine recipe_task(recipe: Addr) -> Addr
     return Hijacked[Addr](recipe).peek()
 
 ### Builds the Work for a `to[Work]` conversion: the recipe and the routine that runs it. Nothing runs until a verb.
+### :param entry: The routine that runs the recipe.
+### :param recipe: The recipe that holds the arguments.
 ### :returns: the Work recipe.
 dangerous routine work_recipe[T](entry: Addr, recipe: Addr) -> Work[T]
     return Work[T](state: work_state[T](entry: entry, recipe: recipe), deadline: Duration(seconds: 0, nanoseconds: 0),
@@ -110,6 +121,8 @@ dangerous routine work_recipe[T](entry: Addr, recipe: Addr) -> Work[T]
 
 ### Builds the work for a `to[Work]` conversion, not started: a fresh state cell over the recipe and the routine that
 ### runs it.
+### :param entry: The routine that runs the recipe.
+### :param recipe: The recipe that holds the arguments.
 ### :returns: the work.
 dangerous routine work_state[T](entry: Addr, recipe: Addr) -> WorkState[T]
     var cell = rf_allocate_dynamic(size: recipe_slot_size() * 6)
@@ -127,6 +140,8 @@ dangerous routine work_state[T](entry: Addr, recipe: Addr) -> WorkState[T]
 ### the task's box: its bytes are copied, then its tag is cleared, so the caller's teardown of `outcome` frees
 ### nothing the box now holds (a caught error is one object, freed once). Builder plumbing for the routine that runs
 ### a recipe.
+### :param recipe: The recipe that ran.
+### :param outcome: What the work came to. It moves into the task box.
 dangerous routine work_finish[T](recipe: Addr, outcome: Hijacked[Check[T]])
     var task = recipe_task(recipe: recipe)
     C::rf_invalidate(ptr: recipe)
@@ -138,11 +153,14 @@ dangerous routine work_finish[T](recipe: Addr, outcome: Hijacked[Check[T]])
     return
 
 ### Reads word `slot` of the shared cell. A slot that holds a handle holds its address as a number.
+### :param slot: The word index.
 ### :returns: the word.
 dangerous routine WorkState[T].cell_word(slot: U64) -> U64
     return Hijacked[U64](me.cell).peek_at_offset(offset: recipe_slot_size() * slot)
 
 ### Writes word `slot` of the shared cell.
+### :param slot: The word index.
+### :param value: The word to store.
 dangerous routine WorkState[T].set_cell_word(slot: U64, value: U64)
     Hijacked[U64](me.cell).poke_at_offset(at: recipe_slot_size() * slot, value: value)
     return
@@ -163,6 +181,7 @@ routine WorkState[T].place() -> WorkPlace
     return WorkPlace.WAITING
 
 ### Records where the work runs.
+### :param place: The place to record.
 dangerous routine WorkState[T].set_place(place: WorkPlace)
     var code: U64 = 0
     if place == WorkPlace.NOW
@@ -194,6 +213,8 @@ routine WorkState[T].task() -> Addr
 ### A `held` start makes the task block and the fiber or thread but leaves recipe slot 0 empty: the routine that runs
 ### the recipe waits there (`work_wait_released`) until `release()` writes the task, so the Works of a list are all
 ### ready before any of them runs.
+### :param place: Where to run the work.
+### :param held: `true` to make the task and its fiber or thread but keep it waiting until it is released.
 ### :returns: false if the work could not be started, or `place` is HERE inside a `start_now()` job.
 dangerous routine WorkState[T].start_at(place: WorkPlace, held: Bool) -> Bool
     if me.place() != WorkPlace.WAITING or me.cancelled()
@@ -258,6 +279,7 @@ dangerous routine WorkState[T].release()
 ### `start_now()` / `start_here()` / `start_apart()` makes every Work ready first and then lets them all go, so none runs
 ### before the others are ready. A Work started on its own is let go at once. Builder plumbing for the routine that
 ### runs a recipe.
+### :param recipe: The recipe whose release word is watched.
 dangerous routine work_wait_released(recipe: Addr)
     until LLVM::atomic_load[U64](ptr: Hijacked[U64](recipe)) != 0
         if C::rf_in_coroutine() != 0
@@ -268,6 +290,8 @@ dangerous routine work_wait_released(recipe: Addr)
 
 ### Starts a verb's own place, or crashes with what went wrong: the Work was started already, or `start_here()`
 ### runs inside a `start_now()` job.
+### :param place: Where to run the work.
+### :param verb: The name of the verb, for the error text.
 ### :throws: {WorkStartError} if the Work was started already or cannot start at `place`.
 ### :throws: {TaskSpawnError} if the work could not be started.
 routine WorkState[T].start_with(place: WorkPlace, verb: Text)
@@ -470,12 +494,14 @@ routine WorkState[T].cancel()
 ### started that way. `retrieve!` reads the value out and reaps what
 ### ran: a thread's task goes to the worker↔consumer rendezvous, so on a deadline give-up the still-running
 ### thread frees its own block.
+### :param deadline: How long to wait before giving up.
+### :param has_deadline: `true` if `deadline` applies.
+### :returns: The value the routine returned.
 ### :throws: {WorkStartError} if the value was taken already, or a deadline was set on a fiber.
 ### :throws: {CancelRequested} if the Work was cancelled.
 ### :throws: Whatever the work threw: its failure surfaces here, not where it ran.
 ### :throws: {TaskSpawnError} if the work could not be started.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
-### :returns: The value the routine returned.
 routine WorkState[T].retrieve(deadline: Duration, has_deadline: Bool) -> T
     if me.place() == WorkPlace.DONE
         throw WorkStartError(reason: "You called retrieve() on a Work whose value was already taken. " +
@@ -729,6 +755,8 @@ routine List[Work[T]].start_apart()
 
 ### Starts every Work of the list at `place`, held, then lets them all go. Plumbing for the list's `start_now()`,
 ### `start_here()` and `start_apart()`.
+### :param place: Where to run the works.
+### :param verb: The name of the verb, for the error text.
 ### :throws: {WorkStartError} if a Work of the list was started already, or HERE runs inside a `start_now()` job.
 ### :throws: {TaskSpawnError} if a Work could not be started.
 routine List[Work[T]].start_together(place: WorkPlace, verb: Text)
@@ -950,6 +978,7 @@ routine yield_now()
 ### of its own. A job body polls this and returns early to stop
 ### cooperatively; this is the ONLY way to halt a CPU-bound worker thread (a thread cannot be killed).
 ### A coroutine's `waitfor` also honors the request by returning early. Outside any job it is always
-### false. :returns: true if cancellation was requested for this job.
+### false.
+### :returns: true if cancellation was requested for this job.
 routine cancellation_requested() -> Bool
     return C::rf_cancel_requested() != 0

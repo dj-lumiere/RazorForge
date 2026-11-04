@@ -91,6 +91,7 @@ common routine RotatableList[T].from_literal(elements...: T) -> RotatableList[T]
 
 ### Creates an empty rotatable list with no allocated storage.
 ### The backing buffer is acquired lazily on first insertion.
+### :returns: The empty list.
 routine RotatableList[T]() -> RotatableList[T]
     danger
         return RotatableList[T](
@@ -104,6 +105,7 @@ routine RotatableList[T]() -> RotatableList[T]
 ### The requested capacity is rounded up to the next power of two so index wrapping
 ### can use a bitmask.
 ### :param capacity: The minimum number of elements to reserve space for.
+### :returns: The empty list.
 ### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
 routine RotatableList[T](capacity: U64) -> RotatableList[T]
     var actual = storage_doubled_capacity(start: 1, capacity: capacity)
@@ -443,6 +445,8 @@ secret routine RotatableList[T].exchange(index: U64, value: T) -> T
 ### 1)`. A plain `getitem` hands back a copy, and a call on that copy would change only the copy. Like
 ### `T.modify()`, the token lives only for that one call (the builder keeps the container still meanwhile,
 ### RF-S639). Entity elements only.
+### :param index: The position of the element.
+### :returns: A write token on the element.
 routine RotatableList[T].modify_at(index: U64) -> Modifying[T]
 needs EntityType T
     if index >= me.count
@@ -457,6 +461,8 @@ needs EntityType T
 ### `getitem` hands back a copy, and a call on that copy would copy the whole element first. Like
 ### `T.view()`, the token lives only for that one call (the builder keeps the container still meanwhile,
 ### RF-S639). Entity elements only.
+### :param index: The position of the element.
+### :returns: A read token on the element.
 @readonly
 routine RotatableList[T].view_at(index: U64) -> Viewing[T]
 needs EntityType T
@@ -535,6 +541,8 @@ routine RotatableList[T].rotate_right(n: U64)
         me.start = me.start -% shift
     return
 
+### Returns an emitter that walks the elements of `me` in order, for a `for` loop.
+### :returns: The emitter, positioned before the first element.
 @readonly
 routine RotatableList[T].emitter() -> RotatableListEmitter[T]
     danger
@@ -607,6 +615,8 @@ needs T obeys Equatable
 # Comparison Operations
 # ============================================================================
 
+### Returns the text form of `me`: the elements of the list in front-to-back order in brackets, separated by commas.
+### :returns: The text form of `me`.
 @readonly
 @override
 routine RotatableList[T].represent() -> Text
@@ -620,6 +630,8 @@ routine RotatableList[T].represent() -> Text
     result = result + "]"
     return result
 
+### Returns the diagnostic text of `me`: its type, count and elements.
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 routine RotatableList[T].diagnose() -> Text
@@ -648,6 +660,7 @@ needs T obeys Equatable
         i = i +% 1
     return true
 
+### Tears down each element in front-to-back order, then frees the buffer.
 @override
 routine RotatableList[T].destruct()
     danger

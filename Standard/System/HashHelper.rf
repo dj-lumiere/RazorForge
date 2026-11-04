@@ -9,6 +9,8 @@ preset XX_PRIME4: U64 = 9650029242287828579
 ### Hashes a single 64-bit value using the xxHash64 leaf-mix step.
 ### This helper is intended for per-field hashing before those field hashes are
 ### folded into a larger aggregate hash.
+### :param v: The value to hash.
+### :returns: The hash of `v`.
 secret routine __hash_leaf(v: U64) -> U64
     var a = LLVM::mul(v, XX_PRIME3)
     var b = LLVM::bit_or(LLVM::shift_left(a, 27), LLVM::shift_right_unsigned(a, 37))
@@ -18,6 +20,9 @@ secret routine __hash_leaf(v: U64) -> U64
 ### Folds one field hash into an accumulator using the xxHash64 round step.
 ### Repeated application of this helper produces the rolling state used for
 ### record and tuple hashing.
+### :param acc: The running hash.
+### :param h: The field hash to fold in.
+### :returns: The updated accumulator.
 secret routine __hash_round(acc: U64, h: U64) -> U64
     var a = LLVM::add(acc, LLVM::mul(h, XX_PRIME2))
     var b = LLVM::bit_or(LLVM::shift_left(a, 31), LLVM::shift_right_unsigned(a, 33))
@@ -26,6 +31,8 @@ secret routine __hash_round(acc: U64, h: U64) -> U64
 ### Applies the xxHash64 avalanche finalization to an accumulator.
 ### Finalization should be performed after all fields have been folded into the
 ### accumulator.
+### :param h: The running hash.
+### :returns: The finished hash.
 secret routine __hash_finalize(h: U64) -> U64
     var a = LLVM::bit_xor(h, LLVM::shift_right_unsigned(h, 33))
     var b = LLVM::mul(a, XX_PRIME2)
@@ -36,6 +43,8 @@ secret routine __hash_finalize(h: U64) -> U64
 ### Hashes a 128-bit value by splitting into two U64 rounds.
 ### This helper preserves all input bits while still producing the standard
 ### 64-bit hash output used by the runtime.
+### :param v: The value to hash.
+### :returns: The 64-bit hash of `v`.
 secret routine __hash_u128(v: U128) -> U64
     var lo = LLVM::int_truncate[U128, U64](v)
     var hi = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(v, 64))

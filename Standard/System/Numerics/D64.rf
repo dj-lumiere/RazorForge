@@ -28,23 +28,31 @@ obeys Numeric, Comparable, Copyable, Hashable
     nothing
 
 ### Reinterprets the 64-bit BID storage as a raw U64 (no decode).
+### :returns: The bits of `me`.
 @readonly
 routine D64.to_bits() -> U64
     return LLVM::reinterpret_bits[D64, U64](me)
 
 ### Reinterprets a raw U64 as BID64 storage (no validation).
+### :param bits: The bit pattern.
+### :returns: The value with exactly those bits.
 common routine D64.from_bits(bits: U64) -> D64
     return LLVM::reinterpret_bits[U64, D64](bits)
 
 ### The decimal64 value re-encoded in DPD interchange form. Never crashes.
+### :returns: The DPD interchange word.
 routine D64.to_dpd() -> U64
     return C::ingrid_d64_to_dpd(x: me.to_bits())
 
 ### Decodes a DPD interchange word into a decimal64. Never crashes.
+### :param bits: The DPD interchange word.
+### :returns: The decoded value.
 common routine D64.from_dpd(bits: U64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_dpd(bits: bits))
 
 ### Infinity / quiet NaN.
+### :param sign: `true` for negative infinity.
+### :returns: Positive infinity, or negative infinity when `sign` is true.
 common routine D64.infinity(sign: Bool) -> D64
     var neg: U32 = 0
     if sign
@@ -52,38 +60,45 @@ common routine D64.infinity(sign: Bool) -> D64
     return D64.from_bits(bits: C::ingrid_d64_special(kind: 1, neg: neg))
 
 ### Returns a quiet NaN.
+### :returns: A quiet NaN.
 common routine D64.quiet_nan() -> D64
     return D64.from_bits(bits: C::ingrid_d64_special(kind: 2, neg: 0))
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+### :returns: A signaling NaN.
 common routine D64.signaling_nan() -> D64
     return D64.from_bits(bits: C::ingrid_d64_special(kind: 3, neg: 0))
 
 ### True when this is a finite value.
+### :returns: `true` if `me` is neither an infinity nor a NaN.
 @readonly
 @inline
 routine D64.is_finite() -> Bool
     return (C::ingrid_d64_class(x: me.to_bits()) & 2) != 0
 
 ### True when this is ±infinity.
+### :returns: `true` if `me` is positive or negative infinity.
 @readonly
 @inline
 routine D64.is_infinite() -> Bool
     return (C::ingrid_d64_class(x: me.to_bits()) & 4) != 0
 
 ### True when this is a NaN (quiet or signaling).
+### :returns: `true` if `me` is a quiet or signaling NaN.
 @readonly
 @inline
 routine D64.is_nan() -> Bool
     return (C::ingrid_d64_class(x: me.to_bits()) & 8) != 0
 
 ### True when this is a SIGNALING NaN.
+### :returns: `true` if `me` is a signaling NaN.
 @readonly
 @inline
 routine D64.is_signaling() -> Bool
     return (C::ingrid_d64_class(x: me.to_bits()) & 16) != 0
 
 ### True when this is a finite zero (±0).
+### :returns: `true` if `me` is positive or negative zero.
 @readonly
 @inline
 routine D64.is_zero() -> Bool
@@ -91,6 +106,10 @@ routine D64.is_zero() -> Bool
 
 ### Builds a finite D64 from a sign, a coefficient and a base-10 exponent: value = (-1)^sign * coeff *
 ### 10^exp, rounded half to even to 16 digits and brought into the exponent range.
+### :param sign: `true` for a negative value.
+### :param coeff: The integer coefficient.
+### :param exp: The power of ten.
+### :returns: The value (-1)^sign * coeff * 10^exp, rounded if the coefficient has too many digits.
 common routine D64.from_components(sign: Bool, coeff: U64, exp: S64) -> D64
     var neg: U32 = 0
     if sign
@@ -98,10 +117,15 @@ common routine D64.from_components(sign: Bool, coeff: U64, exp: S64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_parts(neg: neg, c_low: coeff, c_high: 0, exp: exp))
 
 ### Builds a D64 from a 64-bit signed integer (exponent 0).
+### :param value: The integer to convert.
+### :returns: The value equal to `value`, rounded if it needs more digits than the type holds.
 common routine D64.from_int64(value: S64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_s64(n: value))
 
 ### An integer (sign and 256-bit magnitude) as a D64, rounded half to even to 16 digits.
+### :param neg: `true` for a negative value.
+### :param m: The magnitude.
+### :returns: The D64 value.
 routine d64_of_integer(neg: Bool, m: U256) -> D64
     var n: U32 = 0
     if neg
@@ -113,6 +137,8 @@ routine d64_of_integer(neg: Bool, m: U256) -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_integer(neg: n, m0: m0, m1: m1, m2: m2, m3: m3))
 
 ### A signed 256-bit integer as a D64, rounded half to even to 16 digits.
+### :param v: The integer to convert.
+### :returns: `v` as a D64.
 secret routine d64_of_s256(v: S256) -> D64
     var m = LLVM::reinterpret_bits[S256, U256](v)
     var m0 = LLVM::int_truncate[U256, U64](m)
@@ -123,11 +149,16 @@ secret routine d64_of_s256(v: S256) -> D64
 
 ### The bits of the binary float nearest to x, `which` bits wide (16, 32, 64, or 128). An infinity keeps its sign,
 ### a NaN becomes the positive quiet NaN.
+### :param x: The D64 value to convert.
+### :param which: The binary float width in bits: 16, 32, 64, or 128.
+### :returns: The bits of the binary float. An infinity keeps its sign and a NaN becomes the positive quiet NaN.
 routine d64_to_binary(x: D64, which: U32) -> U128
     var r = C::ingrid_d64_to_binary(x: x.to_bits(), which: which)
     return (r.w1.to[U128]() << 64) | r.w0.to[U128]()
 
 ### A B128 as a D64, correctly rounded (a narrower binary float widens to B128 exactly first).
+### :param x: The binary float to convert.
+### :returns: `x` as a D64.
 routine d64_of_b128(x: B128) -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_binary(low: x.low_bits(), high: x.high_bits()))
 
@@ -137,6 +168,8 @@ routine d64_of_b128(x: B128) -> D64
 
 ### Returns `me + you`. Checked: crashes if the result is non-finite. Use `add_unchecked` for raw
 ### IEEE.
+### :param you: The value to add.
+### :returns: `me + you`.
 @readonly
 routine D64.add(you: D64) -> D64
     var r = D64.from_bits(bits: C::ingrid_d64_add(a: me.to_bits(), b: you.to_bits()))
@@ -148,6 +181,8 @@ routine D64.add(you: D64) -> D64
 
 ### Returns `me - you`. Checked: crashes if the result is non-finite. Use `sub_unchecked` for raw
 ### IEEE.
+### :param you: The value to subtract.
+### :returns: `me - you`.
 @readonly
 routine D64.sub(you: D64) -> D64
     var r = D64.from_bits(bits: C::ingrid_d64_sub(a: me.to_bits(), b: you.to_bits()))
@@ -159,6 +194,8 @@ routine D64.sub(you: D64) -> D64
 
 ### Returns `me * you`. Checked: crashes if the result is non-finite. Use `mul_unchecked` for raw
 ### IEEE.
+### :param you: The factor to multiply by.
+### :returns: `me * you`.
 @readonly
 routine D64.mul(you: D64) -> D64
     var r = D64.from_bits(bits: C::ingrid_d64_mul(a: me.to_bits(), b: you.to_bits()))
@@ -171,6 +208,8 @@ routine D64.mul(you: D64) -> D64
 ### Returns `me / you`. Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain, overflow ->
 ### overflow.
 ### Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+### :param you: The divisor.
+### :returns: `me / you`.
 @readonly
 routine D64.truediv(you: D64) -> D64
     var r = D64.from_bits(bits: C::ingrid_d64_div(a: me.to_bits(), b: you.to_bits()))
@@ -183,23 +222,33 @@ routine D64.truediv(you: D64) -> D64
     throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The value to add.
+### :returns: `me + you`, possibly an infinity or a NaN.
 routine D64.add_unchecked(you: D64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_add(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The value to subtract.
+### :returns: `me - you`, possibly an infinity or a NaN.
 routine D64.sub_unchecked(you: D64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_sub(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The factor to multiply by.
+### :returns: `me * you`, possibly an infinity or a NaN.
 routine D64.mul_unchecked(you: D64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_mul(a: me.to_bits(), b: you.to_bits()))
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+### :param you: The divisor.
+### :returns: `me / you`, with an infinity for a division by zero and a NaN for 0/0.
 routine D64.truediv_unchecked(you: D64) -> D64
     return D64.from_bits(bits: C::ingrid_d64_div(a: me.to_bits(), b: you.to_bits()))
 
 ### Decimal value equality (NaN never equal; infinities equal only with the same sign;
 ### finite values compare by value, so different cohorts of the same number are equal).
+### :param you: The value to compare against.
+### :returns: `true` if the two compare equal.
 @readonly
 routine D64.eq(you: D64) -> Bool
     return C::ingrid_d64_order(a: me.to_bits(), b: you.to_bits()) == 0
@@ -215,6 +264,8 @@ routine D64.hash(k0: U64, k1: U64) -> U64
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
 ### maps to `SAME` (matching the B128 engine convention).
+### :param you: The value to compare against.
+### :returns: Whether `me` is smaller than, equal to, or larger than `you`.
 @readonly
 routine D64.compare(you: D64) -> ComparisonSign
     var o = C::ingrid_d64_order(a: me.to_bits(), b: you.to_bits())
@@ -225,6 +276,8 @@ routine D64.compare(you: D64) -> ComparisonSign
     return SAME
 
 ### Raises this value to the `you` power (IEEE semantics: inf/NaN on overflow/domain error).
+### :param you: The exponent.
+### :returns: `me` to the power `you`.
 @readonly
 routine D64.pow(you: D64) -> D64
     var r = me.pow_unchecked(you: you)
@@ -236,6 +289,7 @@ routine D64.pow(you: D64) -> D64
 
 ### The decimal text, every digit of the coefficient kept: positional for an exponent of at most 0 not below 1e-6
 ### (`1.50`, `0.001`), `d.dddE+x` otherwise (`1E+3`).
+### :returns: The text form of `me`.
 @override
 routine D64.represent() -> Text
     return decimal_bits_text(low: me.to_bits().to[U64](), high: 0, width: 64, style: 0, places: 0, mode: 4)
@@ -251,6 +305,7 @@ routine D64.fixed(places: U64, rule: RoundingRule = RoundingRule.HALF_EVEN) -> T
         mode: rounding_mode(rule: rule))
 
 ### Debug form: `D64(<value>)`.
+### :returns: The diagnostic text of `me`.
 @override
 routine D64.diagnose() -> Text
     return decimal_bits_text(low: me.to_bits().to[U64](), high: 0, width: 64, style: 3, places: 0, mode: 4)
@@ -299,50 +354,62 @@ routine D64.midpoint(you: D64) -> D64
 # ============================================================================
 
 ### Converts an S8 into decimal64 (exponent 0).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine S8.to[D64]() -> D64
     return D64.from_int64(value: me.to[S64]())
 
 ### Converts an S16 into decimal64 (exponent 0).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine S16.to[D64]() -> D64
     return D64.from_int64(value: me.to[S64]())
 
 ### Converts an S32 into decimal64 (exponent 0).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine S32.to[D64]() -> D64
     return D64.from_int64(value: me.to[S64]())
 
 ### Converts an S64 into decimal64 (exponent 0).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine S64.to[D64]() -> D64
     return D64.from_int64(value: me)
 
 ### Converts an S128 into decimal64 (exponent 0, rounded half to even when it has more than 16 digits).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine S128.to[D64]() -> D64
     return d64_of_s256(v: LLVM::sign_extend[S128, S256](me))
 
 ### Converts an S256 into decimal64 (exponent 0, rounded half to even when it has more than 16 digits).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine S256.to[D64]() -> D64
     return d64_of_s256(v: me)
 
 ### Converts a U8 into decimal64 (exponent 0).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine U8.to[D64]() -> D64
     return D64.from_components(sign: false, coeff: me.to[U64](), exp: 0)
 
 ### Converts a U16 into decimal64 (exponent 0).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine U16.to[D64]() -> D64
     return D64.from_components(sign: false, coeff: me.to[U64](), exp: 0)
 
 ### Converts a U32 into decimal64 (exponent 0).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine U32.to[D64]() -> D64
     return D64.from_components(sign: false, coeff: me.to[U64](), exp: 0)
 
 ### Converts a U64 into decimal64 (exponent 0).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine U64.to[D64]() -> D64
     return D64.from_components(sign: false, coeff: me, exp: 0)
 
 ### Converts a U128 into decimal64 (exponent 0, rounded half to even when it has more than 16 digits).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine U128.to[D64]() -> D64
     return d64_of_integer(neg: false, m: LLVM::zero_extend[U128, U256](me))
 
 ### Converts a U256 into decimal64 (exponent 0, rounded half to even when it has more than 16 digits).
+### :returns: `me` as a D64, rounded to the nearest value that fits when it has too many digits.
 routine U256.to[D64]() -> D64
     return d64_of_integer(neg: false, m: me)
 
@@ -351,18 +418,22 @@ routine U256.to[D64]() -> D64
 # ============================================================================
 
 ### Converts a B16 to decimal64, correctly rounded.
+### :returns: `me` as a D64, rounded to nearest.
 routine B16.to[D64]() -> D64
     return d64_of_b128(x: me.to[B128]())
 
 ### Converts a B32 to decimal64, correctly rounded.
+### :returns: `me` as a D64, rounded to nearest.
 routine B32.to[D64]() -> D64
     return d64_of_b128(x: me.to[B128]())
 
 ### Converts a B64 to decimal64, correctly rounded.
+### :returns: `me` as a D64, rounded to nearest.
 routine B64.to[D64]() -> D64
     return d64_of_b128(x: me.to[B128]())
 
 ### Converts a B128 to decimal64, correctly rounded.
+### :returns: `me` as a D64, rounded to nearest.
 routine B128.to[D64]() -> D64
     return d64_of_b128(x: me)
 
@@ -371,14 +442,17 @@ routine B128.to[D64]() -> D64
 # ============================================================================
 
 ### Converts a D32 to D64 (exact: every decimal32 is a decimal64).
+### :returns: `me` as a D64, rounded to nearest when it has too many digits.
 routine D32.to[D64]() -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_d32(x: me.to_bits()))
 
 ### Identity conversion (D64 -> D64).
+### :returns: `me` unchanged.
 routine D64.to[D64]() -> D64
     return me
 
 ### Converts a D128 to D64 (rounded half to even to 16 digits, the exponent kept where it fits).
+### :returns: `me` as a D64, rounded to nearest when it has too many digits.
 routine D128.to[D64]() -> D64
     return D64.from_bits(bits: C::ingrid_d64_from_d128(x_low: d128_low(v: me), x_high: d128_high(v: me)))
 
@@ -387,6 +461,7 @@ routine D128.to[D64]() -> D64
 # ============================================================================
 
 ### Parses a decimal literal into a `D64` (the scanned value rounded once to 16 digits).
+### :returns: The parsed D64, rounded once to the digits it holds.
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 routine Text.to[D64]() -> D64
     var w = decimal_bits_parse(text: me, width: 64)
@@ -399,6 +474,7 @@ routine Text.to[D64]() -> D64
 # ============================================================================
 
 ### Returns the raw bytes of this value in little-endian order.
+### :returns: The bytes, least significant first.
 routine D64.to_bytes_le() -> Items[Byte, 8]
     var raw = me.to_bits()
     var result = Items[Byte, 8]()
@@ -412,6 +488,7 @@ routine D64.to_bytes_le() -> Items[Byte, 8]
     return result
 
 ### Returns the raw bytes of this value in big-endian order.
+### :returns: The bytes, most significant first.
 routine D64.to_bytes_be() -> Items[Byte, 8]
     var raw = me.to_bits()
     var result = Items[Byte, 8]()

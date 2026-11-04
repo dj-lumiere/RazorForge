@@ -45,6 +45,12 @@ record UDR256
 ### Performs one Knuth Algorithm-D quotient-digit step (D3-D6) for a normalized 2-limb
 ### divisor (vn1:vn0), against the top dividend limbs (ujn:ujn1:ujn2). Estimates qhat,
 ### corrects it, runs the multiply-subtract, and adds the divisor back if it went negative.
+### :param ujn: The highest of the three top dividend words.
+### :param ujn1: The middle one of the three top dividend words.
+### :param ujn2: The lowest of the three top dividend words.
+### :param vn0: The lower of the two top divisor words.
+### :param vn1: The highest divisor word.
+### :param vrec: The reciprocal of `vn1`, computed once by the caller.
 ### :returns: the updated top three dividend limbs and the final quotient digit `q`.
 @inline
 routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64, vrec: U64) -> KStep
@@ -129,6 +135,11 @@ routine knuth_step(ujn: U64, ujn1: U64, ujn2: U64, vn0: U64, vn1: U64, vrec: U64
     return KStep(ujn: nujn, ujn1: nujn1, ujn2: nujn2, q: qres)
 
 ### Assemble 4 U64 limbs (little-endian) into a U256.
+### :param q0: The lowest word.
+### :param q1: The second word.
+### :param q2: The third word.
+### :param q3: The highest word.
+### :returns: The U256 made of the four words.
 @inline
 routine asm256(q0: U64, q1: U64, q2: U64, q3: U64) -> U256
     return LLVM::bit_or(
@@ -153,6 +164,9 @@ routine asm256(q0: U64, q1: U64, q2: U64, q3: U64) -> U256
 
 ### Quotient of num // den (den fits U128) with the round-sticky in bit 0. Register-
 ### resident: n=1 long division for a single-limb divisor, unrolled n=2 Knuth otherwise.
+### :param num: The dividend.
+### :param den: The divisor.
+### :returns: The quotient, with its lowest bit set if the remainder is not zero.
 routine udiv256_by_u128_sticky(num: U256, den: U256) -> U256
     var a0 = LLVM::int_truncate[U256, U64](num)
     var a1 = LLVM::int_truncate[U256, U64](
@@ -266,6 +280,9 @@ routine udiv256_by_u128_sticky(num: U256, den: U256) -> U256
 ### sticky baked into bit 0 (set iff the remainder was nonzero). Two hardware 128/64 divides
 ### (high limb, then low) — no `__udivti3` U128 libcall and no separate %/multiply-back to
 ### recover the remainder. The D64 single-limb analog of `udiv256_by_u128_sticky`.
+### :param num: The dividend.
+### :param den: The divisor.
+### :returns: The quotient, with its lowest bit set if the remainder is not zero.
 @inline
 routine udiv128_by_u64_sticky(num: U128, den: U64) -> U128
     var a0 = LLVM::int_truncate[U128, U64](num)
@@ -303,6 +320,9 @@ routine udiv128_by_u64_sticky(num: U128, den: U64) -> U128
 ### divide `0:na1` → quotient 0 anyway, so it is pure overhead here. PRECONDITION: `hi(num) <
 ### den` (else the result is wrong). D64's divide satisfies it — its digit-scaling caps the
 ### quotient at ~18-19 digits (< 2^64).
+### :param num: The dividend. Its high word must be below `den`.
+### :param den: The divisor.
+### :returns: The quotient, with its lowest bit set if the remainder is not zero.
 @inline
 routine udiv128_hi_lt_den_sticky(num: U128, den: U64) -> U128
     var a0 = LLVM::int_truncate[U128, U64](num)
@@ -331,6 +351,9 @@ routine udiv128_hi_lt_den_sticky(num: U128, den: U64) -> U128
 ### Quotient of `num // den` with the round-sticky baked into bit 0 (set iff the
 ### division left a nonzero remainder). One Knuth-D call returns both quotient and
 ### remainder, so callers that only need a sticky avoid a separate %/mul-back.
+### :param num: The dividend.
+### :param den: The divisor.
+### :returns: The quotient, with its lowest bit set if the remainder is not zero.
 routine udiv256_sticky(num: U256, den: U256) -> U256
     var av = num
     var bv = den
@@ -349,6 +372,8 @@ routine udiv256_sticky(num: U256, den: U256) -> U256
 
 ### (quotient, remainder) of `num // den` from one `knuth_divide[4]` call (base-2⁶⁴
 ### Knuth-D over 4 U64 limbs). Caller guarantees `den != 0`.
+### :param num: The dividend.
+### :param den: The divisor.
 ### :returns: a `UDR256` holding the quotient `q` and remainder `r`.
 routine udivrem256(num: U256, den: U256) -> UDR256
     var av = num
@@ -365,6 +390,7 @@ routine udivrem256(num: U256, den: U256) -> UDR256
         return UDR256(q: q, r: r)
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
+### :returns: The text form of `me`.
 @override
 routine U256.represent() -> Text
     return wide_dec[U256](me)
@@ -378,6 +404,7 @@ routine U256.to_text(radix: S32) -> Text
     return wide_radix_text[U256](mag: me, negative: false, radix: radix)
 
 ### Diagnostic representation tagged with the type name.
+### :returns: The diagnostic text of `me`.
 @override
 routine U256.diagnose() -> Text
     return "U256(" + me.represent() + ")"
@@ -920,6 +947,8 @@ routine U256.is_power_of_two() -> Bool
     return me != 0 and (me & me - 1) == 0
 
 ### Returns this value rotated left by `bits` positions.
+### :param bits: The number of positions to rotate. It counts modulo the bit width.
+### :returns: `me` rotated left.
 routine U256.rotate_left(bits: U32) -> U256
     var n = bits % 256
     if n == 0
@@ -930,6 +959,8 @@ routine U256.rotate_left(bits: U32) -> U256
     )
 
 ### Returns this value rotated right by `bits` positions.
+### :param bits: The number of positions to rotate. It counts modulo the bit width.
+### :returns: `me` rotated right.
 routine U256.rotate_right(bits: U32) -> U256
     var n = bits % 256
     if n == 0
@@ -940,6 +971,7 @@ routine U256.rotate_right(bits: U32) -> U256
     )
 
 ### Returns the raw byte representation of this value in little-endian order.
+### :returns: The bytes, least significant first.
 routine U256.to_bytes_le() -> Items[Byte, 32]
     var result = Items[Byte, 32]()
     var i: U64 = 0
@@ -950,10 +982,13 @@ routine U256.to_bytes_le() -> Items[Byte, 32]
     return result
 
 ### Returns the raw byte representation of this value in big-endian order.
+### :returns: The bytes, most significant first.
 routine U256.to_bytes_be() -> Items[Byte, 32]
     return me.swap_bytes().to_bytes_le()
 
 ### Builds a `U256` from its little-endian raw byte representation.
+### :param bytes: The raw bytes, least significant first.
+### :returns: The U256 value stored in `bytes`.
 common routine U256.from_bytes_le(bytes: Items[Byte, 32]) -> U256
     var result: U256 = 0
     var i: U64 = 0
@@ -967,6 +1002,8 @@ common routine U256.from_bytes_le(bytes: Items[Byte, 32]) -> U256
     return result
 
 ### Builds a `U256` from its big-endian raw byte representation.
+### :param bytes: The raw bytes, most significant first.
+### :returns: The U256 value stored in `bytes`.
 common routine U256.from_bytes_be(bytes: Items[Byte, 32]) -> U256
     return U256.from_bytes_le(bytes: bytes).swap_bytes()
 
@@ -1079,12 +1116,16 @@ routine U256.sqrtrem() -> (U256, U256)
 ### TARGET type `T` (not a `[T]`-parametrized S64 member): keying on the receiver type seeds every
 ### width the reachability pass meets, where a method-level type param would be pruned when the width
 ### is reached only through nested generic-member instantiations.
+### :param s: The non-negative amount to convert.
+### :returns: `s` as a value of this type.
 common routine T.to_width(s: S64) -> T
     return LLVM::zero_extend[U64, T](LLVM::reinterpret_bits[S64, U64](s))
 
 ### The 9 decimal digits of a U64 in [0, 10⁹), zero-padded (interior base-10⁹ chunk of `wide_dec`).
 ### The `// 10` / `% 10` here are on a scalar U64 by a constant, so the backend lowers them to a
 ### reciprocal multiply (no hardware divide) — the "magic/Montgomery" step for the constant divisor.
+### :param c: The number to format. It must be below 10^9.
+### :returns: The nine digits.
 routine wide_dec9(c: U64) -> Text
     var s = ""
     var x = c
@@ -1096,6 +1137,8 @@ routine wide_dec9(c: U64) -> Text
     return s
 
 ### The decimal digits of a nonzero U64 with no leading zeros (the most-significant base-10⁹ chunk).
+### :param c: The number to format. It must not be zero.
+### :returns: The digits.
 routine wide_dec_head(c: U64) -> Text
     var s = ""
     var x = c
@@ -1109,6 +1152,8 @@ routine wide_dec_head(c: U64) -> Text
 ### FloorDivisible, then formats each 9-digit chunk with scalar reciprocal-multiply `// 10`. The
 ### wide divisor 10⁹ fits one limb, so each peel is the fast single-limb divide. Backs the wide-int
 ### and Decimal `represent`s; table-free, any width.
+### :param v: The value to format.
+### :returns: The digits, most significant first, or "0" for zero.
 routine wide_dec[T](v: T) -> Text
 needs RecordType T
 needs T obeys FloorDivisible

@@ -8,6 +8,7 @@ import Collections
 ### record that doesn't provide its own (a hand-written `T.represent` or a kind-specialized
 ### `@override` takes precedence). Secret fields are hidden — the `openmemvarof` walk yields only the
 ### publicly-readable (OPEN ∪ POSTED) members. Each value renders via its own `represent`.
+### :returns: The text form of `me`.
 @readonly
 @overridable
 infallible routine T.represent() -> Text
@@ -29,6 +30,8 @@ needs AnyType T
 ### exact type-identity), so each instantiation collapses to just its arm. Containers call `nested_repr`
 ### on every element; the top-level `represent()` stays bare. It reads the element where it is: the container
 ### still holds it, so the builder doesn't tear an entity element down here.
+### :param value: The element to show.
+### :returns: The element form of `value`.
 routine nested_repr(value: T) -> Text
 needs AnyType T
     when T
@@ -70,6 +73,8 @@ secret routine quoted_source(text: Text) -> Text
 ### character quoted, while a variant element names the member type its value has (`S32(1)`, `Text("a")`), which the
 ### container's type does not say. A record or entity whose `represent()` the builder derives is its type name and its
 ### member variables in this form (`Tag(name: "left")`, see `member_diagnose`).
+### :param value: The element to show.
+### :returns: The element form of `value`.
 routine nested_diagnose(value: T) -> Text
 needs AnyType T
     when T
@@ -92,6 +97,7 @@ needs AnyType T
 ### for the absent arm. The `@override needs VariantType T` gate makes the wired synthesizer pick this
 ### over the record default for a variant type. `expand m in branchof(T)` generates one arm clause each;
 ### the explicit `is None` clause covers the absent arm the payload expansion skips.
+### :returns: The text form of `me`.
 @readonly
 @override
 infallible routine T.represent() -> Text
@@ -103,6 +109,7 @@ needs VariantType T
 
 ### Variant `diagnose()`: the member type the value has and the value in its element form (`S32(1)`, `Text("a")`), or
 ### `none` for the absent arm, so two members holding the same digits never read the same.
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 infallible routine T.diagnose() -> Text
@@ -115,6 +122,7 @@ needs VariantType T
 ### Choice `represent()`: VALUE-dispatch on the S32 discriminant via `caseof`, returning the bare case
 ### name (`READ`). `LLVM::reinterpret_bits[T, S32](me)` reads the discriminant, and `$valueof(c)` is each case's
 ### constant. The walk is exhaustive (one case always matches), so the trailing `throw` is unreachable.
+### :returns: The text form of `me`.
 @readonly
 @override
 infallible routine T.represent() -> Text
@@ -125,6 +133,7 @@ needs ChoiceType T
     throw LogicBreachedError()
 
 ### Choice `diagnose()`: `Module.ChoiceName(id: <discriminant>, CaseName)`, matching the C# builder.
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 infallible routine T.diagnose() -> Text
@@ -137,6 +146,7 @@ needs ChoiceType T
 ### Flags `represent()`: the ON members joined by `" and "` (`READ and WRITE`), or `none` if the
 ### bitmask is empty. A flags value is a COMBINATION, so `caseof` ACCUMULATES (no `when`): a SUBSET
 ### test per member (the bitmask `&` the member's value is not `0`) appends its name.
+### :returns: The text form of `me`.
 @readonly
 @override
 infallible routine T.represent() -> Text
@@ -156,6 +166,7 @@ needs FlagsType T
 
 ### Flags `diagnose()`: `Module.FlagsName(value: %<bits>, <members>)` — `<bits>` is LSB-first, one
 ### digit per declared member in declaration order ('1' if set), matching the C# builder.
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 infallible routine T.diagnose() -> Text
@@ -182,6 +193,7 @@ needs FlagsType T
 ### walked `$valueof(c)` is by construction a declared discriminant, so no validity check is needed here (a
 ### from-untrusted-scalar public creator would additionally validate + throw). `Me` resolves as a type
 ### argument because this is a member routine whose owner is `T`.
+### :returns: The list of all cases.
 @overridable
 routine T.all_cases() -> List[Me]
 needs ChoiceType T
@@ -192,6 +204,7 @@ needs ChoiceType T
 
 ### Flags `all_cases()`: every declared single-bit member value; `$valueof(c)` is its U64 bit, reinterpreted
 ### back to `Me` inline (safe — a declared member bit).
+### :returns: The list of all cases.
 @overridable
 routine T.all_cases() -> List[Me]
 needs FlagsType T
@@ -204,6 +217,7 @@ needs FlagsType T
 ### `n +% 1` per declared case, so the sum constant-folds to the case count — no runtime iteration remains.
 ### Written as a template (not a synthesized buildtime constant) so the demand collector materializes a real
 ### body; `+%` wraps rather than checks, though a declared-case count never approaches U64 overflow.
+### :returns: The number of declared cases.
 @readonly
 @overridable
 routine T.count() -> U64
@@ -213,6 +227,8 @@ needs ChoiceType T
         n = n +% 1
     return n
 
+### Number of declared members of a flags type.
+### :returns: The number of declared members.
 @readonly
 @overridable
 routine T.count() -> U64
@@ -226,6 +242,7 @@ needs FlagsType T
 ### element in its container-element form (`nested_repr`), so text is quoted as in a list: `(3, "write")`.
 ### Distinct from the record `TypeName(field: value)` shape, hence the `is TupleType` override. A one-item tuple keeps
 ### its comma, `(1,)`, the way it is written.
+### :returns: The text form of `me`.
 @readonly
 @override
 infallible routine T.represent() -> Text
@@ -244,6 +261,7 @@ needs TupleType T
 ### Tuple `diagnose()`: `Module.Tuple[…](v0, v1, …)`, the qualified type name prefixed onto the elements in their
 ### container-element form (`nested_diagnose`): the type name says each element's type, a text is quoted with its
 ### escapes, so `(1, "1")` never reads as `(1, 1)`.
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 infallible routine T.diagnose() -> Text
@@ -262,18 +280,23 @@ needs TupleType T
 ### signature Text: serializing code is meaningless, but the signature is the useful view. These make a
 ### routine-typed member (an entity may hold one — `entity Callback { f: Callable[...] }`) serialize
 ### uniformly through the universal walk, no capability gate.
+### :returns: The signature of the routine type.
 @readonly
 @override
 infallible routine T.represent() -> Text
 needs RoutineType T
     return me.type_name()
 
+### Diagnostic text of a routine value: its full signature.
+### :returns: The full signature of the routine type.
 @readonly
 @override
 infallible routine T.diagnose() -> Text
 needs RoutineType T
     return me.full_type_name()
 
+### Serialized form of a routine value: its signature as text.
+### :returns: The signature text of `me`, boxed.
 @override
 infallible routine T.serialize() -> SerialValue
 needs RoutineType T
@@ -281,6 +304,7 @@ needs RoutineType T
 
 ### A crashable's `crash_title()`, as a `needs CrashableType T` body sees it. The builder gives every crashable its
 ### title, its type name in sentence case (`AbsentValueError` -> "Absent value error"), which wins over this one.
+### :returns: The title text.
 @readonly
 @overridable
 infallible routine T.crash_title() -> Text
@@ -290,6 +314,7 @@ needs CrashableType T
 ### A crashable's `crash_message()`, as a `needs CrashableType T` body sees it. Every crashable writes its own
 ### (RF-S704), which wins over this one, so this body never runs: it only lets a crashable derive call
 ### `me.crash_message()`.
+### :returns: The message text.
 @readonly
 @overridable
 infallible routine T.crash_message() -> Text
@@ -300,6 +325,7 @@ needs CrashableType T
 ### crashable is surfaced to users, logs and `f"{err}"` by its message. The `needs CrashableType T` kind gate
 ### makes the derive selector pick this over the record `needs AnyType T` default (which would show the empty
 ### `TypeName()` for a fieldless error); `crash_message` resolves via the CrashableType derive above.
+### :returns: The text form of `me`.
 @readonly
 @override
 infallible routine T.represent() -> Text
@@ -309,6 +335,7 @@ needs CrashableType T
 ### Crashable `diagnose()`: `Module.CrashableName(<crash_message>[, field: value, …])` — the qualified type
 ### name, the message as the first element, then each declared field in its container-element form
 ### (`nested_diagnose`, a text quoted with its escapes).
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 infallible routine T.diagnose() -> Text
@@ -331,6 +358,7 @@ needs RoutineType T
 ### A routine VALUE's copy step is the same value, bit for bit: its bound payload is kept for as long as the program
 ### runs, so a copy holds nothing a second teardown would release. A record holding a routine value (an operations
 ### table) copies it through this in its member walk.
+### :returns: The copy.
 @readonly
 @override
 secret infallible routine T.share() -> Me
@@ -342,6 +370,7 @@ needs RoutineType T
 ### value is written in its container-element form (`nested_diagnose`): a text quoted with its escapes, a variant
 ### naming its member type, and a record or entity whose `represent` is derived by its short type name and members
 ### (`member_diagnose`, never its `diagnose`, which would name every module again).
+### :returns: The diagnostic text of `me`.
 @readonly
 @overridable
 infallible routine T.diagnose() -> Text
@@ -383,6 +412,8 @@ needs AnyType T
 ### equal. Written as the universal `@overridable routine T.eq()`; `ne` is derived from this by the
 ### builder (`return not me.eq(...)`). The buildtime `expand` field-walk replaces the hand-written C#
 ### builder — a zero-field type expands to no comparisons and returns `true`.
+### :param you: The value to compare against.
+### :returns: `true` if the two compare equal.
 @overridable
 routine T.eq(you: Viewing[T]) -> Bool
 needs T obeys Equatable
@@ -395,6 +426,8 @@ needs T obeys Equatable
 ### declaration order, returning at the first non-`SAME` member. Written as the universal
 ### `@overridable routine T.compare()`; `lt`/`le`/`gt`/`ge` are derived from this by the builder. A
 ### zero-field type expands to no comparisons and returns `SAME`.
+### :param you: The value to compare against.
+### :returns: Whether `me` is smaller than, equal to, or larger than `you`.
 @overridable
 routine T.compare(you: Viewing[T]) -> ComparisonSign
 needs T obeys Comparable
@@ -428,6 +461,8 @@ needs FlagsType T
 ### entity being compared already (a parent and its children, a ring), so the pair is kept for the running task
 ### while its member variables are compared, and meeting it again counts as equal: a cyclic structure compares by its
 ### shape and the comparison ends. The same entity is equal to itself without a walk.
+### :param you: The value to compare against.
+### :returns: `true` if the two compare equal.
 @override
 routine T.eq(you: Viewing[T]) -> Bool
 needs EntityType T
@@ -447,6 +482,9 @@ needs T obeys Equatable
 
 ### Entity keyed `hash(k0, k1)`: the member variables' hashes folded as for a record. A member variable leading back
 ### to an entity whose hash is running already adds a fixed value instead of walking it again, so the hash ends.
+### :param k0: The first half of the secret key.
+### :param k1: The second half of the secret key.
+### :returns: The 64-bit hash of `me`.
 @override
 routine T.hash(k0: U64, k1: U64) -> U64
 needs EntityType T
@@ -465,11 +503,16 @@ needs T obeys Hashable
 ### `allmemvarof(T)` is empty and the record template would wrongly return `true`/`SAME` for every pair).
 ### Reading the discriminant is a reinterpretation of the value (the same read the choice `represent` makes), and the inner
 ### `==`/`compare` resolve to the hand-written `S32` ops, so there is no recursion back into this derive.
+### :param you: The value to compare against.
+### :returns: `true` if the two compare equal.
 @override
 routine T.eq(you: Viewing[T]) -> Bool
 needs ChoiceType T
     return LLVM::reinterpret_bits[T, S32](me) == LLVM::reinterpret_bits[T, S32](you)
 
+### Three-way comparison of `me` and `you`.
+### :param you: The value to compare against.
+### :returns: Whether `me` is smaller than, equal to, or larger than `you`.
 @override
 routine T.compare(you: Viewing[T]) -> ComparisonSign
 needs ChoiceType T
@@ -478,6 +521,9 @@ needs ChoiceType T
 ### Choice `hash`: a choice IS its S32 discriminant, so hashing reinterprets to the integral identity
 ### (the discriminant widened to `S64`) and defers to the hand-written `S64` keyed hash. Without
 ### this override the call binds to the abstract `Hashable.hash` and the protocol type leaks to codegen.
+### :param k0: The first half of the secret key.
+### :param k1: The second half of the secret key.
+### :returns: The 64-bit hash of `me`.
 @override
 routine T.hash(k0: U64, k1: U64) -> U64
 needs ChoiceType T
@@ -487,6 +533,8 @@ needs ChoiceType T
 ### is a SET of bits, so membership/subset ("is READ on?") is the separate `in` operator, never `==`. Like
 ### the choice derives, this compares the reinterpreted U64 bitmask via the hand-written `U64` op — no
 ### field-walk, no recursion. Flags have no natural total order, so no `compare` derive.
+### :param you: The value to compare against.
+### :returns: `true` if the two compare equal.
 @override
 routine T.eq(you: Viewing[T]) -> Bool
 needs FlagsType T
@@ -497,16 +545,24 @@ needs FlagsType T
 ### U64 bitwise op, and reinterprets the result back to the flags type. The result bits are always a subset
 ### of declared members (both operands are valid), so the reverse reinterpret is safe — no validity check.
 ### `Me` resolves as a type argument because the owner is `T` (a member routine).
+### :param you: The flags to combine with.
+### :returns: The flags that are on in `me` or in `you`.
 @override
 routine T.bitor(you: T) -> Me
 needs FlagsType T
     return LLVM::reinterpret_bits[U64, Me](LLVM::reinterpret_bits[T, U64](me).bitor(you: LLVM::reinterpret_bits[T, U64](you)))
 
+### Intersection of two flags values.
+### :param you: The flags to intersect with.
+### :returns: The flags that are on in both `me` and `you`.
 @override
 routine T.bitand(you: T) -> Me
 needs FlagsType T
     return LLVM::reinterpret_bits[U64, Me](LLVM::reinterpret_bits[T, U64](me).bitand(you: LLVM::reinterpret_bits[T, U64](you)))
 
+### Symmetric difference of two flags values.
+### :param you: The flags to compare with.
+### :returns: The flags that are on in exactly one of `me` and `you`.
 @override
 routine T.bitxor(you: T) -> Me
 needs FlagsType T
@@ -546,6 +602,7 @@ needs FlagsType T
 
 ### Flags `all_on`: the union of every declared member bit, folded over `caseof`. The value with no member on is
 ### the literal `none`.
+### :returns: The union of all members.
 @override
 routine T.all_on() -> Me
 needs FlagsType T
@@ -559,18 +616,29 @@ needs FlagsType T
 ### which the collector/harness codegen path lost; deriving them here routes them through the same
 ### everywhere-derive template mechanism as `represent`/`compare` (registered + materialized by the collector),
 ### so `a < b` (-> `a.lt(b)`) resolves for Char, numerics, records, collections uniformly.
+### :param you: The value to compare against.
+### :returns: `true` if `me` is smaller than `you`.
 routine T.lt(you: Viewing[T]) -> Bool
 needs T obeys Comparable
     return me.compare(you: you) == ME_SMALL
 
+### Whether `me` orders before or equal to `you`.
+### :param you: The value to compare against.
+### :returns: `true` if `me` is not larger than `you`.
 routine T.le(you: Viewing[T]) -> Bool
 needs T obeys Comparable
     return me.compare(you: you) != ME_LARGE
 
+### Whether `me` orders after `you`.
+### :param you: The value to compare against.
+### :returns: `true` if `me` is larger than `you`.
 routine T.gt(you: Viewing[T]) -> Bool
 needs T obeys Comparable
     return me.compare(you: you) == ME_LARGE
 
+### Whether `me` orders after or equal to `you`.
+### :param you: The value to compare against.
+### :returns: `true` if `me` is not smaller than `you`.
 routine T.ge(you: Viewing[T]) -> Bool
 needs T obeys Comparable
     return me.compare(you: you) != ME_SMALL
@@ -578,6 +646,7 @@ needs T obeys Comparable
 ### The auto-derived fast `hash()` for any record/entity/tuple: XOR-fold each member variable's fast
 ### hash. Seeded at `0` (the XOR identity), so a single-field type hashes to exactly that field's hash
 ### and a zero-field type hashes to `0` — matching the hand-written C# builder. `expand` field-walk.
+### :returns: The 64-bit hash of `me`.
 @overridable
 routine T.hash() -> U64
 needs T obeys Hashable
@@ -588,6 +657,9 @@ needs T obeys Hashable
 
 ### The auto-derived keyed `hash(k0, k1)`: same XOR-fold, threading the seed keys through each member
 ### variable's keyed hash.
+### :param k0: The first half of the secret key.
+### :param k1: The second half of the secret key.
+### :returns: The 64-bit hash of `me`.
 @overridable
 routine T.hash(k0: U64, k1: U64) -> U64
 needs T obeys Hashable
@@ -605,6 +677,7 @@ needs T obeys Hashable
 ### into that arm; a fixed-width scalar without one (S128, D64, Char, ...) boxes its `represent()`
 ### Text, which its `from_serial` parses back; a `Byte` boxes as `U8`; an aggregate record/entity
 ### recurses. `choice`/`flags`/variants override below, a routine value boxes its signature Text.
+### :returns: The serialized value of `me`.
 @overridable
 infallible routine T.serialize() -> SerialValue
 needs AnyType T
@@ -647,12 +720,14 @@ needs AnyType T
             return SerialValue(steal __sv)
 
 ### Choice `serialize()`: the bare case name as Text (`GREEN`), which `from_serial` looks up again.
+### :returns: The serialized value of `me`.
 @override
 infallible routine T.serialize() -> SerialValue
 needs ChoiceType T
     return SerialValue(from: me.represent())
 
 ### Flags `serialize()`: the list of set member names (`["READ", "WRITE"]`), empty when no bit is set.
+### :returns: The serialized value of `me`.
 @override
 infallible routine T.serialize() -> SerialValue
 needs FlagsType T
@@ -664,6 +739,7 @@ needs FlagsType T
 
 ### Variant `serialize()`: a one-entry table `{arm: payload}` naming the live arm, or `None` for the
 ### absent arm, so `from_serial` knows which arm to rebuild.
+### :returns: The serialized value of `me`.
 @override
 infallible routine T.serialize() -> SerialValue
 needs VariantType T
@@ -677,6 +753,7 @@ needs VariantType T
 
 ### The auto-derived deep `copy()` (Copyable): forwards to `store` — a bitwise copy for a pure value
 ### type, or the retaining store for a managed-leaf / retaining-field record. Same as the C# builder.
+### :returns: The copy.
 @overridable
 routine T.duplicate() -> Me
 needs T obeys Copyable
@@ -686,6 +763,7 @@ needs T obeys Copyable
 ### heap arm (a collection, a managed leaf) is NOT bitwise-aliased (which would double-free). `branchof`
 ### emits one clause per payload arm boxing `v.duplicate()` back into the variant via the arm constructor
 ### `Me(from: …)`; None / borrow arms (borrow can't be a variant payload) fall to `else => return me`.
+### :returns: The copy.
 @override
 routine T.duplicate() -> Me
 needs VariantType T
@@ -699,6 +777,7 @@ needs T obeys Copyable
 ### `duplicate()` of a value aggregate that holds an entity (a tuple or variant holding an entity, a Slots): it has
 ### no `assign` (a shallow copy would make two owners of the entity), so each member is duplicated into a zeroed
 ### value of its own.
+### :returns: The copy.
 @override
 routine T.duplicate() -> Me
 needs OwningValueType T
@@ -712,6 +791,7 @@ needs T obeys Copyable
 ### Entity `duplicate()`: a new entity of its own whose every member is a duplicate of this one's. An entity
 ### has no `assign` (a copy would be a second owner), so the base forward does not apply. The new entity starts
 ### zeroed (`hollow`) and each member is filled in from `me`, so no constructor argument list is needed.
+### :returns: The copy.
 @override
 routine T.duplicate() -> Me
 needs EntityType T
@@ -863,6 +943,7 @@ needs VariantType T
 ### self-copy, so there is no recursion), then each member is copied in place by its own `share`. A plain value
 ### field's `share` is the bitwise `return me`, and a field holding a handle (a `Guarded` buffer of a `Text`, an RC
 ### wrapper) gains one more holder, so the two copies tear down in balance.
+### :returns: The copy.
 @overridable
 secret infallible routine T.share() -> Me
 needs RecordType T
@@ -875,6 +956,7 @@ needs RecordType T
 ### case holding a handle gains one more holder instead of being aliased bit for bit. Empty cases fall to
 ### `else => return me`. A variant held in a record field (`Optional[S32]` in a record) needs it too: the record's
 ### own `share` walk calls it.
+### :returns: The copy.
 @override
 secret infallible routine T.share() -> Me
 needs VariantType T

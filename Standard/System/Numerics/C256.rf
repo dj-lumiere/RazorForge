@@ -21,28 +21,37 @@ obeys Numeric, Equatable, Hashable
 # Complex constants. `common routine` factories (not `preset`s): a `C256` value is a two-`B128` record,
 # not a buildtime scalar constant, so inlining it at every use (what a `preset` does) leaves the
 # construction unresolved / emits an undefined creator symbol at codegen.
-### The complex zero value (0 + 0i). :returns: The resulting `C256` value.
+### The complex zero value (0 + 0i).
+### :returns: The resulting `C256` value.
 common routine C256.zero() -> C256
     return C256(real: 0.0, imag: 0.0)
 
-### The complex unit value (1 + 0i). :returns: The resulting `C256` value.
+### The complex unit value (1 + 0i).
+### :returns: The resulting `C256` value.
 common routine C256.one() -> C256
     return C256(real: 1.0, imag: 0.0)
 
-### The imaginary unit (0 + 1i). :returns: The resulting `C256` value.
+### The imaginary unit (0 + 1i).
+### :returns: The resulting `C256` value.
 common routine C256.i() -> C256
     return C256(real: 0.0, imag: 1.0)
 
 ### The low 64 bits of a B128's bits: an Ingrid routine takes each C256 part as its low and high halves, because a
 ### 128-bit value crosses Win64 by pointer from Tessera but by value from RazorForge.
+### :param v: The part to split.
+### :returns: The low word.
 secret routine c256_low(v: B128) -> U64
     return LLVM::int_truncate[U128, U64](v.to_bits())
 
 ### The high 64 bits of a B128's bits.
+### :param v: The part to split.
+### :returns: The high word.
 secret routine c256_high(v: B128) -> U64
     return LLVM::int_truncate[U128, U64](v.to_bits() >>> 64)
 
 ### Reads the B128 an Ingrid routine hands back: its low 64 bits in `w0`, its high 64 bits in `w1`.
+### :param w: The two words: low bits in `w0`, high bits in `w1`.
+### :returns: The B128 made of the two words.
 secret routine c256_scalar(w: IngridWords) -> B128
     var high = LLVM::zero_extend[U64, U128](w.w1) << 64
     return B128.from_bits(bits: high | LLVM::zero_extend[U64, U128](w.w0))
@@ -584,6 +593,8 @@ routine C256.sqrt_unchecked() -> C256
 
 ### Crashes unless both parts of `r` are finite: a NaN part is a domain error, an infinite part an
 ### overflow. The check behind the checked forms of `exp`/`ln`/`sqrt`/`sinh`/`cosh`.
+### :param r: The result to check.
+### :returns: `r`, known to be finite.
 routine c256_checked(r: C256) -> C256
     var k = C::ingrid_c256_class(
         real_low: c256_low(v: r.real),
@@ -676,6 +687,7 @@ routine C256.is_imaginary() -> Bool
     return (k & 4) != 0
 
 ### Returns `true` if either part is NaN.
+### :returns: `true` if `me` is a quiet or signaling NaN.
 routine C256.is_nan() -> Bool
     var k = C::ingrid_c256_class(
         real_low: c256_low(v: me.real),
@@ -686,6 +698,7 @@ routine C256.is_nan() -> Bool
     return (k & 8) != 0
 
 ### Returns `true` if either part is infinite.
+### :returns: `true` if `me` is positive or negative infinity.
 routine C256.is_infinite() -> Bool
     var k = C::ingrid_c256_class(
         real_low: c256_low(v: me.real),
@@ -696,6 +709,7 @@ routine C256.is_infinite() -> Bool
     return (k & 16) != 0
 
 ### Returns `true` if both parts are finite.
+### :returns: `true` if `me` is neither an infinity nor a NaN.
 routine C256.is_finite() -> Bool
     var k = C::ingrid_c256_class(
         real_low: c256_low(v: me.real),

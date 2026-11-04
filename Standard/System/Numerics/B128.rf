@@ -89,6 +89,7 @@ routine B128.is_nan() -> Bool
     return me.raw_exponent() == 0x7FFF and LLVM::int_ne(a: me.raw_mantissa(), b: 0)
 
 ### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
+### :returns: `true` if `me` is a signaling NaN.
 routine B128.is_signaling() -> Bool
     return me.is_nan()
         and LLVM::int_eq(
@@ -121,14 +122,17 @@ routine B128.is_subnormal() -> Bool
     return me.raw_exponent() == 0 and LLVM::int_ne(a: me.raw_mantissa(), b: 0)
 
 ### Returns `true` when the sign bit is set (C `is_sign_negative`; true for -0 and -NaN too).
+### :returns: `true` if the sign bit is set, also for -0 and a negative NaN.
 routine B128.is_sign_negative() -> Bool
     return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()), b: 0)
 
 ### Returns `true` for a finite, normal value (nonzero and not subnormal).
+### :returns: `true` if `me` is finite, nonzero and not subnormal.
 routine B128.is_normal() -> Bool
     return me.is_finite() and not me.is_zero() and not me.is_subnormal()
 
 ### C `fpclassify`: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
+### :returns: The class of `me`: signaling NaN, NaN, infinite, zero, subnormal, or normal.
 routine B128.fpclassify() -> FpClass
     if me.is_signaling()
         return SIGNALING_NAN
@@ -148,6 +152,8 @@ routine B128.fpclassify() -> FpClass
 
 ### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
 ### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
+### :param bits: The 128-bit pattern of a binary float.
+### :returns: The key. A smaller key means an earlier place in the total order.
 routine b128_order_key(bits: U128) -> U128
     if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: b128_sign_mask()), b: 0)
         return LLVM::bit_xor(a: bits, b: LLVM::bit_or(a: b128_sign_mask(), b: b128_abs_mask()))
@@ -270,6 +276,7 @@ routine B128.round_ties_away() -> B128
     return rounded.copysign(sign: me)
 
 ### Returns the fractional part `me - trunc(me)`, preserving sign (frac(±inf) = ±0).
+### :returns: `me - trunc(me)`.
 routine B128.fract() -> B128
     if me.is_nan()
         return me
@@ -504,38 +511,48 @@ routine B128.ldexp(n: S64) -> B128
 # ============================================================================
 
 ### The implicit-bit mask `1 << 112`.
+### :returns: The mask.
 routine b128_implicit() -> U128
     return LLVM::shift_left(value: 1, bits: 112)
 
 ### The 112-bit mantissa mask `(1 << 112) - 1`.
+### :returns: The mask.
 routine b128_mant_mask() -> U128
     return LLVM::sub(a: b128_implicit(), b: 1)
 
 ### The sign-bit mask `1 << 127`.
+### :returns: The mask.
 routine b128_sign_mask() -> U128
     return LLVM::shift_left(value: 1, bits: 127)
 
 ### The magnitude mask `~(1 << 127)` (all but the sign bit).
+### :returns: The mask.
 routine b128_abs_mask() -> U128
     return LLVM::sub(a: b128_sign_mask(), b: 1)
 
 ### The infinity encoding `0x7FFF << 112` for the given sign bit.
+### :param sign: The sign bit: 1 for negative infinity, 0 for positive.
+### :returns: The bits of the infinity.
 routine b128_inf(sign: U64) -> U128
     var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127)
     var e: U128 = LLVM::shift_left(value: 32767, bits: 112)
     return LLVM::bit_or(a: s, b: e)
 
 ### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
+### :returns: The bits of the quiet NaN.
 routine b128_qnan() -> U128
     var e: U128 = LLVM::shift_left(value: 32767, bits: 112)
     var q: U128 = LLVM::shift_left(value: 1, bits: 111)
     return LLVM::bit_or(a: e, b: q)
 
 ### Forces the quiet bit on a NaN encoding (top mantissa bit).
+### :param bits: The bits of a NaN.
+### :returns: `bits` with the top mantissa bit set.
 routine b128_quiet(bits: U128) -> U128
     return LLVM::bit_or(a: bits, b: LLVM::shift_left(value: 1, bits: 111))
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+### :returns: A signaling NaN.
 common routine B128.signaling_nan() -> B128
     return B128.from_bits(
         bits: LLVM::bit_or(a: LLVM::shift_left[U128](value: 32767, bits: 112), b: 1),
@@ -631,10 +648,13 @@ routine B128.diagnose() -> Text
 # ============================================================================
 
 ### Returns the next representable value after `me` toward `you` (C `nextafter`).
+### :param you: The value that gives the direction.
+### :returns: The neighbor of `me` toward `you`, or `you` if they are equal.
 routine B128.nextafter(you: B128) -> B128
     return b128_of_words(w: C::ingrid_b128_nextafter(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()))
 
 ### Splits into integer and fractional parts (C `modf`): returns (intpart, fracpart).
+### :returns: The integer part and the fractional part, in that order.
 routine B128.modf() -> (B128, B128)
     if me.is_nan()
         return (me, me)
@@ -646,6 +666,7 @@ routine B128.modf() -> (B128, B128)
     return (ip, fp)
 
 ### Splits into a fraction in [0.5,1) and a power-of-two exponent (C `frexp`).
+### :returns: The fraction in [0.5, 1) and the exponent, so that `me` is fraction * 2^exponent.
 routine B128.frexp() -> (B128, S64)
     var w = C::ingrid_b128_frexp(low: me.low_bits(), high: me.high_bits())
     return (B128.from_bits(bits: (w.w1.to[U128]() << 64) | w.w0.to[U128]()), LLVM::reinterpret_bits[U64, S64](w.w2))
@@ -787,6 +808,8 @@ routine B128.finite() -> B128
 # `dangerous`): inf/NaN are valid IEEE values; the `_unchecked` spelling is the marker.
 
 ### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+### :param you: The divisor.
+### :returns: `me / you`, with an infinity for a division by zero and a NaN for 0/0.
 @readonly
 routine B128.truediv_unchecked(you: B128) -> B128
     return b128_of_words(
@@ -794,6 +817,8 @@ routine B128.truediv_unchecked(you: B128) -> B128
     )
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The value to add.
+### :returns: `me + you`, possibly an infinity or a NaN.
 @readonly
 routine B128.add_unchecked(you: B128) -> B128
     return b128_of_words(
@@ -801,6 +826,8 @@ routine B128.add_unchecked(you: B128) -> B128
     )
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The value to subtract.
+### :returns: `me - you`, possibly an infinity or a NaN.
 @readonly
 routine B128.sub_unchecked(you: B128) -> B128
     return b128_of_words(
@@ -808,6 +835,8 @@ routine B128.sub_unchecked(you: B128) -> B128
     )
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The factor to multiply by.
+### :returns: `me * you`, possibly an infinity or a NaN.
 @readonly
 routine B128.mul_unchecked(you: B128) -> B128
     return b128_of_words(

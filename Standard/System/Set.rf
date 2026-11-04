@@ -72,9 +72,14 @@ needs T obeys Hashable, Equatable
         i = i +% 1
     return result
 
+### Creates an empty set with a random hash key.
+### :returns: The empty set.
 routine Set[T]() -> Set[T]
     return Set[T](key: SecureHashKey.random())
 
+### Creates an empty set that hashes with `key`.
+### :param key: The secret key that seeds the hash of every element.
+### :returns: The empty set.
 routine Set[T](key: SecureHashKey) -> Set[T]
     var cap = SET_INITIAL_CAPACITY
     var ecap = SET_INITIAL_ENTRIES
@@ -103,6 +108,10 @@ routine Set[T](key: SecureHashKey) -> Set[T]
         set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
         return set
 
+### Creates an empty set that hashes with `key`, with room for `capacity` elements.
+### :param key: The secret key that seeds the hash of every element.
+### :param capacity: The number of entries to reserve space for.
+### :returns: The empty set.
 ### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
 routine Set[T](key: SecureHashKey, capacity: U64) -> Set[T]
     var cap = storage_doubled_capacity(start: SET_INITIAL_CAPACITY, capacity: capacity)
@@ -136,19 +145,31 @@ routine Set[T](key: SecureHashKey, capacity: U64) -> Set[T]
 # Internal Helpers
 # ============================================================================
 
+### Tag of a hash: its low 7 bits, kept in the control byte of a slot.
+### :param hash: The full hash.
+### :returns: The 7-bit tag.
 @readonly
 routine Set[T].h2(hash: U64) -> U8
     return (hash & CTRL_H2_MASK.to[U64]()).to[U8]()
 
+### Position part of a hash: the bits above the tag.
+### :param hash: The full hash.
+### :returns: The hash shifted right by 7 bits.
 @readonly
 routine Set[T].h1(hash: U64) -> U64
     return hash >> 7
 
+### Reads the entry index stored in a slot of the index table.
+### :param slot: The slot to read.
+### :returns: The entry index in that slot.
 @readonly
 routine Set[T].read_index(slot: U64) -> U64
     danger
         return me.indices.offset(U64.data_size() * slot).peek()
 
+### Finds the slot that holds an equal key by probing from its hash.
+### :param value: The element to look for.
+### :returns: The slot, or the capacity if no equal key is stored.
 @readonly
 routine Set[T].find_slot(value: T) -> U64
     var h = value.hash(k0: me.k0, k1: me.k1)
@@ -167,6 +188,9 @@ routine Set[T].find_slot(value: T) -> U64
             i = i +% 1 & mask
     return me.capacity
 
+### Stores an entry index in the first free or deleted slot on the probe path of a hash.
+### :param h: The full hash of the key.
+### :param entry_index: The entry index to store.
 @reshaping
 routine Set[T].insert_index_raw(h: U64, entry_index: U64)
     var h2_val = me.h2(h)
@@ -187,6 +211,8 @@ routine Set[T].insert_index_raw(h: U64, entry_index: U64)
             i = i +% 1 & mask
     return
 
+### Whether the table is too full and must grow before the next insertion.
+### :returns: `true` if the load is at or above 7/8 or the entry arrays are full.
 @readonly
 routine Set[T].should_rehash() -> Bool
     if (me.count +% me.deleted) *% 8 >= me.capacity *% 7
@@ -195,6 +221,7 @@ routine Set[T].should_rehash() -> Bool
         return true
     return false
 
+### Rebuilds the table with more room and drops deleted slots.
 @reshaping
 routine Set[T].rehash()
     var old_cap = me.capacity
@@ -259,14 +286,19 @@ routine Set[T].rehash()
 # Core Operations
 # ============================================================================
 
+### Number of entries stored.
+### :returns: The entry count.
 @readonly
 routine Set[T].count() -> U64
     return me.count
 
+### Whether nothing is stored.
+### :returns: `true` if the count is zero.
 @readonly
 routine Set[T].is_empty() -> Bool
     return me.count == 0
 
+### Removes every entry and tears each one down.
 @reshaping
 routine Set[T].clear()
     danger
@@ -289,6 +321,9 @@ routine Set[T].clear()
     me.entries_used = 0
     return
 
+### Whether `value` is in the set.
+### :param value: The element to look for.
+### :returns: `true` if `value` is stored.
 @readonly
 routine Set[T].has(value: T) -> Bool
     return me.find_slot(value) < me.capacity
@@ -300,6 +335,9 @@ routine Set[T].has(value: T) -> Bool
 routine Set[T].lacks(value: T) -> Bool
     return not me.has(value)
 
+### Adds `value` to the set.
+### :param value: The element to add.
+### :returns: `true` if the element was new.
 @reshaping
 @discardable
 routine Set[T].add(value: T) -> Bool
@@ -316,6 +354,9 @@ routine Set[T].add(value: T) -> Bool
     me.count = me.count +% 1
     return true
 
+### Removes `value` from the set.
+### :param value: The element to remove.
+### :returns: `true` if the element was present.
 @reshaping
 @discardable
 routine Set[T].remove(value: T) -> Bool
@@ -339,6 +380,8 @@ routine Set[T].remove(value: T) -> Bool
 # Iteration
 # ============================================================================
 
+### Returns an emitter that walks the elements of `me` in order, for a `for` loop.
+### :returns: The emitter, positioned before the first element.
 @readonly
 routine Set[T].emitter() -> SetEmitter[T]
     danger
@@ -349,6 +392,8 @@ routine Set[T].emitter() -> SetEmitter[T]
             pos: 0,
         )
 
+### Yields the next element of the walk and moves on.
+### :returns: The next element.
 routine SetEmitter[T].emit() -> T
     danger
         until me.pos >= me.entries_used
@@ -362,6 +407,9 @@ routine SetEmitter[T].emit() -> T
 # Set Operations
 # ============================================================================
 
+### Set of the elements that are in `me` or in `other`.
+### :param other: The set to merge in.
+### :returns: A new set with the elements of both.
 @readonly
 routine Set[T].union(other: Viewing[Set[T]]) -> Set[T]
     var result = Set[T](key: SecureHashKey.random(), capacity: me.count +% other.count)
@@ -371,6 +419,9 @@ routine Set[T].union(other: Viewing[Set[T]]) -> Set[T]
         drop result.add(val)
     return result
 
+### Set of the elements that are in both `me` and `other`.
+### :param other: The set to intersect with.
+### :returns: A new set with the shared elements.
 @readonly
 routine Set[T].intersection(other: Viewing[Set[T]]) -> Set[T]
     var result = Set[T]()
@@ -379,6 +430,9 @@ routine Set[T].intersection(other: Viewing[Set[T]]) -> Set[T]
             drop result.add(val)
     return result
 
+### Set of the elements of `me` that are not in `other`.
+### :param other: The set whose elements are left out.
+### :returns: A new set with the elements only in `me`.
 @readonly
 routine Set[T].difference(other: Viewing[Set[T]]) -> Set[T]
     var result = Set[T]()
@@ -387,6 +441,9 @@ routine Set[T].difference(other: Viewing[Set[T]]) -> Set[T]
             drop result.add(val)
     return result
 
+### Set of the elements that are in exactly one of `me` and `other`.
+### :param other: The set to compare with.
+### :returns: A new set with the elements in only one of the two.
 @readonly
 routine Set[T].symmetric_difference(other: Viewing[Set[T]]) -> Set[T]
     var result = Set[T]()
@@ -398,6 +455,9 @@ routine Set[T].symmetric_difference(other: Viewing[Set[T]]) -> Set[T]
             drop result.add(val)
     return result
 
+### Whether every element of `me` is in `other`.
+### :param other: The set that should contain `me`.
+### :returns: `true` if `me` is contained in `other`.
 @readonly
 routine Set[T].is_subset(other: Viewing[Set[T]]) -> Bool
     if me.count > other.count
@@ -407,10 +467,16 @@ routine Set[T].is_subset(other: Viewing[Set[T]]) -> Bool
             return false
     return true
 
+### Whether every element of `other` is in `me`.
+### :param other: The set that should be contained.
+### :returns: `true` if `me` contains `other`.
 @readonly
 routine Set[T].is_superset(other: Viewing[Set[T]]) -> Bool
     return other.is_subset(me)
 
+### Whether `me` and `other` share no element.
+### :param other: The set to compare with.
+### :returns: `true` if no element is in both.
 @readonly
 routine Set[T].is_disjoint(other: Viewing[Set[T]]) -> Bool
     for val in me
@@ -434,6 +500,8 @@ routine Set[T].to[List[T]]() -> List[T]
 # Display
 # ============================================================================
 
+### Returns the text form of `me`: the elements of the set in braces, separated by commas.
+### :returns: The text form of `me`.
 @readonly
 @override
 routine Set[T].represent() -> Text
@@ -449,6 +517,8 @@ routine Set[T].represent() -> Text
     result = result + "}"
     return result
 
+### Returns the diagnostic text of `me`: its type, count and elements.
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 routine Set[T].diagnose() -> Text
@@ -466,6 +536,9 @@ routine Set[T].diagnose() -> Text
 # Comparison
 # ============================================================================
 
+### Whether two sets hold the same elements.
+### :param you: The set to compare against.
+### :returns: `true` if both sets have the same elements.
 @readonly
 routine Set[T].eq(you: Viewing[Set[T]]) -> Bool
     if me.count != you.count
@@ -475,6 +548,7 @@ routine Set[T].eq(you: Viewing[Set[T]]) -> Bool
             return false
     return true
 
+### Tears down each stored element, then frees the buffers.
 @override
 routine Set[T].destruct()
     danger

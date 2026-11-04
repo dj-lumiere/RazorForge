@@ -78,9 +78,14 @@ needs TKey obeys Hashable, Equatable
         i = i +% 1
     return result
 
+### Creates an empty dictionary with a random hash key.
+### :returns: The empty dictionary.
 routine Dict[TKey, TValue]() -> Dict[TKey, TValue]
     return Dict[TKey, TValue](key: SecureHashKey.random())
 
+### Creates an empty dictionary that hashes with `key`.
+### :param key: The secret key that seeds the hash of every entry.
+### :returns: The empty dictionary.
 routine Dict[TKey, TValue](key: SecureHashKey) -> Dict[TKey, TValue]
     var cap = DICT_INITIAL_CAPACITY
     var ecap = DICT_INITIAL_ENTRIES
@@ -111,6 +116,10 @@ routine Dict[TKey, TValue](key: SecureHashKey) -> Dict[TKey, TValue]
         dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
         return dict
 
+### Creates an empty dictionary that hashes with `key`, with room for `capacity` entries.
+### :param key: The secret key that seeds the hash of every entry.
+### :param capacity: The number of entries to reserve space for.
+### :returns: The empty dictionary.
 ### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
 routine Dict[TKey, TValue](key: SecureHashKey, capacity: U64) -> Dict[TKey, TValue]
     var cap = storage_doubled_capacity(start: DICT_INITIAL_CAPACITY, capacity: capacity)
@@ -193,34 +202,55 @@ infallible dangerous routine Dict[TKey, TValue].roam_free()
 # Internal Helpers
 # ============================================================================
 
+### Tag of a hash: its low 7 bits, kept in the control byte of a slot.
+### :param hash: The full hash.
+### :returns: The 7-bit tag.
 @readonly
 routine Dict[TKey, TValue].h2(hash: U64) -> U8
     return (hash & CTRL_H2_MASK.to[U64]()).to[U8]()
 
+### Position part of a hash: the bits above the tag.
+### :param hash: The full hash.
+### :returns: The hash shifted right by 7 bits.
 @readonly
 routine Dict[TKey, TValue].h1(hash: U64) -> U64
     return hash >> 7
 
+### Reads the entry index stored in a slot of the index table.
+### :param slot: The slot to read.
+### :returns: The entry index in that slot.
 @readonly
 routine Dict[TKey, TValue].read_index(slot: U64) -> U64
     danger
         return me.indices.offset(U64.data_size() * slot).peek()
 
+### Reads the key of an entry.
+### :param ei: The entry index.
+### :returns: The key of entry `ei`.
 @readonly
 routine Dict[TKey, TValue].read_key_at(ei: U64) -> TKey
     danger
         return me.keys.offset(TKey.data_size() * ei).peek()
 
+### Reads the value of an entry.
+### :param ei: The entry index.
+### :returns: The value of entry `ei`.
 @readonly
 routine Dict[TKey, TValue].read_val_at(ei: U64) -> TValue
     danger
         return me.vals.offset(TValue.data_size() * ei).peek()
 
+### Overwrites the value of an entry.
+### :param ei: The entry index.
+### :param val: The new value.
 routine Dict[TKey, TValue].write_val_at(ei: U64, val: TValue)
     danger
         me.vals.offset(TValue.data_size() * ei).poke(val)
     return
 
+### Finds the slot that holds an equal key by probing from its hash.
+### :param key: The key to look for.
+### :returns: The slot, or the capacity if no equal key is stored.
 @readonly
 routine Dict[TKey, TValue].find_slot(key: TKey) -> U64
     var h = key.hash(k0: me.k0, k1: me.k1)
@@ -239,6 +269,9 @@ routine Dict[TKey, TValue].find_slot(key: TKey) -> U64
             i = i +% 1 & mask
     return me.capacity
 
+### Stores an entry index in the first free or deleted slot on the probe path of a hash.
+### :param h: The full hash of the key.
+### :param entry_index: The entry index to store.
 @reshaping
 routine Dict[TKey, TValue].insert_index_raw(h: U64, entry_index: U64)
     var h2_val = me.h2(h)
@@ -259,6 +292,8 @@ routine Dict[TKey, TValue].insert_index_raw(h: U64, entry_index: U64)
             i = i +% 1 & mask
     return
 
+### Whether the table is too full and must grow before the next insertion.
+### :returns: `true` if the load is at or above 7/8 or the entry arrays are full.
 @readonly
 routine Dict[TKey, TValue].should_rehash() -> Bool
     if (me.count +% me.deleted) *% 8 >= me.capacity *% 7
@@ -267,6 +302,7 @@ routine Dict[TKey, TValue].should_rehash() -> Bool
         return true
     return false
 
+### Rebuilds the table with more room and drops deleted slots.
 @reshaping
 routine Dict[TKey, TValue].rehash()
     var old_cap = me.capacity
@@ -337,14 +373,19 @@ routine Dict[TKey, TValue].rehash()
 # Core Operations
 # ============================================================================
 
+### Number of entries stored.
+### :returns: The entry count.
 @readonly
 routine Dict[TKey, TValue].count() -> U64
     return me.count
 
+### Whether nothing is stored.
+### :returns: `true` if the count is zero.
 @readonly
 routine Dict[TKey, TValue].is_empty() -> Bool
     return me.count == 0
 
+### Removes every entry and tears each one down.
 @reshaping
 routine Dict[TKey, TValue].clear()
     danger
@@ -372,16 +413,24 @@ routine Dict[TKey, TValue].clear()
     me.entries_used = 0
     return
 
+### Whether an entry for `key` exists.
+### :param key: The key to look for.
+### :returns: `true` if `key` is stored.
 @readonly
 routine Dict[TKey, TValue].has_key(key: TKey) -> Bool
     return me.find_slot(key) < me.capacity
 
 ### Returns whether `key` has no entry (`d lack k`).
 ### :param key: The key to look for.
+### :returns: `true` if `key` is not stored.
 @readonly
 routine Dict[TKey, TValue].lacks_key(key: TKey) -> Bool
     return not me.has_key(key: key)
 
+### Stores `value` under `key`, replacing an existing value.
+### :param key: The key to store under.
+### :param value: The value to store.
+### :returns: `true` if the key was new, `false` if an existing value was replaced.
 @reshaping
 @discardable
 secret routine Dict[TKey, TValue].put(key: TKey, value: TValue) -> Bool
@@ -434,6 +483,9 @@ routine Dict[TKey, TValue].slot(key: TKey, seed: TValue) -> Hijacked[TValue]
     danger
         return me.vals.offset(TValue.data_size() * ei)
 
+### Removes the entry for `key`.
+### :param key: The key to remove.
+### :returns: `true` if an entry was removed.
 @reshaping
 @discardable
 routine Dict[TKey, TValue].remove(key: TKey) -> Bool
@@ -457,6 +509,10 @@ routine Dict[TKey, TValue].remove(key: TKey) -> Bool
     me.deleted = me.deleted +% 1
     return true
 
+### Reads the value stored under `key`, or a fallback.
+### :param key: The key to look for.
+### :param default_value: The value to give when `key` is missing.
+### :returns: The stored value, or `default_value` if `key` is not stored.
 @readonly
 routine Dict[TKey, TValue].get_or_default(key: TKey, default_value: TValue) -> TValue
     var slot = me.find_slot(key)
@@ -468,6 +524,9 @@ routine Dict[TKey, TValue].get_or_default(key: TKey, default_value: TValue) -> T
 # Indexing
 # ============================================================================
 
+### Reads the value stored under `key`.
+### :param key: The key to look for.
+### :returns: A copy of the stored value.
 @readonly
 @overridable
 routine Dict[TKey, TValue].getitem(key: Viewing[TKey]) -> TValue
@@ -505,6 +564,8 @@ secret routine Dict[TKey, TValue].exchange(key: Viewing[TKey], value: TValue) ->
 ### `getitem` hands back a copy, and a call on that copy would change only the copy. Like `T.modify()`, the
 ### token lives only for that one call (the builder keeps the container still meanwhile, RF-S639). Entity
 ### elements only.
+### :param key: The key of the entry.
+### :returns: A write token on the element.
 routine Dict[TKey, TValue].modify_at(key: Viewing[TKey]) -> Modifying[TValue]
 needs EntityType TValue
     var slot = me.find_slot(key)
@@ -519,6 +580,8 @@ needs EntityType TValue
 ### copying it: `groups["a"].count()` lowers to `groups.view_at(key: "a").count()`. A plain `getitem` hands
 ### back a copy, and a call on that copy would copy the whole value first. Like `T.view()`, the token lives
 ### only for that one call (the builder keeps the container still meanwhile, RF-S639). Entity elements only.
+### :param key: The key of the entry.
+### :returns: A read token on the element.
 @readonly
 routine Dict[TKey, TValue].view_at(key: Viewing[TKey]) -> Viewing[TValue]
 needs EntityType TValue
@@ -579,6 +642,8 @@ needs RecordType TValue
 # Iteration
 # ============================================================================
 
+### Returns an emitter that walks the entries of `me` in insertion order, for a `for` loop.
+### :returns: The emitter, positioned before the first entry.
 @readonly
 routine Dict[TKey, TValue].emitter() -> DictEmitter[TKey, TValue]
     danger
@@ -590,6 +655,8 @@ routine Dict[TKey, TValue].emitter() -> DictEmitter[TKey, TValue]
             pos: 0,
         )
 
+### Yields the next live entry of the walk and moves on.
+### :returns: The next key and value.
 routine DictEmitter[TKey, TValue].emit() -> (TKey, TValue)
     danger
         until me.pos >= me.entries_used
@@ -622,6 +689,8 @@ needs RecordType TValue
 # Display
 # ============================================================================
 
+### Returns the text form of `me`: the entries as `key: value` pairs in braces, or `{:}` when empty.
+### :returns: The text form of `me`.
 @readonly
 @override
 routine Dict[TKey, TValue].represent() -> Text
@@ -637,6 +706,8 @@ routine Dict[TKey, TValue].represent() -> Text
     result = result + "}"
     return result
 
+### Returns the diagnostic text of `me`: its type, count and entries.
+### :returns: The diagnostic text of `me`.
 @readonly
 @override
 routine Dict[TKey, TValue].diagnose() -> Text
@@ -656,6 +727,9 @@ routine Dict[TKey, TValue].diagnose() -> Text
 # Comparison
 # ============================================================================
 
+### Whether two dictionaries hold the same keys with equal values.
+### :param you: The dictionary to compare against.
+### :returns: `true` if every entry of `me` is in `you` with an equal value.
 @readonly
 routine Dict[TKey, TValue].eq(you: Viewing[Dict[TKey, TValue]]) -> Bool
 needs TValue obeys Equatable

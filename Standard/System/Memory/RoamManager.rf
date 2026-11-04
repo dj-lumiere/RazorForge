@@ -86,16 +86,19 @@ needs EntityType T
 ### routine-value reference to that hook, and the `Addr.hollow()` body is a never-used fallback (NOT `@innate`
 ### — an unrecognized `@innate` T-method is folded to a default before the rewrite runs).
 ### See internal-wiki/v0.4.x-cycle-collector.md §9.3.
+### :returns: The address of the hook.
 infallible routine T.roam_trace_ref() -> Addr
     return Addr.hollow()
 
 ### Builder intrinsic: yields a closure over this type's synthesized `roam_free` hook (tears down
 ### non-`Roamed` fields + frees the entity). Rewritten by ExpressionLoweringPass, `Addr.hollow()` fallback.
+### :returns: The address of the hook.
 infallible routine T.roam_free_ref() -> Addr
     return Addr.hollow()
 
 ### Builder intrinsic: yields this type's `destruct` as a native code address (RoamHookRefLoweringPass), the
 ### drop hook the last strong release runs. `Addr.hollow()` fallback.
+### :returns: The address of the hook.
 infallible routine T.roam_drop_ref() -> Addr
     return Addr.hollow()
 
@@ -127,6 +130,7 @@ dangerous routine RoamManager[T](data: Hijacked[T]) -> RoamManager[T]
 # ============================================================================
 
 ### This controller's address, as Ingrid's Roamed routines take it (their `RoamHeader` repeats this layout).
+### :returns: The address of the controller.
 secret routine RoamManager[T].header() -> Addr
     danger
         return me.hijack().get_address()
@@ -192,14 +196,16 @@ dangerous routine RoamManager[T].unobserve()
     return
 
 ### Whether the observed entity is still alive. Safe on a tombstone (reads the atomic `dead` flag, never
-### `data`). A lock-free snapshot, like `strong_count`. :returns: `true` until the entity's data is freed.
+### `data`). A lock-free snapshot, like `strong_count`.
+### :returns: `true` until the entity's data is freed.
 routine RoamManager[T].is_alive() -> Bool
     danger
         return not C::ingrid_roam_is_destroyed(header: me.header())
 
 ### Whether the observed entity has been destroyed. Path-agnostic: true once the entity DATA is freed by
 ### the RC-drop (`unhold`) OR the cycle-collect (`cyclic_finalize`) path — NOT keyed on the strong count,
-### which a cycle-collected node keeps non-zero via its internal edges. :returns: `true` once it is gone.
+### which a cycle-collected node keeps non-zero via its internal edges.
+### :returns: `true` once it is gone.
 routine RoamManager[T].is_destroyed() -> Bool
     danger
         return C::ingrid_roam_is_destroyed(header: me.header())
@@ -266,6 +272,7 @@ dangerous routine RoamManager[T].drop_data()
     me.data.as_entity().destruct()
     return
 
+### Ends the controller. The entity itself is freed by the release and cycle collection paths.
 @override
 routine RoamManager[T].destruct()
     danger
