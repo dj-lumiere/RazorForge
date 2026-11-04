@@ -73,7 +73,7 @@ revare buildandrun hello.rr
 
 ## 3. A real project
 
-Create a `razorforge.toml` next to your sources:
+Create a `config.toml` next to your sources:
 
 ```toml
 [package]
