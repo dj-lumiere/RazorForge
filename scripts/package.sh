@@ -35,16 +35,59 @@ echo "=== build the Tessera builder ==="
 # builder at Tessera/bin/Release/net10.0/tessera.dll.
 dotnet build Tessera/Tessera.csproj -c Release --verbosity minimal
 
+echo "=== publish the Tessera builder (NativeAOT) ==="
+# Tessera ships as one native executable with its standard library, boards and Ingrid's Tessera library beside it
+# (the layout StdlibDir and FindIngrid look for from the executable's folder). Its own archive: the RazorForge
+# package carries the Tessera backend inside the builders and needs no separate tessera executable.
+TESSERA_VERSION="$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Tessera/Tessera.csproj | head -1)"
+TESSERA_NAME="tessera-v${TESSERA_VERSION}-${RID}"
+TESSERA_OUT="dist/${TESSERA_NAME}"
+rm -rf "$TESSERA_OUT" "dist/${TESSERA_NAME}.tar.gz" "dist/_tessera-publish"
+dotnet publish Tessera/Tessera.csproj -c Release -r "$RID" -o "dist/_tessera-publish" --verbosity minimal
+mkdir -p "$TESSERA_OUT"
+cp "dist/_tessera-publish/tessera" "$TESSERA_OUT/"
+cp -a Tessera/Standard "$TESSERA_OUT/Standard"
+cp -a Tessera/boards "$TESSERA_OUT/boards"
+cp -a Ingrid/tessera "$TESSERA_OUT/Ingrid"
+cp Tessera/LICENSE Tessera/README.md "$TESSERA_OUT/"
+rm -rf "dist/_tessera-publish"
+# The packaged executable builds and runs a program from a folder away from every checkout.
+TESSERA_SMOKE=$(mktemp -d)
+cat > "$TESSERA_SMOKE/smoke.te" <<'EOF'
+import Hosted
+
+routine start() -> None
+    Console.show("packaged tessera works")
+    return
+EOF
+TESSERA_STAGE=$(mktemp -d)
+cp -a "$TESSERA_OUT/." "$TESSERA_STAGE/"
+if ! (cd "$TESSERA_SMOKE" && "$TESSERA_STAGE/tessera" run smoke.te 2>&1 | grep -q "packaged tessera works"); then
+    echo "packaged tessera smoke failed" >&2
+    exit 1
+fi
+rm -rf "$TESSERA_SMOKE" "$TESSERA_STAGE"
+tar -C dist -czf "dist/${TESSERA_NAME}.tar.gz" "$TESSERA_NAME"
+if command -v sha256sum >/dev/null 2>&1; then
+    (cd dist && sha256sum "${TESSERA_NAME}.tar.gz" >> checksums.txt)
+else
+    (cd dist && shasum -a 256 "${TESSERA_NAME}.tar.gz" >> checksums.txt)
+fi
+echo "Packaged: dist/${TESSERA_NAME}.tar.gz"
+
 echo "=== build Ingrid's native runtime ==="
 (cd Ingrid/native && bash build.sh)
 
-echo "=== dotnet publish razorforge + suflae (self-contained, one directory) ==="
-# Both command lines share Anvila and the runtime, so they publish into the same directory. ReadyToRun: the
-# assemblies ship precompiled, so a one-shot build does not spend its first second compiling the builder.
-dotnet publish RazorForge/RazorForge.csproj -c Release -r "$RID" --self-contained true -p:PublishReadyToRun=true \
+echo "=== dotnet publish razorforge + suflae (NativeAOT, one directory) ==="
+# Both command lines share Anvila and the runtime, so they publish into the same directory. NativeAOT: each command line is
+# one native executable, so a one-shot build does not spend its first second starting the .NET runtime and compiling the
+# builder. The native runtime, the standard libraries and the LLVM tools are copied below, publish does not carry them.
+dotnet publish RazorForge/RazorForge.csproj -c Release -r "$RID" -p:PublishAot=true \
     -o "$OUT" --verbosity minimal
-dotnet publish Suflae/Suflae.csproj -c Release -r "$RID" --self-contained true -p:PublishReadyToRun=true \
+dotnet publish Suflae/Suflae.csproj -c Release -r "$RID" -p:PublishAot=true \
     -o "$OUT" --verbosity minimal
+# The prebuilt standard library snapshot is made and read by managed builders only (PbrfSerializer.IsSupported).
+rm -rf "$OUT/Standard/.prebuilt"
 
 echo "=== native runtime artifacts (installed layout) ==="
 # The installed layout — and the toolchain's own P/Invoke probing + buildandrun's prebuilt-layout
