@@ -18,7 +18,7 @@ csproj_version() {
 tag="${GITHUB_REF_NAME:?GITHUB_REF_NAME is not set}"
 
 if [[ "$tag" == mi-v* ]]; then
-  pkg_version="$(csproj_version)"                 # e.g. 0.4.0 — the builder that runs .mi
+  pkg_version="$(csproj_version)"                 # e.g. 0.4.0 — the builder that runs .mie
   release_name="Mielia v${tag#mi-v} (preview)"    # e.g. Mielia v0.1.0 (preview)
   release_notes="Revare/scripts/package-assets/RELEASE_NOTES_MI.md"
 else

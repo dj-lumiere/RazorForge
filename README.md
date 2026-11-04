@@ -259,10 +259,10 @@ including low-end Pentium, Celeron, and Atom parts, cannot run the output.
 
 ## Revare and Mielia
 
-[Mielia](https://github.com/dj-lumiere/Mielia) (`.mi`) is Revare's sibling. It shares the
+[Mielia](https://github.com/dj-lumiere/Mielia) (`.mie`) is Revare's sibling. It shares the
 grammar, the standard library, and the loud failures, and shares every entity for you: its
 entities are shared reference-counted handles with a cycle collector, bare numbers are exact
-`Int` and `Decimal`, and it has thread-safe module `global`s. A `.mi` file can import `.rr`
+`Int` and `Decimal`, and it has thread-safe module `global`s. A `.mie` file can import `.rr`
 modules, so one program can mix the two. Pick Revare when you want to choose how each thing is
 shared and how wide each number is, Mielia when you would rather not think about either.
 

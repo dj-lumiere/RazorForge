@@ -119,7 +119,7 @@ fixtures). CI green on Linux, macOS, and Windows.
 
 **Mielia** — the sharing-first sister language that hides Revare's memory-management surface behind a
 biased-refcount `Roamed` runtime — ships its **first preview** as a separate `sf-v0.1.0` release. The
-same builder binary runs it (`mielia hello.mi`, or any `.mi` file). See the Mielia v0.1.0 release notes
+same builder binary runs it (`mielia hello.mie`, or any `.mie` file). See the Mielia v0.1.0 release notes
 for scope.
 
 ## ⚠️ Not yet

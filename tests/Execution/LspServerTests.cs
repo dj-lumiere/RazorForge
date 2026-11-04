@@ -88,13 +88,13 @@ public sealed class LspServerTests
     [Fact]
     public void MieliaDocument_IsLeftToTheMieliaServer()
     {
-        const string miUri = "file:///test/Other.mi";
+        const string miUri = "file:///test/Other.mie";
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
             LspTestHarness.DidOpen(uri: miUri, text: "routine start()\n    var x = undefined_name\n    return\n",
                 languageId: "mielia"),
             Exit);
 
-        // A .mi file is the Mielia server's: this one publishes nothing for it.
+        // A .mie file is the Mielia server's: this one publishes nothing for it.
         Assert.Null(@object: LspTestHarness.Diagnostics(replies: replies, uri: miUri));
     }
 

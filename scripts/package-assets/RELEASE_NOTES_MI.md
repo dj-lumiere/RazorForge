@@ -10,10 +10,10 @@ This is a **preview**: single-threaded Mielia programs run end-to-end today. Con
 collector) is the next milestone and is intentionally out of scope here — see **Scope & limits** below.
 
 The builder is the same binary as Revare. Run Mielia with the `mielia` command (or `mi`), or by
-handing any `.mi` file to `revare`:
+handing any `.mie` file to `revare`:
 
 ```
-mielia hello.mi
+mielia hello.mie
 mielia version      # Mielia v0.1.0
 ```
 
@@ -43,7 +43,7 @@ Mielia's defaults are chosen for clarity, not machine width.
 ## 📚 Standard library
 
 Mielia reuses Revare's `Core` **wholesale** — `List`, `Dict`, `Set`, `Text`, and the rest are the
-real RA Core types, resolved through Mielia's world-line so a bare `List` in `.mi` *is* `RA::Core.List`,
+real RA Core types, resolved through Mielia's world-line so a bare `List` in `.mie` *is* `RA::Core.List`,
 roamed per instance and reached through display/operator transparency. There is no forked collections
 library to drift.
 
@@ -53,7 +53,7 @@ library to drift.
 
 ## 🧪 Equivalence testing
 
-A dedicated `.mi` fixture harness runs Mielia programs end-to-end and **locks RA/MI equivalence**: the
+A dedicated `.mie` fixture harness runs Mielia programs end-to-end and **locks RA/MI equivalence**: the
 same program expressed in both languages must produce the same output. This is how the shared-stdlib
 reuse stays honest.
 
@@ -75,6 +75,6 @@ are loud, uncatchable crashes, distinct from recoverable failures you handle wit
 
 ## ✅ Tests
 
-The `.mi` fixture harness is green and wired into CI alongside Revare's suite (**1,511 unit +
+The `.mie` fixture harness is green and wired into CI alongside Revare's suite (**1,511 unit +
 analyzer tests**, **188 stdlib fixtures**), including the RA/MI equivalence locks. CI green on Linux,
 macOS, and Windows.

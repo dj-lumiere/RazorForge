@@ -313,7 +313,7 @@ public sealed class ProgramCliTests : IDisposable
                 "    each i in 0 til 10 by 2\n" +
                 "        nothing\n" +
                 "    return\n"),
-            ("old.mi",
+            ("old.mie",
                 "module Test/ForMi\n" +
                 "routine start()\n" +
                 "    each k: U64 in 0 til n\n" +
@@ -336,7 +336,7 @@ public sealed class ProgramCliTests : IDisposable
             actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
         Assert.Equal(
             expected: "module Test/ForMi\nroutine start()\n    for k: U64 in 0 til n\n        show(k)\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.mi")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.mie")));
     }
 
     [Fact]

@@ -28,8 +28,8 @@ public sealed partial class StdlibApiTests
 
     private const string HarnessModule = "StdlibHarness";
 
-    // Mielia (.mi) sibling harness. MI fixtures live under a DISTINCT namespace prefix
-    // (Tests/StdlibMi/*) and their own fixtures dir so the MI bundle's prefix import pulls only `.mi`
+    // Mielia (.mie) sibling harness. MI fixtures live under a DISTINCT namespace prefix
+    // (Tests/StdlibMi/*) and their own fixtures dir so the MI bundle's prefix import pulls only `.mie`
     // files — a shared prefix would drag `.rr` fixtures into the MI project and trip BuildDriver's
     // cross-language import guard. MI reuses the Revare stdlib wholesale (MI's System IS RA's System),
     // so the ONLY difference here is the fixtures dir, entry extension, module name, and library path.
@@ -81,7 +81,7 @@ public sealed partial class StdlibApiTests
     /// <paramref name="glob"/> (importing each by its declared module, calling its <c>start()</c> via the
     /// module leaf), compiles + runs the ONE program, splits combined stdout on the
     /// <c>##### stem #####</c> delimiters, and diffs each section against its <c>.expected.txt</c>. Guarded
-    /// by the Revare (.rr) and Mielia (.mi) harnesses — the language is selected by the entry file's
+    /// by the Revare (.rr) and Mielia (.mie) harnesses — the language is selected by the entry file's
     /// extension, so the only per-language inputs are the fixtures dir, glob, module name, and paths.
     /// Returns the number of fixtures discovered and bundled (0 = nothing ran).
     /// </summary>

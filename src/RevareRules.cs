@@ -26,8 +26,8 @@ public sealed class RevareRules : LanguageRules
     public override string Name => "Revare";
     public override string ToolName => "revare";
     public override string Version => VersionOf(assembly: typeof(RevareRules).Assembly);
-    public override string FileExtension => ".rr";
-    public override string? PreviousFileExtension => ".rf";
+    public override string FileExtension => Builder.Frontends.SourceExtensions.Revare;
+    public override string? PreviousFileExtension => Builder.Frontends.SourceExtensions.PreviousRevare;
     public override string ShortName => TypeModel.Realms.Shared;
 
     public override List<Token> Tokenize(string source, string fileName)
