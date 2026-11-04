@@ -230,7 +230,7 @@ RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
   "class"/"struct".
 - field → **member variable**, declared as a bare `name: Type` line — **no `var`,
   no `open`**. Only restricted visibility is written: `posted` (module-write) /
-  `secret` (type/module-private: seen in its module and the modules under it). `open` is the unwritten default. Giving a `secret` or `posted` member
+  `secret` (type/module-private: seen in its module and the modules under it). In the standard library a secret name is seen by the whole library and by no program. `open` is the unwritten default. Giving a `secret` or `posted` member
   variable a value in `T(field: value, ...)` is allowed only inside the type's module (RF-S403 / RF-S404):
   outside, build it with a routine the module opens (`HttpResult.ok(body: b)`). There is no
   static `let`/`var` distinction for members. Locals inside routines still use
@@ -1248,7 +1248,7 @@ uppercase hex digits) for any byte that is not printable ASCII. `Bytes` shows `\
 - **`Text` slicing** uses a range subscript: `text[a til b]` / `text[a to b]`
   (subscript forces `U64` indices), open-ended `text[a til ^0]` to the end.
   Beyond the basics, `Text` carries a rich pure-RF method set (search, split,
-  case, padding) — e.g. `count_of`, `find`/`find_last` (a `U64?`, `none` where nothing is found), `split_once`,
+  case, padding) — e.g. `count_of`, `find`/`find_last` (a `U64?`, `none` where nothing is found), `split_once` (a `(Text, Text)?`),
   `replace_first`, `capitalize`, `center`, `eq_ignore_case`. Verify exact names
   in `Standard/RazorForge/System/Text/Text.rf`.
 - **`Bytes` `obeys Comparable, Hashable`** — usable as a `Dict` key and sortable.
