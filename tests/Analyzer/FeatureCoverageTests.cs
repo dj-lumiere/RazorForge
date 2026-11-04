@@ -27,7 +27,7 @@ public class FeatureCoverageTests
     {
         Program program = Parse(source: source);
         var analyzer = new SemanticVerifier(language: Language.Revare,
-            buildMode: RaBuildMode.ReleaseSpace);
+            buildMode: RvBuildMode.ReleaseSpace);
         AnalysisResult result = analyzer.Analyze(program: program);
         AssertNoErrors(result: result);
 
@@ -42,7 +42,7 @@ public class FeatureCoverageTests
     {
         Program program = ParseMielia(source: source);
         var analyzer = new SemanticVerifier(language: Language.Mielia,
-            buildMode: RaBuildMode.ReleaseSpace);
+            buildMode: RvBuildMode.ReleaseSpace);
         AnalysisResult result = analyzer.Analyze(program: program);
         AssertNoErrors(result: result);
 
@@ -59,7 +59,7 @@ public class FeatureCoverageTests
             options: new LlvmEmitterOptions
             {
                 StdlibPrograms = result.Registry.StdlibPrograms,
-                BuildMode = RaBuildMode.ReleaseSpace,
+                BuildMode = RvBuildMode.ReleaseSpace,
                 SynthesizedBodies = result.SynthesizedBodies,
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies
             });

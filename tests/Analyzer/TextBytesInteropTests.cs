@@ -60,7 +60,7 @@ public class TextBytesInteropTests
                                                    """);
         // `is_letter()` calls a routine that does not exist on Char (the API is
         // `is_alphabetic`), so it is a memberRoutineNotFound — `.name()` is a routine call, distinct
-        // from `.name` member access, and an unresolved routine call is RA-S458.
+        // from `.name` member access, and an unresolved routine call is RV-S458.
         Assert.Contains(collection: invalid.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MemberRoutineNotFound);
     }
@@ -72,7 +72,7 @@ public class TextBytesInteropTests
     public void TextEncodeAndBytesDecodeUtf8_Analyze()
     {
         // decode_as_utf8 is failable (strict validation) → `decode_as_utf8!()` from a failable
-        // routine; the non-failable counterpart is `decode_as_utf8_lossy()`. RA-S458 otherwise.
+        // routine; the non-failable counterpart is `decode_as_utf8_lossy()`. RV-S458 otherwise.
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
                                                       var text: Text = "Hello, 계"
@@ -92,7 +92,7 @@ public class TextBytesInteropTests
     {
         // interpret_as_utf8 is failable (strict UTF-8 validation), so it must be called as
         // `interpret_as_utf8!()` from a routine — the non-failable `interpret_as_utf8()`
-        // form does not exist (the lossy counterpart is `interpret_as_utf8_lossy()`). RA-S458.
+        // form does not exist (the lossy counterpart is `interpret_as_utf8_lossy()`). RV-S458.
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
                                                       var bytes: Bytes = "Hi".encode_as_utf8()

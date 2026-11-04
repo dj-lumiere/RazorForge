@@ -9,7 +9,7 @@ using static TestHelpers;
 /// A routine value from a dangerous routine is a dangerous callable (intent C82): it goes to a C routine's or a
 /// dangerous routine's <c>Callable</c> parameter or into a local variable, a dangerous routine's <c>Callable</c>
 /// parameters are dangerous callables in its body, and a dangerous callable is called only inside <c>danger</c> or a
-/// dangerous routine. Anything else is RA-S609.
+/// dangerous routine. Anything else is RV-S609.
 /// </summary>
 public class DangerousCallableTests
 {
@@ -91,7 +91,7 @@ public class DangerousCallableTests
                                  """);
     }
 
-    // ---- where it may not go (RA-S609) ----------------------------------------------------------------------------
+    // ---- where it may not go (RV-S609) ----------------------------------------------------------------------------
 
     [Fact]
     public void Analyze_DangerousRoutineToPlainRoutineCallable_Errors()

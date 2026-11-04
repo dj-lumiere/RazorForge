@@ -5,7 +5,7 @@ using TypeModel.Enums;
 namespace Revare.Tests.Formatting;
 
 /// <summary>
-/// The source formatter: each <c>tests/Fixtures/Format/*.rr</c> input formats to its sibling
+/// The source formatter: each <c>tests/Fixtures/Format/*.rvr</c> input formats to its sibling
 /// <c>.expected.txt</c>, formatting that output again changes nothing, and a file the formatter cannot reproduce
 /// is refused with a reason instead of being rewritten.
 /// </summary>
@@ -19,7 +19,7 @@ public sealed class FormatterTests
     /// <summary>The fixture inputs, by file name.</summary>
     public static IEnumerable<object[]> Fixtures()
     {
-        return Directory.EnumerateFiles(path: FixturesDir, searchPattern: "*.rr")
+        return Directory.EnumerateFiles(path: FixturesDir, searchPattern: "*.rvr")
                         .Select(selector: path => new object[] { Path.GetFileName(path: path) })
                         .OrderBy(keySelector: row => (string)row[0], comparer: StringComparer.Ordinal);
     }
@@ -66,7 +66,7 @@ public sealed class FormatterTests
     [InlineData("module Demo\nroutine start()\n    return\n", "module Demo\n\nroutine start()\n    return\n")]
     public void SeparatesModuleImportsAndBody_ByOneBlankLine(string source, string expected)
     {
-        FormatResult result = SourceFormatter.Format(source: source, fileName: "groups.rr",
+        FormatResult result = SourceFormatter.Format(source: source, fileName: "groups.rvr",
             language: Language.Revare);
 
         Assert.True(condition: result.Succeeded, userMessage: result.Refusal);
@@ -79,7 +79,7 @@ public sealed class FormatterTests
     {
         const string source = "routine start(\n    return\n";
 
-        FormatResult result = SourceFormatter.Format(source: source, fileName: "broken.rr",
+        FormatResult result = SourceFormatter.Format(source: source, fileName: "broken.rvr",
             language: Language.Revare);
 
         Assert.False(condition: result.Succeeded);
@@ -101,7 +101,7 @@ public sealed class FormatterTests
                                   return
                               """;
 
-        FormatResult result = SourceFormatter.Format(source: source, fileName: "comments.rr",
+        FormatResult result = SourceFormatter.Format(source: source, fileName: "comments.rvr",
             language: Language.Revare);
 
         Assert.False(condition: result.Succeeded);
@@ -120,7 +120,7 @@ public sealed class FormatterTests
                                   return
                               """;
 
-        FormatResult result = SourceFormatter.Format(source: source, fileName: "comment.rr",
+        FormatResult result = SourceFormatter.Format(source: source, fileName: "comment.rvr",
             language: Language.Revare);
 
         Assert.True(condition: result.Succeeded, userMessage: result.Refusal);

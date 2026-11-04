@@ -48,7 +48,7 @@ public class AttributeTests
         Assert.Contains(expected: "crash_only", collection: routine.Annotations);
     }
     /// <summary>
-    /// Verifies that an annotation the builder does not know is RA-G221, and the routine under it still parses.
+    /// Verifies that an annotation the builder does not know is RV-G221, and the routine under it still parses.
     /// </summary>
     [Fact]
     public void Parse_UnknownAnnotation_IsG221()
@@ -61,7 +61,7 @@ public class AttributeTests
                         """;
 
         (Program program, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
-        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RA-G221") && e.Contains(value: "@prelude"));
+        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RV-G221") && e.Contains(value: "@prelude"));
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         Assert.DoesNotContain(expected: "prelude", collection: routine.Annotations);
     }
@@ -78,7 +78,7 @@ public class AttributeTests
                         """;
 
         (_, Builder.Parser.Parser parser) = ParseWithErrors(source: source);
-        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RA-G221") && e.Contains(value: "@readonly"));
+        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RV-G221") && e.Contains(value: "@readonly"));
     }
     /// <summary>
     /// Verifies that the parser accepts inline attribute.
@@ -187,7 +187,7 @@ public class AttributeTests
     }
 
     /// <summary>
-    /// Verifies that an annotation on a protocol itself is rejected: it has no effect there (RA-G213).
+    /// Verifies that an annotation on a protocol itself is rejected: it has no effect there (RV-G213).
     /// </summary>
     [Fact]
     public void Parse_AttributeOnProtocol_HasNoEffect()
@@ -206,7 +206,7 @@ public class AttributeTests
     #region Member Variable Annotation Tests
 
     /// <summary>
-    /// Verifies that an annotation on a record's member variable is rejected: it has no effect there (RA-G213).
+    /// Verifies that an annotation on a record's member variable is rejected: it has no effect there (RV-G213).
     /// </summary>
     [Fact]
     public void Parse_AttributeOnField_HasNoEffect()
@@ -223,7 +223,7 @@ public class AttributeTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Verifies that an annotation on an entity's member variable is rejected: it has no effect there (RA-G213).
+    /// Verifies that an annotation on an entity's member variable is rejected: it has no effect there (RV-G213).
     /// </summary>
     [Fact]
     public void Parse_AttributeOnEntityMemberVariable_HasNoEffect()

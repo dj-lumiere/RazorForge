@@ -2,7 +2,7 @@
 
 The realm release. v0.2.0 shipped the execution model, v0.3.0 the communication layer. v0.4.0 is a
 **language-maturity** release built around one idea that turned out to connect everything else:
-**realms**. A realm is the namespace a name lives in — `RA::` for Revare, `C::` for foreign C,
+**realms**. A realm is the namespace a name lives in — `RV::` for Revare, `C::` for foreign C,
 `LLVM::` for intrinsics, and `MI::` for the new sister language **Mielia**. Foreign calls, builder
 intrinsics, and cross-language interop all became one mechanism instead of three ad-hoc ones.
 
@@ -18,11 +18,11 @@ Foreign and intrinsic calls are now **realm-qualified** rather than string-tagge
 - **`routine C::malloc(...)` / `routine LLVM::...`** replace the old `external("C"|"llvm")` form. A
   realm is part of a name's identity, not a comment on it — so a foreign name resolves, mangles, and
   type-checks like any other.
-- **Realm-qualified references in expression and type position** — `RA::Core.List`, `C::size_t` — so a
-  program can name a type or routine from a specific world when it matters (mixed RA/MI, FFI boundaries).
-- **Strict-realm checking at foreign call sites (RA-S460)**: crossing a realm boundary is deliberate,
+- **Realm-qualified references in expression and type position** — `RV::Core.List`, `C::size_t` — so a
+  program can name a type or routine from a specific world when it matters (mixed RV/MI, FFI boundaries).
+- **Strict-realm checking at foreign call sites (RV-S460)**: crossing a realm boundary is deliberate,
   never accidental.
-- Realms are the substrate the whole Mielia "world-line" model rides on: MI's `List` *is* `RA::Core.List`,
+- Realms are the substrate the whole Mielia "world-line" model rides on: MI's `List` *is* `RV::Core.List`,
   wrapped per-instance so it obeys Mielia's sharing semantics without forking the standard library.
 
 ## 🔗 C FFI
@@ -60,7 +60,7 @@ The value/copy rules were reworked into one coherent model.
 - **One canonical RC vocabulary:** `share` (mint a co-owner), `hold` / `unhold` (strong count),
   `observe` / `unobserve` (weak count), `access` (read-only coercion), `control` (deref), `destroy`
   (which now folds in the old `release`). Aggregate-steal holes (`steal l[i]`, `steal o.field`) are
-  rejected (RA-S622).
+  rejected (RV-S622).
 
 ## 🪞 Buildtime reflection
 

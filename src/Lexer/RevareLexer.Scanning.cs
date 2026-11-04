@@ -101,7 +101,7 @@ public partial class RevareLexer
                 ScanDotOperator();
                 break;
             case ':':
-                // `::` is the realm-qualifier separator (e.g. `RA::System.List`); bare `:` is a colon.
+                // `::` is the realm-qualifier separator (e.g. `RV::System.List`); bare `:` is a colon.
                 AddToken(type: Match(expected: ':')
                     ? TokenType.DoubleColon
                     : TokenType.Colon);

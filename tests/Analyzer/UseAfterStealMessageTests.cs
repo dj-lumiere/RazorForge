@@ -6,7 +6,7 @@ namespace Revare.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// RA-S615, a use of a name after <c>steal</c> moved its value out: the message names the line of the steal, where
+/// RV-S615, a use of a name after <c>steal</c> moved its value out: the message names the line of the steal, where
 /// the value went (a binding, a field, or a call), and the way out (use the new owner, or use the name before
 /// the steal).
 /// </summary>

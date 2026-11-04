@@ -6,7 +6,7 @@ namespace Revare.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// The name a <c>for</c> loop binds each element to is bound again every round, so assigning it is RA-S251 with a
+/// The name a <c>for</c> loop binds each element to is bound again every round, so assigning it is RV-S251 with a
 /// message that says it is the loop variable: over a collection (where the element is a token), over a range (a
 /// counter loop), and for each name of a destructured element. A local declared in the body stays assignable.
 /// </summary>

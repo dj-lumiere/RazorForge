@@ -2,7 +2,7 @@
 # Simple test for Revare Bootstrap
 
 SOURCE_FILE=$1
-BASE_NAME="${SOURCE_FILE%.rr}"
+BASE_NAME="${SOURCE_FILE%.rvr}"
 
 echo "=== Revare Bootstrap Test ==="
 echo "Source: $SOURCE_FILE"

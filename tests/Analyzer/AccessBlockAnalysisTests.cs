@@ -7,10 +7,10 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for the analysis of <c>viewing</c> / <c>modifying</c> blocks and of a Guarded's <c>view()</c> /
-/// <c>modify()</c> passed to a call: opening a Guarded again inside a block of the same routine (RA-S630, for reading
-/// and for writing), naming a target twice (RA-S650), a target the block can't open that way (RA-S651),
-/// <c>try</c> on a target that can't be tried (RA-S611), the access call anywhere but passed to a call (RA-S652), and
-/// the token of a block handed to a job (RA-S632).
+/// <c>modify()</c> passed to a call: opening a Guarded again inside a block of the same routine (RV-S630, for reading
+/// and for writing), naming a target twice (RV-S650), a target the block can't open that way (RV-S651),
+/// <c>try</c> on a target that can't be tried (RV-S611), the access call anywhere but passed to a call (RV-S652), and
+/// the token of a block handed to a job (RV-S632).
 /// </summary>
 public class AccessBlockAnalysisTests
 {
@@ -316,7 +316,7 @@ public class AccessBlockAnalysisTests
     [Fact]
     public void Analyze_UnopenableTarget_NameStillKnownInBlock()
     {
-        // The block can't open a ReadOnly Guarded with 'modifying' (RA-S651). Its 'as' name is still declared in the
+        // The block can't open a ReadOnly Guarded with 'modifying' (RV-S651). Its 'as' name is still declared in the
         // block, so the use of 'c' there is not a second error about an unknown identifier.
         string source = Prelude + """
                                   routine start()
@@ -337,8 +337,8 @@ public class AccessBlockAnalysisTests
     [Fact]
     public void Analyze_UsingOnGuardedView_OnlySaysToOpenWithBlock()
     {
-        // 'using log.view() as entries' on a Guarded is RA-S612, whose message says what to write. The same call is not
-        // also RA-S652 (an access call that isn't passed to a call).
+        // 'using log.view() as entries' on a Guarded is RV-S612, whose message says what to write. The same call is not
+        // also RV-S652 (an access call that isn't passed to a call).
         string source = Prelude + """
                                   routine start()
                                       var log = Guarded[Counter, MultiRead](from: Counter(value: 1))
@@ -402,7 +402,7 @@ public class AccessBlockAnalysisTests
         Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.AccessTargetNotOpenable);
     }
 
-    /// <summary>A view_enter that gives no Viewing token is RA-S654.</summary>
+    /// <summary>A view_enter that gives no Viewing token is RV-S654.</summary>
     [Fact]
     public void Analyze_EnterWithoutToken_Errors()
     {

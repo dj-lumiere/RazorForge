@@ -8,7 +8,7 @@ using static TestHelpers;
 /// A generic parameter's NAME is a label, not an identity — a user type named the same as a stdlib
 /// generic's parameter (`record T` vs `List[T]`/`Items[T,N]`/`Hijacked[T]`, `record N` vs `Items[T,N]`,
 /// `record M` vs a generic's `M` parameter) must NOT break that generic's monomorphization. Today it DOES
-/// (Track-C "unsubstituted generic parameter" / RA-S954), because the pipeline keys on the parameter
+/// (Track-C "unsubstituted generic parameter" / RV-S954), because the pipeline keys on the parameter
 /// NAME as identity in ~6 places. These tests encode the fixed behavior; UN-SKIP each when the alpha-
 /// rename (parameter identity = slot, not name) lands.
 /// </summary>

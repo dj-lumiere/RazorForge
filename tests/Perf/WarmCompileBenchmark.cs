@@ -40,10 +40,10 @@ public sealed partial class WarmCompileBenchmark
     private static Program ParseTrivial()
     {
         List<Token> tokens =
-            Lexers.Tokenize(source: Trivial, fileName: "bench.rr", language: Language.Revare);
+            Lexers.Tokenize(source: Trivial, fileName: "bench.rvr", language: Language.Revare);
         return new Builder.Parser.Parser(tokens: tokens,
             language: Language.Revare,
-            fileName: "bench.rr").Parse();
+            fileName: "bench.rvr").Parse();
     }
 
     private static double TimeMs(Action a)
@@ -136,7 +136,7 @@ public sealed partial class WarmCompileBenchmark
 
     private static string PrintCodegenAst(AnalysisResult r)
     {
-        return new Builder.RaSyntaxTreePrinter().PrintMultiProgram(
+        return new Builder.RvSyntaxTreePrinter().PrintMultiProgram(
             programs: r.Registry.UserPrograms,
             synthesizedBodies: r.SynthesizedBodies,
             registry: r.Registry,
@@ -254,10 +254,10 @@ public sealed partial class WarmCompileBenchmark
         {
             return new Builder.Parser.Parser(
                 tokens: Lexers.Tokenize(source: SrcB,
-                    fileName: "b.rr",
+                    fileName: "b.rvr",
                     language: Language.Revare),
                 language: Language.Revare,
-                fileName: "b.rr").Parse();
+                fileName: "b.rvr").Parse();
         }
 
         HashSet<string> coldADefs = DefineSet(ll: Codegen(

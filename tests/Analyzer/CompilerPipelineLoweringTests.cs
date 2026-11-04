@@ -289,7 +289,7 @@ public class CompilerPipelineLoweringTests
     public void Analyze_LambdaExpression_IsLiftedBeforeCodegen()
     {
         // A lambda parameter needs an annotation or a typed target: Revare does not
-        // back-infer a lambda parameter's type from its body (RA-S638). Annotate `x`.
+        // back-infer a lambda parameter's type from its body (RV-S638). Annotate `x`.
         string source = """
                         routine test() -> S32
                             var double_it = (x: S32) => x * 2
@@ -516,9 +516,9 @@ public class CompilerPipelineLoweringTests
     [Fact]
     public void LlvmEmitter_LambdaLift_GeneratesIr()
     {
-        // Revare has no module-level mutable state (RA-S435), so the captured binding is a
+        // Revare has no module-level mutable state (RV-S435), so the captured binding is a
         // routine local — the lambda lift still fires on the closure over `factor`. The lambda
-        // parameter `x` needs a type annotation (RA-S638: no body back-inference); a single typed
+        // parameter `x` needs a type annotation (RV-S638: no body back-inference); a single typed
         // param with a `given` capture must be parenthesized.
         string source = """
                         routine test() -> S32

@@ -26,7 +26,7 @@ object RevareLanguage : Language("revare") {
 /** Highlights Revare code outside a file (a hover's code block) with the same TextMate grammar the editor uses. */
 class RevareSyntaxHighlighterFactory : SyntaxHighlighterFactory() {
     override fun getSyntaxHighlighter(project: Project?, virtualFile: VirtualFile?): SyntaxHighlighter =
-        TextMateService.getInstance().getLanguageDescriptorByExtension("rr")
+        TextMateService.getInstance().getLanguageDescriptorByExtension("rvr")
             ?.let { TextMateHighlighter(TextMateHighlightingLexer(it, LINE_LIMIT)) }
             ?: PlainSyntaxHighlighter()
 

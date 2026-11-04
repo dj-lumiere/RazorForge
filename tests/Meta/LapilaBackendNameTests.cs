@@ -56,23 +56,23 @@ public sealed class LapilaBackendNameTests
         Assert.Equal(expected: "9", actual: BuildAndRun(fixture: "LapilaBackendGatherNone"));
     }
 
-    /// <summary>Builds and runs <c>tests/Fixtures/{fixture}/main.rr</c> and returns what it printed.</summary>
+    /// <summary>Builds and runs <c>tests/Fixtures/{fixture}/main.rvr</c> and returns what it printed.</summary>
     private static string BuildAndRun(string fixture)
     {
-        string raPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", fixture, "main.rr"]);
+        string rvPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", fixture, "main.rvr"]);
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: raPath), "buildandrun", raPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "buildandrun", rvPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
             UseShellExecute = false,
-            WorkingDirectory = Path.GetDirectoryName(path: raPath)!,
+            WorkingDirectory = Path.GetDirectoryName(path: rvPath)!,
             Environment =
             {
-                [key: "DOTNET_gcServer"] = "0", [key: "DOTNET_GCConserveMemory"] = "9", [key: "RA_NO_DAEMON"] = "1"
+                [key: "DOTNET_gcServer"] = "0", [key: "DOTNET_GCConserveMemory"] = "9", [key: "RV_NO_DAEMON"] = "1"
             }
         };
         using var p = Process.Start(startInfo: psi)!;

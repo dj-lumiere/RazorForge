@@ -6,7 +6,7 @@ namespace Revare;
 
 /// <summary>
 /// The Revare Language Server: the shared engine (<c>Builder.Execution.LspServer</c>) run by <c>revare lsp</c>,
-/// serving <c>.rr</c> files with Revare's own keywords and names.
+/// serving <c>.rvr</c> files with Revare's own keywords and names.
 /// </summary>
 internal sealed class RevareLanguageServer : LanguageServerProfile
 {

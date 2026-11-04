@@ -1,0 +1,480 @@
+module System/Numerics
+
+# ============================================================================
+# DecimalTrans — the transcendental / libm surface of `Decimal`.
+#
+# `Decimal` is a finite-only canonical face of decimal128 sharing D128's i128 BID
+# storage (see Decimal.rvr), so every math routine here reinterprets to `D128` via
+# `dec_to_d128` and wraps the result back. A non-finite result crashes (NumericOverflowError for an
+# infinity, NumericDomainError for a NaN), since a Decimal is finite-only.
+# The functions that round (the transcendentals, pow, sqrt, hypot, atan2, quantize, round) go to Ingrid's Decimal
+# exports instead, which round a value exactly halfway half up, as every Decimal rounding does, and hand back the
+# result in Decimal's one form. The exact ones (abs, trunc, floor, scaleb, ...) reuse D128 and normalize.
+# ============================================================================
+
+### fn(me) through `ingrid_decimal_unary`: the engine's code `fn` (0 exp, 1 exp_m1, 2 exp2, 3 exp10, 4 ln, 5 ln_1p,
+### 6 log2, 7 log10, 8 asin, 9 acos, 10 atan, 11 sinh, 12 cosh, 13 tanh, 14 asinh, 15 acosh, 16 atanh, 17 erf,
+### 18 erfc, 19 gamma, 20 ln_gamma, 21 sin, 22 cos, 23 tan, 24 cbrt), correctly rounded, a tie half up.
+### :param fn: The routine code of the engine.
+### :param x: The argument.
+### :returns: The correctly rounded result.
+### :throws: {NumericDomainError} for a NaN result; {NumericOverflowError} for an infinite one.
+secret routine dec_unary(fn: U32, x: Decimal) -> Decimal
+    var d = dec_to_d128(x: x)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_unary(fn: fn, x_low: d128_low(v: d),
+        x_high: d128_high(v: d))))
+
+# ============================================================================
+# Exponentials
+# ============================================================================
+
+### e^me.
+### :returns: The value of e raised to the power `me`.
+routine Decimal.exp() -> Decimal
+    return dec_unary(fn: 0, x: me)
+
+### e^me - 1, accurate for small me.
+### :returns: The value of e^me - 1, accurate for small `me`.
+routine Decimal.exp_m1() -> Decimal
+    return dec_unary(fn: 1, x: me)
+
+### 2^me.
+### :returns: The value of 2 raised to the power `me`.
+routine Decimal.exp2() -> Decimal
+    return dec_unary(fn: 2, x: me)
+
+### 10^me.
+### :returns: The value of 10 raised to the power `me`.
+routine Decimal.exp10() -> Decimal
+    return dec_unary(fn: 3, x: me)
+
+# ============================================================================
+# Logarithms
+# ============================================================================
+
+### Natural logarithm ln(me).
+### :returns: The natural logarithm of `me`.
+routine Decimal.ln() -> Decimal
+    return dec_unary(fn: 4, x: me)
+
+### ln(1 + me), accurate for small me.
+### :returns: The value of ln(1 + me), accurate for small `me`.
+routine Decimal.ln_1p() -> Decimal
+    return dec_unary(fn: 5, x: me)
+
+### Base-2 logarithm log2(me).
+### :returns: The base 2 logarithm of `me`.
+routine Decimal.log2() -> Decimal
+    return dec_unary(fn: 6, x: me)
+
+### Base-10 logarithm log10(me).
+### :returns: The base 10 logarithm of `me`.
+routine Decimal.log10() -> Decimal
+    return dec_unary(fn: 7, x: me)
+
+# ============================================================================
+# Powers / roots
+# ============================================================================
+
+### me raised to the power `you`.
+### :param you: The exponent.
+### :returns: `me` to the power `you`.
+@readonly
+routine Decimal.pow(you: Decimal) -> Decimal
+    var x = dec_to_d128(x: me)
+    var y = dec_to_d128(x: you)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_pow(x_low: d128_low(v: x),
+        x_high: d128_high(v: x), y_low: d128_low(v: y), y_high: d128_high(v: y))))
+
+### Square root of me.
+### :returns: The square root of `me`.
+routine Decimal.sqrt() -> Decimal
+    var x = dec_to_d128(x: me)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_sqrt(x_low: d128_low(v: x),
+        x_high: d128_high(v: x))))
+
+### 1 / sqrt(me), correctly rounded to 34 digits (a tie half up), not `1 / me.sqrt()` (two roundings).
+### :returns: The value of 1 divided by the square root of `me`.
+### :throws: {NumericDomainError} when `me` is zero or below.
+routine Decimal.rsqrt() -> Decimal
+    var x = dec_to_d128(x: me)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_rsqrt(x_low: d128_low(v: x),
+        x_high: d128_high(v: x))))
+
+### Cube root of me.
+### :returns: The cube root of `me`.
+routine Decimal.cbrt() -> Decimal
+    return dec_unary(fn: 24, x: me)
+
+### Euclidean norm sqrt(x^2 + y^2), computed without overflow/underflow.
+### :param x: One leg.
+### :param y: The other leg.
+### :returns: The length of the hypotenuse.
+routine hypot(x: Decimal, y: Decimal) -> Decimal
+    return dec_hypot(x: x, y: y, z: DECIMAL_ZERO)
+
+### 3D Euclidean norm sqrt(x^2 + y^2 + z^2), computed without overflow/underflow.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+### :returns: The length of the 3D hypotenuse.
+routine hypot(x: Decimal, y: Decimal, z: Decimal) -> Decimal
+    return dec_hypot(x: x, y: y, z: z)
+
+### sqrt(x^2 + y^2 + z^2) rounded half up, through Ingrid.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+### :returns: The length sqrt(x^2 + y^2 + z^2).
+secret routine dec_hypot(x: Decimal, y: Decimal, z: Decimal) -> Decimal
+    var a = dec_to_d128(x: x)
+    var b = dec_to_d128(x: y)
+    var c = dec_to_d128(x: z)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_hypot(x_low: d128_low(v: a),
+        x_high: d128_high(v: a), y_low: d128_low(v: b), y_high: d128_high(v: b), z_low: d128_low(v: c),
+        z_high: d128_high(v: c))))
+
+### Fused multiply-add me*b + c with a single rounding, half up.
+### :param b: The second factor.
+### :param c: The value added to the product.
+### :returns: `me * b + c`, rounded once.
+routine Decimal.mul_add(b: Decimal, c: Decimal) -> Decimal
+    var x = dec_to_d128(x: me)
+    var y = dec_to_d128(x: b)
+    var z = dec_to_d128(x: c)
+    var r = d128_of_words(w: C::ingrid_decimal_mul_add(a_low: d128_low(v: x), a_high: d128_high(v: x),
+        b_low: d128_low(v: y), b_high: d128_high(v: y), c_low: d128_low(v: z), c_high: d128_high(v: z)))
+    return dec_of_canonical_finite(d: r)
+
+# ============================================================================
+# Trigonometric
+# ============================================================================
+
+### Sine of me (radians).
+### :returns: The sine of `me`, with `me` in radians.
+routine Decimal.sin() -> Decimal
+    return dec_unary(fn: 21, x: me)
+
+### Cosine of me (radians).
+### :returns: The cosine of `me`, with `me` in radians.
+routine Decimal.cos() -> Decimal
+    return dec_unary(fn: 22, x: me)
+
+### Tangent of me (radians).
+### :returns: The tangent of `me`, with `me` in radians.
+routine Decimal.tan() -> Decimal
+    return dec_unary(fn: 23, x: me)
+
+### Arcsine of me (result in radians).
+### :returns: The arc sine of `me`, in radians.
+routine Decimal.asin() -> Decimal
+    return dec_unary(fn: 8, x: me)
+
+### Arccosine of me (result in radians).
+### :returns: The arc cosine of `me`, in radians.
+routine Decimal.acos() -> Decimal
+    return dec_unary(fn: 9, x: me)
+
+### Arctangent of me (result in radians).
+### :returns: The arc tangent of `me`, in radians.
+routine Decimal.atan() -> Decimal
+    return dec_unary(fn: 10, x: me)
+
+### Two-argument arctangent atan2(y, x) (result in radians).
+### :param y: The vertical coordinate.
+### :param x: The horizontal coordinate.
+### :returns: The angle in radians, in the range -pi to pi.
+routine atan2(y: Decimal, x: Decimal) -> Decimal
+    var a = dec_to_d128(x: y)
+    var b = dec_to_d128(x: x)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_atan2(y_low: d128_low(v: a),
+        y_high: d128_high(v: a), x_low: d128_low(v: b), x_high: d128_high(v: b))))
+
+# ============================================================================
+# Hyperbolic
+# ============================================================================
+
+### Hyperbolic sine of me.
+### :returns: The hyperbolic sine of `me`.
+routine Decimal.sinh() -> Decimal
+    return dec_unary(fn: 11, x: me)
+
+### Hyperbolic cosine of me.
+### :returns: The hyperbolic cosine of `me`.
+routine Decimal.cosh() -> Decimal
+    return dec_unary(fn: 12, x: me)
+
+### Hyperbolic tangent of me.
+### :returns: The hyperbolic tangent of `me`.
+routine Decimal.tanh() -> Decimal
+    return dec_unary(fn: 13, x: me)
+
+### Inverse hyperbolic sine of me.
+### :returns: The inverse hyperbolic sine of `me`.
+routine Decimal.asinh() -> Decimal
+    return dec_unary(fn: 14, x: me)
+
+### Inverse hyperbolic cosine of me.
+### :returns: The inverse hyperbolic cosine of `me`.
+routine Decimal.acosh() -> Decimal
+    return dec_unary(fn: 15, x: me)
+
+### Inverse hyperbolic tangent of me.
+### :returns: The inverse hyperbolic tangent of `me`.
+routine Decimal.atanh() -> Decimal
+    return dec_unary(fn: 16, x: me)
+
+# ============================================================================
+# Special functions
+# ============================================================================
+
+### Error function erf(me).
+### :returns: The value of erf(`me`), the error integral.
+routine Decimal.erf() -> Decimal
+    return dec_unary(fn: 17, x: me)
+
+### Complementary error function erfc(me) = 1 - erf(me).
+### :returns: The value of erfc(`me`), the complementary error integral.
+routine Decimal.erfc() -> Decimal
+    return dec_unary(fn: 18, x: me)
+
+### Gamma function gamma(me).
+### :returns: The value of gamma(`me`), the generalized factorial of `me - 1`.
+routine Decimal.gamma() -> Decimal
+    return dec_unary(fn: 19, x: me)
+
+### Natural logarithm of the absolute value of the gamma function, ln_gamma(me).
+### :returns: The value of ln(abs(gamma(`me`))).
+routine Decimal.ln_gamma() -> Decimal
+    return dec_unary(fn: 20, x: me)
+
+# ============================================================================
+# Sign / inspection
+# ============================================================================
+
+### True if me has its sign bit set (a Decimal below zero: there is no -0).
+### :returns: `true` if the sign bit is set, also for -0 and a negative NaN.
+routine Decimal.is_sign_negative() -> Bool
+    return dec_to_d128(x: me).is_sign_negative()
+
+### True if me is finite and nonzero.
+### :returns: `true` if `me` is finite, nonzero and not subnormal.
+routine Decimal.is_normal() -> Bool
+    return dec_to_d128(x: me).is_normal()
+
+### True if me is 0.
+### :returns: `true` if `me` is positive or negative zero.
+routine Decimal.is_zero() -> Bool
+    return dec_to_d128(x: me).is_zero()
+
+### True if me is below zero (a Decimal zero is always +0).
+### :returns: `true` if `me` is less than zero.
+routine Decimal.is_negative() -> Bool
+    return dec_to_d128(x: me).is_negative()
+
+### True if me is strictly positive.
+### :returns: `true` if `me` is greater than zero.
+routine Decimal.is_positive() -> Bool
+    return dec_to_d128(x: me).is_positive()
+
+### True if me is subnormal (finite, nonzero, below the smallest normal).
+### :returns: `true` if `me` is nonzero and below the smallest normal value in magnitude.
+routine Decimal.is_subnormal() -> Bool
+    return dec_to_d128(x: me).is_subnormal()
+
+### -1, 0, or +1 matching the sign of me.
+### :returns: -1, 0, or +1 as a value of the same type.
+routine Decimal.signum() -> Decimal
+    return dec_of_canonical(x: dec_to_d128(x: me).signum())
+
+### C99 fpclassify code (ZERO / SUBNORMAL / NORMAL; a well-formed Decimal is never inf/NaN).
+### :returns: The class of `me`: signaling NaN, NaN, infinite, zero, subnormal, or normal.
+routine Decimal.fpclassify() -> FpClass
+    return dec_to_d128(x: me).fpclassify()
+
+# ============================================================================
+# Absolute value / negation / sign transfer
+# ============================================================================
+
+### Absolute value of me.
+### :returns: The magnitude of `me`.
+routine Decimal.abs() -> Decimal
+    return dec_of_canonical(x: dec_to_d128(x: me).abs())
+
+### Negation of me (flips the sign: zero stays +0).
+### :returns: `me` with its sign flipped.
+@readonly
+routine Decimal.neg() -> Decimal
+    var x = dec_to_d128(x: me)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_neg(x_low: d128_low(v: x), x_high: d128_high(v: x))))
+
+### Magnitude of me with the sign of `you` (zero stays +0).
+### :param you: The value whose sign is used.
+### :returns: The magnitude of `me` with the sign of `you`.
+routine Decimal.copysign(you: Decimal) -> Decimal
+    var x = dec_to_d128(x: me)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_copysign(x_low: d128_low(v: x), x_high: d128_high(v: x),
+        y_high: d128_high(v: dec_to_d128(x: you)))))
+
+# ============================================================================
+# Extrema / difference
+# ============================================================================
+
+### Positive difference max(me - you, 0), rounded half up to 34 digits.
+### :param you: The value to subtract.
+### :returns: `me - you` when `me` is greater, otherwise zero.
+routine Decimal.fdim(you: Decimal) -> Decimal
+    if me <= you
+        return DECIMAL_ZERO
+    return dec_of_d128_finite(d: dec_round_add(a: dec_to_d128(x: me), b: dec_to_d128(x: you).neg()))
+
+### IEEE minimumNumber(me, you).
+### :param you: The value to compare against.
+### :returns: The smaller value, or the other one if one is a NaN.
+routine Decimal.min_num(you: Decimal) -> Decimal
+    return dec_of_canonical(x: dec_to_d128(x: me).min_num(you: dec_to_d128(x: you)))
+
+### IEEE maximumNumber(me, you).
+### :param you: The value to compare against.
+### :returns: The larger value, or the other one if one is a NaN.
+routine Decimal.max_num(you: Decimal) -> Decimal
+    return dec_of_canonical(x: dec_to_d128(x: me).max_num(you: dec_to_d128(x: you)))
+
+### IEEE minimum(me, you).
+### :param you: The value to compare against.
+### :returns: The smaller value, or a NaN if either is a NaN.
+routine Decimal.minimum(you: Decimal) -> Decimal
+    return dec_of_canonical(x: dec_to_d128(x: me).minimum(you: dec_to_d128(x: you)))
+
+### IEEE maximum(me, you).
+### :param you: The value to compare against.
+### :returns: The larger value, or a NaN if either is a NaN.
+routine Decimal.maximum(you: Decimal) -> Decimal
+    return dec_of_canonical(x: dec_to_d128(x: me).maximum(you: dec_to_d128(x: you)))
+
+# ============================================================================
+# Remainder
+# ============================================================================
+
+### Floating remainder of me / you (C fmod; result has me's sign).
+### :param you: The divisor.
+### :returns: `me - trunc(me / you) * you`.
+routine Decimal.mod_trunc(you: Decimal) -> Decimal
+    return dec_of_d128(x: dec_to_d128(x: me).mod_trunc(you: dec_to_d128(x: you)))
+
+### Returns the Euclidean remainder of `me` divided by `you`, computed exactly: the r with `me = q * you + r` for a whole
+### number q and `0 <= r < |you|`, never negative, as integer `%` is (-7 by 2 is 1, 7 by -2 is 1, 5.5 by -2 is 1.5).
+### :param you: The divisor.
+### :returns: The remainder.
+### :throws: {DivisionByZeroError} when `you` is zero, and {NumericOverflowError} when the remainder needs more than 34
+###     significant digits (-1e-40 by 7 is 7 - 1e-40).
+routine Decimal.rem(you: Decimal) -> Decimal
+    if you.is_zero()
+        throw DivisionByZeroError()
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    var w = C::ingrid_decimal_rem(a_low: d128_low(v: a), a_high: d128_high(v: a), b_low: d128_low(v: b),
+        b_high: d128_high(v: b))
+    if w.w2 != 0
+        throw NumericOverflowError(
+            description: "the remainder has more significant digits than a Decimal holds (34)")
+    return dec_of_canonical(x: D128.from_words(low: w.w0, high: w.w1))
+
+# ============================================================================
+# Scaling / exponent
+# ============================================================================
+
+### me * 10^n (the decimal analog of ldexp).
+### :param n: The power-of-ten exponent to apply.
+### :returns: `me * 10^n`.
+routine Decimal.scaleb(n: S64) -> Decimal
+    return dec_of_d128(x: dec_to_d128(x: me).scaleb(n: n))
+
+### The base-10 exponent of me (floor(log10(|me|)) as a Decimal).
+### :returns: The exponent of `me`.
+routine Decimal.logb() -> Decimal
+    return dec_of_d128(x: dec_to_d128(x: me).logb())
+
+# ============================================================================
+# Rounding to integral values
+# ============================================================================
+
+### Truncates toward zero to an integral value.
+### :returns: `me` with its fractional part removed.
+routine Decimal.trunc() -> Decimal
+    return dec_of_d128(x: dec_to_d128(x: me).trunc())
+
+### Rounds toward negative infinity (floor).
+### :returns: The largest integral value not above `me`.
+routine Decimal.floor() -> Decimal
+    return dec_of_d128(x: dec_to_d128(x: me).floor())
+
+### Rounds toward positive infinity (ceil).
+### :returns: The smallest integral value not below `me`.
+routine Decimal.ceil() -> Decimal
+    return dec_of_d128(x: dec_to_d128(x: me).ceil())
+
+### Rounds to `places` digits after the point by `rule`, half up when left out (Decimal's rule): `x.round()` is the
+### whole number n with n - 0.5 <= x < n + 0.5 (2.5 -> 3, -2.5 -> -2, -0.5 -> 0), `2.675.round(places: 2)` is 2.68,
+### `(-2.5).round(rule: RoundingRule.HALF_EVEN)` is -2.
+### :param places: The digits after the point kept (0 for a whole number).
+### :param rule: How the digits past them go.
+### :returns: The rounded value.
+@readonly
+routine Decimal.round(places: U64 = 0, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    var x = dec_to_d128(x: me)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_round_places(x_low: d128_low(v: x),
+        x_high: d128_high(v: x), places: places, mode: rounding_mode(rule: rule))))
+
+### Rounds the way Decimal rounds, half up: the same as `round()`.
+### :returns: The nearest integral value to `me`.
+routine Decimal.rint() -> Decimal
+    return me.round()
+
+### Rounds to the nearest integral value, ties away from zero: `round(rule: RoundingRule.HALF_AWAY)`.
+### :returns: The nearest integral value to `me`.
+routine Decimal.round_ties_away() -> Decimal
+    return me.round(rule: RoundingRule.HALF_AWAY)
+
+### The fractional part of me (me - trunc(me), carrying me's sign).
+### :returns: `me - trunc(me)`.
+routine Decimal.fract() -> Decimal
+    return dec_of_d128(x: dec_to_d128(x: me).fract())
+
+### Splits me into its integer and fractional parts, both carrying me's sign.
+### :returns: The integer part and the fractional part, in that order.
+routine Decimal.modf() -> (Decimal, Decimal)
+    var ip = me.trunc()
+    return (ip, me.sub(you: ip))
+
+# ============================================================================
+# Quantum / total ordering
+# ============================================================================
+
+### True if me and you have the same quantum (exponent).
+### :param you: The value to compare against.
+### :returns: `true` if both have the same exponent.
+routine Decimal.same_quantum(you: Decimal) -> Bool
+    return dec_to_d128(x: me).same_quantum(you: dec_to_d128(x: you))
+
+### Rounds me, half up, to the exponent of you (`x.quantize(0.01)` keeps two places, the result in Decimal's one form,
+### so its text drops the zeros). Crashes with NumericDomainError when that needs more than 34 digits.
+### :param you: The value that gives the target exponent.
+### :returns: `me` with the exponent of `you`, or a NaN if it does not fit.
+routine Decimal.quantize(you: Decimal) -> Decimal
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_quantize(a_low: d128_low(v: a),
+        a_high: d128_high(v: a), b_low: d128_low(v: b), b_high: d128_high(v: b))))
+
+### IEEE totalOrder predicate (a total order over all values).
+### :param you: The value to compare against.
+### :returns: `true` if `me` precedes or equals `you` in the total order.
+routine Decimal.total_compare(you: Decimal) -> Bool
+    return dec_to_d128(x: me).total_compare(you: dec_to_d128(x: you))
+
+### IEEE totalOrderMag predicate (total order over magnitudes).
+### :param you: The value to compare against.
+### :returns: `true` if `|me|` precedes or equals `|you|` in the total order.
+routine Decimal.total_order_mag(you: Decimal) -> Bool
+    return dec_to_d128(x: me).total_order_mag(you: dec_to_d128(x: you))

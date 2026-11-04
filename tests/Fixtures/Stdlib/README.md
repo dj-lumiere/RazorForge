@@ -1,6 +1,6 @@
 # Stdlib API Fixtures
 
-End-to-end functional tests for the Revare stdlib. Each `*.rr` fixture builds + runs through `buildandrun`, and its
+End-to-end functional tests for the Revare stdlib. Each `*.rvr` fixture builds + runs through `buildandrun`, and its
 stdout is diffed against a sibling `*.expected.txt` snapshot by `tests/Meta/StdlibApiTests.cs`.
 
 Complements `validate-stdlib` (which only parse/typechecks): catches *runtime* regressions in stdlib API behavior.
@@ -13,10 +13,10 @@ Run tests with the bless env var set — actual output is captured as the new `.
 
 ```bash
 # bash / WSL
-RA_TEST_BLESS=1 dotnet test --filter "FullyQualifiedName~StdlibApiTests"
+RV_TEST_BLESS=1 dotnet test --filter "FullyQualifiedName~StdlibApiTests"
 
 # pwsh
-$env:RA_TEST_BLESS = "1"; dotnet test --filter "FullyQualifiedName~StdlibApiTests"; $env:RA_TEST_BLESS = $null
+$env:RV_TEST_BLESS = "1"; dotnet test --filter "FullyQualifiedName~StdlibApiTests"; $env:RV_TEST_BLESS = $null
 ```
 
 Review the diff in the captured `.expected.txt` and commit if correct.
@@ -41,7 +41,7 @@ Each fixture passes iff its captured stdout matches the snapshot exactly (traili
 
 ## Inventory
 
-Covered today (see `*.rr` files in this directory):
+Covered today (see `*.rvr` files in this directory):
 
 - Containers: `list`, `set`, `dict`, `rotatable_list`, `tuple`, `bitlist`, `sorted_list`, `sorted_set`, `sorted_dict`,
   `array`, `bitarray`

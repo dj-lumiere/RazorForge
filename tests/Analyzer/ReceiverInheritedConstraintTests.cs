@@ -14,7 +14,7 @@ using static TestHelpers;
 /// Such constraints used to be silently dropped during memberRoutine resolution (the resolved instance
 /// memberRoutine kept only constraints on its OWN generic params, discarding owner-param constraints), so
 /// they went unchecked. The fix preserves owner-param TypeEquality constraints through resolution
-/// and validates them at the call site against the receiver's bound argument (RA-S160).
+/// and validates them at the call site against the receiver's bound argument (RV-S160).
 /// </summary>
 public class ReceiverInheritedConstraintTests
 {

@@ -1,4 +1,4 @@
-"""Writes tests/Fixtures/Stdlib/complex_crosscheck_api.rr: C64, C128, and C256 results checked against exact rational
+"""Writes tests/Fixtures/Stdlib/complex_crosscheck_api.rvr: C64, C128, and C256 results checked against exact rational
 arithmetic and a high-precision reference made with Python's decimal module.
 
 The sums, differences, products, quotients, reciprocals, squared moduli, moduli, scalings, and narrowings are rounded
@@ -25,7 +25,7 @@ import sys
 from decimal import Decimal, localcontext
 from fractions import Fraction
 
-OUT = os.environ.get("COMPLEX_CROSSCHECK_OUT", "tests/Fixtures/Stdlib/complex_crosscheck_api.rr")
+OUT = os.environ.get("COMPLEX_CROSSCHECK_OUT", "tests/Fixtures/Stdlib/complex_crosscheck_api.rvr")
 COUNT = int(os.environ.get("COMPLEX_CROSSCHECK_COUNT", "2"))
 DUMP = "--dump" in sys.argv
 
@@ -1283,5 +1283,5 @@ if __name__ == "__main__" and len(sys.argv) == 1:
     fc = fixture_cases()
     with open(OUT, "w") as fh:
         fh.write(fixture_program(fc))
-    with open(OUT.replace(".rr", ".expected.txt"), "w") as fh:
+    with open(OUT.replace(".rvr", ".expected.txt"), "w") as fh:
         fh.write(fixture_expected(fc))

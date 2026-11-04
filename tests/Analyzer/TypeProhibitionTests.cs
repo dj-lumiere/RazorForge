@@ -214,7 +214,7 @@ public class TypeProhibitionTests
     [Fact]
     public void Analyze_ByteLiteralNonAscii_ReportsError()
     {
-        // Non-ASCII byte literals are rejected at the lexer level (RA-G005)
+        // Non-ASCII byte literals are rejected at the lexer level (RV-G005)
         string source = """
                         routine test()
                             var x: Byte = b'é'

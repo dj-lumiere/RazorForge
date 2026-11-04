@@ -12,7 +12,7 @@ using static TestHelpers;
 
 /// <summary>
 /// <c>@noinline</c> keeps a routine out of its callers: the LLVM emitter writes <c>noinline</c> on its definition and
-/// no <c>optnone</c>, so its own body is still optimized. Together with <c>@inline</c> it is RA-G227.
+/// no <c>optnone</c>, so its own body is still optimized. Together with <c>@inline</c> it is RV-G227.
 /// </summary>
 public sealed class NoinlineAnnotationTests
 {
@@ -38,7 +38,7 @@ public sealed class NoinlineAnnotationTests
                                                                     "routine cold(x: S64) -> S64\n    return x * 3\n");
         Assert.Single(collection: parser.GetStructuredErrors()
                                         .Where(predicate: e => e.Code == GrammarDiagnosticCode.InlineAndNoinline));
-        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RA-G227"));
+        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RV-G227"));
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed class NoinlineAnnotationTests
     private static string GenerateIr(string source)
     {
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.Revare, buildMode: RaBuildMode.Debug);
+        var analyzer = new SemanticVerifier(language: Language.Revare, buildMode: RvBuildMode.Debug);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
         var generator = new LlvmEmitter(program: program,
@@ -83,7 +83,7 @@ public sealed class NoinlineAnnotationTests
             options: new LlvmEmitterOptions
             {
                 StdlibPrograms = result.Registry.StdlibPrograms,
-                BuildMode = RaBuildMode.Debug,
+                BuildMode = RvBuildMode.Debug,
                 SynthesizedBodies = result.SynthesizedBodies,
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies,
                 LiveRoutineKeys = result.LiveRoutineKeys,

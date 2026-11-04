@@ -11,13 +11,13 @@ import javax.swing.Icon
 
 internal const val PLUGIN_ID = "com.revare.rider"
 
-private val EXTENSIONS = setOf("rr", "revare")
+private val EXTENSIONS = setOf("rvr", "revare")
 
 internal fun VirtualFile.isRevare(): Boolean = extension?.lowercase() in EXTENSIONS
 
 /**
  * Registers the TextMate bundle shipped next to the plugin's jar: the grammar from Revare.tmbundle plus the comment
- * and bracket rules of language-configuration.json. `.rr` files open as TextMate files, highlighted by that grammar.
+ * and bracket rules of language-configuration.json. `.rvr` files open as TextMate files, highlighted by that grammar.
  */
 class RevareBundleProvider : TextMateBundleProvider {
     override fun getBundles(): List<TextMateBundleProvider.PluginBundle> {
@@ -26,7 +26,7 @@ class RevareBundleProvider : TextMateBundleProvider {
     }
 }
 
-/** Gives `.rr` files the Revare icon in place of the generic TextMate one. */
+/** Gives `.rvr` files the Revare icon in place of the generic TextMate one. */
 class RevareIconProvider : FileIconProvider {
     override fun getIcon(file: VirtualFile, flags: Int, project: Project?): Icon? =
         if (file.isRevare()) ICON else null

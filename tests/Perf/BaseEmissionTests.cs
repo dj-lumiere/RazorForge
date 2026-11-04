@@ -140,7 +140,7 @@ public sealed class BaseEmissionTests
     {
         AnalysisResult r =
             new SemanticVerifier(language: Language.Revare).Analyze(
-                program: Parse(src: Trivial, file: "bench.rr"));
+                program: Parse(src: Trivial, file: "bench.rvr"));
         Assert.Empty(collection: r.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
@@ -183,20 +183,20 @@ public sealed class BaseEmissionTests
             }).Generate();
 
         HashSet<string> defs = DefinedSymbols(ll: oneIr);
-        // RA-mangled defines are quoted (`@"[member] …"`); bare-name defines (_rf_trace_push, …) are the
+        // RV-mangled defines are quoted (`@"[member] …"`); bare-name defines (_rf_trace_push, …) are the
         // shared-runtime shadow-stack HELPERS the emitter inlines into every module regardless of the body
         // set. Those are the GLOBALS-analogue-of-C4 concern (define once in the main module, extern in the
         // per-routine on-demand modules) — handled at the ORC wiring step, NOT part of the one-routine body set.
-        var raDefs = defs.Where(predicate: d => d.StartsWith(value: '"')).ToList();
+        var rvDefs = defs.Where(predicate: d => d.StartsWith(value: '"')).ToList();
         _out.WriteLine(message: $"target={targetName}");
-        _out.WriteLine(message: $"one-routine module: rf-defines={raDefs.Count} (bare-runtime={defs.Count - raDefs.Count}), chars={oneIr.Length}");
-        _out.WriteLine(message: "RA-DEFINES:\n  " + string.Join(separator: "\n  ", values: raDefs));
+        _out.WriteLine(message: $"one-routine module: rf-defines={rvDefs.Count} (bare-runtime={defs.Count - rvDefs.Count}), chars={oneIr.Length}");
+        _out.WriteLine(message: "RV-DEFINES:\n  " + string.Join(separator: "\n  ", values: rvDefs));
 
-        // The primitive defines EXACTLY the target RA routine, nothing resident re-defined, no @main.
+        // The primitive defines EXACTLY the target RV routine, nothing resident re-defined, no @main.
         Assert.DoesNotContain(expectedSubstring: "define i32 @main(", actualString: oneIr);
-        Assert.Single(collection: raDefs);
+        Assert.Single(collection: rvDefs);
         Assert.Equal(expected: targetName.Trim(trimChar: '"'),
-            actual: raDefs[index: 0].Trim(trimChar: '"'));
+            actual: rvDefs[index: 0].Trim(trimChar: '"'));
     }
 
     [Fact]
@@ -205,7 +205,7 @@ public sealed class BaseEmissionTests
         // Cold analyze retains StdlibPrograms (the warm/snapshot path drops them).
         AnalysisResult r =
             new SemanticVerifier(language: Language.Revare).Analyze(
-                program: Parse(src: Trivial, file: "bench.rr"));
+                program: Parse(src: Trivial, file: "bench.rvr"));
         Assert.Empty(collection: r.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
@@ -316,7 +316,7 @@ public sealed class BaseEmissionTests
         // keeps it out of the base (@main is gated off in base mode regardless).
         var baseSa = new SemanticVerifier(language: Language.Revare);
         AnalysisResult baseR = baseSa.Analyze(
-            program: Parse(src: Builder.Execution.BaseObjectCache.SeedProgramSource, file: "base.rr"));
+            program: Parse(src: Builder.Execution.BaseObjectCache.SeedProgramSource, file: "base.rvr"));
         Assert.Empty(collection: baseR.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,
@@ -340,7 +340,7 @@ public sealed class BaseEmissionTests
         File.Delete(path: cache.ObjectPath(fingerprint: fp));
         string? obj = cache.GetOrBuild(fingerprint: fp,
             baseIr: baseIr,
-            buildMode: Builder.Targeting.RaBuildMode.Debug,
+            buildMode: Builder.Targeting.RvBuildMode.Debug,
             wasCached: out bool cached);
 
         _out.WriteLine(

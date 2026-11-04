@@ -1,0 +1,733 @@
+module Collections
+
+import BuilderQuery
+### A growable, rotatable sequence backed by a power-of-two circular buffer.
+###
+### `RotatableList[T]` supports O(1) amortized insertion and removal at both the front
+### and the back. A bitmask wraps the buffer indices instead of a modulo, so
+### the capacity is always kept at a power of two. Random access by index is O(1)
+### after resolving the physical slot from the logical position.
+###
+### **When to use**
+### - You need O(1) rotation — cycle elements in place without copying.
+### - You need a bounded "keep the latest N" history in FIXED space — `add_last_keeping(value, keeping: n)`
+###   (or `add_last` then `keep_last(n)`) retains only the most recent `n` elements without ever
+###   reallocating. `List[T]` cannot do this in O(1): dropping from the front is O(n) there. This is
+###   `RotatableList`'s sharpest edge.
+### - You need a sliding window or rolling history — advance in O(1) (dropped the front, push the back).
+### - You need fast insertion and removal at both ends — e.g. a BFS frontier or an event stream.
+### - You want a **stack**, **queue**, or **deque**: Revare has no separate types for these —
+###   `RotatableList[T]` is all three. Stack = `add_last` / `remove_last!`; queue = `add_last` /
+###   `remove_first!`; deque = insert and remove at either end.
+### - Use {List[T]} instead when you only ever add or remove at the back.
+### - Use {PriorityQueue[TPriority, TElement]} instead when removal order depends on priority.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add_last` / `add_first` | O(1) amortized |
+### | `remove_last!` / `remove_first!` | O(1) |
+### | `first!` / `last!` | O(1) |
+### | `getitem!` / `setitem!` | O(1) |
+### | `rotate_left` / `rotate_right` | O(1) |
+### | `contains` | O(n) |
+### | Iteration | O(n) |
+###
+### :typeparam T: The element type stored in the rotatable list.
+### :see: {List[T]} for a simpler growable sequence optimized for back-only append.
+### :see: {PriorityQueue[TPriority, TElement]} for priority-ordered removal.
+entity RotatableList[T]
+relates RotatableListEmitter[T] as Emitter
+obeys Emittable[T], ModifyingIndexable[T], Sized, ListLiteral[T]
+    ### Stores the circular buffer backing the rotatable list.
+    ### Elements are laid out in allocation order and interpreted through
+    ### `start` and `count` rather than by physical position alone.
+    secret data: Hijacked[T]
+    ### Stores the physical index of the logical front element.
+    secret start: U64
+    ### Stores the number of live elements currently in the rotatable list.
+    secret count: U64
+    ### Stores the number of element slots allocated in the circular buffer.
+    ### Capacity is always kept as a power of two so index wrapping can use a mask.
+    secret capacity: U64
+
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+### Walks the elements of a `RotatableList[T]` from logical front to back.
+### The emitter captures a raw pointer, the start index, element count, and capacity
+### at creation time so the source rotatable list does not need to remain alive during iteration.
+### :typeparam T: The element type yielded by the emitter.
+entity RotatableListEmitter[T]
+obeys Emitter[T]
+    ### Raw pointer into the source rotatable list's circular buffer.
+    secret data: Hijacked[T]
+    ### Front-of-queue physical index captured at emitter creation.
+    secret start: U64
+    ### Element count captured at emitter creation.
+    secret count: U64
+    ### Buffer capacity captured at emitter creation.
+    secret capacity: U64
+    ### Current logical position.
+    secret index: U64
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Creates a rotatable list containing exactly the given `elements`, in order. Variadic constructor behind the
+### `[a, b, c]` list-literal syntax (the `ListLiteral` opt-in): the builder packs the elements into a
+### fixed `Items[T, K]` and monomorphizes one body per element count `K`.
+### :param elements: The elements to populate the rotatable list with, in order.
+### :returns: A rotatable list of the given elements.
+common routine RotatableList[T].from_literal(elements...: T) -> RotatableList[T]
+    var result = RotatableList[T]()
+    var i: U64 = 0
+    until i >= elements.count()
+        result.add_last(value: elements.get_raw(index: i))
+        i = i +% 1
+    return result
+
+### Creates an empty rotatable list with no allocated storage.
+### The backing buffer is acquired lazily on first insertion.
+### :returns: The empty list.
+routine RotatableList[T]() -> RotatableList[T]
+    danger
+        return RotatableList[T](
+            data: Hijacked[T].hollow(),
+            start: 0,
+            count: 0,
+            capacity: 0,
+        )
+
+### Creates an empty rotatable list with storage pre-allocated for at least `capacity` elements.
+### The requested capacity is rounded up to the next power of two so index wrapping
+### can use a bitmask.
+### :param capacity: The minimum number of elements to reserve space for.
+### :returns: The empty list.
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it.
+routine RotatableList[T](capacity: U64) -> RotatableList[T]
+    var actual = storage_doubled_capacity(start: 1, capacity: capacity)
+    danger
+        return RotatableList[T](
+            data: hijacked_from[T](allocate_storage_uninit(element_size: T.data_size(), count: actual)),
+            start: 0,
+            count: 0,
+            capacity: actual,
+        )
+
+# ============================================================================
+# Internal Helpers
+# ============================================================================
+
+### Maps a physical index into the range [0, capacity) using a power-of-two bitmask.
+### :param index: The raw physical index to normalize.
+### :returns: The equivalent in-range slot index for the current buffer.
+@readonly
+routine RotatableList[T].wrap_index(index: U64) -> U64
+    # Capacity is always a power of 2 — use bitmask instead of modulo.
+    return index & me.capacity -% 1
+
+### Converts a logical position (0 = front) to the physical slot in the ring buffer.
+### :param logical_index: The zero-based distance from the logical front.
+### :returns: The physical slot index that currently holds that element.
+@readonly
+routine RotatableList[T].physical_index(logical_index: U64) -> U64
+    # Convert logical index (0 = front) to physical index in buffer
+    return me.wrap_index(me.start +% logical_index)
+
+### Reads the element from physical slot `physical_idx` without bounds checking.
+### :param physical_idx: The slot index inside the backing buffer.
+### :returns: The element stored in that slot.
+@readonly
+routine RotatableList[T].read_at(physical_idx: U64) -> T
+    var byte_offset = T.data_size() * physical_idx
+    danger
+        return me.data.offset(byte_offset).peek()
+
+### Writes `value` into physical slot `physical_idx` without bounds checking.
+### :param physical_idx: The slot index inside the backing buffer.
+### :param value: The element to store.
+routine RotatableList[T].write_at(physical_idx: U64, value: T)
+    var byte_offset = T.data_size() * physical_idx
+    danger
+        me.data.offset(byte_offset).poke(value)
+    return
+
+# ============================================================================
+# Core Operations
+# ============================================================================
+
+### Returns the number of live elements currently stored in the rotatable list.
+### :returns: The live element count.
+@readonly
+routine RotatableList[T].count() -> U64
+    return me.count
+
+### Returns the number of element slots available before the next growth step.
+### :returns: The current backing-buffer slot count.
+@readonly
+routine RotatableList[T].capacity() -> U64
+    return me.capacity
+
+### Returns true if the rotatable list currently contains no elements.
+### :returns: `true` when `count()` is zero.
+@readonly
+routine RotatableList[T].is_empty() -> Bool
+    return me.count == 0
+
+### Appends `value` at the logical back of the rotatable list.
+### The buffer is doubled automatically when the current capacity is exhausted.
+### :param value: The element to add at the back.
+@reshaping
+routine RotatableList[T].add_last(value: T)
+    # Add element to back - O(1) amortized
+    if me.count >= me.capacity
+        me.grow()
+    var idx = me.physical_index(me.count)
+    me.write_at(physical_idx: idx, value: value)
+    me.count = me.count +% 1
+    return
+
+### Adds every element of `you` at the back, in order.
+### :param you: The elements to add.
+@reshaping
+routine RotatableList[T].add_range(you: Viewing[Emittable[T]])
+    for value in you
+        me.add_last(value: value)
+    return
+
+### Prepends `value` at the logical front of the rotatable list.
+### The front index is decremented with wraparound using the ring-buffer mask.
+### The buffer is doubled automatically when the current capacity is exhausted.
+### :param value: The element to add at the front.
+@reshaping
+routine RotatableList[T].add_first(value: T)
+    # Add element to front - O(1) amortized
+    if me.count >= me.capacity
+        me.grow()
+    # Decrement start with wrap: (start + cap - 1) & (cap - 1) — branchless
+    me.start = me.wrap_index(me.start +% me.capacity -% 1)
+    me.write_at(physical_idx: me.start, value: value)
+    me.count = me.count +% 1
+    return
+
+### Removes and returns the element at the logical back of the rotatable list.
+### :returns: The element that was at the back.
+### :throws: {AbsentValueError} The rotatable list is empty.
+@reshaping
+routine RotatableList[T].remove_last() -> T
+    # Remove and return back element - O(1)
+    if me.is_empty()
+        throw AbsentValueError()
+    me.count = me.count - 1
+    var idx = me.physical_index(me.count)
+    return me.read_at(idx)
+
+### Removes and returns the element at the logical front of the rotatable list.
+### :returns: The element that was at the front.
+### :throws: {AbsentValueError} The rotatable list is empty.
+@reshaping
+routine RotatableList[T].remove_first() -> T
+    # Remove and return front element - O(1)
+    if me.is_empty()
+        throw AbsentValueError()
+    var value = me.read_at(me.start)
+    me.start = me.wrap_index(me.start + 1)
+    me.count = me.count - 1
+    return value
+
+### Discards the oldest elements so at most the latest `n` remain, keeping the current
+### allocation. Nothing is copied and no growth occurs — the front index simply advances,
+### so this is the fixed-space "keep the latest N" primitive (a rolling history that never
+### reallocates). When `n` is at least the current count, the list is left unchanged.
+### Dropped elements are torn down in place, mirroring `destruct` — they are discarded, not
+### handed back (a no-op for value types; frees owned entity elements).
+### :param n: The maximum number of most-recent elements to retain.
+routine RotatableList[T].keep_last(n: U64)
+    # Drop the oldest (count - n) elements in O(count - n), no reallocation
+    if n >= me.count
+        return
+    var dropped = me.count -% n
+    var i: U64 = 0
+    danger
+        until i >= dropped
+            me.data
+                .offset(T.data_size() * me.start)
+                .peek()
+                .destruct()
+            me.start = me.wrap_index(me.start +% 1)
+            i = i +% 1
+    me.count = n
+    return
+
+### Discards the newest elements so at most the first `n` remain, keeping the current allocation.
+### The mirror of `keep_last`: elements are dropped from the back (the front index is untouched),
+### so this retains the OLDEST `n` in fixed space with no copy and no growth. When `n` is at least
+### the current count, the list is left unchanged.
+### Dropped elements are torn down in place, mirroring `destruct` — they are discarded, not handed
+### back (a no-op for value types; frees owned entity elements).
+### :param n: The maximum number of oldest elements to retain.
+routine RotatableList[T].keep_first(n: U64)
+    # Drop the newest (count - n) elements from the back in O(count - n), no reallocation
+    if n >= me.count
+        return
+    var i = n
+    danger
+        until i >= me.count
+            var physical = me.wrap_index(me.start +% i)
+            me.data
+                .offset(T.data_size() * physical)
+                .peek()
+                .destruct()
+            i = i +% 1
+    me.count = n
+    return
+
+### Appends `value` at the back, then drops the oldest elements so at most `keeping` remain.
+### This is the one-call "push into a fixed-size latest-N history" — `add_last` followed by
+### `keep_last` — the canonical ring-buffer rolling log that never reallocates once warm.
+### With `keeping` of zero the value is added and then immediately dropped, leaving the list empty.
+### :param value: The element to add at the back.
+### :param keeping: The maximum number of most-recent elements to retain afterward.
+@reshaping
+routine RotatableList[T].add_last_keeping(value: T, keeping: U64)
+    me.add_last(value: value)
+    me.keep_last(n: keeping)
+    return
+
+### Prepends `value` at the front, then drops the oldest elements (from the back) so at most
+### `keeping` remain. The front-pushing mirror of `add_last_keeping` — `add_first` followed by
+### `keep_first` — a fixed-size latest-N history where the newest element sits at the front.
+### With `keeping` of zero the value is added and then immediately dropped, leaving the list empty.
+### :param value: The element to add at the front.
+### :param keeping: The maximum number of most-recent elements to retain afterward.
+@reshaping
+routine RotatableList[T].add_first_keeping(value: T, keeping: U64)
+    me.add_first(value: value)
+    me.keep_first(n: keeping)
+    return
+
+### Returns the front element without removing it.
+### :returns: The current front element.
+### :throws: {AbsentValueError} The rotatable list is empty.
+@readonly
+routine RotatableList[T].first() -> T
+    # Peek at front element without removing
+    if me.is_empty()
+        throw AbsentValueError()
+    return me.read_at(me.start)
+
+### Returns the back element without removing it.
+### :returns: The current back element.
+### :throws: {AbsentValueError} The rotatable list is empty.
+@readonly
+routine RotatableList[T].last() -> T
+    # Peek at back element without removing
+    if me.is_empty()
+        throw AbsentValueError()
+    var idx = me.physical_index(me.count - 1)
+    return me.read_at(idx)
+
+### Removes every element while preserving the current circular-buffer allocation.
+@reshaping
+routine RotatableList[T].clear()
+    danger
+        # Each element ends here (an entity's destruct, a Text's release), as the list's own destruct ends them.
+        var i: U64 = 0
+        until i >= me.count
+            var physical = me.start +% i & me.capacity -% 1
+            me.data
+                .offset(T.data_size() * physical)
+                .peek()
+                .destruct()
+            i = i + 1
+    me.start = 0
+    me.count = 0
+    return
+
+# ============================================================================
+# Growth
+# ============================================================================
+
+### Grows the backing storage using the rotatable list's standard doubling policy.
+### Empty rotatable lists start at four slots; subsequent growth always doubles.
+### NOTE: Unlike `List`/`PriorityQueue`, this deliberately does NOT use the hybrid
+### `next_grow_capacity` (double-then-1.5x) policy. Capacity is pinned to a power of two so
+### index wrapping can use a bitmask (`reserve` rounds up), and a 1.5x request would round
+### straight back up to the next power of two — a no-op. Staying at 2x is intentional here.
+@reshaping
+routine RotatableList[T].grow()
+    var new_capacity = if me.capacity == 0 then 4 else me.capacity *% 2
+    me.reserve(new_capacity)
+    return
+
+### Ensures the rotatable list can hold at least `new_capacity` elements without another growth step.
+### The requested capacity is rounded up to the next power of two. Elements are copied into
+### the new buffer in logical order so the front moves to physical slot 0.
+### Requests no larger than the current capacity are ignored.
+### :param new_capacity: The minimum element count to accommodate.
+### :throws: {OutOfMemoryError} The storage is more bytes than a `U64` counts, or the heap has no room for it. The
+###     rotatable list then stays as it was.
+@reshaping
+routine RotatableList[T].reserve(new_capacity: U64)
+    var actual = storage_doubled_capacity(start: 1, capacity: new_capacity)
+    if actual <= me.capacity
+        return
+
+    danger
+        var _new_data = hijacked_from[T](allocate_storage_uninit(element_size: T.data_size(), count: actual))
+
+        # Copy elements in logical order (unwrap the ring)
+        var i: U64 = 0
+        until i >= me.count
+            var old_idx = me.physical_index(i)
+            var value = me.read_at(old_idx)
+            var new_byte_offset = T.data_size() * i
+            _new_data.offset(new_byte_offset).poke(value)
+            i = i +% 1
+
+        if not me.data.is_hollow()
+            me.data.invalidate()
+        me.data = _new_data
+        me.start = 0
+        me.capacity = actual
+        return
+
+# ============================================================================
+# Indexing with Integral (forward index)
+# ============================================================================
+
+### Returns the element at the given zero-based logical position.
+### Logical index 0 refers to the front element regardless of its physical slot.
+### :param index: The zero-based logical position to read.
+### :returns: The element at that logical position.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+@readonly
+@overridable
+routine RotatableList[T].getitem(index: U64) -> T
+needs RecordType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var physical_idx = me.physical_index(index)
+    return me.read_at(physical_idx).share()
+
+### Replaces the element at the given zero-based logical position.
+### :param index: The zero-based logical position to update.
+### :param value: The replacement element.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+routine RotatableList[T].setitem(index: U64, value: T)
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var physical_idx = me.physical_index(index)
+    danger
+        me.read_at(physical_idx).destruct()
+    me.write_at(physical_idx: physical_idx, value: value)
+    return
+
+### Puts `value` at logical position `index` and gives back the element that was there, in one step. This is
+### what `steal ring[i] as old inject fresh` runs, so the place is never empty.
+### :param index: The zero-based logical position to exchange.
+### :param value: The element that goes in.
+### :returns: The element that was there.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+secret routine RotatableList[T].exchange(index: U64, value: T) -> T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    var physical_idx = me.physical_index(index)
+    var old = me.read_at(physical_idx)
+    me.write_at(physical_idx: physical_idx, value: value)
+    return old
+
+### Returns a write token on the entity stored at logical position `index`, so one call through it changes
+### the element in place: `ring[0].add_last(value: 1)` lowers to `ring.modify_at(index: 0).add_last(value:
+### 1)`. A plain `getitem` hands back a copy, and a call on that copy would change only the copy. Like
+### `T.modify()`, the token lives only for that one call (the builder keeps the container still meanwhile,
+### RV-S639). Entity elements only.
+### :param index: The position of the element.
+### :returns: A write token on the element.
+routine RotatableList[T].modify_at(index: U64) -> Modifying[T]
+needs EntityType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    danger
+        return Modifying[T](
+            me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]](),
+        )
+
+### Returns a read token on the entity stored at logical position `index`, so one call through it reads the
+### element without copying it: `ring[0].count()` lowers to `ring.view_at(index: 0).count()`. A plain
+### `getitem` hands back a copy, and a call on that copy would copy the whole element first. Like
+### `T.view()`, the token lives only for that one call (the builder keeps the container still meanwhile,
+### RV-S639). Entity elements only.
+### :param index: The position of the element.
+### :returns: A read token on the element.
+@readonly
+routine RotatableList[T].view_at(index: U64) -> Viewing[T]
+needs EntityType T
+    if index >= me.count
+        throw IndexOutOfBoundsError(index: index, count: me.count)
+    danger
+        return Viewing[T](
+            me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]](),
+        )
+
+### Returns a NEW rotatable list holding independent copies of the elements in `range` — the slice form of
+### indexing (`rotatable list[a til b]`), over LOGICAL positions (front = 0). A half-open `a til b` yields
+### `[a, b)`; an inclusive `a to b` yields `[a, b]`; a range that counts down (`by -1`) reverses. Positions at or past
+### `count` are skipped. Each element is copied through `copy`, so the result shares no structure with
+### the original — the value-semantics counterpart to `List`/`Text` slicing.
+### :param range: The logical index range to extract.
+### :returns: A new `RotatableList[T]` owning copies of the selected elements.
+@readonly
+routine RotatableList[T].getitem(range: Range[U64]) -> RotatableList[T]
+needs RecordType T
+    var result = RotatableList[T]()
+    for i in range
+        if i < me.count
+            result.add_last(value: me[i])
+    return result
+
+# ============================================================================
+# Rotation
+# ============================================================================
+
+### Shifts the logical front toward the back by `n` positions.
+### Elements that fall off the front reappear at the back. Only the front index
+### changes when the buffer is full; otherwise `n` elements move.
+### :param n: The number of positions to rotate left.
+routine RotatableList[T].rotate_left(n: U64)
+    # Rotate elements left by n positions
+    # Front elements move to back
+    if me.count == 0
+        return
+    var shift = LLVM::unsigned_rem(n, me.count)
+    if me.count == me.capacity
+        me.start = me.wrap_index(me.start +% shift)
+        return
+    # With free slots after the back, moving the front index alone would bring them into the list: each
+    # front element moves into the free slot after the back instead.
+    var i: U64 = 0
+    until i >= shift
+        var value = me.read_at(physical_idx: me.start)
+        me.start = me.wrap_index(me.start +% 1)
+        me.write_at(physical_idx: me.physical_index(me.count -% 1), value: value)
+        i = i +% 1
+    return
+
+### Shifts the logical back toward the front by `n` positions.
+### Elements that fall off the back reappear at the front. Only the front index
+### changes when the buffer is full; otherwise `n` elements move.
+### :param n: The number of positions to rotate right.
+routine RotatableList[T].rotate_right(n: U64)
+    # Rotate elements right by n positions
+    # Back elements move to front
+    if me.count == 0
+        return
+    var shift = LLVM::unsigned_rem(n, me.count)
+    if me.count != me.capacity
+        # With free slots before the front, each back element moves into the free slot before the front.
+        var i: U64 = 0
+        until i >= shift
+            var value = me.read_at(physical_idx: me.physical_index(me.count -% 1))
+            me.start = me.wrap_index(me.start +% me.capacity -% 1)
+            me.write_at(physical_idx: me.start, value: value)
+            i = i +% 1
+        return
+    if shift > me.start
+        me.start = me.capacity -% (shift -% me.start)
+    else
+        me.start = me.start -% shift
+    return
+
+### Returns an emitter that walks the elements of `me` in order, for a `for` loop.
+### :returns: The emitter, positioned before the first element.
+@readonly
+routine RotatableList[T].emitter() -> RotatableListEmitter[T]
+    danger
+        return RotatableListEmitter[T](
+            data: me.data,
+            start: me.start,
+            count: me.count,
+            capacity: me.capacity,
+            index: 0,
+        )
+
+### Returns the next element from the emitter in front-to-back order.
+### :returns: The next logical element.
+### :throws: {AbsentValueError} All elements captured at emitter creation have been yielded.
+routine RotatableListEmitter[T].emit() -> T
+    if me.index >= me.count
+        throw AbsentValueError()
+    var physical = me.start +% me.index & me.capacity -% 1
+    lateinit var _result: T
+    danger
+        _result = me.data.offset(T.data_size() * physical).peek()
+    me.index = me.index + 1
+    return _result
+
+# ============================================================================
+# Utility Operations
+# ============================================================================
+
+### Returns the front element or `default_value` if the rotatable list is empty.
+### :param default_value: The fallback to return when no element is stored.
+### :returns: The front element if present; `default_value` otherwise.
+@readonly
+routine RotatableList[T].first_or_default(default_value: T) -> T
+    if me.is_empty()
+        return default_value
+    return me.first()
+
+### Returns the back element or `default_value` if the rotatable list is empty.
+### :param default_value: The fallback to return when no element is stored.
+### :returns: The back element if present; `default_value` otherwise.
+@readonly
+routine RotatableList[T].last_or_default(default_value: T) -> T
+    if me.is_empty()
+        return default_value
+    return me.last()
+
+### Returns true if any element in the rotatable list equals `value`.
+### Scans in logical front-to-back order using the element type's equality operator.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found; `false` if no element matches.
+@readonly
+routine RotatableList[T].has(value: T) -> Bool
+needs T obeys Equatable
+    var i: U64 = 0
+    until i >= me.count
+        if me[i] == value
+            return true
+        i = i +% 1
+    return false
+
+### Returns whether `value` is not in this value: the opposite of `has`.
+### :param value: The value to look for.
+### :returns: `true` when `value` is absent.
+@readonly
+routine RotatableList[T].lacks(value: T) -> Bool
+needs T obeys Equatable
+    return not me.has(value)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns the text form of `me`: the elements of the list in front-to-back order in brackets, separated by commas.
+### :returns: The text form of `me`.
+@readonly
+@override
+routine RotatableList[T].represent() -> Text
+    var result = "["
+    var i: U64 = 0
+    for v in me
+        if i > 0
+            result = result + ", "
+        result = result + nested_repr(v)
+        i = i +% 1
+    result = result + "]"
+    return result
+
+### Returns the diagnostic text of `me`: its type, count and elements.
+### :returns: The diagnostic text of `me`.
+@readonly
+@override
+routine RotatableList[T].diagnose() -> Text
+    var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
+    var i: U64 = 0
+    for v in me
+        if i > 0
+            result = result + ", "
+        result = result + nested_diagnose(v)
+        i = i +% 1
+    result = result + "])"
+    return result
+
+### Returns true if both rotatable lists contain the same elements in the same logical order.
+### :param you: The other rotatable list to compare against.
+### :returns: `true` if both have equal count and all corresponding elements are equal.
+@readonly
+routine RotatableList[T].eq(you: Viewing[RotatableList[T]]) -> Bool
+needs T obeys Equatable
+    if me.count != you.count
+        return false
+    var i: U64 = 0
+    until i >= me.count
+        if me[i] != you[i]
+            return false
+        i = i +% 1
+    return true
+
+### Tears down each element in front-to-back order, then frees the buffer.
+@override
+routine RotatableList[T].destruct()
+    danger
+        # Tear down each live element in logical front-to-back (ring) order before freeing the buffer
+        # (mirrors RotatableListEmitter.emit!). No-op for value types; frees owned entity elements.
+        var i: U64 = 0
+        until i >= me.count
+            var physical = me.start +% i & me.capacity -% 1
+            me.data
+                .offset(T.data_size() * physical)
+                .peek()
+                .destruct()
+            i = i + 1
+        me.data.invalidate()
+        return
+
+### Cycle-collector TRACE: report every live element to the collector, walking the ring in logical
+### order (elements are NOT contiguous, so `cyclic_trace_buffer` cannot be used — this mirrors the
+### physical-index walk in `destruct` but calls `cyclic_visit` instead of `destruct`).
+@override
+infallible dangerous routine RotatableList[T].roam_trace()
+    var i: U64 = 0
+    until i >= me.count
+        var physical = me.start +% i & me.capacity -% 1
+        me.data
+            .offset(T.data_size() * physical)
+            .peek()
+            .cyclic_visit()
+        i = i + 1
+    return
+
+### Cycle-collector FREE: free the backing buffer and this list's own box, but NOT the elements (the
+### collector frees the whole white cycle directly).
+@override
+infallible dangerous routine RotatableList[T].roam_free()
+    me.data.invalidate()
+    return
+
+### Serializes this collection to a `SerialValue.List`, serializing each element.
+### :returns: The `SerialValue.List` of each element's serialized form.
+@readonly
+@override
+routine RotatableList[T].serialize() -> SerialValue
+    var __sv = List[SerialValue]()
+    for __x in me
+        __sv.add_last(value: __x.serialize())
+    return SerialValue(__sv)
+
+### Builds the list from its serialized element list, the reverse of `serialize`.
+### :param value: The serialized element list.
+### :returns: The rebuilt list.
+### :throws: {SerialShapeError} when the value is not a list or an element does not fit `T`.
+common routine RotatableList[T].from_serial(value: SerialValue) -> RotatableList[T]
+    var result = RotatableList[T]()
+    when value
+        is List[SerialValue] as items =>
+            for item in items
+                result.add_last(value: serial_decode[T](value: item))
+        else =>
+            throw SerialShapeError(detail: "expected a list")
+    return result
+
+### Collects the values into a `RotatableList`, in order.
+### :returns: The list.
+@readonly
+routine Emittable[T].to[RotatableList[T]]() -> RotatableList[T]
+    var result = RotatableList[T]()
+    for item in me
+        result.add_last(item)
+    return result

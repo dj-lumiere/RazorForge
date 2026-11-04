@@ -6,7 +6,7 @@ namespace Revare.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for the `to[Work]` argument boundary (RA-S632). A Work may run on any thread in parallel with
+/// Tests for the `to[Work]` argument boundary (RV-S632). A Work may run on any thread in parallel with
 /// the code that made it, so each argument `f.to[Work](...)` computes now must cross safely: `steal`-moved
 /// (exclusive transfer), trivially-copyable value data (passed BY VALUE), or a thread-shareable wrapper
 /// (Unbroken/Guarded/Witnessed, which carries its own synchronization, or a token a `using` over a Guarded's lock bound). Anything else passed by
@@ -232,7 +232,7 @@ public class ThreadArgShareabilityTests
         // `steal` on a plain record IS allowed (no-op), but stealing a record that transitively owns
         // a Retained does NOT make it safe to cross: moving the record doesn't make its interior
         // non-atomic refcount exclusive. The boundary credits `steal` ONLY for a bare entity, so this
-        // is still rejected (RA-S632) — must use `Guarded`/`Witnessed`.
+        // is still rejected (RV-S632) — must use `Guarded`/`Witnessed`.
         string source = Prelude + """
                                   record Holder
                                       posted node: Retained[Node]

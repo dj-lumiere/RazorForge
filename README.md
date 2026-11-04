@@ -23,7 +23,7 @@
   <a href="https://github.com/dj-lumiere/Mielia">Mielia</a>
 </p>
 
-Revare (`.rr`) is a natively compiled language built around precision: in what a program means,
+Revare (`.rvr`) is a natively compiled language built around precision: in what a program means,
 in how it fails, and in the numbers it computes. It is meant for application work where you want
 native code and predictable memory behavior: command-line tools, services, games, and data and
 numeric tools. It is not a kernel or bare-metal language: programs link against a runtime library,
@@ -137,7 +137,7 @@ Open a new terminal and check that it works:
 revare version
 ```
 
-The same package installs Mielia too (`mielia`). Short aliases `ra` and `mi` work as well.
+The same package installs Mielia too (`mielia`). Short aliases `rv` and `mi` work as well.
 
 > **Linux:** linking needs the C library's development files. Most machines have them. Otherwise
 > install `libc6-dev` (Debian/Ubuntu) or `glibc-devel` (Fedora) once.
@@ -149,7 +149,7 @@ The same package installs Mielia too (`mielia`). Short aliases `ra` and `mi` wor
 ### 2. Hello, world
 
 ```revare
-# hello.rr
+# hello.rvr
 import IO/Console
 
 routine start()
@@ -158,10 +158,10 @@ routine start()
 ```
 
 ```bash
-revare run hello.rr
+revare run hello.rvr
 ```
 
-`run` builds a native executable and runs it. `revare build hello.rr` stops after
+`run` builds a native executable and runs it. `revare build hello.rvr` stops after
 building and leaves `hello.exe` next to the source.
 
 Every routine ends with an explicit `return`, because scope teardown is anchored there. A single-file
@@ -179,7 +179,7 @@ compact list of where those guesses go wrong, with pointers to the CI-verified p
 ## Command line
 
 ```
-revare new [folder]                    Start a project (config.toml, main.rr, editor files)
+revare new [folder]                    Start a project (config.toml, main.rvr, editor files)
 revare migrate [--check] <paths>...    Move sources from the previous release to this one
 revare check [--json] [entry-file]     Check the program without building it
 revare build [entry-file]              Build a native executable for this OS (no run)
@@ -212,7 +212,7 @@ so `cd` into a solution and run `revare run`.
 
 - **Builder pipeline:** tokenizing, parsing, name and type resolution, desugaring, semantic
   analysis, type-aware lowering, monomorphization, LLVM IR, and a native executable. Only code
-  reachable from `start()` is built. Diagnostics read `error[RA-S###]: file:line:col: message` with a
+  reachable from `start()` is built. Diagnostics read `error[RV-S###]: file:line:col: message` with a
   source excerpt.
 - **Memory model:** copy or share. Records are copied, entities are shared: for a moment through
   scope-bound permissions (`view()` / `modify()`), for longer through the
@@ -262,7 +262,7 @@ including low-end Pentium, Celeron, and Atom parts, cannot run the output.
 [Mielia](https://github.com/dj-lumiere/Mielia) (`.mie`) is Revare's sibling. It shares the
 grammar, the standard library, and the loud failures, and shares every entity for you: its
 entities are shared reference-counted handles with a cycle collector, bare numbers are exact
-`Int` and `Decimal`, and it has thread-safe module `global`s. A `.mie` file can import `.rr`
+`Int` and `Decimal`, and it has thread-safe module `global`s. A `.mie` file can import `.rvr`
 modules, so one program can mix the two. Pick Revare when you want to choose how each thing is
 shared and how wide each number is, Mielia when you would rather not think about either.
 
@@ -293,7 +293,7 @@ language feature and standard library API.
 ```
 Revare/
 ├── src/                  # The Revare front end: lexer, language rules, `revare` command line
-├── Standard/             # The standard library (.rr), used by Revare and Mielia builds
+├── Standard/             # The standard library (.rvr), used by Revare and Mielia builds
 ├── tests/                # Revare.Tests: unit tests and end-to-end fixtures
 │   └── Fixtures/Stdlib/  #   programs with expected output
 ├── scripts/              # Packaging and maintenance scripts

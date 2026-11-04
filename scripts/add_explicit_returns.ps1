@@ -1,4 +1,4 @@
-# PowerShell script to add explicit return statements to Revare .rr files
+# PowerShell script to add explicit return statements to Revare .rvr files
 # This fixes the implicit return issue by making all returns explicit
 
 param(
@@ -216,12 +216,12 @@ function Process-Directory
         Write-Host "DRY RUN MODE - No files will be modified`n" -ForegroundColor Yellow
     }
 
-    # Find all .rr files recursively
-    $raFiles = Get-ChildItem -Path $DirPath -Filter "*.rr" -Recurse -File
+    # Find all .rvr files recursively
+    $rvFiles = Get-ChildItem -Path $DirPath -Filter "*.rvr" -Recurse -File
 
-    Write-Host "Found $( $raFiles.Count ) .rr files to process`n" -ForegroundColor Cyan
+    Write-Host "Found $( $rvFiles.Count ) .rvr files to process`n" -ForegroundColor Cyan
 
-    foreach ($file in $raFiles)
+    foreach ($file in $rvFiles)
     {
         Process-File -FilePath $file.FullName
     }

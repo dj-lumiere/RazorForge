@@ -84,7 +84,7 @@ public sealed class WarmLeakDiagTests
         for (int i = 0; i < 4; i++)
             sets.Add(DefineSet(Codegen(
                 new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
-                    Parse(user, "bench.rr")))));
+                    Parse(user, "bench.rvr")))));
 
         _out.WriteLine($"counts: {string.Join(", ", sets.Select(s => s.Count))}");
         for (int i = 1; i < sets.Count; i++)

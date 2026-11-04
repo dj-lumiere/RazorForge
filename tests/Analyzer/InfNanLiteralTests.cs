@@ -29,7 +29,7 @@ public class InfNanLiteralTests
         Assert.Empty(collection: result.Errors);
     }
 
-    /// <summary>Verifies <c>inf</c> with nothing to give it a type is RA-S019.</summary>
+    /// <summary>Verifies <c>inf</c> with nothing to give it a type is RV-S019.</summary>
     [Fact]
     public void NoType_IsRejected()
     {
@@ -42,7 +42,7 @@ public class InfNanLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.SpecialFloatNeedsType);
     }
 
-    /// <summary>Verifies <c>inf</c> and <c>nan</c> where a type without them goes is RA-S020.</summary>
+    /// <summary>Verifies <c>inf</c> and <c>nan</c> where a type without them goes is RV-S020.</summary>
     [Theory]
     [InlineData("var x: Decimal = inf")]
     [InlineData("var x: S64 = nan")]
@@ -57,7 +57,7 @@ public class InfNanLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.SpecialFloatNotInType);
     }
 
-    /// <summary>Verifies the old width-carrying spelling is RA-G010 and names the new one.</summary>
+    /// <summary>Verifies the old width-carrying spelling is RV-G010 and names the new one.</summary>
     [Fact]
     public void WidthSpelling_IsAnError()
     {

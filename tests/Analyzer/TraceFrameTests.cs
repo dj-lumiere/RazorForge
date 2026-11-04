@@ -56,7 +56,7 @@ public class TraceFrameTests
     private static string Body(string name)
     {
         Program program = Parse(source: Source);
-        var analyzer = new SemanticVerifier(language: Language.Revare, buildMode: RaBuildMode.Release);
+        var analyzer = new SemanticVerifier(language: Language.Revare, buildMode: RvBuildMode.Release);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
         string ir = new LlvmEmitter(program: program,
@@ -64,7 +64,7 @@ public class TraceFrameTests
             options: new LlvmEmitterOptions
             {
                 StdlibPrograms = result.Registry.StdlibPrograms,
-                BuildMode = RaBuildMode.Release,
+                BuildMode = RvBuildMode.Release,
                 SynthesizedBodies = result.SynthesizedBodies,
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies
             }).Generate();

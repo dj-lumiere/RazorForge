@@ -1,0 +1,472 @@
+module Math3D
+
+# The math lives in Ingrid's Lapila library (`Ingrid/lapila/quaternion.lpa`), which Revare and
+# Mielia share: each routine below that computes hands the components to a `C::ingrid_q256_*`
+# routine (declared at the end of this file). Its `+ - * /` are checked like B64's own, so a
+# component that overflows or has no real value crashes as it does here.
+
+# Quaternion constants
+preset Q256_ZERO: Q256 = Q256(w: 0.0, x: 0.0, y: 0.0, z: 0.0)
+preset Q256_IDENTITY: Q256 = Q256(w: 1.0, x: 0.0, y: 0.0, z: 0.0)
+
+### A double-precision quaternion `w + x·i + y·j + z·k` with `B64` components.
+### `Q256` is the high-precision rotation type; use `Q128` for graphics-facing code
+### that prefers single precision. A quaternion is a value record (four `B64`
+### fields), trivially copyable.
+###
+### Quaternions form a (non-commutative) division ring, so `Q256` obeys the
+### arithmetic protocols `Addable`, `Subtractable`, `Multiplicable` (the Hamilton
+### product — note `a·b ≠ b·a`), `Divisible`, `Negatable`, plus `Equatable`.
+### Geometry interop uses the shared `B32` `Vector3D`, converting at the boundary.
+record Q256
+obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Equatable, Hashable
+    ### The real (scalar) component.
+    w: B64
+    ### The i (x) component.
+    x: B64
+    ### The j (y) component.
+    y: B64
+    ### The k (z) component.
+    z: B64
+
+### Reads the B32 in the low half of a word an Ingrid routine hands back.
+### :param v: The word to read.
+### :returns: The B32 made of the low 32 bits of `v`.
+secret routine q256_word32(v: U64) -> B32
+    return B32.from_bits(bits: LLVM::int_truncate[U64, U32](v))
+
+### Reads the Q256 an Ingrid routine hands back: w, x, y and z in `w0` to `w3`.
+### :param w: The four words from Ingrid.
+### :returns: The quaternion with w, x, y and z taken from the four words.
+secret routine q256_from_words(w: IngridWords) -> Q256
+    return Q256(
+        w: B64.from_bits(bits: w.w0),
+        x: B64.from_bits(bits: w.w1),
+        y: B64.from_bits(bits: w.w2),
+        z: B64.from_bits(bits: w.w3),
+    )
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Constructs a real quaternion `w + 0i + 0j + 0k` from a scalar.
+### :returns: The corresponding real quaternion.
+routine B64.to[Q256]() -> Q256
+    return Q256(w: me, x: 0.0, y: 0.0, z: 0.0)
+
+### Widens a `Q128` to `Q256` by extending each component to `B64`.
+### :returns: A `Q256` carrying the same numeric value.
+routine Q128.to[Q256]() -> Q256
+    return Q256(w: me.w.to[B64](), x: me.x.to[B64](), y: me.y.to[B64](), z: me.z.to[B64]())
+
+### Builds a unit rotation quaternion from an axis and an angle (right-hand rule).
+### The axis is normalized internally; a zero-length axis yields the identity.
+### :param axis: The rotation axis (need not be unit length).
+### :param angle: The rotation angle in radians.
+### :returns: The unit quaternion representing that rotation.
+routine Q256.from_axis_angle(axis: Vector3D, angle: B64) -> Q256
+    var w = C::ingrid_q256_from_axis_angle(ax: axis.x, ay: axis.y, az: axis.z, angle: angle)
+    return q256_from_words(w: w)
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Returns the component-wise sum `me + you`.
+### :param you: The addend.
+### :returns: A `Q256` whose components are the sums.
+routine Q256.add(you: Q256) -> Q256
+    return Q256(w: me.w + you.w, x: me.x + you.x, y: me.y + you.y, z: me.z + you.z)
+
+### Returns the component-wise difference `me - you`.
+### :param you: The value to subtract.
+### :returns: A `Q256` whose components are the differences.
+routine Q256.sub(you: Q256) -> Q256
+    return Q256(w: me.w - you.w, x: me.x - you.x, y: me.y - you.y, z: me.z - you.z)
+
+### Returns the Hamilton product `me · you`. Quaternion multiplication is NOT
+### commutative: `me · you` composes `you`'s rotation followed by `me`'s.
+### :param you: The right operand.
+### :returns: The Hamilton product.
+routine Q256.mul(you: Q256) -> Q256
+    var w = C::ingrid_q256_mul(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+    )
+    return q256_from_words(w: w)
+
+### Returns the quotient `me / you = me · you⁻¹`.
+### :param you: The divisor.
+### :returns: The quaternion quotient.
+routine Q256.truediv(you: Q256) -> Q256
+    var w = C::ingrid_q256_div(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+    )
+    return q256_from_words(w: w)
+
+### Returns this quaternion scaled by a real scalar `factor`.
+### :param factor: The scalar multiplier.
+### :returns: `factor · me`, component-wise.
+routine Q256.scale(factor: B64) -> Q256
+    return Q256(w: me.w * factor, x: me.x * factor, y: me.y * factor, z: me.z * factor)
+
+### Returns `me * you` for a real `you` (the same as `scale`).
+### :param you: The scalar factor.
+### :returns: `you · me`, component-wise.
+routine Q256.mul(you: B64) -> Q256
+    return me.scale(factor: you)
+
+### Returns `me / you` for a real `you`.
+### :param you: The scalar divisor.
+### :returns: `me / you`, component-wise.
+routine Q256.truediv(you: B64) -> Q256
+    return Q256(w: me.w / you, x: me.x / you, y: me.y / you, z: me.z / you)
+
+### Returns the arithmetic negation of this quaternion.
+### :returns: A `Q256` with all components negated.
+routine Q256.neg() -> Q256
+    return Q256(w: -me.w, x: -me.x, y: -me.y, z: -me.z)
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns `true` if all four components compare equal.
+### :param you: The value to compare against.
+### :returns: `true` if every component of `me` equals the matching component of `you`.
+routine Q256.eq(you: Q256) -> Bool
+    return me.w == you.w and me.x == you.x and me.y == you.y and me.z == you.z
+
+# ============================================================================
+# Properties
+# ============================================================================
+
+### Returns the conjugate (negates the vector part).
+### :returns: `w − x·i − y·j − z·k`.
+routine Q256.conjugate() -> Q256
+    return Q256(w: me.w, x: -me.x, y: -me.y, z: -me.z)
+
+### Returns the squared norm (avoids the square root of `abs`).
+### :returns: `w² + x² + y² + z²`.
+routine Q256.norm() -> B64
+    return C::ingrid_q256_norm(w: me.w, x: me.x, y: me.y, z: me.z)
+
+### Returns the norm (magnitude) of this quaternion.
+### :returns: `√(w² + x² + y² + z²)`.
+routine Q256.abs() -> B64
+    return C::ingrid_q256_abs(w: me.w, x: me.x, y: me.y, z: me.z)
+
+### Returns the unit quaternion in the same direction. A zero quaternion is
+### returned unchanged (its norm is zero).
+### :returns: `me / |me|`, or `me` when `|me| == 0`.
+routine Q256.normalize() -> Q256
+    var w = C::ingrid_q256_normalize(w: me.w, x: me.x, y: me.y, z: me.z)
+    return q256_from_words(w: w)
+
+### Returns the multiplicative inverse `me⁻¹ = conj(me) / |me|²`.
+### :returns: The quaternion inverse.
+routine Q256.reciprocal() -> Q256
+    var w = C::ingrid_q256_reciprocal(w: me.w, x: me.x, y: me.y, z: me.z)
+    return q256_from_words(w: w)
+
+### Returns the dot product of the two quaternions viewed as 4-vectors.
+### :param you: The right operand.
+### :returns: `w₁w₂ + x₁x₂ + y₁y₂ + z₁z₂`.
+routine Q256.dot(you: Q256) -> B64
+    return C::ingrid_q256_dot(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+    )
+
+# ============================================================================
+# Rotation
+# ============================================================================
+
+### Rotates a `Vector3D` by this quaternion (assumed unit length), computing
+### `q · (0, v) · q⁻¹` via the conjugate. The vector is widened to `B64` for the
+### product and narrowed back to `B32` on return.
+### :param v: The vector to rotate.
+### :returns: The rotated vector.
+routine Q256.rotate(v: Vector3D) -> Vector3D
+    var w = C::ingrid_q256_rotate(w: me.w, x: me.x, y: me.y, z: me.z, vx: v.x, vy: v.y, vz: v.z)
+    return Vector3D(x: q256_word32(v: w.w0), y: q256_word32(v: w.w1), z: q256_word32(v: w.w2))
+
+### Returns the spherical linear interpolation between `me` (at `t = 0`) and
+### `you` (at `t = 1`). Both operands are assumed to be unit quaternions; the
+### shorter arc is chosen. Falls back to linear interpolation for nearly
+### parallel inputs.
+### :param you: The endpoint rotation.
+### :param t: The interpolation parameter.
+### :returns: The interpolated unit quaternion.
+routine Q256.slerp(you: Q256, t: B64) -> Q256
+    var w = C::ingrid_q256_slerp(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+        t: t,
+    )
+    return q256_from_words(w: w)
+
+### Returns the rotation angle encoded by this unit quaternion, in radians.
+### :returns: `2·acos(w)`, in the range [0, 2π).
+routine Q256.angle() -> B64
+    return C::ingrid_q256_angle(w: me.w, x: me.x, y: me.y, z: me.z)
+
+### Returns the rotation axis (unit length) and angle (radians) of this unit quaternion, the inverse of
+### `from_axis_angle`. A rotation by 0 has no axis; it reports the x axis with angle 0.
+### :returns: A tuple `(axis, angle)`.
+routine Q256.to_axis_angle() -> (Vector3D, B64)
+    var w = C::ingrid_q256_to_axis_angle(w: me.w, x: me.x, y: me.y, z: me.z)
+    var axis = Vector3D(x: q256_word32(v: w.w0), y: q256_word32(v: w.w1), z: q256_word32(v: w.w2))
+    return (axis, B64.from_bits(bits: w.w3))
+
+### Returns the shortest rotation that turns direction `from` onto direction `target` (neither needs to be
+### unit length). Opposite directions turn vy half a turn about an axis perpendicular to `from`.
+### :param from: The starting direction.
+### :param target: The target direction.
+### :returns: The unit rotation quaternion.
+common routine Q256.from_to(from: Vector3D, target: Vector3D) -> Q256
+    var w = C::ingrid_q256_from_to(
+        ux: from.x,
+        uy: from.y,
+        uz: from.z,
+        vx: target.x,
+        vy: target.y,
+        vz: target.z,
+    )
+    return q256_from_words(w: w)
+
+### Returns the normalized linear interpolation between `me` (at `t = 0`) and `you` (at `t = 1`) along
+### the shorter arc: cheaper than `slerp`, with a non-constant angular speed.
+### :param you: The endpoint rotation.
+### :param t: The interpolation parameter.
+### :returns: The interpolated unit quaternion.
+routine Q256.nlerp(you: Q256, t: B64) -> Q256
+    var w = C::ingrid_q256_nlerp(
+        w: me.w,
+        x: me.x,
+        y: me.y,
+        z: me.z,
+        other_w: you.w,
+        other_x: you.x,
+        other_y: you.y,
+        other_z: you.z,
+        t: t,
+    )
+    return q256_from_words(w: w)
+
+### Returns `true` if this quaternion has unit length within rounding (`|norm - 1| <= 0.000000000001`).
+### :returns: `true` if the norm is within 0.00001 of 1.
+routine Q256.is_unit() -> Bool
+    return C::ingrid_q256_is_unit(w: me.w, x: me.x, y: me.y, z: me.z)
+
+### Returns the rotation of the upper-left 3x3 part of `m` (assumed a pure rotation), the inverse of
+### `Matrix4R4C.from_quaternion`.
+### :param m: The rotation matrix.
+### :returns: The unit rotation quaternion.
+common routine Q256.from_matrix(m: Matrix4R4C) -> Q256
+    var w = C::ingrid_q256_from_matrix(
+        m00: m.get(row: 0, col: 0),
+        m01: m.get(row: 0, col: 1),
+        m02: m.get(row: 0, col: 2),
+        m10: m.get(row: 1, col: 0),
+        m11: m.get(row: 1, col: 1),
+        m12: m.get(row: 1, col: 2),
+        m20: m.get(row: 2, col: 0),
+        m21: m.get(row: 2, col: 1),
+        m22: m.get(row: 2, col: 2),
+    )
+    return q256_from_words(w: w)
+
+### Builds a rotation from Euler angles in radians, applied as yaw about z, then pitch about y, then
+### roll about x (the aerospace Z-Y-X order; the rotation is `yaw * pitch * roll`).
+### :param roll: The rotation about the x axis.
+### :param pitch: The rotation about the y axis.
+### :param yaw: The rotation about the z axis.
+### :returns: The unit rotation quaternion.
+common routine Q256.from_euler(roll: B64, pitch: B64, yaw: B64) -> Q256
+    var w = C::ingrid_q256_from_euler(roll: roll, pitch: pitch, yaw: yaw)
+    return q256_from_words(w: w)
+
+### Returns the Z-Y-X Euler angles `(roll, pitch, yaw)` of this unit quaternion, the inverse of
+### `from_euler`. At pitch +-90 degrees (gimbal lock) roll and yaw are not unique; pitch is clamped there.
+### :returns: A tuple `(roll, pitch, yaw)` in radians.
+routine Q256.to_euler() -> (B64, B64, B64)
+    var w = C::ingrid_q256_to_euler(w: me.w, x: me.x, y: me.y, z: me.z)
+    return (B64.from_bits(bits: w.w0), B64.from_bits(bits: w.w1), B64.from_bits(bits: w.w2))
+
+# ============================================================================
+# Text Representation
+# ============================================================================
+
+### Formats this quaternion as `w+xi+yj+zk` (signs collapse for negatives).
+### :returns: The resulting `Text` value.
+@override
+routine Q256.represent() -> Text
+    return me.w.represent() + __q64_term(v: me.x, unit: "i") + __q64_term(
+        v: me.y,
+        unit: "j",
+    ) + __q64_term(v: me.z, unit: "k")
+
+### Formats this quaternion as `w+xi+yj+zk` with exactly `places` digits after the point in each part
+### (see `B64.fixed`).
+### :param places: The number of digits after the point.
+### :returns: The resulting `Text` value.
+routine Q256.fixed(places: U64) -> Text
+    return me.w.fixed(places) + q256_fixed_term(
+        v: me.x,
+        unit: "i",
+        places: places,
+    ) + q256_fixed_term(v: me.y, unit: "j", places: places) + q256_fixed_term(
+        v: me.z,
+        unit: "k",
+        places: places,
+    )
+
+### One imaginary term of `fixed`, with an explicit leading sign.
+### :param v: The coefficient.
+### :param unit: The unit letter to append.
+### :param places: The number of digits after the decimal point.
+### :returns: The term, such as `+0.50i`.
+routine q256_fixed_term(v: B64, unit: Text, places: U64) -> Text
+    if v < 0.0
+        return "-" + v.abs().fixed(places) + unit
+    return "+" + v.abs().fixed(places) + unit
+
+### Formats one imaginary term with an explicit leading sign.
+### :param v: The component value.
+### :param unit: The imaginary unit label (`i`, `j`, or `k`).
+### :returns: A `Text` like `+2i` or `-3j`.
+routine __q64_term(v: B64, unit: Text) -> Text
+    if v < 0.0
+        return "-" + v.abs().represent() + unit
+    # abs() also collapses negative zero so it prints as `+0`, not `+-0`.
+    return "+" + v.abs().represent() + unit
+
+### Returns a diagnostic string wrapping the value with its type name.
+### :returns: The resulting `Text` value.
+@override
+routine Q256.diagnose() -> Text
+    return "Q256(" + me.represent() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a SipHash-2-4 keyed hash of this quaternion.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash.
+routine Q256.hash(k0: U64, k1: U64) -> U64
+    var acc = __hash_round(acc: 0, h: me.w.hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.x.hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.y.hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.z.hash(k0: k0, k1: k1))
+    return __hash_finalize(h: acc)
+
+# ============================================================================
+# Ingrid (Ingrid/lapila/quaternion.lpa)
+# ============================================================================
+# The bodies of Q256's math: each component of a quaternion is its own B64, a Vector3D's or a Matrix4R4C's
+# its own B32. A quaternion comes back in `IngridWords` (w, x, y, z in `w0` to `w3`), a vector in `w0` to `w2`
+# as B32s, `to_axis_angle` as the axis's B32s then the angle, and `to_euler` as roll, pitch, yaw.
+routine C::ingrid_q256_mul(
+    w: B64,
+    x: B64,
+    y: B64,
+    z: B64,
+    other_w: B64,
+    other_x: B64,
+    other_y: B64,
+    other_z: B64,
+) -> IngridWords
+routine C::ingrid_q256_div(
+    w: B64,
+    x: B64,
+    y: B64,
+    z: B64,
+    other_w: B64,
+    other_x: B64,
+    other_y: B64,
+    other_z: B64,
+) -> IngridWords
+routine C::ingrid_q256_dot(
+    w: B64,
+    x: B64,
+    y: B64,
+    z: B64,
+    other_w: B64,
+    other_x: B64,
+    other_y: B64,
+    other_z: B64,
+) -> B64
+routine C::ingrid_q256_norm(w: B64, x: B64, y: B64, z: B64) -> B64
+routine C::ingrid_q256_abs(w: B64, x: B64, y: B64, z: B64) -> B64
+routine C::ingrid_q256_angle(w: B64, x: B64, y: B64, z: B64) -> B64
+routine C::ingrid_q256_normalize(w: B64, x: B64, y: B64, z: B64) -> IngridWords
+routine C::ingrid_q256_reciprocal(w: B64, x: B64, y: B64, z: B64) -> IngridWords
+routine C::ingrid_q256_to_axis_angle(w: B64, x: B64, y: B64, z: B64) -> IngridWords
+routine C::ingrid_q256_to_euler(w: B64, x: B64, y: B64, z: B64) -> IngridWords
+routine C::ingrid_q256_is_unit(w: B64, x: B64, y: B64, z: B64) -> Bool
+routine C::ingrid_q256_rotate(w: B64, x: B64, y: B64, z: B64, vx: B32, vy: B32, vz: B32) -> IngridWords
+routine C::ingrid_q256_slerp(
+    w: B64,
+    x: B64,
+    y: B64,
+    z: B64,
+    other_w: B64,
+    other_x: B64,
+    other_y: B64,
+    other_z: B64,
+    t: B64,
+) -> IngridWords
+routine C::ingrid_q256_nlerp(
+    w: B64,
+    x: B64,
+    y: B64,
+    z: B64,
+    other_w: B64,
+    other_x: B64,
+    other_y: B64,
+    other_z: B64,
+    t: B64,
+) -> IngridWords
+routine C::ingrid_q256_from_axis_angle(ax: B32, ay: B32, az: B32, angle: B64) -> IngridWords
+routine C::ingrid_q256_from_to(ux: B32, uy: B32, uz: B32, vx: B32, vy: B32, vz: B32) -> IngridWords
+routine C::ingrid_q256_from_matrix(
+    m00: B32,
+    m01: B32,
+    m02: B32,
+    m10: B32,
+    m11: B32,
+    m12: B32,
+    m20: B32,
+    m21: B32,
+    m22: B32,
+) -> IngridWords
+routine C::ingrid_q256_from_euler(roll: B64, pitch: B64, yaw: B64) -> IngridWords

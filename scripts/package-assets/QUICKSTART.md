@@ -5,7 +5,7 @@ native runtime, and the LLVM toolchain (clang/opt/lld) are all inside this
 folder. You do not need to install anything else to build and run Revare
 programs.
 
-## 1. Install (puts `revare` + `ra` on your PATH)
+## 1. Install (puts `revare` + `rv` on your PATH)
 
 **Windows**
 
@@ -53,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 ## 2. Hello, world
 
-Create `hello.rr`:
+Create `hello.rvr`:
 
 ```revare
 module Hello
@@ -68,7 +68,7 @@ routine start()
 Build and run it:
 
 ```bash
-revare buildandrun hello.rr
+revare buildandrun hello.rvr
 ```
 
 ## 3. A real project

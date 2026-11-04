@@ -116,7 +116,7 @@ public sealed partial class SourceFolderFailurePointTests
         },
         {
             "Debug", "debug AST printing includes explicit visitors for generated tree shapes",
-            ["RaSyntaxTreePrinter", "Visit", "Accept"]
+            ["RvSyntaxTreePrinter", "Visit", "Accept"]
         }
     };
 

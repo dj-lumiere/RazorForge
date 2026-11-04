@@ -37,13 +37,13 @@ Mielia's defaults are chosen for clarity, not machine width.
 - **`Int`** is the default for unsuffixed integer literals (arbitrary width, no silent overflow
   surprises).
 - **`Decimal`** is base-10 (not binary `F64`) — the default for fractional literals.
-- Both are reused from Revare's standard library; Mielia keeps RA's `S64`/`F64` literal defaults only
+- Both are reused from Revare's standard library; Mielia keeps RV's `S64`/`F64` literal defaults only
   inside the shared stdlib bodies.
 
 ## 📚 Standard library
 
 Mielia reuses Revare's `Core` **wholesale** — `List`, `Dict`, `Set`, `Text`, and the rest are the
-real RA Core types, resolved through Mielia's world-line so a bare `List` in `.mie` *is* `RA::Core.List`,
+real RV Core types, resolved through Mielia's world-line so a bare `List` in `.mie` *is* `RV::Core.List`,
 roamed per instance and reached through display/operator transparency. There is no forked collections
 library to drift.
 
@@ -53,7 +53,7 @@ library to drift.
 
 ## 🧪 Equivalence testing
 
-A dedicated `.mie` fixture harness runs Mielia programs end-to-end and **locks RA/MI equivalence**: the
+A dedicated `.mie` fixture harness runs Mielia programs end-to-end and **locks RV/MI equivalence**: the
 same program expressed in both languages must produce the same output. This is how the shared-stdlib
 reuse stays honest.
 
@@ -62,7 +62,7 @@ reuse stays honest.
 This is an honest **0.1 preview**. What works, and what does not yet:
 
 - ✅ **Single-threaded programs run end-to-end** — hello-world through to real programs.
-- ✅ Reused RA number model + `Core` stdlib, `entity`→`Roamed` lowering, nullability, single-thread cycle
+- ✅ Reused RV number model + `Core` stdlib, `entity`→`Roamed` lowering, nullability, single-thread cycle
   collection, container roam-trace.
 - ⛔ **Concurrency is not ready.** The cycle collector and mutators can race, so a multi-threaded Mielia
   program can hit use-after-free. Mielia 0.1 is **single-thread only**; a thread-safe collector is the
@@ -76,5 +76,5 @@ are loud, uncatchable crashes, distinct from recoverable failures you handle wit
 ## ✅ Tests
 
 The `.mie` fixture harness is green and wired into CI alongside Revare's suite (**1,511 unit +
-analyzer tests**, **188 stdlib fixtures**), including the RA/MI equivalence locks. CI green on Linux,
+analyzer tests**, **188 stdlib fixtures**), including the RV/MI equivalence locks. CI green on Linux,
 macOS, and Windows.

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Writes Standard/System/Text/CharCase.rr from UnicodeData.txt: the simple uppercase and lowercase mappings and the
+Writes Standard/System/Text/CharCase.rvr from UnicodeData.txt: the simple uppercase and lowercase mappings and the
 uppercase (Lu) and lowercase (Ll) letters, as runs a binary search walks.
 
-Usage: gen_char_case.py <UnicodeData.txt> <unicode version> <output .rr>
+Usage: gen_char_case.py <UnicodeData.txt> <unicode version> <output .rvr>
 
 A mapping run is (first, last, step, shift): every code point from first to last, step apart, maps to itself plus
 shift. A letter run is (first, last, step): every code point from first to last, step apart, is such a letter.

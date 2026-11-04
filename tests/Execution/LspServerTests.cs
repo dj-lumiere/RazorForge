@@ -13,7 +13,7 @@ namespace Revare.Tests.Execution;
 /// </summary>
 public sealed class LspServerTests
 {
-    private const string Uri = "file:///test/Sample.rr";
+    private const string Uri = "file:///test/Sample.rvr";
 
     // A symbol-rich Revare document: free routines, a record with a member routine, a generic
     // container use, variables, calls, an f-string, and control flow — enough surface to exercise
@@ -165,9 +165,9 @@ public sealed class LspServerTests
             "    return\n";
 
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
-            LspTestHarness.DidOpen(uri: "file:///bad.rr", text: bad), Exit);
+            LspTestHarness.DidOpen(uri: "file:///bad.rvr", text: bad), Exit);
 
-        JsonElement? diag = LspTestHarness.Diagnostics(replies: replies, uri: "file:///bad.rr");
+        JsonElement? diag = LspTestHarness.Diagnostics(replies: replies, uri: "file:///bad.rvr");
         Assert.NotNull(@object: diag);
         JsonElement arr = diag!.Value.GetProperty(propertyName: "diagnostics");
         Assert.True(condition: arr.GetArrayLength() > 0, userMessage: "expected at least one diagnostic");
@@ -249,7 +249,7 @@ public sealed class LspServerTests
             "    return\n";
         // The document is a real file: analysis reads the file's folder to find its module.
         string dir = Directory.CreateTempSubdirectory(prefix: "lsp_hover_").FullName;
-        string path = Path.Combine(path1: dir, path2: "main.rr");
+        string path = Path.Combine(path1: dir, path2: "main.rvr");
         File.WriteAllText(path: path, contents: source);
         string uri = new System.Uri(uriString: path).AbsoluteUri;
         (int line, int character) = LspTestHarness.PositionOf(text: source, needle: "Pair", occurrence: 2);
@@ -265,8 +265,8 @@ public sealed class LspServerTests
     }
 
     [Theory]
-    [InlineData("main.rr", "routine start()\n    var d = Duration.zero()\n    return\n", "Duration", "span of time")]
-    [InlineData("main.rr", "routine start()\n    var m = Moment.epoch()\n    return\n", "Moment", "absolute point in time")]
+    [InlineData("main.rvr", "routine start()\n    var d = Duration.zero()\n    return\n", "Duration", "span of time")]
+    [InlineData("main.rvr", "routine start()\n    var m = Moment.epoch()\n    return\n", "Moment", "absolute point in time")]
     public void Hover_OverStdlibType_ShowsItsDocComment(string file, string source, string needle, string doc)
     {
         string dir = Directory.CreateTempSubdirectory(prefix: "lsp_hover_").FullName;
@@ -529,8 +529,8 @@ public sealed class LspServerTests
         string folder = Path.Combine(path1: Path.GetTempPath(), path2: "lsp-names-" + Guid.NewGuid().ToString(format: "N"));
         Directory.CreateDirectory(path: folder);
         File.WriteAllText(path: Path.Combine(path1: folder, path2: "config.toml"),
-            contents: "[package]\nrevare-version = \"0.5.0\"\nname = \"names\"\n\n[target]\nexecutable = \"names.rr\"\nmode = \"debug\"\n");
-        string file = Path.Combine(path1: folder, path2: "names.rr");
+            contents: "[package]\nrevare-version = \"0.5.0\"\nname = \"names\"\n\n[target]\nexecutable = \"names.rvr\"\nmode = \"debug\"\n");
+        string file = Path.Combine(path1: folder, path2: "names.rvr");
         File.WriteAllText(path: file, contents: text);
         return (new System.Uri(uriString: file).AbsoluteUri, folder);
     }
@@ -685,7 +685,7 @@ public sealed class LspServerTests
     {
         // hover before any didOpen — the handler must handle the missing DocState gracefully.
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
-            LspTestHarness.Positional(id: 19, method: "textDocument/hover", uri: "file:///never-opened.rr",
+            LspTestHarness.Positional(id: 19, method: "textDocument/hover", uri: "file:///never-opened.rvr",
                 line: 0, character: 0),
             Exit);
 

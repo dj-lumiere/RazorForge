@@ -160,7 +160,7 @@ import IO/Console
 routine start()
     show("packaged revare works")
     return
-'@ | Set-Content -Path "$smokeDir\smoke.rr" -Encoding utf8NoBOM
+'@ | Set-Content -Path "$smokeDir\smoke.rvr" -Encoding utf8NoBOM
 # Stage a copy of the package OUTSIDE the repo (buildandrun's dev-checkout
 # detection walks up from the exe and would find the repo's native/build tree
 # from dist\), strip PATH down to the OS so the bundled toolchain is the only
@@ -168,12 +168,12 @@ routine start()
 $stageDir = Join-Path ([System.IO.Path]::GetTempPath()) "rf_pkg_stage_$PID"
 if (Test-Path $stageDir) { Remove-Item -Recurse -Force $stageDir }
 Copy-Item -Recurse $Out $stageDir
-$raExe = Join-Path $stageDir 'Revare.exe'
+$rvExe = Join-Path $stageDir 'Revare.exe'
 $oldPath = $env:PATH
 Push-Location $smokeDir
 try {
     $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-    $smokeOut = & $raExe buildandrun smoke.rr 2>&1 | Out-String
+    $smokeOut = & $rvExe buildandrun smoke.rvr 2>&1 | Out-String
 } finally {
     $env:PATH = $oldPath
     Pop-Location

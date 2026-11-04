@@ -6,7 +6,7 @@ namespace Revare.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// A <c>lateinit var</c> is read only where every path to the read has given it a value (RA-S202). The check follows
+/// A <c>lateinit var</c> is read only where every path to the read has given it a value (RV-S202). The check follows
 /// branches like a <c>steal</c> does: a path that leaves (<c>return</c>, <c>break</c>) doesn't count, and a loop is left
 /// with what was unassigned at its <c>break</c>s.
 /// </summary>

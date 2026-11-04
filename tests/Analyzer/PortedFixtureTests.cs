@@ -13,7 +13,7 @@ using static TestHelpers;
 /// </summary>
 public class PortedFixtureTests
 {
-    // ── playground/rc_test.rr ────────────────────────────────────────────────
+    // ── playground/rc_test.rvr ────────────────────────────────────────────────
     // Source memory: is_none_pattern_inversion_fix.md (2026-05-13).
     // `is None` on an Optional-carrier produced by Tracked.try_recover() must resolve,
     // and the else-arm must bind the inner Retained[T] cleanly.
@@ -38,7 +38,7 @@ public class PortedFixtureTests
         Assert.Empty(collection: result.Errors);
     }
 
-    // ── playground/maybe_entity_test.rr ──────────────────────────────────────
+    // ── playground/maybe_entity_test.rvr ──────────────────────────────────────
     // Source memory: maybe_entity_auto_own.md + failable_entity_return_sa_check_2026_05_14.md.
     // After the bound-T-is-pointer redesign, Optional[entity] is the natural carrier
     // for a failable returning an entity. `try` recovery + `is None` must resolve.
@@ -64,7 +64,7 @@ public class PortedFixtureTests
         Assert.Empty(collection: result.Errors);
     }
 
-    // ── playground/desugar_edge_cases.rr::test_compound ──────────────────────
+    // ── playground/desugar_edge_cases.rvr::test_compound ──────────────────────
     // Source memory: desugar_edge_cases_fix_2026_05_21.md.
     // Compound-assign through an index expression must dispatch to $setitem!/$getitem!
     // around the in-place operator, on a List[S64] (entity carrier).

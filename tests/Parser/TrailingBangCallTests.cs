@@ -45,7 +45,7 @@ public class TrailingBangCallTests
     [Fact]
     public void Parse_TrailingBang_InsideIfExpression_IsParseError()
     {
-        // The original BytesIO.rr regression — `!` after a constructor call
+        // The original BytesIO.rvr regression — `!` after a constructor call
         // inside an inline if-then-else expression. Both branches are invalid.
         string source = """
                         module L/Test

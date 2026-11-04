@@ -8,8 +8,8 @@ using static TestHelpers;
 /// <summary>
 /// Tests for a routine returning a token taken from one of several token parameters. Different returns may use
 /// different parameters, and the caller's token has every argument handed to one of them as a source: a change
-/// that ends any of them ends the token (RA-S643 at a later use). Returning a token taken from a local is still
-/// RA-S600.
+/// that ends any of them ends the token (RV-S643 at a later use). Returning a token taken from a local is still
+/// RV-S600.
 /// </summary>
 public class TokenReturnSourcesTests
 {

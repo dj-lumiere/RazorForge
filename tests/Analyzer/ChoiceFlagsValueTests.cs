@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Choice values and flags bits are written on every member or on none (intent C79): some with and some without is
-/// RA-S417, a flags bit is 0 to 63 (RA-S419), and two members on one bit is RA-S429.
+/// RV-S417, a flags bit is 0 to 63 (RV-S419), and two members on one bit is RV-S429.
 /// </summary>
 public class ChoiceFlagsValueTests
 {

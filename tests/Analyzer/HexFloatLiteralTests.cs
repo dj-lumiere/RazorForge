@@ -51,7 +51,7 @@ public class HexFloatLiteralTests
                 bits: out _));
     }
 
-    /// <summary>Verifies a hex float on a decimal float type is RA-S017.</summary>
+    /// <summary>Verifies a hex float on a decimal float type is RV-S017.</summary>
     [Theory]
     [InlineData("var x: D64 = 0x1p3")]
     [InlineData("var x: Decimal = 0x1p3")]
@@ -66,7 +66,7 @@ public class HexFloatLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.HexFloatLiteralNotBinaryFloat);
     }
 
-    /// <summary>Verifies a hex float that does not fit its binary float exactly is RA-S018.</summary>
+    /// <summary>Verifies a hex float that does not fit its binary float exactly is RV-S018.</summary>
     [Theory]
     [InlineData("var x: B32 = 0x1.000001p0")]
     [InlineData("var x: B32 = 0x1p-150")]

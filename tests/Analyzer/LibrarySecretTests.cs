@@ -10,7 +10,7 @@ using static TestHelpers;
 /// </summary>
 public class LibrarySecretTests
 {
-    /// <summary>A program naming the library's <c>HandlerCell</c> record gets RA-S402.</summary>
+    /// <summary>A program naming the library's <c>HandlerCell</c> record gets RV-S402.</summary>
     [Fact]
     public void Analyze_ProgramNamesLibrarySecretType_Fails()
     {

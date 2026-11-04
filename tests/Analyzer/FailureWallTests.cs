@@ -121,7 +121,7 @@ public class FailureWallTests
         AssertAnalyzesSa(source: source);
     }
 
-    /// <summary>A lambda that can fail goes to any <c>Callable</c> parameter: there is no RA-S761 any more.</summary>
+    /// <summary>A lambda that can fail goes to any <c>Callable</c> parameter: there is no RV-S761 any more.</summary>
     [Fact]
     public void LambdaThatCanFail_ToCallableParameter_Builds()
     {
@@ -149,7 +149,7 @@ public class FailureWallTests
                               return
                           """;
         (_, Builder.Parser.Parser parser) = ParseWithErrors(source: failable);
-        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RA-G230") &&
+        Assert.Contains(collection: parser.GetErrors(), filter: e => e.Contains(value: "RV-G230") &&
                                                                    e.Contains(value: "infallible"));
 
         string infallible = """

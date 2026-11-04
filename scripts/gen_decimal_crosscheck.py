@@ -1,4 +1,4 @@
-"""Writes tests/Fixtures/Stdlib/decimal_crosscheck_api.rr: D32, D64, D128, and Decimal results checked against
+"""Writes tests/Fixtures/Stdlib/decimal_crosscheck_api.rvr: D32, D64, D128, and Decimal results checked against
 Python's decimal module.
 
 Every expected value is computed here exactly (or at 1000 digits for a quotient that doesn't end) and rounded once to
@@ -16,7 +16,7 @@ from decimal import (Decimal, Context, ROUND_HALF_EVEN, ROUND_HALF_UP, ROUND_HAL
                      ROUND_DOWN, localcontext, setcontext)
 
 # DECIMAL_CROSSCHECK_COUNT and DECIMAL_CROSSCHECK_OUT write a larger run elsewhere (the fixture keeps 12 per operation).
-OUT = os.environ.get("DECIMAL_CROSSCHECK_OUT", "tests/Fixtures/Stdlib/decimal_crosscheck_api.rr")
+OUT = os.environ.get("DECIMAL_CROSSCHECK_OUT", "tests/Fixtures/Stdlib/decimal_crosscheck_api.rvr")
 EXACT = Context(prec=1000, Emax=10 ** 8, Emin=-10 ** 8)
 FORMATS = {
     "D32": (7, 96, -95),

@@ -366,7 +366,7 @@ public class VariableDeclarationTests
 
     /// <summary>
     /// A number no longer names its type with a suffix: each spelling (with or without the separator, hex,
-    /// binary, octal, float, <c>n</c>, <c>dn</c>) is RA-G010, with the caret on the suffix and the declaration to
+    /// binary, octal, float, <c>n</c>, <c>dn</c>) is RV-G010, with the caret on the suffix and the declaration to
     /// write instead in the message. Unit suffixes and the imaginary <c>i</c> stay.
     /// </summary>
     [Theory]

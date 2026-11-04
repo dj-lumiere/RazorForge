@@ -117,7 +117,7 @@ public class TypeDeclarationTests
     }
     /// <summary>
     /// Verifies the same comma-separated multi-parameter constraint form on a FREE routine —
-    /// <c>routine pair[T, U](...) needs T obeys A, U obeys B</c>. This used to fail with RA-G055.
+    /// <c>routine pair[T, U](...) needs T obeys A, U obeys B</c>. This used to fail with RV-G055.
     /// </summary>
     [Fact]
     public void Parse_FreeRoutine_WithConstraint_CommaSeparatedDifferentParams()

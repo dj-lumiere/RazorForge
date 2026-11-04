@@ -74,7 +74,7 @@ public sealed partial class WarmColdFixtureParityTests
         var data = new TheoryData<string, string>();
         foreach (string n in names)
         {
-            string p = Path.Combine(path1: FixtureDir, path2: n + ".rr");
+            string p = Path.Combine(path1: FixtureDir, path2: n + ".rvr");
             if (File.Exists(path: p))
             {
                 data.Add(p1: n, p2: p);
@@ -120,7 +120,7 @@ public sealed partial class WarmColdFixtureParityTests
     [InlineData("itertools_api")]
     public void CacheHitBuild_MatchesCold(string name)
     {
-        string path = Path.Combine(path1: FixtureDir, path2: name + ".rr");
+        string path = Path.Combine(path1: FixtureDir, path2: name + ".rvr");
         string src = File.ReadAllText(path: path);
         SemanticVerifier.CompiledStdlibState warm =
             SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
@@ -152,7 +152,7 @@ public sealed partial class WarmColdFixtureParityTests
     [InlineData("work_api", "work_start_api")]
     public void BuildAfterAnotherProgram_MatchesCold(string first, string second)
     {
-        string path = Path.Combine(path1: FixtureDir, path2: second + ".rr");
+        string path = Path.Combine(path1: FixtureDir, path2: second + ".rvr");
         string src = File.ReadAllText(path: path);
         HashSet<string> coldDefs = DefineSet(ll: Codegen(
             r: new SemanticVerifier(language: Language.Revare).Analyze(
@@ -160,7 +160,7 @@ public sealed partial class WarmColdFixtureParityTests
 
         SemanticVerifier.CompiledStdlibState warm =
             SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
-        string firstPath = Path.Combine(path1: FixtureDir, path2: first + ".rr");
+        string firstPath = Path.Combine(path1: FixtureDir, path2: first + ".rvr");
         Codegen(r: new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
             program: Parse(src: File.ReadAllText(path: firstPath), path: firstPath)));
         HashSet<string> warmDefs = DefineSet(ll: Codegen(

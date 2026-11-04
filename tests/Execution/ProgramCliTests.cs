@@ -25,7 +25,7 @@ public sealed class ProgramCliTests : IDisposable
         _dir = Path.Combine(path1: Path.GetTempPath(),
             path2: "rf-cli-tests-" + Guid.NewGuid().ToString(format: "N"));
         Directory.CreateDirectory(path: _dir);
-        _rf = Path.Combine(path1: _dir, path2: "sample.rr");
+        _rf = Path.Combine(path1: _dir, path2: "sample.rvr");
         File.WriteAllText(path: _rf,
             contents:
             "module Test/Cli\n" +
@@ -136,7 +136,7 @@ public sealed class ProgramCliTests : IDisposable
     /// <summary>
     /// An <c>Int</c> literal outside the <c>S64</c> range is a <c>Guarded[List[U64], ReadOnly]</c> the builder lays down
     /// as module data: the manager and the list are written field by field, and each field must get what the
-    /// declarations in <c>System/Memory/GuardManager.rr</c> and <c>System/List.rr</c> say it holds. The emitted IR names
+    /// declarations in <c>System/Memory/GuardManager.rvr</c> and <c>System/List.rvr</c> say it holds. The emitted IR names
     /// each struct's member variables in order, so this reads the order from there and checks every value: the share
     /// count starts at 1, the weak count and the policy state at 0, the manager's <c>data</c> is the list, and the
     /// list's <c>data</c>, <c>count</c> and <c>capacity</c> are the limbs and their number. A use shares it once more.
@@ -145,7 +145,7 @@ public sealed class ProgramCliTests : IDisposable
     [Fact]
     public void LlvmEmitter_BigIntLiteral_LaysTheListOutAsGuardManagerAndListDeclareIt()
     {
-        string rf = Path.Combine(path1: _dir, path2: "big.rr");
+        string rf = Path.Combine(path1: _dir, path2: "big.rvr");
         File.WriteAllText(path: rf,
             contents:
             "module Test/BigLiteral\n" +
@@ -210,7 +210,7 @@ public sealed class ProgramCliTests : IDisposable
     [Fact]
     public void ValidateStdlib_Revare_ReturnsZero()
     {
-        (int code, _) = RunMain("validate-stdlib", "ra");
+        (int code, _) = RunMain("validate-stdlib", "rv");
         Assert.Equal(expected: 0, actual: code);
     }
 
@@ -231,7 +231,7 @@ public sealed class ProgramCliTests : IDisposable
     [Fact]
     public void Check_SourceWithError_ReturnsNonZero()
     {
-        string bad = Path.Combine(path1: _dir, path2: "bad.rr");
+        string bad = Path.Combine(path1: _dir, path2: "bad.rvr");
         File.WriteAllText(path: bad,
             contents:
             "module Test/Bad\n" +
@@ -267,7 +267,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "indent", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/Indent\n" +
                 "routine start()\n" +
                 "  var t = \"first\n" +
@@ -277,7 +277,7 @@ public sealed class ProgramCliTests : IDisposable
                 "    var x = (1,\n" +
                 "       2)\n" +
                 "  return\n"),
-            ("new.rr", "module Test/Indented\nroutine start()\n    return\n")
+            ("new.rvr", "module Test/Indented\nroutine start()\n    return\n")
         ]);
 
         (int code, string output) = RunMain("migrate", "--step", "indent", dir);
@@ -293,9 +293,9 @@ public sealed class ProgramCliTests : IDisposable
                       "        var x = (1,\n" +
                       "              2)\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
         Assert.Equal(expected: "module Test/Indented\nroutine start()\n    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rvr")));
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "for", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/ForRa\n" +
                 "routine start()\n" +
                 "    each x in xs  # each x in xs\n" +
@@ -333,7 +333,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    for i in 0 til 10 by 2\n" +
                       "        nothing\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
         Assert.Equal(
             expected: "module Test/ForMi\nroutine start()\n    for k: U64 in 0 til n\n        show(k)\n",
             actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.mie")));
@@ -344,7 +344,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "work", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/WorkRa\n" +
                 "routine start()\n" +
                 "    var job: Agent[S64] = f.to[Agent](x: 1)\n" +
@@ -365,7 +365,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    show(\"Agent\")  # Agent\n" +
                       "    var e: WorkStartError = WorkStartError(reason: \"\")\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
     }
 
     [Fact]
@@ -373,7 +373,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "random", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/RandomRa\n" +
                 "routine start()\n" +
                 "    var a = rng.next_u64()\n" +
@@ -396,7 +396,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    show(\"rng.next_u64()\")\n" +
                       "    var e = Entropy.next[U64]()\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
     }
 
     [Fact]
@@ -435,7 +435,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "pierce", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/PierceRa\n" +
                 "routine start()\n" +
                 "    var pierce = 1\n" +
@@ -456,7 +456,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    if pierce > 5\n" +
                       "        throw LogicBreachedError()\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
     }
 
     [Fact]
@@ -464,7 +464,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "type-names", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/TypeNamesRa\n" +
                 "import Collections\n" +
                 "record Cell[T]\n" +
@@ -497,7 +497,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    show(\"Atomic CircularList Integer\")  # Atomic Integer\n" +
                       "    var atomic_hits = hits.load()\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
     }
 
     [Fact]
@@ -505,7 +505,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "type-names-optional", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/TypeNamesOptional\n" +
                 "entity Node\n" +
                 "    next: Maybe[Node]\n" +
@@ -528,7 +528,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    var count: Optional[S64] = none\n" +
                       "    var head: Optional[Node] = none  # Maybe[Node]\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
     }
 
     [Fact]
@@ -536,7 +536,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "type-names-own", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/TypeNamesOwn\n" +
                 "record SplitArray[T, N]\n" +
                 "    first: T\n" +
@@ -557,7 +557,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    var runs = Items[S64, 2](1, 2)\n" +
                       "    var own = SplitArray[S64, 2](first: 1)\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
     }
 
     [Fact]
@@ -565,7 +565,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "release", oldManifest: true, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/Release\n" +
                 "record Pt\n" +
                 "  x: S64\n" +
@@ -616,7 +616,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    for i in n to 1\n" +
                       "        nothing\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
         Assert.Contains(expectedSubstring: "a range counts up only now", actualString: output);
         Assert.Contains(expectedSubstring: "run migrate --step suffix", actualString: output);
         Assert.False(condition: File.Exists(path: Path.Combine(path1: dir, path2: "razorforge.toml")));
@@ -629,26 +629,26 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "marked", oldManifest: false, files:
         [
-            ("old.rr",
+            ("old.rvr",
                 "module Test/MarkedOld\n" +
                 "routine start()\n" +
                 "    var xs = [1, 2]\n" +
                 "    each x in xs\n" +
                 "        nothing\n" +
                 "    return\n"),
-            ("new.rr",
+            ("new.rvr",
                 "module Test/MarkedNew\n" +
                 "routine run()\n" +
                 "    return\n")
         ]);
         File.WriteAllText(path: Path.Combine(path1: dir, path2: "config.toml"),
             contents: "[package]\nname = \"marked\"\nrevare-version = \"0.5.0\"\n");
-        string untouched = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr"));
+        string untouched = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rvr"));
 
         (_, string output) = RunMain("migrate", dir);
         Assert.Contains(expectedSubstring: "    for x in xs\n",
-            actualString: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
-        Assert.Equal(expected: untouched, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr")));
+            actualString: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
+        Assert.Equal(expected: untouched, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rvr")));
         Assert.Contains(expectedSubstring: "does not read as it", actualString: output);
         Assert.Contains(expectedSubstring: "1 file(s) skipped", actualString: output);
     }
@@ -658,7 +658,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "nomanifest", oldManifest: false, files:
         [
-            ("new.rr",
+            ("new.rvr",
                 "module Test/NoManifest\n" +
                 "routine try_hard(n: S64) -> S64\n" +
                 "    return n\n" +
@@ -671,9 +671,9 @@ public sealed class ProgramCliTests : IDisposable
                 "    return\n")
         ]);
 
-        string before = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr"));
+        string before = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rvr"));
         (_, string output) = RunMain("migrate", dir);
-        Assert.Equal(expected: before, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr")));
+        Assert.Equal(expected: before, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rvr")));
         Assert.Contains(expectedSubstring: "'C64' is two B32 parts now", actualString: output);
     }
 
@@ -682,10 +682,10 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "oldmanifest", oldManifest: true, files:
         [
-            ("main.rr", "module Test/OldManifest\nroutine start()\n    return\n")
+            ("main.rvr", "module Test/OldManifest\nroutine start()\n    return\n")
         ]);
 
-        (int code, string output) = RunMain("check", Path.Combine(path1: dir, path2: "main.rr"));
+        (int code, string output) = RunMain("check", Path.Combine(path1: dir, path2: "main.rvr"));
         Assert.NotEqual(expected: 0, actual: code);
         Assert.Contains(expectedSubstring: "named config.toml now", actualString: output);
     }

@@ -5,7 +5,7 @@ using static TestHelpers;
 /// <summary>
 /// Regression locks for the <c>LLVM::</c> conversion intrinsics: a type-argument pair the underlying LLVM cast
 /// cannot take (<c>int_truncate[U32, U64]</c> became <c>trunc i32 ... to i64</c>, which opt rejected after the
-/// build had reported success) is RA-S514 at the call.
+/// build had reported success) is RV-S514 at the call.
 /// </summary>
 public class IntrinsicConversionTests
 {

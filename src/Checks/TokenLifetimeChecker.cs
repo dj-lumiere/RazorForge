@@ -14,7 +14,7 @@ namespace Revare.Checks;
 /// or for a routine on <c>h</c> that returns <c>me.inner.view()</c>, <c>boxes[]</c> (some element) for
 /// <c>var b = boxes[0]</c>. The source is free to change: replacing it (<c>h.inner = …</c>), moving it out
 /// (<c>steal h</c>), leaving its scope, or calling a routine that can replace it (one whose body assigns that field,
-/// directly or through its own calls) ends the token. Only a USE of an ended token is an error (RA-S643), reported
+/// directly or through its own calls) ends the token. Only a USE of an ended token is an error (RV-S643), reported
 /// where it happens and pointing at what ended it, so nothing is rejected that could not reach freed memory.
 /// <para>Each routine gets a REPLACE EFFECT: for each parameter (and <c>me</c>), the parts of it the routine may
 /// replace (<c>.inner</c>, <c>.inner.x</c>, or <c>.*</c> for anything inside). A stdlib routine counts through its
@@ -22,11 +22,11 @@ namespace Revare.Checks;
 /// routine that returns a token gets a RETURN ORIGIN: the parameters (and <c>me</c>) it may take the token from, each
 /// with the part of it. Different returns may use different parameters. A caller's token has every argument handed to
 /// one of them as a source, so a change that ends any of them ends the token. A return from a local, a temporary or
-/// an entity parameter the routine owns is RA-S600. Both summaries are solved as a fixpoint over all user
+/// an entity parameter the routine owns is RV-S600. Both summaries are solved as a fixpoint over all user
 /// routines.</para>
 /// <para>Within a routine the check follows the control flow: a token ended on one branch is ended after the
 /// branches meet, and a loop is walked until what it ends no longer changes. A call that can replace the source of
-/// a token passed to that same call is rejected at the call (RA-S639).</para>
+/// a token passed to that same call is rejected at the call (RV-S639).</para>
 /// </summary>
 internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBodyCheck
 {
@@ -786,7 +786,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                        .ToHashSet(), returns);
     }
 
-    /// <summary>RA-S600: every return of a token-returning routine takes the token from <c>me</c> or from a token
+    /// <summary>RV-S600: every return of a token-returning routine takes the token from <c>me</c> or from a token
     /// parameter (different returns may use different ones), never from a local, a temporary, or an entity parameter
     /// the routine owns.</summary>
     private void CheckReturns(RoutineDeclaration routine)
@@ -924,7 +924,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
         private readonly Dictionary<string, string> _aliasRoots = new(comparer: StringComparer.Ordinal);
 
         /// <summary>The names a pattern bound to what an identifier being matched holds, with that identifier: giving
-        /// the identifier a new value there is RA-S264 already, so it does not end them a second time.</summary>
+        /// the identifier a new value there is RV-S264 already, so it does not end them a second time.</summary>
         private readonly Dictionary<string, string> _pinnedSubjects = new(comparer: StringComparer.Ordinal);
 
         /// <summary>The pairs of names a <c>viewing</c> / <c>modifying</c> block with several targets is running over:
@@ -1142,7 +1142,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
         /// <summary>Takes each name <paramref name="pattern"/> binds to an entity in place as a token on the part of
         /// <paramref name="matched"/> it names, for <paramref name="body"/>: replacing, stealing or dropping that part
-        /// there ends it (RA-S643 at a later use). Gives the names it bound.</summary>
+        /// there ends it (RV-S643 at a later use). Gives the names it bound.</summary>
         private List<string> BindPattern(Pattern? pattern, HashSet<string> matched, Statement body, string? subject)
         {
             var bound = new List<string>();
@@ -1248,7 +1248,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
 
                     // An emitter kept in a local (`var it = xs.emitter()`, `var big = xs.where(...)`) that points at
                     // the container it walks is a token on that container's elements: it ends when the container may
-                    // have changed shape or ends, and a later use is RA-S643.
+                    // have changed shape or ends, and a later use is RV-S643.
                     bool walkToken = !v.Name.StartsWith(value: "_lf_", comparisonType: StringComparison.Ordinal) &&
                                      v.Initializer is { } walkInit && IsWalkToken(walk: walkInit);
 
@@ -1789,7 +1789,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             }
             else if (target is IdentifierExpression id && _state?.Tokens.ContainsKey(key: id.Name) == true)
             {
-                // A value is no token to point at (SA reported the assignment, RA-S252): the name keeps where it points,
+                // A value is no token to point at (SA reported the assignment, RV-S252): the name keeps where it points,
                 // or its uses would be reported against the local the value was read from.
                 if (IsTrackedToken(type: value.ResolvedType))
                 {
@@ -1908,7 +1908,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
             }
         }
 
-        /// <summary>RA-S623 for one call handed the same entity twice through token variables that name it
+        /// <summary>RV-S623 for one call handed the same entity twice through token variables that name it
         /// differently (<c>var m2 = m</c>, then <c>both(a: m, b: m2)</c>), with one of the two written: a change through
         /// the write token changes what the other reads. Two arguments spelled as the same place are reported by the
         /// shape check already.</summary>
@@ -2037,7 +2037,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
                 Expression? ownReceiver = call.Callee is MemberExpression { Object: var self } ? Unwrap(expr: self) : null;
                 HashSet<string> throughReceiver = owner.ReceiverWrites(call: call, tokenOrigins: Held);
 
-                // A `steal` among the arguments is RA-S615 at the stolen variable's other use in the call (the
+                // A `steal` among the arguments is RV-S615 at the stolen variable's other use in the call (the
                 // builder's own use-after-steal check says it moves out in the same call), so only the call's own
                 // effects are checked here.
                 foreach ((string path, string callee) in writes)
@@ -2233,7 +2233,7 @@ internal sealed class TokenLifetimeChecker(DiagnosticReporter report) : IUserBod
     }
 
     /// <summary>
-    /// RA-S456: a call that can change what a READ token points at, through that token: the receiver
+    /// RV-S456: a call that can change what a READ token points at, through that token: the receiver
     /// (`v.set_to(n: 2)`, `xs.view().add_last(...)`) or an argument handed to a parameter the callee changes. A
     /// routine changes a slot when its body writes into it or hands it on to something that does (the same
     /// summary that tells which parts a routine may replace), and a stdlib routine when it is not `@readonly`.

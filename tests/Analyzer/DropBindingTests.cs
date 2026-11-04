@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// <c>drop x</c> tears a local binding the routine owns down where it stands and ends the name, as <c>steal x</c>
-/// does. A Work is an entity with one owner, and a started one nothing collects is warning RA-W009.
+/// does. A Work is an entity with one owner, and a started one nothing collects is warning RV-W009.
 /// </summary>
 public class DropBindingTests
 {

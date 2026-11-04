@@ -42,7 +42,7 @@ public partial class RevareLexer
 
     /// <summary>
     /// Dictionary mapping keywords to their corresponding token types.
-    /// Guarded keywords are always present; RA-only keywords are added conditionally.
+    /// Guarded keywords are always present; RV-only keywords are added conditionally.
     /// </summary>
     private readonly Dictionary<string, TokenType> _keywords;
 
@@ -162,7 +162,7 @@ public partial class RevareLexer
             language: language);
         _language = language;
 
-        // Guarded keywords (both RA and MI)
+        // Guarded keywords (both RV and MI)
         _keywords = new Dictionary<string, TokenType>
         {
             // Type declarations
@@ -204,7 +204,7 @@ public partial class RevareLexer
             [key: "is"] = TokenType.Is,
             [key: "loop"] = TokenType.Loop,
             [key: "for"] = TokenType.For,
-            // Reserved: a loop over a range or a collection is written `for` (RA-G229).
+            // Reserved: a loop over a range or a collection is written `for` (RV-G229).
             [key: "each"] = TokenType.Each,
             [key: "break"] = TokenType.Break,
             [key: "continue"] = TokenType.Continue,
@@ -256,8 +256,8 @@ public partial class RevareLexer
             // `needs P everywhere` — the structural-conferral gate of the protocol model (a `needs`-clause
             // modifier, NOT a reflection construct). It lives with `needs`/`obeys`/`protocol`, which MI
             // shares, so it is a SHARED keyword. The derive TEMPLATES it gates (e.g. `routine T.eq` with an
-            // `expand` body) are RA stdlib that MI reuses wholesale; authoring such a template needs
-            // `expand` (RA-only), but the gate itself and the built-in structural protocols apply to MI
+            // `expand` body) are RV stdlib that MI reuses wholesale; authoring such a template needs
+            // `expand` (RV-only), but the gate itself and the built-in structural protocols apply to MI
             // types just as well.
             [key: "everywhere"] = TokenType.Everywhere,
             // `until cond` loops while the condition is false, `becomes v` gives a block arm of a value `when` its value.
@@ -271,8 +271,8 @@ public partial class RevareLexer
         _keywords[key: "failable"] = TokenType.Failable;
         _keywords[key: "infallible"] = TokenType.Infallible;
         _keywords[key: "steal"] = TokenType.Steal;
-        // Buildtime reflection is RA's model (monomorph unroll). Mielia's reflection is the runtime
-        // ObjectHacker (later); MI inherits the RA-mode-compiled stdlib derives via wholesale System
+        // Buildtime reflection is RV's model (monomorph unroll). Mielia's reflection is the runtime
+        // ObjectHacker (later); MI inherits the RV-mode-compiled stdlib derives via wholesale System
         // reuse, so it never needs `expand` itself. `expand` is the ONLY reflection keyword; the sources
         // (`openmemvarof`/`allmemvarof`/`caseof`/`branchof`) and accessors (`nameof`/`typeof`/…)
         // tokenize as plain identifiers and are classified in SA (see ExpandSources / the

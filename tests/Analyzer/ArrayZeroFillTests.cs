@@ -6,10 +6,10 @@ namespace Revare.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// RA-S641: <c>Items[T, N]()</c> fills every slot with zero, which is only a real value when T has one.
+/// RV-S641: <c>Items[T, N]()</c> fills every slot with zero, which is only a real value when T has one.
 /// An entity, a reference-counted handle, or a record holding one would get null slots that crash when
 /// read or torn down, so those arrays are built from their elements (<c>Items[N](a, b, ...)</c>).
-/// Also RA-S150 on a generic construction whose type argument misses the type's <c>needs</c>.
+/// Also RV-S150 on a generic construction whose type argument misses the type's <c>needs</c>.
 /// </summary>
 public class ArrayZeroFillTests
 {

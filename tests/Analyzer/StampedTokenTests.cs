@@ -7,11 +7,11 @@ using static TestHelpers;
 
 /// <summary>
 /// Stamps reached through tokens and stamps whose type is inferred. The token `fetch()` gives comes from the stamp
-/// table, so it has no source in the stamp, and a write through the fetched token ends nothing (RA-S643). Nothing that
+/// table, so it has no source in the stamp, and a write through the fetched token ends nothing (RV-S643). Nothing that
 /// changes comes out of a `Viewing`: a `fetch()` through a read token gives a read token (a write through it is
-/// RA-S631), and a value that holds a way to change an entity (a stamp, a manager handle, a write token, a record or
-/// tuple or Optional holding one) is read in place from a view, never copied out of it (RA-S657). A `stamp()` gives
-/// an entity type of the program its slot whether the stamp's type is written or inferred (RA-S656 stays for a
+/// RV-S631), and a value that holds a way to change an entity (a stamp, a manager handle, a write token, a record or
+/// tuple or Optional holding one) is read in place from a view, never copied out of it (RV-S657). A `stamp()` gives
+/// an entity type of the program its slot whether the stamp's type is written or inferred (RV-S656 stays for a
 /// standard library entity).
 /// </summary>
 public class StampedTokenTests
@@ -125,7 +125,7 @@ public class StampedTokenTests
 
         // A program file (a source extension) is where a stamp needs its slot.
         AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "has no slot for stamps",
-            fileName: "stamp_of_stdlib_entity.rr");
+            fileName: "stamp_of_stdlib_entity.rvr");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.StampOfTypeWithoutSlot);
     }
@@ -305,7 +305,7 @@ public class StampedTokenTests
         AssertAnalyzesSa(source: source);
     }
 
-    /// <summary>A stamp is never empty: its member variables are secret, so a program can't build one (RA-S403).</summary>
+    /// <summary>A stamp is never empty: its member variables are secret, so a program can't build one (RV-S403).</summary>
     [Fact]
     public void Analyze_StampBuiltFromItsMemberVariables_IsReported()
     {

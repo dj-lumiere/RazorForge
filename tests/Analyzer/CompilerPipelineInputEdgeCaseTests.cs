@@ -143,7 +143,7 @@ public class CompilerPipelineInputEdgeCaseTests
     /// Capped at 30s. Build 886 ran 1h 35m before failing — a 36-line source (32 nested
     /// `if true` blocks) should never need more than a fraction of a second. A timeout here
     /// surfaces algorithmic regressions in seconds instead of bleeding CI throughput.
-    /// Repro source mirrored at <c>playground/deeply_nested_repro.rr</c>.
+    /// Repro source mirrored at <c>playground/deeply_nested_repro.rvr</c>.
     /// </remarks>
     // Runs SYNCHRONOUSLY with no per-test timeout: the actual work for depth 32 is sub-second
     // (measured Analyze ≈ 0.9 s cold-JIT, codegen ≈ 35 ms; the builder is O(depth) — even depth 100
@@ -169,7 +169,7 @@ public class CompilerPipelineInputEdgeCaseTests
         // asserted, not dead-routine elimination.
         Program program = Parse(source: source);
         var analyzer = new SemanticVerifier(language: Language.Revare,
-            buildMode: RaBuildMode.Debug);
+            buildMode: RvBuildMode.Debug);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -178,7 +178,7 @@ public class CompilerPipelineInputEdgeCaseTests
             options: new LlvmEmitterOptions
             {
                 StdlibPrograms = result.Registry.StdlibPrograms,
-                BuildMode = RaBuildMode.Debug,
+                BuildMode = RvBuildMode.Debug,
                 SynthesizedBodies = result.SynthesizedBodies,
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies,
                 LiveRoutineKeys = result.LiveRoutineKeys,

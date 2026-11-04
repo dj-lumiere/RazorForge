@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// A <c>for</c> loop over a token goes through the container the token is on (intent C68): changing that container's
-/// shape in the loop is RA-S625, for a token from <c>xs.view()</c>, from a <c>viewing</c> block, and from a routine that
+/// shape in the loop is RV-S625, for a token from <c>xs.view()</c>, from a <c>viewing</c> block, and from a routine that
 /// may give back any of the tokens handed to it.
 /// </summary>
 public class TokenLoopShapeTests

@@ -616,7 +616,7 @@ public class GenericResolutionTests
 
     /// <summary>
     /// A generic routine whose type parameter appears ONLY in the return type, called with
-    /// no expected-type context, cannot bind that parameter. This must surface as RA-S161
+    /// no expected-type context, cannot bind that parameter. This must surface as RV-S161
     /// during SA rather than silently passing and crashing in codegen.
     /// </summary>
     [Fact]
@@ -638,7 +638,7 @@ public class GenericResolutionTests
 
     /// <summary>
     /// The same call binds cleanly when the return-only type parameter has expected-type
-    /// context (a typed variable annotation), so no RA-S161 fires.
+    /// context (a typed variable annotation), so no RV-S161 fires.
     /// </summary>
     [Fact]
     public void Analyze_ReturnOnlyTypeParam_WithContext_NoCannotInfer()

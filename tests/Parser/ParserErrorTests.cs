@@ -13,7 +13,7 @@ public class ParserErrorTests
 
     /// <summary>
     /// Verifies that a record member missing its <c>: Type</c> annotation throws or recovers.
-    /// RA records are indentation-delimited — there is no brace to omit; the real malformation is a
+    /// RV records are indentation-delimited — there is no brace to omit; the real malformation is a
     /// member line that is not <c>name: Type</c>.
     /// </summary>
     [Fact]
@@ -393,7 +393,7 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Verifies that a block header with no indented body throws or recovers. RA blocks are
+    /// Verifies that a block header with no indented body throws or recovers. RV blocks are
     /// indentation-delimited — there is no brace to mismatch; the real malformation is a block
     /// header (<c>if true</c>) followed by no deeper-indented body.
     /// </summary>

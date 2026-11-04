@@ -436,7 +436,7 @@ public class CompoundAssignmentTests
 
     /// <summary>
     /// A compound assignment is rejected exactly when its binary form is: <c>t += v</c> with a
-    /// different fixed-width type is RA-S767, like <c>t = t + v</c>.
+    /// different fixed-width type is RV-S767, like <c>t = t + v</c>.
     /// </summary>
     [Fact]
     public void Analyze_MixedFixedWidthCompoundAssignment_ReportsError()

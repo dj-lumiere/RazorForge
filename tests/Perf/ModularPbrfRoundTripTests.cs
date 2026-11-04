@@ -35,10 +35,10 @@ public sealed partial class ModularPbrfRoundTripTests
     private static Program ParseTrivial()
     {
         List<Token> tokens =
-            Lexers.Tokenize(source: Trivial, fileName: "bench.rr", language: Language.Revare);
+            Lexers.Tokenize(source: Trivial, fileName: "bench.rvr", language: Language.Revare);
         return new Builder.Parser.Parser(tokens: tokens,
             language: Language.Revare,
-            fileName: "bench.rr").Parse();
+            fileName: "bench.rvr").Parse();
     }
 
     private static string Codegen(AnalysisResult r)

@@ -6,10 +6,10 @@ namespace Revare.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// A token (<c>Viewing[T]</c> / <c>Modifying[T]</c>) is never a type argument (RA-S601): a container, a <c>Optional</c>, a
+/// A token (<c>Viewing[T]</c> / <c>Modifying[T]</c>) is never a type argument (RV-S601): a container, a <c>Optional</c>, a
 /// tuple, a variant or a generic type holding one could keep it after the place it points at is gone. A routine may
 /// return <c>Optional</c> of a token (an iterator's <c>emit</c> under <c>try</c>), and the caller unpacks it with
-/// <c>when</c> where it gets it. A lambda that captures a token is bound to it and is never returned or kept (RA-S606). The first five cases are the analogs of
+/// <c>when</c> where it gets it. A lambda that captures a token is bound to it and is never returned or kept (RV-S606). The first five cases are the analogs of
 /// Rust #164250 that read a dead entity before.
 /// </summary>
 public class TokenTypeArgumentTests

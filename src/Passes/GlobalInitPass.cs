@@ -13,7 +13,7 @@ namespace Revare.Passes;
 /// </summary>
 internal static class GlobalInitPass
 {
-    /// <summary>Returns false after reporting RA-S436 / RA-S438 when the globals cannot be initialized.</summary>
+    /// <summary>Returns false after reporting RV-S436 / RV-S438 when the globals cannot be initialized.</summary>
     internal static bool Run(List<(SyntaxTree.Program Program, string FilePath)> orderedFiles,
         Action<SemanticDiagnosticCode, string, SourceLocation> report)
     {

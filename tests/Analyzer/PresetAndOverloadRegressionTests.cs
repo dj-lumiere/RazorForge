@@ -72,7 +72,7 @@ public class PresetAndOverloadRegressionTests
             expectedErrorSubstring: "is a 'Text' literal");
     }
 
-    /// <summary>A free <c>secret routine</c> is callable from its own module (it used to be RA-S403).</summary>
+    /// <summary>A free <c>secret routine</c> is callable from its own module (it used to be RV-S403).</summary>
     [Fact]
     public void SecretFreeRoutine_CallableFromOwnModule()
     {

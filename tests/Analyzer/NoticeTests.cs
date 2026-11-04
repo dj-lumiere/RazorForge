@@ -160,7 +160,7 @@ public class NoticeTests
                                                      ### :returns: twice x
                                                      routine twice(x: S64) -> S64
                                                          return x + x
-                                                     """, file: "/virtual/docs/doc_notes.rr");
+                                                     """, file: "/virtual/docs/doc_notes.rvr");
         Assert.All(collection: notes, action: n => Assert.True(condition: n.IsNotice));
         Assert.Equal(expected: 1, actual: notes.Count(predicate: n => n.Code == SemanticWarningCode.RoutineHasNoDocComment));
         Assert.Contains(collection: notes, filter: n => n.Code == SemanticWarningCode.DocCommentLacksParam &&
@@ -170,15 +170,15 @@ public class NoticeTests
         Assert.Contains(collection: notes, filter: n => n.Code == SemanticWarningCode.DocCommentLacksReturns &&
                                                        n.Message.Contains(value: "'add'"));
         Assert.DoesNotContain(collection: notes, filter: n => n.Message.Contains(value: "'twice'"));
-        Assert.Equal(expected: "RA-W305", actual: notes.First(predicate: n => n.Code == SemanticWarningCode.RoutineHasNoDocComment)
+        Assert.Equal(expected: "RV-W305", actual: notes.First(predicate: n => n.Code == SemanticWarningCode.RoutineHasNoDocComment)
                                                        .CodeString);
     }
 
     [Theory]
-    [InlineData("/virtual/tests/doc_notes.rr")]
-    [InlineData("/virtual/playground/doc_notes.rr")]
-    [InlineData("/virtual/scratch/doc_notes.rr")]
-    [InlineData("/virtual/generated/doc_notes.rr")]
+    [InlineData("/virtual/tests/doc_notes.rvr")]
+    [InlineData("/virtual/playground/doc_notes.rvr")]
+    [InlineData("/virtual/scratch/doc_notes.rvr")]
+    [InlineData("/virtual/generated/doc_notes.rvr")]
     public void DocNotes_ExemptFolders_GetNone(string file)
     {
         Assert.Empty(collection: DocNotes(source: """

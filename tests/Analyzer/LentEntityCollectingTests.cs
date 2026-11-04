@@ -6,7 +6,7 @@ namespace Revare.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for RA-S413 at a terminal that would keep entities a walk only reaches where their container keeps them
+/// Tests for RV-S413 at a terminal that would keep entities a walk only reaches where their container keeps them
 /// (<c>xs.where(...).to[List]()</c> over a <c>List[Crate]</c>): the new collection, or the one entity given back,
 /// would keep each entity in a second place. A walk that hands its items over (<c>select</c> making new entities,
 /// <c>(steal xs).where(...)</c> taking the list apart) may be collected.

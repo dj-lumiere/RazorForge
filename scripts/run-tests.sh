@@ -207,7 +207,7 @@ run_compiler_tests() {
     local test_files=()
     while IFS= read -r -d '' file; do
         test_files+=("$file")
-    done < <(find "$TEST_DIR" -name "*.rr" -print0)
+    done < <(find "$TEST_DIR" -name "*.rvr" -print0)
 
     if [ ${#test_files[@]} -eq 0 ]; then
         print_warning "No Revare test files found"
@@ -218,7 +218,7 @@ run_compiler_tests() {
     local failed=0
 
     for test_file in "${test_files[@]}"; do
-        local test_name=$(basename "$test_file" .rr)
+        local test_name=$(basename "$test_file" .rvr)
         print_info "Testing: $test_name"
 
         # Compile the test file

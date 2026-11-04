@@ -23,7 +23,7 @@ public sealed class TargetGateTests
     [Fact]
     public void NoDirective_AlwaysCompiles()
     {
-        string f = WriteTemp(name: "plain.rr", body: "module M\n\nroutine start()\n    return\n");
+        string f = WriteTemp(name: "plain.rvr", body: "module M\n\nroutine start()\n    return\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f,
@@ -35,7 +35,7 @@ public sealed class TargetGateTests
     [Fact]
     public void MatchingOs_Compiles_NonMatchingExcluded()
     {
-        string f = WriteTemp(name: "win.rr", body: "@target(os: \"windows\")\nmodule M\n");
+        string f = WriteTemp(name: "win.rvr", body: "@target(os: \"windows\")\nmodule M\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f,
@@ -49,7 +49,7 @@ public sealed class TargetGateTests
     [Fact]
     public void MultiValueOs_MatchesAny()
     {
-        string f = WriteTemp(name: "unix.rr",
+        string f = WriteTemp(name: "unix.rvr",
             body: "@target(os: \"linux\", \"macos\")\nmodule M\n");
         try
         {
@@ -67,7 +67,7 @@ public sealed class TargetGateTests
     public void ArchAlias_NormalizesToLlvmName()
     {
         // Directive uses the ergonomic `arm64`; TargetConfig carries the LLVM `aarch64`.
-        string f = WriteTemp(name: "arm.rr", body: "@target(arch: \"arm64\")\nmodule M\n");
+        string f = WriteTemp(name: "arm.rvr", body: "@target(arch: \"arm64\")\nmodule M\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f,
@@ -81,7 +81,7 @@ public sealed class TargetGateTests
     [Fact]
     public void MultipleKeys_AreAnded()
     {
-        string f = WriteTemp(name: "wa.rr",
+        string f = WriteTemp(name: "wa.rvr",
             body: "@target(os: \"windows\", arch: \"x64\")\nmodule M\n");
         try
         {
@@ -98,7 +98,7 @@ public sealed class TargetGateTests
     {
         // The directive must precede real code (leading comment block). Here it follows `module`, so it
         // is a plain comment and the file compiles unconditionally.
-        string f = WriteTemp(name: "late.rr",
+        string f = WriteTemp(name: "late.rvr",
             body: "module M\n@target(os: \"windows\")\nroutine start()\n    return\n");
         try
         {

@@ -9,9 +9,9 @@ namespace Revare.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// A <c>record</c> is a value, so it holds neither an entity nor a type parameter that could be one (RA-S409). An
+/// A <c>record</c> is a value, so it holds neither an entity nor a type parameter that could be one (RV-S409). An
 /// entity is the declaration that may: <c>Slots[T, COUNT]</c> is the fixed run of places for any <c>T</c>, kept in one
-/// place, and <c>bundle</c> is a build error (RA-G228).
+/// place, and <c>bundle</c> is a build error (RV-G228).
 /// </summary>
 public class RecordSlotsTests
 {

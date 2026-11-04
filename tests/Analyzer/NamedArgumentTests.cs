@@ -216,7 +216,7 @@ public class NamedArgumentTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
-        // RA-W258, the old two-argument naming warning, is gone.
+        // RV-W258, the old two-argument naming warning, is gone.
         Assert.DoesNotContain(collection: result.Warnings, filter: w => (int)w.Code == 258);
     }
     /// <summary>

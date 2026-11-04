@@ -17,13 +17,13 @@ public static class TestHelpers
 {
     /// <summary>
     /// A time limit for a child process the tests start (a build, a built program), scaled by the
-    /// <c>RA_TEST_TIMEOUT_SCALE</c> environment variable (a whole number, 1 when unset). CI sets it on the coverage
+    /// <c>RV_TEST_TIMEOUT_SCALE</c> environment variable (a whole number, 1 when unset). CI sets it on the coverage
     /// leg: the child runs the coverage-instrumented builder assemblies from the test output directory, which makes a
     /// build several times slower. The limit only catches hangs, so a slower run gets a longer one.
     /// </summary>
     public static int ChildTimeoutMs(int baseMs)
     {
-        string? scale = Environment.GetEnvironmentVariable(variable: "RA_TEST_TIMEOUT_SCALE");
+        string? scale = Environment.GetEnvironmentVariable(variable: "RV_TEST_TIMEOUT_SCALE");
         return int.TryParse(s: scale, result: out int factor) && factor > 1 ? baseMs * factor : baseMs;
     }
 

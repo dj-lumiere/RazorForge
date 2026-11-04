@@ -53,7 +53,7 @@ cp Lapila/LICENSE Lapila/README.md "$LAPILA_OUT/"
 rm -rf "dist/_lapila-publish"
 # The packaged executable builds and runs a program from a folder away from every checkout.
 LAPILA_SMOKE=$(mktemp -d)
-cat > "$LAPILA_SMOKE/smoke.li" <<'EOF'
+cat > "$LAPILA_SMOKE/smoke.lpa" <<'EOF'
 import Hosted
 
 routine start() -> None
@@ -62,7 +62,7 @@ routine start() -> None
 EOF
 LAPILA_STAGE=$(mktemp -d)
 cp -a "$LAPILA_OUT/." "$LAPILA_STAGE/"
-if ! (cd "$LAPILA_SMOKE" && "$LAPILA_STAGE/lapila" run smoke.li 2>&1 | grep -q "packaged lapila works"); then
+if ! (cd "$LAPILA_SMOKE" && "$LAPILA_STAGE/lapila" run smoke.lpa 2>&1 | grep -q "packaged lapila works"); then
     echo "packaged lapila smoke failed" >&2
     exit 1
 fi
@@ -114,7 +114,7 @@ cp Revare/LICENSE Revare/README.md Revare/THIRD-PARTY-NOTICES.md "$OUT/"
 # Short alias next to the canonical binary. (Users preferring `forge` can alias it
 # themselves — the name is deliberately not shipped to avoid colliding with
 # Foundry's `forge`.)
-ln -sf Revare "$OUT/ra"
+ln -sf Revare "$OUT/rv"
 
 # Mielia has its own command line; `mielia` and `mi` point at it.
 ln -sf Mielia "$OUT/mielia"
@@ -214,9 +214,9 @@ chmod +x "$OUT/install.sh"
 
 echo "=== smoke test: self-contained buildandrun (system toolchain hidden) ==="
 "$OUT/Revare" version
-RA_ABS="$(cd "$OUT" && pwd)/Revare"
+RV_ABS="$(cd "$OUT" && pwd)/Revare"
 SMOKE_DIR=$(mktemp -d)
-cat > "$SMOKE_DIR/smoke.rr" <<'EOF'
+cat > "$SMOKE_DIR/smoke.rvr" <<'EOF'
 module PackageSmoke
 
 import IO/Console
@@ -232,8 +232,8 @@ EOF
 # prerequisites (libc dev files / CLT) come from the system.
 STAGE_DIR=$(mktemp -d)
 cp -a "$OUT/." "$STAGE_DIR/"
-RA_ABS="$STAGE_DIR/Revare"
-SMOKE_OUT=$( cd "$SMOKE_DIR" && PATH="/usr/bin:/bin" "$RA_ABS" buildandrun smoke.rr 2>&1 ) || {
+RV_ABS="$STAGE_DIR/Revare"
+SMOKE_OUT=$( cd "$SMOKE_DIR" && PATH="/usr/bin:/bin" "$RV_ABS" buildandrun smoke.rvr 2>&1 ) || {
     echo "$SMOKE_OUT"
     echo "self-contained buildandrun smoke failed"
     rm -rf "$STAGE_DIR"

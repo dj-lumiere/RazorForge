@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// An emitter hands out each item once, so a <c>for</c> over a named emitter that has certainly run out would run zero
-/// times: RA-S517. That is a second <c>for</c> after one that ended by itself on every path, or a <c>for</c> inside a
+/// times: RV-S517. That is a second <c>for</c> after one that ended by itself on every path, or a <c>for</c> inside a
 /// loop over an emitter made outside it. An emitter left with <c>break</c> goes on where it stopped, and anything that
 /// may refill the name (a new value, a line naming it or its collection) makes it usable again.
 /// </summary>

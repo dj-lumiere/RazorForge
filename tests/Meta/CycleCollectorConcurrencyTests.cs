@@ -6,7 +6,7 @@ namespace Revare.Tests.Meta;
 
 /// <summary>
 /// End-to-end regressions for the Roamed cycle collector's concurrency + deep-graph fixes. Each compiles
-/// and runs a committed <c>tests/Fixtures/CycleCollector/*.rr</c> fixture via <c>buildandrun</c> and
+/// and runs a committed <c>tests/Fixtures/CycleCollector/*.rvr</c> fixture via <c>buildandrun</c> and
 /// asserts a clean finish (exit 0, success marker on stdout, clean stderr):
 /// <list type="bullet">
 ///   <item><b>MultithreadedCollection_NoUseAfterFree</b> — concurrent collector and mutator OS threads
@@ -32,7 +32,7 @@ public sealed partial class CycleCollectorConcurrencyTests
     public void MultithreadedCollection_NoUseAfterFree()
     {
         (int exit, string stdout, string stderr, bool timedOut) =
-            RunFixture(fixture: "mt_uaf_stress.rr", timeoutMs: 180_000);
+            RunFixture(fixture: "mt_uaf_stress.rvr", timeoutMs: 180_000);
 
         Assert.False(condition: timedOut,
             userMessage:
@@ -48,7 +48,7 @@ public sealed partial class CycleCollectorConcurrencyTests
     public void DeepCycle_NoStackOverflow()
     {
         (int exit, string stdout, string stderr, bool timedOut) =
-            RunFixture(fixture: "deep_cycle.rr", timeoutMs: 120_000);
+            RunFixture(fixture: "deep_cycle.rvr", timeoutMs: 120_000);
 
         Assert.False(condition: timedOut,
             userMessage: $"deep_cycle hung.\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -64,7 +64,7 @@ public sealed partial class CycleCollectorConcurrencyTests
     /// so a fault that somehow left a zero exit is still caught.</summary>
     [GeneratedRegex(
         pattern:
-        @"error\[RA-|Codegen bug|Synthesized body codegen failed|Unresolved generic|undefined symbol|never defined|Unhandled exception|Segmentation|AccessViolation")]
+        @"error\[RV-|Codegen bug|Synthesized body codegen failed|Unresolved generic|undefined symbol|never defined|Unhandled exception|Segmentation|AccessViolation")]
     private static partial Regex StderrFaultPattern();
 
     private static void AssertCleanStderr(string stderr)
@@ -82,11 +82,11 @@ public sealed partial class CycleCollectorConcurrencyTests
     private static (int Exit, string Stdout, string Stderr, bool TimedOut) RunFixture(
         string fixture, int timeoutMs)
     {
-        string raPath = Path.Combine(path1: FixturesDir, path2: fixture);
+        string rvPath = Path.Combine(path1: FixturesDir, path2: fixture);
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: raPath), "buildandrun", raPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "buildandrun", rvPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

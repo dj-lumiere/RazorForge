@@ -11,7 +11,7 @@ using static TestHelpers;
 /// remove from the container, even through another routine: every routine carries the set of parameters
 /// (and <c>me</c>) it may reshape, propagated through calls. Handing the container to a routine value, or
 /// changing another shared handle of the same kind of container, is rejected because the build cannot
-/// tell. Loop cases report RA-S625, element cases RA-S639.
+/// tell. Loop cases report RV-S625, element cases RV-S639.
 /// </summary>
 public class ShapeEffectTests
 {

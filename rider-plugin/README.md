@@ -1,6 +1,6 @@
 # Revare for Rider
 
-A Rider plugin for Revare (`.rr`, `.revare`):
+A Rider plugin for Revare (`.rvr`, `.revare`):
 
 - Syntax highlighting from `../Revare.tmbundle`, plus `#` comment toggling and bracket pairing (`bundle/`).
 - The Revare file icon.

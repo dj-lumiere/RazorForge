@@ -1,6 +1,6 @@
 # Revare installer (Windows)
 #
-# Adds this package directory to your user PATH so `revare` and `ra`
+# Adds this package directory to your user PATH so `revare` and `rv`
 # work from any terminal. Everything runs from this folder — no admin
 # rights, no registry beyond the user PATH entry, no other downloads.
 #
@@ -24,6 +24,6 @@ if ($entries -contains $dir) {
 Write-Host ''
 Write-Host 'Try it:'
 Write-Host '  revare version'
-Write-Host '  revare buildandrun hello.rr      (ra works too)'
+Write-Host '  revare buildandrun hello.rvr      (rv works too)'
 Write-Host ''
 Write-Host 'See QUICKSTART.md for a hello-world walkthrough.'

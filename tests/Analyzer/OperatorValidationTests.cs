@@ -59,7 +59,7 @@ public class OperatorValidationTests
 
     /// <summary>
     /// Defining $getitem WITHOUT following ViewingIndexable is the actual error — governed by protocol
-    /// conformance (RA-S411), independent of whether the owner is a record or an entity.
+    /// conformance (RV-S411), independent of whether the owner is a record or an entity.
     /// </summary>
     [Fact]
     public void Analyze_IndexOperatorWithoutIndexable_ReportsError()

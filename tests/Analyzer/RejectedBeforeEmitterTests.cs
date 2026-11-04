@@ -166,7 +166,7 @@ public class RejectedBeforeEmitterTests
                        """);
     }
 
-    /// <summary><c>Char(n)</c> takes the bits as a codepoint without checking them: RA-S655, pointing to
+    /// <summary><c>Char(n)</c> takes the bits as a codepoint without checking them: RV-S655, pointing to
     /// <c>Char.from_codepoint</c>.</summary>
     [Fact]
     public void Analyze_CharBuiltFromAVariablesBits_PointsToFromCodepoint()
@@ -187,7 +187,7 @@ public class RejectedBeforeEmitterTests
             expectedErrorSubstring: "'Char.from_codepoint(n: n.to[U32]())'");
     }
 
-    /// <summary><c>Bool(x)</c> keeps the lowest bit (<c>Bool(2)</c> is false): RA-S655, pointing to a comparison.</summary>
+    /// <summary><c>Bool(x)</c> keeps the lowest bit (<c>Bool(2)</c> is false): RV-S655, pointing to a comparison.</summary>
     [Fact]
     public void Analyze_BoolBuiltFromAVariablesBits_PointsToTheComparison()
     {
@@ -329,7 +329,7 @@ public class RejectedBeforeEmitterTests
                              return
                          """,
             expectedErrorSubstring: "'Hidden' ('Box' holds it) cannot be read back from a serialized value",
-            fileName: "read_back.rr");
+            fileName: "read_back.rvr");
     }
 
     [Fact]

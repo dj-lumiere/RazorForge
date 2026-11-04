@@ -4,12 +4,12 @@
 # Compiles Revare code to native executable
 
 if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <source_file.rr>"
+    echo "Usage: $0 <source_file.rvr>"
     exit 1
 fi
 
 SOURCE_FILE=$1
-BASE_NAME="${SOURCE_FILE%.rr}"
+BASE_NAME="${SOURCE_FILE%.rvr}"
 
 echo "=== Revare Bootstrap Builder ==="
 echo "Source: $SOURCE_FILE"

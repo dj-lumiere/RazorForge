@@ -246,7 +246,7 @@ public class ControlFlowAnalysisTests
 
     #endregion
 
-    #region Infinite Loop Termination (RA-S305)
+    #region Infinite Loop Termination (RV-S305)
 
     // An unconditional `loop` has a fall-through edge ONLY through a `break` that targets it. With no
     // such break the loop can only be left via return/throw/absent, so control never falls past it and

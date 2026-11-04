@@ -60,7 +60,7 @@ public sealed class WarmRestoreReproTests
             AnalysisResult r = analyzer.AnalyzeMultiple(
                 files: new List<(Program, string)>
                 {
-                    (Parse(src: user, file: "bench.rr"), "bench.rr")
+                    (Parse(src: user, file: "bench.rvr"), "bench.rvr")
                 });
             _out.WriteLine(
                 message:

@@ -127,7 +127,7 @@ public sealed partial class DebugJitRunTests
             _pipe = "rf-jit-" + Guid.NewGuid().ToString(format: "N")[..12];
             _dir = Path.Combine(path1: Path.GetTempPath(), path2: _pipe);
             Directory.CreateDirectory(path: _dir);
-            _entry = Path.Combine(path1: _dir, path2: "probe.rr");
+            _entry = Path.Combine(path1: _dir, path2: "probe.rvr");
             File.WriteAllText(path: _entry, contents: Program);
             File.WriteAllText(path: Path.Combine(path1: _dir, path2: "config.toml"),
                 contents: $"""
@@ -135,7 +135,7 @@ public sealed partial class DebugJitRunTests
                            name = "jitprobe"
 
                            [target]
-                           executable = "probe.rr"
+                           executable = "probe.rvr"
                            mode = "debug-jit"
                            incremental = {(incremental ? "true" : "false")}
                            use-daemon = {(useDaemon ? "true" : "false")}
@@ -229,11 +229,11 @@ public sealed partial class DebugJitRunTests
 
             if (_useDaemon)
             {
-                psi.Environment.Remove(key: "RA_NO_DAEMON");
+                psi.Environment.Remove(key: "RV_NO_DAEMON");
             }
             else
             {
-                psi.Environment[key: "RA_NO_DAEMON"] = "1";
+                psi.Environment[key: "RV_NO_DAEMON"] = "1";
             }
 
             var stdout = new StringBuilder();

@@ -8,7 +8,7 @@ using static TestHelpers;
 /// <summary>
 /// A `for` over a range literal of an integer type counts with a local instead of walking a range emitter, so the
 /// lowered body asks no emitter for values. A range over another type, and a range kept in a variable, still walk
-/// one. What the loops yield is checked by tests/Fixtures/Stdlib/range_counter_api.rr.
+/// one. What the loops yield is checked by tests/Fixtures/Stdlib/range_counter_api.rvr.
 /// </summary>
 public sealed class RangeCounterLoopTests
 {

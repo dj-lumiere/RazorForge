@@ -3,7 +3,7 @@ REM Revare Bootstrap Script for Windows
 REM Compiles Revare code to native executable
 
 if "%~1"=="" (
-    echo Usage: bootstrap.bat ^<source_file.rr^>
+    echo Usage: bootstrap.bat ^<source_file.rvr^>
     exit /b 1
 )
 

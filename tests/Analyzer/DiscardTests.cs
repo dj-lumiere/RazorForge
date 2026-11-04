@@ -358,7 +358,7 @@ public class DiscardTests
 
     #region Revare - Discard Non-Call Targets (semantic error)
 
-    // Whether the discarded expression is a routine call is a SEMANTIC check (RA-S421
+    // Whether the discarded expression is a routine call is a SEMANTIC check (RV-S421
     // InvalidDropTarget), not a grammatical one — the parser records whatever expression
     // follows `drop`, and the semantic verifier rejects non-call targets.
 

@@ -27,7 +27,7 @@ public class SafetyPathMatrixTests
         Assert.Contains(collection: result.Errors, filter: e => e.Code == code);
     }
 
-    // ---- tokens never leave the routine's variables (RA-S601) ----------------------------------------------
+    // ---- tokens never leave the routine's variables (RV-S601) ----------------------------------------------
 
     [Fact]
     public void Analyze_TokenInWrittenVariant_Errors()
@@ -70,7 +70,7 @@ public class SafetyPathMatrixTests
             code: SemanticDiagnosticCode.TokenMemberVariableNotAllowed, expected: "makes 'T' of 'same'");
     }
 
-    // ---- an entity lives in one place (RA-S413) -------------------------------------------------------------
+    // ---- an entity lives in one place (RV-S413) -------------------------------------------------------------
 
     [Fact]
     public void Analyze_GenericValueHandedOverTwice_Errors()
@@ -88,7 +88,7 @@ public class SafetyPathMatrixTests
             code: SemanticDiagnosticCode.BareEntityAssignment, expected: "'T' may be an entity");
     }
 
-    // ---- single-thread handles stay on their thread (RA-S632) ------------------------------------------------
+    // ---- single-thread handles stay on their thread (RV-S632) ------------------------------------------------
 
     [Fact]
     public void Analyze_EntityHoldingRetainedStolenIntoWork_Errors()
@@ -264,7 +264,7 @@ public class SafetyPathMatrixTests
             code: SemanticDiagnosticCode.ThreadArgNotShareable, expected: "Every running job reaches a global");
     }
 
-    // ---- globals (RA-S256, RA-S421, RA-S448) ----------------------------------------------------------------------
+    // ---- globals (RV-S256, RV-S421, RV-S448) ----------------------------------------------------------------------
 
     [Fact]
     public void Analyze_ModifyingBlockOnPlainEntityGlobalUsedByWork_Errors()
@@ -305,7 +305,7 @@ public class SafetyPathMatrixTests
             code: SemanticDiagnosticCode.InvalidDropTarget, expected: "You steal the global 'G'");
     }
 
-    // ---- the walked collection keeps its shape (RA-S625) -------------------------------------------------------
+    // ---- the walked collection keeps its shape (RV-S625) -------------------------------------------------------
 
     [Fact]
     public void Analyze_ReshapeThroughAdapterSource_Errors()
@@ -320,7 +320,7 @@ public class SafetyPathMatrixTests
             code: SemanticDiagnosticCode.ReshapingDuringIteration, expected: "'add_last' adds to or removes from 'xs'");
     }
 
-    // ---- dangerous routines only inside danger (RA-S609) --------------------------------------------------------
+    // ---- dangerous routines only inside danger (RV-S609) --------------------------------------------------------
 
     [Fact]
     public void Analyze_DangerousRoutineAsValue_Errors()

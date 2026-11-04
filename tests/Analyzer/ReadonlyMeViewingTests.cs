@@ -8,7 +8,7 @@ using static TestHelpers;
 /// <summary>
 /// The <c>me</c> of a <c>@readonly</c> member routine follows the rule of a <c>Viewing</c> (C154): a write token
 /// reached through <c>me</c> is a read token, and a value that holds a way to change an entity is read in place from
-/// <c>me</c>, never copied out (RA-S657). Also the token a <c>for</c> loop over values hands out, which reads as the
+/// <c>me</c>, never copied out (RV-S657). Also the token a <c>for</c> loop over values hands out, which reads as the
 /// value it is on where a value is wanted.
 /// </summary>
 public class ReadonlyMeViewingTests

@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// A binding from outside an <c>if</c>, a <c>when</c> or a loop is taken with <c>steal</c> on every path that goes on
-/// past it, or on none (RA-S616): its end-of-scope teardown follows one rule, with no hidden flag.
+/// past it, or on none (RV-S616): its end-of-scope teardown follows one rule, with no hidden flag.
 /// </summary>
 public class StealEveryPathTests
 {
