@@ -196,7 +196,11 @@ When unsure, consult ground truth in the repo/package:
    variable, a token, `me` or a global is RF-S421.
    **Notes and fixes (RF and SF).** A NOTE is a likely slip that builds as written: `check`, `lint` (SF files) and
    the language server show it (`note[RF-W###]`), a build never does. `until false` gets RF-W304 with the fix
-   "Write 'loop'". The body of `until true` gets RF-W057 and, like the code after an
+   "Write 'loop'". Doc comment notes (shown by `check`, `lint`, the language server and `validate-stdlib`): RF-W305 a routine
+   with no `###` doc comment (every routine of a library or example file, the stdlib included), RF-W306 a parameter with
+   no `:param` line, RF-W307 a `:param` line naming no parameter, RF-W308 a routine that returns a value with no
+   `:returns:` line. Files under a `tests`, `playground`, `scratch` or `generated` folder (below the project folder) are
+   exempt. The text is read with `DocComment.Parse`. The body of `until true` gets RF-W057 and, like the code after an
    unconditional `return`/`break` (RF-S786, still an error), is shown FADED (LSP `Unnecessary` tag, range through its
    last line). Diagnostics carry an optional `Fix` (title + 1-based `TextEdit`s): the language server offers it as a
    quick fix (sent in `diagnostic.data`), and `check --json` writes every error/warning/note as a JSON array (`file`,
