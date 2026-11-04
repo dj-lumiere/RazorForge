@@ -268,6 +268,39 @@ public sealed class BaseEmissionTests
     }
 
     /// <summary>
+    /// The resident-JIT base seed builds with no error and no warning in RazorForge, through the same driver a program
+    /// goes through (the Suflae twin of this test is in the Suflae test project).
+    /// </summary>
+    [Fact]
+    public void BaseSeed_Builds_WithoutDiagnostics()
+    {
+        (string source, string fileName) = Builder.Execution.BaseObjectCache.SeedFor(language: Language.RazorForge);
+        string dir = Path.Combine(path1: Path.GetTempPath(), path2: "rf_seed_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path: dir);
+        TextWriter savedOut = Console.Out;
+        TextWriter savedErr = Console.Error;
+        var captured = new StringWriter();
+        try
+        {
+            string file = Path.Combine(path1: dir, path2: fileName);
+            File.WriteAllText(path: file, contents: source);
+            Console.SetOut(newOut: captured);
+            Console.SetError(newError: captured);
+            int rc = Builder.Execution.Program.CompileEntryToIrForTests(entryFile: file, ir: out _);
+            Assert.True(condition: rc == 0, userMessage: captured.ToString());
+        }
+        finally
+        {
+            Console.SetOut(newOut: savedOut);
+            Console.SetError(newError: savedErr);
+            Directory.Delete(path: dir, recursive: true);
+        }
+
+        Assert.DoesNotContain(expectedSubstring: "warning[", actualString: captured.ToString());
+        Assert.DoesNotContain(expectedSubstring: "error[", actualString: captured.ToString());
+    }
+
+    /// <summary>
     /// AOT the standalone base IR to a native object via <see cref="BaseObjectCache"/> (opt + clang -c).
     /// clang runs as an EXTERNAL tool (no in-process libLLVM). It validates the
     /// base-object AOT primitive AND, on failure, clang's stderr pinpoints the exact malformed base IR
