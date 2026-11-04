@@ -133,4 +133,57 @@ public class NoticeTests
             predicate: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
         Assert.Equal(expected: [".to[S64]()", ".to[S64]()"], actual: error.Fix!.Edits.Select(selector: e => e.NewText));
     }
+
+    private static List<SemanticWarning> DocNotes(string source, string file)
+    {
+        return AnalyzeSa(source: source, fileName: file)
+              .Notices.Where(predicate: n => n.Code is >= SemanticWarningCode.RoutineHasNoDocComment
+                                                 and <= SemanticWarningCode.DocCommentLacksReturns)
+              .ToList();
+    }
+
+    [Fact]
+    public void DocNotes_RoutineWithoutDoc_AndEachWrongLine_AreNotes()
+    {
+        List<SemanticWarning> notes = DocNotes(source: """
+                                                     routine bare(x: S64)
+                                                         return
+
+                                                     ### Adds two numbers.
+                                                     ### :param a: the first number
+                                                     ### :param c: not a parameter
+                                                     routine add(a: S64, b: S64) -> S64
+                                                         return a + b
+
+                                                     ### Doubles a number.
+                                                     ### :param x: the number
+                                                     ### :returns: twice x
+                                                     routine twice(x: S64) -> S64
+                                                         return x + x
+                                                     """, file: "/virtual/docs/doc_notes.rf");
+        Assert.All(collection: notes, action: n => Assert.True(condition: n.IsNotice));
+        Assert.Equal(expected: 1, actual: notes.Count(predicate: n => n.Code == SemanticWarningCode.RoutineHasNoDocComment));
+        Assert.Contains(collection: notes, filter: n => n.Code == SemanticWarningCode.DocCommentLacksParam &&
+                                                       n.Message.Contains(value: "'b'"));
+        Assert.Contains(collection: notes, filter: n => n.Code == SemanticWarningCode.DocCommentNamesUnknownParam &&
+                                                       n.Message.Contains(value: "'c'"));
+        Assert.Contains(collection: notes, filter: n => n.Code == SemanticWarningCode.DocCommentLacksReturns &&
+                                                       n.Message.Contains(value: "'add'"));
+        Assert.DoesNotContain(collection: notes, filter: n => n.Message.Contains(value: "'twice'"));
+        Assert.Equal(expected: "RF-W305", actual: notes.First(predicate: n => n.Code == SemanticWarningCode.RoutineHasNoDocComment)
+                                                       .CodeString);
+    }
+
+    [Theory]
+    [InlineData("/virtual/tests/doc_notes.rf")]
+    [InlineData("/virtual/playground/doc_notes.rf")]
+    [InlineData("/virtual/scratch/doc_notes.rf")]
+    [InlineData("/virtual/generated/doc_notes.rf")]
+    public void DocNotes_ExemptFolders_GetNone(string file)
+    {
+        Assert.Empty(collection: DocNotes(source: """
+                                                  routine bare(x: S64)
+                                                      return
+                                                  """, file: file));
+    }
 }
