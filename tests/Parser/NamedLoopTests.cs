@@ -1,7 +1,7 @@
 using Builder.Diagnostics;
 using SyntaxTree;
 
-namespace RazorForge.Tests.Parser;
+namespace Revare.Tests.Parser;
 
 using static TestHelpers;
 
@@ -73,7 +73,7 @@ public class NamedLoopTests
                                                                       return
                                                                   """);
         Builder.Parser.BuildWarning warning = Assert.Single(collection: parser.GetWarnings());
-        Assert.Equal(expected: "RF-W010", actual: warning.WarningCode);
+        Assert.Equal(expected: "RA-W010", actual: warning.WarningCode);
         Assert.Contains(expectedSubstring: "'rows'", actualString: warning.Message);
     }
 

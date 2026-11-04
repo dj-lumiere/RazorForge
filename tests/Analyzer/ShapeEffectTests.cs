@@ -1,17 +1,17 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for the build-time shape check (RazorForge). While a `for` loop goes through a container, or a
+/// Tests for the build-time shape check (Revare). While a `for` loop goes through a container, or a
 /// statement works on one of its entity elements in place, nothing in that loop or statement may add to or
 /// remove from the container, even through another routine: every routine carries the set of parameters
 /// (and <c>me</c>) it may reshape, propagated through calls. Handing the container to a routine value, or
 /// changing another shared handle of the same kind of container, is rejected because the build cannot
-/// tell. Loop cases report RF-S625, element cases RF-S639.
+/// tell. Loop cases report RA-S625, element cases RA-S639.
 /// </summary>
 public class ShapeEffectTests
 {

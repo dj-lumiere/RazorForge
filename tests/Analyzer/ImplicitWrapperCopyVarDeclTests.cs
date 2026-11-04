@@ -1,6 +1,6 @@
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -157,7 +157,7 @@ public class ImplicitWrapperCopyVarDeclTests
         Assert.Empty(collection: result.Errors);
     }
 
-    /// <summary>A token used after its source was replaced is RF-S643, reported at the use.</summary>
+    /// <summary>A token used after its source was replaced is RA-S643, reported at the use.</summary>
     [Fact]
     public void Analyze_VarDecl_TokenUsedAfterSourceReplaced_IsError()
     {

@@ -5,7 +5,7 @@ using Builder.Verification;
 using Builder.Verification.Results;
 using Xunit.Abstractions;
 
-namespace RazorForge.Tests.Perf;
+namespace Revare.Tests.Perf;
 
 /// <summary>
 /// Regression lock for the warm-restore stdlib re-lowering crash. The compile daemon captures a fully
@@ -29,8 +29,8 @@ public sealed class WarmRestoreReproTests
     private static Program Parse(string src, string file)
     {
         return new Builder.Parser.Parser(
-            tokens: Lexers.Tokenize(source: src, fileName: file, language: Language.RazorForge),
-            language: Language.RazorForge,
+            tokens: Lexers.Tokenize(source: src, fileName: file, language: Language.Revare),
+            language: Language.Revare,
             fileName: file).Parse();
     }
 
@@ -38,7 +38,7 @@ public sealed class WarmRestoreReproTests
     public void WarmRestore_ImportsNonCoreModule_DoesNotReLowerStdlibCore()
     {
         SemanticVerifier.CompiledStdlibState warm =
-            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
 
         // A non-System import (Collections.RotatableList) is what makes the fresh loader re-scan stdlib and re-parse
         // every System file — the trigger for the leaked-fresh-System crash this test guards.
@@ -56,11 +56,11 @@ public sealed class WarmRestoreReproTests
         // The daemon serves many compiles from one snapshot — run several to catch cross-compile mutation.
         for (int i = 1; i <= 3; i++)
         {
-            var analyzer = new SemanticVerifier(language: Language.RazorForge, warm: warm);
+            var analyzer = new SemanticVerifier(language: Language.Revare, warm: warm);
             AnalysisResult r = analyzer.AnalyzeMultiple(
                 files: new List<(Program, string)>
                 {
-                    (Parse(src: user, file: "bench.rf"), "bench.rf")
+                    (Parse(src: user, file: "bench.rr"), "bench.rr")
                 });
             _out.WriteLine(
                 message:

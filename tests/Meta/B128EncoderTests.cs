@@ -1,6 +1,6 @@
 using Builder.Verification;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// Pins the managed <see cref="NumericLiteralParser.EncodeB128"/> (pure C#, BigInteger,

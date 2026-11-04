@@ -3,7 +3,7 @@ using Builder.Diagnostics;
 using Builder.Verification.Results;
 using TypeModel.Symbols;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 

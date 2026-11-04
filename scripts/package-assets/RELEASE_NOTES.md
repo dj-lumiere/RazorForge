@@ -1,15 +1,15 @@
-# RazorForge v0.4.0
+# Revare v0.4.0
 
 The realm release. v0.2.0 shipped the execution model, v0.3.0 the communication layer. v0.4.0 is a
 **language-maturity** release built around one idea that turned out to connect everything else:
-**realms**. A realm is the namespace a name lives in — `RF::` for RazorForge, `C::` for foreign C,
-`LLVM::` for intrinsics, and `SF::` for the new sister language **Suflae**. Foreign calls, builder
+**realms**. A realm is the namespace a name lives in — `RA::` for Revare, `C::` for foreign C,
+`LLVM::` for intrinsics, and `MI::` for the new sister language **Mielia**. Foreign calls, builder
 intrinsics, and cross-language interop all became one mechanism instead of three ad-hoc ones.
 
 On top of that foundation this release lands a **reworked ownership & copy model**, a **buildtime
 reflection surface**, a matured **C FFI** (struct-by-value including float structs, platform-width C
-types, conditional compilation), and native **SIMD vectors**. Suflae ships as its own **v0.1 preview**
-release alongside this one — see the Suflae release notes.
+types, conditional compilation), and native **SIMD vectors**. Mielia ships as its own **v0.1 preview**
+release alongside this one — see the Mielia release notes.
 
 ## 🌐 Realms
 
@@ -18,12 +18,12 @@ Foreign and intrinsic calls are now **realm-qualified** rather than string-tagge
 - **`routine C::malloc(...)` / `routine LLVM::...`** replace the old `external("C"|"llvm")` form. A
   realm is part of a name's identity, not a comment on it — so a foreign name resolves, mangles, and
   type-checks like any other.
-- **Realm-qualified references in expression and type position** — `RF::Core.List`, `C::size_t` — so a
-  program can name a type or routine from a specific world when it matters (mixed RF/SF, FFI boundaries).
-- **Strict-realm checking at foreign call sites (RF-S460)**: crossing a realm boundary is deliberate,
+- **Realm-qualified references in expression and type position** — `RA::Core.List`, `C::size_t` — so a
+  program can name a type or routine from a specific world when it matters (mixed RA/MI, FFI boundaries).
+- **Strict-realm checking at foreign call sites (RA-S460)**: crossing a realm boundary is deliberate,
   never accidental.
-- Realms are the substrate the whole Suflae "world-line" model rides on: SF's `List` *is* `RF::Core.List`,
-  wrapped per-instance so it obeys Suflae's sharing semantics without forking the standard library.
+- Realms are the substrate the whole Mielia "world-line" model rides on: MI's `List` *is* `RA::Core.List`,
+  wrapped per-instance so it obeys Mielia's sharing semantics without forking the standard library.
 
 ## 🔗 C FFI
 
@@ -60,7 +60,7 @@ The value/copy rules were reworked into one coherent model.
 - **One canonical RC vocabulary:** `share` (mint a co-owner), `hold` / `unhold` (strong count),
   `observe` / `unobserve` (weak count), `access` (read-only coercion), `control` (deref), `destroy`
   (which now folds in the old `release`). Aggregate-steal holes (`steal l[i]`, `steal o.field`) are
-  rejected (RF-S622).
+  rejected (RA-S622).
 
 ## 🪞 Buildtime reflection
 
@@ -112,14 +112,14 @@ Internal-only, but load-bearing for correctness and future speed.
 ## ✅ Tests
 
 Full suite green — **1,511 unit + analyzer tests** and the single-build stdlib harness (**188
-fixtures**, including the C-FFI, ABI struct-by-value, buildtime-reflection, realm, and Suflae-equivalence
+fixtures**, including the C-FFI, ABI struct-by-value, buildtime-reflection, realm, and Mielia-equivalence
 fixtures). CI green on Linux, macOS, and Windows.
 
-## 🔮 Suflae arrives
+## 🔮 Mielia arrives
 
-**Suflae** — the sharing-first sister language that hides RazorForge's memory-management surface behind a
+**Mielia** — the sharing-first sister language that hides Revare's memory-management surface behind a
 biased-refcount `Roamed` runtime — ships its **first preview** as a separate `sf-v0.1.0` release. The
-same builder binary runs it (`suflae hello.sf`, or any `.sf` file). See the Suflae v0.1.0 release notes
+same builder binary runs it (`mielia hello.mi`, or any `.mi` file). See the Mielia v0.1.0 release notes
 for scope.
 
 ## ⚠️ Not yet

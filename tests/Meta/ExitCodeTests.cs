@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// End-to-end check of <c>set_exit_code</c>: a program that returns from <c>start</c> normally ends with the status
 /// it set last, which the builder's <c>main</c> returns after <c>start</c>. Builds and runs
-/// <c>tests/Fixtures/ExitCode/set_exit_code.rf</c> through <c>buildandrun</c>. Also holds the fixtures that must
+/// <c>tests/Fixtures/ExitCode/set_exit_code.rr</c> through <c>buildandrun</c>. Also holds the fixtures that must
 /// crash (status 82), which the one-program stdlib harness cannot run.
 /// </summary>
 public sealed class ExitCodeTests
@@ -18,7 +18,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void AlertBytes_WritesTheBytesRaw()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "alert_bytes.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "alert_bytes.rr");
 
         Assert.True(condition: exit == 0,
             userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -30,7 +30,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void SetExitCode_LastCallIsTheExitStatus()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "set_exit_code.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "set_exit_code.rr");
 
         Assert.True(condition: exit == 42,
             userMessage: $"expected exit 42, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -43,7 +43,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void GlobalReadByAnotherGlobalsDestruct_IsTornDownAfterIt()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "global_destruct_order.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "global_destruct_order.rr");
 
         Assert.True(condition: exit == 0,
             userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -57,7 +57,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void ReserveSizePastU64_CrashesInsteadOfWrapping()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "reserve_size_overflow.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "reserve_size_overflow.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -69,7 +69,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void ThrowInPlainRoutineUnderTry_CrashesWithItsMessage()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "throw_in_plain_under_try.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "throw_in_plain_under_try.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -86,7 +86,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void BareFailureAfterKeptCheck_CrashesWithItsOwnMessage()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "mold_bare_crash.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "mold_bare_crash.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -101,7 +101,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void LambdaFailureWithoutKeyword_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "lambda_bare_crash.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "lambda_bare_crash.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -118,7 +118,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void FailureInsidePlainHelperUnderTry_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "wall_under_try.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "wall_under_try.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -136,7 +136,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void RangeStepZero_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "range_step_zero.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "range_step_zero.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -151,7 +151,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void StackOverflow_MainThread_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "stack_overflow_main.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "stack_overflow_main.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -164,7 +164,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void StackOverflow_InWork_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "stack_overflow.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "stack_overflow.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -178,7 +178,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void ChannelSelfWait_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "channel_self_wait.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "channel_self_wait.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -192,7 +192,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void AccessReenter_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "access_reenter.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "access_reenter.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -206,7 +206,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void AccessDeadlock_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "access_deadlock.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "access_deadlock.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -214,7 +214,7 @@ public sealed class ExitCodeTests
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
         Assert.Contains(expectedSubstring: "Deadlock error: These pieces of work wait on each other for access",
             actualString: stdout + stderr);
-        Assert.Contains(expectedSubstring: "access_deadlock.rf:12", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "access_deadlock.rr:12", actualString: stdout + stderr);
     }
 
     /// <summary>A block whose two targets are the same <c>Guarded</c> under two names enters the first, and entering
@@ -222,7 +222,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void AccessAliased_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "access_aliased.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "access_aliased.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -235,7 +235,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void SharedHandleSteal_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "shared_handle_steal.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "shared_handle_steal.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -250,7 +250,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void RethrownError_KeepsTheTraceOfItsFirstThrow()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "rethrown_keeps_trace.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "rethrown_keeps_trace.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -259,10 +259,10 @@ public sealed class ExitCodeTests
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
         string report = stdout + stderr;
         Assert.Contains(expectedSubstring: "innermost(System.S64) (", actualString: report);
-        Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rf:16:9)", actualString: report);
+        Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rr:16:9)", actualString: report);
         Assert.Contains(expectedSubstring: "middle(System.S64) (", actualString: report);
         Assert.Contains(expectedSubstring: "Thrown again at", actualString: report);
-        Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rf:27:13", actualString: report);
+        Assert.Contains(expectedSubstring: "rethrown_keeps_trace.rr:27:13", actualString: report);
     }
 
     /// <summary>An error in a Work crashes where the Work is retrieved. The report names the work's
@@ -271,7 +271,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void WorkCrash_ReportsTheProgramsOwnPlaces()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_crash_report.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_crash_report.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -281,16 +281,16 @@ public sealed class ExitCodeTests
         Assert.Contains(expectedSubstring: "work in Tests/ExitCode/WorkCrashReport.start() (", actualString: report);
         Assert.DoesNotContain(expectedSubstring: "__work", actualString: report);
         Assert.Contains(expectedSubstring: "Thrown again at", actualString: report);
-        Assert.Contains(expectedSubstring: "work_crash_report.rf:16:13", actualString: report);
+        Assert.Contains(expectedSubstring: "work_crash_report.rr:16:13", actualString: report);
     }
 
     /// <summary>A started Work nobody retrieves is cancelled and waited for at the end of its scope. A failure its
     /// work came to crashes there with status 82 and the failure's message (safety matrix C45, rf-fail-job-dropped):
-    /// it used to vanish with only RF-W009.</summary>
+    /// it used to vanish with only RA-W009.</summary>
     [Fact]
     public void DroppedWorkFailure_CrashesLoudly()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_dropped_failure.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_dropped_failure.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -303,7 +303,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void CancelledWorkDrop_DropsItsFailure()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_cancelled_drop.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "work_cancelled_drop.rr");
 
         Assert.True(condition: exit == 0,
             userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -316,7 +316,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void RecoveredSerialRebuild_LinksWhenBuiltAlone()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "recovered_serial_rebuild_alone.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "recovered_serial_rebuild_alone.rr");
 
         Assert.True(condition: exit == 0,
             userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -328,7 +328,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void FailureInsideDestruct_CrashesEvenUnderCheck()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "destruct_failure_under_check.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "destruct_failure_under_check.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -343,7 +343,7 @@ public sealed class ExitCodeTests
     [Fact]
     public void FailureWithoutKeyword_StopsWhereItHappened()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "unreceived_deep_failure.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "unreceived_deep_failure.rr");
 
         Assert.True(condition: exit == 82,
             userMessage: $"expected exit 82, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -351,18 +351,18 @@ public sealed class ExitCodeTests
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
         string report = stdout + stderr;
         Assert.Contains(expectedSubstring: "Division by zero error", actualString: report);
-        Assert.Contains(expectedSubstring: "unreceived_deep_failure.rf:9:", actualString: report);
+        Assert.Contains(expectedSubstring: "unreceived_deep_failure.rr:9:", actualString: report);
         Assert.Contains(expectedSubstring: "UnreceivedDeepFailure.eval", actualString: report);
         Assert.Contains(expectedSubstring: "UnreceivedDeepFailure.start", actualString: report);
     }
 
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
-        string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ExitCode", fixture]);
+        string raPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ExitCode", fixture]);
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rfPath), "buildandrun", rfPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: raPath), "buildandrun", raPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
@@ -396,7 +396,7 @@ public sealed class ExitCodeTests
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "Revare.csproj")))
             {
                 return dir;
             }
@@ -411,6 +411,6 @@ public sealed class ExitCodeTests
         }
 
         throw new InvalidOperationException(
-            message: "Could not locate RazorForge.csproj walking up from test assembly directory.");
+            message: "Could not locate Revare.csproj walking up from test assembly directory.");
     }
 }

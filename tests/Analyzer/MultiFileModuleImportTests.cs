@@ -5,7 +5,7 @@ using Builder.Verification.Results;
 using SyntaxTree;
 using TypeModel.Enums;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 /// <summary>
 /// Regression tests for importing a directory-as-module: several files in one directory that all
@@ -15,9 +15,9 @@ namespace RazorForge.Tests.Analyzer;
 /// <c>check</c> verb. Two bugs are guarded:
 /// <list type="bullet">
 /// <item>Member import of a shared bare module (<c>import Name.A</c>) double-registered the file
-/// (RF-S406/S400/S450) because module-load deduped on the import-path alias, not the resolved file.</item>
+/// (RA-S406/S400/S450) because module-load deduped on the import-path alias, not the resolved file.</item>
 /// <item>Bare/selective whole-module import (<c>import Name</c> / <c>import Name.[A, B]</c>) failed
-/// with RF-S105 because the build driver never discovered the sibling files declaring that module.</item>
+/// with RA-S105 because the build driver never discovered the sibling files declaring that module.</item>
 /// </list>
 /// </summary>
 public sealed class MultiFileModuleImportTests
@@ -26,7 +26,7 @@ public sealed class MultiFileModuleImportTests
     // layout. A whole-module import must gather BOTH; a member import of one must not re-register it.
     private static readonly (string RelPath, string Source)[] SharedModuleFiles =
     [
-        ("Shapes/Alpha.rf", """
+        ("Shapes/Alpha.rr", """
                             module Shapes
                             record Alpha
                                 value: S32
@@ -34,7 +34,7 @@ public sealed class MultiFileModuleImportTests
                             routine Alpha.doubled() -> S32
                                 return me.value * 2
                             """),
-        ("Shapes/Beta.rf", """
+        ("Shapes/Beta.rr", """
                            module Shapes
                            record Beta
                                value: S32
@@ -46,7 +46,7 @@ public sealed class MultiFileModuleImportTests
 
     /// <summary>
     /// Bare <c>import Shapes</c> gathers every file declaring <c>module Shapes</c>, so both Alpha
-    /// (from Shapes/Alpha.rf) and Beta (from Shapes/Beta.rf) resolve.
+    /// (from Shapes/Alpha.rr) and Beta (from Shapes/Beta.rr) resolve.
     /// </summary>
     [Fact]
     public void BareImport_GathersAllFilesOfSharedModule_NoErrors()
@@ -92,7 +92,7 @@ public sealed class MultiFileModuleImportTests
 
     /// <summary>
     /// A single member import (<c>import Shapes.Alpha</c>) of a file whose declared module name
-    /// ("Shapes") differs from its path must not re-register the file (was RF-S406).
+    /// ("Shapes") differs from its path must not re-register the file (was RA-S406).
     /// </summary>
     [Fact]
     public void SingleMemberImport_OfSharedBareModule_NoErrors()
@@ -114,7 +114,7 @@ public sealed class MultiFileModuleImportTests
 
     /// <summary>
     /// Two member imports of the same shared bare module (<c>import Shapes.Alpha</c> +
-    /// <c>import Shapes.Beta</c>) must not collide or mis-resolve (was RF-S400/S406/S450).
+    /// <c>import Shapes.Beta</c>) must not collide or mis-resolve (was RA-S400/S406/S450).
     /// </summary>
     [Fact]
     public void TwoMemberImports_OfSharedBareModule_NoErrors()
@@ -137,7 +137,7 @@ public sealed class MultiFileModuleImportTests
     }
 
     /// <summary>
-    /// A genuinely missing module still reports RF-S105, so the directory-as-module fallback does
+    /// A genuinely missing module still reports RA-S105, so the directory-as-module fallback does
     /// not mask real resolution failures.
     /// </summary>
     [Fact]
@@ -170,7 +170,7 @@ public sealed class MultiFileModuleImportTests
                                                              routine start()
                                                                  return
                                                              """,
-            moduleFiles: [("Shop/Cart.rf", """
+            moduleFiles: [("Shop/Cart.rr", """
                                            module Shop/Cart
                                            routine cart_total() -> S32
                                                return 3
@@ -201,7 +201,7 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("GenLib/Lib.rf", """
+                ("GenLib/Lib.rr", """
                                   module GenLib
                                   routine con_id(x: S32) -> S32
                                       return x
@@ -218,7 +218,7 @@ public sealed class MultiFileModuleImportTests
     // sibling Bbb — all `module SameMod`, with NO import linking them. Used for the entry-file case.
     private static readonly (string RelPath, string Source)[] SameModuleSiblingFiles =
     [
-        ("SameMod/Aaa.rf", """
+        ("SameMod/Aaa.rr", """
                            module SameMod
                            record Aaa
                                secret value: S32
@@ -227,7 +227,7 @@ public sealed class MultiFileModuleImportTests
                                var b = Bbb(value: 10)
                                return me.value + b.tripled()
                            """),
-        ("SameMod/Bbb.rf", """
+        ("SameMod/Bbb.rr", """
                            module SameMod
                            record Bbb
                                secret value: S32
@@ -254,7 +254,7 @@ public sealed class MultiFileModuleImportTests
                                                                  return
                                                              """,
             moduleFiles: SameModuleSiblingFiles,
-            entryRelPath: "SameMod/Main.rf");
+            entryRelPath: "SameMod/Main.rr");
 
         Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
     }
@@ -269,7 +269,7 @@ public sealed class MultiFileModuleImportTests
         var files = new List<(string RelPath, string Source)>(collection: SameModuleSiblingFiles)
         {
             // Declares a DIFFERENT module and would error if analyzed (unknown type call).
-            ("SameMod/Other.rf", """
+            ("SameMod/Other.rr", """
                                  module OtherMod
                                  record Zzz
                                      secret value: S32
@@ -289,7 +289,7 @@ public sealed class MultiFileModuleImportTests
                                                                  return
                                                              """,
             moduleFiles: files,
-            entryRelPath: "SameMod/Main.rf");
+            entryRelPath: "SameMod/Main.rr");
 
         Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
     }
@@ -303,7 +303,7 @@ public sealed class MultiFileModuleImportTests
     {
         var files = new List<(string RelPath, string Source)>(collection: SameModuleSiblingFiles)
         {
-            ("SameMod/Main.next.rf", """
+            ("SameMod/Main.next.rr", """
                                      module SameMod
 
                                      routine start()
@@ -321,7 +321,7 @@ public sealed class MultiFileModuleImportTests
                                                                  return
                                                              """,
             moduleFiles: files,
-            entryRelPath: "SameMod/Main.rf");
+            entryRelPath: "SameMod/Main.rr");
 
         Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
     }
@@ -343,7 +343,7 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("SameMod/Helper.rf", """
+                ("SameMod/Helper.rr", """
                                       module SameMod
 
                                       routine double(n: S64) -> S64
@@ -355,14 +355,14 @@ public sealed class MultiFileModuleImportTests
                                           return n // 2
                                       """)
             ],
-            entryRelPath: "SameMod/Main.rf");
+            entryRelPath: "SameMod/Main.rr");
 
         Assert.True(condition: errors.Count == 0, userMessage: RenderErrors(errors: errors));
     }
 
     /// <summary>
     /// A same-module sibling with loose top-level statements (and no `routine start()` of its own) is not left out
-    /// silently: it is a script outside the entry file, RF-S443.
+    /// silently: it is a script outside the entry file, RA-S443.
     /// </summary>
     [Fact]
     public void EntryModuleFile_SiblingScript_Reported()
@@ -377,14 +377,14 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("SameMod/Stray.rf", """
+                ("SameMod/Stray.rr", """
                                      module SameMod
                                      import IO/Console
 
                                      show("stray")
                                      """)
             ],
-            entryRelPath: "SameMod/Main.rf");
+            entryRelPath: "SameMod/Main.rr");
 
         Assert.Contains(collection: errors,
             filter: e => e.Code == SemanticDiagnosticCode.ScriptStatementsOutsideEntryFile);
@@ -398,7 +398,7 @@ public sealed class MultiFileModuleImportTests
     /// <param name="moduleFiles">Additional files written alongside, keyed by relative path.</param>
     /// <param name="entryRelPath">Relative path for the entry file (default at the project root).</param>
     /// <summary>
-    /// Only the entry file may run as a script. Loose statements in an imported file are RF-S443
+    /// Only the entry file may run as a script. Loose statements in an imported file are RA-S443
     /// (they would otherwise give the program a second, accidental entry point).
     /// </summary>
     [Fact]
@@ -410,7 +410,7 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("Helper.rf", """
+                ("Helper.rr", """
                               import IO/Console
                               routine greet()
                                   show("hi")
@@ -426,7 +426,7 @@ public sealed class MultiFileModuleImportTests
     // A code and its body that must agree: only Http/Result may put them together, other modules use `ok`.
     private static readonly (string RelPath, string Source)[] ClosedFieldFiles =
     [
-        ("Http/Result.rf", """
+        ("Http/Result.rr", """
                            module Http/Result
                            choice ResponseCode
                                OK
@@ -448,7 +448,7 @@ public sealed class MultiFileModuleImportTests
 
     /// <summary>
     /// Giving a <c>secret</c> member variable a value in <c>T(field: value, ...)</c> outside the type's module is
-    /// RF-S403, and the message names the routine the module opens to build it.
+    /// RA-S403, and the message names the routine the module opens to build it.
     /// </summary>
     [Fact]
     public void MemberwiseConstruction_SecretFieldOutsideModule_Reported()
@@ -469,7 +469,7 @@ public sealed class MultiFileModuleImportTests
 
     /// <summary>
     /// A <c>posted</c> member variable is read anywhere but written only by its module, so giving it a value in a
-    /// construction outside the module is RF-S404.
+    /// construction outside the module is RA-S404.
     /// </summary>
     [Fact]
     public void MemberwiseConstruction_PostedFieldOutsideModule_Reported()
@@ -511,7 +511,7 @@ public sealed class MultiFileModuleImportTests
     /// <summary>
     /// A header-less file is named after its location, and that name cannot be turned back into a
     /// path (spaces dropped, letter case changed), so <c>import Tools/TextUtils</c> must still find
-    /// <c>tools/text utils.rf</c>.
+    /// <c>tools/text utils.rr</c>.
     /// </summary>
     [Fact]
     public void HeaderlessModule_ImportedByDerivedName_Resolves()
@@ -523,7 +523,7 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("tools/text utils.rf", """
+                ("tools/text utils.rr", """
                                         routine shout(t: Text) -> Text
                                             return t + "!"
                                         """)
@@ -536,7 +536,7 @@ public sealed class MultiFileModuleImportTests
     /// A foreign intrinsic is reachable only through its realm qualifier, so it must not hide a user
     /// routine of the same name: the bare lookup of <c>add</c> falls back to <c>System.add</c>, which the
     /// generic <c>LLVM::add[T]</c> intrinsic owns. Both the entry module's own <c>add</c> and one from an
-    /// imported module must win (the bug reported RF-S460 "call it as LLVM::add").
+    /// imported module must win (the bug reported RA-S460 "call it as LLVM::add").
     /// </summary>
     [Fact]
     public void UserRoutineNamedLikeIntrinsic_WinsOverForeign()
@@ -552,7 +552,7 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("Mathx.rf", """
+                ("Mathx.rr", """
                              routine sub(n: S64) -> S64
                                  return n - 1
                              """)
@@ -578,7 +578,7 @@ public sealed class MultiFileModuleImportTests
             moduleFiles: []);
 
         SemanticError error = Assert.Single(collection: errors);
-        Assert.Equal(expected: "RF-G112", actual: error.CodeString);
+        Assert.Equal(expected: "RA-G112", actual: error.CodeString);
         Assert.Contains(expectedSubstring: "`none`", actualString: error.Message);
     }
 
@@ -618,13 +618,13 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("garden/garden.rf", """
+                ("garden/garden.rr", """
                                      module Garden
 
                                      routine describe() -> S64
                                          return 1
                                      """),
-                ("garden/tools/tools.rf", """
+                ("garden/tools/tools.rr", """
                                           module Garden/Tools
 
                                           routine tool_count() -> S64
@@ -652,13 +652,13 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("garden/garden.rf", """
+                ("garden/garden.rr", """
                                      module Garden
 
                                      secret routine starting_plants() -> S64
                                          return 3
                                      """),
-                ("garden/tools/tools.rf", """
+                ("garden/tools/tools.rr", """
                                           module Garden/Tools
 
                                           import Garden
@@ -672,7 +672,7 @@ public sealed class MultiFileModuleImportTests
     }
 
     /// <summary>
-    /// A <c>secret</c> routine of <c>Garden/Tools</c> is not seen in <c>Garden</c>, the module above it (RF-S403).
+    /// A <c>secret</c> routine of <c>Garden/Tools</c> is not seen in <c>Garden</c>, the module above it (RA-S403).
     /// </summary>
     [Fact]
     public void SecretRoutine_NotSeenInModuleAboveIt_Reported()
@@ -686,7 +686,7 @@ public sealed class MultiFileModuleImportTests
                                                              """,
             moduleFiles:
             [
-                ("garden/garden.rf", """
+                ("garden/garden.rr", """
                                      module Garden
 
                                      import Garden/Tools
@@ -694,7 +694,7 @@ public sealed class MultiFileModuleImportTests
                                      routine plants() -> S64
                                          return spare_plants()
                                      """),
-                ("garden/tools/tools.rf", """
+                ("garden/tools/tools.rr", """
                                           module Garden/Tools
 
                                           secret routine spare_plants() -> S64
@@ -710,7 +710,7 @@ public sealed class MultiFileModuleImportTests
     // A module with two routines and two types, for the narrowed and aliased imports below.
     private static readonly (string RelPath, string Source)[] PriceFiles =
     [
-        ("Prices.rf", """
+        ("Prices.rr", """
                       module Prices
 
                       record Coin
@@ -862,7 +862,7 @@ public sealed class MultiFileModuleImportTests
 
     private static List<SemanticError> RunProject(string entrySource,
         IReadOnlyList<(string RelPath, string Source)> moduleFiles,
-        string entryRelPath = "ImportProbe.rf")
+        string entryRelPath = "ImportProbe.rr")
     {
         string root = Path.Combine(path1: Path.GetTempPath(),
             path2: "rf_mfimport_" + Guid.NewGuid()
@@ -909,10 +909,10 @@ public sealed class MultiFileModuleImportTests
 
         var driver = new BuildDriver(projectRoot: projectRoot,
             stdlibRoot: stdlibRoot,
-            language: Language.RazorForge);
+            language: Language.Revare);
         BuildResult buildResult = driver.CompileFile(entryFile: fullEntry);
 
-        // Build errors (e.g. RF-S105 unresolved import) abort before SA in the real pipeline.
+        // Build errors (e.g. RA-S105 unresolved import) abort before SA in the real pipeline.
         if (buildResult.Errors.Count > 0)
         {
             return buildResult.Errors;
@@ -958,7 +958,7 @@ public sealed class MultiFileModuleImportTests
             }
         }
 
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         analyzer.Registry.UseModuleResolver(resolver: driver.Resolver);
         AnalysisResult result = analyzer.AnalyzeMultiple(files: orderedFiles);
         return result.Errors;

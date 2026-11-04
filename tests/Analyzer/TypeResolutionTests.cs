@@ -4,7 +4,7 @@ using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 

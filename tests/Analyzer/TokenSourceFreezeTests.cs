@@ -1,14 +1,14 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
 /// Tests for token sources. A token remembers the object it was taken from. Reassigning or stealing that
-/// object ends the token, and using the token afterwards is RF-S643 at the use. Inside one call, handing over
-/// a token while the same call moves its source out is RF-S639 at the call. Other bindings, and the source
+/// object ends the token, and using the token afterwards is RA-S643 at the use. Inside one call, handing over
+/// a token while the same call moves its source out is RA-S639 at the call. Other bindings, and the source
 /// itself once the token is no longer used, stay free.
 /// </summary>
 public class TokenSourceFreezeTests

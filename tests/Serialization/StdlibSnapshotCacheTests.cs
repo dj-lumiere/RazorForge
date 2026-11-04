@@ -2,7 +2,7 @@ using Builder.Serialization;
 using Builder.Verification;
 using TypeModel.Enums;
 
-namespace RazorForge.Tests.Serialization;
+namespace Revare.Tests.Serialization;
 
 /// <summary>
 /// Exercises the on-disk stdlib snapshot cache (<c>src/Serialization/StdlibSnapshotCache.cs</c>) — the
@@ -16,8 +16,8 @@ public sealed class StdlibSnapshotCacheTests
     [Fact]
     public void ComputeStdlibHash_IsStableAndNonEmpty()
     {
-        string? h1 = StdlibSnapshotCache.ComputeStdlibHash(language: Language.RazorForge);
-        string? h2 = StdlibSnapshotCache.ComputeStdlibHash(language: Language.RazorForge);
+        string? h1 = StdlibSnapshotCache.ComputeStdlibHash(language: Language.Revare);
+        string? h2 = StdlibSnapshotCache.ComputeStdlibHash(language: Language.Revare);
 
         Assert.False(condition: string.IsNullOrWhiteSpace(value: h1));
         Assert.Equal(expected: h1, actual: h2); // deterministic over identical stdlib sources
@@ -27,12 +27,12 @@ public sealed class StdlibSnapshotCacheTests
     public void LoadOrCapture_ReturnsUsableState_AndMemoizes()
     {
         SemanticVerifier.CompiledStdlibState first =
-            StdlibSnapshotCache.LoadOrCapture(language: Language.RazorForge);
+            StdlibSnapshotCache.LoadOrCapture(language: Language.Revare);
         Assert.NotNull(@object: first);
 
         // Second call hits the process-lifetime memo and returns the SAME instance.
         SemanticVerifier.CompiledStdlibState second =
-            StdlibSnapshotCache.LoadOrCapture(language: Language.RazorForge);
+            StdlibSnapshotCache.LoadOrCapture(language: Language.Revare);
         Assert.Same(expected: first, actual: second);
     }
 }

@@ -1,16 +1,16 @@
 @echo off
-REM RazorForge Bootstrap Script for Windows
-REM Compiles RazorForge code to native executable
+REM Revare Bootstrap Script for Windows
+REM Compiles Revare code to native executable
 
 if "%~1"=="" (
-    echo Usage: bootstrap.bat ^<source_file.rf^>
+    echo Usage: bootstrap.bat ^<source_file.rr^>
     exit /b 1
 )
 
 set SOURCE_FILE=%~1
 set BASE_NAME=%~n1
 
-echo === RazorForge Bootstrap Builder ===
+echo === Revare Bootstrap Builder ===
 echo Source: %SOURCE_FILE%
 
 REM Step 1: Run C# builder to generate LLVM IR
@@ -35,8 +35,8 @@ if %ERRORLEVEL% neq 0 (
 REM Step 3: Link with runtime library (using cl.exe from Visual Studio)
 echo Step 3: Linking with runtime...
 cl /Fe"%BASE_NAME%.exe" "%BASE_NAME%.obj" ^
-    razorforge_minimal_implementation\runtime.c ^
-    razorforge_minimal_implementation\i8.c
+    revare_minimal_implementation\runtime.c ^
+    revare_minimal_implementation\i8.c
 
 if %ERRORLEVEL% neq 0 (
     echo Error: Failed to link executable

@@ -7,7 +7,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
-group = "com.razorforge"
+group = "com.revare"
 version = "0.2.0"
 
 repositories {
@@ -46,13 +46,13 @@ intellijPlatform {
 }
 
 tasks {
-    // The TextMate bundle sits next to the plugin's jar: the grammar comes straight from ../RazorForge.tmbundle (its one
+    // The TextMate bundle sits next to the plugin's jar: the grammar comes straight from ../Revare.tmbundle (its one
     // source), the VS Code-style package.json and language-configuration.json from bundle/.
     prepareSandbox {
         from(layout.projectDirectory.dir("bundle")) {
             into(pluginName.map { "$it/bundle" })
         }
-        from(layout.projectDirectory.dir("../RazorForge.tmbundle/Syntaxes")) {
+        from(layout.projectDirectory.dir("../Revare.tmbundle/Syntaxes")) {
             into(pluginName.map { "$it/bundle/syntaxes" })
         }
     }

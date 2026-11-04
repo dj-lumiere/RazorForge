@@ -1,7 +1,7 @@
 using TypeModel.Symbols;
 using TypeModel.Types;
 
-namespace RazorForge.Tests.TypeModel;
+namespace Revare.Tests.TypeModel;
 
 /// <summary>
 /// Type-model tests for associated-type storage (bucket 2): verifies that generic

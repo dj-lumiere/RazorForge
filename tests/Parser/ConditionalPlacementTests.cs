@@ -1,14 +1,14 @@
 using Builder.Diagnostics;
 using SyntaxTree;
 
-namespace RazorForge.Tests.Parser;
+namespace Revare.Tests.Parser;
 
 using static TestHelpers;
 
 /// <summary>
 /// A conditional value <c>if c then a else b</c> stands only as the whole value of <c>var x =</c>, <c>x =</c> or
 /// <c>return</c>. Every other position (inside parentheses, an argument, an operand, a subscript, an f-text slot, a
-/// branch of another conditional, after <c>try</c>/<c>check</c>) is RF-G112 with a message that points at a named
+/// branch of another conditional, after <c>try</c>/<c>check</c>) is RA-G112 with a message that points at a named
 /// value or <c>when</c>.
 /// </summary>
 public sealed class ConditionalPlacementTests

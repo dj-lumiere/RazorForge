@@ -8,7 +8,7 @@ using Builder.Verification;
 using Builder.Verification.Results;
 using Xunit.Abstractions;
 
-namespace RazorForge.Tests.Perf;
+namespace Revare.Tests.Perf;
 
 /// <summary>
 /// Milestone-1 de-risk: measures the build-time ceiling when the stdlib is processed ONCE and
@@ -40,10 +40,10 @@ public sealed partial class WarmCompileBenchmark
     private static Program ParseTrivial()
     {
         List<Token> tokens =
-            Lexers.Tokenize(source: Trivial, fileName: "bench.rf", language: Language.RazorForge);
+            Lexers.Tokenize(source: Trivial, fileName: "bench.rr", language: Language.Revare);
         return new Builder.Parser.Parser(tokens: tokens,
-            language: Language.RazorForge,
-            fileName: "bench.rf").Parse();
+            language: Language.Revare,
+            fileName: "bench.rr").Parse();
     }
 
     private static double TimeMs(Action a)
@@ -66,13 +66,13 @@ public sealed partial class WarmCompileBenchmark
         // COLD: full stdlib load + SA (this is what every CLI invocation pays today).
         TypeRegistry.StdlibSnapshot snap = null!;
         double cold = TimeMs(a: () =>
-            snap = SemanticVerifier.CaptureStdlibSnapshot(language: Language.RazorForge));
+            snap = SemanticVerifier.CaptureStdlibSnapshot(language: Language.Revare));
         _out.WriteLine(message: $"COLD  capture stdlib snapshot (load+Phase1-5): {cold:N0} ms");
 
         // WARM (SA-only): restore snapshot + analyze the trivial user file, stopping at Phase 5.
         double warmSa = TimeMs(a: () =>
         {
-            var sa = new SemanticVerifier(language: Language.RazorForge, snapshot: snap)
+            var sa = new SemanticVerifier(language: Language.Revare, snapshot: snap)
             {
                 SaOnly = true
             };
@@ -86,7 +86,7 @@ public sealed partial class WarmCompileBenchmark
         AnalysisResult warmResult = null!;
         double warmFull = TimeMs(a: () =>
         {
-            var sa = new SemanticVerifier(language: Language.RazorForge, snapshot: snap);
+            var sa = new SemanticVerifier(language: Language.Revare, snapshot: snap);
             warmResult = sa.Analyze(program: ParseTrivial());
         });
         _out.WriteLine(
@@ -96,7 +96,7 @@ public sealed partial class WarmCompileBenchmark
         // Second warm full to show steady-state (JIT/GC warmed), WITH per-phase timing to stderr.
         double warmFull2 = TimeMs(a: () =>
         {
-            var sa = new SemanticVerifier(language: Language.RazorForge, snapshot: snap)
+            var sa = new SemanticVerifier(language: Language.Revare, snapshot: snap)
             {
                 SaTiming = true
             };
@@ -136,7 +136,7 @@ public sealed partial class WarmCompileBenchmark
 
     private static string PrintCodegenAst(AnalysisResult r)
     {
-        return new Builder.RfSyntaxTreePrinter().PrintMultiProgram(
+        return new Builder.RaSyntaxTreePrinter().PrintMultiProgram(
             programs: r.Registry.UserPrograms,
             synthesizedBodies: r.SynthesizedBodies,
             registry: r.Registry,
@@ -159,17 +159,17 @@ public sealed partial class WarmCompileBenchmark
     public void WarmCodegenAst_MatchesCold()
     {
         // COLD reference: a normal from-scratch compile of the trivial file.
-        var cold = new SemanticVerifier(language: Language.RazorForge);
+        var cold = new SemanticVerifier(language: Language.Revare);
         AnalysisResult coldResult = cold.Analyze(program: ParseTrivial());
         string coldAst = PrintCodegenAst(r: coldResult);
 
         // WARM: capture the fully-processed stdlib once, then compile the SAME file from the restore.
         SemanticVerifier.CompiledStdlibState warm =
-            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
         double warmMs = 0;
         AnalysisResult warmResult = null!;
         var sw = Stopwatch.StartNew();
-        var warmSa = new SemanticVerifier(language: Language.RazorForge, warm: warm);
+        var warmSa = new SemanticVerifier(language: Language.Revare, warm: warm);
         warmResult = warmSa.Analyze(program: ParseTrivial());
         warmMs = sw.Elapsed.TotalMilliseconds;
         string warmAst = PrintCodegenAst(r: warmResult);
@@ -254,38 +254,38 @@ public sealed partial class WarmCompileBenchmark
         {
             return new Builder.Parser.Parser(
                 tokens: Lexers.Tokenize(source: SrcB,
-                    fileName: "b.rf",
-                    language: Language.RazorForge),
-                language: Language.RazorForge,
-                fileName: "b.rf").Parse();
+                    fileName: "b.rr",
+                    language: Language.Revare),
+                language: Language.Revare,
+                fileName: "b.rr").Parse();
         }
 
         HashSet<string> coldADefs = DefineSet(ll: Codegen(
-            r: new SemanticVerifier(language: Language.RazorForge)
+            r: new SemanticVerifier(language: Language.Revare)
                .Analyze(program: ParseTrivial())));
         HashSet<string> coldBDefs = DefineSet(ll: Codegen(
-            r: new SemanticVerifier(language: Language.RazorForge).Analyze(program: ParseB())));
+            r: new SemanticVerifier(language: Language.Revare).Analyze(program: ParseB())));
 
         // Capture the warm state ONCE — the daemon's resident in-RAM stdlib.
         SemanticVerifier.CompiledStdlibState warm =
-            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
 
         // Reuse it across builds, as a daemon would: A, A again, then a DIFFERENT file B.
         AnalysisResult a1 =
-            new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+            new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
                 program: ParseTrivial());
         HashSet<string> a1Defs = DefineSet(ll: Codegen(r: a1));
         AnalysisResult a2 =
-            new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+            new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
                 program: ParseTrivial());
         HashSet<string> a2Defs = DefineSet(ll: Codegen(r: a2));
         AnalysisResult b1 =
-            new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+            new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
                 program: ParseB());
         HashSet<string> b1Defs = DefineSet(ll: Codegen(r: b1));
         // A THIRD build of A after B — catches poisoning that only a DIFFERENT-file build introduces.
         AnalysisResult a3 =
-            new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+            new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
                 program: ParseTrivial());
         HashSet<string> a3Defs = DefineSet(ll: Codegen(r: a3));
 

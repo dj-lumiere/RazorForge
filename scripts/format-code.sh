@@ -1,5 +1,5 @@
 #!/bin/bash
-# RazorForge Code Formatter
+# Revare Code Formatter
 # ========================
 # Format and lint all source code
 
@@ -32,7 +32,7 @@ print_info() { print_status "$BLUE" "ℹ $1"; }
 
 # Function to show help
 show_help() {
-    echo "RazorForge Code Formatter"
+    echo "Revare Code Formatter"
     echo ""
     echo "Usage: $0 [options]"
     echo ""
@@ -76,7 +76,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 print_info "========================================="
-print_info "RazorForge Code Formatter"
+print_info "Revare Code Formatter"
 print_info "========================================="
 print_info "Project Root: $PROJECT_ROOT"
 print_info "Dry Run: $DRY_RUN"
@@ -96,7 +96,7 @@ fi
 format_csharp() {
     print_info "Formatting C# code..."
 
-    local cmd="dotnet format RazorForge.csproj"
+    local cmd="dotnet format Revare.csproj"
 
     if [ "$VERIFY_ONLY" = "true" ]; then
         cmd="$cmd --verify-no-changes"

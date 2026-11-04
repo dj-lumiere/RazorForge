@@ -1,4 +1,4 @@
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -6,7 +6,7 @@ using static TestHelpers;
 /// Regression lock for the realm-import alias feature: `import Module.C::name` (or `LLVM::name`) brings a
 /// foreign routine into BARE scope, lifting the usual `C::`/`LLVM::` call-site qualifier requirement for
 /// that ONE routine. The declaration stays realm-qualified; only the aliased routine may be called bare;
-/// everything else still errors (RF-S460). See CheckCallRealm + `_importedForeignAliases`.
+/// everything else still errors (RA-S460). See CheckCallRealm + `_importedForeignAliases`.
 /// </summary>
 public class RealmImportAliasTests
 {

@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# RazorForge Bootstrap Script
-# Compiles RazorForge code to native executable
+# Revare Bootstrap Script
+# Compiles Revare code to native executable
 
 if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <source_file.rf>"
+    echo "Usage: $0 <source_file.rr>"
     exit 1
 fi
 
 SOURCE_FILE=$1
-BASE_NAME="${SOURCE_FILE%.rf}"
+BASE_NAME="${SOURCE_FILE%.rr}"
 
-echo "=== RazorForge Bootstrap Builder ==="
+echo "=== Revare Bootstrap Builder ==="
 echo "Source: $SOURCE_FILE"
 
 # Step 1: Run C# builder to generate LLVM IR
@@ -35,8 +35,8 @@ fi
 # Step 3: Link with runtime library
 echo "Step 3: Linking with runtime..."
 gcc "$BASE_NAME.o" \
-    razorforge_minimal_implementation/runtime.c \
-    razorforge_minimal_implementation/i8.c \
+    revare_minimal_implementation/runtime.c \
+    revare_minimal_implementation/i8.c \
     -o "$BASE_NAME" \
     -lm
 

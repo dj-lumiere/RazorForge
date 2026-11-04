@@ -1,11 +1,11 @@
-# RazorForge Quick Start
+# Revare Quick Start
 
 This package is **self-contained**: the builder, the standard library, the
 native runtime, and the LLVM toolchain (clang/opt/lld) are all inside this
-folder. You do not need to install anything else to build and run RazorForge
+folder. You do not need to install anything else to build and run Revare
 programs.
 
-## 1. Install (puts `razorforge` + `rf` on your PATH)
+## 1. Install (puts `revare` + `ra` on your PATH)
 
 **Windows**
 
@@ -53,22 +53,22 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 ## 2. Hello, world
 
-Create `hello.rf`:
+Create `hello.rr`:
 
-```razorforge
+```revare
 module Hello
 
 import IO/Console
 
 routine start()
-    show("Hello from RazorForge!")
+    show("Hello from Revare!")
     return
 ```
 
 Build and run it:
 
 ```bash
-razorforge buildandrun hello.rf
+revare buildandrun hello.rr
 ```
 
 ## 3. A real project
@@ -87,34 +87,34 @@ mode = "debug"           # debug | release | release-time | release-space
 Then from anywhere inside the project:
 
 ```bash
-razorforge buildandrun
+revare buildandrun
 ```
 
 ## Using an AI assistant?
 
-RazorForge is too new to be in any model's training data — assistants will
+Revare is too new to be in any model's training data — assistants will
 confidently generate wrong syntax (positional arguments, missing `return`s,
-inline conditionals). Give your assistant the **`RAZORFORGE-FOR-AI.md`** file
+inline conditionals). Give your assistant the **`REVARE-FOR-AI.md`** file
 in this folder first; it lists exactly where their assumptions break, plus the
 90+ verified example programs to copy from.
 
 ## CLI reference
 
 ```
-razorforge parse <file>             Parse and show AST summary
-razorforge tokenize <file>          Show tokens
-razorforge codegen <file> [out.ll]  Emit LLVM IR for one file
-razorforge build [entry] [out.ll]   Build a multi-file project
-razorforge buildandrun [entry]      Build, link, and execute
-razorforge check [entry]            Type-check only
-razorforge version                  Show version
+revare parse <file>             Parse and show AST summary
+revare tokenize <file>          Show tokens
+revare codegen <file> [out.ll]  Emit LLVM IR for one file
+revare build [entry] [out.ll]   Build a multi-file project
+revare buildandrun [entry]      Build, link, and execute
+revare check [entry]            Type-check only
+revare version                  Show version
 ```
 
-Docs: https://razorforge.lumi-dev.xyz/ · Issues:
-https://github.com/dj-lumiere/RazorForge/issues
+Docs: https://revare.lumi-dev.xyz/ · Issues:
+https://github.com/dj-lumiere/Revare/issues
 
 ## Using your own LLVM instead
 
 The builder prefers the bundled `toolchain/` folder. To use a system LLVM,
-set `RAZORFORGE_LLVM_HOME` to its root (the directory containing `bin/clang`),
+set `REVARE_LLVM_HOME` to its root (the directory containing `bin/clang`),
 or delete the `toolchain/` folder to fall back to PATH lookup.

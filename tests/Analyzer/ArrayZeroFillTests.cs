@@ -1,15 +1,15 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// RF-S641: <c>Items[T, N]()</c> fills every slot with zero, which is only a real value when T has one.
+/// RA-S641: <c>Items[T, N]()</c> fills every slot with zero, which is only a real value when T has one.
 /// An entity, a reference-counted handle, or a record holding one would get null slots that crash when
 /// read or torn down, so those arrays are built from their elements (<c>Items[N](a, b, ...)</c>).
-/// Also RF-S150 on a generic construction whose type argument misses the type's <c>needs</c>.
+/// Also RA-S150 on a generic construction whose type argument misses the type's <c>needs</c>.
 /// </summary>
 public class ArrayZeroFillTests
 {

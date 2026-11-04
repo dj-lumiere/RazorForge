@@ -1,10 +1,10 @@
 #!/bin/bash
-# Simple test for RazorForge Bootstrap
+# Simple test for Revare Bootstrap
 
 SOURCE_FILE=$1
-BASE_NAME="${SOURCE_FILE%.rf}"
+BASE_NAME="${SOURCE_FILE%.rr}"
 
-echo "=== RazorForge Bootstrap Test ==="
+echo "=== Revare Bootstrap Test ==="
 echo "Source: $SOURCE_FILE"
 
 # Step 1: Generate LLVM IR
@@ -26,7 +26,7 @@ if [ -f "$BASE_NAME.ll" ]; then
     # Since we don't have llc, create a simple C program that returns 42
     echo "Step 3: Creating equivalent C program..."
     cat > "${BASE_NAME}_equiv.c" << 'EOF'
-// Equivalent C program for the RazorForge hello world
+// Equivalent C program for the Revare hello world
 #include <stdio.h>
 
 int main() {

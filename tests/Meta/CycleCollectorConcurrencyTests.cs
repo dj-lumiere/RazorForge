@@ -2,11 +2,11 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// End-to-end regressions for the Roamed cycle collector's concurrency + deep-graph fixes. Each compiles
-/// and runs a committed <c>tests/Fixtures/CycleCollector/*.rf</c> fixture via <c>buildandrun</c> and
+/// and runs a committed <c>tests/Fixtures/CycleCollector/*.rr</c> fixture via <c>buildandrun</c> and
 /// asserts a clean finish (exit 0, success marker on stdout, clean stderr):
 /// <list type="bullet">
 ///   <item><b>MultithreadedCollection_NoUseAfterFree</b> — concurrent collector and mutator OS threads
@@ -32,7 +32,7 @@ public sealed partial class CycleCollectorConcurrencyTests
     public void MultithreadedCollection_NoUseAfterFree()
     {
         (int exit, string stdout, string stderr, bool timedOut) =
-            RunFixture(fixture: "mt_uaf_stress.rf", timeoutMs: 180_000);
+            RunFixture(fixture: "mt_uaf_stress.rr", timeoutMs: 180_000);
 
         Assert.False(condition: timedOut,
             userMessage:
@@ -48,7 +48,7 @@ public sealed partial class CycleCollectorConcurrencyTests
     public void DeepCycle_NoStackOverflow()
     {
         (int exit, string stdout, string stderr, bool timedOut) =
-            RunFixture(fixture: "deep_cycle.rf", timeoutMs: 120_000);
+            RunFixture(fixture: "deep_cycle.rr", timeoutMs: 120_000);
 
         Assert.False(condition: timedOut,
             userMessage: $"deep_cycle hung.\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
@@ -64,7 +64,7 @@ public sealed partial class CycleCollectorConcurrencyTests
     /// so a fault that somehow left a zero exit is still caught.</summary>
     [GeneratedRegex(
         pattern:
-        @"error\[RF-|Codegen bug|Synthesized body codegen failed|Unresolved generic|undefined symbol|never defined|Unhandled exception|Segmentation|AccessViolation")]
+        @"error\[RA-|Codegen bug|Synthesized body codegen failed|Unresolved generic|undefined symbol|never defined|Unhandled exception|Segmentation|AccessViolation")]
     private static partial Regex StderrFaultPattern();
 
     private static void AssertCleanStderr(string stderr)
@@ -82,11 +82,11 @@ public sealed partial class CycleCollectorConcurrencyTests
     private static (int Exit, string Stdout, string Stderr, bool TimedOut) RunFixture(
         string fixture, int timeoutMs)
     {
-        string rfPath = Path.Combine(path1: FixturesDir, path2: fixture);
+        string raPath = Path.Combine(path1: FixturesDir, path2: fixture);
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rfPath), "buildandrun", rfPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: raPath), "buildandrun", raPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
@@ -122,7 +122,7 @@ public sealed partial class CycleCollectorConcurrencyTests
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "Revare.csproj")))
             {
                 return dir;
             }
@@ -138,6 +138,6 @@ public sealed partial class CycleCollectorConcurrencyTests
 
         throw new InvalidOperationException(
             message:
-            "Could not locate RazorForge.csproj walking up from test assembly directory.");
+            "Could not locate Revare.csproj walking up from test assembly directory.");
     }
 }

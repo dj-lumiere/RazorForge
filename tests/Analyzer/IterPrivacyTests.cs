@@ -2,7 +2,7 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 

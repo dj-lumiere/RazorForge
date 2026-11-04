@@ -1,7 +1,7 @@
 using Builder.Verification.Results;
 using TypeModel.Types;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 

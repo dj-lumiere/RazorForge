@@ -1,36 +1,36 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// End-to-end checks of a binding a loop moves out on an earlier pass. Builds and runs
-/// <c>tests/Fixtures/UseAfterSteal/*.rf</c> through <c>buildandrun</c>.
+/// <c>tests/Fixtures/UseAfterSteal/*.rr</c> through <c>buildandrun</c>.
 /// </summary>
 public sealed class UseAfterStealTests
 {
     private static readonly string RepoRoot = LocateRepoRoot();
 
     /// <summary>A loop that moves `a` out on its first pass and reads it on the next is caught by the build
-    /// (RF-S616), before any runtime net is needed.</summary>
+    /// (RA-S616), before any runtime net is needed.</summary>
     [Fact]
     public void StealInLoop_IsABuildError()
     {
-        (int exit, string stdout, string stderr) = RunFixture(fixture: "steal_in_loop.rf");
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "steal_in_loop.rr");
 
         Assert.True(condition: exit != 0,
             userMessage: $"expected a build error, got exit 0\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-        Assert.Contains(expectedSubstring: "RF-S616", actualString: stdout + stderr);
+        Assert.Contains(expectedSubstring: "RA-S616", actualString: stdout + stderr);
         Assert.DoesNotContain(expectedSubstring: "consumed 1", actualString: stdout);
     }
 
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
-        string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "UseAfterSteal", fixture]);
+        string raPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "UseAfterSteal", fixture]);
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rfPath), "buildandrun", rfPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: raPath), "buildandrun", raPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
@@ -64,7 +64,7 @@ public sealed class UseAfterStealTests
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "Revare.csproj")))
             {
                 return dir;
             }
@@ -79,6 +79,6 @@ public sealed class UseAfterStealTests
         }
 
         throw new InvalidOperationException(
-            message: "Could not locate RazorForge.csproj walking up from test assembly directory.");
+            message: "Could not locate Revare.csproj walking up from test assembly directory.");
     }
 }

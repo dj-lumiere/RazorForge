@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace RazorForge.Tests.BuildSystem;
+namespace Revare.Tests.BuildSystem;
 
 /// <summary>
 /// The order of a file's imports never changes what a program means. Every test builds one project several times with
@@ -13,17 +13,17 @@ public sealed class ImportOrderTests
     private static readonly Dictionary<string, string> Modules = new()
     {
         [key: "config.toml"] = "[package]\nname = \"imports\"\nversion = \"0.0.1\"\n\n[target]\nexecutable = \"App\"\nmode = \"debug\"\n",
-        [key: "Base.rf"] = "module Base\n\nentity Counter\n    n: S64\n",
+        [key: "Base.rr"] = "module Base\n\nentity Counter\n    n: S64\n",
         // Adds a routine to a type of another module: it is seen where Ext is imported.
-        [key: "Ext.rf"] = "module Ext\n\nimport Base\n\nroutine Counter.plus_two() -> S64\n    return me.n + 2\n",
-        [key: "A.rf"] = "module A\n\nrecord Thing\n    v: S64\n\nroutine twin() -> S64\n    return 1\n\n" +
+        [key: "Ext.rr"] = "module Ext\n\nimport Base\n\nroutine Counter.plus_two() -> S64\n    return me.n + 2\n",
+        [key: "A.rr"] = "module A\n\nrecord Thing\n    v: S64\n\nroutine twin() -> S64\n    return 1\n\n" +
                         "routine describe() -> S64\n    return 10\n\nroutine pick(x: S64) -> S64\n    return x + 100\n",
-        [key: "B.rf"] = "module B\n\nroutine twin() -> S64\n    return 2\n\n" +
+        [key: "B.rr"] = "module B\n\nroutine twin() -> S64\n    return 2\n\n" +
                         "routine describe() -> S64\n    return 20\n\nroutine pick(x: Text) -> S64\n    return 7\n",
-        [key: "C.rf"] = "module C\n\nrecord Gizmo\n    w: S64\n\nroutine gadget() -> S64\n    return 5\n\n" +
+        [key: "C.rr"] = "module C\n\nrecord Gizmo\n    w: S64\n\nroutine gadget() -> S64\n    return 5\n\n" +
                         "routine twin() -> S64\n    return 6\n",
-        [key: "D.rf"] = "module D\n\nroutine describe() -> S64\n    return 30\n\nroutine only_d() -> S64\n    return 4\n",
-        [key: "E.rf"] = "module E\n\nroutine thing() -> S64\n    return 8\n"
+        [key: "D.rr"] = "module D\n\nroutine describe() -> S64\n    return 30\n\nroutine only_d() -> S64\n    return 4\n",
+        [key: "E.rr"] = "module E\n\nroutine thing() -> S64\n    return 8\n"
     };
 
     // Whole-module imports, member imports (one name, several names, with an alias) and a module alias.
@@ -103,7 +103,7 @@ public sealed class ImportOrderTests
             assertResult: (exit, text) =>
             {
                 Assert.NotEqual(expected: 0, actual: exit);
-                Assert.Contains(expectedSubstring: "RF-S513", actualString: text);
+                Assert.Contains(expectedSubstring: "RA-S513", actualString: text);
                 Assert.Contains(expectedSubstring: "'twin' is in", actualString: text);
                 Assert.Contains(expectedSubstring: "'pick' is in", actualString: text);
             });
@@ -146,7 +146,7 @@ public sealed class ImportOrderTests
                     File.WriteAllText(path: Path.Combine(path1: dir, path2: name), contents: text);
                 }
 
-                File.WriteAllText(path: Path.Combine(path1: dir, path2: "App.rf"), contents: source(arg: order));
+                File.WriteAllText(path: Path.Combine(path1: dir, path2: "App.rr"), contents: source(arg: order));
                 (int exit, string output) = Run(verb: verb, dir: dir);
                 results.Add(item: (string.Join(separator: " | ", value: order), exit, Normalize(text: output, dir: dir)));
             }
@@ -206,7 +206,7 @@ public sealed class ImportOrderTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: dir), verb, Path.Combine(path1: dir, path2: "App.rf") },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: dir), verb, Path.Combine(path1: dir, path2: "App.rr") },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

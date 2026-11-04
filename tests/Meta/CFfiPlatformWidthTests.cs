@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// End-to-end proof that the <c>@target(os: …)</c>-gated C FFI scalar/string wrappers
@@ -13,7 +13,7 @@ namespace RazorForge.Tests.Meta;
 /// The stdlib fixture harness (<see cref="StdlibApiTests"/>) diffs one OS-independent <c>.expected.txt</c>
 /// per fixture, so it CANNOT express a value that differs across platforms — a divergent fixture would
 /// fail on whichever OS it wasn't authored for (the platform-INDEPENDENT surface is covered there by
-/// <c>csubsystem_api.rf</c>). This suite fills that gap by keying BOTH the probe source and the expected
+/// <c>csubsystem_api.rr</c>). This suite fills that gap by keying BOTH the probe source and the expected
 /// result on the host OS, exercising exactly the range where the two data models diverge:
 ///   • byte width of each wrapper (4/4/2 on Windows vs 8/8/4 on Unix);
 ///   • narrowing at the 32-/16-bit boundary — a value that fits Unix's wider type but overflows Windows'
@@ -88,7 +88,7 @@ public sealed class CFfiPlatformWidthTests
     public void CFfiNarrowing_AtBoundary_DivergesByPlatform(string ctorType, string valueLiteral,
         string widen, string expectedUnixDecimal)
     {
-        // Token-substitution template (a non-interpolated raw string) so the RF f-string braces need no
+        // Token-substitution template (a non-interpolated raw string) so the RA f-string braces need no
         // C# escaping. Emits e.g. `var value: S64 = 2147483648` then `show(f"v={value.to[CLong]().to[S64]()}")`.
         const string template = """
                                 module Playground
@@ -193,17 +193,17 @@ public sealed class CFfiPlatformWidthTests
     private static (int ExitCode, string Stdout, string Stderr, bool TimedOut) RunProgram(
         string source)
     {
-        // Isolated dir: buildandrun compiles EVERY .rf in the entry file's directory, so a shared temp
-        // dir would pull sibling probes in and collide on `routine start` (RF-S406).
+        // Isolated dir: buildandrun compiles EVERY .rr in the entry file's directory, so a shared temp
+        // dir would pull sibling probes in and collide on `routine start` (RA-S406).
         string tempDir = Path.Combine(path1: Path.GetTempPath(),
             path2: "rf-cffi-" + Guid.NewGuid()
                                     .ToString(format: "N"));
         Directory.CreateDirectory(path: tempDir);
-        string probe = Path.Combine(path1: tempDir, path2: "probe.rf");
+        string probe = Path.Combine(path1: tempDir, path2: "probe.rr");
         try
         {
             File.WriteAllText(path: probe, contents: source);
-            return RunBuildAndRun(rfPath: probe);
+            return RunBuildAndRun(raPath: probe);
         }
         finally
         {
@@ -216,12 +216,12 @@ public sealed class CFfiPlatformWidthTests
     }
 
     private static (int ExitCode, string Stdout, string Stderr, bool TimedOut) RunBuildAndRun(
-        string rfPath)
+        string raPath)
     {
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rfPath), "buildandrun", rfPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: raPath), "buildandrun", raPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

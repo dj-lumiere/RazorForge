@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// Verifies that each builder source folder retains explicit handling for its known failure points.
@@ -24,7 +24,7 @@ public sealed partial class SourceFolderFailurePointTests
         // 3 declarations · 4 syntactic desugar · 5 verification · 6 type-aware lowering · 7 monomorphize ·
         // 8 demand collect · 9 LLVM IR. (4.Desugaring = syntactic/DesugaringPipeline; 6.Lowering =
         // type-aware/PostprocessingPipeline.)
-        // The lexer is RazorForge's own (RazorForge/src/Lexer), not the builder core's.
+        // The lexer is Revare's own (Revare/src/Lexer), not the builder core's.
         {
             "Lexer",
             "source validation rejects ambiguous bytes and whitespace before scanning",
@@ -116,7 +116,7 @@ public sealed partial class SourceFolderFailurePointTests
         },
         {
             "Debug", "debug AST printing includes explicit visitors for generated tree shapes",
-            ["RfSyntaxTreePrinter", "Visit", "Accept"]
+            ["RaSyntaxTreePrinter", "Visit", "Accept"]
         }
     };
 
@@ -217,11 +217,11 @@ public sealed partial class SourceFolderFailurePointTests
 
     private static string ReadSourceFolder(string folder)
     {
-        // A builder-core folder (Anvila/src), else one of RazorForge's own (RazorForge/src).
+        // A builder-core folder (Anvila/src), else one of Revare's own (Revare/src).
         string folderPath = Path.Combine(path1: FindSourceRoot(), path2: folder);
         if (!Directory.Exists(path: folderPath))
         {
-            folderPath = Path.GetFullPath(path: Path.Combine(FindSourceRoot(), "..", "..", "RazorForge", "src",
+            folderPath = Path.GetFullPath(path: Path.Combine(FindSourceRoot(), "..", "..", "Revare", "src",
                 folder));
         }
 

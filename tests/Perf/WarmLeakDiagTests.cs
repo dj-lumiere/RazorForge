@@ -5,7 +5,7 @@ using Builder.Verification;
 using Builder.Verification.Results;
 using Xunit.Abstractions;
 
-namespace RazorForge.Tests.Perf;
+namespace Revare.Tests.Perf;
 
 /// <summary>
 /// Cross-build isolation guard: many warm compiles served from ONE captured
@@ -25,8 +25,8 @@ public sealed class WarmLeakDiagTests
     private static Program Parse(string src, string path)
     {
         List<Token> tokens =
-            Lexers.Tokenize(source: src, fileName: path, language: Language.RazorForge);
-        return new Builder.Parser.Parser(tokens: tokens, language: Language.RazorForge,
+            Lexers.Tokenize(source: src, fileName: path, language: Language.Revare);
+        return new Builder.Parser.Parser(tokens: tokens, language: Language.Revare,
             fileName: path).Parse();
     }
 
@@ -64,7 +64,7 @@ public sealed class WarmLeakDiagTests
     public void SuccessiveWarmBuilds_SameProgram_IdenticalDefines()
     {
         SemanticVerifier.CompiledStdlibState warm =
-            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
 
         // Exercise the for/til → Range[U64] iterator chain: the field-init Range creator inside the
         // (generic-def) Range iterator template is exactly the +1 define that leaked across warm builds
@@ -83,8 +83,8 @@ public sealed class WarmLeakDiagTests
         var sets = new List<HashSet<string>>();
         for (int i = 0; i < 4; i++)
             sets.Add(DefineSet(Codegen(
-                new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
-                    Parse(user, "bench.rf")))));
+                new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
+                    Parse(user, "bench.rr")))));
 
         _out.WriteLine($"counts: {string.Join(", ", sets.Select(s => s.Count))}");
         for (int i = 1; i < sets.Count; i++)

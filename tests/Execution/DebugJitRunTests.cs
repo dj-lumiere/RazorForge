@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace RazorForge.Tests.Execution;
+namespace Revare.Tests.Execution;
 
 /// <summary>
 /// End-to-end runs of the <c>mode = "debug-jit"</c> dev loop through <c>buildandrun</c>: the builder compiles the
@@ -127,7 +127,7 @@ public sealed partial class DebugJitRunTests
             _pipe = "rf-jit-" + Guid.NewGuid().ToString(format: "N")[..12];
             _dir = Path.Combine(path1: Path.GetTempPath(), path2: _pipe);
             Directory.CreateDirectory(path: _dir);
-            _entry = Path.Combine(path1: _dir, path2: "probe.rf");
+            _entry = Path.Combine(path1: _dir, path2: "probe.rr");
             File.WriteAllText(path: _entry, contents: Program);
             File.WriteAllText(path: Path.Combine(path1: _dir, path2: "config.toml"),
                 contents: $"""
@@ -135,7 +135,7 @@ public sealed partial class DebugJitRunTests
                            name = "jitprobe"
 
                            [target]
-                           executable = "probe.rf"
+                           executable = "probe.rr"
                            mode = "debug-jit"
                            incremental = {(incremental ? "true" : "false")}
                            use-daemon = {(useDaemon ? "true" : "false")}
@@ -212,10 +212,10 @@ public sealed partial class DebugJitRunTests
                 {
                     [key: "DOTNET_gcServer"] = "0",
                     [key: "DOTNET_GCConserveMemory"] = "9",
-                    [key: "RAZORFORGE_DAEMON_PIPE"] = _pipe,
+                    [key: "REVARE_DAEMON_PIPE"] = _pipe,
                     // Warming the daemon and building its base run beside the rest of the suite, and on CI under
                     // coverage, so the client waits as long as the suite's other child limits allow.
-                    [key: "RAZORFORGE_DAEMON_WAIT_SECONDS"] =
+                    [key: "REVARE_DAEMON_WAIT_SECONDS"] =
                         (TestHelpers.ChildTimeoutMs(baseMs: 120_000) / 1000).ToString(
                             provider: System.Globalization.CultureInfo.InvariantCulture)
                 }
@@ -229,11 +229,11 @@ public sealed partial class DebugJitRunTests
 
             if (_useDaemon)
             {
-                psi.Environment.Remove(key: "RF_NO_DAEMON");
+                psi.Environment.Remove(key: "RA_NO_DAEMON");
             }
             else
             {
-                psi.Environment[key: "RF_NO_DAEMON"] = "1";
+                psi.Environment[key: "RA_NO_DAEMON"] = "1";
             }
 
             var stdout = new StringBuilder();

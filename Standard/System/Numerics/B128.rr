@@ -1,0 +1,1184 @@
+module System/Numerics
+
+import Collections
+# ============================================================================
+# Public surface — creators / presets / parser / hash / bytes
+# ============================================================================
+
+# IEEE 754 quadruple precision constants
+preset B128_EPSILON: B128 = 1.925929944387235853055977942584927319e-34
+preset B128_MIN: B128 = -1.189731495357231765085759326628007016e+4932
+preset B128_MAX: B128 = 1.189731495357231765085759326628007016e+4932
+preset B128_MIN_POSITIVE: B128 = 3.362103143112093506262677817321752602e-4932
+preset B128_ZERO: B128 = 0.0
+preset B128_ONE: B128 = 1.0
+# Mathematical constants with quadruple precision
+preset B128_PI: B128 = 3.141592653589793238462643383279502884
+preset B128_E: B128 = 2.718281828459045235360287471352662498
+preset B128_SQRT_2: B128 = 1.414213562373095048801688724209698079
+preset B128_LN_2: B128 = 0.693147180559945309417232121458176568
+preset B128_LN_10: B128 = 2.302585092994045684017991454684364208
+
+# ============================================================================
+# B128 — software IEEE 754 binary128 in a raw 128-bit container. The arithmetic, the rounding to an integer,
+# the remainders, the conversions that round, and the text are Ingrid's (Lapila's software binary128, through
+# Ingrid/lapila/binfloat_ops.li and floattext.li), the same bits on every platform. Classification,
+# comparison, and the sign operations are bit logic here.
+#
+# Layout: sign(1) | exponent(15, bias 16383) | mantissa(112).
+# ============================================================================
+
+### Represents a 128-bit IEEE 754 binary floating-point value (software binary128).
+### `B128` provides quadruple precision for workloads that need far more range and
+### significand precision than `B64`. It is a pure-integer software implementation
+### (raw 128-bit container, no LLVM `fp128`), so results are bit-identical on every
+### platform without relying on compiler-rt `__*tf*` libcalls.
+@llvm("i128")
+record B128
+obeys Numeric, Comparable, Copyable, Splittable
+    nothing
+
+# ============================================================================
+# Raw bit access
+# ============================================================================
+
+### Reinterprets this value as its raw IEEE 754 bit pattern.
+### :returns: The underlying 128-bit encoding.
+@readonly
+routine B128.to_bits() -> U128
+    return LLVM::reinterpret_bits[B128, U128](me)
+
+### Builds a value directly from a raw IEEE 754 bit pattern.
+### :param bits: The exact 128-bit encoding.
+### :returns: The decoded `B128`.
+common routine B128.from_bits(bits: U128) -> B128
+    return LLVM::reinterpret_bits[U128, B128](bits)
+
+### Returns the raw biased exponent field (0..32767).
+### :returns: The 15-bit exponent field.
+@readonly
+routine B128.raw_exponent() -> U64
+    return LLVM::int_truncate[U128, U64](
+        LLVM::bit_and(a: LLVM::shift_right_unsigned(me.to_bits(), 112), b: 32767),
+    )
+
+### Returns the raw 112-bit mantissa field (no implicit bit).
+### :returns: The stored fraction bits.
+@readonly
+routine B128.raw_mantissa() -> U128
+    return LLVM::bit_and(a: me.to_bits(), b: b128_mant_mask())
+
+# ============================================================================
+# Classification (pure bit inspection)
+# ============================================================================
+
+### Returns `true` when the value is negative (sign bit set).
+### :returns: Whether the sign bit is set.
+routine B128.is_negative() -> Bool
+    return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()), b: 0)
+
+### Returns `true` when the value is strictly positive.
+### :returns: Whether the value is greater than zero.
+routine B128.is_positive() -> Bool
+    return not me.is_negative() and not me.is_zero()
+
+### Returns `true` when the value encodes a NaN.
+### :returns: Whether the bit pattern is not-a-number.
+@readonly
+routine B128.is_nan() -> Bool
+    return me.raw_exponent() == 0x7FFF and LLVM::int_ne(a: me.raw_mantissa(), b: 0)
+
+### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
+### :returns: `true` if `me` is a signaling NaN.
+routine B128.is_signaling() -> Bool
+    return me.is_nan()
+        and LLVM::int_eq(
+            a: LLVM::bit_and(
+                a: me.raw_mantissa(),
+                b: LLVM::shift_left(value: 1, bits: 111),
+            ),
+            b: 0,
+        )
+
+### Returns `true` when the value encodes positive or negative infinity.
+### :returns: Whether the bit pattern is an infinity.
+routine B128.is_infinite() -> Bool
+    return me.raw_exponent() == 0x7FFF and LLVM::int_eq(a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the value is neither NaN nor infinity.
+### :returns: Whether the value is finite.
+routine B128.is_finite() -> Bool
+    return me.raw_exponent() != 0x7FFF
+
+### Returns `true` when the value is zero (either sign).
+### :returns: Whether the value is +0 or -0.
+@readonly
+routine B128.is_zero() -> Bool
+    return me.raw_exponent() == 0 and LLVM::int_eq(a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the value is subnormal (denormalized, nonzero).
+### :returns: Whether the value is subnormal.
+routine B128.is_subnormal() -> Bool
+    return me.raw_exponent() == 0 and LLVM::int_ne(a: me.raw_mantissa(), b: 0)
+
+### Returns `true` when the sign bit is set (C `is_sign_negative`; true for -0 and -NaN too).
+### :returns: `true` if the sign bit is set, also for -0 and a negative NaN.
+routine B128.is_sign_negative() -> Bool
+    return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()), b: 0)
+
+### Returns `true` for a finite, normal value (nonzero and not subnormal).
+### :returns: `true` if `me` is finite, nonzero and not subnormal.
+routine B128.is_normal() -> Bool
+    return me.is_finite() and not me.is_zero() and not me.is_subnormal()
+
+### C `fpclassify`: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
+### :returns: The class of `me`: signaling NaN, NaN, infinite, zero, subnormal, or normal.
+routine B128.fpclassify() -> FpClass
+    if me.is_signaling()
+        return SIGNALING_NAN
+    if me.is_nan()
+        return NAN
+    if me.is_infinite()
+        return INFINITE
+    if me.is_zero()
+        return ZERO
+    if me.is_subnormal()
+        return SUBNORMAL
+    return NORMAL
+
+# ============================================================================
+# IEEE 754 Tier 1 — total ordering predicates
+# ============================================================================
+
+### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
+### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
+### :param bits: The 128-bit pattern of a binary float.
+### :returns: The key. A smaller key means an earlier place in the total order.
+routine b128_order_key(bits: U128) -> U128
+    if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: b128_sign_mask()), b: 0)
+        return LLVM::bit_xor(a: bits, b: LLVM::bit_or(a: b128_sign_mask(), b: b128_abs_mask()))
+    return LLVM::bit_or(a: bits, b: b128_sign_mask())
+
+### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
+### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
+### :param you: The value to compare against.
+### :returns: Whether `me` precedes or equals `you` in the total order.
+routine B128.total_compare(you: B128) -> Bool
+    return b128_order_key(bits: me.to_bits()) <= b128_order_key(bits: you.to_bits())
+
+### IEEE 754 totalOrderMag: `total_compare` applied to the magnitudes (sign bit cleared).
+### :param you: The value whose magnitude to compare against.
+### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
+routine B128.total_order_mag(you: B128) -> Bool
+    return LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask()) <= LLVM::bit_and(
+        a: you.to_bits(),
+        b: b128_abs_mask(),
+    )
+
+# ============================================================================
+# IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding
+# ============================================================================
+
+### IEEE 754 nextUp: the least value greater than `me`. Propagating; never crashes.
+### :returns: The next representable value toward +infinity.
+routine B128.next_up() -> B128
+    return me.nextafter(you: B128.from_bits(bits: b128_inf(sign: 0)))
+
+### IEEE 754 nextDown: the greatest value less than `me`. Never crashes.
+### :returns: The next representable value toward -infinity.
+routine B128.next_down() -> B128
+    return me.nextafter(you: B128.from_bits(bits: b128_inf(sign: 1)))
+
+### IEEE 754 logb: the unbiased exponent of `me` as a floating value (logb(0)=-inf,
+### logb(±inf)=+inf, logb(NaN)=NaN). Propagating; never crashes.
+### :returns: The radix-2 exponent of `me`.
+routine B128.logb() -> B128
+    return b128_of_words(w: C::ingrid_b128_logb(low: me.low_bits(), high: me.high_bits()))
+
+### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
+### :param n: The power-of-two exponent to apply.
+### :returns: `me` scaled by `2^n`.
+routine B128.scaleb(n: S64) -> B128
+    var r = me.scalbn(n: n)
+    if r.is_finite() or not me.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
+### :param n: The power-of-two exponent to apply.
+### :returns: `me` scaled by `2^n`.
+routine B128.scaleb_unchecked(n: S64) -> B128
+    return me.scalbn(n: n)
+
+### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, ignoring NaN.
+routine B128.min_num(you: B128) -> B128
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if me == you
+        if me.is_zero()
+            return if me.is_sign_negative() then me else you
+        return me
+    return if me < you then me else you
+### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, ignoring NaN.
+routine B128.max_num(you: B128) -> B128
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if me == you
+        if me.is_zero()
+            return if me.is_sign_negative() then you else me
+        return me
+    return if me > you then me else you
+### IEEE 754-2019 minimum: the smaller operand, propagating NaN, ordering -0 below +0.
+### :param you: The value to compare against.
+### :returns: The minimum of `me` and `you`, NaN if either is NaN.
+routine B128.minimum(you: B128) -> B128
+    if me.is_nan()
+        return me
+    if you.is_nan()
+        return you
+    if me == you
+        if me.is_zero()
+            return if me.is_sign_negative() then me else you
+        return me
+    return if me < you then me else you
+### IEEE 754-2019 maximum: the larger operand, propagating NaN, ordering +0 above -0.
+### :param you: The value to compare against.
+### :returns: The maximum of `me` and `you`, NaN if either is NaN.
+routine B128.maximum(you: B128) -> B128
+    if me.is_nan()
+        return me
+    if you.is_nan()
+        return you
+    if me == you
+        if me.is_zero()
+            return if me.is_sign_negative() then you else me
+        return me
+    return if me > you then me else you
+
+### IEEE 754 roundToIntegralTiesToAway: rounds to nearest integer, halves away from zero.
+### :returns: `me` rounded to an integral value with ties away from zero.
+routine B128.round_ties_away() -> B128
+    if not me.is_finite()
+        return me
+    var a = me.abs()
+    var t = a.trunc()
+    var rounded = if a - t >= 0.5 then t + 1.0 else t
+    return rounded.copysign(sign: me)
+
+### Returns the fractional part `me - trunc(me)`, preserving sign (frac(±inf) = ±0).
+### :returns: `me - trunc(me)`.
+routine B128.fract() -> B128
+    if me.is_nan()
+        return me
+    if me.is_infinite()
+        return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
+    return me - me.trunc()
+
+# ============================================================================
+# Sign operations (pure bit manipulation)
+# ============================================================================
+
+### Returns the arithmetic negation (sign bit flipped).
+### :returns: The negated value.
+@inline
+@readonly
+routine B128.neg() -> B128
+    return B128.from_bits(bits: LLVM::bit_xor(a: me.to_bits(), b: b128_sign_mask()))
+
+### Returns the absolute value (sign bit cleared).
+### :returns: The magnitude of this value.
+@inline
+routine B128.abs() -> B128
+    return B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask()))
+
+### Returns this magnitude carrying the sign of `sign`.
+### :param sign: The value supplying the sign bit.
+### :returns: A value combining this magnitude with the sign of `sign`.
+routine B128.copysign(sign: B128) -> B128
+    var mag = LLVM::bit_and(a: me.to_bits(), b: b128_abs_mask())
+    var sgn = LLVM::bit_and(a: sign.to_bits(), b: b128_sign_mask())
+    return B128.from_bits(bits: LLVM::bit_or(a: mag, b: sgn))
+
+# ============================================================================
+# Ordered comparison (pure — sign-magnitude bit logic, no native delegation)
+# ============================================================================
+
+### Returns whether two values compare equal (NaN compares unequal; +0 == -0).
+### :param you: The value to compare against.
+### :returns: Whether the values are ordered-equal.
+@readonly
+routine B128.eq(you: B128) -> Bool
+    if me.is_nan() or you.is_nan()
+        return false
+    if me.is_zero() and you.is_zero()
+        return true
+    return LLVM::int_eq(a: me.to_bits(), b: you.to_bits())
+
+### Compares this value with `you` under IEEE ordered semantics (pure bit logic).
+### :param you: The value to compare against.
+### :returns: The comparison sign (SAME for unordered/NaN).
+@readonly
+routine B128.compare(you: B128) -> ComparisonSign
+    if me.is_nan() or you.is_nan()
+        return SAME
+    if me.is_zero() and you.is_zero()
+        return SAME
+    var ka = b128_order_key(bits: me.to_bits())
+    var kb = b128_order_key(bits: you.to_bits())
+    if LLVM::unsigned_lt(a: ka, b: kb)
+        return ME_SMALL
+    if LLVM::unsigned_gt(a: ka, b: kb)
+        return ME_LARGE
+    return SAME
+
+# ============================================================================
+# Software arithmetic
+# ============================================================================
+
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors B64/Decimal):
+# ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
+# keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
+
+### Returns `me + you` (software IEEE 754, round-to-nearest-even). Checked: crashes if the result is
+### non-finite. Use `add_unchecked` for raw IEEE 754 propagation.
+### :param you: The addend.
+### :returns: The sum (always finite).
+@readonly
+routine B128.add(you: B128) -> B128
+    var r = me.add_unchecked(you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me - you` (software IEEE 754). Checked: crashes if the result is non-finite.
+### Use `sub_unchecked` for raw IEEE 754 propagation.
+### :param you: The value to subtract.
+### :returns: The difference (always finite).
+@readonly
+routine B128.sub(you: B128) -> B128
+    var r = me.sub_unchecked(you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me + you`, promoting the real `me` to complex (imaginary part 0). Only `+`/`-` allow
+### real↔complex mixing; the component width must match (B128 pairs with C256).
+### :param you: The complex addend.
+### :returns: The complex sum.
+routine B128.add(you: C256) -> C256
+    return me.to[C256]().add(you)
+
+### Returns `me - you`, promoting the real `me` to complex (imaginary part 0).
+### :param you: The complex value to subtract.
+### :returns: The complex difference.
+routine B128.sub(you: C256) -> C256
+    return me.to[C256]().sub(you)
+
+### Returns `me * you` (software IEEE 754). Checked: crashes if the result is non-finite.
+### Use `mul_unchecked` for raw IEEE 754 propagation.
+### :param you: The multiplier.
+### :returns: The product (always finite).
+@readonly
+routine B128.mul(you: B128) -> B128
+    var r = me.mul_unchecked(you)
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me / you` (software IEEE 754). Checked: `x/0` -> DivisionByZeroError, `0/0` -> domain,
+### overflow -> overflow. Use `truediv_unchecked` for raw IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN).
+### :param you: The divisor.
+### :returns: The quotient (always finite).
+@readonly
+routine B128.truediv(you: B128) -> B128
+    var r = me.truediv_unchecked(you)
+    if r.is_finite()
+        return r
+    if you.is_zero() and not me.is_zero()
+        throw DivisionByZeroError()
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+# ============================================================================
+# Rounding to integer (exact, Ingrid's, C99 semantics) and value selection.
+# ============================================================================
+
+### Truncates toward zero to an integer value (C `trunc`).
+### :returns: The integer part, preserving sign (NaN/inf returned unchanged).
+routine B128.trunc() -> B128
+    return b128_round_int(x: me, mode: 0)
+
+### Rounds toward negative infinity (C `floor`).
+### :returns: The largest integer not greater than this value.
+routine B128.floor() -> B128
+    return b128_round_int(x: me, mode: 1)
+
+### Rounds toward positive infinity (C `ceil`).
+### :returns: The smallest integer not less than this value.
+routine B128.ceil() -> B128
+    return b128_round_int(x: me, mode: 2)
+
+### Rounds to nearest integer, ties away from zero (C `round`).
+### :returns: The rounded integer value.
+routine B128.round() -> B128
+    return b128_round_int(x: me, mode: 3)
+
+### Rounds to nearest integer, ties to even (C `rint` under the default mode).
+### :returns: The rounded integer value.
+routine B128.rint() -> B128
+    return b128_round_int(x: me, mode: 4)
+
+### `x` rounded to an integer by Ingrid: an infinity or a NaN comes back as it is.
+### :param x: The value.
+### :param mode: 0 toward zero, 1 down, 2 up, 3 to nearest with ties away from zero, 4 to nearest with ties to even.
+### :returns: The integer value.
+secret routine b128_round_int(x: B128, mode: U32) -> B128
+    if not x.is_finite()
+        return x
+    return b128_of_words(w: C::ingrid_b128_round_int(low: x.low_bits(), high: x.high_bits(), mode: mode))
+
+### The smaller of `me` and `you`. If one operand is NaN, the other one. -0 counts below +0.
+### :param you: The value to compare against.
+### :returns: The minimum.
+routine B128.min(you: B128) -> B128
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if me.is_zero() and you.is_zero()
+        if me.is_negative()
+            return me
+        return you
+    if me < you
+        return me
+    return you
+
+### The larger of `me` and `you`. If one operand is NaN, the other one. -0 counts below +0.
+### :param you: The value to compare against.
+### :returns: The maximum.
+routine B128.max(you: B128) -> B128
+    if me.is_nan()
+        return you
+    if you.is_nan()
+        return me
+    if me.is_zero() and you.is_zero()
+        if me.is_negative()
+            return you
+        return me
+    if me > you
+        return me
+    return you
+
+### Returns the positive difference `max(me - you, 0)` (C `fdim`).
+### :param you: The value to subtract.
+### :returns: The positive difference, or +0.
+routine B128.fdim(you: B128) -> B128
+    return b128_of_words(w: C::ingrid_b128_fdim(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()))
+
+### Multiplies by `2^n` exactly when representable (C `scalbn` / `ldexp`).
+### :param n: The power-of-two exponent adjustment.
+### :returns: `me * 2^n`, with overflow to infinity and underflow to subnormal/zero.
+routine B128.scalbn(n: S64) -> B128
+    if not me.is_finite() or me.is_zero()
+        return me
+    return b128_of_words(w: C::ingrid_b128_scalbn(low: me.low_bits(), high: me.high_bits(), n: n))
+
+### Alias of `scalbn` (C `ldexp`).
+### :param n: The power-of-two exponent adjustment.
+### :returns: `me * 2^n`.
+routine B128.ldexp(n: S64) -> B128
+    return me.scalbn(n: n)
+
+# ============================================================================
+# Bit-pattern constants (built via shifts to avoid 128-bit literal typos)
+# ============================================================================
+
+### The implicit-bit mask `1 << 112`.
+### :returns: The mask.
+routine b128_implicit() -> U128
+    return LLVM::shift_left(value: 1, bits: 112)
+
+### The 112-bit mantissa mask `(1 << 112) - 1`.
+### :returns: The mask.
+routine b128_mant_mask() -> U128
+    return LLVM::sub(a: b128_implicit(), b: 1)
+
+### The sign-bit mask `1 << 127`.
+### :returns: The mask.
+routine b128_sign_mask() -> U128
+    return LLVM::shift_left(value: 1, bits: 127)
+
+### The magnitude mask `~(1 << 127)` (all but the sign bit).
+### :returns: The mask.
+routine b128_abs_mask() -> U128
+    return LLVM::sub(a: b128_sign_mask(), b: 1)
+
+### The infinity encoding `0x7FFF << 112` for the given sign bit.
+### :param sign: The sign bit: 1 for negative infinity, 0 for positive.
+### :returns: The bits of the infinity.
+routine b128_inf(sign: U64) -> U128
+    var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127)
+    var e: U128 = LLVM::shift_left(value: 32767, bits: 112)
+    return LLVM::bit_or(a: s, b: e)
+
+### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
+### :returns: The bits of the quiet NaN.
+routine b128_qnan() -> U128
+    var e: U128 = LLVM::shift_left(value: 32767, bits: 112)
+    var q: U128 = LLVM::shift_left(value: 1, bits: 111)
+    return LLVM::bit_or(a: e, b: q)
+
+### Forces the quiet bit on a NaN encoding (top mantissa bit).
+### :param bits: The bits of a NaN.
+### :returns: `bits` with the top mantissa bit set.
+routine b128_quiet(bits: U128) -> U128
+    return LLVM::bit_or(a: bits, b: LLVM::shift_left(value: 1, bits: 111))
+
+### Returns a signaling NaN (interop/testing; never produced by arithmetic).
+### :returns: A signaling NaN.
+common routine B128.signaling_nan() -> B128
+    return B128.from_bits(
+        bits: LLVM::bit_or(a: LLVM::shift_left[U128](value: 32767, bits: 112), b: 1),
+    )
+
+### Returns the square root. Checked: crashes (domain error) if `me` is negative (`sqrt(<0)` ->
+### NaN).
+### Use `sqrt_unchecked` for raw IEEE 754 propagation.
+### :returns: The quadruple-precision square root (always finite for finite non-negative input).
+routine B128.sqrt() -> B128
+    var r = me.sqrt_unchecked()
+    if r.is_finite()
+        return r
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+# ============================================================================
+# Remainder operators — fmod (truncated) and IEEE remainder (round-to-even), exact, by Ingrid.
+# ============================================================================
+
+### Returns `me mod you` truncated toward zero (C `mod_trunc`): result has the sign of
+### `me` and magnitude strictly less than `|you|`.
+### :param you: The divisor.
+### :returns: The truncated remainder.
+routine B128.mod_trunc(you: B128) -> B128
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if you.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
+    if me.is_infinite() or you.is_zero()
+        return B128.from_bits(bits: b128_qnan())
+    if you.is_infinite() or me.is_zero()
+        return me
+    return b128_of_words(
+        w: C::ingrid_b128_mod_trunc(
+            low: me.low_bits(),
+            high: me.high_bits(),
+            y_low: you.low_bits(),
+            y_high: you.high_bits(),
+        ),
+    )
+
+### Returns the IEEE 754 remainder `me - n*you` where `n` is `me/you` rounded to
+### the nearest integer, ties to even (C `rem`).
+### :param you: The divisor.
+### :returns: The remainder in `[-|you|/2, |you|/2]`.
+routine B128.rem(you: B128) -> B128
+    if me.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+    if you.is_nan()
+        return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
+    if me.is_infinite() or you.is_zero()
+        return B128.from_bits(bits: b128_qnan())
+    if you.is_infinite() or me.is_zero()
+        return me
+    return b128_of_words(
+        w: C::ingrid_b128_rem(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()),
+    )
+
+# ============================================================================
+# Decimal text conversion: Ingrid's, exact, on the raw bits (FloatText.rr).
+# ============================================================================
+
+### Returns the shortest decimal text that reads back as this exact value (`B128(from_text:)`
+### round-trips it bit for bit).
+### :returns: The formatted representation.
+@override
+routine B128.represent() -> Text
+    if me.is_signaling()
+        return "snan"
+    return float_text(low: me.low_bits(), high: me.high_bits(), format: 4, style: 0, digits: 0)
+
+### Renders this value with exactly `places` digits after the point, rounded half to even from its
+### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
+### part is always written out in full, never in exponent form.
+### :param places: The number of digits after the point (0 for none).
+### :returns: The rendered `Text`.
+@readonly
+routine B128.fixed(places: U64) -> Text
+    return float_text(low: me.low_bits(), high: me.high_bits(), format: 4, style: 2, digits: places)
+
+### Returns a diagnostic representation tagged with the type name.
+### :returns: The formatted representation.
+@override
+routine B128.diagnose() -> Text
+    if me.is_signaling()
+        return "B128(snan)"
+    return float_text(low: me.low_bits(), high: me.high_bits(), format: 4, style: 3, digits: 0)
+
+# ============================================================================
+# More exact members: nextafter, modf, frexp
+# ============================================================================
+
+### Returns the next representable value after `me` toward `you` (C `nextafter`).
+### :param you: The value that gives the direction.
+### :returns: The neighbor of `me` toward `you`, or `you` if they are equal.
+routine B128.nextafter(you: B128) -> B128
+    return b128_of_words(w: C::ingrid_b128_nextafter(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()))
+
+### Splits into integer and fractional parts (C `modf`): returns (intpart, fracpart).
+### :returns: The integer part and the fractional part, in that order.
+routine B128.modf() -> (B128, B128)
+    if me.is_nan()
+        return (me, me)
+    if me.is_infinite()
+        var z = B128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: b128_sign_mask()))
+        return (me, z)
+    var ip = me.trunc()
+    var fp = me - ip
+    return (ip, fp)
+
+### Splits into a fraction in [0.5,1) and a power-of-two exponent (C `frexp`).
+### :returns: The fraction in [0.5, 1) and the exponent, so that `me` is fraction * 2^exponent.
+routine B128.frexp() -> (B128, S64)
+    var w = C::ingrid_b128_frexp(low: me.low_bits(), high: me.high_bits())
+    return (B128.from_bits(bits: (w.w1.to[U128]() << 64) | w.w0.to[U128]()), LLVM::reinterpret_bits[U64, S64](w.w2))
+
+### Converts an `S8` into quadruple-precision floating-point form.
+### :returns: The corresponding `B128` value.
+routine S8.to[B128]() -> B128
+    return (LLVM::sign_extend[S8, S64](me)).to[B128]()
+
+### Converts an `S16` into quadruple-precision floating-point form.
+### :returns: The corresponding `B128` value.
+routine S16.to[B128]() -> B128
+    return (LLVM::sign_extend[S16, S64](me)).to[B128]()
+
+### Converts an `S32` into quadruple-precision floating-point form.
+### :returns: The corresponding `B128` value.
+routine S32.to[B128]() -> B128
+    return (LLVM::sign_extend[S32, S64](me)).to[B128]()
+
+### Converts an `S64` into quadruple-precision floating-point form.
+### :returns: The closest representable `B128` value.
+routine S64.to[B128]() -> B128
+    var u = LLVM::reinterpret_bits[S64, U64](me)
+    if me < 0
+        return (0 -% u).to[B128]().neg()
+    return u.to[B128]()
+
+### Converts an `S128` into quadruple-precision floating-point form.
+### :returns: The closest representable `B128` value.
+routine S128.to[B128]() -> B128
+    var neg = LLVM::signed_lt(a: me, b: 0)
+    var mag = if neg then LLVM::reinterpret_bits[S128, U128](0 -% me) else LLVM::reinterpret_bits[S128, U128](me)
+    var r = mag.to[B128]()
+    return if neg then r.neg() else r
+### Converts an `S256` into quadruple-precision floating-point form.
+### :returns: The closest representable `B128` value.
+routine S256.to[B128]() -> B128
+    var neg = LLVM::signed_lt(a: me, b: 0)
+    var mag = if neg then LLVM::reinterpret_bits[S256, U256](0 -% me) else LLVM::reinterpret_bits[S256, U256](me)
+    var r = mag.to[B128]()
+    return if neg then r.neg() else r
+### Converts a `U8` into quadruple-precision floating-point form.
+### :returns: The corresponding `B128` value.
+routine U8.to[B128]() -> B128
+    return (LLVM::zero_extend[U8, U64](me)).to[B128]()
+
+### Converts a `U16` into quadruple-precision floating-point form.
+### :returns: The corresponding `B128` value.
+routine U16.to[B128]() -> B128
+    return (LLVM::zero_extend[U16, U64](me)).to[B128]()
+
+### Converts a `U32` into quadruple-precision floating-point form.
+### :returns: The corresponding `B128` value.
+routine U32.to[B128]() -> B128
+    return (LLVM::zero_extend[U32, U64](me)).to[B128]()
+
+### Converts a `U64` into quadruple-precision floating-point form.
+### :returns: The closest representable `B128` value.
+routine U64.to[B128]() -> B128
+    return b128_of_words(w: C::ingrid_b128_from_u128(low: me, high: 0))
+
+### Converts a `U128` into quadruple-precision floating-point form.
+### :returns: The closest representable `B128` value.
+routine U128.to[B128]() -> B128
+    return b128_of_words(
+        w: C::ingrid_b128_from_u128(
+            low: LLVM::int_truncate[U128, U64](me),
+            high: LLVM::int_truncate[U128, U64](me >>> 64),
+        ),
+    )
+
+### Converts a `U256` into quadruple-precision floating-point form.
+### value = hi * 2^128 + lo, with hi and lo each rounded to B128 first and their sum rounded once more
+### (Ingrid's).
+### :returns: The closest representable `B128` value.
+routine U256.to[B128]() -> B128
+    return b128_of_words(
+        w: C::ingrid_b128_from_u256(
+            w0: LLVM::int_truncate[U256, U64](me),
+            w1: LLVM::int_truncate[U256, U64](me >>> 64),
+            w2: LLVM::int_truncate[U256, U64](me >>> 128),
+            w3: LLVM::int_truncate[U256, U64](me >>> 192),
+        ),
+    )
+
+### Widens a half-precision float to quadruple precision.
+### :returns: An `B128` carrying the same numeric value when representable.
+routine B16.to[B128]() -> B128
+    return (LLVM::float_extend[B32, B64](LLVM::float_extend[B16, B32](me))).to[B128]()
+
+### Widens a single-precision float to quadruple precision.
+### :returns: An `B128` carrying the same numeric value when representable.
+routine B32.to[B128]() -> B128
+    return (LLVM::float_extend[B32, B64](me)).to[B128]()
+
+### Widens a double-precision float to quadruple precision (exact, Ingrid's). An infinity or a NaN keeps its
+### sign and its payload, the quiet bit as it was.
+### :returns: An `B128` carrying the same numeric value.
+routine B64.to[B128]() -> B128
+    return b128_of_words(w: C::ingrid_b128_from_b64(x: me.to_bits()))
+
+### Returns an existing `B128` unchanged.
+### :returns: this value.
+routine B128.to[B128]() -> B128
+    return me
+
+### Converts a decimal32 value to quadruple-precision binary floating point.
+### :returns: The closest representable `B128` value.
+routine D32.to[B128]() -> B128
+    return B128.from_bits(bits: d32_to_binary(x: me, which: 128))
+
+### Converts a decimal64 value to quadruple-precision binary floating point.
+### :returns: The closest representable `B128` value.
+routine D64.to[B128]() -> B128
+    return B128.from_bits(bits: d64_to_binary(x: me, which: 128))
+
+### Converts a decimal128 value to quadruple-precision binary floating point, correctly rounded: the exact
+### value when c * 10^q is an integer below 2^384 or a binary fraction (the only cases that can be exact or
+### halfway), else within about 2^-372 of it.
+### :returns: The closest representable `B128` value.
+routine D128.to[B128]() -> B128
+    return B128.from_bits(bits: d128_to_binary(x: me, which: 128))
+
+# ============================================================================
+# Arithmetic Operations (IEEE 754 semantics)
+# ============================================================================
+
+### Returns `me` if it is finite; throws if it is ±infinity or NaN. The opt-in
+### finiteness assertion for IEEE arithmetic, e.g. `var x = (a * b + c).finite()`.
+### :returns: `me`, when finite.
+### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
+routine B128.finite() -> B128
+    if not me.is_finite()
+        throw NumericOverflowError(description: f"B128 value is non-finite: {me}")
+    return me
+
+# Unchecked variants — raw IEEE 754 propagation: Ingrid's operation itself (not the checked `+ - * /`
+# operators, which would crash), so `x/0` -> ±inf and `0/0` -> NaN instead of a crash. Plain (not
+# `dangerous`): inf/NaN are valid IEEE values; the `_unchecked` spelling is the marker.
+
+### Returns `me / you` with raw IEEE 754 propagation (`x/0` -> ±infinity, `0/0` -> NaN). No crash.
+### :param you: The divisor.
+### :returns: `me / you`, with an infinity for a division by zero and a NaN for 0/0.
+@readonly
+routine B128.truediv_unchecked(you: B128) -> B128
+    return b128_of_words(
+        w: C::ingrid_b128_div(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()),
+    )
+
+### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The value to add.
+### :returns: `me + you`, possibly an infinity or a NaN.
+@readonly
+routine B128.add_unchecked(you: B128) -> B128
+    return b128_of_words(
+        w: C::ingrid_b128_add(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()),
+    )
+
+### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The value to subtract.
+### :returns: `me - you`, possibly an infinity or a NaN.
+@readonly
+routine B128.sub_unchecked(you: B128) -> B128
+    return b128_of_words(
+        w: C::ingrid_b128_sub(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()),
+    )
+
+### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
+### :param you: The factor to multiply by.
+### :returns: `me * you`, possibly an infinity or a NaN.
+@readonly
+routine B128.mul_unchecked(you: B128) -> B128
+    return b128_of_words(
+        w: C::ingrid_b128_mul(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()),
+    )
+
+# ============================================================================
+# Comparison Operations (ordered - false if NaN)
+# ============================================================================
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+### Discards the fractional part of this value toward zero.
+### :returns: The truncated result in quadruple precision.
+routine B128.int_truncate() -> B128
+    return me.trunc()
+
+# ============================================================================
+# Convenience (recip / angle conversion / integer power / midpoint)
+# ============================================================================
+
+### Returns the reciprocal `1 / me` (`±∞` for `±0`, following IEEE rules).
+### :returns: The multiplicative inverse.
+routine B128.recip() -> B128
+    return B128_ONE.truediv_unchecked(me)
+
+### Returns `me` converted from radians to degrees (`me × 180 / π`).
+### :returns: The angle in degrees.
+routine B128.to_degrees() -> B128
+    return me.mul_unchecked(180.0).truediv_unchecked(B128_PI)
+
+### Returns `me` converted from degrees to radians (`me × π / 180`).
+### :returns: The angle in radians.
+routine B128.to_radians() -> B128
+    return me.mul_unchecked(B128_PI).truediv_unchecked(180.0)
+
+### Returns `me` raised to the integer power `n`, correctly rounded: the exact `me^n` rounded to the nearest
+### `B128` (ties to even), identical on every platform, with raw IEEE 754 propagation. `powi(0)` is 1 for every
+### `me`, NaN included.
+### :param n: The integer exponent.
+### :returns: `me ** n`.
+routine B128.powi(n: S32) -> B128
+    return b128_of_words(w: C::ingrid_b128_powi(low: me.low_bits(), high: me.high_bits(), n: n))
+
+### Returns `(me + you) / 2`, computed without intermediate overflow.
+### :param you: The other value.
+### :returns: The arithmetic midpoint of `me` and `you`.
+routine B128.midpoint(you: B128) -> B128
+    return b128_of_words(w: C::ingrid_b128_midpoint(low: me.low_bits(), high: me.high_bits(), y_low: you.low_bits(), y_high: you.high_bits()))
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Restricts this value to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound to enforce.
+### :param max_val: The upper bound to enforce.
+### :returns: `me` if already in range, otherwise the nearest bound.
+@positional
+routine B128.clamp(min_val: B128, max_val: B128) -> B128
+    return me.min(max_val).max(min_val)
+
+### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
+### :returns: A unit-sign value describing the sign of `me`.
+routine B128.signum() -> B128
+    return when
+        me > 0.0 => 1.0
+        me < 0.0 => -1.0
+        else => 0.0
+
+### Returns the low 64 bits of the raw `B128` encoding.
+### :returns: The least-significant half of the bit pattern.
+@readonly
+routine B128.low_bits() -> U64
+    return LLVM::int_truncate[U128, U64](me.to_bits())
+
+### Returns the high 64 bits of the raw `B128` encoding.
+### :returns: The most-significant half of the bit pattern.
+@readonly
+routine B128.high_bits() -> U64
+    return LLVM::int_truncate[U128, U64](me.to_bits() >>> 64)
+
+# ============================================================================
+# Classification
+# ============================================================================
+
+# ============================================================================
+# Float Precision Conversions
+# ============================================================================
+
+### Narrows this quadruple-precision value to single precision.
+### Checked: a finite value past the `B32` range crashes. {B128.to_unchecked[B32]} gives the infinity instead. An
+### infinity stays infinite and a NaN stays a NaN.
+### :returns: The nearest `B32` value.
+### :throws: {NumericOverflowError} if a finite `me` rounds past the `B32` range.
+routine B128.to[B32]() -> B32
+    var r = me.to_unchecked[B32]()
+    if r.is_infinite() and me.is_finite()
+        throw NumericOverflowError(description: "overflow: out of the B32 range")
+    return r
+
+### Narrows this quadruple-precision value to single precision.
+### Unchecked: a value past the `B32` range gives an infinity, where {B128.to[B32]} crashes.
+### :returns: The nearest `B32` value.
+routine B128.to_unchecked[B32]() -> B32
+    # B128 -> B64 (correctly rounded) -> B32 (native fptrunc). The wide B64 slack
+    # makes the second rounding faithful for all but pathological double-round ties.
+    return LLVM::float_narrow[B64, B32](me.to_unchecked[B64]())
+
+### Narrows this quadruple-precision value to double precision, correctly rounded (Ingrid's).
+### Checked: a finite value past the `B64` range crashes. {B128.to_unchecked[B64]} gives the infinity instead. An
+### infinity stays infinite and a NaN stays a NaN.
+### :returns: The nearest `B64` value.
+### :throws: {NumericOverflowError} if a finite `me` rounds past the `B64` range.
+routine B128.to[B64]() -> B64
+    var r = me.to_unchecked[B64]()
+    if r.is_infinite() and me.is_finite()
+        throw NumericOverflowError(description: "overflow: out of the B64 range")
+    return r
+
+### Narrows this quadruple-precision value to double precision, correctly rounded (Ingrid's): overflow gives
+### ±inf, the B64 subnormal range is rounded once, and a NaN gives the quiet NaN with its sign.
+### Unchecked: a value past the `B64` range gives an infinity, where {B128.to[B64]} crashes.
+### :returns: The nearest `B64` value.
+routine B128.to_unchecked[B64]() -> B64
+    return B64.from_bits(bits: C::ingrid_b128_to_b64(low: me.low_bits(), high: me.high_bits()))
+
+# ============================================================================
+# Diagnostics and Hashing
+# ============================================================================
+
+### Returns a stable hash derived from the raw floating-point encoding.
+### NaN payloads and negative zero are normalized so equal numeric values hash
+### identically under Revare's equality rules.
+### :returns: The hash code for this value.
+routine B128.hash() -> U64
+    var bits = me.to_bits()
+    var lo = LLVM::int_truncate[U128, U64](bits)
+    var hi = LLVM::int_truncate[U128, U64](bits >>> 64)
+    if me.is_nan()
+        lo = 0
+        hi = 0x7FFF800000000000
+    if bits == LLVM::shift_left(LLVM::zero_extend[U64, U128](0x8000000000000000), 64)
+        lo = 0
+        hi = 0
+    return LLVM::bit_xor(lo, LLVM::mul(a: hi, b: 1099511628211))
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+### Parses decimal text into the correctly-rounded `B128` (round-to-nearest-even). Accepts standard
+### decimal notation and the special values `nan`, `inf`, and `infinity` (case-insensitive, with
+### optional leading sign). The value is built as an exact rational and rounded once, straight to
+### binary128 (Ingrid's reader, the same one B16/B32/B64 use).
+### :returns: The correctly-rounded `B128` value.
+### :throws: {InvalidValueError} on malformed input.
+routine Text.to[B128]() -> B128
+    var w = float_parse(text: me, format: 4)
+    if w.w0 == 3
+        throw InvalidValueError(input: me, target: "B128")
+    if w.w0 == 1
+        return B128.from_bits(bits: b128_qnan())
+    return B128.from_bits(bits: (w.w2.to[U128]() << 64) | w.w1.to[U128]())
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+# ============================================================================
+# Byte Representation
+# ============================================================================
+
+### Returns the raw bytes of this value in little-endian order.
+### :returns: The resulting `Items[Byte, 16]` value.
+routine B128.to_bytes_le() -> Items[Byte, 16]
+    var raw = LLVM::reinterpret_bits[B128, U128](me)
+    var lo = LLVM::int_truncate[U128, U64](raw)
+    var hi = LLVM::int_truncate[U128, U64](raw >>> 64)
+    var result = Items[Byte, 16]()
+    result = LLVM::set_byte_at(array: result, index: 0, value: LLVM::int_truncate[U64, U8](lo))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 8)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 2,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 16)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 3,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 24)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 4,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 32)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 5,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 40)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 6,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 48)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 7,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 56)),
+    )
+    result = LLVM::set_byte_at(array: result, index: 8, value: LLVM::int_truncate[U64, U8](hi))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 9,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 8)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 10,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 16)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 11,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 24)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 12,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 32)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 13,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 40)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 14,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 48)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 15,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 56)),
+    )
+    return result
+
+### Returns the raw bytes of this value in big-endian order.
+### :returns: The resulting `Items[Byte, 16]` value.
+routine B128.to_bytes_be() -> Items[Byte, 16]
+    var raw = LLVM::reinterpret_bits[B128, U128](me)
+    var lo = LLVM::int_truncate[U128, U64](raw >>> 64)
+    var hi = LLVM::int_truncate[U128, U64](raw)
+    lo = LLVM::byte_swap(lo)
+    hi = LLVM::byte_swap(hi)
+    var result = Items[Byte, 16]()
+    result = LLVM::set_byte_at(array: result, index: 0, value: LLVM::int_truncate[U64, U8](lo))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 1,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 8)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 2,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 16)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 3,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 24)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 4,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 32)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 5,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 40)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 6,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 48)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 7,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(lo, 56)),
+    )
+    result = LLVM::set_byte_at(array: result, index: 8, value: LLVM::int_truncate[U64, U8](hi))
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 9,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 8)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 10,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 16)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 11,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 24)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 12,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 32)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 13,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 40)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 14,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 48)),
+    )
+    result = LLVM::set_byte_at(
+        array: result,
+        index: 15,
+        value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(hi, 56)),
+    )
+    return result
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+routine B128.hash(k0: U64, k1: U64) -> U64
+    return __secure_hash_u128(v: LLVM::reinterpret_bits[B128, U128](me), k0: k0, k1: k1)

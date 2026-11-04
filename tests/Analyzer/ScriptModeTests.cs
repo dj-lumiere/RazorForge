@@ -2,12 +2,12 @@ using Builder.Diagnostics;
 using Builder.Verification.Results;
 using SyntaxTree;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Script mode (RazorForge and Suflae): a file with loose top-level STATEMENTS needs no explicit entry point —
+/// Script mode (Revare and Mielia): a file with loose top-level STATEMENTS needs no explicit entry point —
 /// the parser folds those statements (and any top-level runtime <c>var</c> declarations) into an implicit
 /// <c>routine start()</c>, in source order. These lock the AST transform: synthesis, var-sweeping, the
 /// no-op on a normal module file, and the explicit-start conflict.
@@ -22,7 +22,7 @@ public sealed class ScriptModeTests
     }
 
     [Fact]
-    public void Parse_RazorForgeScript_SynthesizesMarkedStart()
+    public void Parse_RevareScript_SynthesizesMarkedStart()
     {
         Program program = Parse(source: """
                                         import IO/Console
@@ -38,7 +38,7 @@ public sealed class ScriptModeTests
     }
 
     [Fact]
-    public void Parse_RazorForgeLooseStatementWithExplicitStart_ReportsError()
+    public void Parse_RevareLooseStatementWithExplicitStart_ReportsError()
     {
         (Program _, Builder.Parser.Parser parser) = ParseWithErrors(source: """
             show("loose")
@@ -52,7 +52,7 @@ public sealed class ScriptModeTests
     }
 
     [Fact]
-    public void Analyze_RazorForgeScriptVariableInRoutine_ExplainsScope()
+    public void Analyze_RevareScriptVariableInRoutine_ExplainsScope()
     {
         AnalysisResult result = AssertHasError(source: """
                                                       var total = 0

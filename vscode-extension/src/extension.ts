@@ -5,7 +5,7 @@ import { LanguageClient, LanguageClientOptions, ServerOptions } from "vscode-lan
 import { registerRun } from "./run";
 
 /**
- * RazorForge in VS Code: the TextMate grammar colors the text, and the language server (`RazorForge lsp`) brings the errors,
+ * Revare in VS Code: the TextMate grammar colors the text, and the language server (`Revare lsp`) brings the errors,
  * semantic colors, hover, completion, go to definition, rename and formatting. The server runs from a copy of its
  * build folder, so it never holds the files a rebuild overwrites, and a rebuild restarts it.
  */
@@ -14,11 +14,11 @@ let watcher: fs.FSWatcher | undefined;
 let restartTimer: NodeJS.Timeout | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-    registerRun(context, { id: "razorforge", name: "RazorForge" }, locateServer);
+    registerRun(context, { id: "revare", name: "Revare" }, locateServer);
     context.subscriptions.push(
-        vscode.commands.registerCommand("razorforge.restartServer", () => restart(context)),
+        vscode.commands.registerCommand("revare.restartServer", () => restart(context)),
         vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration("razorforge.serverPath")) void restart(context);
+            if (e.affectsConfiguration("revare.serverPath")) void restart(context);
         }),
     );
     await start(context);
@@ -41,8 +41,8 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
     if (!server) {
         void vscode.window.showErrorMessage(
             vscode.env.language.startsWith("ko")
-                ? "RazorForge 언어 서버를 찾지 못했습니다. 설정의 razorforge.serverPath에 지정하거나 RazorForge를 빌드하세요."
-                : "The RazorForge language server isn't built or set. Set razorforge.serverPath, or build RazorForge.");
+                ? "Revare 언어 서버를 찾지 못했습니다. 설정의 revare.serverPath에 지정하거나 Revare를 빌드하세요."
+                : "The Revare language server isn't built or set. Set revare.serverPath, or build Revare.");
         return;
     }
     watchBuild(context, path.dirname(server));
@@ -70,25 +70,25 @@ async function start(context: vscode.ExtensionContext): Promise<void> {
         },
     };
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: "file", language: "razorforge" }, { scheme: "untitled", language: "razorforge" }],
+        documentSelector: [{ scheme: "file", language: "revare" }, { scheme: "untitled", language: "revare" }],
     };
-    client = new LanguageClient("razorforge", "RazorForge", serverOptions, clientOptions);
+    client = new LanguageClient("revare", "Revare", serverOptions, clientOptions);
     await client.start();
 }
 
-/** The server the setting names, else the dev build in a workspace folder, else `RazorForge` on the PATH. */
+/** The server the setting names, else the dev build in a workspace folder, else `Revare` on the PATH. */
 function locateServer(): string | undefined {
-    const set = vscode.workspace.getConfiguration("razorforge").get<string>("serverPath")?.trim();
+    const set = vscode.workspace.getConfiguration("revare").get<string>("serverPath")?.trim();
     if (set) return fs.existsSync(set) ? set : undefined;
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
         for (const candidate of [
-            path.join(folder.uri.fsPath, "RazorForge", "bin", "Debug", "net10.0", "RazorForge.dll"),
-            path.join(folder.uri.fsPath, "bin", "Debug", "net10.0", "RazorForge.dll"),
+            path.join(folder.uri.fsPath, "Revare", "bin", "Debug", "net10.0", "Revare.dll"),
+            path.join(folder.uri.fsPath, "bin", "Debug", "net10.0", "Revare.dll"),
         ]) {
             if (fs.existsSync(candidate)) return candidate;
         }
     }
-    return onPath("RazorForge");
+    return onPath("Revare");
 }
 
 function onPath(name: string): string | undefined {
@@ -106,7 +106,7 @@ function onPath(name: string): string | undefined {
 function stage(context: vscode.ExtensionContext, server: string): string {
     const folder = path.dirname(server);
     const stamp = String(newest(folder));
-    const root = path.join(context.globalStorageUri.fsPath, "razorforge-lsp");
+    const root = path.join(context.globalStorageUri.fsPath, "revare-lsp");
     const target = path.join(root, stamp);
     if (!fs.existsSync(path.join(target, path.basename(server)))) {
         fs.mkdirSync(root, { recursive: true });

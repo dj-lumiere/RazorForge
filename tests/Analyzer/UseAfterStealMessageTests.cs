@@ -1,12 +1,12 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// RF-S615, a use of a name after <c>steal</c> moved its value out: the message names the line of the steal, where
+/// RA-S615, a use of a name after <c>steal</c> moved its value out: the message names the line of the steal, where
 /// the value went (a binding, a field, or a call), and the way out (use the new owner, or use the name before
 /// the steal).
 /// </summary>

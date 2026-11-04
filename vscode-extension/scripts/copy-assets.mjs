@@ -4,6 +4,6 @@ import { copyFileSync, mkdirSync } from "node:fs";
 
 mkdirSync("syntaxes", { recursive: true });
 mkdirSync("icons", { recursive: true });
-copyFileSync("../RazorForge.tmbundle/Syntaxes/RazorForge.tmLanguage.json", "syntaxes/RazorForge.tmLanguage.json");
+copyFileSync("../Revare.tmbundle/Syntaxes/Revare.tmLanguage.json", "syntaxes/Revare.tmLanguage.json");
 copyFileSync("../rider-plugin/bundle/language-configuration.json", "language-configuration.json");
-copyFileSync("../rider-plugin/src/main/resources/icons/razorforge.svg", "icons/razorforge.svg");
+copyFileSync("../rider-plugin/src/main/resources/icons/revare.svg", "icons/revare.svg");

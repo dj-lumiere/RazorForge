@@ -4,7 +4,7 @@ using Builder.Verification.Results;
 using SyntaxTree;
 using TypeModel.Enums;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -32,7 +32,7 @@ public class PresetAndOverloadRegressionTests
                                             var b = WORDS[1]
                                             return
                                         """);
-        AnalysisResult result = new SemanticVerifier(language: Language.RazorForge).Analyze(program: program);
+        AnalysisResult result = new SemanticVerifier(language: Language.Revare).Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
         List<PresetDeclaration> presets = GetDeclarations<PresetDeclaration>(program: program);
@@ -72,7 +72,7 @@ public class PresetAndOverloadRegressionTests
             expectedErrorSubstring: "is a 'Text' literal");
     }
 
-    /// <summary>A free <c>secret routine</c> is callable from its own module (it used to be RF-S403).</summary>
+    /// <summary>A free <c>secret routine</c> is callable from its own module (it used to be RA-S403).</summary>
     [Fact]
     public void SecretFreeRoutine_CallableFromOwnModule()
     {

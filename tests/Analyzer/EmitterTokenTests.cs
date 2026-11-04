@@ -1,14 +1,14 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
 /// An emitter kept in a local and made from a local container (<c>xs.emitter()</c>, <c>xs.where(...)</c>) is a token
-/// on the container's elements: a change of the container's shape ends it (RF-S643 at a later use), and it is returned
-/// only when made from <c>me</c> or a token parameter (RF-S644 otherwise). One built from <c>steal</c> holds the
+/// on the container's elements: a change of the container's shape ends it (RA-S643 at a later use), and it is returned
+/// only when made from <c>me</c> or a token parameter (RA-S644 otherwise). One built from <c>steal</c> holds the
 /// elements itself.
 /// </summary>
 public class EmitterTokenTests

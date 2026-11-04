@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using Builder.Serialization;
 
-namespace RazorForge.Tests.Perf;
+namespace Revare.Tests.Perf;
 
 /// <summary>
 /// Stage-1/2 unit test for the modular .pbrf per-module artifact + shell two-phase loader.

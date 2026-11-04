@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# RazorForge packaging script (Unix host -> host-RID package).
+# Revare packaging script (Unix host -> host-RID package).
 #
-# Produces: dist/razorforge-v<version>-<rid>.tar.gz (+ sha256 in checksums.txt)
+# Produces: dist/revare-v<version>-<rid>.tar.gz (+ sha256 in checksums.txt)
 # where <rid> is the host's RID: linux-x64, osx-arm64, or osx-x64.
 #
-# IMPORTANT: packages the HOST platform only. The native runtime (razorforge_runtime)
+# IMPORTANT: packages the HOST platform only. The native runtime (revare_runtime)
 # is built by the host toolchain, and `dotnet publish -r <foreign-rid>` would silently
 # bundle the host's native binaries into a foreign-platform archive. Build the Windows
 # package on Windows with scripts/package.ps1.
@@ -22,69 +22,69 @@ case "$(uname -s)" in
         exit 1
         ;;
 esac
-VERSION="${VERSION:-$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' RazorForge/RazorForge.csproj | head -1)}"
-NAME="razorforge-v${VERSION}-${RID}"
+VERSION="${VERSION:-$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Revare/Revare.csproj | head -1)}"
+NAME="revare-v${VERSION}-${RID}"
 OUT="dist/${NAME}"
 
-echo "=== RazorForge ${VERSION} -> ${NAME} ==="
+echo "=== Revare ${VERSION} -> ${NAME} ==="
 rm -rf "$OUT" "dist/${NAME}.tar.gz"
 mkdir -p dist
 
-echo "=== build the Tessera builder ==="
-# Ingrid's runtime has code written in Tessera (Ingrid/runtime-tessera): its native build finds the Tessera
-# builder at Tessera/bin/Release/net10.0/tessera.dll.
-dotnet build Tessera/Tessera.csproj -c Release --verbosity minimal
+echo "=== build the Lapila builder ==="
+# Ingrid's runtime has code written in Lapila (Ingrid/runtime-lapila): its native build finds the Lapila
+# builder at Lapila/bin/Release/net10.0/lapila.dll.
+dotnet build Lapila/Lapila.csproj -c Release --verbosity minimal
 
-echo "=== publish the Tessera builder (NativeAOT) ==="
-# Tessera ships as one native executable with its standard library, boards and Ingrid's Tessera library beside it
-# (the layout StdlibDir and FindIngrid look for from the executable's folder). Its own archive: the RazorForge
-# package carries the Tessera backend inside the builders and needs no separate tessera executable.
-TESSERA_VERSION="$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Tessera/Tessera.csproj | head -1)"
-TESSERA_NAME="tessera-v${TESSERA_VERSION}-${RID}"
-TESSERA_OUT="dist/${TESSERA_NAME}"
-rm -rf "$TESSERA_OUT" "dist/${TESSERA_NAME}.tar.gz" "dist/_tessera-publish"
-dotnet publish Tessera/Tessera.csproj -c Release -r "$RID" -o "dist/_tessera-publish" --verbosity minimal
-mkdir -p "$TESSERA_OUT"
-cp "dist/_tessera-publish/tessera" "$TESSERA_OUT/"
-cp -a Tessera/Standard "$TESSERA_OUT/Standard"
-cp -a Tessera/boards "$TESSERA_OUT/boards"
-cp -a Ingrid/tessera "$TESSERA_OUT/Ingrid"
-cp Tessera/LICENSE Tessera/README.md "$TESSERA_OUT/"
-rm -rf "dist/_tessera-publish"
+echo "=== publish the Lapila builder (NativeAOT) ==="
+# Lapila ships as one native executable with its standard library, boards and Ingrid's Lapila library beside it
+# (the layout StdlibDir and FindIngrid look for from the executable's folder). Its own archive: the Revare
+# package carries the Lapila backend inside the builders and needs no separate lapila executable.
+LAPILA_VERSION="$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Lapila/Lapila.csproj | head -1)"
+LAPILA_NAME="lapila-v${LAPILA_VERSION}-${RID}"
+LAPILA_OUT="dist/${LAPILA_NAME}"
+rm -rf "$LAPILA_OUT" "dist/${LAPILA_NAME}.tar.gz" "dist/_lapila-publish"
+dotnet publish Lapila/Lapila.csproj -c Release -r "$RID" -o "dist/_lapila-publish" --verbosity minimal
+mkdir -p "$LAPILA_OUT"
+cp "dist/_lapila-publish/lapila" "$LAPILA_OUT/"
+cp -a Lapila/Standard "$LAPILA_OUT/Standard"
+cp -a Lapila/boards "$LAPILA_OUT/boards"
+cp -a Ingrid/lapila "$LAPILA_OUT/Ingrid"
+cp Lapila/LICENSE Lapila/README.md "$LAPILA_OUT/"
+rm -rf "dist/_lapila-publish"
 # The packaged executable builds and runs a program from a folder away from every checkout.
-TESSERA_SMOKE=$(mktemp -d)
-cat > "$TESSERA_SMOKE/smoke.te" <<'EOF'
+LAPILA_SMOKE=$(mktemp -d)
+cat > "$LAPILA_SMOKE/smoke.li" <<'EOF'
 import Hosted
 
 routine start() -> None
-    Console.show("packaged tessera works")
+    Console.show("packaged lapila works")
     return
 EOF
-TESSERA_STAGE=$(mktemp -d)
-cp -a "$TESSERA_OUT/." "$TESSERA_STAGE/"
-if ! (cd "$TESSERA_SMOKE" && "$TESSERA_STAGE/tessera" run smoke.te 2>&1 | grep -q "packaged tessera works"); then
-    echo "packaged tessera smoke failed" >&2
+LAPILA_STAGE=$(mktemp -d)
+cp -a "$LAPILA_OUT/." "$LAPILA_STAGE/"
+if ! (cd "$LAPILA_SMOKE" && "$LAPILA_STAGE/lapila" run smoke.li 2>&1 | grep -q "packaged lapila works"); then
+    echo "packaged lapila smoke failed" >&2
     exit 1
 fi
-rm -rf "$TESSERA_SMOKE" "$TESSERA_STAGE"
-tar -C dist -czf "dist/${TESSERA_NAME}.tar.gz" "$TESSERA_NAME"
+rm -rf "$LAPILA_SMOKE" "$LAPILA_STAGE"
+tar -C dist -czf "dist/${LAPILA_NAME}.tar.gz" "$LAPILA_NAME"
 if command -v sha256sum >/dev/null 2>&1; then
-    (cd dist && sha256sum "${TESSERA_NAME}.tar.gz" >> checksums.txt)
+    (cd dist && sha256sum "${LAPILA_NAME}.tar.gz" >> checksums.txt)
 else
-    (cd dist && shasum -a 256 "${TESSERA_NAME}.tar.gz" >> checksums.txt)
+    (cd dist && shasum -a 256 "${LAPILA_NAME}.tar.gz" >> checksums.txt)
 fi
-echo "Packaged: dist/${TESSERA_NAME}.tar.gz"
+echo "Packaged: dist/${LAPILA_NAME}.tar.gz"
 
 echo "=== build Ingrid's native runtime ==="
 (cd Ingrid/native && bash build.sh)
 
-echo "=== dotnet publish razorforge + suflae (NativeAOT, one directory) ==="
+echo "=== dotnet publish revare + mielia (NativeAOT, one directory) ==="
 # Both command lines share Anvila and the runtime, so they publish into the same directory. NativeAOT: each command line is
 # one native executable, so a one-shot build does not spend its first second starting the .NET runtime and compiling the
 # builder. The native runtime, the standard libraries and the LLVM tools are copied below, publish does not carry them.
-dotnet publish RazorForge/RazorForge.csproj -c Release -r "$RID" -p:PublishAot=true \
+dotnet publish Revare/Revare.csproj -c Release -r "$RID" -p:PublishAot=true \
     -o "$OUT" --verbosity minimal
-dotnet publish Suflae/Suflae.csproj -c Release -r "$RID" -p:PublishAot=true \
+dotnet publish Mielia/Mielia.csproj -c Release -r "$RID" -p:PublishAot=true \
     -o "$OUT" --verbosity minimal
 # The prebuilt standard library snapshot is made and read by managed builders only (PbrfSerializer.IsSupported).
 rm -rf "$OUT/Standard/.prebuilt"
@@ -98,27 +98,27 @@ for sub in Ingrid/native/build/bin Ingrid/native/build/lib; do
     fi
 done
 
-echo "=== Ingrid's Tessera library (installed layout) ==="
-# Every build links ingrid_tessera.bc (made from ingrid_tessera.ll) from next to the executable. An installed layout
-# has no Tessera sources to compile it from, so the package ships both: the packaged builder compiles them here,
-# finding Ingrid/tessera up the tree.
-"$OUT/RazorForge" emit-ingrid
-test -f "$OUT/ingrid_tessera.ll"
-test -f "$OUT/ingrid_tessera.bc"
+echo "=== Ingrid's Lapila library (installed layout) ==="
+# Every build links ingrid_lapila.bc (made from ingrid_lapila.ll) from next to the executable. An installed layout
+# has no Lapila sources to compile it from, so the package ships both: the packaged builder compiles them here,
+# finding Ingrid/lapila up the tree.
+"$OUT/Revare" emit-ingrid
+test -f "$OUT/ingrid_lapila.ll"
+test -f "$OUT/ingrid_lapila.bc"
 
 echo "=== prune dev-only artifacts ==="
-rm -rf "$OUT/RazorForge-Wiki" "$OUT/Suflae-Wiki"
+rm -rf "$OUT/Revare-Wiki" "$OUT/Mielia-Wiki"
 find "$OUT" -name '*.pdb' -delete
-cp RazorForge/LICENSE RazorForge/README.md RazorForge/THIRD-PARTY-NOTICES.md "$OUT/"
+cp Revare/LICENSE Revare/README.md Revare/THIRD-PARTY-NOTICES.md "$OUT/"
 
 # Short alias next to the canonical binary. (Users preferring `forge` can alias it
 # themselves — the name is deliberately not shipped to avoid colliding with
 # Foundry's `forge`.)
-ln -sf RazorForge "$OUT/rf"
+ln -sf Revare "$OUT/ra"
 
-# Suflae has its own command line; `suflae` and `sf` point at it.
-ln -sf Suflae "$OUT/suflae"
-ln -sf Suflae "$OUT/sf"
+# Mielia has its own command line; `mielia` and `mi` point at it.
+ln -sf Mielia "$OUT/mielia"
+ln -sf Mielia "$OUT/mi"
 
 echo "=== bundle self-contained LLVM toolchain ==="
 # The builder resolves <package>/toolchain/bin before PATH (ResolveToolchainTool),
@@ -209,20 +209,20 @@ if [[ -n "$LLVM_ASSET" ]]; then
 fi
 
 echo "=== add install script + quickstart + AI reference ==="
-cp RazorForge/scripts/package-assets/install.sh RazorForge/scripts/package-assets/QUICKSTART.md RazorForge/RAZORFORGE-FOR-AI.md "$OUT/"
+cp Revare/scripts/package-assets/install.sh Revare/scripts/package-assets/QUICKSTART.md Revare/REVARE-FOR-AI.md "$OUT/"
 chmod +x "$OUT/install.sh"
 
 echo "=== smoke test: self-contained buildandrun (system toolchain hidden) ==="
-"$OUT/RazorForge" version
-RF_ABS="$(cd "$OUT" && pwd)/RazorForge"
+"$OUT/Revare" version
+RA_ABS="$(cd "$OUT" && pwd)/Revare"
 SMOKE_DIR=$(mktemp -d)
-cat > "$SMOKE_DIR/smoke.rf" <<'EOF'
+cat > "$SMOKE_DIR/smoke.rr" <<'EOF'
 module PackageSmoke
 
 import IO/Console
 
 routine start()
-    show("packaged razorforge works")
+    show("packaged revare works")
     return
 EOF
 # Stage a copy of the package OUTSIDE the repo (buildandrun's dev-checkout
@@ -232,15 +232,15 @@ EOF
 # prerequisites (libc dev files / CLT) come from the system.
 STAGE_DIR=$(mktemp -d)
 cp -a "$OUT/." "$STAGE_DIR/"
-RF_ABS="$STAGE_DIR/RazorForge"
-SMOKE_OUT=$( cd "$SMOKE_DIR" && PATH="/usr/bin:/bin" "$RF_ABS" buildandrun smoke.rf 2>&1 ) || {
+RA_ABS="$STAGE_DIR/Revare"
+SMOKE_OUT=$( cd "$SMOKE_DIR" && PATH="/usr/bin:/bin" "$RA_ABS" buildandrun smoke.rr 2>&1 ) || {
     echo "$SMOKE_OUT"
     echo "self-contained buildandrun smoke failed"
     rm -rf "$STAGE_DIR"
     exit 1
 }
 rm -rf "$STAGE_DIR"
-if ! grep -q "packaged razorforge works" <<< "$SMOKE_OUT"; then
+if ! grep -q "packaged revare works" <<< "$SMOKE_OUT"; then
     echo "$SMOKE_OUT"
     echo "self-contained buildandrun smoke failed (wrong output)"
     exit 1

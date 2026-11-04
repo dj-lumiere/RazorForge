@@ -5,7 +5,7 @@ using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Types;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -77,7 +77,7 @@ public class CollectionLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptySetNoTypeAnnotation);
     }
     /// <summary>
-    /// `{}` is the empty set: where a dict is expected it is RF-S558, which names `{:}`, and no type mismatch follows.
+    /// `{}` is the empty set: where a dict is expected it is RA-S558, which names `{:}`, and no type mismatch follows.
     /// </summary>
     [Fact]
     public void EmptySetLiteral_WhereDictExpected_PointsToEmptyDictLiteral()
@@ -339,7 +339,7 @@ public class CollectionLiteralTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        var analyzer = new SemanticVerifier(language: Language.Revare) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -374,7 +374,7 @@ public class CollectionLiteralTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        var analyzer = new SemanticVerifier(language: Language.Revare) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -401,7 +401,7 @@ public class CollectionLiteralTests
     /// to T so the local owns the heap allocation. Without the wrap, the var holds a
     /// bare entity pointer, scope-exit cleanup invalidates it, and any caller that stored
     /// the pointer (e.g. an entity field via constructor argument) reads dangling memory.
-    /// Originally hit in playground/SegTreeLazy.rf as a heap-layout-flaky IOOB/AV.
+    /// Originally hit in playground/SegTreeLazy.rr as a heap-layout-flaky IOOB/AV.
     /// </summary>
     [Fact]
     public void CreatorExpression_BareEntity_InfersOwnedWrap()
@@ -413,7 +413,7 @@ public class CollectionLiteralTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        var analyzer = new SemanticVerifier(language: Language.Revare) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);

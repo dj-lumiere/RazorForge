@@ -1,7 +1,7 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -14,7 +14,7 @@ using static TestHelpers;
 /// </summary>
 public class DiscardTests
 {
-    #region RazorForge - Discard With Call
+    #region Revare - Discard With Call
 
     /// <summary>
     /// Verifies semantic analysis behavior for drop call without unexpected warnings.
@@ -190,7 +190,7 @@ public class DiscardTests
 
     #endregion
 
-    #region RazorForge - Discard In Failable Context
+    #region Revare - Discard In Failable Context
 
     /// <summary>
     /// Verifies that drop on a failable call inside a routine produces no error.
@@ -260,7 +260,7 @@ public class DiscardTests
 
     #endregion
 
-    #region RazorForge - Discard Chained And Constructed Calls
+    #region Revare - Discard Chained And Constructed Calls
 
     /// <summary>
     /// Verifies that the parser accepts drop on a chained memberRoutine call.
@@ -356,9 +356,9 @@ public class DiscardTests
 
     #endregion
 
-    #region RazorForge - Discard Non-Call Targets (semantic error)
+    #region Revare - Discard Non-Call Targets (semantic error)
 
-    // Whether the discarded expression is a routine call is a SEMANTIC check (RF-S421
+    // Whether the discarded expression is a routine call is a SEMANTIC check (RA-S421
     // InvalidDropTarget), not a grammatical one — the parser records whatever expression
     // follows `drop`, and the semantic verifier rejects non-call targets.
 

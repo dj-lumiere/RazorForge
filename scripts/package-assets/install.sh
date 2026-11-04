@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# RazorForge installer (Linux / macOS)
+# Revare installer (Linux / macOS)
 #
-# Symlinks `razorforge`, `rf`, `suflae`, and `sf` into ~/.local/bin so they work from any
+# Symlinks `revare`, `ra`, `mielia`, and `mi` into ~/.local/bin so they work from any
 # terminal. Everything runs from this folder — no root, no other downloads.
 #
 # Usage:  ./install.sh
@@ -40,15 +40,15 @@ if [ "$(uname -s)" = "Darwin" ]; then
 fi
 
 mkdir -p "$BIN"
-ln -sf "$DIR/RazorForge" "$BIN/razorforge"
-ln -sf "$DIR/RazorForge" "$BIN/rf"
-ln -sf "$DIR/Suflae" "$BIN/suflae"
-ln -sf "$DIR/Suflae" "$BIN/sf"
-echo "Linked razorforge, rf, suflae, and sf into $BIN"
+ln -sf "$DIR/Revare" "$BIN/revare"
+ln -sf "$DIR/Revare" "$BIN/ra"
+ln -sf "$DIR/Mielia" "$BIN/mielia"
+ln -sf "$DIR/Mielia" "$BIN/mi"
+echo "Linked revare, ra, mielia, and mi into $BIN"
 
 case ":$PATH:" in
   *":$BIN:"*)
-    echo "Ready — try: razorforge version"
+    echo "Ready — try: revare version"
     ;;
   *)
     echo "NOTE: $BIN is not on your PATH yet. Add it, e.g.:"

@@ -11,7 +11,7 @@ using TypeModel.Reprs;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -33,7 +33,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -55,7 +55,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -79,7 +79,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -104,7 +104,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -130,7 +130,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -153,7 +153,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -189,7 +189,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -227,7 +227,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -269,7 +269,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -288,8 +288,8 @@ public class CompilerPipelineLoweringTests
     [Fact]
     public void Analyze_LambdaExpression_IsLiftedBeforeCodegen()
     {
-        // A lambda parameter needs an annotation or a typed target: RazorForge does not
-        // back-infer a lambda parameter's type from its body (RF-S638). Annotate `x`.
+        // A lambda parameter needs an annotation or a typed target: Revare does not
+        // back-infer a lambda parameter's type from its body (RA-S638). Annotate `x`.
         string source = """
                         routine test() -> S32
                             var double_it = (x: S32) => x * 2
@@ -297,7 +297,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -317,7 +317,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -349,7 +349,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -384,7 +384,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -442,7 +442,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -480,7 +480,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -516,9 +516,9 @@ public class CompilerPipelineLoweringTests
     [Fact]
     public void LlvmEmitter_LambdaLift_GeneratesIr()
     {
-        // RazorForge has no module-level mutable state (RF-S435), so the captured binding is a
+        // Revare has no module-level mutable state (RA-S435), so the captured binding is a
         // routine local — the lambda lift still fires on the closure over `factor`. The lambda
-        // parameter `x` needs a type annotation (RF-S638: no body back-inference); a single typed
+        // parameter `x` needs a type annotation (RA-S638: no body back-inference); a single typed
         // param with a `given` capture must be parenthesized.
         string source = """
                         routine test() -> S32
@@ -528,7 +528,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -574,7 +574,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -623,7 +623,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -656,7 +656,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -699,7 +699,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -737,7 +737,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -779,7 +779,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -827,7 +827,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -866,7 +866,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -943,7 +943,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -974,7 +974,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1020,7 +1020,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1053,7 +1053,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1096,7 +1096,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1131,7 +1131,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1192,7 +1192,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1243,7 +1243,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1273,7 +1273,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1309,7 +1309,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1343,7 +1343,7 @@ public class CompilerPipelineLoweringTests
         // SA-only: keep the body un-lowered so `dict[key]` stays an IndexExpression whose value
         // type SA resolves from the concrete Dict[S64, S64] parameter (lowering would otherwise
         // hoist it into a temp-var decl, hiding the resolved type behind an identifier).
-        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        var analyzer = new SemanticVerifier(language: Language.Revare) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1377,7 +1377,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1426,7 +1426,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1472,7 +1472,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1512,7 +1512,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -1549,7 +1549,7 @@ public class CompilerPipelineLoweringTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);

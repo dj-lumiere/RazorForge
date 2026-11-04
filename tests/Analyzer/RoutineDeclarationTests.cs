@@ -1,7 +1,7 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -106,7 +106,7 @@ public class RoutineDeclarationTests
 
     /// <summary>
     /// A routine written without <c>-&gt; T</c> gives nothing back, so a <c>return</c> with a value in it is
-    /// RF-S301 naming the routine and the value's type. The value never sets the result type.
+    /// RA-S301 naming the routine and the value's type. The value never sets the result type.
     /// </summary>
     [Fact]
     public void Analyze_ValueReturnWithoutArrow_ReportsError()
@@ -127,7 +127,7 @@ public class RoutineDeclarationTests
     }
 
     /// <summary>
-    /// A routine declared <c>-&gt; None</c> that returns a value is RF-S301 too.
+    /// A routine declared <c>-&gt; None</c> that returns a value is RA-S301 too.
     /// </summary>
     [Fact]
     public void Analyze_ValueReturnFromExplicitNone_ReportsError()
@@ -144,7 +144,7 @@ public class RoutineDeclarationTests
     }
 
     /// <summary>
-    /// A bare <c>return</c> in a routine declared <c>-&gt; Bool</c> leaves the caller without a value: RF-S301.
+    /// A bare <c>return</c> in a routine declared <c>-&gt; Bool</c> leaves the caller without a value: RA-S301.
     /// </summary>
     [Fact]
     public void Analyze_BareReturnInValueRoutine_ReportsError()
@@ -203,7 +203,7 @@ public class RoutineDeclarationTests
 
     /// <summary>
     /// A lambda's body is one expression and its value is the result, so a lambda holds no <c>return</c>
-    /// (a parse error), and a lambda whose value does not fit the <c>Callable</c> it goes to is RF-S502.
+    /// (a parse error), and a lambda whose value does not fit the <c>Callable</c> it goes to is RA-S502.
     /// </summary>
     [Fact]
     public void Analyze_LambdaValueIntoNoneCallable_ReportsError()

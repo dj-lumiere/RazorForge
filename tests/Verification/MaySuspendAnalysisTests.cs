@@ -1,7 +1,7 @@
 using TypeModel.Symbols;
 using Builder.Verification;
 
-namespace RazorForge.Tests.Verification;
+namespace Revare.Tests.Verification;
 
 /// <summary>
 /// Unit tests for the v0.2.0 may-suspend effect analysis (the Phase 4 instrumentation gate).

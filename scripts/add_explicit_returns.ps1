@@ -1,4 +1,4 @@
-# PowerShell script to add explicit return statements to RazorForge .rf files
+# PowerShell script to add explicit return statements to Revare .rr files
 # This fixes the implicit return issue by making all returns explicit
 
 param(
@@ -208,7 +208,7 @@ function Process-Directory
     }
 
     Write-Host "`n========================================" -ForegroundColor Magenta
-    Write-Host "  RazorForge Explicit Return Fixer" -ForegroundColor Magenta
+    Write-Host "  Revare Explicit Return Fixer" -ForegroundColor Magenta
     Write-Host "========================================`n" -ForegroundColor Magenta
 
     if ($DryRun)
@@ -216,12 +216,12 @@ function Process-Directory
         Write-Host "DRY RUN MODE - No files will be modified`n" -ForegroundColor Yellow
     }
 
-    # Find all .rf files recursively
-    $rfFiles = Get-ChildItem -Path $DirPath -Filter "*.rf" -Recurse -File
+    # Find all .rr files recursively
+    $raFiles = Get-ChildItem -Path $DirPath -Filter "*.rr" -Recurse -File
 
-    Write-Host "Found $( $rfFiles.Count ) .rf files to process`n" -ForegroundColor Cyan
+    Write-Host "Found $( $raFiles.Count ) .rr files to process`n" -ForegroundColor Cyan
 
-    foreach ($file in $rfFiles)
+    foreach ($file in $raFiles)
     {
         Process-File -FilePath $file.FullName
     }

@@ -1,10 +1,10 @@
 using System.Text.Json;
 
-namespace RazorForge.Tests.Execution;
+namespace Revare.Tests.Execution;
 
 /// <summary>
 /// End-to-end coverage for the LSP server (<c>src/Execution/LspServer.cs</c>): every request handler
-/// is driven in-process over real, analyzed RazorForge/Suflae documents via <see cref="LspTestHarness"/>.
+/// is driven in-process over real, analyzed Revare/Mielia documents via <see cref="LspTestHarness"/>.
 /// Positions are computed from the source text so the tests stay robust to edits.
 ///
 /// All tests live in one class so they share xUnit's per-class sequential execution — the server keeps
@@ -13,9 +13,9 @@ namespace RazorForge.Tests.Execution;
 /// </summary>
 public sealed class LspServerTests
 {
-    private const string Uri = "file:///test/Sample.rf";
+    private const string Uri = "file:///test/Sample.rr";
 
-    // A symbol-rich RazorForge document: free routines, a record with a member routine, a generic
+    // A symbol-rich Revare document: free routines, a record with a member routine, a generic
     // container use, variables, calls, an f-string, and control flow — enough surface to exercise
     // hover / definition / references / completion / signature-help / symbols / semantic tokens.
     private const string Source =
@@ -78,28 +78,28 @@ public sealed class LspServerTests
     }
 
     [Fact]
-    public void Initialize_NamesTheRazorForgeServer()
+    public void Initialize_NamesTheRevareServer()
     {
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(Initialize(id: 1), Shutdown, Exit);
 
-        Assert.Equal(expected: "razorforge-lsp", actual: ServerName(reply: LspTestHarness.ReplyWithId(replies: replies, id: 1)));
+        Assert.Equal(expected: "revare-lsp", actual: ServerName(reply: LspTestHarness.ReplyWithId(replies: replies, id: 1)));
     }
 
     [Fact]
-    public void SuflaeDocument_IsLeftToTheSuflaeServer()
+    public void MieliaDocument_IsLeftToTheMieliaServer()
     {
-        const string sfUri = "file:///test/Other.sf";
+        const string miUri = "file:///test/Other.mi";
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
-            LspTestHarness.DidOpen(uri: sfUri, text: "routine start()\n    var x = undefined_name\n    return\n",
-                languageId: "suflae"),
+            LspTestHarness.DidOpen(uri: miUri, text: "routine start()\n    var x = undefined_name\n    return\n",
+                languageId: "mielia"),
             Exit);
 
-        // A .sf file is the Suflae server's: this one publishes nothing for it.
-        Assert.Null(@object: LspTestHarness.Diagnostics(replies: replies, uri: sfUri));
+        // A .mi file is the Mielia server's: this one publishes nothing for it.
+        Assert.Null(@object: LspTestHarness.Diagnostics(replies: replies, uri: miUri));
     }
 
     [Fact]
-    public void Completion_OffersRazorForgeKeywords()
+    public void Completion_OffersRevareKeywords()
     {
         (int line, int character) = Pos(needle: "add(a:");
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
@@ -108,7 +108,7 @@ public sealed class LspServerTests
                 character: character + 1),
             Exit);
 
-        // `steal` is a RazorForge keyword (Suflae has no ownership transfer).
+        // `steal` is a Revare keyword (Mielia has no ownership transfer).
         Assert.Contains(expected: "steal", collection: CompletionLabels(reply: LspTestHarness.ReplyWithId(replies: replies, id: 40)));
     }
 
@@ -165,9 +165,9 @@ public sealed class LspServerTests
             "    return\n";
 
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
-            LspTestHarness.DidOpen(uri: "file:///bad.rf", text: bad), Exit);
+            LspTestHarness.DidOpen(uri: "file:///bad.rr", text: bad), Exit);
 
-        JsonElement? diag = LspTestHarness.Diagnostics(replies: replies, uri: "file:///bad.rf");
+        JsonElement? diag = LspTestHarness.Diagnostics(replies: replies, uri: "file:///bad.rr");
         Assert.NotNull(@object: diag);
         JsonElement arr = diag!.Value.GetProperty(propertyName: "diagnostics");
         Assert.True(condition: arr.GetArrayLength() > 0, userMessage: "expected at least one diagnostic");
@@ -249,7 +249,7 @@ public sealed class LspServerTests
             "    return\n";
         // The document is a real file: analysis reads the file's folder to find its module.
         string dir = Directory.CreateTempSubdirectory(prefix: "lsp_hover_").FullName;
-        string path = Path.Combine(path1: dir, path2: "main.rf");
+        string path = Path.Combine(path1: dir, path2: "main.rr");
         File.WriteAllText(path: path, contents: source);
         string uri = new System.Uri(uriString: path).AbsoluteUri;
         (int line, int character) = LspTestHarness.PositionOf(text: source, needle: "Pair", occurrence: 2);
@@ -265,8 +265,8 @@ public sealed class LspServerTests
     }
 
     [Theory]
-    [InlineData("main.rf", "routine start()\n    var d = Duration.zero()\n    return\n", "Duration", "span of time")]
-    [InlineData("main.rf", "routine start()\n    var m = Moment.epoch()\n    return\n", "Moment", "absolute point in time")]
+    [InlineData("main.rr", "routine start()\n    var d = Duration.zero()\n    return\n", "Duration", "span of time")]
+    [InlineData("main.rr", "routine start()\n    var m = Moment.epoch()\n    return\n", "Moment", "absolute point in time")]
     public void Hover_OverStdlibType_ShowsItsDocComment(string file, string source, string needle, string doc)
     {
         string dir = Directory.CreateTempSubdirectory(prefix: "lsp_hover_").FullName;
@@ -529,8 +529,8 @@ public sealed class LspServerTests
         string folder = Path.Combine(path1: Path.GetTempPath(), path2: "lsp-names-" + Guid.NewGuid().ToString(format: "N"));
         Directory.CreateDirectory(path: folder);
         File.WriteAllText(path: Path.Combine(path1: folder, path2: "config.toml"),
-            contents: "[package]\nrazorforge-version = \"0.5.0\"\nname = \"names\"\n\n[target]\nexecutable = \"names.rf\"\nmode = \"debug\"\n");
-        string file = Path.Combine(path1: folder, path2: "names.rf");
+            contents: "[package]\nrevare-version = \"0.5.0\"\nname = \"names\"\n\n[target]\nexecutable = \"names.rr\"\nmode = \"debug\"\n");
+        string file = Path.Combine(path1: folder, path2: "names.rr");
         File.WriteAllText(path: file, contents: text);
         return (new System.Uri(uriString: file).AbsoluteUri, folder);
     }
@@ -685,7 +685,7 @@ public sealed class LspServerTests
     {
         // hover before any didOpen — the handler must handle the missing DocState gracefully.
         IReadOnlyList<JsonDocument> replies = LspTestHarness.Run(
-            LspTestHarness.Positional(id: 19, method: "textDocument/hover", uri: "file:///never-opened.rf",
+            LspTestHarness.Positional(id: 19, method: "textDocument/hover", uri: "file:///never-opened.rr",
                 line: 0, character: 0),
             Exit);
 

@@ -3,7 +3,7 @@ using System.Text.Json;
 using Builder;
 using Builder.Execution;
 
-namespace RazorForge.Tests.Execution;
+namespace Revare.Tests.Execution;
 
 /// <summary>
 /// In-process driver for <see cref="LspServer.Run(System.IO.Stream, System.IO.Stream)"/>. Builds a
@@ -39,7 +39,7 @@ internal static class LspTestHarness
         using var output = new MemoryStream();
 
         LspServer.Run(stdin: input, stdout: output,
-            profile: global::Builder.Frontends.Languages.For(language: global::TypeModel.Enums.Language.RazorForge).LanguageServer);
+            profile: global::Builder.Frontends.Languages.For(language: global::TypeModel.Enums.Language.Revare).LanguageServer);
 
         return ParseFrames(bytes: output.ToArray());
     }
@@ -139,7 +139,7 @@ internal static class LspTestHarness
     }
 
     /// <summary>JSON for a <c>textDocument/didOpen</c> notification.</summary>
-    public static string DidOpen(string uri, string text, string languageId = "razorforge")
+    public static string DidOpen(string uri, string text, string languageId = "revare")
     {
         return JsonSerializer.Serialize(value: new
         {

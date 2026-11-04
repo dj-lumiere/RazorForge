@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using Builder;
 using Builder.Execution;
 
-namespace RazorForge.Tests.Execution;
+namespace Revare.Tests.Execution;
 
 /// <summary>
 /// Drives the builder CLI (<c>src/Execution/Program.cs</c>) in-process via <see cref="Program.Main"/> for
@@ -25,7 +25,7 @@ public sealed class ProgramCliTests : IDisposable
         _dir = Path.Combine(path1: Path.GetTempPath(),
             path2: "rf-cli-tests-" + Guid.NewGuid().ToString(format: "N"));
         Directory.CreateDirectory(path: _dir);
-        _rf = Path.Combine(path1: _dir, path2: "sample.rf");
+        _rf = Path.Combine(path1: _dir, path2: "sample.rr");
         File.WriteAllText(path: _rf,
             contents:
             "module Test/Cli\n" +
@@ -59,7 +59,7 @@ public sealed class ProgramCliTests : IDisposable
         try
         {
             Console.SetOut(newOut: sw);
-            int code = Program.Run(args: args, cliLanguage: global::TypeModel.Enums.Language.RazorForge);
+            int code = Program.Run(args: args, cliLanguage: global::TypeModel.Enums.Language.Revare);
             return (code, sw.ToString());
         }
         finally
@@ -136,7 +136,7 @@ public sealed class ProgramCliTests : IDisposable
     /// <summary>
     /// An <c>Int</c> literal outside the <c>S64</c> range is a <c>Guarded[List[U64], ReadOnly]</c> the builder lays down
     /// as module data: the manager and the list are written field by field, and each field must get what the
-    /// declarations in <c>System/Memory/GuardManager.rf</c> and <c>System/List.rf</c> say it holds. The emitted IR names
+    /// declarations in <c>System/Memory/GuardManager.rr</c> and <c>System/List.rr</c> say it holds. The emitted IR names
     /// each struct's member variables in order, so this reads the order from there and checks every value: the share
     /// count starts at 1, the weak count and the policy state at 0, the manager's <c>data</c> is the list, and the
     /// list's <c>data</c>, <c>count</c> and <c>capacity</c> are the limbs and their number. A use shares it once more.
@@ -145,7 +145,7 @@ public sealed class ProgramCliTests : IDisposable
     [Fact]
     public void LlvmEmitter_BigIntLiteral_LaysTheListOutAsGuardManagerAndListDeclareIt()
     {
-        string rf = Path.Combine(path1: _dir, path2: "big.rf");
+        string rf = Path.Combine(path1: _dir, path2: "big.rr");
         File.WriteAllText(path: rf,
             contents:
             "module Test/BigLiteral\n" +
@@ -208,9 +208,9 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
-    public void ValidateStdlib_RazorForge_ReturnsZero()
+    public void ValidateStdlib_Revare_ReturnsZero()
     {
-        (int code, _) = RunMain("validate-stdlib", "rf");
+        (int code, _) = RunMain("validate-stdlib", "ra");
         Assert.Equal(expected: 0, actual: code);
     }
 
@@ -231,7 +231,7 @@ public sealed class ProgramCliTests : IDisposable
     [Fact]
     public void Check_SourceWithError_ReturnsNonZero()
     {
-        string bad = Path.Combine(path1: _dir, path2: "bad.rf");
+        string bad = Path.Combine(path1: _dir, path2: "bad.rr");
         File.WriteAllText(path: bad,
             contents:
             "module Test/Bad\n" +
@@ -267,7 +267,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "indent", oldManifest: false, files:
         [
-            ("old.rf",
+            ("old.rr",
                 "module Test/Indent\n" +
                 "routine start()\n" +
                 "  var t = \"first\n" +
@@ -277,7 +277,7 @@ public sealed class ProgramCliTests : IDisposable
                 "    var x = (1,\n" +
                 "       2)\n" +
                 "  return\n"),
-            ("new.rf", "module Test/Indented\nroutine start()\n    return\n")
+            ("new.rr", "module Test/Indented\nroutine start()\n    return\n")
         ]);
 
         (int code, string output) = RunMain("migrate", "--step", "indent", dir);
@@ -293,9 +293,9 @@ public sealed class ProgramCliTests : IDisposable
                       "        var x = (1,\n" +
                       "              2)\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
         Assert.Equal(expected: "module Test/Indented\nroutine start()\n    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr")));
     }
 
     [Fact]
@@ -303,8 +303,8 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "for", oldManifest: false, files:
         [
-            ("old.rf",
-                "module Test/ForRf\n" +
+            ("old.rr",
+                "module Test/ForRa\n" +
                 "routine start()\n" +
                 "    each x in xs  # each x in xs\n" +
                 "        show(\"each {x}\")\n" +
@@ -313,8 +313,8 @@ public sealed class ProgramCliTests : IDisposable
                 "    each i in 0 til 10 by 2\n" +
                 "        nothing\n" +
                 "    return\n"),
-            ("old.sf",
-                "module Test/ForSf\n" +
+            ("old.mi",
+                "module Test/ForMi\n" +
                 "routine start()\n" +
                 "    each k: U64 in 0 til n\n" +
                 "        show(k)\n")
@@ -324,7 +324,7 @@ public sealed class ProgramCliTests : IDisposable
         Assert.Equal(expected: 0, actual: code);
         Assert.Contains(expectedSubstring: "2 file(s) changed", actualString: output);
         Assert.Equal(
-            expected: "module Test/ForRf\n" +
+            expected: "module Test/ForRa\n" +
                       "routine start()\n" +
                       "    for x in xs  # each x in xs\n" +
                       "        show(\"each {x}\")\n" +
@@ -333,10 +333,10 @@ public sealed class ProgramCliTests : IDisposable
                       "    for i in 0 til 10 by 2\n" +
                       "        nothing\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
         Assert.Equal(
-            expected: "module Test/ForSf\nroutine start()\n    for k: U64 in 0 til n\n        show(k)\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.sf")));
+            expected: "module Test/ForMi\nroutine start()\n    for k: U64 in 0 til n\n        show(k)\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.mi")));
     }
 
     [Fact]
@@ -344,8 +344,8 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "work", oldManifest: false, files:
         [
-            ("old.rf",
-                "module Test/WorkRf\n" +
+            ("old.rr",
+                "module Test/WorkRa\n" +
                 "routine start()\n" +
                 "    var job: Agent[S64] = f.to[Agent](x: 1)\n" +
                 "    job.start_here()\n" +
@@ -358,14 +358,14 @@ public sealed class ProgramCliTests : IDisposable
         Assert.Equal(expected: 0, actual: code);
         Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
         Assert.Equal(
-            expected: "module Test/WorkRf\n" +
+            expected: "module Test/WorkRa\n" +
                       "routine start()\n" +
                       "    var job: Work[S64] = f.to[Work](x: 1)\n" +
                       "    job.start_here()\n" +
                       "    show(\"Agent\")  # Agent\n" +
                       "    var e: WorkStartError = WorkStartError(reason: \"\")\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
     }
 
     [Fact]
@@ -373,8 +373,8 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "random", oldManifest: false, files:
         [
-            ("old.rf",
-                "module Test/RandomRf\n" +
+            ("old.rr",
+                "module Test/RandomRa\n" +
                 "routine start()\n" +
                 "    var a = rng.next_u64()\n" +
                 "    var b = rng.next_u32() + 1  # rng.next_u32()\n" +
@@ -388,7 +388,7 @@ public sealed class ProgramCliTests : IDisposable
         Assert.Equal(expected: 0, actual: code);
         Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
         Assert.Equal(
-            expected: "module Test/RandomRf\n" +
+            expected: "module Test/RandomRa\n" +
                       "routine start()\n" +
                       "    var a = rng.next[U64]()\n" +
                       "    var b = rng.next[U32]() + 1  # rng.next_u32()\n" +
@@ -396,7 +396,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    show(\"rng.next_u64()\")\n" +
                       "    var e = Entropy.next[U64]()\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
     }
 
     [Fact]
@@ -435,8 +435,8 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "pierce", oldManifest: false, files:
         [
-            ("old.rf",
-                "module Test/PierceRf\n" +
+            ("old.rr",
+                "module Test/PierceRa\n" +
                 "routine start()\n" +
                 "    var pierce = 1\n" +
                 "    pierce = pierce + 1\n" +
@@ -449,14 +449,14 @@ public sealed class ProgramCliTests : IDisposable
         Assert.Equal(expected: 0, actual: code);
         Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
         Assert.Equal(
-            expected: "module Test/PierceRf\n" +
+            expected: "module Test/PierceRa\n" +
                       "routine start()\n" +
                       "    var pierce = 1\n" +
                       "    pierce = pierce + 1\n" +
                       "    if pierce > 5\n" +
                       "        throw LogicBreachedError()\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
     }
 
     [Fact]
@@ -464,8 +464,8 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "type-names", oldManifest: false, files:
         [
-            ("old.rf",
-                "module Test/TypeNamesRf\n" +
+            ("old.rr",
+                "module Test/TypeNamesRa\n" +
                 "import Collections\n" +
                 "record Cell[T]\n" +
                 "needs T obeys AtomicType\n" +
@@ -484,7 +484,7 @@ public sealed class ProgramCliTests : IDisposable
         Assert.Equal(expected: 0, actual: code);
         Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
         Assert.Equal(
-            expected: "module Test/TypeNamesRf\n" +
+            expected: "module Test/TypeNamesRa\n" +
                       "import Collections\n" +
                       "record Cell[T]\n" +
                       "needs T obeys UnbrokenType\n" +
@@ -497,7 +497,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    show(\"Atomic CircularList Integer\")  # Atomic Integer\n" +
                       "    var atomic_hits = hits.load()\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
     }
 
     [Fact]
@@ -505,7 +505,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "type-names-optional", oldManifest: false, files:
         [
-            ("old.rf",
+            ("old.rr",
                 "module Test/TypeNamesOptional\n" +
                 "entity Node\n" +
                 "    next: Maybe[Node]\n" +
@@ -528,7 +528,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    var count: Optional[S64] = none\n" +
                       "    var head: Optional[Node] = none  # Maybe[Node]\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
     }
 
     [Fact]
@@ -536,7 +536,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "type-names-own", oldManifest: false, files:
         [
-            ("old.rf",
+            ("old.rr",
                 "module Test/TypeNamesOwn\n" +
                 "record SplitArray[T, N]\n" +
                 "    first: T\n" +
@@ -557,7 +557,7 @@ public sealed class ProgramCliTests : IDisposable
                       "    var runs = Items[S64, 2](1, 2)\n" +
                       "    var own = SplitArray[S64, 2](first: 1)\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
     }
 
     [Fact]
@@ -565,7 +565,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "release", oldManifest: true, files:
         [
-            ("old.rf",
+            ("old.rr",
                 "module Test/Release\n" +
                 "record Pt\n" +
                 "  x: S64\n" +
@@ -616,11 +616,11 @@ public sealed class ProgramCliTests : IDisposable
                       "    for i in n to 1\n" +
                       "        nothing\n" +
                       "    return\n",
-            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
         Assert.Contains(expectedSubstring: "a range counts up only now", actualString: output);
         Assert.Contains(expectedSubstring: "run migrate --step suffix", actualString: output);
         Assert.False(condition: File.Exists(path: Path.Combine(path1: dir, path2: "razorforge.toml")));
-        Assert.Contains(expectedSubstring: "razorforge-version = \"0.5.0\"",
+        Assert.Contains(expectedSubstring: "revare-version = \"0.5.0\"",
             actualString: File.ReadAllText(path: Path.Combine(path1: dir, path2: "config.toml")));
     }
 
@@ -629,26 +629,26 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "marked", oldManifest: false, files:
         [
-            ("old.rf",
+            ("old.rr",
                 "module Test/MarkedOld\n" +
                 "routine start()\n" +
                 "    var xs = [1, 2]\n" +
                 "    each x in xs\n" +
                 "        nothing\n" +
                 "    return\n"),
-            ("new.rf",
+            ("new.rr",
                 "module Test/MarkedNew\n" +
                 "routine run()\n" +
                 "    return\n")
         ]);
         File.WriteAllText(path: Path.Combine(path1: dir, path2: "config.toml"),
-            contents: "[package]\nname = \"marked\"\nrazorforge-version = \"0.5.0\"\n");
-        string untouched = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf"));
+            contents: "[package]\nname = \"marked\"\nrevare-version = \"0.5.0\"\n");
+        string untouched = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr"));
 
         (_, string output) = RunMain("migrate", dir);
         Assert.Contains(expectedSubstring: "    for x in xs\n",
-            actualString: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rf")));
-        Assert.Equal(expected: untouched, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf")));
+            actualString: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rr")));
+        Assert.Equal(expected: untouched, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr")));
         Assert.Contains(expectedSubstring: "does not read as it", actualString: output);
         Assert.Contains(expectedSubstring: "1 file(s) skipped", actualString: output);
     }
@@ -658,7 +658,7 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "nomanifest", oldManifest: false, files:
         [
-            ("new.rf",
+            ("new.rr",
                 "module Test/NoManifest\n" +
                 "routine try_hard(n: S64) -> S64\n" +
                 "    return n\n" +
@@ -671,9 +671,9 @@ public sealed class ProgramCliTests : IDisposable
                 "    return\n")
         ]);
 
-        string before = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf"));
+        string before = File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr"));
         (_, string output) = RunMain("migrate", dir);
-        Assert.Equal(expected: before, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rf")));
+        Assert.Equal(expected: before, actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "new.rr")));
         Assert.Contains(expectedSubstring: "'C64' is two B32 parts now", actualString: output);
     }
 
@@ -682,10 +682,10 @@ public sealed class ProgramCliTests : IDisposable
     {
         string dir = OldProject(name: "oldmanifest", oldManifest: true, files:
         [
-            ("main.rf", "module Test/OldManifest\nroutine start()\n    return\n")
+            ("main.rr", "module Test/OldManifest\nroutine start()\n    return\n")
         ]);
 
-        (int code, string output) = RunMain("check", Path.Combine(path1: dir, path2: "main.rf"));
+        (int code, string output) = RunMain("check", Path.Combine(path1: dir, path2: "main.rr"));
         Assert.NotEqual(expected: 0, actual: code);
         Assert.Contains(expectedSubstring: "named config.toml now", actualString: output);
     }

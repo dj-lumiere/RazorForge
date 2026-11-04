@@ -1,7 +1,7 @@
 using System.Numerics;
 using Builder.Verification;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// Validates the managed <see cref="NumericLiteralParser.EncodeDecimalCanonical"/> (buildtime

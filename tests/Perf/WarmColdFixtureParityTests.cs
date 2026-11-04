@@ -6,7 +6,7 @@ using Builder.Verification;
 using Builder.Verification.Results;
 using Xunit.Abstractions;
 
-namespace RazorForge.Tests.Perf;
+namespace Revare.Tests.Perf;
 
 /// <summary>
 /// WARM/COLD PARITY over the real stdlib fixtures — the systematic guard against the recurring
@@ -36,7 +36,7 @@ public sealed partial class WarmColdFixtureParityTests
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "Revare.csproj")))
             {
                 return dir;
             }
@@ -50,12 +50,12 @@ public sealed partial class WarmColdFixtureParityTests
             dir = parent;
         }
 
-        throw new InvalidOperationException(message: "Could not locate RazorForge.csproj.");
+        throw new InvalidOperationException(message: "Could not locate Revare.csproj.");
     }
 
     // Captured ONCE (the daemon's resident stdlib) and shared across all cases in this class.
     private static readonly SemanticVerifier.CompiledStdlibState Warm =
-        SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+        SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
 
     /// <summary>Risky-surface subset — the feature areas where demand-seeding has historically drifted
     /// between warm and cold (throw→crash_message/represent, entity self-free, iterator adapters, lock
@@ -74,7 +74,7 @@ public sealed partial class WarmColdFixtureParityTests
         var data = new TheoryData<string, string>();
         foreach (string n in names)
         {
-            string p = Path.Combine(path1: FixtureDir, path2: n + ".rf");
+            string p = Path.Combine(path1: FixtureDir, path2: n + ".rr");
             if (File.Exists(path: p))
             {
                 data.Add(p1: n, p2: p);
@@ -120,17 +120,17 @@ public sealed partial class WarmColdFixtureParityTests
     [InlineData("itertools_api")]
     public void CacheHitBuild_MatchesCold(string name)
     {
-        string path = Path.Combine(path1: FixtureDir, path2: name + ".rf");
+        string path = Path.Combine(path1: FixtureDir, path2: name + ".rr");
         string src = File.ReadAllText(path: path);
         SemanticVerifier.CompiledStdlibState warm =
-            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
         HashSet<string> coldDefs = DefineSet(ll: Codegen(
-            r: new SemanticVerifier(language: Language.RazorForge).Analyze(
+            r: new SemanticVerifier(language: Language.Revare).Analyze(
                 program: Parse(src: src, path: path))));
         for (int build = 1; build <= 2; build++)
         {
             HashSet<string> warmDefs = DefineSet(ll: Codegen(
-                r: new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+                r: new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
                     program: Parse(src: src, path: path))));
             string[] coldOnly = coldDefs.Except(second: warmDefs).OrderBy(keySelector: s => s).ToArray();
             string[] warmOnly = warmDefs.Except(second: coldDefs).OrderBy(keySelector: s => s).ToArray();
@@ -152,19 +152,19 @@ public sealed partial class WarmColdFixtureParityTests
     [InlineData("work_api", "work_start_api")]
     public void BuildAfterAnotherProgram_MatchesCold(string first, string second)
     {
-        string path = Path.Combine(path1: FixtureDir, path2: second + ".rf");
+        string path = Path.Combine(path1: FixtureDir, path2: second + ".rr");
         string src = File.ReadAllText(path: path);
         HashSet<string> coldDefs = DefineSet(ll: Codegen(
-            r: new SemanticVerifier(language: Language.RazorForge).Analyze(
+            r: new SemanticVerifier(language: Language.Revare).Analyze(
                 program: Parse(src: src, path: path))));
 
         SemanticVerifier.CompiledStdlibState warm =
-            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
-        string firstPath = Path.Combine(path1: FixtureDir, path2: first + ".rf");
-        Codegen(r: new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
+        string firstPath = Path.Combine(path1: FixtureDir, path2: first + ".rr");
+        Codegen(r: new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
             program: Parse(src: File.ReadAllText(path: firstPath), path: firstPath)));
         HashSet<string> warmDefs = DefineSet(ll: Codegen(
-            r: new SemanticVerifier(language: Language.RazorForge, warm: warm).Analyze(
+            r: new SemanticVerifier(language: Language.Revare, warm: warm).Analyze(
                 program: Parse(src: src, path: path))));
 
         string[] coldOnly = coldDefs.Except(second: warmDefs).OrderBy(keySelector: s => s).ToArray();
@@ -180,10 +180,10 @@ public sealed partial class WarmColdFixtureParityTests
     {
         string src = File.ReadAllText(path: path);
         HashSet<string> coldDefs = DefineSet(ll: Codegen(
-            r: new SemanticVerifier(language: Language.RazorForge).Analyze(
+            r: new SemanticVerifier(language: Language.Revare).Analyze(
                 program: Parse(src: src, path: path))));
         HashSet<string> warmDefs = DefineSet(ll: Codegen(
-            r: new SemanticVerifier(language: Language.RazorForge, warm: Warm).Analyze(
+            r: new SemanticVerifier(language: Language.Revare, warm: Warm).Analyze(
                 program: Parse(src: src, path: path))));
         return (coldDefs.Count, warmDefs.Count, coldDefs.Except(second: warmDefs)
                                                         .OrderBy(keySelector: s => s)
@@ -196,9 +196,9 @@ public sealed partial class WarmColdFixtureParityTests
     private static Program Parse(string src, string path)
     {
         List<Token> tokens =
-            Lexers.Tokenize(source: src, fileName: path, language: Language.RazorForge);
+            Lexers.Tokenize(source: src, fileName: path, language: Language.Revare);
         return new Builder.Parser.Parser(tokens: tokens,
-            language: Language.RazorForge,
+            language: Language.Revare,
             fileName: path).Parse();
     }
 

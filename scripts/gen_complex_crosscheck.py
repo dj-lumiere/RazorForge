@@ -1,4 +1,4 @@
-"""Writes tests/Fixtures/Stdlib/complex_crosscheck_api.rf: C64, C128, and C256 results checked against exact rational
+"""Writes tests/Fixtures/Stdlib/complex_crosscheck_api.rr: C64, C128, and C256 results checked against exact rational
 arithmetic and a high-precision reference made with Python's decimal module.
 
 The sums, differences, products, quotients, reciprocals, squared moduli, moduli, scalings, and narrowings are rounded
@@ -10,7 +10,7 @@ normwise in units in the last place of the larger part. Random operands from a f
 products that cancel, quotients on and next to a tie, signed zeros, values near the underflow and overflow ends, and
 points on both sides of every branch cut. The text cases read back what represent writes.
 
-Run from the RazorForge folder: python3 scripts/gen_complex_crosscheck.py
+Run from the Revare folder: python3 scripts/gen_complex_crosscheck.py
 
 COMPLEX_CROSSCHECK_COUNT sets how many random cases each operation gets (the fixture keeps 2), and
 COMPLEX_CROSSCHECK_OUT writes the program elsewhere. With --dump the program prints every result's bits instead of
@@ -25,7 +25,7 @@ import sys
 from decimal import Decimal, localcontext
 from fractions import Fraction
 
-OUT = os.environ.get("COMPLEX_CROSSCHECK_OUT", "tests/Fixtures/Stdlib/complex_crosscheck_api.rf")
+OUT = os.environ.get("COMPLEX_CROSSCHECK_OUT", "tests/Fixtures/Stdlib/complex_crosscheck_api.rr")
 COUNT = int(os.environ.get("COMPLEX_CROSSCHECK_COUNT", "2"))
 DUMP = "--dump" in sys.argv
 
@@ -246,7 +246,7 @@ def unary_operands(f, n, lo=-6, hi=4):
 
 # ── the operations ───────────────────────────────────────────────────────────────
 
-# name, RazorForge call on z (and w), what the result is ("c" complex, "p" part, "b" Bool, "t" Text)
+# name, Revare call on z (and w), what the result is ("c" complex, "p" part, "b" Bool, "t" Text)
 BINARY = [
     ("add", "z + w", "c"), ("sub", "z - w", "c"), ("mul", "z * w", "c"), ("div", "z / w", "c"),
     ("eq", "z == w", "b"),
@@ -1283,5 +1283,5 @@ if __name__ == "__main__" and len(sys.argv) == 1:
     fc = fixture_cases()
     with open(OUT, "w") as fh:
         fh.write(fixture_program(fc))
-    with open(OUT.replace(".rf", ".expected.txt"), "w") as fh:
+    with open(OUT.replace(".rr", ".expected.txt"), "w") as fh:
         fh.write(fixture_expected(fc))

@@ -1,6 +1,6 @@
-# RazorForge installer (Windows)
+# Revare installer (Windows)
 #
-# Adds this package directory to your user PATH so `razorforge` and `rf`
+# Adds this package directory to your user PATH so `revare` and `ra`
 # work from any terminal. Everything runs from this folder — no admin
 # rights, no registry beyond the user PATH entry, no other downloads.
 #
@@ -23,7 +23,7 @@ if ($entries -contains $dir) {
 
 Write-Host ''
 Write-Host 'Try it:'
-Write-Host '  razorforge version'
-Write-Host '  razorforge buildandrun hello.rf      (rf works too)'
+Write-Host '  revare version'
+Write-Host '  revare buildandrun hello.rr      (ra works too)'
 Write-Host ''
 Write-Host 'See QUICKSTART.md for a hello-world walkthrough.'

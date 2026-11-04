@@ -5,29 +5,29 @@ using Builder.Verification.Results;
 using SyntaxTree;
 using TypeModel.Enums;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
 /// Drives the full in-process compile pipeline (parse → semantic analysis + lowering + monomorphization
-/// → LLVM IR emission) over feature-rich RazorForge and Suflae programs. Unlike the spawned
+/// → LLVM IR emission) over feature-rich Revare and Mielia programs. Unlike the spawned
 /// <c>buildandrun</c> stdlib harness (whose child process is not coverage-instrumented), these run the
 /// builder IN the test host, so they exercise — and count coverage for — the lowering/instantiation/
 /// codegen passes that only fire for constructs like pattern matching, lambdas, generics, error-handling
-/// variants, iterator inlining, and Suflae module globals.
+/// variants, iterator inlining, and Mielia module globals.
 ///
 /// Each case asserts the program analyzes without errors and emits non-empty IR; the point is breadth of
 /// executed builder paths, not output shape (the stdlib harness owns behavioral snapshots).
 /// </summary>
 public class FeatureCoverageTests
 {
-    /// <summary>Parse + analyze + codegen a RazorForge program to IR, asserting a clean compile.</summary>
+    /// <summary>Parse + analyze + codegen a Revare program to IR, asserting a clean compile.</summary>
     private static string GenerateIr(string source)
     {
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge,
-            buildMode: RfBuildMode.ReleaseSpace);
+        var analyzer = new SemanticVerifier(language: Language.Revare,
+            buildMode: RaBuildMode.ReleaseSpace);
         AnalysisResult result = analyzer.Analyze(program: program);
         AssertNoErrors(result: result);
 
@@ -37,12 +37,12 @@ public class FeatureCoverageTests
         return ir;
     }
 
-    /// <summary>Suflae sibling of <see cref="GenerateIr"/> — analyzed in Suflae realm.</summary>
-    private static string GenerateIrSuflae(string source)
+    /// <summary>Mielia sibling of <see cref="GenerateIr"/> — analyzed in Mielia realm.</summary>
+    private static string GenerateIrMielia(string source)
     {
-        Program program = ParseSuflae(source: source);
-        var analyzer = new SemanticVerifier(language: Language.Suflae,
-            buildMode: RfBuildMode.ReleaseSpace);
+        Program program = ParseMielia(source: source);
+        var analyzer = new SemanticVerifier(language: Language.Mielia,
+            buildMode: RaBuildMode.ReleaseSpace);
         AnalysisResult result = analyzer.Analyze(program: program);
         AssertNoErrors(result: result);
 
@@ -59,7 +59,7 @@ public class FeatureCoverageTests
             options: new LlvmEmitterOptions
             {
                 StdlibPrograms = result.Registry.StdlibPrograms,
-                BuildMode = RfBuildMode.ReleaseSpace,
+                BuildMode = RaBuildMode.ReleaseSpace,
                 SynthesizedBodies = result.SynthesizedBodies,
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies
             });
@@ -497,7 +497,7 @@ public class FeatureCoverageTests
     [Fact]
     public void FString_FormatSpecs_Compile()
     {
-        // RazorForge f-text supports exactly four specs: {x} represent, {x:?} diagnose,
+        // Revare f-text supports exactly four specs: {x} represent, {x:?} diagnose,
         // {x:=} "name=" + represent, {x:=?} "name=" + diagnose.
         const string source = """
                               module Test/Feat/FString
@@ -561,6 +561,6 @@ public class FeatureCoverageTests
         _ = GenerateIr(source: source);
     }
 
-    // ---- Suflae realm: module globals + script-ish program --------------------------------------
+    // ---- Mielia realm: module globals + script-ish program --------------------------------------
 
 }

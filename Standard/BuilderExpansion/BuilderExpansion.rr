@@ -1,0 +1,40 @@
+module BuilderExpansion
+
+### BuilderExpansion is Revare's COMPTIME member-walk / generative-reflection surface — the sibling of
+### the describe-only [BuilderQuery] module. Where BuilderQuery answers "what does this type look like?" at
+### build time, BuilderExpansion LAYS DOWN CODE per member/case/arm of a type via the `expand` loop, folding
+### the per-part handle projections to literals at monomorphization. (Mielia reflects at RUNTIME via
+### ObjectHacker instead; this module is RA-only buildtime.)
+###
+### `import BuilderExpansion` is the opt-in that unlocks the `expand` construct and its reflection
+### intrinsics. Like `import BuilderQuery`, it is a capability gate, not a symbol import: the intrinsics
+### below are recognized by the builder and FOLDED at build time (they have no runtime routine body — the
+### per-part handle `m` is a buildtime-only value with no user-spellable type), so they are documented here
+### rather than declared as callable routines.
+###
+### ── The loop (a keyword; the ONLY reflection keyword) ─────────────────────────────────────────────
+###   `expand <m> in <source>(T)` — unroll the body once per part of T, binding `m` to each part.
+###
+### ── Sources (buildtime member/case/arm sets; the thing `expand` iterates) ──────────────────────────
+###   `allmemvarof(T)`   — ALL member variables of a record/entity/tuple, declaration order (incl. secret).
+###   `openmemvarof(T)`  — the OPEN ∪ POSTED (publicly readable) member variables only.
+###   `selfmemvarof(T)`  — the member variables of an entity that hold an entity of the same type (`next: Node?`), declaration order.
+###   `caseof(T)`        — the cases of a `choice`/`flags`.
+###   `branchof(T)`      — the arms of a `variant` (used inside a `when` to emit one clause per arm).
+###   `protocolof(T)`    — the protocols `T` obeys, the ones they refine included, each once (`nameof(p)` is the
+###                        protocol's name).
+###
+### ── Accessors (read a buildtime property off the active handle `m`, or a type) ──────────────────────
+###   `nameof(m) -> Text`          — the member/case/arm name as declared.
+###   `typeof(m) -> <typewise>`    — the member's type as a buildtime typewise receiver.
+###   `typeidof(m) -> U64`         — the stable buildtime type id of the member's type.
+###   `orderof(m) -> U64`          — the member's declaration index.
+###   `placeof(m) -> U64`          — the member's byte offset in the type's layout.
+###   `sizeof(T) -> U64`           — the byte size of a type.
+###   `valueof(c) -> S32|U64`      — a case's computed value: a choice's S32 discriminant / a flags' U64 bit.
+###   `visibilityof(m) -> Visibility` — the member's OPEN/POSTED/SECRET visibility (the BuilderQuery choice).
+###
+### Splice `$` weaves a handle projection into surface syntax: it binds to the immediately-following
+### primary (an intrinsic call or identifier) and injects that buildtime value as code — `me.$nameof(m)`
+### becomes a real member access at unroll, `$typeof(m)` a type argument / typewise receiver, `$valueof(c)`
+### a case constant. See the Wiki (Expansion) for worked derives.

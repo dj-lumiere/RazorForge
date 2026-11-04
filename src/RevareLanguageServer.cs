@@ -1,0 +1,40 @@
+using Builder.Frontends;
+using Revare.Lexer;
+using TypeModel.Enums;
+
+namespace Revare;
+
+/// <summary>
+/// The Revare Language Server: the shared engine (<c>Builder.Execution.LspServer</c>) run by <c>revare lsp</c>,
+/// serving <c>.rr</c> files with Revare's own keywords and names.
+/// </summary>
+internal sealed class RevareLanguageServer : LanguageServerProfile
+{
+    /// <inheritdoc/>
+    public override Language Language => Language.Revare;
+
+    /// <inheritdoc/>
+    public override string ServerName => "revare-lsp";
+
+    /// <inheritdoc/>
+    public override string CodeBlockLanguage => "revare";
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<string> Keywords => RevareLexer.KeywordSpellings;
+
+    /// <inheritdoc/>
+    /// <remarks>From the improvement plan: `until` loops, `becomes` in an expression `when`, `inject` after `steal … as`.</remarks>
+    public override IReadOnlyList<string> PlannedKeywords { get; } = ["inject"];
+
+    /// <inheritdoc/>
+    /// <remarks>`threaded` / `suspended` gave way to `agent` at the call.</remarks>
+    public override IReadOnlyList<string> RetiredKeywords { get; } =
+        ["threaded", "suspended"];
+
+    /// <inheritdoc/>
+    public override string? Format(string text, string fileName)
+    {
+        return Builder.Formatting.SourceFormatter.Format(source: text, fileName: fileName, language: Language)
+                      .Output;
+    }
+}

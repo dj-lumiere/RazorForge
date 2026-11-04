@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// The tool as a user runs it, end to end: <c>run</c>, <c>test</c> and <c>lint</c>, and a crash out of a
@@ -45,7 +45,7 @@ public sealed class ToolCommandTests : IDisposable
     [Fact]
     public void UnhandledErrorArm_OutsideAFailableRoutine_Crashes()
     {
-        string program = Write(name: "crash.rf", source: "module ToolCrash\nimport IO/Console\n\n" + Nope + """
+        string program = Write(name: "crash.rr", source: "module ToolCrash\nimport IO/Console\n\n" + Nope + """
             routine start()
                 when check fails(n: 1)
                     is S64 as v =>
@@ -68,15 +68,15 @@ public sealed class ToolCommandTests : IDisposable
     {
         string tests = Path.Combine(path1: _dir, path2: "tests");
         Directory.CreateDirectory(path: tests);
-        Write(name: Path.Combine(path1: "tests", path2: "good.rf"),
+        Write(name: Path.Combine(path1: "tests", path2: "good.rr"),
             source: "module ToolGood\nimport IO/Console\n\nroutine start()\n    show(\"hi\")\n    return\n");
         Write(name: Path.Combine(path1: "tests", path2: "good.expected"), source: "hi\n");
-        Write(name: Path.Combine(path1: "tests", path2: "wrong.rf"),
+        Write(name: Path.Combine(path1: "tests", path2: "wrong.rr"),
             source: "module ToolWrong\nimport IO/Console\n\nroutine start()\n    show(\"bye\")\n    return\n");
         Write(name: Path.Combine(path1: "tests", path2: "wrong.expected"), source: "hi\n");
-        Write(name: Path.Combine(path1: "tests", path2: "broken.rf"),
+        Write(name: Path.Combine(path1: "tests", path2: "broken.rr"),
             source: "module ToolBroken\n\nroutine start()\n    var x: S64 = \"no\"\n    return\n");
-        Write(name: Path.Combine(path1: "tests", path2: "broken.error"), source: "RF-S");
+        Write(name: Path.Combine(path1: "tests", path2: "broken.error"), source: "RA-S");
 
         (int exit, string stdout, _) = Tool("test", tests);
 
@@ -94,7 +94,7 @@ public sealed class ToolCommandTests : IDisposable
     [Fact]
     public void Test_RunsEachTestRoutine()
     {
-        string program = Write(name: "routines.rf", source: """
+        string program = Write(name: "routines.rr", source: """
             module ToolRoutines
 
             routine add(a: S32, b: S32) -> S32
@@ -174,9 +174,9 @@ public sealed class ToolCommandTests : IDisposable
     [Fact]
     public void Lint_ReportsStyleErrors()
     {
-        string messy = Write(name: "messy.rf",
+        string messy = Write(name: "messy.rr",
             source: "module ToolMessy\n\nimport IO/Console\n\nroutine start()\n    show( \"hi\" )\n    return\n");
-        string tidy = Write(name: "tidy.rf",
+        string tidy = Write(name: "tidy.rr",
             source: "module ToolTidy\n\nimport IO/Console\n\nroutine start()\n    show(\"hi\")\n    return\n");
 
         (int messyExit, string messyOut, _) = Tool("lint", messy);
@@ -199,7 +199,7 @@ public sealed class ToolCommandTests : IDisposable
         string sleep = OperatingSystem.IsWindows()
             ? "@link(\"kernel32\")\n@blocking\nroutine C::Sleep(ms: U32)\n\nroutine pause()\n    C::Sleep(ms: 300)\n    return\n"
             : "@blocking\nroutine C::usleep(us: U32) -> S32\n\nroutine pause()\n    drop C::usleep(us: 300000)\n    return\n";
-        string program = Write(name: "blocking.rf", source: "module ToolBlocking\nimport IO/Console\n\n" + sleep + """
+        string program = Write(name: "blocking.rr", source: "module ToolBlocking\nimport IO/Console\n\n" + sleep + """
 
             @blocking
             routine C::labs(n: S64) -> S64
@@ -226,7 +226,7 @@ public sealed class ToolCommandTests : IDisposable
                 return
             """);
 
-        (int exit, string stdout, string stderr) = ToolWith(environment: [("RF_WORKERS", "1")], "run", program);
+        (int exit, string stdout, string stderr) = ToolWith(environment: [("RA_WORKERS", "1")], "run", program);
 
         Assert.True(condition: exit == 0, userMessage: stdout + stderr);
         Assert.Contains(expectedSubstring: "labs 42", actualString: stdout);
@@ -244,7 +244,7 @@ public sealed class ToolCommandTests : IDisposable
             return;
         }
 
-        string program = Write(name: "deep.rf", source: """
+        string program = Write(name: "deep.rr", source: """
             module ToolDeep
             import IO/Console
 
@@ -292,14 +292,14 @@ public sealed class ToolCommandTests : IDisposable
             StandardErrorEncoding = Encoding.UTF8,
             UseShellExecute = false,
             WorkingDirectory = _dir,
-            Environment = { [key: "RF_NO_DAEMON"] = "1" }
+            Environment = { [key: "RA_NO_DAEMON"] = "1" }
         };
         foreach ((string name, string value) in environment)
         {
             psi.Environment[key: name] = value;
         }
 
-        psi.ArgumentList.Add(item: TestHelpers.ToolchainDll(sourcePath: Path.Combine(path1: _dir, path2: "x.rf")));
+        psi.ArgumentList.Add(item: TestHelpers.ToolchainDll(sourcePath: Path.Combine(path1: _dir, path2: "x.rr")));
         foreach (string arg in args)
         {
             psi.ArgumentList.Add(item: arg);

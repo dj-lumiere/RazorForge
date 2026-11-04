@@ -1,0 +1,36 @@
+module Tests/Stdlib/EnvironmentApi
+
+import IO/Console
+import IO/Environment
+import IO/File
+import Random
+
+# What the operating system gives the program: arguments, environment variables, the well-known directories, the
+# partition a directory is on, and random bits.
+routine start()
+    var arguments = Environment.arguments()
+    show(f"arguments: {arguments.count()}")
+    show(f"PATH set: {Environment.variable(name: "PATH").is_present()}")
+    show(f"missing variable: {Environment.variable(name: "RA_FIXTURE_SURELY_NOT_SET")}")
+    # The snapshot keeps each name as the system spells it, and Windows spells this one Path.
+    var variables = Environment.to[Dict[Text, Text]]()
+    var path_listed = false
+    for name in variables.keys()
+        if name.to_uppercase() == "PATH"
+            path_listed = true
+    show(f"PATH in the snapshot: {path_listed}")
+    var working = Environment.working_directory()
+    show(f"working directory exists: {FileManager.exists(at: working)}")
+    show(f"temp directory exists: {FileManager.exists(at: Environment.temp_directory())}")
+    var partition = FileManager.partition(at: working)
+    show(f"partition root exists: {FileManager.exists(at: partition.root)}")
+    var known = false
+    for p in PartitionManager.all()
+        if p.root.at == partition.root.at
+            known = true
+    show(f"partition listed: {known}")
+    show(f"entropy differs: {Entropy.next[U64]() != Entropy.next[U64]()}")
+    var a = Random.from_entropy()
+    var b = Random.from_entropy()
+    show(f"streams differ: {a.next[U64]() != b.next[U64]()}")
+    return

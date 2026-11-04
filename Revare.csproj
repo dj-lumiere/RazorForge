@@ -1,0 +1,93 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Revare: the Revare front end (its lexer) and the `revare` command line, over the Anvila
+       builder core. Ships the Revare standard library, which Mielia builds also use. -->
+  <PropertyGroup>
+    <SonarQubeTestProject>false</SonarQubeTestProject>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>0.5.0</Version>
+    <AssemblyName>Revare</AssemblyName>
+    <RootNamespace>Revare</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <!-- Canonical command name. `forge` is deliberately NOT used: it collides with
+         Foundry's forge (Ethereum toolchain) on developer machines. Users who want
+         `forge` can alias it locally; packages also ship an `ra` short alias. -->
+    <ToolCommandName>revare</ToolCommandName>
+    <PackageId>Revare</PackageId>
+    <Description>The Revare toolchain.</Description>
+    <!-- The builder runs optimized in every configuration: bin/Debug is what daily builds, the test suites and
+         the editors' language servers run. Build with -p:Optimize=false to step through it in a debugger. -->
+    <Optimize>true</Optimize>
+    <!-- Most builds are one process from start to finish, too short for the profile tiered PGO collects to pay
+         for itself. -->
+    <TieredPGO>false</TieredPGO>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Anvila\Anvila.csproj"/>
+  </ItemGroup>
+
+  <!-- A NativeAOT build keeps reflection data only for what it can see used. The standard library snapshot, the language
+       server and the syntax tree walks read the builder's model types by reflection (fields and properties of whatever
+       object they hold), so the builder's assemblies are rooted whole. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Anvila"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mielia"/>
+    <InternalsVisibleTo Include="Revare.Tests"/>
+  </ItemGroup>
+
+  <!-- The Revare standard library, laid out as Standard\Revare next to the executable. -->
+  <ItemGroup>
+    <Content Include="Standard\**\*" Link="Standard\Revare\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true"/>
+    <None Remove="Standard\**\*"/>
+  </ItemGroup>
+
+  <!-- Emit the modular compiled-stdlib prebuilt (.pbrf) artifacts as a BUILD BYPRODUCT (the daemon/cold path LOADS
+       them instead of paying a ~8s stdlib capture on first run). Runs the JUST-BUILT toolchain after Build.
+       MSBuild Inputs/Outputs make this INCREMENTAL: when no stdlib source and no toolchain dll changed since
+       the last emit, the whole target is SKIPPED (no process launch → zero per-build cost). Disable with
+       -p:EmitPrebuilt=false. Best-effort (ContinueOnError) so a toolchain hiccup never fails the build. -->
+  <ItemGroup>
+    <RaStdlibSource Include="Standard\**\*.rr"/>
+  </ItemGroup>
+  <Target Name="EmitPrebuilt" AfterTargets="Build"
+          Condition="'$(EmitPrebuilt)' != 'false' and Exists('$(TargetPath)')"
+          Inputs="@(RaStdlibSource);$(TargetPath)"
+          Outputs="$(TargetDir)Standard\.prebuilt\Revare\index.pbrf">
+    <Exec Command="dotnet &quot;$(TargetPath)&quot; emit-prebuilt" WorkingDirectory="$(TargetDir)" ContinueOnError="true"/>
+  </Target>
+
+  <Import Project="..\Ingrid\StageIngridRuntime.targets"/>
+  <Import Project="..\Anvila\PatchMacLibLlvm.targets"/>
+
+  <!-- rider-plugin\ is the Rider plugin, a Gradle project of its own. -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);rider-plugin\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!-- tests\ is its own project. -->
+  <ItemGroup>
+    <Compile Remove="tests\**"/>
+    <None Remove="tests\**"/>
+    <Content Remove="tests\**"/>
+    <EmbeddedResource Remove="tests\**"/>
+  </ItemGroup>
+
+  <!-- A file moved or deleted in the library's sources leaves its old copy in the output, where the builder would read
+       it as part of the library: every copy under Standard/Revare whose source is gone is taken out before the copy. -->
+  <Target Name="RemoveStaleRevareLibrary" BeforeTargets="CopyFilesToOutputDirectory">
+    <ItemGroup>
+      <_RemoveStaleRevareLibrarySource Include="$(MSBuildProjectDirectory)/Standard/**/*"/>
+      <_RemoveStaleRevareLibraryKept Include="@(_RemoveStaleRevareLibrarySource->'$(OutDir)Standard/Revare/%(RecursiveDir)%(Filename)%(Extension)')"/>
+      <_RemoveStaleRevareLibraryCopy Include="$(OutDir)Standard/Revare/**/*"/>
+      <_RemoveStaleRevareLibraryStale Include="@(_RemoveStaleRevareLibraryCopy)" Exclude="@(_RemoveStaleRevareLibraryKept)"/>
+    </ItemGroup>
+    <Delete Files="@(_RemoveStaleRevareLibraryStale)"/>
+  </Target>
+</Project>

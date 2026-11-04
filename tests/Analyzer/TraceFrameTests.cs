@@ -6,7 +6,7 @@ using Builder.Verification.Results;
 using SyntaxTree;
 using TypeModel.Enums;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -56,7 +56,7 @@ public class TraceFrameTests
     private static string Body(string name)
     {
         Program program = Parse(source: Source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge, buildMode: RfBuildMode.Release);
+        var analyzer = new SemanticVerifier(language: Language.Revare, buildMode: RaBuildMode.Release);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
         string ir = new LlvmEmitter(program: program,
@@ -64,7 +64,7 @@ public class TraceFrameTests
             options: new LlvmEmitterOptions
             {
                 StdlibPrograms = result.Registry.StdlibPrograms,
-                BuildMode = RfBuildMode.Release,
+                BuildMode = RaBuildMode.Release,
                 SynthesizedBodies = result.SynthesizedBodies,
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies
             }).Generate();

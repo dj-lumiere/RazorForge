@@ -8,7 +8,7 @@ using Builder.Verification;
 using Builder.Verification.Results;
 using Xunit.Abstractions;
 
-namespace RazorForge.Tests.Perf;
+namespace Revare.Tests.Perf;
 
 /// <summary>
 /// De-risk spike for the .pbrf compiled-stdlib serialization (the "cold under 1 s" foundation):
@@ -36,10 +36,10 @@ public sealed partial class PbrfRoundTripTests
     private static Program ParseTrivial()
     {
         List<Token> tokens =
-            Lexers.Tokenize(source: Trivial, fileName: "bench.rf", language: Language.RazorForge);
+            Lexers.Tokenize(source: Trivial, fileName: "bench.rr", language: Language.Revare);
         return new Builder.Parser.Parser(tokens: tokens,
-            language: Language.RazorForge,
-            fileName: "bench.rf").Parse();
+            language: Language.Revare,
+            fileName: "bench.rr").Parse();
     }
 
     private static string Codegen(AnalysisResult r)
@@ -78,13 +78,13 @@ public sealed partial class PbrfRoundTripTests
     public void Pbrf_RoundTrip_ProducesIdenticalDefines()
     {
         // Cold reference define set.
-        var cold = new SemanticVerifier(language: Language.RazorForge);
+        var cold = new SemanticVerifier(language: Language.Revare);
         AnalysisResult coldResult = cold.Analyze(program: ParseTrivial());
         HashSet<string> coldDefs = DefineSet(ll: Codegen(r: coldResult));
 
         // Capture the compiled stdlib, serialize → .pbrf bytes, deserialize.
         SemanticVerifier.CompiledStdlibState warm =
-            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
 
         byte[] bytes;
         var swSer = Stopwatch.StartNew();
@@ -111,7 +111,7 @@ public sealed partial class PbrfRoundTripTests
             $".pbrf size={bytes.Length / 1024}KB  serialize={swSer.ElapsedMilliseconds}ms  deserialize={swDe.ElapsedMilliseconds}ms");
 
         // Compile the SAME file from the DESERIALIZED warm state; compare emitted defines to cold.
-        var warmSa = new SemanticVerifier(language: Language.RazorForge, warm: restored);
+        var warmSa = new SemanticVerifier(language: Language.Revare, warm: restored);
         AnalysisResult warmResult = warmSa.Analyze(program: ParseTrivial());
         HashSet<string> warmDefs = DefineSet(ll: Codegen(r: warmResult));
 

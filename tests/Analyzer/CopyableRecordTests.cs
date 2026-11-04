@@ -1,4 +1,4 @@
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -9,7 +9,7 @@ using static TestHelpers;
 /// </summary>
 public class CopyableRecordTests
 {
-    /// <summary>A record holding a <c>Guarded</c> handle obeys Copyable without writing <c>duplicate</c> (no RF-S702).</summary>
+    /// <summary>A record holding a <c>Guarded</c> handle obeys Copyable without writing <c>duplicate</c> (no RA-S702).</summary>
     [Fact]
     public void RecordWithGuardedMember_ObeysCopyable_WithoutWrittenDuplicate()
     {

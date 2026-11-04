@@ -1,12 +1,12 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for RF-S413 on reads of an entity that something else goes on owning: a container element
+/// Tests for RA-S413 on reads of an entity that something else goes on owning: a container element
 /// (<c>boxes[0]</c>) or a field (<c>p.a</c>). Putting such a read anywhere that owns what it holds (a
 /// variable, a field, a container slot, a consuming parameter, a returned value, a tuple) would make two
 /// owners of one entity, and for an element the container's getitem would quietly duplicate it first.
@@ -56,7 +56,7 @@ public class KeptEntityReadTests
     }
 
     /// <summary>A local entity that may be absent (<c>Node?</c>) handed to a constructor's <c>Node?</c> field is a
-    /// second name for the same original: RF-S413 asks for <c>steal</c>.</summary>
+    /// second name for the same original: RA-S413 asks for <c>steal</c>.</summary>
     [Fact]
     public void Analyze_OptionalEntityLocalIntoCreatorOptionalField_Errors()
     {

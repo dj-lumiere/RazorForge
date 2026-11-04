@@ -1,5 +1,5 @@
 #pragma warning disable CS1591
-namespace RazorForge.Tests.Parser;
+namespace Revare.Tests.Parser;
 
 using static TestHelpers;
 

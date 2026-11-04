@@ -1,4 +1,4 @@
-"""Writes tests/Fixtures/Stdlib/decimal_crosscheck_api.rf: D32, D64, D128, and Decimal results checked against
+"""Writes tests/Fixtures/Stdlib/decimal_crosscheck_api.rr: D32, D64, D128, and Decimal results checked against
 Python's decimal module.
 
 Every expected value is computed here exactly (or at 1000 digits for a quotient that doesn't end) and rounded once to
@@ -7,7 +7,7 @@ floor(x + 0.5) (a positive tie away from zero, a negative one toward it). The fi
 library, reads the expected text back, and prints a line for every value that differs, then one count per type and
 operation. Random operands (a fixed seed) and hand-picked ties.
 
-Run from the RazorForge folder: python3 scripts/gen_decimal_crosscheck.py
+Run from the Revare folder: python3 scripts/gen_decimal_crosscheck.py
 """
 
 import os
@@ -16,7 +16,7 @@ from decimal import (Decimal, Context, ROUND_HALF_EVEN, ROUND_HALF_UP, ROUND_HAL
                      ROUND_DOWN, localcontext, setcontext)
 
 # DECIMAL_CROSSCHECK_COUNT and DECIMAL_CROSSCHECK_OUT write a larger run elsewhere (the fixture keeps 12 per operation).
-OUT = os.environ.get("DECIMAL_CROSSCHECK_OUT", "tests/Fixtures/Stdlib/decimal_crosscheck_api.rf")
+OUT = os.environ.get("DECIMAL_CROSSCHECK_OUT", "tests/Fixtures/Stdlib/decimal_crosscheck_api.rr")
 EXACT = Context(prec=1000, Emax=10 ** 8, Emin=-10 ** 8)
 FORMATS = {
     "D32": (7, 96, -95),

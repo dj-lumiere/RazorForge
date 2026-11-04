@@ -3,7 +3,7 @@ using Builder.Tokenizer;
 using Builder.Verification.Results;
 using SyntaxTree;
 
-namespace RazorForge.Tests.Parser;
+namespace Revare.Tests.Parser;
 
 using static TestHelpers;
 

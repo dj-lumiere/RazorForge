@@ -1,9 +1,9 @@
 @echo off
-REM RazorForge VSCode One-Click Setup Script
+REM Revare VSCode One-Click Setup Script
 REM This script sets up the development environment for VSCode
 
 echo ========================================
-echo RazorForge VSCode Setup
+echo Revare VSCode Setup
 echo ========================================
 echo.
 
@@ -81,13 +81,13 @@ call code --install-extension wayou.vscode-todo-highlight
 
 echo.
 echo ========================================
-echo Building RazorForge...
+echo Building Revare...
 echo ========================================
 echo.
 
 REM Build the project
 echo [INFO] Running dotnet build...
-dotnet build RazorForge.csproj
+dotnet build Revare.csproj
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

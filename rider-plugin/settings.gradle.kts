@@ -1,1 +1,1 @@
-rootProject.name = "razorforge-rider"
+rootProject.name = "revare-rider"

@@ -1,0 +1,686 @@
+module System/Numerics
+
+import Collections
+# ============================================================================
+# Constants (decimal128: 34 significant digits, emax 6144). The transcendental
+# constants carry extra digits; the build-time BID encoder rounds them to 34
+# (half up, as every Decimal rounding).
+# ============================================================================
+
+### pi (Archimedes' constant), rounded to Decimal's 34 significant digits.
+preset DECIMAL_PI: Decimal = 3.14159265358979323846264338327950288
+### e (base of the natural logarithm), rounded to 34 significant digits.
+preset DECIMAL_E: Decimal = 2.71828182845904523536028747135266250
+### Zero.
+preset DECIMAL_ZERO: Decimal = 0
+### One.
+preset DECIMAL_ONE: Decimal = 1
+### The largest finite Decimal (34 nines at the maximum exponent, emax 6144).
+preset DECIMAL_MAX: Decimal = 9.999999999999999999999999999999999e6144
+### The most-negative finite Decimal (negative `DECIMAL_MAX`).
+preset DECIMAL_MIN: Decimal = -9.999999999999999999999999999999999e6144
+### The smallest positive normal Decimal.
+preset DECIMAL_MIN_POSITIVE: Decimal = 1e-6143
+### The unit in the last place at exponent 0: 10^-33, the gap from 1 to the next Decimal.
+preset DECIMAL_EPSILON: Decimal = 1e-33
+
+# ============================================================================
+# Decimal — Revare's default number type (and Mielia's default numeric): a
+# FINITE-ONLY, CANONICAL software decimal128. Its storage IS D128's i128 BID layout
+# (bit127 = sign, bits126..113 = biased exponent q+6176, bits112..0 = the coefficient
+# as a plain binary integer), so every operation reinterprets to `D128` and reuses
+# that verified engine — Decimal is "D128 minus the specials". Two things make it
+# distinct from `D128`:
+#   * FINITE-ONLY. inf/NaN can never exist in a Decimal. Literals reject them (build
+#     time); a conversion from a non-finite source crashes (inf -> NumericOverflowError,
+#     NaN -> NumericDomainError); arithmetic delegates to D128's CHECKED operators,
+#     which crash on a non-finite result. Failure is loud, which suits the default type.
+#   * HALF UP. Every rounding a Decimal does (a quotient, text read in, an integer or a float with more than 34
+#     digits, `fixed(places:)`, `round()`) takes x to the n (at the digit kept) with n - 0.5 <= x < n + 0.5, that is
+#     floor(x + 0.5): 2.5 -> 3, -2.5 -> -2. The IEEE types D32/D64/D128 keep round-half-to-even.
+#   * ONE FORM. Unlike the IEEE-cohort D128, every Decimal result is normalized: the coefficient has no trailing
+#     zeros (as far as the largest exponent allows) and a zero is always +0, never -0. `1.0` and `1.00` are the same
+#     bits, so `hash` hashes the bits. The text drops the zeros after the point (`2.50` renders "2.5") and writes an
+#     integer of up to 34 digits in full (`100`, not `1E+2`). Every routine that makes a Decimal ends in this form:
+#     Ingrid's Decimal exports normalize their result, and `dec_of_d128` normalizes a D128 result.
+#
+# 34 significant digits (decimal128) is abundant for a default number — wider than C#'s
+# `decimal` (28) and the IEEE interchange standard — and i128 keeps the hot path lean.
+# ============================================================================
+
+### A finite-only canonical software decimal128 value (shares D128's i128 BID storage).
+@llvm("i128")
+record Decimal
+obeys Numeric, Comparable, Copyable, Hashable
+    nothing
+
+# ============================================================================
+# D128 bridge — Decimal and D128 share the i128 BID layout, so converting between
+# them is a bit-for-bit reinterpret. All arithmetic and math route through these.
+# ============================================================================
+
+### Views this Decimal as its underlying `D128` (bit-for-bit; a Decimal is always finite).
+### :param x: The Decimal to view.
+### :returns: The same bits as a D128.
+routine dec_to_d128(x: Decimal) -> D128
+    return LLVM::reinterpret_bits[Decimal, D128](x)
+
+### Wraps a finite `D128` as a Decimal in its one form: trailing zeros of the coefficient stripped, a zero +0 (the
+### caller guarantees finiteness). An odd coefficient (its low bit) has no trailing zero and wraps as it is.
+### :param x: A finite D128.
+### :returns: The Decimal.
+routine dec_of_d128(x: D128) -> Decimal
+    var bits = LLVM::reinterpret_bits[D128, U128](x)
+    if bits.bitand(you: 1) == 1
+        return LLVM::reinterpret_bits[U128, Decimal](bits)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_normalize(x_low: d128_low(v: x),
+        x_high: d128_high(v: x))))
+
+### Wraps a D128 that is already in Decimal's one form (a result of Ingrid's Decimal exports), bit-for-bit.
+### :param x: A D128 that an Ingrid Decimal export gave.
+### :returns: The Decimal with the same bits.
+secret routine dec_of_canonical(x: D128) -> Decimal
+    return LLVM::reinterpret_bits[D128, Decimal](x)
+
+### Crashes if `d` is non-finite, else wraps it as a Decimal. The single guard that keeps
+### Decimal finite-only on every conversion from a possibly infinite/NaN source.
+### :param d: The D128 to wrap.
+### :returns: The Decimal.
+### :throws: {NumericOverflowError} if `d` is +-infinity; {NumericDomainError} if `d` is NaN.
+routine dec_of_d128_finite(d: D128) -> Decimal
+    if d.is_finite()
+        return dec_of_d128(x: d)
+    if d.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Crashes if `d` is non-finite, else wraps it bit-for-bit: `d` is already in Decimal's one form (a result of
+### Ingrid's Decimal exports).
+### :param d: The D128 to wrap.
+### :returns: The Decimal with the same bits.
+### :throws: {NumericOverflowError} if `d` is +-infinity; {NumericDomainError} if `d` is NaN.
+secret routine dec_of_canonical_finite(d: D128) -> Decimal
+    if d.is_finite()
+        return dec_of_canonical(x: d)
+    if d.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+# ============================================================================
+# Bit representation (raw i128 <-> value)
+# ============================================================================
+
+### Returns the raw i128 BID storage of this value.
+### :returns: The bits of `me`.
+@readonly
+routine Decimal.to_bits() -> U128
+    return LLVM::reinterpret_bits[Decimal, U128](me)
+
+### Reads a raw U128 as a Decimal in its one form (assumes a valid finite BID encoding).
+### :param bits: The bit pattern.
+### :returns: The value with exactly those bits.
+common routine Decimal.from_bits(bits: U128) -> Decimal
+    return dec_of_d128(x: LLVM::reinterpret_bits[U128, D128](bits))
+
+### Returns the raw 16 bytes of this value in little-endian order.
+### :returns: The bytes, least significant first.
+routine Decimal.to_bytes_le() -> Items[Byte, 16]
+    return dec_to_d128(x: me).to_bytes_le()
+
+### Returns the raw 16 bytes of this value in big-endian order.
+### :returns: The bytes, most significant first.
+routine Decimal.to_bytes_be() -> Items[Byte, 16]
+    return dec_to_d128(x: me).to_bytes_be()
+
+# ============================================================================
+# Text parsing — finite-only (inf/NaN text is rejected)
+# ============================================================================
+
+### Parses a decimal literal into a Decimal.
+### :returns: The parsed Decimal, rounded once to the digits it holds.
+### :throws: {InvalidValueError} if the text is not a valid FINITE decimal literal.
+routine Text.to[Decimal]() -> Decimal
+    var w = decimal_bits_parse(text: me, width: 0)
+    if w.w0 != 0
+        throw InvalidValueError(input: me, target: "decimal number")
+    return dec_of_canonical(x: D128.from_words(low: w.w1, high: w.w2))
+
+# ============================================================================
+# Creators — integers are always finite, so they delegate straight to D128 and
+# reinterpret. Binary floats and IEEE decimals can be non-finite, so they route
+# through the finite guard (crashes on inf/NaN).
+# ============================================================================
+
+### Builds a Decimal from a sign + U128 coefficient at the given exponent (rounds to <= 34 digits).
+### :param sign: `true` for a negative value.
+### :param coeff: The integer coefficient.
+### :param exp: The power of ten.
+### :returns: The value (-1)^sign * coeff * 10^exp, rounded if the coefficient has too many digits.
+common routine Decimal.from_components(sign: Bool, coeff: U128, exp: S64) -> Decimal
+    return dec_of_canonical(x: dec_round_parts(sign: sign, coeff: coeff, exp: exp))
+
+### sign, coeff, exp rounded to 34 digits, half up, in Decimal's one form.
+### :param sign: `true` for a negative value.
+### :param coeff: The integer coefficient.
+### :param exp: The power of ten.
+### :returns: The rounded value as a D128 in the one form of a Decimal.
+secret routine dec_round_parts(sign: Bool, coeff: U128, exp: S64) -> D128
+    var neg: U32 = 0
+    if sign
+        neg = 1
+    var low = LLVM::int_truncate[U128, U64](coeff)
+    var high = LLVM::int_truncate[U128, U64](coeff >>> 64)
+    return d128_of_words(w: C::ingrid_decimal_from_parts(neg: neg, c_low: low, c_high: high, exp: exp))
+
+### An integer magnitude rounded to 34 digits, half up.
+### :param neg: `true` for a negative value.
+### :param m: The magnitude.
+### :returns: The rounded Decimal.
+secret routine dec_round_integer(neg: Bool, m: U256) -> Decimal
+    var n: U32 = 0
+    if neg
+        n = 1
+    var m0 = LLVM::int_truncate[U256, U64](m)
+    var m1 = LLVM::int_truncate[U256, U64](m >>> 64)
+    var m2 = LLVM::int_truncate[U256, U64](m >>> 128)
+    var m3 = LLVM::int_truncate[U256, U64](m >>> 192)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_from_integer(neg: n, m0: m0, m1: m1, m2: m2, m3: m3)))
+
+### A signed 256-bit integer rounded to 34 digits, half up.
+### :param v: The integer to convert.
+### :returns: The rounded Decimal.
+secret routine dec_round_signed(v: S256) -> Decimal
+    var m = LLVM::reinterpret_bits[S256, U256](v)
+    var m0 = LLVM::int_truncate[U256, U64](m)
+    var m1 = LLVM::int_truncate[U256, U64](m >>> 64)
+    var m2 = LLVM::int_truncate[U256, U64](m >>> 128)
+    var m3 = LLVM::int_truncate[U256, U64](m >>> 192)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_from_s256(m0: m0, m1: m1, m2: m2, m3: m3)))
+
+### A 64-bit signed integer as a Decimal (exact).
+### :param n: The integer to convert.
+### :returns: The Decimal equal to `n`.
+secret routine dec_of_s64(n: S64) -> Decimal
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_from_s64(n: n)))
+
+### A binary float rounded to 34 digits and reduced, half up (crashes if non-finite).
+### :param x: The binary float to convert.
+### :returns: The Decimal nearest to `x`.
+secret routine dec_round_binary(x: B128) -> Decimal
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_from_binary(low: x.low_bits(), high: x.high_bits())))
+
+### S8 -> Decimal.
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine S8.to[Decimal]() -> Decimal
+    return dec_of_s64(n: me.to[S64]())
+
+### S16 -> Decimal.
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine S16.to[Decimal]() -> Decimal
+    return dec_of_s64(n: me.to[S64]())
+
+### S32 -> Decimal.
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine S32.to[Decimal]() -> Decimal
+    return dec_of_s64(n: me.to[S64]())
+
+### S64 -> Decimal.
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine S64.to[Decimal]() -> Decimal
+    return dec_of_s64(n: me)
+
+### S128 -> Decimal (rounds half up when the magnitude exceeds 34 digits).
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine S128.to[Decimal]() -> Decimal
+    return dec_round_signed(v: LLVM::sign_extend[S128, S256](me))
+
+### S256 -> Decimal (rounds half up when the magnitude exceeds 34 digits).
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine S256.to[Decimal]() -> Decimal
+    return dec_round_signed(v: me)
+
+### U8 -> Decimal.
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine U8.to[Decimal]() -> Decimal
+    return dec_round_integer(neg: false, m: me.to[U256]())
+
+### U16 -> Decimal.
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine U16.to[Decimal]() -> Decimal
+    return dec_round_integer(neg: false, m: me.to[U256]())
+
+### U32 -> Decimal.
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine U32.to[Decimal]() -> Decimal
+    return dec_round_integer(neg: false, m: me.to[U256]())
+
+### U64 -> Decimal.
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine U64.to[Decimal]() -> Decimal
+    return dec_round_integer(neg: false, m: me.to[U256]())
+
+### U128 -> Decimal (rounds half up when the value exceeds 34 digits).
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine U128.to[Decimal]() -> Decimal
+    return dec_round_integer(neg: false, m: me.to[U256]())
+
+### U256 -> Decimal (rounds half up when the value exceeds 34 digits).
+### :returns: `me` as a Decimal, rounded to the nearest value that fits when it has too many digits.
+routine U256.to[Decimal]() -> Decimal
+    return dec_round_integer(neg: false, m: me)
+
+### B16 -> Decimal (correctly rounded half up, crashes if the value is non-finite).
+### :returns: `me` as a Decimal, rounded to nearest.
+routine B16.to[Decimal]() -> Decimal
+    return dec_round_binary(x: me.to[B128]())
+
+### B32 -> Decimal (correctly rounded half up, crashes if the value is non-finite).
+### :returns: `me` as a Decimal, rounded to nearest.
+routine B32.to[Decimal]() -> Decimal
+    return dec_round_binary(x: me.to[B128]())
+
+### B64 -> Decimal (correctly rounded half up, crashes if the value is non-finite).
+### :returns: `me` as a Decimal, rounded to nearest.
+routine B64.to[Decimal]() -> Decimal
+    return dec_round_binary(x: me.to[B128]())
+
+### Converts a `Decimal` to the nearest `B32`, correctly rounded in one step.
+### :returns: The `B32` closest to this value.
+### :throws: {NumericOverflowError} if this value is beyond the range of `B32`.
+routine Decimal.to[B32]() -> B32
+    var x = dec_to_d128(x: me)
+    var r = B32.from_bits(bits: LLVM::int_truncate[U64, U32](C::ingrid_d128_to_binary(x_low: d128_low(v: x), x_high: d128_high(v: x), which: 32).w0))
+    if r.is_infinite()
+        throw NumericOverflowError(description: "overflow: out of the B32 range")
+    return r
+
+### Converts a `Decimal` to the nearest `B64`, correctly rounded in one step.
+### :returns: The `B64` closest to this value.
+### :throws: {NumericOverflowError} if this value is beyond the range of `B64`.
+routine Decimal.to[B64]() -> B64
+    var x = dec_to_d128(x: me)
+    var r = B64.from_bits(bits: C::ingrid_d128_to_binary(x_low: d128_low(v: x), x_high: d128_high(v: x), which: 64).w0)
+    if r.is_infinite()
+        throw NumericOverflowError(description: "overflow: out of the B64 range")
+    return r
+
+### B128 -> Decimal (correctly rounded half up, crashes if the value is non-finite).
+### :returns: `me` as a Decimal, rounded to nearest.
+routine B128.to[Decimal]() -> Decimal
+    return dec_round_binary(x: me)
+
+### D32 -> Decimal (exact widen; crashes if the value is non-finite).
+### :returns: `me` as a Decimal, rounded to nearest when it has too many digits.
+routine D32.to[Decimal]() -> Decimal
+    return dec_of_d128_finite(d: me.to[D128]())
+
+### D64 -> Decimal (exact widen; crashes if the value is non-finite).
+### :returns: `me` as a Decimal, rounded to nearest when it has too many digits.
+routine D64.to[Decimal]() -> Decimal
+    return dec_of_d128_finite(d: me.to[D128]())
+
+### D128 -> Decimal (bit-for-bit; crashes if the value is non-finite).
+### :returns: `me` as a Decimal, rounded to nearest when it has too many digits.
+routine D128.to[Decimal]() -> Decimal
+    return dec_of_d128_finite(d: me)
+
+# ============================================================================
+# Classification. A well-formed Decimal is always finite (is_finite -> true,
+# is_infinite/is_nan -> false); the checks stay honest for a value built from raw
+# bits via `from_bits`.
+# ============================================================================
+
+### True when this is a finite value (always true for a Decimal built through the normal paths).
+### :returns: `true` if `me` is neither an infinity nor a NaN.
+@readonly
+routine Decimal.is_finite() -> Bool
+    return dec_to_d128(x: me).is_finite()
+
+### True when this is +-infinity (never true through the normal paths).
+### :returns: `true` if `me` is positive or negative infinity.
+@readonly
+routine Decimal.is_infinite() -> Bool
+    return dec_to_d128(x: me).is_infinite()
+
+### True when this is NaN (never true through the normal paths).
+### :returns: `true` if `me` is a quiet or signaling NaN.
+@readonly
+routine Decimal.is_nan() -> Bool
+    return dec_to_d128(x: me).is_nan()
+
+# ============================================================================
+# Comparison (Comparable / value equality) and hashing. A Decimal has one form, so equal values have equal bits.
+# ============================================================================
+
+### Three-way comparison under IEEE ordered semantics (delegated to D128).
+### :param you: The value to compare against.
+### :returns: Whether `me` is smaller than, equal to, or larger than `you`.
+@readonly
+routine Decimal.compare(you: Decimal) -> ComparisonSign
+    return dec_to_d128(x: me).compare(you: dec_to_d128(x: you))
+
+### Value equality (delegated to D128): `1.0` and `1.00` are equal (and are the same bits).
+### :param you: The value to compare against.
+### :returns: `true` if the two compare equal.
+@readonly
+routine Decimal.eq(you: Decimal) -> Bool
+    return dec_to_d128(x: me).eq(you: dec_to_d128(x: you))
+
+### Returns a SipHash-2-4 keyed hash of the bits. A Decimal has one form, so equal values hash equal.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+@readonly
+routine Decimal.hash(k0: U64, k1: U64) -> U64
+    return __secure_hash_u128(v: me.to_bits(), k0: k0, k1: k1)
+
+# ============================================================================
+# Arithmetic. `+ - *` are exact: a result that needs more than 34 significant digits (or an exponent below the
+# smallest one) stops with NumericOverflowError instead of rounding, the way an integer that overflows does.
+# Division rounds to the nearest 34-digit value, since a quotient is rarely exact in any number of digits. Every
+# operator crashes on a result out of range (NumericOverflowError) or with no value (NumericDomainError,
+# DivisionByZeroError). Failability is inferred from the body.
+# ============================================================================
+
+### The value of an exact `+ - *` from Ingrid: the 34-digit result, or a crash when that lost a digit.
+### :param w: The result words, `w2` 1 when rounding lost a digit.
+### :param what: The result's name for the crash message (`sum`, `difference`, `product`).
+### :returns: The exact result.
+### :throws: {NumericOverflowError} when the exact result needs more than 34 significant digits, or is out of range.
+secret routine dec_exact(w: IngridWords, what: Text) -> Decimal
+    if w.w2 != 0
+        throw NumericOverflowError(
+            description: f"the exact {what} has more significant digits than a Decimal holds (34)")
+    var d = D128.from_words(low: w.w0, high: w.w1)
+    if d.is_finite()
+        return dec_of_canonical(x: d)
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `me * you`, exactly.
+### :param you: The factor to multiply by.
+### :returns: `me * you`.
+### :throws: {NumericOverflowError} when the exact product needs more than 34 significant digits.
+@readonly
+routine Decimal.mul(you: Decimal) -> Decimal
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_exact(w: C::ingrid_decimal_mul_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
+        b_low: d128_low(v: b), b_high: d128_high(v: b)), what: "product")
+
+### Returns `me + you`, exactly.
+### :param you: The value to add.
+### :returns: `me + you`.
+### :throws: {NumericOverflowError} when the exact sum needs more than 34 significant digits.
+@readonly
+routine Decimal.add(you: Decimal) -> Decimal
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_exact(w: C::ingrid_decimal_add_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
+        b_low: d128_low(v: b), b_high: d128_high(v: b)), what: "sum")
+
+### Returns `me - you`, exactly.
+### :param you: The value to subtract.
+### :returns: `me - you`.
+### :throws: {NumericOverflowError} when the exact difference needs more than 34 significant digits.
+@readonly
+routine Decimal.sub(you: Decimal) -> Decimal
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_exact(w: C::ingrid_decimal_sub_exact(a_low: d128_low(v: a), a_high: d128_high(v: a),
+        b_low: d128_low(v: b), b_high: d128_high(v: b)), what: "difference")
+
+### Returns `me / you`, rounded to 34 digits, half up.
+### :param you: The divisor.
+### :returns: `me / you`.
+### :throws: {DivisionByZeroError} when `you` is zero; {NumericOverflowError} when the quotient is out of range.
+@readonly
+routine Decimal.truediv(you: Decimal) -> Decimal
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    var r = d128_of_words(w: C::ingrid_decimal_div(a_low: d128_low(v: a), a_high: d128_high(v: a),
+        b_low: d128_low(v: b), b_high: d128_high(v: b)))
+    if r.is_finite()
+        return dec_of_canonical(x: r)
+    if b.is_zero() and not a.is_zero()
+        throw DivisionByZeroError()
+    if r.is_nan()
+        throw NumericDomainError(description: "domain error: no real result")
+    throw NumericOverflowError(description: "overflow: out of range")
+
+### `me op you` (op 0 add, 1 subtract, 2 multiply) computed exactly, then rounded once to `places` digits after the
+### point by `rule`.
+### :param op: The operation: 0 add, 1 subtract, 2 multiply, 3 divide.
+### :param a: The first operand.
+### :param b: The second operand.
+### :param places: The digits after the point that are kept.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded result.
+### :throws: {NumericOverflowError} when even the rounded result needs more than 34 significant digits.
+secret routine dec_places_op(op: U32, a: Decimal, b: Decimal, places: U64, rule: RoundingRule) -> Decimal
+    var x = dec_to_d128(x: a)
+    var y = dec_to_d128(x: b)
+    var w = C::ingrid_decimal_places_op(op: op, a_low: d128_low(v: x), a_high: d128_high(v: x), b_low: d128_low(v: y),
+        b_high: d128_high(v: y), places: places, mode: rounding_mode(rule: rule))
+    if w.w2 != 0
+        throw NumericOverflowError(
+            description: f"the result to {places} places has more significant digits than a Decimal holds (34)")
+    return dec_of_canonical(x: D128.from_words(low: w.w0, high: w.w1))
+
+### `me op you` (op 0 add, 1 subtract, 2 multiply, 3 divide) computed exactly, then rounded once to the nearest value of
+### 34 significant digits under `rule`.
+### :param op: The operation: 0 add, 1 subtract, 2 multiply, 3 divide.
+### :param a: The first operand.
+### :param b: The second operand.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded result.
+### :throws: {NumericOverflowError} when the rounded result is past the range of a Decimal (about 1e6144).
+secret routine dec_sig_op(op: U32, a: Decimal, b: Decimal, rule: RoundingRule) -> Decimal
+    var x = dec_to_d128(x: a)
+    var y = dec_to_d128(x: b)
+    var w = C::ingrid_decimal_sig_op(op: op, a_low: d128_low(v: x), a_high: d128_high(v: x), b_low: d128_low(v: y),
+        b_high: d128_high(v: y), mode: rounding_mode(rule: rule))
+    if w.w2 != 0
+        throw NumericOverflowError(description: "overflow: out of range")
+    return dec_of_canonical(x: D128.from_words(low: w.w0, high: w.w1))
+
+### Returns `me + you` computed exactly, then rounded once, by `rule` (half up when left out), to the nearest value of 34
+### significant digits, or to `places` digits after the point when `places` is given. Where `+` fails past 34 digits,
+### this rounds: `a.add_round(b, places: 2)`.
+### :param you: The number added.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded sum.
+### :throws: {NumericOverflowError} when the rounded sum is past the range of a Decimal.
+@readonly
+routine Decimal.add_round(you: Decimal, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_sig_op(op: 0, a: me, b: you, rule: rule)
+
+### Returns `me + you` computed exactly, then rounded once, by `rule` (half up when left out), to the nearest value of 34
+### significant digits, or to `places` digits after the point when `places` is given. Where `+` fails past 34 digits,
+### this rounds: `a.add_round(b, places: 2)`.
+### :param you: The number added.
+### :param places: The digits after the point kept.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded sum.
+### :throws: {NumericOverflowError} when the rounded sum is past the range of a Decimal or needs more than 34 significant digits.
+@readonly
+routine Decimal.add_round(you: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_places_op(op: 0, a: me, b: you, places: places, rule: rule)
+
+### Returns `me - you` computed exactly, then rounded once, by `rule` (half up when left out), to the nearest value of 34
+### significant digits, or to `places` digits after the point when `places` is given. Where `-` fails past 34 digits,
+### this rounds: `a.sub_round(b, places: 2)`.
+### :param you: The number taken away.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded difference.
+### :throws: {NumericOverflowError} when the rounded difference is past the range of a Decimal.
+@readonly
+routine Decimal.sub_round(you: Decimal, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_sig_op(op: 1, a: me, b: you, rule: rule)
+
+### Returns `me - you` computed exactly, then rounded once, by `rule` (half up when left out), to the nearest value of 34
+### significant digits, or to `places` digits after the point when `places` is given. Where `-` fails past 34 digits,
+### this rounds: `a.sub_round(b, places: 2)`.
+### :param you: The number taken away.
+### :param places: The digits after the point kept.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded difference.
+### :throws: {NumericOverflowError} when the rounded difference is past the range of a Decimal or needs more than 34 significant digits.
+@readonly
+routine Decimal.sub_round(you: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_places_op(op: 1, a: me, b: you, places: places, rule: rule)
+
+### Returns `me * you` computed exactly, then rounded once, by `rule` (half up when left out), to the nearest value of 34
+### significant digits, or to `places` digits after the point when `places` is given. Where `*` fails past 34 digits,
+### this rounds: `a.mul_round(b, places: 2)`.
+### :param you: The other factor.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded product.
+### :throws: {NumericOverflowError} when the rounded product is past the range of a Decimal.
+@readonly
+routine Decimal.mul_round(you: Decimal, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_sig_op(op: 2, a: me, b: you, rule: rule)
+
+### Returns `me * you` computed exactly, then rounded once, by `rule` (half up when left out), to the nearest value of 34
+### significant digits, or to `places` digits after the point when `places` is given. Where `*` fails past 34 digits,
+### this rounds: `a.mul_round(b, places: 2)`.
+### :param you: The other factor.
+### :param places: The digits after the point kept.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded product.
+### :throws: {NumericOverflowError} when the rounded product is past the range of a Decimal or needs more than 34 significant digits.
+@readonly
+routine Decimal.mul_round(you: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_places_op(op: 2, a: me, b: you, places: places, rule: rule)
+
+### Returns `me / you` rounded once, by `rule` (half up when left out), to the nearest value of 34 significant digits, or to
+### `places` digits after the point when `places` is given: `1.div_round(3)` is `0.3333333333333333333333333333333333`,
+### `1.div_round(3, places: 2)` is `0.33`, `2.div_round(3, places: 2, rule: RoundingRule.FLOOR)` is `0.66`.
+### :param you: The divisor.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded quotient.
+### :throws: {DivisionByZeroError} when `you` is zero; {NumericOverflowError} when the rounded quotient needs more than 34
+###     significant digits or is past the range of a Decimal.
+@readonly
+routine Decimal.div_round(you: Decimal, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    if you.is_zero()
+        throw DivisionByZeroError()
+    return dec_sig_op(op: 3, a: me, b: you, rule: rule)
+
+### Returns `me / you` rounded once, by `rule` (half up when left out), to the nearest value of 34 significant digits, or to
+### `places` digits after the point when `places` is given: `1.div_round(3)` is `0.3333333333333333333333333333333333`,
+### `1.div_round(3, places: 2)` is `0.33`, `2.div_round(3, places: 2, rule: RoundingRule.FLOOR)` is `0.66`.
+### :param you: The divisor.
+### :param places: The digits after the point kept.
+### :param rule: How the digits past the kept ones go.
+### :returns: The rounded quotient.
+### :throws: {DivisionByZeroError} when `you` is zero; {NumericOverflowError} when the rounded quotient needs more than 34
+###     significant digits or is past the range of a Decimal.
+@readonly
+routine Decimal.div_round(you: Decimal, places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    if you.is_zero()
+        throw DivisionByZeroError()
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    var w = C::ingrid_decimal_divide(a_low: d128_low(v: a), a_high: d128_high(v: a), b_low: d128_low(v: b),
+        b_high: d128_high(v: b), places: places, mode: rounding_mode(rule: rule))
+    if w.w2 != 0
+        throw NumericOverflowError(
+            description: f"the quotient to {places} places has more significant digits than a Decimal holds (34)")
+    return dec_of_canonical(x: D128.from_words(low: w.w0, high: w.w1))
+
+### `a + b` rounded to 34 digits, half up (raw: an infinity passes through).
+### :param a: The first addend.
+### :param b: The second addend.
+### :returns: `a + b`, rounded.
+secret routine dec_round_add(a: D128, b: D128) -> D128
+    return d128_of_words(w: C::ingrid_decimal_add(a_low: d128_low(v: a), a_high: d128_high(v: a),
+        b_low: d128_low(v: b), b_high: d128_high(v: b)))
+
+# ============================================================================
+# Comparison selectors and convenience (min / max / clamp / recip / powi / midpoint)
+# ============================================================================
+
+### The smaller of `me` and `you`. If one operand is NaN, the other one.
+### :param you: The value to compare with.
+### :returns: The smaller value, the other operand when one is NaN, and NaN when both are.
+routine Decimal.min(you: Decimal) -> Decimal
+    var x = dec_to_d128(x: me)
+    var y = dec_to_d128(x: you)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_d128_select(a_low: d128_low(v: x), a_high: d128_high(v: x),
+        b_low: d128_low(v: y), b_high: d128_high(v: y), which: 0)))
+### The larger of `me` and `you`. If one operand is NaN, the other one.
+### :param you: The value to compare with.
+### :returns: The larger value, the other operand when one is NaN, and NaN when both are.
+routine Decimal.max(you: Decimal) -> Decimal
+    var x = dec_to_d128(x: me)
+    var y = dec_to_d128(x: you)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_d128_select(a_low: d128_low(v: x), a_high: d128_high(v: x),
+        b_low: d128_low(v: y), b_high: d128_high(v: y), which: 1)))
+### Restricts `me` to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound.
+### :param max_val: The upper bound.
+### :returns: The clamped value.
+@positional
+routine Decimal.clamp(min_val: Decimal, max_val: Decimal) -> Decimal
+    var x = dec_to_d128(x: me)
+    var lo = dec_to_d128(x: min_val)
+    var hi = dec_to_d128(x: max_val)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_d128_clamp(x_low: d128_low(v: x), x_high: d128_high(v: x),
+        lo_low: d128_low(v: lo), lo_high: d128_high(v: lo), hi_low: d128_low(v: hi), hi_high: d128_high(v: hi))))
+
+### Returns the reciprocal `1 / me`. Crashes if `me` is zero (no finite inverse), as for all
+### `Decimal` arithmetic.
+### :returns: The multiplicative inverse.
+routine Decimal.recip() -> Decimal
+    return DECIMAL_ONE.truediv(me)
+
+### Returns `me` raised to the integer power `n`, rounded once to 34 digits (a tie half up), not one rounding per
+### multiplication, the result in Decimal's one form. `x.powi(0)` is 1. A power out of range crashes, as for all
+### `Decimal` arithmetic (NumericOverflowError, also for a zero to a negative power).
+### :param n: The integer exponent.
+### :returns: `me ** n`.
+routine Decimal.powi(n: S32) -> Decimal
+    var x = dec_to_d128(x: me)
+    return dec_of_canonical_finite(d: d128_of_words(w: C::ingrid_decimal_powi(x_low: d128_low(v: x),
+        x_high: d128_high(v: x), n: n.to[S64]())))
+
+### Returns `(me + you) / 2`, rounded once to 34 digits (a tie half up): the sum is not rounded on its own, so the
+### midpoint of two Decimals is always a Decimal.
+### :param you: The other value.
+### :returns: The arithmetic midpoint of `me` and `you`.
+routine Decimal.midpoint(you: Decimal) -> Decimal
+    var a = dec_to_d128(x: me)
+    var b = dec_to_d128(x: you)
+    return dec_of_canonical(x: d128_of_words(w: C::ingrid_decimal_midpoint(a_low: d128_low(v: a),
+        a_high: d128_high(v: a), b_low: d128_low(v: b), b_high: d128_high(v: b))))
+
+# ============================================================================
+# Formatting — canonical decimal text (fractional trailing zeros stripped)
+# ============================================================================
+
+### Returns the decimal text of this value: no fractional trailing zeros (2.50 -> "2.5"), an integer of up to 34
+### digits written in full (100 -> "100"), exponent form past that or below 1e-6.
+### :returns: The text form of `me`.
+@override
+routine Decimal.represent() -> Text
+    var x = dec_to_d128(x: me)
+    return decimal_bits_text(low: d128_low(v: x), high: d128_high(v: x), width: 0, style: 1, places: 0, mode: 5)
+
+### Renders this value with exactly `places` digits after the point, rounded from its exact value by `rule`, half up
+### when left out (`2.675.fixed(2)` is `2.68`, `-7.125.fixed(2)` is `-7.12`, `-2.5.fixed(0)` is `-2`). The integer part
+### is always written out in full, never in exponent form.
+### :param places: The number of digits after the point (0 for none).
+### :param rule: How the digits past them go.
+### :returns: The rendered `Text`.
+@readonly
+routine Decimal.fixed(places: U64, rule: RoundingRule = RoundingRule.HALF_UP) -> Text
+    var x = dec_to_d128(x: me)
+    return decimal_bits_text(low: d128_low(v: x), high: d128_high(v: x), width: 0, style: 4, places: places,
+        mode: rounding_mode(rule: rule))
+
+### Returns a debug rendering of this value, e.g. `Decimal(3.5)`. Mirrors the D32/D64/D128 surface.
+### :returns: The diagnostic text of `me`.
+@override
+routine Decimal.diagnose() -> Text
+    var x = dec_to_d128(x: me)
+    return decimal_bits_text(low: d128_low(v: x), high: d128_high(v: x), width: 0, style: 3, places: 0, mode: 5)

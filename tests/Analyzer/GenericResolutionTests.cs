@@ -4,7 +4,7 @@ using Builder.Verification.Results;
 using SyntaxTree;
 using TypeModel.Enums;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -267,7 +267,7 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        var analyzer = new SemanticVerifier(language: Language.Revare) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -311,7 +311,7 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        var analyzer = new SemanticVerifier(language: Language.Revare) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -351,7 +351,7 @@ public class GenericResolutionTests
 
         Program program = Parse(source: source);
         // Needs full pipeline: GenericCallLoweringPass (Phase 4) lowers GenericMemberRoutineCallExpression → CallExpression
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -616,7 +616,7 @@ public class GenericResolutionTests
 
     /// <summary>
     /// A generic routine whose type parameter appears ONLY in the return type, called with
-    /// no expected-type context, cannot bind that parameter. This must surface as RF-S161
+    /// no expected-type context, cannot bind that parameter. This must surface as RA-S161
     /// during SA rather than silently passing and crashing in codegen.
     /// </summary>
     [Fact]
@@ -638,7 +638,7 @@ public class GenericResolutionTests
 
     /// <summary>
     /// The same call binds cleanly when the return-only type parameter has expected-type
-    /// context (a typed variable annotation), so no RF-S161 fires.
+    /// context (a typed variable annotation), so no RA-S161 fires.
     /// </summary>
     [Fact]
     public void Analyze_ReturnOnlyTypeParam_WithContext_NoCannotInfer()

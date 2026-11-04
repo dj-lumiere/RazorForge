@@ -1,9 +1,9 @@
 #!/bin/bash
-# RazorForge Rider One-Click Setup Script (Linux/macOS)
+# Revare Rider One-Click Setup Script (Linux/macOS)
 # This script sets up the development environment for JetBrains Rider
 
 echo "========================================"
-echo "RazorForge Rider Setup"
+echo "Revare Rider Setup"
 echo "========================================"
 echo ""
 
@@ -22,13 +22,13 @@ echo "[INFO] .NET version: $DOTNET_VERSION"
 
 echo ""
 echo "========================================"
-echo "Building RazorForge..."
+echo "Building Revare..."
 echo "========================================"
 echo ""
 
 # Build the project
 echo "[INFO] Running dotnet build..."
-dotnet build RazorForge.csproj
+dotnet build Revare.csproj
 
 if [ $? -ne 0 ]; then
     echo ""
@@ -48,27 +48,27 @@ echo "========================================"
 echo ""
 echo "The following have been pre-configured:"
 echo ""
-echo "  ✓ Run Configurations (.idea/.idea.RazorForge/.idea/runConfigurations/)"
-echo "    - Build RazorForge"
+echo "  ✓ Run Configurations (.idea/.idea.Revare/.idea/runConfigurations/)"
+echo "    - Build Revare"
 echo "    - Compile: Current File"
 echo "    - Compile: Intrinsics Demo"
 echo "    - Compile: Primitive Types Demo"
 echo "    - Compile: Console Demo"
-echo "    - Compile: Suflae Current File"
-echo "    - Compile: Suflae Console Demo"
+echo "    - Compile: Mielia Current File"
+echo "    - Compile: Mielia Console Demo"
 echo "    - Language Server"
 echo "    - Run: All Tests"
 echo ""
 echo "  ✓ File Templates (.idea/fileTemplates/)"
-echo "    - RazorForge File.rf"
-echo "    - RazorForge Record Type.rf"
-echo "    - RazorForge Entity Type.rf"
-echo "    - Suflae File.sf"
-echo "    - Suflae Record Type.sf"
-echo "    - Suflae Entity Type.sf"
+echo "    - Revare File.rr"
+echo "    - Revare Record Type.rr"
+echo "    - Revare Entity Type.rr"
+echo "    - Mielia File.mi"
+echo "    - Mielia Record Type.mi"
+echo "    - Mielia Entity Type.mi"
 echo ""
-echo "  ✓ Inspection Profile (.idea/.idea.RazorForge/.idea/inspectionProfiles/)"
-echo "    - RazorForge.xml"
+echo "  ✓ Inspection Profile (.idea/.idea.Revare/.idea/inspectionProfiles/)"
+echo "    - Revare.xml"
 echo ""
 echo "========================================"
 echo "Setup Complete!"

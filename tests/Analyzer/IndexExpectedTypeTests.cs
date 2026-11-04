@@ -2,7 +2,7 @@ using SyntaxTree;
 using TypeModel.Types;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 

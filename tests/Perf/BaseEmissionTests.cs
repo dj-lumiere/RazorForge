@@ -7,7 +7,7 @@ using Builder.Verification;
 using Builder.Verification.Results;
 using Xunit.Abstractions;
 
-namespace RazorForge.Tests.Perf;
+namespace Revare.Tests.Perf;
 
 /// <summary>
 /// Resident-JIT incremental Phase 0a (see internal-wiki/RESIDENT-JIT-INCREMENTAL-V0.5.md §2A.5): validates
@@ -37,8 +37,8 @@ public sealed class BaseEmissionTests
     private static Program Parse(string src, string file)
     {
         var parser = new Builder.Parser.Parser(
-            tokens: Lexers.Tokenize(source: src, fileName: file, language: Language.RazorForge),
-            language: Language.RazorForge,
+            tokens: Lexers.Tokenize(source: src, fileName: file, language: Language.Revare),
+            language: Language.Revare,
             fileName: file) { PrintsErrors = false };
         Program program = parser.Parse();
         Assert.False(condition: parser.HasErrors,
@@ -139,8 +139,8 @@ public sealed class BaseEmissionTests
     public void EmitOneRoutine_DefinesTargetDeclaresCallees()
     {
         AnalysisResult r =
-            new SemanticVerifier(language: Language.RazorForge).Analyze(
-                program: Parse(src: Trivial, file: "bench.rf"));
+            new SemanticVerifier(language: Language.Revare).Analyze(
+                program: Parse(src: Trivial, file: "bench.rr"));
         Assert.Empty(collection: r.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
@@ -183,20 +183,20 @@ public sealed class BaseEmissionTests
             }).Generate();
 
         HashSet<string> defs = DefinedSymbols(ll: oneIr);
-        // RF-mangled defines are quoted (`@"[member] …"`); bare-name defines (_rf_trace_push, …) are the
+        // RA-mangled defines are quoted (`@"[member] …"`); bare-name defines (_rf_trace_push, …) are the
         // shared-runtime shadow-stack HELPERS the emitter inlines into every module regardless of the body
         // set. Those are the GLOBALS-analogue-of-C4 concern (define once in the main module, extern in the
         // per-routine on-demand modules) — handled at the ORC wiring step, NOT part of the one-routine body set.
-        var rfDefs = defs.Where(predicate: d => d.StartsWith(value: '"')).ToList();
+        var raDefs = defs.Where(predicate: d => d.StartsWith(value: '"')).ToList();
         _out.WriteLine(message: $"target={targetName}");
-        _out.WriteLine(message: $"one-routine module: rf-defines={rfDefs.Count} (bare-runtime={defs.Count - rfDefs.Count}), chars={oneIr.Length}");
-        _out.WriteLine(message: "RF-DEFINES:\n  " + string.Join(separator: "\n  ", values: rfDefs));
+        _out.WriteLine(message: $"one-routine module: rf-defines={raDefs.Count} (bare-runtime={defs.Count - raDefs.Count}), chars={oneIr.Length}");
+        _out.WriteLine(message: "RA-DEFINES:\n  " + string.Join(separator: "\n  ", values: raDefs));
 
-        // The primitive defines EXACTLY the target RF routine, nothing resident re-defined, no @main.
+        // The primitive defines EXACTLY the target RA routine, nothing resident re-defined, no @main.
         Assert.DoesNotContain(expectedSubstring: "define i32 @main(", actualString: oneIr);
-        Assert.Single(collection: rfDefs);
+        Assert.Single(collection: raDefs);
         Assert.Equal(expected: targetName.Trim(trimChar: '"'),
-            actual: rfDefs[index: 0].Trim(trimChar: '"'));
+            actual: raDefs[index: 0].Trim(trimChar: '"'));
     }
 
     [Fact]
@@ -204,8 +204,8 @@ public sealed class BaseEmissionTests
     {
         // Cold analyze retains StdlibPrograms (the warm/snapshot path drops them).
         AnalysisResult r =
-            new SemanticVerifier(language: Language.RazorForge).Analyze(
-                program: Parse(src: Trivial, file: "bench.rf"));
+            new SemanticVerifier(language: Language.Revare).Analyze(
+                program: Parse(src: Trivial, file: "bench.rr"));
         Assert.Empty(collection: r.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: r.Registry.UserPrograms,
@@ -268,13 +268,13 @@ public sealed class BaseEmissionTests
     }
 
     /// <summary>
-    /// The resident-JIT base seed builds with no error and no warning in RazorForge, through the same driver a program
-    /// goes through (the Suflae twin of this test is in the Suflae test project).
+    /// The resident-JIT base seed builds with no error and no warning in Revare, through the same driver a program
+    /// goes through (the Mielia twin of this test is in the Mielia test project).
     /// </summary>
     [Fact]
     public void BaseSeed_Builds_WithoutDiagnostics()
     {
-        (string source, string fileName) = Builder.Execution.BaseObjectCache.SeedFor(language: Language.RazorForge);
+        (string source, string fileName) = Builder.Execution.BaseObjectCache.SeedFor(language: Language.Revare);
         string dir = Path.Combine(path1: Path.GetTempPath(), path2: "rf_seed_test_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path: dir);
         TextWriter savedOut = Console.Out;
@@ -316,9 +316,9 @@ public sealed class BaseEmissionTests
         // Hijacked[…] explosion) and we feed the FULL set to the base; a program's own uncommon instances fall to
         // the per-run delta. The seed's own `start` lives in UserPrograms, so passing empty userPrograms below
         // keeps it out of the base (@main is gated off in base mode regardless).
-        var baseSa = new SemanticVerifier(language: Language.RazorForge);
+        var baseSa = new SemanticVerifier(language: Language.Revare);
         AnalysisResult baseR = baseSa.Analyze(
-            program: Parse(src: Builder.Execution.BaseObjectCache.SeedProgramSource, file: "base.rf"));
+            program: Parse(src: Builder.Execution.BaseObjectCache.SeedProgramSource, file: "base.rr"));
         Assert.Empty(collection: baseR.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,
@@ -342,7 +342,7 @@ public sealed class BaseEmissionTests
         File.Delete(path: cache.ObjectPath(fingerprint: fp));
         string? obj = cache.GetOrBuild(fingerprint: fp,
             baseIr: baseIr,
-            buildMode: Builder.Targeting.RfBuildMode.Debug,
+            buildMode: Builder.Targeting.RaBuildMode.Debug,
             wasCached: out bool cached);
 
         _out.WriteLine(

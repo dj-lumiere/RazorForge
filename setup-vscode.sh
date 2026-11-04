@@ -1,9 +1,9 @@
 #!/bin/bash
-# RazorForge VSCode One-Click Setup Script (Linux/macOS)
+# Revare VSCode One-Click Setup Script (Linux/macOS)
 # This script sets up the development environment for VSCode
 
 echo "========================================"
-echo "RazorForge VSCode Setup"
+echo "Revare VSCode Setup"
 echo "========================================"
 echo ""
 
@@ -77,13 +77,13 @@ code --install-extension wayou.vscode-todo-highlight
 
 echo ""
 echo "========================================"
-echo "Building RazorForge..."
+echo "Building Revare..."
 echo "========================================"
 echo ""
 
 # Build the project
 echo "[INFO] Running dotnet build..."
-dotnet build RazorForge.csproj
+dotnet build Revare.csproj
 
 if [ $? -ne 0 ]; then
     echo ""

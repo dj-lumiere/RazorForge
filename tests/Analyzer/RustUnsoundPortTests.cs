@@ -1,12 +1,12 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Rust soundness bugs (`I-unsound` issues) ported to RazorForge (intent C46) that built before and are build errors
+/// Rust soundness bugs (`I-unsound` issues) ported to Revare (intent C46) that built before and are build errors
 /// now. Each case is the port reduced to its core, with the Rust issue it follows. The last cases check that the legal
 /// neighbours of those programs still build.
 /// </summary>

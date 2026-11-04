@@ -2,10 +2,10 @@ using Builder.Desugaring;
 using Builder.Diagnostics;
 using SyntaxTree;
 
-namespace RazorForge.Passes;
+namespace Revare.Passes;
 
 /// <summary>
-/// RazorForge <c>global</c> initialization, run on the user programs at the start of semantic analysis. Each global
+/// Revare <c>global</c> initialization, run on the user programs at the start of semantic analysis. Each global
 /// keeps its own module-level cell (its type is one threads may share, checked in analysis), and its initializer
 /// becomes an assignment at the top of <c>start()</c>, in the order <see cref="ModuleGlobalOrder"/> gives. The
 /// assignments are marked <see cref="AssignmentStatement.IsGlobalInit"/>, so each global is torn down at every exit of
@@ -13,7 +13,7 @@ namespace RazorForge.Passes;
 /// </summary>
 internal static class GlobalInitPass
 {
-    /// <summary>Returns false after reporting RF-S436 / RF-S438 when the globals cannot be initialized.</summary>
+    /// <summary>Returns false after reporting RA-S436 / RA-S438 when the globals cannot be initialized.</summary>
     internal static bool Run(List<(SyntaxTree.Program Program, string FilePath)> orderedFiles,
         Action<SemanticDiagnosticCode, string, SourceLocation> report)
     {

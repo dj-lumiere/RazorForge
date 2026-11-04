@@ -1,7 +1,7 @@
 using Builder.Diagnostics;
 using SyntaxTree;
 
-namespace RazorForge.Tests.Parser;
+namespace Revare.Tests.Parser;
 
 using static TestHelpers;
 
@@ -583,7 +583,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// The old <c>pass</c> line is RF-G225 with the quick fix <c>nothing</c>, and the parser reads it as
+    /// The old <c>pass</c> line is RA-G225 with the quick fix <c>nothing</c>, and the parser reads it as
     /// <c>nothing</c>, so the rest of the file is still checked.
     /// </summary>
     [Fact]
@@ -608,7 +608,7 @@ public class ControlFlowTests
     }
 
     /// <summary>
-    /// A loop written with <c>each</c> is RF-G229 with the quick fix <c>for</c>, and the parser reads it as the
+    /// A loop written with <c>each</c> is RA-G229 with the quick fix <c>for</c>, and the parser reads it as the
     /// <c>for</c> loop it means, so the rest of the file is still checked.
     /// </summary>
     [Fact]

@@ -1,7 +1,7 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
@@ -214,7 +214,7 @@ public class TypeProhibitionTests
     [Fact]
     public void Analyze_ByteLiteralNonAscii_ReportsError()
     {
-        // Non-ASCII byte literals are rejected at the lexer level (RF-G005)
+        // Non-ASCII byte literals are rejected at the lexer level (RA-G005)
         string source = """
                         routine test()
                             var x: Byte = b'é'

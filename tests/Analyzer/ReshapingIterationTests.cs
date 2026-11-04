@@ -1,12 +1,12 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Regression coverage for the RF-S625 (<see cref="SemanticDiagnosticCode.ReshapingDuringIteration"/>)
+/// Regression coverage for the RA-S625 (<see cref="SemanticDiagnosticCode.ReshapingDuringIteration"/>)
 /// ban: calling a <c>@reshaping</c> member routine on the very collection a <c>for</c> loop is iterating
 /// is rejected (the next element could no longer be the real next element). This check was DEAD CODE for a
 /// while — the surface <c>ForStatement</c> is lowered to an iterator+<c>while</c> before body analysis, so

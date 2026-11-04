@@ -1,13 +1,13 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
 /// <c>d[k] = v</c> may add the key, so a map's <c>setitem</c> is <c>@reshaping</c>: writing a key of the map an
-/// <c>for</c> loop is going through is RF-S625, directly, through a field, through a routine that writes a key of
+/// <c>for</c> loop is going through is RA-S625, directly, through a field, through a routine that writes a key of
 /// its parameter, and as a compound write. A list element write and a write after the loop stay allowed.
 /// </summary>
 public class DictReshapeTests

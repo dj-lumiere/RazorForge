@@ -1,10 +1,13 @@
 <p align="center">
-  <img src="branding/razorforge.svg" alt="RazorForge logo" width="112">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="branding/revare-dark.svg">
+    <img src="branding/revare.svg" alt="Revare logo" width="112">
+  </picture>
 </p>
 
-<h1 align="center">RazorForge</h1>
+<h1 align="center">Revare</h1>
 
-<p align="center"><strong>Make programming sharp again.</strong></p>
+<p align="center"><strong>Carve out what you meant.</strong></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.5.0-informational.svg" alt="Version 0.5.0">
@@ -13,20 +16,20 @@
 </p>
 
 <p align="center">
-  <a href="https://razorforge.lumi-dev.xyz/">Documentation</a> ·
+  <a href="https://revare.lumi-dev.xyz/">Documentation</a> ·
   <a href="#quick-start">Quick start</a> ·
-  <a href="RAZORFORGE-FOR-AI.md">Reference for AI assistants</a> ·
+  <a href="REVARE-FOR-AI.md">Reference for AI assistants</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="https://github.com/dj-lumiere/Suflae">Suflae</a>
+  <a href="https://github.com/dj-lumiere/Mielia">Mielia</a>
 </p>
 
-RazorForge (`.rf`) is a natively compiled language built around precision: in what a program means,
+Revare (`.rr`) is a natively compiled language built around precision: in what a program means,
 in how it fails, and in the numbers it computes. It is meant for application work where you want
 native code and predictable memory behavior: command-line tools, services, games, and data and
 numeric tools. It is not a kernel or bare-metal language: programs link against a runtime library,
 and there is no freestanding mode.
 
-```razorforge
+```revare
 import IO/Console
 
 entity Resource
@@ -57,7 +60,7 @@ routine start()
 ```
 
 > **Early alpha.** The builder, runtime, and standard library work, and every commit passes over
-> 2,000 unit tests and about 460 end-to-end programs (RazorForge and Suflae) on Windows, Linux, and
+> 2,000 unit tests and about 460 end-to-end programs (Revare and Mielia) on Windows, Linux, and
 > macOS in CI. APIs will still change between releases, and you will find bugs.
 
 ## What we are trying to keep
@@ -69,13 +72,13 @@ routine start()
 - **Nothing goes wrong silently.** A failure is loud, a hang is reported, and no work is left running that nobody will
   ever check.
 
-And for RazorForge, the feeling of finishing something the way you meant it, and of the builder recognizing it.
+And for Revare, the feeling of finishing something the way you meant it, and of the builder recognizing it.
 
 ## What it is like
 
 **Copy or share, and say how you share.** `=` copies a record. An entity is something a copy would get
 wrong, because two copies leave you unsure which one is legitimate, or because copying costs too much, so you
-share it instead, and RazorForge asks for how long. For a moment: the entity has one original, you give a
+share it instead, and Revare asks for how long. For a moment: the entity has one original, you give a
 routine or a block permission (`view()` / `modify()`), and the builder checks that the permission ends with its
 call or its `viewing` / `modifying` block. Handing the original over is written `steal`. For longer: a manager such as `Retained[T]` or `Guarded[T, P]` (or the watching `Tracked[T]` / `Witnessed[T]`)
 holds the entity while each part keeps a handle. Cleanup follows from that choice and runs deterministically at
@@ -107,13 +110,13 @@ indentation, four spaces each.
 ### 1. Install
 
 Download the package for your platform from the
-[releases page](https://github.com/dj-lumiere/RazorForge/releases):
+[releases page](https://github.com/dj-lumiere/Revare/releases):
 
 | Platform              | File                                 |
 |-----------------------|--------------------------------------|
-| Windows x64           | `razorforge-v<version>-win-x64.zip`    |
-| Linux x64             | `razorforge-v<version>-linux-x64.tar.gz` |
-| macOS (Apple Silicon) | `razorforge-v<version>-osx-arm64.tar.gz` |
+| Windows x64           | `revare-v<version>-win-x64.zip`    |
+| Linux x64             | `revare-v<version>-linux-x64.tar.gz` |
+| macOS (Apple Silicon) | `revare-v<version>-osx-arm64.tar.gz` |
 
 The package is self-contained: the builder, the standard library, the runtime, and the LLVM
 toolchain are all inside it. Unpack it anywhere and run the installer from that folder:
@@ -131,10 +134,10 @@ install.cmd
 Open a new terminal and check that it works:
 
 ```bash
-razorforge version
+revare version
 ```
 
-The same package installs Suflae too (`suflae`). Short aliases `rf` and `sf` work as well.
+The same package installs Mielia too (`mielia`). Short aliases `ra` and `mi` work as well.
 
 > **Linux:** linking needs the C library's development files. Most machines have them. Otherwise
 > install `libc6-dev` (Debian/Ubuntu) or `glibc-devel` (Fedora) once.
@@ -145,20 +148,20 @@ The same package installs Suflae too (`suflae`). Short aliases `rf` and `sf` wor
 
 ### 2. Hello, world
 
-```razorforge
-# hello.rf
+```revare
+# hello.rr
 import IO/Console
 
 routine start()
-    show("Hello from RazorForge!")
+    show("Hello from Revare!")
     return
 ```
 
 ```bash
-razorforge run hello.rf
+revare run hello.rr
 ```
 
-`run` builds a native executable and runs it. `razorforge build hello.rf` stops after
+`run` builds a native executable and runs it. `revare build hello.rr` stops after
 building and leaves `hello.exe` next to the source.
 
 Every routine ends with an explicit `return`, because scope teardown is anchored there. A single-file
@@ -167,26 +170,26 @@ program may also skip `routine start()` and put its statements at the top level 
 
 ### Using an AI assistant?
 
-RazorForge is not in any model's training data yet, so assistants tend to guess Rust- or
+Revare is not in any model's training data yet, so assistants tend to guess Rust- or
 Python-flavored syntax that does not build. Point yours at
-[`RAZORFORGE-FOR-AI.md`](RAZORFORGE-FOR-AI.md), which also ships in every release package. It is a
+[`REVARE-FOR-AI.md`](REVARE-FOR-AI.md), which also ships in every release package. It is a
 compact list of where those guesses go wrong, with pointers to the CI-verified programs in
 [`tests/Fixtures/Stdlib/`](tests/Fixtures/Stdlib/).
 
 ## Command line
 
 ```
-razorforge new [folder]                    Start a project (config.toml, main.rf, editor files)
-razorforge migrate [--check] <paths>...    Move sources from the previous release to this one
-razorforge check [--json] [entry-file]     Check the program without building it
-razorforge build [entry-file]              Build a native executable for this OS (no run)
-razorforge run [entry-file]                Build the program and run it
-razorforge test <dir-or-file>...           Run test programs against their expected output
-razorforge fmt [--check] <file-or-dir>...  Format sources in place
-razorforge lint <file-or-dir>...           Report code that is not in the canonical style
-razorforge docs <source-dir> <output-dir>  Write the API reference pages of a library
-razorforge lsp                             Run the language server (for an editor)
-razorforge help | version
+revare new [folder]                    Start a project (config.toml, main.rr, editor files)
+revare migrate [--check] <paths>...    Move sources from the previous release to this one
+revare check [--json] [entry-file]     Check the program without building it
+revare build [entry-file]              Build a native executable for this OS (no run)
+revare run [entry-file]                Build the program and run it
+revare test <dir-or-file>...           Run test programs against their expected output
+revare fmt [--check] <file-or-dir>...  Format sources in place
+revare lint <file-or-dir>...           Report code that is not in the canonical style
+revare docs <source-dir> <output-dir>  Write the API reference pages of a library
+revare lsp                             Run the language server (for an editor)
+revare help | version
 ```
 
 There are no build flags. All build configuration lives in the `[target]` section of a
@@ -203,13 +206,13 @@ mode = "debug"                     # debug -O0 | release -O2 | release-time -O3 
 ```
 
 With no entry file, the command looks for `config.toml` in the current directory and its parents,
-so `cd` into a solution and run `razorforge run`.
+so `cd` into a solution and run `revare run`.
 
 ## What works today
 
 - **Builder pipeline:** tokenizing, parsing, name and type resolution, desugaring, semantic
   analysis, type-aware lowering, monomorphization, LLVM IR, and a native executable. Only code
-  reachable from `start()` is built. Diagnostics read `error[RF-S###]: file:line:col: message` with a
+  reachable from `start()` is built. Diagnostics read `error[RA-S###]: file:line:col: message` with a
   source excerpt.
 - **Memory model:** copy or share. Records are copied, entities are shared: for a moment through
   scope-bound permissions (`view()` / `modify()`), for longer through the
@@ -254,32 +257,32 @@ On x86-64, programs target x86-64-v3 (Intel Haswell 2013+, AMD Excavator 2015+, 
 because the correctly rounded float math relies on hardware FMA. CPUs without AVX2 and FMA,
 including low-end Pentium, Celeron, and Atom parts, cannot run the output.
 
-## RazorForge and Suflae
+## Revare and Mielia
 
-[Suflae](https://github.com/dj-lumiere/Suflae) (`.sf`) is RazorForge's sibling. It shares the
+[Mielia](https://github.com/dj-lumiere/Mielia) (`.mi`) is Revare's sibling. It shares the
 grammar, the standard library, and the loud failures, and shares every entity for you: its
 entities are shared reference-counted handles with a cycle collector, bare numbers are exact
-`Int` and `Decimal`, and it has thread-safe module `global`s. A `.sf` file can import `.rf`
-modules, so one program can mix the two. Pick RazorForge when you want to choose how each thing is
-shared and how wide each number is, Suflae when you would rather not think about either.
+`Int` and `Decimal`, and it has thread-safe module `global`s. A `.mi` file can import `.rr`
+modules, so one program can mix the two. Pick Revare when you want to choose how each thing is
+shared and how wide each number is, Mielia when you would rather not think about either.
 
 ## Documentation
 
-The documentation lives at [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/):
+The documentation lives at [revare.lumi-dev.xyz](https://revare.lumi-dev.xyz/):
 
-- [Hello World](https://razorforge.lumi-dev.xyz/Hello-World) ·
-  [Data Types](https://razorforge.lumi-dev.xyz/Data-Types) ·
-  [Pattern Matching](https://razorforge.lumi-dev.xyz/Pattern-Matching)
-- [Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) ·
-  [Error Handling](https://razorforge.lumi-dev.xyz/Error-Handling) ·
-  [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks)
-- [Collections](https://razorforge.lumi-dev.xyz/Collections) ·
-  [Numeric Types](https://razorforge.lumi-dev.xyz/Numeric-Types) ·
-  [Generics](https://razorforge.lumi-dev.xyz/Generics) ·
-  [Protocols](https://razorforge.lumi-dev.xyz/Protocols)
-- [C Subsystem](https://razorforge.lumi-dev.xyz/C-Subsystem) ·
-  [Build System](https://razorforge.lumi-dev.xyz/Build-System) ·
-  [Design Philosophy](https://razorforge.lumi-dev.xyz/Design-Philosophy)
+- [Hello World](https://revare.lumi-dev.xyz/Hello-World) ·
+  [Data Types](https://revare.lumi-dev.xyz/Data-Types) ·
+  [Pattern Matching](https://revare.lumi-dev.xyz/Pattern-Matching)
+- [Memory Model](https://revare.lumi-dev.xyz/Memory-Model) ·
+  [Error Handling](https://revare.lumi-dev.xyz/Error-Handling) ·
+  [Danger Blocks](https://revare.lumi-dev.xyz/Danger-Blocks)
+- [Collections](https://revare.lumi-dev.xyz/Collections) ·
+  [Numeric Types](https://revare.lumi-dev.xyz/Numeric-Types) ·
+  [Generics](https://revare.lumi-dev.xyz/Generics) ·
+  [Protocols](https://revare.lumi-dev.xyz/Protocols)
+- [C Subsystem](https://revare.lumi-dev.xyz/C-Subsystem) ·
+  [Build System](https://revare.lumi-dev.xyz/Build-System) ·
+  [Design Philosophy](https://revare.lumi-dev.xyz/Design-Philosophy)
 
 The programs in [`tests/Fixtures/Stdlib/`](tests/Fixtures/Stdlib/) run on every commit and are
 diffed against their `.expected.txt` output, so they double as working examples for nearly every
@@ -288,15 +291,15 @@ language feature and standard library API.
 ## This repository
 
 ```
-RazorForge/
-├── src/                  # The RazorForge front end: lexer, language rules, `razorforge` command line
-├── Standard/             # The standard library (.rf), used by RazorForge and Suflae builds
-├── tests/                # RazorForge.Tests: unit tests and end-to-end fixtures
+Revare/
+├── src/                  # The Revare front end: lexer, language rules, `revare` command line
+├── Standard/             # The standard library (.rr), used by Revare and Mielia builds
+├── tests/                # Revare.Tests: unit tests and end-to-end fixtures
 │   └── Fixtures/Stdlib/  #   programs with expected output
 ├── scripts/              # Packaging and maintenance scripts
 ├── rider-plugin/         # Rider plugin
-├── RazorForge.tmbundle/  # TextMate grammar
-├── RAZORFORGE-FOR-AI.md  # Reference for AI assistants
+├── Revare.tmbundle/  # TextMate grammar
+├── REVARE-FOR-AI.md  # Reference for AI assistants
 └── CHANGELOG.md          # Release notes
 ```
 
@@ -306,7 +309,7 @@ The builder itself (parser, analysis, lowering, LLVM emission) is
 
 ## Roadmap
 
-**Shipped** (RazorForge 0.5.0)
+**Shipped** (Revare 0.5.0)
 
 - Native builds on Windows and Linux x86-64 and macOS ARM64, with prebuilt packages
 - Copy-or-share memory model, loud failures with recovery keywords, generics, collections, 256-bit
@@ -329,11 +332,11 @@ The builder itself (parser, analysis, lowering, LLVM emission) is
 
 ## Building from source
 
-You only need this to work on the builder or the standard library. RazorForge is built from five
+You only need this to work on the builder or the standard library. Revare is built from five
 repositories checked out side by side: the builder core
 ([Anvila](https://github.com/dj-lumiere/Anvila)), the shared library
 ([Ingrid](https://github.com/dj-lumiere/Ingrid)), the two language front ends (this repository and
-[Suflae](https://github.com/dj-lumiere/Suflae)), and [Tessera](https://github.com/dj-lumiere/Tessera),
+[Mielia](https://github.com/dj-lumiere/Mielia)), and [Lapila](https://github.com/dj-lumiere/Lapila),
 whose builder compiles part of the native runtime.
 
 You need the .NET 10 SDK, LLVM 22 (`clang` and `opt` on `PATH`), CMake 3.20+, and Ninja on Windows.
@@ -342,21 +345,21 @@ You need the .NET 10 SDK, LLVM 22 (`clang` and `opt` on `PATH`), CMake 3.20+, an
 mkdir LumiFoundry && cd LumiFoundry
 git clone https://github.com/dj-lumiere/Anvila.git
 git clone https://github.com/dj-lumiere/Ingrid.git
-git clone https://github.com/dj-lumiere/RazorForge.git
-git clone https://github.com/dj-lumiere/Suflae.git
-git clone https://github.com/dj-lumiere/Tessera.git
+git clone https://github.com/dj-lumiere/Revare.git
+git clone https://github.com/dj-lumiere/Mielia.git
+git clone https://github.com/dj-lumiere/Lapila.git
 
-dotnet build RazorForge/RazorForge.csproj               # also builds the native runtime
-dotnet test RazorForge/tests/RazorForge.Tests.csproj    # optional
+dotnet build Revare/Revare.csproj               # also builds the native runtime
+dotnet test Revare/tests/Revare.Tests.csproj    # optional
 ```
 
-The built command is `RazorForge/bin/Debug/net10.0/RazorForge` (`RazorForge.exe` on Windows).
+The built command is `Revare/bin/Debug/net10.0/Revare` (`Revare.exe` on Windows).
 
 ## Contributing
 
 Bug reports, feature suggestions, documentation fixes, and code are all welcome. A good start is to
 [build from source](#building-from-source), run the tests, and read a few programs in `tests/Fixtures/Stdlib/`. Report bugs
-at [github.com/dj-lumiere/RazorForge/issues](https://github.com/dj-lumiere/RazorForge/issues).
+at [github.com/dj-lumiere/Revare/issues](https://github.com/dj-lumiere/Revare/issues).
 
 ## License
 

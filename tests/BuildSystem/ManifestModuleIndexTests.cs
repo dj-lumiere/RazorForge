@@ -1,6 +1,6 @@
 using Builder;
 
-namespace RazorForge.Tests.BuildSystem;
+namespace Revare.Tests.BuildSystem;
 
 /// <summary>
 /// Regression tests for the manifest's executable-module resolution (<c>ManifestLoader.BuildModuleIndex</c>).
@@ -30,9 +30,9 @@ public sealed class ManifestModuleIndexTests
         string root = CreateTempProject(files: new Dictionary<string, string>
         {
             [key: "config.toml"] = Manifest,
-            [key: "App.rf"] = "module App\n\nroutine start()\n    return\n",
-            [key: "Lib/A.rf"] = "module Lib\n\nrecord A\n    x: S32\n",
-            [key: "Lib/B.rf"] = "module Lib\n\nrecord B\n    y: S32\n"
+            [key: "App.rr"] = "module App\n\nroutine start()\n    return\n",
+            [key: "Lib/A.rr"] = "module Lib\n\nrecord A\n    x: S32\n",
+            [key: "Lib/B.rr"] = "module Lib\n\nrecord B\n    y: S32\n"
         });
         try
         {
@@ -40,7 +40,7 @@ public sealed class ManifestModuleIndexTests
                 tomlPath: Path.Combine(path1: root, path2: "config.toml"));
 
             Assert.Equal(
-                expected: Path.GetFullPath(path: Path.Combine(path1: root, path2: "App.rf")),
+                expected: Path.GetFullPath(path: Path.Combine(path1: root, path2: "App.rr")),
                 actual: manifest.Target.Executable,
                 comparer: StringComparer.OrdinalIgnoreCase);
         }
@@ -60,8 +60,8 @@ public sealed class ManifestModuleIndexTests
         string root = CreateTempProject(files: new Dictionary<string, string>
         {
             [key: "config.toml"] = Manifest,
-            [key: "App.rf"] = "import IO/Console\n\nshow(\"hi\")\n",
-            [key: "Lib/A.rf"] = "module Lib\n\nrecord A\n    x: S32\n"
+            [key: "App.rr"] = "import IO/Console\n\nshow(\"hi\")\n",
+            [key: "Lib/A.rr"] = "module Lib\n\nrecord A\n    x: S32\n"
         });
         try
         {
@@ -69,7 +69,7 @@ public sealed class ManifestModuleIndexTests
                 tomlPath: Path.Combine(path1: root, path2: "config.toml"));
 
             Assert.Equal(
-                expected: Path.GetFullPath(path: Path.Combine(path1: root, path2: "App.rf")),
+                expected: Path.GetFullPath(path: Path.Combine(path1: root, path2: "App.rr")),
                 actual: manifest.Target.Executable,
                 comparer: StringComparer.OrdinalIgnoreCase);
         }
@@ -90,8 +90,8 @@ public sealed class ManifestModuleIndexTests
         {
             [key: "config.toml"] = Manifest,
             // Both declare `module App`; only the entry file has start().
-            [key: "App/lib.rf"] = "module App\n\nrecord Helper\n    x: S32\n",
-            [key: "App/main.rf"] = "module App\n\nroutine start()\n    return\n"
+            [key: "App/lib.rr"] = "module App\n\nrecord Helper\n    x: S32\n",
+            [key: "App/main.rr"] = "module App\n\nroutine start()\n    return\n"
         });
         try
         {
@@ -101,7 +101,7 @@ public sealed class ManifestModuleIndexTests
             Assert.Equal(
                 expected: Path.GetFullPath(path: Path.Combine(path1: root,
                     path2: "App",
-                    path3: "main.rf")),
+                    path3: "main.rr")),
                 actual: manifest.Target.Executable,
                 comparer: StringComparer.OrdinalIgnoreCase);
         }
@@ -120,8 +120,8 @@ public sealed class ManifestModuleIndexTests
         string root = CreateTempProject(files: new Dictionary<string, string>
         {
             [key: "config.toml"] = Manifest,
-            [key: "main1.rf"] = "module App\n\nroutine start()\n    return\n",
-            [key: "main2.rf"] = "module App\n\nroutine start()\n    return\n"
+            [key: "main1.rr"] = "module App\n\nroutine start()\n    return\n",
+            [key: "main2.rr"] = "module App\n\nroutine start()\n    return\n"
         });
         try
         {

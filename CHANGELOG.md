@@ -1,16 +1,16 @@
 # Changelog
 
-All notable changes to RazorForge are documented here. This project follows
-[Keep a Changelog](https://keepachangelog.com/) conventions. Suflae keeps its own changelog.
+All notable changes to Revare are documented here. This project follows
+[Keep a Changelog](https://keepachangelog.com/) conventions. Mielia keeps its own changelog.
 
 ## [0.5.0] — unreleased
 
 0.5 changes the language surface in many places. This section lists what differs from 0.4.0. Read **Breaking
 changes** before you move a 0.4 project.
 
-To move a project, run `razorforge migrate <folder>` first. It applies every default rewrite listed below,
-skips files whose `config.toml` already says `razorforge-version = "0.5.0"`, and marks the manifest when it is done.
-The named steps (`razorforge migrate --step <name> <folder>`) run one rewrite on any source. Where no step exists,
+To move a project, run `revare migrate <folder>` first. It applies every default rewrite listed below,
+skips files whose `config.toml` already says `revare-version = "0.5.0"`, and marks the manifest when it is done.
+The named steps (`revare migrate --step <name> <folder>`) run one rewrite on any source. Where no step exists,
 the build error says what to write instead.
 
 `migrate` first indents a 0.4 file in steps of 4 spaces and renames `razorforge.toml` to `config.toml`, then
@@ -19,21 +19,26 @@ file only once its other old spellings are gone.
 
 ### Breaking changes
 
+- The language is renamed: RazorForge is **Revare**. Sources end in `.rr` (a `.rf` file given to the builder is a build error that names the new
+  extension), diagnostic codes start with `RA-` (`RA-S625`), the command is `revare`, and the manifest key is
+  `revare-version`. `revare migrate --step extensions <folder>` renames the files, rewrites the manifest's
+  `executable` and version key, `RF::` and `@rf(...)` in code, and old diagnostic codes in comments.
+
 **Source layout and tools**
-- Indentation is a multiple of 4 spaces. Any other indent is `RF-G053`. 0.4 sources used 2 spaces: default `migrate`
+- Indentation is a multiple of 4 spaces. Any other indent is `RA-G053`. 0.4 sources used 2 spaces: default `migrate`
   doubles the leading spaces of each line of such a file first (`migrate --step indent` does only that, and leaves
   the lines inside a text literal as they are).
 - The project manifest is `config.toml` (it was `razorforge.toml`). A `razorforge.toml` with no `config.toml` next
-  to it is a build error, and default `migrate` renames the file. `RF_DEADLOCK_DETECT` is `deadlock-check` under
+  to it is a build error, and default `migrate` renames the file. `RA_DEADLOCK_DETECT` is `deadlock-check` under
   `[debug]`: when the variable is still set, every command prints a warning that names the key.
 - The commands are `check`, `build`, `run`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`. A bare file
-  name is not a command: the error shows `razorforge run <file>`.
+  name is not a command: the error shows `revare run <file>`.
 - Every runtime crash exits with code 82.
 - x86-64 programs target x86-64-v3.
 
 **Failure and recovery**
 - A routine that can fail says so on its declaration: `failable routine parse(...)`. `routine parse!(...)` is
-  `RF-G222` (`migrate --step failable`). A call never writes `!`: `f!(x)` and `job.retrieve!()` are `RF-G211`.
+  `RA-G222` (`migrate --step failable`). A call never writes `!`: `f!(x)` and `job.retrieve!()` are `RA-G211`.
 - Recovery is a keyword at the call: `try f(x)` gives a `T?` (`Optional[T]`), `check f(x)` gives a `Check[T]`. The generated
   `try_f` / `check_f` / `lookup_f` routines are gone. Default `migrate` writes `try f(x)` for `try_f(x)` (and
   `try r.f(x)` for `r.try_f(x)`) and `check f(x)` for `check_f(x)` and `lookup_f(x)`, and the build error on an old
@@ -44,15 +49,15 @@ file only once its other old spellings are gone.
   caller instead.
 - A routine that is not failable is a wall: a failure inside it crashes there, even under a `try` or `check` above
   its caller. Declare the routine `failable` to let its failures go up.
-- `try` or `check` in front of an expression that reaches no failable call is `RF-S760`. Remove the keyword, or
+- `try` or `check` in front of an expression that reaches no failable call is `RA-S760`. Remove the keyword, or
   declare the routine `failable`.
 - A lambda that can fail, or a failable routine named as a value, goes only to a parameter or member variable of type
-  `failable Callable[...]`: handing one to a plain `Callable[...]` is `RF-S761`. The call that hands it over can fail
+  `failable Callable[...]`: handing one to a plain `Callable[...]` is `RA-S761`. The call that hands it over can fail
   through it (`try xs.select(transform: x => 10 // x).to[List]()`). The standard library routines that take a
   routine value (`select`, `where`, `any`, `all`, `sort_by`, `min_by`, ...) take it as `failable Callable[...]`.
 - `Result[T]` is `Check[T]`. `Lookup[T]` is gone. The build errors say so.
 - `absent` is gone: a routine with nothing to give throws, `throw AbsentValueError()` (default `migrate`).
-- The `Crashable` protocol is the `Crashables` record. Every crashable writes its own `crash_message()` (`RF-S704`).
+- The `Crashable` protocol is the `Crashables` record. Every crashable writes its own `crash_message()` (`RA-S704`).
 - `MemoryAllocationError` is `OutOfMemoryError` (default `migrate`, `migrate --step type-names`).
 - `Integer` is `Int` (default `migrate`, `migrate --step type-names`). There is no alias: `Integer` is a build
   error that names `Int`. An `Int` is 16 bytes: a value in the `S64` range is held in the value itself, and a
@@ -61,14 +66,14 @@ file only once its other old spellings are gone.
 
 **Syntax**
 - A loop is `until c` (it stops when `c` becomes true) or `loop` (it ends only with `break`, `return` or `throw`).
-  `while` is not a keyword: `while c` is `RF-G224` (`migrate --step until` turns integer comparisons around and
-  lists the rest). A loop takes no `else` (`RF-G219`). A loop's `then` block runs after `break` too.
-- The loop over a range or a collection is `for x in xs`. `each` is a reserved word: `each x in xs` is `RF-G229`
+  `while` is not a keyword: `while c` is `RA-G224` (`migrate --step until` turns integer comparisons around and
+  lists the rest). A loop takes no `else` (`RA-G219`). A loop's `then` block runs after `break` too.
+- The loop over a range or a collection is `for x in xs`. `each` is a reserved word: `each x in xs` is `RA-G229`
   (default `migrate`, `migrate --step for`).
-- A line with no work is `nothing`. `pass` is `RF-G225` (`migrate --step nothing`). A type declaration with an empty
-  body is `RF-S211` (write `nothing` under the header).
+- A line with no work is `nothing`. `pass` is `RA-G225` (`migrate --step nothing`). A type declaration with an empty
+  body is `RA-S211` (write `nothing` under the header).
 - A number takes its type from where it goes or from its declaration (`var x: U8 = 5`). Type suffixes (`0_s64`,
-  `1.5f32`, `10n`, `2.5dn`) are `RF-G010` (`migrate --step suffix`). `inf` and `nan` are literals, so `inf_b64` and
+  `1.5f32`, `10n`, `2.5dn`) are `RA-G010` (`migrate --step suffix`). `inf` and `nan` are literals, so `inf_b64` and
   the `B*_INFINITY` / `B*_NAN` presets are gone.
 - Binary floats are `B16`, `B32`, `B64`, `B128` (the build error names the `B` type for an `F` name). Complex types
   are named by their total bits: 0.4's `C64` is `C128` and 0.4's `C128` is `C256`, and `C64` is now two `B32`
@@ -77,14 +82,14 @@ file only once its other old spellings are gone.
   / `Q64` names them).
 - Containment is a call on the container: `xs.has(x)`, `xs.lacks(x)`, `d.has_key(k)`, `d.lacks_key(k)`,
   `perms.has_any(...)`. The `have` / `lack` operators are gone (`migrate --step have`), `contains` /
-  `notcontains` are `has` / `lacks` (default `migrate`), `x in xs` as a test is `RF-G212`, and `notin` is gone.
+  `notcontains` are `has` / `lacks` (default `migrate`), `x in xs` as a test is `RA-G212`, and `notin` is gone.
 - `x but y` is `x.without(y)`, `unless c` is `if not (c)` (default `migrate`). `disobeys` is gone: write
   `not (x obeys P)`.
 - A pattern binds with `as`: `is T as x`, `else as p` (default `migrate`). `else as x` needs exactly one type left
-  (`RF-S359`).
+  (`RA-S359`).
 - `Character` is `Char` and `Routine[...]` is `Callable[...]` (default `migrate`).
 - Operator levels: `and` and `or` share one level, and so do the bitwise operators, so mixing them needs
-  parentheses (`RF-G216`). A range binds looser than arithmetic and tighter than comparisons. `**` binds tighter
+  parentheses (`RA-G216`). A range binds looser than arithmetic and tighter than comparisons. `**` binds tighter
   than a leading `-`: `-2 ** 2` is `-4`. Default `migrate` writes `(-x) ** n` for each `-x ** n`, which keeps what
   the line computed in 0.4, and lists each one.
 - A range counts down only with a negative step: `10 to 1` is empty, write `10 to 1 by -1`. Default `migrate` adds
@@ -92,32 +97,32 @@ file only once its other old spellings are gone.
 - A chained comparison goes one way. `!=` or `<=>` after another comparison is a parse error.
 - A conditional value `if c then a else b` stands only as the whole value of `var x =`, `x =`, `preset`, `global`
   or `return`. Inside parentheses, an argument, an operand, a subscript, an f-text slot, a branch of another
-  conditional or right after `try` / `check` it is `RF-G112`: give it a name first, or choose the value with `when`.
+  conditional or right after `try` / `check` it is `RA-G112`: give it a name first, or choose the value with `when`.
 - A routine's `return` matches its `->`: a `return` with a value in a routine without `->` (or with `-> None`), and a
-  bare `return` in a routine with `-> T`, is `RF-S301`. The return type is never taken from the returned values.
+  bare `return` in a routine with `-> T`, is `RA-S301`. The return type is never taken from the returned values.
 - There is no `<<<`: `<<` fills with zeros.
 - A constructor is `routine T(...)`. `routine T.create(...)` declares an ordinary member routine named `create`.
   Default `migrate` rewrites it to `routine T(...)` (and a call `T.create(...)` to `T(...)`), and a member routine
-  `create` that gives back its own type is warning `RF-W104`.
-- A `var` that hides a parameter or an outer local is `RF-S008`. An unknown annotation is `RF-G221`.
+  `create` that gives back its own type is warning `RA-W104`.
+- A `var` that hides a parameter or an outer local is `RA-S008`. An unknown annotation is `RA-G221`.
 - A memberwise construction that sets `secret` or `posted` member variables works only inside their module
-  (`RF-S403`, `RF-S404`).
-- The right side of a compound assignment is checked like a binary expression (`Int += S64` is `RF-S502`).
-- `===` and `!==` take entities and handles. An access token is `RF-S440`, like a value.
+  (`RA-S403`, `RA-S404`).
+- The right side of a compound assignment is checked like a binary expression (`Int += S64` is `RA-S502`).
+- `===` and `!==` take entities and handles. An access token is `RA-S440`, like a value.
 - `destroy` is `destruct` (default `migrate`). The builder calls it: a program that calls `x.destruct()` gets
-  `RF-S812`, which points to `drop x`. `dangerous routine T.destruct` is `RF-S807` (default `migrate` removes
-  `dangerous`). A `failable` `destruct` is `RF-S815`.
-- `discard` is `drop` (default `migrate`). A dropped result needs `drop` (`RF-W007`) unless its routine is
+  `RA-S812`, which points to `drop x`. `dangerous routine T.destruct` is `RA-S807` (default `migrate` removes
+  `dangerous`). A `failable` `destruct` is `RA-S815`.
+- `discard` is `drop` (default `migrate`). A dropped result needs `drop` (`RA-W007`) unless its routine is
   `@discardable`.
 - The flags value with no member on is `none` (`var marks: CellMarks = none`, also in presets and record presets).
   `all_off()` is gone, and its build error names `none`.
 - Choice values (`OK: 200`) and flags bits (`MINE: 0`) are written on every member or on none, and with none the
-  members count 0, 1, 2, ... in order. Some with and some without is `RF-S417`, a flags bit past 63 is `RF-S419`,
-  and two members on one bit is `RF-S429`.
+  members count 0, 1, 2, ... in order. Some with and some without is `RA-S417`, a flags bit past 63 is `RA-S419`,
+  and two members on one bit is `RA-S429`.
 - A local handed over inside a `return` (`return Shelf(book: book)`) moves without `steal`. `steal` there is a
-  warning, `RF-W259`, whose quick fix removes it (`migrate --step return-steal`).
-- The same routine declared twice in one standard library or program file is a build error (`RF-S406`).
-- A `for` over an emitter that has run out is `RF-S517`: a second `for` over a named emitter after one that ended
+  warning, `RA-W259`, whose quick fix removes it (`migrate --step return-steal`).
+- The same routine declared twice in one standard library or program file is a build error (`RA-S406`).
+- A `for` over an emitter that has run out is `RA-S517`: a second `for` over a named emitter after one that ended
   by itself, or a `for` inside a loop over an emitter made outside it. Such a loop ran zero times. Make a new
   `xs.emitter()` just before the loop, or write `for x in xs`.
 
@@ -129,48 +134,48 @@ file only once its other old spellings are gone.
 - A `Guarded` value is opened with an access block: `viewing g as v` to read and `modifying g as m` to write. The
   block calls the target's `view_enter()` / `modify_enter()` before it (the token they give is the `as` name) and
   `view_exit()` / `modify_exit()` on every way out, so any type with those pairs is a block target (`Guarded`,
-  `FileStorage`, a type of your own). Using the block on a `Retained`, a `Roamed` or a weak handle is `RF-S651` (use
+  `FileStorage`, a type of your own). Using the block on a `Retained`, a `Roamed` or a weak handle is `RA-S651` (use
   it directly, or `hold()` first). `try viewing g as v` gives `v` as an `Optional` of the token, which the body takes
   apart with `when`. `modifying a, b` enters in the written order and leaves in the reverse one. `consult()`,
   `amend()`, `Consulting`, `Amending`, `multiamend` and the `using` access blocks are gone: a `using` over an access
-  is `RF-S612`, and `migrate --step access` rewrites the 0.4 forms.
+  is `RA-S612`, and `migrate --step access` rewrites the 0.4 forms.
 - `LockPolicy` is `AccessPolicy`, `ReentrantLockError` is `ReenterDuringAccessError` (`migrate --step access`),
   and the `[debug]` switches are `access-order` and `deadlock-check`.
 - `RetainController`, `GuardController` and `RoamController` are `RetainManager`, `GuardManager` and
   `RoamManager`. `FrozenController` is gone.
-- A `Guarded[T, ReadOnly]` is read directly. Reaching a locking `Guarded` without an access block is `RF-S649`.
-- An entity has one original. Holding it under a second name without a token or a manager is `RF-S413`. Hand it over with `steal`, on every path or
-  on none (`RF-S616`). A name `steal` emptied takes a new value with `=`, and the builder tears that value down at
+- A `Guarded[T, ReadOnly]` is read directly. Reaching a locking `Guarded` without an access block is `RA-S649`.
+- An entity has one original. Holding it under a second name without a token or a manager is `RA-S413`. Hand it over with `steal`, on every path or
+  on none (`RA-S616`). A name `steal` emptied takes a new value with `=`, and the builder tears that value down at
   the end of the scope.
-- Changing a container's shape while a `for` loop or an element statement uses it is a build error (`RF-S625`,
-  `RF-S639`), and so is holding an element while another token changes a container of the same kind (`RF-S640`) or
-  passing one container twice in a call (`RF-S623`). A `for` over a token (`var w = a.view()`, `viewing a as w`, a
-  token a routine gives back) guards the containers it is on: `a.add_last(...)` inside `for x in w` is `RF-S625`.
-- `Array[T, N]()` with a `T` that has no zero value is `RF-S641`.
+- Changing a container's shape while a `for` loop or an element statement uses it is a build error (`RA-S625`,
+  `RA-S639`), and so is holding an element while another token changes a container of the same kind (`RA-S640`) or
+  passing one container twice in a call (`RA-S623`). A `for` over a token (`var w = a.view()`, `viewing a as w`, a
+  token a routine gives back) guards the containers it is on: `a.add_last(...)` inside `for x in w` is `RA-S625`.
+- `Array[T, N]()` with a `T` that has no zero value is `RA-S641`.
 - A lazy adapter is used in the statement that makes it. The elements of a loop over a read token are read-only.
 - A routine that returns a token may return one from `me` or from any of its token parameters. The caller's token
-  ends when any of the arguments it came from changes shape or ends (`RF-S643`).
-- A Work that receives a token or a `Retained` starts with `start_here()` (`RF-S632`).
+  ends when any of the arguments it came from changes shape or ends (`RA-S643`).
+- A Work that receives a token or a `Retained` starts with `start_here()` (`RA-S632`).
 - A token is never a type argument: `List[Viewing[T]]`, `Optional[Viewing[T]]` kept in a name, a tuple or a generic type
-  holding one, written or inferred (`var xs = [a.view()]`), is `RF-S601`. What `try` gives on a routine that returns a
-  token is unpacked with `when` where it is made. A lambda capturing a token is `RF-S606`, and `steal` on a token is
-  `RF-S604`.
+  holding one, written or inferred (`var xs = [a.view()]`), is `RA-S601`. What `try` gives on a routine that returns a
+  token is unpacked with `when` where it is made. A lambda capturing a token is `RA-S606`, and `steal` on a token is
+  `RA-S604`.
 - More paths are build errors. A token in a variant written in place (`Viewing[Cell] | S64`), a global of a token
-  type, and a generic routine whose type parameter a call makes a token (`same(x: l.view())`) are `RF-S601`. In a
+  type, and a generic routine whose type parameter a call makes a token (`same(x: l.view())`) are `RA-S601`. In a
   generic body, handing a value of a type parameter to a parameter of a type parameter (`xs.add_last(value: x)`)
-  takes `steal` (`RF-S413`). `RF-S632` follows a Work's argument into an entity's member variables, a collection's
+  takes `steal` (`RA-S413`). `RA-S632` follows a Work's argument into an entity's member variables, a collection's
   elements, a channel end's items, a lambda's captures and a routine value handed on to a Work, and a global holding
-  `Retained` or `Tracked` is `RF-S632`. `modifying G` on a global entity that is not a `Guarded` is `RF-S256`, `steal G`
-  is `RF-S421`. A `for` over an adapter (`xs.where(...)`) guards `xs` against reshaping (`RF-S625`), and so does a
+  `Retained` or `Tracked` is `RA-S632`. `modifying G` on a global entity that is not a `Guarded` is `RA-S256`, `steal G`
+  is `RA-S421`. A `for` over an adapter (`xs.where(...)`) guards `xs` against reshaping (`RA-S625`), and so does a
   lambda that reshapes the container its routine walks. A binding taken in a loop turn that reaches `continue` is
-  `RF-S616`.
+  `RA-S616`.
 - A routine value taken from a `dangerous` routine is a dangerous callable. It goes only to a `Callable` parameter of
   a C routine or of a `dangerous` routine, or to a local (which is a dangerous callable from then on), and it is
-  called only inside a `dangerous` routine or a `danger` block. Anywhere else it is `RF-S609`. A lambda body is
+  called only inside a `dangerous` routine or a `danger` block. Anywhere else it is `RA-S609`. A lambda body is
   outside the `danger` block it is written in, and an operator or f-text insertion whose routine is `dangerous` needs
-  `danger` (`RF-S609`).
+  `danger` (`RA-S609`).
 - Collecting the entities a walk shows in place (`xs.where(...).to[List]()`, `first`, `last`, `min_by`, ... on a list
-  of entities) is `RF-S413` at that call: copy them with `select(e => e.duplicate())`, take the list with
+  of entities) is `RA-S413` at that call: copy them with `select(e => e.duplicate())`, take the list with
   `(steal xs).where(...)`, or keep tokens.
 - A started Work nobody retrieves is cancelled where it is dropped, and a failure its work came to crashes the
   program there. `job.cancel()` throws the failure away.
@@ -178,21 +183,21 @@ file only once its other old spellings are gone.
 **Types and the C boundary**
 - `Address` and `CPtr` are `Addr`. Two addresses compare with `===`, and an address moves by a `ByteSize` with
   `+%` / `-%` (`migrate --step addr`).
-- `CStr` and `CWStr` are C strings RazorForge made, cleaned up at scope exit. A pointer from C is a `CStrView` /
-  `CWStrView`. `CStr` at the C boundary is `RF-S814`.
+- `CStr` and `CWStr` are C strings Revare made, cleaned up at scope exit. A pointer from C is a `CStrView` /
+  `CWStrView`. `CStr` at the C boundary is `RA-S814`.
 - `blank[T]()` is gone and `hollow[T]()` is `T.hollow()`, a `dangerous` routine every type has. The handle types and
   `Addr` have `is_hollow()`.
 - A `Byte` shows as the byte literal that makes it, alone or inside a collection: `b'L'`, `b'\x0A'`, `b'\''`,
   `b'\\'` (0.4 wrote `\x4C`). `Bytes` still shows its text with `\xHH` escapes.
 - `Byte.to_hex()` writes two digits. The widest signed integer is `S256`. `Vector[T, N]` arithmetic does not check
   for overflow.
-- A number type built from one number with `T(x)` (`U8(x)`, `S64(1.5)`, `Decimal(2)`) is `RF-S655` outside `danger`,
+- A number type built from one number with `T(x)` (`U8(x)`, `S64(1.5)`, `Decimal(2)`) is `RA-S655` outside `danger`,
   because it reads the bits of `x` and gives another number. Convert with `x.to[T]()`, or write a number where the
   type is expected (`var b: U8 = 200`). `migrate --step numbers` rewrites the calls between binary integer and float
   types and lists the rest.
-- A named type is a `record` or an `entity`: `bundle` is `RF-G228`. `migrate --step bundle` makes a bundle that holds
+- A named type is a `record` or an `entity`: `bundle` is `RA-G228`. `migrate --step bundle` makes a bundle that holds
   no type parameter by value a `record`, one whose uses hold an entity an `entity`, one whose uses hold only values a
-  `record` with `needs RecordType T`, and lists the rest. RF-S445 and RF-S446 are retired.
+  `record` with `needs RecordType T`, and lists the rest. RA-S445 and RA-S446 are retired.
 - `Array[T, COUNT]` is `Items[T, COUNT]` and holds values (`needs RecordType T`). `Slots[T, COUNT]` is the entity with
   the same layout for any `T`: it has one original, `steal slots[i] as old inject fresh`, `swap`, `duplicate()` when `T`
   is `Copyable`. The arguments of a variadic parameter are a `Slots[T, N]`. `SplitArray` is `SplitItems` (values
@@ -216,7 +221,7 @@ file only once its other old spellings are gone.
   `_unchecked` routines. A narrowing float conversion that would turn a finite value infinite fails (raw:
   `to_unchecked`).
 - A conversion is `x.to[T]()`: `S32(from: x)` and `x.S32()` are rewritten by default `migrate`, and a missing
-  conversion is `RF-S458`. Collecting is a conversion too: `xs.List()` and `xs.Set()` are `xs.to[List]()` and
+  conversion is `RA-S458`. Collecting is a conversion too: `xs.List()` and `xs.Set()` are `xs.to[List]()` and
   `xs.to[Set]()`.
 - What walks a value is an emitter: `Iterable[T]` is `Emittable[T]`, 0.4's `Emittable[T]` (the iterator) is
   `Emitter[T]`, and `iter()` is `emitter()`. The collection iterators are named `ListEmitter`, `DictEmitter`, ...,
@@ -272,7 +277,7 @@ file only once its other old spellings are gone.
 
 **Language**
 - Script mode: the loose statements of the entry file are its `start()`. Loose statements in an imported file are
-  `RF-S443`.
+  `RA-S443`.
 - `global`: module-level state, initialized in order before `start()` runs and torn down at its end. A global
   binding is read-only, so state that changes is an `Unbroken` or a `Guarded`. Globals of one name in two modules
   stay apart.
@@ -289,10 +294,10 @@ file only once its other old spellings are gone.
 - Named and short arguments can mix: `area(width, height: 4)`.
 - `todo` statement.
 - `@noinline` keeps a routine out of its callers (its own body is still optimized). `@inline` with `@noinline` on one
-  routine is `RF-G227`.
+  routine is `RA-G227`.
 - Presets are computed at buildtime, including presets that call routines.
 - Hex float literals (`0x1.8p3`) for binary floats.
-- `@throws([...])` lists what a routine throws and the builder checks it (`RF-S712`, `RF-S713`).
+- `@throws([...])` lists what a routine throws and the builder checks it (`RA-S712`, `RA-S713`).
 - A crashable has no size limit. A `Check` bound to a name keeps its own error after later failures, and a failure
   on one fiber never overwrites another's.
 - Kind constraints `needs RecordType T` and `needs EntityType T`.
@@ -339,7 +344,7 @@ file only once its other old spellings are gone.
 - `AccessManager`: `viewing` / `modifying` blocks, deadlock detection (`[debug] deadlock-check`, on in debug
   builds) and `access-order`.
 - Emitters: a program may call `emitter()` and keep the emitter in a local, where it is a token on the container
-  (`RF-S643` after the container changes shape, `RF-S644` in a field or a return). `(steal xs).emitter()` takes the
+  (`RA-S643` after the container changes shape, `RA-S644` in a field or a return). `(steal xs).emitter()` takes the
   elements and can go anywhere, and `r.emitter()` on a `Retained` holds one more reference to the entity. An emitter
   is an emittable, so terminals and adapters work on it.
 - An emittable collects into any collection with `to[...]`: `to[List]`, `to[Set]`, `to[Dict]` (of `(key, value)`
@@ -387,7 +392,7 @@ file only once its other old spellings are gone.
 - The language server: diagnostics, formatting, hover, go to definition, rename and quick fixes.
 - Rider plugin and VS Code extension. The color of a carrier or variant whose kind follows its members and is not
   decided yet is the semantic token `memberKindType`.
-- `[target] backend = "tessera"` (experimental, opt-in): builds through Tessera instead of LLVM IR directly. It does not cover every program yet.
+- `[target] backend = "lapila"` (experimental, opt-in): builds through Lapila instead of LLVM IR directly. It does not cover every program yet.
 - Windows trace builds write CodeView and PDB files.
 - A crash trace holds the program's routines only: a standard library routine keeps no frame, and a crash
   inside one reports the line where the program called it. `[debug] trace-stdlib = true` keeps the library's
@@ -420,7 +425,7 @@ file only once its other old spellings are gone.
 - `S128_MIN.to[B128]()` and `S256_MIN.to[B128]()` crashed. `B128.rem` crashed on operands near the top of the
   range.
 - Soundness holes are closed: a global that reads itself in its initializer, a preset defined from itself and two
-  globals whose `destruct`s read each other are `RF-S436`. A name bound by a pattern or a `for` loop ends with the
+  globals whose `destruct`s read each other are `RA-S436`. A name bound by a pattern or a `for` loop ends with the
   place it came from. `ByteSize` multiplication checks for overflow. An entity a routine receives through a bare
   generic parameter and does not keep is torn down by that routine, on failure paths too, so it no longer leaks.
 - A range that reaches the ends of its type runs to the end and stops there.

@@ -2,10 +2,10 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
-/// Runs each <c>tests/Fixtures/Stdlib/*.rf</c> fixture through <c>buildandrun</c> and
+/// Runs each <c>tests/Fixtures/Stdlib/*.rr</c> fixture through <c>buildandrun</c> and
 /// diffs its stdout against the sibling <c>.expected.txt</c> snapshot. Provides
 /// end-to-end behavior coverage for stdlib types/routines that <c>validate-stdlib</c>
 /// (parse-and-typecheck only) does not catch.
@@ -28,34 +28,34 @@ public sealed partial class StdlibApiTests
 
     private const string HarnessModule = "StdlibHarness";
 
-    // Suflae (.sf) sibling harness. SF fixtures live under a DISTINCT namespace prefix
-    // (Tests/StdlibSf/*) and their own fixtures dir so the SF bundle's prefix import pulls only `.sf`
-    // files — a shared prefix would drag `.rf` fixtures into the SF project and trip BuildDriver's
-    // cross-language import guard. SF reuses the RazorForge stdlib wholesale (SF's System IS RF's System),
+    // Mielia (.mi) sibling harness. MI fixtures live under a DISTINCT namespace prefix
+    // (Tests/StdlibMi/*) and their own fixtures dir so the MI bundle's prefix import pulls only `.mi`
+    // files — a shared prefix would drag `.rr` fixtures into the MI project and trip BuildDriver's
+    // cross-language import guard. MI reuses the Revare stdlib wholesale (MI's System IS RA's System),
     // so the ONLY difference here is the fixtures dir, entry extension, module name, and library path.
-    private static readonly string SuflaeFixturesDir = Path.Combine(path1: RepoRoot,
+    private static readonly string MieliaFixturesDir = Path.Combine(path1: RepoRoot,
         path2: "tests",
         path3: "Fixtures",
-        path4: "StdlibSf");
+        path4: "StdlibMi");
 
-    private static readonly string SuflaeHarnessDir = Path.Combine(path1: RepoRoot,
+    private static readonly string MieliaHarnessDir = Path.Combine(path1: RepoRoot,
         path2: "tests",
         path3: "Fixtures",
-        path4: "SuflaeHarness");
+        path4: "MieliaHarness");
 
-    private const string SuflaeHarnessModule = "SuflaeHarness";
+    private const string MieliaHarnessModule = "MieliaHarness";
 
     [GeneratedRegex(pattern: @"^\s*module\s+(\S+)\s*$")]
     private static partial Regex ModuleRe();
 
     [GeneratedRegex(
         pattern:
-        @"error\[RF-|Warning:|Codegen bug|Synthesized body codegen failed|Unresolved generic|Error type found|undefined symbol|never defined|MARKER-LEAK|Unhandled exception|\bE0\d")]
+        @"error\[RA-|Warning:|Codegen bug|Synthesized body codegen failed|Unresolved generic|Error type found|undefined symbol|never defined|MARKER-LEAK|Unhandled exception|\bE0\d")]
     private static partial Regex StderrDiagnosticRe();
 
     /// <summary>
-    /// Single-compile stdlib e2e test: generates <c>all_stdlib.rf</c> + <c>razorforge.toml</c> from
-    /// every <c>Stdlib/*.rf</c> fixture (importing each by its declared module and calling its
+    /// Single-compile stdlib e2e test: generates <c>all_stdlib.rr</c> + <c>razorforge.toml</c> from
+    /// every <c>Stdlib/*.rr</c> fixture (importing each by its declared module and calling its
     /// <c>start()</c> via the module leaf), compiles + runs the ONE program, splits the combined
     /// stdout on the <c>##### fixture #####</c> delimiters, and diffs each section against its
     /// <c>.expected.txt</c>. Compiles the stdlib + all fixtures ONCE instead of ~165 times.
@@ -64,16 +64,16 @@ public sealed partial class StdlibApiTests
     public void StdlibHarness_AllFixturesOutputMatchExpected()
     {
         int fixtureCount = RunFixtureBundle(fixturesDir: FixturesDir,
-            glob: "*.rf",
+            glob: "*.rr",
             harnessDir: HarnessDir,
             harnessModule: HarnessModule,
-            bundleFileName: "all_stdlib.rf",
+            bundleFileName: "all_stdlib.rr",
             packageName: "stdlib-harness",
             libraryRel: "../Stdlib");
         // Guard against a silently-empty bundle passing vacuously (e.g. fixtures dir moved/renamed).
         Assert.True(condition: fixtureCount > 0,
             userMessage:
-            "No RazorForge stdlib fixtures were discovered — the harness ran nothing.");
+            "No Revare stdlib fixtures were discovered — the harness ran nothing.");
     }
 
     /// <summary>
@@ -81,7 +81,7 @@ public sealed partial class StdlibApiTests
     /// <paramref name="glob"/> (importing each by its declared module, calling its <c>start()</c> via the
     /// module leaf), compiles + runs the ONE program, splits combined stdout on the
     /// <c>##### stem #####</c> delimiters, and diffs each section against its <c>.expected.txt</c>. Guarded
-    /// by the RazorForge (.rf) and Suflae (.sf) harnesses — the language is selected by the entry file's
+    /// by the Revare (.rr) and Mielia (.mi) harnesses — the language is selected by the entry file's
     /// extension, so the only per-language inputs are the fixtures dir, glob, module name, and paths.
     /// Returns the number of fixtures discovered and bundled (0 = nothing ran).
     /// </summary>
@@ -100,7 +100,7 @@ public sealed partial class StdlibApiTests
                 libraryRel: libraryRel);
 
         // 2) Compile + run the ONE program (cwd = repo root so relative resource paths resolve).
-        FixtureRun run = RunHarness(harnessRf: harnessSrc);
+        FixtureRun run = RunHarness(harnessRa: harnessSrc);
         Assert.True(condition: run is { ExitCode: 0, TimedOut: false },
             userMessage:
             $"Harness buildandrun failed (exit={run.ExitCode}, timedOut={run.TimedOut}).\n" +
@@ -180,13 +180,13 @@ public sealed partial class StdlibApiTests
     public void StdlibHarness_InProcessCompileSucceeds()
     {
         AssertBundleCompilesInProcess(fixturesDir: FixturesDir,
-            glob: "*.rf",
+            glob: "*.rr",
             harnessDir: Path.Combine(path1: RepoRoot,
                 path2: "tests",
                 path3: "Fixtures",
                 path4: "StdlibHarnessInProc"),
             harnessModule: "StdlibHarnessInProc",
-            bundleFileName: "all_stdlib_inproc.rf",
+            bundleFileName: "all_stdlib_inproc.rr",
             packageName: "stdlib-harness-inproc",
             libraryRel: "../Stdlib");
     }
@@ -207,7 +207,7 @@ public sealed partial class StdlibApiTests
                                         .OrderBy(keySelector: p => p,
                                              comparer: StringComparer.Ordinal))
         {
-            string? module = ReadDeclaredModule(rfPath: src);
+            string? module = ReadDeclaredModule(raPath: src);
             if (module == null)
             {
                 continue;
@@ -221,7 +221,7 @@ public sealed partial class StdlibApiTests
                 throw new Xunit.Sdk.XunitException(
                     userMessage:
                     $"Harness leaf collision '{leaf}': {other} vs {module} — module-qualified leaf calls " +
-                    "would be ambiguous (RF-S513). Rename one fixture's module leaf.");
+                    "would be ambiguous (RA-S513). Rename one fixture's module leaf.");
             }
 
             leaves[key: leaf] = module;
@@ -246,7 +246,7 @@ public sealed partial class StdlibApiTests
         File.WriteAllText(path: harnessSrc, contents: string.Join(separator: "\n", values: lines));
 
         string manifest =
-            $"[package]\nname = \"{packageName}\"\nversion = \"0.0.1\"\nrazorforge-version = \"0.1.0\"\n\n" +
+            $"[package]\nname = \"{packageName}\"\nversion = \"0.0.1\"\nrevare-version = \"0.1.0\"\n\n" +
             $"[target]\nexecutable = \"{harnessModule}\"\nmode = \"debug\"\nmodule_paths = [\"{libraryRel}\"]\n";
         File.WriteAllText(path: Path.Combine(path1: harnessDir, path2: "config.toml"),
             contents: manifest);
@@ -286,9 +286,9 @@ public sealed partial class StdlibApiTests
     }
 
     /// <summary>Reads the declared <c>module</c> path of a fixture (utf-8-sig for BOM), or null.</summary>
-    private static string? ReadDeclaredModule(string rfPath)
+    private static string? ReadDeclaredModule(string raPath)
     {
-        foreach (string line in File.ReadLines(path: rfPath))
+        foreach (string line in File.ReadLines(path: raPath))
         {
             Match m = ModuleRe()
                .Match(input: line);
@@ -346,12 +346,12 @@ public sealed partial class StdlibApiTests
     }
 
     /// <summary>Runs <c>buildandrun</c> on the harness program with the harness dir as cwd.</summary>
-    private static FixtureRun RunHarness(string harnessRf)
+    private static FixtureRun RunHarness(string harnessRa)
     {
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: harnessRf), "buildandrun", harnessRf },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: harnessRa), "buildandrun", harnessRa },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             // The compiled program writes UTF-8 (e.g. an em-dash in a fixture string). Without pinning
@@ -370,7 +370,7 @@ public sealed partial class StdlibApiTests
                 [key: "DOTNET_gcServer"] = "0", [key: "DOTNET_GCConserveMemory"] = "9",
                 // The compiled program flushes every line, so output written before a hang or a
                 // crash (the last ##### fixture ##### marker) reaches the failure message.
-                [key: "RF_FLUSH_STDOUT"] = "1"
+                [key: "RA_FLUSH_STDOUT"] = "1"
             }
         };
         using var p = Process.Start(startInfo: psi)!;
@@ -458,14 +458,14 @@ public sealed partial class StdlibApiTests
     /// </summary>
     private const int MaxRunAttempts = 2;
 
-    private static string RunFixture(string rfPath)
+    private static string RunFixture(string raPath)
     {
-        string fixture = Path.GetFileName(path: rfPath);
+        string fixture = Path.GetFileName(path: raPath);
         FixtureRun last = default;
 
         for (int attempt = 1; attempt <= MaxRunAttempts; attempt++)
         {
-            last = RunFixtureOnce(rfPath: rfPath);
+            last = RunFixtureOnce(raPath: raPath);
 
             if (last.TimedOut)
             {
@@ -523,7 +523,7 @@ public sealed partial class StdlibApiTests
         bool TimedOut,
         int TimeoutMs);
 
-    private static FixtureRun RunFixtureOnce(string rfPath)
+    private static FixtureRun RunFixtureOnce(string raPath)
     {
         // Invoke the already-built builder assembly directly. Using
         // `dotnet run --project …` here would re-evaluate the project file on
@@ -532,7 +532,7 @@ public sealed partial class StdlibApiTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rfPath), "buildandrun", rfPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: raPath), "buildandrun", raPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -549,7 +549,7 @@ public sealed partial class StdlibApiTests
                 [key: "DOTNET_gcServer"] = "0", [key: "DOTNET_GCConserveMemory"] = "9",
                 // The compiled program flushes every line, so output written before a hang or a
                 // crash (the last ##### fixture ##### marker) reaches the failure message.
-                [key: "RF_FLUSH_STDOUT"] = "1"
+                [key: "RA_FLUSH_STDOUT"] = "1"
             }
         };
         using var p = Process.Start(startInfo: psi)!;
@@ -601,11 +601,11 @@ public sealed partial class StdlibApiTests
 
     private static string LocateRepoRoot()
     {
-        // Walk up from the test assembly until we find RazorForge.csproj (the project folder holding tests/).
+        // Walk up from the test assembly until we find Revare.csproj (the project folder holding tests/).
         string dir = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(value: dir))
         {
-            if (File.Exists(path: Path.Combine(path1: dir, path2: "RazorForge.csproj")))
+            if (File.Exists(path: Path.Combine(path1: dir, path2: "Revare.csproj")))
             {
                 return dir;
             }
@@ -621,6 +621,6 @@ public sealed partial class StdlibApiTests
 
         throw new InvalidOperationException(
             message:
-            "Could not locate RazorForge.csproj walking up from test assembly directory.");
+            "Could not locate Revare.csproj walking up from test assembly directory.");
     }
 }

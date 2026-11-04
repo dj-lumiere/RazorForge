@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace RazorForge.Tests.Meta;
+namespace Revare.Tests.Meta;
 
 /// <summary>
 /// Tests that test memberRoutines contain an assertion path.
@@ -16,12 +16,12 @@ public sealed partial class AssertionPresenceTests
         "Assert.",
         "Record.Exception",
         "AssertParses",
-        "AssertParsesSuflae",
+        "AssertParsesMielia",
         "AssertParseError",
         "AssertAnalyzes",
-        "AssertAnalyzesSuflae",
+        "AssertAnalyzesMielia",
         "AssertHasError",
-        "AssertHasErrorSuflae",
+        "AssertHasErrorMielia",
         "GenerateIr",
         "AssertBundleCompilesInProcess",
         "AssertDangerError",

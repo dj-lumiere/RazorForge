@@ -1,12 +1,12 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// RazorForge <c>global</c>: a place the program changes (<c>count += 1</c>). The one refusal is a plain global that is
+/// Revare <c>global</c>: a place the program changes (<c>count += 1</c>). The one refusal is a plain global that is
 /// changed somewhere and is used by a routine a Work reaches on another thread. An Unbroken or a Guarded changes what it
 /// holds through its own routines, and a global nothing changes is read from anywhere.
 /// </summary>

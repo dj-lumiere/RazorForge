@@ -7,7 +7,7 @@ using Builder.Verification;
 using Builder.Verification.Results;
 using Xunit.Abstractions;
 
-namespace RazorForge.Tests.Perf;
+namespace Revare.Tests.Perf;
 
 /// <summary>
 /// Stage-2 oracle for modular .pbrf: partition the compiled
@@ -35,10 +35,10 @@ public sealed partial class ModularPbrfRoundTripTests
     private static Program ParseTrivial()
     {
         List<Token> tokens =
-            Lexers.Tokenize(source: Trivial, fileName: "bench.rf", language: Language.RazorForge);
+            Lexers.Tokenize(source: Trivial, fileName: "bench.rr", language: Language.Revare);
         return new Builder.Parser.Parser(tokens: tokens,
-            language: Language.RazorForge,
-            fileName: "bench.rf").Parse();
+            language: Language.Revare,
+            fileName: "bench.rr").Parse();
     }
 
     private static string Codegen(AnalysisResult r)
@@ -76,12 +76,12 @@ public sealed partial class ModularPbrfRoundTripTests
     [Fact]
     public void ModularRoundTrip_ProducesIdenticalDefines()
     {
-        var cold = new SemanticVerifier(language: Language.RazorForge);
+        var cold = new SemanticVerifier(language: Language.Revare);
         AnalysisResult coldResult = cold.Analyze(program: ParseTrivial());
         HashSet<string> coldDefs = DefineSet(ll: Codegen(r: coldResult));
 
         SemanticVerifier.CompiledStdlibState warm =
-            SemanticVerifier.CaptureCompiledStdlib(language: Language.RazorForge);
+            SemanticVerifier.CaptureCompiledStdlib(language: Language.Revare);
 
         string dir = Path.Combine(path1: Path.GetTempPath(),
             path2: "rf_modular_pbrf_" + Guid.NewGuid()
@@ -94,9 +94,9 @@ public sealed partial class ModularPbrfRoundTripTests
             _out.WriteLine(message: $"modules={labels.Count}  artifacts total={total / 1024}KB");
 
             SemanticVerifier.CompiledStdlibState restored =
-                ModularStdlibCache.Deserialize(dir: dir, language: Language.RazorForge);
+                ModularStdlibCache.Deserialize(dir: dir, language: Language.Revare);
 
-            var warmSa = new SemanticVerifier(language: Language.RazorForge, warm: restored);
+            var warmSa = new SemanticVerifier(language: Language.Revare, warm: restored);
             AnalysisResult warmResult = warmSa.Analyze(program: ParseTrivial());
             HashSet<string> warmDefs = DefineSet(ll: Codegen(r: warmResult));
 

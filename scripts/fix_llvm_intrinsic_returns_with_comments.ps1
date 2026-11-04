@@ -12,14 +12,14 @@ if (-not (Test-Path $Path))
     exit 1
 }
 
-$rfFiles = Get-ChildItem -Path $Path -Filter "*.rf" -Recurse
-$totalFiles = $rfFiles.Count
+$raFiles = Get-ChildItem -Path $Path -Filter "*.rr" -Recurse
+$totalFiles = $raFiles.Count
 $filesChanged = 0
 $totalReplacements = 0
 
-Write-Host "Found $totalFiles .rf files to process`n" -ForegroundColor Cyan
+Write-Host "Found $totalFiles .rr files to process`n" -ForegroundColor Cyan
 
-foreach ($file in $rfFiles)
+foreach ($file in $raFiles)
 {
     $content = Get-Content $file.FullName -Raw
     $originalContent = $content

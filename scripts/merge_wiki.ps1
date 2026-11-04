@@ -1,78 +1,78 @@
 # Merge all wiki markdown files into one big file
 
-$razorforgeWikiDir = "L:\programming\RiderProjects\RazorForge\RazorForge-Wiki\docs"
-$suflaeWikiDir = "L:\programming\RiderProjects\RazorForge\Suflae-Wiki\docs"
-$rfOutputFile = "L:\programming\RiderProjects\RazorForge\MERGED_WIKI_RF.md"
-$sfOutputFile = "L:\programming\RiderProjects\RazorForge\MERGED_WIKI_SF.md"
+$revareWikiDir = "L:\programming\RiderProjects\Revare\Revare-Wiki\docs"
+$mieliaWikiDir = "L:\programming\RiderProjects\Revare\Mielia-Wiki\docs"
+$raOutputFile = "L:\programming\RiderProjects\Revare\MERGED_WIKI_RA.md"
+$miOutputFile = "L:\programming\RiderProjects\Revare\MERGED_WIKI_MI.md"
 
 # Get all markdown files from wiki directory
-$rfMdFiles = Get-ChildItem $razorforgeWikiDir -Filter "*.md" | Sort-Object Name
-$sfMdFiles = Get-ChildItem $suflaeWikiDir -Filter "*.md" | Sort-Object Name
+$raMdFiles = Get-ChildItem $revareWikiDir -Filter "*.md" | Sort-Object Name
+$miMdFiles = Get-ChildItem $mieliaWikiDir -Filter "*.md" | Sort-Object Name
 
-# RF merging part
+# RA merging part
 # Create/clear output file
-"# RazorForge Wiki - Merged Documentation`n" | Out-File -FilePath $rfOutputFile -Encoding UTF8
-"Generated on: $( Get-Date -Format 'yyyy-MM-dd HH:mm:ss' )`n" | Out-File -FilePath $rfOutputFile -Append -Encoding UTF8
-"---`n" | Out-File -FilePath $rfOutputFile -Append -Encoding UTF8
+"# Revare Wiki - Merged Documentation`n" | Out-File -FilePath $raOutputFile -Encoding UTF8
+"Generated on: $( Get-Date -Format 'yyyy-MM-dd HH:mm:ss' )`n" | Out-File -FilePath $raOutputFile -Append -Encoding UTF8
+"---`n" | Out-File -FilePath $raOutputFile -Append -Encoding UTF8
 
 # Counter for progress
 $count = 0
-$total = $rfMdFiles.Count
+$total = $raMdFiles.Count
 
 Write-Host "Merging $total markdown files from wiki directory..." -ForegroundColor Green
 
-foreach ($file in $rfMdFiles)
+foreach ($file in $raMdFiles)
 {
     $count++
     Write-Host "[$count/$total] Processing: $( $file.Name )" -ForegroundColor Cyan
 
     # Add file separator with filename as heading
-    "`n`n" | Out-File -FilePath $rfOutputFile -Append -Encoding UTF8 -NoNewline
-    "# ==========================================`n" | Out-File -FilePath $rfOutputFile -Append -Encoding UTF8
-    "# FILE: $( $file.Name )`n" | Out-File -FilePath $rfOutputFile -Append -Encoding UTF8
-    "# ==========================================`n`n" | Out-File -FilePath $rfOutputFile -Append -Encoding UTF8
+    "`n`n" | Out-File -FilePath $raOutputFile -Append -Encoding UTF8 -NoNewline
+    "# ==========================================`n" | Out-File -FilePath $raOutputFile -Append -Encoding UTF8
+    "# FILE: $( $file.Name )`n" | Out-File -FilePath $raOutputFile -Append -Encoding UTF8
+    "# ==========================================`n`n" | Out-File -FilePath $raOutputFile -Append -Encoding UTF8
 
     # Read and append file content
     $content = Get-Content -Path $file.FullName -Raw -Encoding UTF8
-    $content | Out-File -FilePath $rfOutputFile -Append -Encoding UTF8 -NoNewline
+    $content | Out-File -FilePath $raOutputFile -Append -Encoding UTF8 -NoNewline
 
     # Add separator
-    "`n`n---`n" | Out-File -FilePath $rfOutputFile -Append -Encoding UTF8
+    "`n`n---`n" | Out-File -FilePath $raOutputFile -Append -Encoding UTF8
 }
 
-Write-Host "`nMerge complete! Output file: $rfOutputFile" -ForegroundColor Green
+Write-Host "`nMerge complete! Output file: $raOutputFile" -ForegroundColor Green
 Write-Host "Total files merged: $total" -ForegroundColor Green
 
-# SF merging part
+# MI merging part
 # Create/clear output file
-"# Suflae Wiki - Merged Documentation`n" | Out-File -FilePath $sfOutputFile -Encoding UTF8
-"Generated on: $( Get-Date -Format 'yyyy-MM-dd HH:mm:ss' )`n" | Out-File -FilePath $sfOutputFile -Append -Encoding UTF8
-"---`n" | Out-File -FilePath $sfOutputFile -Append -Encoding UTF8
+"# Mielia Wiki - Merged Documentation`n" | Out-File -FilePath $miOutputFile -Encoding UTF8
+"Generated on: $( Get-Date -Format 'yyyy-MM-dd HH:mm:ss' )`n" | Out-File -FilePath $miOutputFile -Append -Encoding UTF8
+"---`n" | Out-File -FilePath $miOutputFile -Append -Encoding UTF8
 
 # Counter for progress
 $count = 0
-$total = $sfMdFiles.Count
+$total = $miMdFiles.Count
 
 Write-Host "Merging $total markdown files from wiki directory..." -ForegroundColor Green
 
-foreach ($file in $sfMdFiles)
+foreach ($file in $miMdFiles)
 {
     $count++
     Write-Host "[$count/$total] Processing: $( $file.Name )" -ForegroundColor Cyan
 
     # Add file separator with filename as heading
-    "`n`n" | Out-File -FilePath $sfOutputFile -Append -Encoding UTF8 -NoNewline
-    "# ==========================================`n" | Out-File -FilePath $sfOutputFile -Append -Encoding UTF8
-    "# FILE: $( $file.Name )`n" | Out-File -FilePath $sfOutputFile -Append -Encoding UTF8
-    "# ==========================================`n`n" | Out-File -FilePath $sfOutputFile -Append -Encoding UTF8
+    "`n`n" | Out-File -FilePath $miOutputFile -Append -Encoding UTF8 -NoNewline
+    "# ==========================================`n" | Out-File -FilePath $miOutputFile -Append -Encoding UTF8
+    "# FILE: $( $file.Name )`n" | Out-File -FilePath $miOutputFile -Append -Encoding UTF8
+    "# ==========================================`n`n" | Out-File -FilePath $miOutputFile -Append -Encoding UTF8
 
     # Read and append file content
     $content = Get-Content -Path $file.FullName -Raw -Encoding UTF8
-    $content | Out-File -FilePath $sfOutputFile -Append -Encoding UTF8 -NoNewline
+    $content | Out-File -FilePath $miOutputFile -Append -Encoding UTF8 -NoNewline
 
     # Add separator
-    "`n`n---`n" | Out-File -FilePath $sfOutputFile -Append -Encoding UTF8
+    "`n`n---`n" | Out-File -FilePath $miOutputFile -Append -Encoding UTF8
 }
 
-Write-Host "`nMerge complete! Output file: $sfOutputFile" -ForegroundColor Green
+Write-Host "`nMerge complete! Output file: $miOutputFile" -ForegroundColor Green
 Write-Host "Total files merged: $total" -ForegroundColor Green

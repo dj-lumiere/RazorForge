@@ -1,12 +1,12 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Contains wiki-derived RazorForge snippets that should fail at a specific builder boundary.
+/// Contains wiki-derived Revare snippets that should fail at a specific builder boundary.
 /// </summary>
 public class WikiLanguageBreakageTests
 {

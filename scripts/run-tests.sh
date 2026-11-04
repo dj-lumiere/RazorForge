@@ -1,5 +1,5 @@
 #!/bin/bash
-# RazorForge Test Runner
+# Revare Test Runner
 # ===================
 # Comprehensive test runner for all test types
 
@@ -47,7 +47,7 @@ print_info() { print_status "$BLUE" "ℹ $1"; }
 
 # Function to show help
 show_help() {
-    echo "RazorForge Test Runner"
+    echo "Revare Test Runner"
     echo ""
     echo "Usage: $0 [options]"
     echo ""
@@ -135,7 +135,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 print_info "========================================="
-print_info "RazorForge Test Runner"
+print_info "Revare Test Runner"
 print_info "========================================="
 print_info "Build Type: $BUILD_TYPE"
 print_info "Verbose: $VERBOSE"
@@ -200,17 +200,17 @@ run_dotnet_tests() {
     fi
 }
 
-# Function to run RazorForge builder tests
+# Function to run Revare builder tests
 run_compiler_tests() {
-    print_info "Running RazorForge builder tests..."
+    print_info "Running Revare builder tests..."
 
     local test_files=()
     while IFS= read -r -d '' file; do
         test_files+=("$file")
-    done < <(find "$TEST_DIR" -name "*.rf" -print0)
+    done < <(find "$TEST_DIR" -name "*.rr" -print0)
 
     if [ ${#test_files[@]} -eq 0 ]; then
-        print_warning "No RazorForge test files found"
+        print_warning "No Revare test files found"
         return 0
     fi
 
@@ -218,11 +218,11 @@ run_compiler_tests() {
     local failed=0
 
     for test_file in "${test_files[@]}"; do
-        local test_name=$(basename "$test_file" .rf)
+        local test_name=$(basename "$test_file" .rr)
         print_info "Testing: $test_name"
 
         # Compile the test file
-        if timeout "$TIMEOUT" "$BUILD_DIR/RazorForge" compile "$test_file" > "$RESULTS_DIR/${test_name}.out" 2>&1; then
+        if timeout "$TIMEOUT" "$BUILD_DIR/Revare" compile "$test_file" > "$RESULTS_DIR/${test_name}.out" 2>&1; then
             print_success "Compiled: $test_name"
             ((passed++))
         else
@@ -234,7 +234,7 @@ run_compiler_tests() {
         fi
     done
 
-    print_info "RazorForge builder tests: $passed passed, $failed failed"
+    print_info "Revare builder tests: $passed passed, $failed failed"
     TOTAL_TESTS=$((TOTAL_TESTS + passed + failed))
     PASSED_TESTS=$((PASSED_TESTS + passed))
     FAILED_TESTS=$((FAILED_TESTS + failed))

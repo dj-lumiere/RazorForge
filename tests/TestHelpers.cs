@@ -8,7 +8,7 @@ using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
-namespace RazorForge.Tests;
+namespace Revare.Tests;
 
 /// <summary>
 /// Helper memberRoutines for parsing and analyzing test code.
@@ -17,13 +17,13 @@ public static class TestHelpers
 {
     /// <summary>
     /// A time limit for a child process the tests start (a build, a built program), scaled by the
-    /// <c>RF_TEST_TIMEOUT_SCALE</c> environment variable (a whole number, 1 when unset). CI sets it on the coverage
+    /// <c>RA_TEST_TIMEOUT_SCALE</c> environment variable (a whole number, 1 when unset). CI sets it on the coverage
     /// leg: the child runs the coverage-instrumented builder assemblies from the test output directory, which makes a
     /// build several times slower. The limit only catches hangs, so a slower run gets a longer one.
     /// </summary>
     public static int ChildTimeoutMs(int baseMs)
     {
-        string? scale = Environment.GetEnvironmentVariable(variable: "RF_TEST_TIMEOUT_SCALE");
+        string? scale = Environment.GetEnvironmentVariable(variable: "RA_TEST_TIMEOUT_SCALE");
         return int.TryParse(s: scale, result: out int factor) && factor > 1 ? baseMs * factor : baseMs;
     }
 
@@ -32,14 +32,14 @@ public static class TestHelpers
     [ModuleInitializer]
     internal static void RegisterFrontends()
     {
-        RazorForge.RazorForgeFrontend.Register();
+        Revare.RevareFrontend.Register();
     }
 
-    /// <summary>The toolchain that builds <paramref name="sourcePath"/>: <c>RazorForge.dll</c> from this test
+    /// <summary>The toolchain that builds <paramref name="sourcePath"/>: <c>Revare.dll</c> from this test
     /// assembly's output directory.</summary>
     public static string ToolchainDll(string sourcePath)
     {
-        return Path.Combine(path1: AppContext.BaseDirectory, path2: "RazorForge.dll");
+        return Path.Combine(path1: AppContext.BaseDirectory, path2: "Revare.dll");
     }
 
     private const string ExpectedAtLeastOneError = "Expected at least one error";
@@ -49,46 +49,46 @@ public static class TestHelpers
     // Captured once per process; each AnalyzeSa call restores in microseconds instead of ~0.5 s.
     private static readonly Lazy<TypeRegistry.StdlibSnapshot> _rfSnapshot =
         new(valueFactory: () =>
-            SemanticVerifier.CaptureStdlibSnapshot(language: Language.RazorForge));
+            SemanticVerifier.CaptureStdlibSnapshot(language: Language.Revare));
 
-    private static readonly Lazy<TypeRegistry.StdlibSnapshot> _suflaeSnapshot =
-        new(valueFactory: () => SemanticVerifier.CaptureStdlibSnapshot(language: Language.Suflae));
+    private static readonly Lazy<TypeRegistry.StdlibSnapshot> _mieliaSnapshot =
+        new(valueFactory: () => SemanticVerifier.CaptureStdlibSnapshot(language: Language.Mielia));
 
     #endregion
 
-    #region RazorForge Helpers
+    #region Revare Helpers
 
     /// <summary>
-    /// Tokenizes RazorForge source code.
+    /// Tokenizes Revare source code.
     /// </summary>
     public static List<Token> Tokenize(string source, [CallerMemberName] string? fileName = null)
     {
         return Lexers.Tokenize(source: source,
             fileName: fileName ?? "test",
-            language: Language.RazorForge);
+            language: Language.Revare);
     }
 
     /// <summary>
-    /// Parses RazorForge source code into an AST.
+    /// Parses Revare source code into an AST.
     /// </summary>
     public static Program Parse(string source, [CallerMemberName] string? fileName = null)
     {
         List<Token> tokens = Tokenize(source: source, fileName: fileName);
         var parser = new Builder.Parser.Parser(tokens: tokens,
-            language: Language.RazorForge,
+            language: Language.Revare,
             fileName: fileName);
         return parser.Parse();
     }
 
     /// <summary>
-    /// Parses RazorForge source and returns the parser for error checking.
+    /// Parses Revare source and returns the parser for error checking.
     /// </summary>
     public static (Program Program, Builder.Parser.Parser Parser) ParseWithErrors(string source,
         [CallerMemberName] string? fileName = null)
     {
         List<Token> tokens = Tokenize(source: source, fileName: fileName);
         var parser = new Builder.Parser.Parser(tokens: tokens,
-            language: Language.RazorForge,
+            language: Language.Revare,
             fileName: fileName);
         Program program = parser.Parse();
         return (program, parser);
@@ -106,12 +106,12 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Parses and analyzes RazorForge source code.
+    /// Parses and analyzes Revare source code.
     /// </summary>
     public static AnalysisResult Analyze(string source, [CallerMemberName] string? fileName = null)
     {
         Program program = Parse(source: source, fileName: fileName);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.Revare);
         return analyzer.Analyze(program: program);
     }
 
@@ -171,47 +171,47 @@ public static class TestHelpers
 
     #endregion
 
-    #region Suflae Helpers
+    #region Mielia Helpers
 
     /// <summary>
-    /// Tokenizes Suflae source code.
+    /// Tokenizes Mielia source code.
     /// </summary>
-    public static List<Token> TokenizeSuflae(string source,
+    public static List<Token> TokenizeMielia(string source,
         [CallerMemberName] string? fileName = null)
     {
         return Lexers.Tokenize(source: source,
             fileName: fileName ?? "test",
-            language: Language.Suflae);
+            language: Language.Mielia);
     }
 
     /// <summary>
-    /// Parses Suflae source code into an AST.
+    /// Parses Mielia source code into an AST.
     /// </summary>
-    public static Program ParseSuflae(string source, [CallerMemberName] string? fileName = null)
+    public static Program ParseMielia(string source, [CallerMemberName] string? fileName = null)
     {
-        List<Token> tokens = TokenizeSuflae(source: source, fileName: fileName);
+        List<Token> tokens = TokenizeMielia(source: source, fileName: fileName);
         var parser = new Builder.Parser.Parser(tokens: tokens,
-            language: Language.Suflae,
+            language: Language.Mielia,
             fileName: fileName);
         return parser.Parse();
     }
 
     /// <summary>
-    /// Parses Suflae source and returns the parser for error checking.
+    /// Parses Mielia source and returns the parser for error checking.
     /// </summary>
-    public static (Program Program, Builder.Parser.Parser Parser) ParseSuflaeWithErrors(
+    public static (Program Program, Builder.Parser.Parser Parser) ParseMieliaWithErrors(
         string source, [CallerMemberName] string? fileName = null)
     {
-        List<Token> tokens = TokenizeSuflae(source: source, fileName: fileName);
+        List<Token> tokens = TokenizeMielia(source: source, fileName: fileName);
         var parser = new Builder.Parser.Parser(tokens: tokens,
-            language: Language.Suflae,
+            language: Language.Mielia,
             fileName: fileName);
         Program program = parser.Parse();
         return (program, parser);
     }
 
     /// <summary>
-    /// Parses and analyzes RazorForge source, stopping after Phase 5 (SA only).
+    /// Parses and analyzes Revare source, stopping after Phase 5 (SA only).
     /// Skips monomorphization and lowering — use for tests that only check errors or type annotations.
     /// Uses a pre-analyzed stdlib snapshot so stdlib loading runs once per process, not per test.
     /// </summary>
@@ -220,7 +220,7 @@ public static class TestHelpers
     {
         Program program = Parse(source: source, fileName: fileName);
         var analyzer = new SemanticVerifier(
-            language: Language.RazorForge,
+            language: Language.Revare,
             snapshot: _rfSnapshot.Value) { SaOnly = true };
         return analyzer.Analyze(program: program);
     }
@@ -233,7 +233,7 @@ public static class TestHelpers
     {
         Program program = Parse(source: source, fileName: fileName);
         var analyzer = new SemanticVerifier(
-            language: Language.RazorForge,
+            language: Language.Revare,
             snapshot: _rfSnapshot.Value) { SaOnly = true };
         return (analyzer.Analyze(program: program), program);
     }
@@ -271,24 +271,24 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Parses and analyzes Suflae source code.
+    /// Parses and analyzes Mielia source code.
     /// </summary>
-    public static AnalysisResult AnalyzeSuflae(string source,
+    public static AnalysisResult AnalyzeMielia(string source,
         [CallerMemberName] string? fileName = null)
     {
-        Program program = ParseSuflae(source: source, fileName: fileName);
-        var analyzer = new SemanticVerifier(language: Language.Suflae);
+        Program program = ParseMielia(source: source, fileName: fileName);
+        var analyzer = new SemanticVerifier(language: Language.Mielia);
         return analyzer.Analyze(program: program);
     }
 
     /// <summary>
-    /// Asserts that Suflae parsing succeeds without errors.
+    /// Asserts that Mielia parsing succeeds without errors.
     /// </summary>
-    public static Program AssertParsesSuflae(string source,
+    public static Program AssertParsesMielia(string source,
         [CallerMemberName] string? fileName = null)
     {
         (Program program, Builder.Parser.Parser parser) =
-            ParseSuflaeWithErrors(source: source, fileName: fileName);
+            ParseMieliaWithErrors(source: source, fileName: fileName);
 
         if (parser.HasErrors)
         {
@@ -305,12 +305,12 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Asserts that Suflae analysis succeeds without errors.
+    /// Asserts that Mielia analysis succeeds without errors.
     /// </summary>
-    public static AnalysisResult AssertAnalyzesSuflae(string source,
+    public static AnalysisResult AssertAnalyzesMielia(string source,
         [CallerMemberName] string? fileName = null)
     {
-        AnalysisResult result = AnalyzeSuflae(source: source, fileName: fileName);
+        AnalysisResult result = AnalyzeMielia(source: source, fileName: fileName);
         if (result.Errors.Count > 0)
         {
             string errorMessages = string.Join(separator: "\n",
@@ -323,12 +323,12 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Asserts that Suflae analysis produces specific errors.
+    /// Asserts that Mielia analysis produces specific errors.
     /// </summary>
-    public static AnalysisResult AssertHasErrorSuflae(string source, string expectedErrorSubstring,
+    public static AnalysisResult AssertHasErrorMielia(string source, string expectedErrorSubstring,
         [CallerMemberName] string? fileName = null)
     {
-        AnalysisResult result = AnalyzeSuflae(source: source, fileName: fileName);
+        AnalysisResult result = AnalyzeMielia(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0, userMessage: ExpectedAtLeastOneError);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: expectedErrorSubstring,
@@ -337,26 +337,26 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Parses and analyzes Suflae source, stopping after Phase 5 (SA only).
+    /// Parses and analyzes Mielia source, stopping after Phase 5 (SA only).
     /// Uses a pre-analyzed stdlib snapshot so stdlib loading runs once per process, not per test.
     /// </summary>
-    public static AnalysisResult AnalyzeSaSuflae(string source,
+    public static AnalysisResult AnalyzeSaMielia(string source,
         [CallerMemberName] string? fileName = null)
     {
-        Program program = ParseSuflae(source: source, fileName: fileName);
+        Program program = ParseMielia(source: source, fileName: fileName);
         var analyzer = new SemanticVerifier(
-            language: Language.Suflae,
-            snapshot: _suflaeSnapshot.Value) { SaOnly = true };
+            language: Language.Mielia,
+            snapshot: _mieliaSnapshot.Value) { SaOnly = true };
         return analyzer.Analyze(program: program);
     }
 
     /// <summary>
-    /// Asserts that Suflae SA-only analysis succeeds without errors.
+    /// Asserts that Mielia SA-only analysis succeeds without errors.
     /// </summary>
-    public static AnalysisResult AssertAnalyzesSaSuflae(string source,
+    public static AnalysisResult AssertAnalyzesSaMielia(string source,
         [CallerMemberName] string? fileName = null)
     {
-        AnalysisResult result = AnalyzeSaSuflae(source: source, fileName: fileName);
+        AnalysisResult result = AnalyzeSaMielia(source: source, fileName: fileName);
         if (result.Errors.Count > 0)
         {
             string errorMessages = string.Join(separator: "\n",
@@ -369,12 +369,12 @@ public static class TestHelpers
     }
 
     /// <summary>
-    /// Asserts that Suflae SA-only analysis produces the expected error.
+    /// Asserts that Mielia SA-only analysis produces the expected error.
     /// </summary>
-    public static AnalysisResult AssertHasErrorSaSuflae(string source,
+    public static AnalysisResult AssertHasErrorSaMielia(string source,
         string expectedErrorSubstring, [CallerMemberName] string? fileName = null)
     {
-        AnalysisResult result = AnalyzeSaSuflae(source: source, fileName: fileName);
+        AnalysisResult result = AnalyzeSaMielia(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0, userMessage: ExpectedAtLeastOneError);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: expectedErrorSubstring,

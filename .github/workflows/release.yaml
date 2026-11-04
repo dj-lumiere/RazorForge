@@ -8,10 +8,10 @@ name: Release
 # The Windows/macOS jobs run after the Linux one so exactly one job creates the
 # release; later invocations of action-gh-release just append their attachments.
 # If a platform job fails, the release still exists with the other platforms'
-# artifacts — build the missing package locally with RazorForge/scripts/package.ps1
+# artifacts — build the missing package locally with Revare/scripts/package.ps1
 # (or package.sh) from the workspace and attach it manually as a fallback.
 #
-# The Suflae repository's release workflow calls this one for its sf-v* tags, so
+# The Mielia repository's release workflow calls this one for its mi-v* tags, so
 # both languages ship from one definition; the release lands in the repository
 # that pushed the tag.
 #
@@ -21,8 +21,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'       # RazorForge release  (e.g. v0.4.0)
-  workflow_call:   # Suflae release (sf-v* tags in the Suflae repository) — same artifacts, SF branding
+      - 'v*'       # Revare release  (e.g. v0.4.0)
+  workflow_call:   # Mielia release (mi-v* tags in the Mielia repository) — same artifacts, MI branding
 
 permissions:
   contents: write
@@ -84,9 +84,9 @@ jobs:
 
       - name: Build native libraries
         run: |
-          # Ingrid's runtime has code written in Tessera (Ingrid/runtime-tessera), compiled by the Tessera builder.
-          dotnet build Tessera/Tessera.csproj --configuration Release
-          export TESSERA_DLL="$GITHUB_WORKSPACE/Tessera/bin/Release/net10.0/tessera.dll"
+          # Ingrid's runtime has code written in Lapila (Ingrid/runtime-lapila), compiled by the Lapila builder.
+          dotnet build Lapila/Lapila.csproj --configuration Release
+          export LAPILA_DLL="$GITHUB_WORKSPACE/Lapila/bin/Release/net10.0/lapila.dll"
           cd Ingrid/native
           chmod +x build.sh
           export CC=clang
@@ -96,16 +96,16 @@ jobs:
           ./build.sh
 
       - name: Resolve version and release branding
-        run: bash RazorForge/scripts/resolve-release.sh
+        run: bash Revare/scripts/resolve-release.sh
 
       - name: Package linux-x64
         run: |
-          chmod +x RazorForge/scripts/package.sh
-          # PKG_VERSION is the tag version for a RazorForge tag, and the csproj
-          # builder version for a Suflae tag (an sf tag ships the same builder,
-          # so its artifacts are named for the builder, not the sf-v0.1.0 tag —
+          chmod +x Revare/scripts/package.sh
+          # PKG_VERSION is the tag version for a Revare tag, and the csproj
+          # builder version for a Mielia tag (an mi tag ships the same builder,
+          # so its artifacts are named for the builder, not the mi-v0.1.0 tag —
           # which would otherwise collide with the existing v0.1.0 release name).
-          VERSION="$PKG_VERSION" RazorForge/scripts/package.sh
+          VERSION="$PKG_VERSION" Revare/scripts/package.sh
           # Per-platform checksum names: all jobs attach to the same release,
           # and identical filenames would collide.
           mv dist/checksums.txt dist/checksums-linux-x64.txt
@@ -172,14 +172,14 @@ jobs:
 
       - name: Resolve version and release branding
         shell: bash
-        run: bash RazorForge/scripts/resolve-release.sh
+        run: bash Revare/scripts/resolve-release.sh
 
       - name: Package win-x64
         shell: pwsh
         run: |
           # package.ps1 honors $env:VERSION; PKG_VERSION is resolved for both tag families.
           $env:VERSION = $env:PKG_VERSION
-          pwsh -NoProfile -File RazorForge/scripts/package.ps1
+          pwsh -NoProfile -File Revare/scripts/package.ps1
           if ($LASTEXITCODE -ne 0) { throw "package.ps1 failed ($LASTEXITCODE)" }
           Move-Item dist/checksums.txt dist/checksums-win-x64.txt
 
@@ -221,9 +221,9 @@ jobs:
 
       - name: Build native libraries
         run: |
-          # Ingrid's runtime has code written in Tessera (Ingrid/runtime-tessera), compiled by the Tessera builder.
-          dotnet build Tessera/Tessera.csproj --configuration Release
-          export TESSERA_DLL="$GITHUB_WORKSPACE/Tessera/bin/Release/net10.0/tessera.dll"
+          # Ingrid's runtime has code written in Lapila (Ingrid/runtime-lapila), compiled by the Lapila builder.
+          dotnet build Lapila/Lapila.csproj --configuration Release
+          export LAPILA_DLL="$GITHUB_WORKSPACE/Lapila/bin/Release/net10.0/lapila.dll"
           cd Ingrid/native
           chmod +x build.sh
           export CC=clang
@@ -231,12 +231,12 @@ jobs:
           ./build.sh
 
       - name: Resolve version and release branding
-        run: bash RazorForge/scripts/resolve-release.sh
+        run: bash Revare/scripts/resolve-release.sh
 
       - name: Package osx-arm64
         run: |
-          chmod +x RazorForge/scripts/package.sh
-          VERSION="$PKG_VERSION" RazorForge/scripts/package.sh
+          chmod +x Revare/scripts/package.sh
+          VERSION="$PKG_VERSION" Revare/scripts/package.sh
           mv dist/checksums.txt dist/checksums-osx-arm64.txt
 
       - name: Attach osx-arm64 artifacts to the release

@@ -4,14 +4,14 @@ using Builder.Verification.Results;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// A <c>record</c> is a value, so it holds neither an entity nor a type parameter that could be one (RF-S409). An
+/// A <c>record</c> is a value, so it holds neither an entity nor a type parameter that could be one (RA-S409). An
 /// entity is the declaration that may: <c>Slots[T, COUNT]</c> is the fixed run of places for any <c>T</c>, kept in one
-/// place, and <c>bundle</c> is a build error (RF-G228).
+/// place, and <c>bundle</c> is a build error (RA-G228).
 /// </summary>
 public class RecordSlotsTests
 {
@@ -190,7 +190,7 @@ public class RecordSlotsTests
             predicate: e => e.Code == SemanticDiagnosticCode.ProtocolConstraintViolation);
     }
 
-    /// <summary>Every RazorForge stdlib record keeps to the rule: what may hold an entity is an entity.</summary>
+    /// <summary>Every Revare stdlib record keeps to the rule: what may hold an entity is an entity.</summary>
     [Fact]
     public void StdlibRecords_HoldNoEntity()
     {

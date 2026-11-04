@@ -1,13 +1,13 @@
 using Builder.Diagnostics;
 using Builder.Verification.Results;
 
-namespace RazorForge.Tests.Analyzer;
+namespace Revare.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
 /// Choice values and flags bits are written on every member or on none (intent C79): some with and some without is
-/// RF-S417, a flags bit is 0 to 63 (RF-S419), and two members on one bit is RF-S429.
+/// RA-S417, a flags bit is 0 to 63 (RA-S419), and two members on one bit is RA-S429.
 /// </summary>
 public class ChoiceFlagsValueTests
 {
