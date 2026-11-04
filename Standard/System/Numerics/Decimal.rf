@@ -393,6 +393,60 @@ secret routine dec_places_op(op: U32, a: Decimal, b: Decimal, places: U64, rule:
             description: f"the result to {places} places has more significant digits than a Decimal holds (34)")
     return dec_of_canonical(x: D128.from_words(low: w.w0, high: w.w1))
 
+### `me op you` (op 0 add, 1 subtract, 2 multiply, 3 divide) computed exactly, then rounded once to the nearest value of
+### 34 significant digits under `rule`.
+### :throws: {NumericOverflowError} when the rounded result is past the range of a Decimal (about 1e6144).
+secret routine dec_sig_op(op: U32, a: Decimal, b: Decimal, rule: RoundingRule) -> Decimal
+    var x = dec_to_d128(x: a)
+    var y = dec_to_d128(x: b)
+    var w = C::ingrid_decimal_sig_op(op: op, a_low: d128_low(v: x), a_high: d128_high(v: x), b_low: d128_low(v: y),
+        b_high: d128_high(v: y), mode: rounding_mode(rule: rule))
+    if w.w2 != 0
+        throw NumericOverflowError(description: "overflow: out of range")
+    return dec_of_canonical(x: D128.from_words(low: w.w0, high: w.w1))
+
+### Returns `me + you` computed exactly, then rounded once to the nearest value of 34 significant digits by `rule` (half
+### up when left out). Where `+` fails past 34 digits, this rounds.
+### :param you: The number added.
+### :param rule: How the digits past the 34th go.
+### :returns: The rounded sum.
+### :throws: {NumericOverflowError} when the rounded sum is past the range of a Decimal.
+@readonly
+routine Decimal.add(you: Decimal, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_sig_op(op: 0, a: me, b: you, rule: rule)
+
+### Returns `me - you` computed exactly, then rounded once to the nearest value of 34 significant digits by `rule` (half
+### up when left out). Where `-` fails past 34 digits, this rounds.
+### :param you: The number taken away.
+### :param rule: How the digits past the 34th go.
+### :returns: The rounded difference.
+### :throws: {NumericOverflowError} when the rounded difference is past the range of a Decimal.
+@readonly
+routine Decimal.subtract(you: Decimal, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_sig_op(op: 1, a: me, b: you, rule: rule)
+
+### Returns `me * by` computed exactly, then rounded once to the nearest value of 34 significant digits by `rule` (half
+### up when left out). Where `*` fails past 34 digits, this rounds.
+### :param by: The other factor.
+### :param rule: How the digits past the 34th go.
+### :returns: The rounded product.
+### :throws: {NumericOverflowError} when the rounded product is past the range of a Decimal.
+@readonly
+routine Decimal.multiply(by: Decimal, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    return dec_sig_op(op: 2, a: me, b: by, rule: rule)
+
+### Returns `me / by` rounded once to the nearest value of 34 significant digits by `rule` (half up when left out).
+### :param by: The divisor.
+### :param rule: How the digits past the 34th go.
+### :returns: The quotient.
+### :throws: {DivisionByZeroError} when `by` is zero; {NumericOverflowError} when the quotient is past the range of a
+###     Decimal.
+@readonly
+routine Decimal.divide(by: Decimal, rule: RoundingRule = RoundingRule.HALF_UP) -> Decimal
+    if by.is_zero()
+        throw DivisionByZeroError()
+    return dec_sig_op(op: 3, a: me, b: by, rule: rule)
+
 ### Returns `me + you` computed exactly, then rounded once to `places` digits after the point by `rule` (half up when
 ### left out). Where `+` fails past 34 digits, this rounds: `a.add(you: b, places: 2)`.
 ### :param you: The number added.
