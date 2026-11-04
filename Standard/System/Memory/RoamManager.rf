@@ -237,6 +237,15 @@ dangerous routine RoamManager[T].guard_enter()
     C::ingrid_roam_lock_enter(header: me.header())
     return
 
+### A debug build's check once the lock is taken: every handle the entity holds must be escaped when the entity is, or
+### another task would reach the handle without its lock. The check is not in a release build.
+### :throws: {SharingViolationError} when an escaped entity holds a handle that has not escaped.
+dangerous routine RoamManager[T].require_shared_handles()
+    var unshared: Addr = C::ingrid_roam_unshared_child(header: me.header())
+    if not unshared.is_hollow()
+        throw SharingViolationError(holder: T.type_name())
+    return
+
 ### Mode-checked lock exit: the `guard_enter` counterpart.
 @inline
 dangerous routine RoamManager[T].guard_exit()

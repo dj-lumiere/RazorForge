@@ -995,6 +995,10 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     followed, and a cycle crashes with `DeadlockError` naming the jobs and where each took its access.
     `[debug] access-order = true` (off by default, costs time on every access): two accesses taken in opposite
     orders crash with `AccessOrderError` before they ever wait on each other.
+  - **Finding a race.** `[debug] sanitize = "thread"` (config.toml, Linux and macOS) builds the program with
+    ThreadSanitizer: two accesses from different threads that no lock or atomic orders are reported when they happen,
+    with both places (`WARNING: ThreadSanitizer: data race`). The program runs several times slower, is built by the
+    local build (not the daemon or the JIT), and the exit status is 66 when something was reported.
   - **Two tokens that may be the same entity.** Two token parameters (or shared handles) on the same kind of
     container may be the same container, so holding an element of one (`var p = x.modify_at(index: 0)`,
     `var b = xs[0]` on an entity element, to the end of its block) while the other changes shape is RF-S640.
