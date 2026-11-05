@@ -13,17 +13,17 @@ public sealed class ExitCodeTests
 {
     private static readonly string RepoRoot = LocateRepoRoot();
 
-    /// <summary><c>alert(bytes)</c> writes the bytes raw to standard error through <c>alert(value: Bytes)</c>, not their
-    /// diagnostic form through <c>alert[T]</c>.</summary>
+    /// <summary><c>alert(bytes)</c> writes the diagnostic form of the bytes to standard error, and
+    /// <c>stderr().push(data:)</c> writes the bytes themselves.</summary>
     [Fact]
-    public void AlertBytes_WritesTheBytesRaw()
+    public void AlertBytes_WritesTheDiagnosticForm()
     {
         (int exit, string stdout, string stderr) = RunFixture(fixture: "alert_bytes.rvr");
 
         Assert.True(condition: exit == 0,
             userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-        Assert.Contains(expectedSubstring: "ab\ncd|\n", actualString: stderr.Replace(oldValue: "\r\n", newValue: "\n"));
-        Assert.DoesNotContain(expectedSubstring: "\\x61", actualString: stderr);
+        Assert.Contains(expectedSubstring: "Bytes(count: 2, b\"\\x61\\x62\")\ncd|\n",
+            actualString: stderr.Replace(oldValue: "\r\n", newValue: "\n"));
         Assert.Contains(expectedSubstring: "done", actualString: stdout);
     }
 

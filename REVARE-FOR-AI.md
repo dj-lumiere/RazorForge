@@ -1250,8 +1250,9 @@ inside the braces:
 `Text` is UTF-32, a record (value type). `Bytes` is a record for raw byte
 sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
 `Byte`; `b"..."` has type `Bytes`. A `Byte` shows (`represent` and `diagnose` alike, alone or in a
-`List[Byte]`) as the byte literal that makes it: `b'L'`, `b'\''`, `b'\\'`, and `b'\x0A'` / `b'\xFF'` (two
-uppercase hex digits) for any byte that is not printable ASCII. `Bytes` shows `\xHH` per byte.
+`List[Byte]`) as the byte literal that makes it, always two uppercase hex digits: `b'\x4C'`, `b'\x0A'`, `b'\xFF'`.
+`Bytes` shows as the bytes literal that makes it, `\xHH` per byte: `b"\x47\x45\x54"`. `show`/`alert` print that form
+too. Raw bytes go out through `stdout().push(data:)` / `stderr().push(data:)`.
 
 - **`Text` slicing** uses a range subscript: `text[a til b]` / `text[a to b]`
   (subscript forces `U64` indices), open-ended `text[a til ^0]` to the end.
