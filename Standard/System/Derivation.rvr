@@ -805,7 +805,7 @@ needs T obeys Copyable
 ### The auto-derived `destruct()`: tear down each member (unconditionally, every type has a `destruct`, a no-op
 ### for a raw-pointer / scalar / borrow leaf). Records/tuples stop here (stack values). An ENTITY then gives back
 ### its own box: one `destruct` call ends the entity. A written entity `destruct` holds only the teardown of what
-### the entity owns, and the builder adds the same `me.hijack().invalidate()` before each of its returns. The
+### the entity owns, and the builder adds the same `C::rf_invalidate(ptr: me.get_address())` before each of its returns. The
 ### `allmemvarof` walk covers every owned member including `secret`.
 @overridable
 infallible routine T.destruct()
@@ -838,7 +838,7 @@ infallible routine T.destruct()
 needs EntityType T
     danger
         # A hollow entity (all zero, the member variable of a hollow value) has nothing to tear down.
-        if me.hijack().is_hollow()
+        if me.get_address().is_hollow()
             return
         var chain = me.lift_own_child()
         # An entity the program stamps ends its slot first: every stamp of it fails from here on.
@@ -846,10 +846,11 @@ needs EntityType T
             C::rf_stamp_release(at: me.get_address(), offset: T.stamp_slot_offset())
         expand m in allmemvarof(T)
             me.$nameof(m).destruct()
-        me.hijack().invalidate()
+        # The box is given back through its address: a Hijacked[T] here would be built for every entity type.
+        C::rf_invalidate(ptr: me.get_address())
         until chain.is_hollow()
-            var after = hijacked_from[T](chain).as_entity().lift_own_child()
-            hijacked_from[T](chain).as_entity().destruct()
+            var after = LLVM::reinterpret_bits[Addr, T](chain).lift_own_child()
+            LLVM::reinterpret_bits[Addr, T](chain).destruct()
             chain = after
     return
 
@@ -912,7 +913,7 @@ needs EntityType T
         C::rf_stamp_release(at: me.get_address(), offset: T.stamp_slot_offset())
     expand m in allmemvarof(T)
         me.$nameof(m).roam_free()
-    me.hijack().invalidate()
+    C::rf_invalidate(ptr: me.get_address())
     return
 
 ### Record `roam_free()`: a record that holds an entity handle (directly or in a member record) frees what it owns

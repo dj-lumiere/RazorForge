@@ -22,9 +22,9 @@ choice RoamState
 ### v1 biased scheme = SINGLE count + one-way flip (the classic dual-counter BRC, which keeps the
 ### owner fast even AFTER escape, is a deferred perf optimization). Reentrancy is keyed to the
 ### task/coroutine id (NOT the OS thread) because M:N migration moves a coroutine across workers.
-### :typeparam T: The exclusively owned entity type.
-entity RoamManager[T]
-needs EntityType T
+### One controller type serves every entity: what depends on the entity's type is the address of its data and the three
+### hooks the creator is given, so the controller's routines are built once, not once per entity type.
+entity RoamManager
     ### Reference count. Read/written non-atomically in LOCAL mode, atomically once ESCAPED.
     secret count: U64
     ### EXPERIMENT (object-level liveness): weak/observer count. A weak observer does NOT keep the entity
@@ -48,8 +48,8 @@ needs EntityType T
     ### SeqCst load/store on the atomic gives the release-store / acquire-load the flip needs. `Bool`
     ### also lowers to `i1`, which has no hardware atomic; the flag is `0`/`1` over `Unbroken[U8]`.
     secret escaped: Unbroken[U8]
-    ### Raw pointer to the managed entity.
-    secret data: Hijacked[T]
+    ### The address of the managed entity.
+    secret data: Addr
     ### Exclusive-lock flag (`0` free / `1` held). Armed and used only in ESCAPED mode.
     secret locked: Unbroken[U8]
     ### Task/coroutine id of the current lock holder (`0` when free). Task-keyed for migration safety.
@@ -103,10 +103,15 @@ infallible routine T.roam_drop_ref() -> Addr
     return Addr.hollow()
 
 ### Creates a controller with one strong reference in LOCAL mode (unlocked, non-atomic).
-### :param data: The raw pointer to the entity; ownership transfers to this controller.
-### :returns: The resulting `RoamManager[T]` value.
-dangerous routine RoamManager[T](data: Hijacked[T]) -> RoamManager[T]
-    return RoamManager[T](
+### :param data: The address of the entity; ownership transfers to this controller.
+### :param trace_hook: The entity type's `roam_trace` hook (`roam_trace_ref()`).
+### :param free_hook: The entity type's `roam_free` hook (`roam_free_ref()`).
+### :param drop_hook: The entity type's `destruct` (`roam_drop_ref()`).
+### :returns: The resulting `RoamManager` value.
+### `infallible`: nothing here can fail in a way a caller receives, and a `check` around it would wrap the new controller
+### in a carrier whose teardown frees it, while the handle made from it still points at it.
+infallible dangerous routine RoamManager(data: Addr, trace_hook: Addr, free_hook: Addr, drop_hook: Addr) -> RoamManager
+    return RoamManager(
         count: 1,
         weak_count: 0,
         dead: Unbroken[U8](initial: 0),
@@ -117,9 +122,9 @@ dangerous routine RoamManager[T](data: Hijacked[T]) -> RoamManager[T]
         depth: 0,
         state: RoamState.LIVE,
         buffered_at: 0,
-        trace_hook: data.as_entity().roam_trace_ref(),
-        free_hook: data.as_entity().roam_free_ref(),
-        drop_hook: data.as_entity().roam_drop_ref(),
+        trace_hook: trace_hook,
+        free_hook: free_hook,
+        drop_hook: drop_hook,
         shape_users: 0,
         kept: Addr.hollow(),
     )
@@ -131,14 +136,14 @@ dangerous routine RoamManager[T](data: Hijacked[T]) -> RoamManager[T]
 
 ### This controller's address, as Ingrid's Roamed routines take it (their `RoamHeader` repeats this layout).
 ### :returns: The address of the controller.
-secret routine RoamManager[T].header() -> Addr
+secret routine RoamManager.header() -> Addr
     danger
         return me.hijack().get_address()
 
 ### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED. The count mutation is bracketed
 ### in the collector's SHARED stop-the-world lock so a concurrent cycle-collection pass (which trial-
 ### deletes counts non-atomically) can never race it. On the collector's own thread the lock is a no-op.
-routine RoamManager[T].hold()
+routine RoamManager.hold()
     danger
         C::ingrid_roam_hold(header: me.header())
     return
@@ -149,7 +154,7 @@ routine RoamManager[T].hold()
 ### under the collector's SHARED stop-the-world lock, so a collection pass can neither race the count nor
 ### free a controller it is mid-traversal over. The entity is destroyed through `drop_hook`. On the collector's
 ### own thread (a finalizer release) the lock is a no-op.
-routine RoamManager[T].unhold()
+routine RoamManager.unhold()
     danger
         C::ingrid_roam_unhold(header: me.header())
     return
@@ -157,19 +162,19 @@ routine RoamManager[T].unhold()
 ### Makes this entity keep another one alive: one more strong handle to the controller at `kept`, let go when this
 ### entity's last strong handle goes. A controller it kept before is let go now.
 ### :param kept: The other entity's controller.
-dangerous routine RoamManager[T].keep(kept: Addr)
+dangerous routine RoamManager.keep(kept: Addr)
     C::ingrid_roam_keep(header: me.header(), kept: kept)
     return
 
 ### Takes the entity out of this controller when one strong handle and no weak observer reach it, freeing the
 ### controller. Anything more leaves the entity where it is.
 ### :returns: The entity's address, or the none address when something else still reaches it.
-dangerous routine RoamManager[T].release_inner() -> Addr
+dangerous routine RoamManager.release_inner() -> Addr
     return C::ingrid_roam_release_inner(header: me.header())
 
 ### Returns the current strong count. Snapshot only.
 ### :returns: The number of live strong handles.
-routine RoamManager[T].strong_count() -> U64
+routine RoamManager.strong_count() -> U64
     danger
         return C::ingrid_roam_strong_count(header: me.header())
 
@@ -184,21 +189,21 @@ routine RoamManager[T].strong_count() -> U64
 ### collection pass (EXCLUSIVE) can never race the weak count or free a controller mid-`cyclic_finalize`.
 ### SAFE PRECONDITION: only ever called through an already-kept reference (a live strong handle or another
 ### weak observer), so the controller is guaranteed alive at entry — no observe-races-free window.
-dangerous routine RoamManager[T].observe()
+dangerous routine RoamManager.observe()
     C::ingrid_roam_observe(header: me.header())
     return
 
 ### Drops a weak observer. When the LAST observer leaves a DEAD (tombstoned) controller, the controller
 ### struct is finally freed. If the entity is still alive, only the observer count drops. Bracketed +
 ### atomic like `unhold` (last-drop detected by the atomic-sub's previous value in ESCAPED mode).
-dangerous routine RoamManager[T].unobserve()
+dangerous routine RoamManager.unobserve()
     C::ingrid_roam_unobserve(header: me.header())
     return
 
 ### Whether the observed entity is still alive. Safe on a tombstone (reads the atomic `dead` flag, never
 ### `data`). A lock-free snapshot, like `strong_count`.
 ### :returns: `true` until the entity's data is freed.
-routine RoamManager[T].is_alive() -> Bool
+routine RoamManager.is_alive() -> Bool
     danger
         return not C::ingrid_roam_is_destroyed(header: me.header())
 
@@ -206,7 +211,7 @@ routine RoamManager[T].is_alive() -> Bool
 ### the RC-drop (`unhold`) OR the cycle-collect (`cyclic_finalize`) path — NOT keyed on the strong count,
 ### which a cycle-collected node keeps non-zero via its internal edges.
 ### :returns: `true` once it is gone.
-routine RoamManager[T].is_destroyed() -> Bool
+routine RoamManager.is_destroyed() -> Bool
     danger
         return C::ingrid_roam_is_destroyed(header: me.header())
 
@@ -222,13 +227,13 @@ routine RoamManager[T].is_destroyed() -> Bool
 ### child — non-atomic count, no lock — that both the owner and the crossing task then touch, a data race).
 ### Transitive escape walks the `Roamed` children through the per-type trace hook, iteratively (a deep graph
 ### would overflow the stack), and stops at already-escaped nodes, so cycles terminate.
-infallible dangerous routine RoamManager[T].promote()
+infallible dangerous routine RoamManager.promote()
     C::ingrid_roam_promote(header: me.header())
     return
 
 ### Whether this object has escaped. Drives `Roamed`'s access-lock wrapping.
 ### :returns: `true` if ESCAPED.
-routine RoamManager[T].is_escaped() -> Bool
+routine RoamManager.is_escaped() -> Bool
     danger
         return C::ingrid_roam_is_escaped(header: me.header())
 
@@ -239,22 +244,23 @@ routine RoamManager[T].is_escaped() -> Bool
 ### Mode-checked lock entry: acquires the reentrant lock only when ESCAPED (a no-op in LOCAL mode,
 ### where there is no contention). Drives `Roamed`'s access wrapping and the `Roaming[T]` guard token.
 @inline
-dangerous routine RoamManager[T].guard_enter()
+dangerous routine RoamManager.guard_enter()
     C::ingrid_roam_lock_enter(header: me.header())
     return
 
 ### A debug build's check once the lock is taken: every handle the entity holds must be escaped when the entity is, or
 ### another task would reach the handle without its lock. The check is not in a release build.
 ### :throws: {SharingViolationError} when an escaped entity holds a handle that has not escaped.
-dangerous routine RoamManager[T].require_shared_handles()
+### :param holder: The name of the entity's type, for the message.
+dangerous routine RoamManager.require_shared_handles(holder: Text)
     var unshared: Addr = C::ingrid_roam_unshared_child(header: me.header())
     if not unshared.is_hollow()
-        throw SharingViolationError(holder: T.type_name())
+        throw SharingViolationError(holder: holder)
     return
 
 ### Mode-checked lock exit: the `guard_enter` counterpart.
 @inline
-dangerous routine RoamManager[T].guard_exit()
+dangerous routine RoamManager.guard_exit()
     C::ingrid_roam_lock_exit(header: me.header())
     return
 
@@ -262,18 +268,13 @@ dangerous routine RoamManager[T].guard_exit()
 # Teardown.
 # ============================================================================
 
-### Returns a non-owning pointer to the managed entity.
-### :returns: The resulting `Hijacked[T]` value.
-routine RoamManager[T].data_ptr() -> Hijacked[T]
+### The address of the managed entity, without keeping it alive.
+### :returns: The entity's address.
+routine RoamManager.data_address() -> Addr
     return me.data
-
-### Destroys the managed entity. Call only when the strong count reaches zero.
-dangerous routine RoamManager[T].drop_data()
-    me.data.as_entity().destruct()
-    return
 
 ### Ends the controller. The entity itself is freed by the release and cycle collection paths.
 @override
-routine RoamManager[T].destruct()
+routine RoamManager.destruct()
     danger
         return

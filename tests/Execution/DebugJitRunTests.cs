@@ -17,7 +17,9 @@ namespace Revare.Tests.Execution;
 public sealed partial class DebugJitRunTests
 {
     /// <summary>A program that reaches common stdlib code (a list, a map, text formatting) and a routine of its own,
-    /// so a run links program code against stdlib code.</summary>
+    /// so a run links program code against stdlib code. Its Work runs a routine that starts Works of its own: their
+    /// routines are written while the builder-made body of <c>burst</c> is analyzed, after the program's own bodies,
+    /// and a warm daemon once declared them without defining them.</summary>
     private const string Program = """
                                    module JitProbe
                                    import IO/Console
@@ -28,16 +30,34 @@ public sealed partial class DebugJitRunTests
                                            sum += i
                                        return sum
 
+                                   routine one() -> S64
+                                       return 1
+
+                                   routine burst() -> S64
+                                       var parts = List[Work[S64]]()
+                                       var i = 0
+                                       until i >= 3
+                                           parts.add_last(value: one.to[Work]())
+                                           i = i + 1
+                                       var got = parts.gather()
+                                       var sum = 0
+                                       var j: U64 = 0
+                                       until j >= 3
+                                           sum = sum + got[j]
+                                           j = j + 1
+                                       return sum
+
                                    routine start()
                                        var names = ["alpha", "beta"]
                                        names.add_last(value: "gamma")
                                        var d = Dict[Text, S64]()
                                        d["one"] = 1
-                                       show(f"jit total {total(upto: 10)} names {names.count()} has one {d.has_key("one")}")
+                                       var b = burst.to[Work]()
+                                       show(f"jit total {total(upto: 10)} names {names.count()} has one {d.has_key("one")} work {b.retrieve()}")
                                        return
                                    """;
 
-    private const string ExpectedLine = "jit total 55 names 3 has one true";
+    private const string ExpectedLine = "jit total 55 names 3 has one true work 3";
 
     [GeneratedRegex(pattern: @"incremental JIT \(cache: (\d+) reused, (\d+) fresh")]
     private static partial Regex IncrementalCacheRegex();
