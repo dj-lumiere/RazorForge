@@ -89,6 +89,22 @@ dotnet publish Mielia/Mielia.csproj -c Release -r "$RID" -p:PublishAot=true \
 # The prebuilt standard library snapshot is made and read by managed builders only (PbrfSerializer.IsSupported).
 rm -rf "$OUT/Standard/.prebuilt"
 
+echo "=== dotnet publish the managed daemons (self-contained, $OUT/daemon) ==="
+# The NativeAOT command line starts the daemon from here when it is there (BuilderLocation.DaemonFolder). Managed code
+# under the JIT analyzes about 1.6 times as fast as the NativeAOT build once the daemon is warm, and the daemon runs for
+# the whole session. Self-contained, so no .NET runtime needs to be installed. It reads the standard library, the tools
+# and Ingrid from the folder above (BuilderLocation.HomeEnvVar), so the large files both folders would hold are links.
+dotnet publish Revare/Revare.csproj -c Release -r "$RID" --self-contained true \
+    -o "$OUT/daemon" --verbosity minimal
+dotnet publish Mielia/Mielia.csproj -c Release -r "$RID" --self-contained true \
+    -o "$OUT/daemon" --verbosity minimal
+for shared in libLLVM.so libLLVM.dylib libLLVMSharp.so libLLVMSharp.dylib lapila-stdlib Standard; do
+    if [ -e "$OUT/daemon/$shared" ] && [ -e "$OUT/$shared" ]; then
+        rm -rf "${OUT:?}/daemon/$shared"
+        ln -s "../$shared" "$OUT/daemon/$shared"
+    fi
+done
+
 echo "=== native runtime artifacts (installed layout) ==="
 # The installed layout — and the toolchain's own P/Invoke probing + buildandrun's prebuilt-layout
 # detection — expect them FLAT next to the executables, matching the dev bin/ output.
