@@ -571,31 +571,18 @@ routine BF16.total_order_mag(you: BF16) -> Bool
 ### The smallest BF16 above this value (+infinity stays, NaN stays, -0 and +0 go to the smallest subnormal).
 ### :returns: The next value up.
 routine BF16.next_up() -> BF16
-    var bits = me.to_bits()
-    if me.is_nan() or bits == 0x7F80
-        return me
-    if bits == 0x8000 or bits == 0
-        return BF16.from_bits(bits: 1)
-    if bits < 0x8000
-        return BF16.from_bits(bits: bits + 1)
-    return BF16.from_bits(bits: bits - 1)
+    return me.nextafter(you: BF16.from_bits(bits: 0x7F80))
 
 ### The largest BF16 below this value.
 ### :returns: The next value down.
 routine BF16.next_down() -> BF16
-    return me.neg().next_up().neg()
+    return me.nextafter(you: BF16.from_bits(bits: 0xFF80))
 
-### The next BF16 from this value toward `you`.
+### The next BF16 from this value toward `you` (C nextafter), computed in Ingrid like the other widths.
 ### :param you: The direction.
 ### :returns: The next value, `you` when the two are equal, NaN when either is.
 routine BF16.nextafter(you: BF16) -> BF16
-    if me.is_nan() or you.is_nan()
-        return me.to[B32]().add_unchecked(you.to[B32]()).to_unchecked[BF16]()
-    if me.to[B32]() == you.to[B32]()
-        return you
-    if me.to[B32]() < you.to[B32]()
-        return me.next_up()
-    return me.next_down()
+    return BF16.from_bits(bits: C::ingrid_bf16_nextafter(x: me.to_bits(), y: you.to_bits()))
 
 ### Formats this value with exactly `places` digits after the decimal point.
 ### :param places: The number of digits after the point.

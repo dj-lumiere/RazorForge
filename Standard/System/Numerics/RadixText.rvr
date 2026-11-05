@@ -15,14 +15,35 @@ routine check_radix(radix: S32)
         throw NumericDomainError(description: f"radix must be between 2 and 36, got {radix}")
     return
 
-### The digit character for `d` (0 to 35): `0`-`9`, then `a`-`z`.
-### :param d: The digit value, 0 to 35.
-### :returns: `0` to `9`, then `a` to `z`.
-routine radix_digit(d: U64) -> Char
-    var d32 = LLVM::int_truncate[U64, U32](d)
-    if d < 10
-        return Char(LLVM::add(a: 0x0030, b: d32))
-    return Char(LLVM::add(a: 0x0057, b: d32))
+### The room of the stack buffer the digits are first written into: a 256-bit value in base 2 needs 257.
+preset RADIX_TEXT_ROOM: U64 = 64
+
+### The digits of the 256-bit magnitude `w3..w0` in base `radix`, with a leading `-` when `negative`. Ingrid writes them
+### (Ingrid/lapila/radix_text.lpa): a short text fits the stack buffer, a longer one is asked for again with room for
+### all of it.
+### :param w0: The lowest 64 bits.
+### :param w1: The next 64 bits.
+### :param w2: The next 64 bits.
+### :param w3: The highest 64 bits.
+### :param negative: Whether to prefix a minus sign.
+### :param radix: The numeric base (2 to 36).
+### :returns: The rendered `Text`.
+secret routine radix_words_text(w0: U64, w1: U64, w2: U64, w3: U64, negative: Bool, radix: S32) -> Text
+    check_radix(radix: radix)
+    var sign: U64 = if negative then 1 else 0
+    var base = LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[S32, U32](radix))
+    var buf = Items[Char, 64]()
+    var count: U64 = 0
+    danger
+        var p = LLVM::reinterpret_bits[Hijacked[Items[Char, 64]], Hijacked[Char]](buf.hijack())
+        count = C::ingrid_radix_text_utf32(w0: w0, w1: w1, w2: w2, w3: w3, negative: sign, radix: base, out: p,
+            out_count: RADIX_TEXT_ROOM)
+        if count <= RADIX_TEXT_ROOM
+            return Text(from_span: p, count: count)
+    var result = text_alloc(count: count)
+    drop C::ingrid_radix_text_utf32(w0: w0, w1: w1, w2: w2, w3: w3, negative: sign, radix: base, out: result.data,
+        out_count: count)
+    return result
 
 ### The digits of `mag` in base `radix`, with a leading `-` when `negative`.
 ### :param mag: The magnitude to render.
@@ -30,23 +51,7 @@ routine radix_digit(d: U64) -> Char
 ### :param radix: The numeric base (2 to 36).
 ### :returns: The rendered `Text`.
 routine radix_text(mag: U64, negative: Bool, radix: S32) -> Text
-    check_radix(radix: radix)
-    if mag == 0
-        return "0"
-    var base = LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[S32, U32](radix))
-    var reversed = List[Char]()
-    var m = mag
-    until m == 0
-        reversed.add_last(value: radix_digit(d: LLVM::unsigned_rem(a: m, b: base)))
-        m = LLVM::unsigned_div(a: m, b: base)
-    if negative
-        reversed.add_last(value: '-')
-    var digits = List[Char]()
-    var i = reversed.count()
-    until i == 0
-        i = i - 1
-        digits.add_last(value: reversed[i])
-    return Text(from_list: digits)
+    return radix_words_text(w0: mag, w1: 0, w2: 0, w3: 0, negative: negative, radix: radix)
 
 ### `radix_text` for a signed 64-bit value (the 8/16/32-bit signed types sign-extend into it first).
 ### Takes the magnitude through the raw bits so `S64` minimum renders correctly.
@@ -59,35 +64,24 @@ routine signed_radix_text(value: S64, radix: S32) -> Text
         return radix_text(mag: 0 -% raw, negative: true, radix: radix)
     return radix_text(mag: raw, negative: false, radix: radix)
 
-### `radix_text` for a wide unsigned magnitude (`U128`, `U256`), dividing in the value's own width through its
-### `//` and `%` (Knuth division, never a 128-bit or 256-bit LLVM divide).
+### `radix_text` for a `U128` magnitude.
 ### :param mag: The magnitude to format.
 ### :param negative: `true` to put a `-` in front.
 ### :param radix: The base, 2 to 36.
 ### :returns: The digits, with a leading `-` when `negative` is true.
-routine wide_radix_text[T](mag: T, negative: Bool, radix: S32) -> Text
-needs RecordType T
-needs T obeys FloorDivisible
-    check_radix(radix: radix)
-    var zero = LLVM::zero_extend[U64, T](0)
-    if LLVM::int_eq(a: mag, b: zero)
-        return "0"
-    var base = LLVM::zero_extend[U64, T](LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[S32, U32](radix)))
-    var reversed = List[Char]()
-    var m = mag
-    until LLVM::int_eq(a: m, b: zero)
-        reversed.add_last(
-            value: radix_digit(d: LLVM::int_truncate[T, U64](m % base)),
-        )
-        m = m // base
-    if negative
-        reversed.add_last(value: '-')
-    var digits = List[Char]()
-    var i = reversed.count()
-    until i == 0
-        i = i - 1
-        digits.add_last(value: reversed[i])
-    return Text(from_list: digits)
+routine wide_radix_text(mag: U128, negative: Bool, radix: S32) -> Text
+    return radix_words_text(w0: LLVM::int_truncate[U128, U64](mag), w1: LLVM::int_truncate[U128, U64](mag >>> 64),
+        w2: 0, w3: 0, negative: negative, radix: radix)
+
+### `radix_text` for a `U256` magnitude.
+### :param mag: The magnitude to format.
+### :param negative: `true` to put a `-` in front.
+### :param radix: The base, 2 to 36.
+### :returns: The digits, with a leading `-` when `negative` is true.
+routine wide_radix_text(mag: U256, negative: Bool, radix: S32) -> Text
+    return radix_words_text(w0: LLVM::int_truncate[U256, U64](mag), w1: LLVM::int_truncate[U256, U64](mag >>> 64),
+        w2: LLVM::int_truncate[U256, U64](mag >>> 128), w3: LLVM::int_truncate[U256, U64](mag >>> 192),
+        negative: negative, radix: radix)
 
 ### This value in hexadecimal, lowercase (`255.hex()` is `ff`, `-255` is `-ff`). No `0x` prefix.
 ### :returns: The hexadecimal `Text`.

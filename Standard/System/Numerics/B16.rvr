@@ -942,26 +942,11 @@ routine B16.rem(you: B16) -> B16
 routine B16.fdim(you: B16) -> B16
     return me.to[B32]().fdim(you: you.to[B32]()).to_unchecked[B16]()
 
-### Next representable value after me toward you. Steps the 16-bit sign-magnitude
-### pattern directly (a B32 step would narrow back to the same B16 value).
+### Next representable value after me toward you (C nextafter), computed in Ingrid like the other widths.
 ### :param you: The value that gives the direction.
-### :returns: The neighbor of `me` toward `you`, or `you` if they are equal.
+### :returns: The neighbor of `me` toward `you`, `you` if they are equal, NaN when either is.
 routine B16.nextafter(you: B16) -> B16
-    if me.is_nan()
-        return me
-    if you.is_nan()
-        return you
-    if me == you
-        return you
-    var bits = me.to_bits()
-    var mag = LLVM::bit_and(a: bits, b: 0x7FFF)
-    var sgn = LLVM::bit_and(a: bits, b: 0x8000)
-    if mag == 0
-        # me is ±0 (and me != you): step to the smallest subnormal toward you.
-        return if you.is_positive() then B16.from_bits(bits: 0x0001) else B16.from_bits(bits: 0x8001)
-    var larger_mag = (me.is_positive() and you > me) or (me.is_negative() and you < me)
-    var next_mag = if larger_mag then LLVM::add(a: mag, b: 1) else LLVM::sub(a: mag, b: 1)
-    return B16.from_bits(bits: LLVM::bit_or(a: sgn, b: next_mag))
+    return B16.from_bits(bits: C::ingrid_b16_nextafter(x: me.to_bits(), y: you.to_bits()))
 
 ### me * 2^n (C scalbn).
 ### :param n: The exponent to apply.
