@@ -1,0 +1,46 @@
+module Tests/Stdlib/WhenMemberSubjectApi
+
+import IO/Console
+# A `when` on a member variable reads the entity the member holds: ending the `when` ends nothing, so the member
+# still holds it and its container ends it once. Read inside a recursive builder, then again after it returns.
+
+entity Node
+    value: S64
+    left: Node?
+
+### The left child's value, 0 when there is none.
+### :param x: The node.
+### :returns: The value.
+routine left_value(x: Modifying[Node]) -> S64
+    var s: S64 = 0
+    when x.left
+        is None => nothing
+        else as c => s = c.value
+    return s
+
+### Adds 10 to the left child's value.
+### :param x: The node.
+routine bump_left(x: Modifying[Node])
+    when x.left
+        is None => nothing
+        else as c => c.value = c.value + 10
+    return
+
+### A chain of `d` nodes, each the left child of the next.
+### :param d: How many.
+### :returns: The top node.
+routine build(d: S64) -> Node
+    if d == 0
+        throw AbsentValueError()
+    var x = Node(value: d, left: none)
+    x.left = try build(d: d - 1)
+    show(f"under {d}: {left_value(x)}")
+    return x
+
+routine start()
+    var top = build(d: 3)
+    bump_left(x: top.modify())
+    bump_left(x: top.modify())
+    show(f"after: {left_value(top.modify())}")
+    show("DONE")
+    return
