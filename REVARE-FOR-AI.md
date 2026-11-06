@@ -1256,7 +1256,7 @@ inside the braces:
 
 `Text` is UTF-32, a record (value type). `Bytes` is a record for raw byte
 sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
-`Byte`; `b"..."` has type `Bytes`. A `Byte` shows (`represent` and `diagnose` alike, alone or in a
+`Byte`; `b"..."` has type `Bytes`. In `b"..."`, `\x00`..`\xFF` are single bytes and a non-ASCII character is its UTF-8 bytes (`b"한국어"` is 9 bytes); `b'x'` holds one byte (ASCII or `\xHH`). Text (`"..."`, `'...'`, `f"..."`) has NO `\x` escape (a build error that points at `\u`), and a `\u` surrogate (D800..DFFF) or value above 10FFFF is a build error. A `Byte` shows (`represent` and `diagnose` alike, alone or in a
 `List[Byte]`) as the byte literal that makes it, always two uppercase hex digits: `b'\x4C'`, `b'\x0A'`, `b'\xFF'`.
 `Bytes` shows as the bytes literal that makes it, `\xHH` per byte: `b"\x47\x45\x54"`. `show`/`alert` print that form
 too. Raw bytes go out through `stdout().push(data:)` / `stderr().push(data:)`.

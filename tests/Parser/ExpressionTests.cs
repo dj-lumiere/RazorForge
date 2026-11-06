@@ -1255,15 +1255,18 @@ public class ExpressionTests
         Assert.Equal(expected: TokenType.ByteLetterLiteral, actual: tokens[index: 0].Type);
     }
     /// <summary>
-    /// Verifies that the tokenizer handles byte string non ascii and fails in the expected way.
+    /// Verifies that a non-ASCII character in a byte string becomes its UTF-8 bytes.
     /// </summary>
     [Fact]
-    public void Tokenize_ByteStringNonAscii_ThrowsError()
+    public void Tokenize_ByteStringNonAscii_IsUtf8Bytes()
     {
-        string source = "b\"\uD55C\uAD6D\""; // b"한국" - non-ASCII
+        string source = "b\"\uD55C\uAD6D\""; // b"한국"
 
-        Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
+        Token token = Tokenize(source: source).Single(predicate: t => t.Type == TokenType.BytesLiteral);
+        Assert.Equal(expected: System.Text.Encoding.UTF8.GetBytes(s: "한국"),
+            actual: token.Text.Select(selector: c => (byte)c).ToArray());
     }
+
     /// <summary>
     /// Verifies that the tokenizer handles byte string unicode escape and fails in the expected way.
     /// </summary>
