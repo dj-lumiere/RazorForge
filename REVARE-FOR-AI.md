@@ -855,7 +855,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   included, so a token on it ends. To keep the old one, take it out with
   `steal … as old inject …`. A collection routine that lets elements go without handing them back ends them the same
   way: `d.remove(key: k)` (the key and the value), every `clear()`, `xs.truncate(new_count: n)`, so an entity
-  element's destruct runs and its stamps stop fetching.
+  element's destruct runs.
   Returning a bare entity hands it to the caller (`var a = make()` keeps it, torn down at scope exit). A routine
   handing back an entity that stays where it is (a container's element) returns an access token, never the bare
   entity: the one original would otherwise be held twice, and torn down twice.
@@ -1025,29 +1025,32 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
     Every `Unbroken` routine is `@readonly` (each change synchronizes itself): `stats.open.fetch_add(delta: 1)`
     works through a read token or a `ReadOnly` Guarded.
   - **`Tracked[T]`** (single-thread) / **`Witnessed[T, TPolicy]`** (multi-thread) — weak handles.
-- **`Stamped[E]`** (System/Memory, `Stamped.rvr`) — a link an entity's member variable, a list or any value can keep
-  (a tree node's `parent: Stamped[Node]?`), where a token can't be (RV-S601 points to it first). A `Stamped[E]` always
-  points at an entity that existed: there is no empty stamp (its member variables are `secret`, so
-  `Stamped[E](slot: 0, ...)` is RV-S403), and `fetch()` fails only once the entity has ended. A link that may be
-  missing is written `Stamped[E]?` and taken with one `try link.fetch()` (`none` for no link and for an ended entity),
-  and `check link.fetch()` tells `AbsentValueError` (no link) from `StaleStampError` (ended). `e.stamp()` takes
-  one (on an entity or a token), `s.fetch()` (failable, `StaleStampError`) gives a `Modifying[E]` while the entity
-  lives: a bare `fetch()` crashes once it has ended, `try s.fetch()` gives `none`. A record of 8 bytes (a slot of the
-  runtime's stamp table, shared with Lapila's `PoolManager`, and the slot's generation), copied with `=`, `===` /
-  `!==` for the same entity. It has no `==` (RV-S061 points to `===`) and is not `Hashable`: a set that groups by
-  "same entity" keys on a number the program assigns. It doesn't keep the entity alive and counts nothing. The token `fetch()` gives has no source the
-  token rules follow: changing the stamp variable doesn't end it, and a write through it (`c.y = 5`) ends nothing.
-  Through a `Viewing` the stamp is read in place and `fetch()` gives a `Viewing[E]` (`for at in stamps` with
-  `stamps: Viewing[List[Stamped[E]]]`, then `at.fetch()`), so the entity can't be changed there, and a stamp can't be
-  copied out of a `Viewing` (RV-S657). The builder gives an
-  entity type of the program 8 hidden bytes after its member variables (the slot and its generation, zero until the
-  first `stamp()`) when the program stamps it: a file writes `Stamped[Name]`, or calls `stamp()` on it, the stamp's
-  type written or inferred (`var at = b.stamp()`). A stdlib entity has none: `stamp()` on one, or through a type
-  parameter only, is RV-S656. The slot
-  ends first thing in the entity's `destruct` (the derived one and a written one alike), so every stamp of it fails
-  from then on, and a freed slot goes to the next entity with a higher generation. An RV entity stays at one address
-  from construction to `destruct` (`steal`, a list, a `Retained` move only the reference), so no move ends a stamp.
-  Threads: nothing orders a `fetch()` on one job against the entity's end on another yet. Not in Mielia.
+- **`PoolManager` and `Stamped[E]`** (System/Memory, `Stamped.rvr`) — the way to link entities that must see when one ends (a
+  tree node's `parent: Stamped[Node]?`), where a token can't be (RV-S601 points to it first). The entities a link
+  needs live in the pool: `var pool = PoolManager.set_up()` in `start` makes it (one pool at a time: a second `set_up`
+  is `PoolAlreadySetUpError`, and `PoolGenerationsUsedUpError` when the slots of earlier pools used up the
+  generations), and `PoolManager.add(value: steal e)` hands any entity over and gives its `Stamped[E]`. The entity's
+  bytes move into a slot of the pool (a type's slots side by side, in address space the pool reserves and commits as it grows)
+  and its block is given back, so an entity in the pool never moves again. `s.fetch()` gives a `Modifying[E]` (a
+  `Viewing[E]` through a `Viewing`, so the entity can't be changed there) and throws `StaleStampError` once the
+  entity was removed or the pool ended: a bare `fetch()` crashes, `try s.fetch()` gives `none`. A `Stamped[E]` is 8 bytes (a slot and
+  its generation), copied with `=`, with `===` / `!==` for the same entity. It has no `==` (RV-S061 points to `===`, also on a
+  `Stamped[E]?`) and is not `Hashable`: a set that groups by "same entity" keys on a number the program assigns. It doesn't keep
+  the entity alive. There is no empty stamp (it has no member variables to build one from): a link that may be missing is
+  `Stamped[E]?`, the 8-byte stamp itself with the all-zero stamp as `none` (`@none_is_zero` on the record), taken with one
+  `try link.fetch()` (`none` for no link and for a removed entity), and `check link.fetch()` tells `AbsentValueError` (no link)
+  from `StaleStampError` (removed). A stamp can't be copied out of a `Viewing` (RV-S657).
+  `PoolManager.remove(s)` takes effect at once (every `fetch()` of the stamp fails, a second `remove` is
+  `StaleStampError`) and runs no `destruct` or reuse of the slot, so a token fetched earlier still reads.
+  `PoolManager.sweep()` runs the `destruct` of the removed entities and frees their slots, a freed slot coming back with
+  a higher generation, so an old stamp of it still fails. Call it where no earlier token is in use. The pool ends at the end of
+  the scope that holds it (normally `start`) through the scope teardown: every stamp becomes stale first, then each entity left is
+  destructed, and each `destruct` cleans up only its own entity (a `fetch()` of another pooled entity there is stale). Generations
+  only go up across pools, so a stamp of an ended pool never matches a later pool's slot. The pool belongs to one thread, like a
+  global the program changes: a routine that a Work runs on another thread, or one it calls, that sets it up, `add`s, `fetch`es,
+  `remove`s or `sweep`s is RV-S448 ("... uses the PoolManager ..."); a graph that threads share goes behind a `Guarded`. An
+  entity added while a Work holds an address into it (an `Unbroken` member lent to a Work) must wait for the Work, as it must before it
+  ends. Not in Mielia.
 - **`Hijacked[T]`** — a raw handle that manages nothing (no-op destruct); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
 - **`Addr`** — an address with no pointee type, LLVM `ptr` (C's `void*`): what the allocator and native code
@@ -1622,13 +1625,12 @@ warning. A diagnostic in a Mielia file spells the same number with `MI-`
 | RV-W007      | ignored result                        | `drop expr`                                        |
 | RV-W008      | a Work nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RV-W009      | a started Work nothing collects      | `retrieve()` it, or `drop job` to stop it          |
-| RV-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Optional[...]` kept in a name, a tuple) | keep a `Stamped[E]` (`e.stamp()`, `fetch()`), the entity or a manager's handle, unpack `try` of a token with `when` at once |
+| RV-S601      | a token in a field, a variant, or a type argument (`List[Viewing[T]]`, `Optional[...]` kept in a name, a tuple) | keep a `Stamped[E]` (`PoolManager.add`, `fetch()`), the entity or a manager's handle, unpack `try` of a token with `when` at once |
 | RV-S632      | `to[Work]` argument unsafe to hand over (a token / `Retained` only with `start_here()`, kept in the routine) | `steal` the entity, pass `Unbroken`/`Guarded`/…, or `start_here()` |
 | RV-S623      | one container handed to two parameters of one call, one of them written | copy the read one first, or pass two containers |
 | RV-S640      | an element of one token held while another token on the same kind of container changes shape | finish with the held element first, or open both with `modifying x, y` |
 | RV-S611      | `try viewing` / `try modifying` on a target the block doesn't enter (token, entity) | remove `try` |
 | RV-S654      | a `view_enter` / `modify_enter` that gives no `Viewing` / `Modifying`, or has no matching exit | return the token, declare the exit |
-| RV-S656      | `e.stamp()` on a stdlib entity, or one reached only through a type parameter | keep a link another way: the entity itself, or a manager's handle (`Retained[T]`) |
 | RV-S806      | a routine declares `Check[T]` as its result | return the value and `throw` where it fails: the caller writes `check f(...)` |
 | RV-S657      | a value that holds a way to change an entity (a `Stamped`, a manager handle, a `Modifying`, a record or tuple with one) copied out of a `Viewing` | read it in place (`links[0].target.fetch()`), or take the container as `Modifying` |
 | RV-S612      | `using` given a non-`Enterable` (also `using g.view()`) | `viewing g as v` / `modifying g as m` |

@@ -2088,17 +2088,29 @@ dangerous routine C::rf_access_lock(access: Addr, kind: U32, mode: U32)
 ### Whether this job holds the access already. :param access: the policy's state. :returns: 1 when it does, else 0.
 dangerous routine C::rf_access_holds(access: Addr) -> U8
 
-### A stamp of the entity at `at`, its slot taken on the first stamp and kept at `offset` in it. :param at: the
-### entity. :param offset: the slot's byte offset in it. :returns: the slot in the low 32 bits, the generation above.
-dangerous routine C::rf_stamp_take(at: Addr, offset: S64) -> U64
+### Sets the pool up: reserves its range of address space and makes its tables. :returns: 0 when it is set up, 1 when a
+### pool lives already, 2 when there is no memory, 3 when the generations of earlier pools are used up.
+dangerous routine C::rf_pool_set_up() -> S32
 
-### Ends the stamp slot the entity at `at` keeps at `offset`, if it has one. :param at: the entity. :param offset: the
-### slot's byte offset in it.
-dangerous routine C::rf_stamp_release(at: Addr, offset: S64)
+### Moves the entity block at `box` into a slot of the pool and gives the block back. :param box: the entity's block.
+### :param size: the block's bytes. :param id: the entity type's id. :param destroy: runs the type's destruct from the
+### address of an entity's bytes in a slot. :returns: the slot in the low 32 bits and its generation above, 0 when there
+### is no room.
+dangerous routine C::rf_pool_add(box: Addr, size: U64, id: U32, destroy: Callable[(Addr,), None]) -> U64
 
-### The entity a stamp was taken of, or 0 once it has ended. :param slot: the stamp's slot. :param generation: its
-### generation. :returns: the entity's address, or 0.
-dangerous routine C::rf_stamp_fetch(slot: U32, generation: U32) -> Addr
+### Removes the entity of a stamp at once. :param slot: the stamp's slot. :param generation: its generation. :returns: 0
+### when it was removed, 1 when the stamp is stale already, 2 when there is no memory.
+dangerous routine C::rf_pool_remove(slot: U32, generation: U32) -> S32
+
+### Runs the destructs of the removed entities and frees their slots.
+dangerous routine C::rf_pool_sweep()
+
+### Ends the pool: every stamp becomes stale, then each entity's destruct runs and the range is given back.
+dangerous routine C::rf_pool_end()
+
+### The entity a stamp names, or 0 once it was removed or the pool ended. :param slot: the stamp's slot. :param
+### generation: its generation. :returns: the address of the entity's bytes, or 0.
+dangerous routine C::rf_pool_fetch(slot: U32, generation: U32) -> Addr
 
 ### Gives up the access this job holds. :param access: the policy's state. :param kind: 1 or 2. :param mode: 1 or 2.
 dangerous routine C::rf_access_unlock(access: Addr, kind: U32, mode: U32)

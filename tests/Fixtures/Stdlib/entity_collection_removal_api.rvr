@@ -3,7 +3,7 @@ module Tests/Stdlib/EntityCollectionRemovalApi
 import IO/Console
 import Collections
 # A collection ends the elements it lets go of without handing them back: `Dict.remove`, every `clear()`,
-# `List.truncate`. Each Box says when it ends, and a stamp of a removed Box no longer fetches.
+# `List.truncate`. Each Box says when it ends, and each Quiet counts its end in a global.
 
 entity Box
     n: S64
@@ -12,31 +12,21 @@ routine Box.destruct()
     show(f"ends {me.n}")
     return
 
-routine stale(at: Stamped[Box]) -> Text
-    when try at.fetch()
-        is None => return "stale"
-        else as live => return f"live {live.n}"
+global quiet_ends: S64 = 0
 
 entity Quiet
     n: S64
 
-routine ended(marks: Viewing[List[Stamped[Quiet]]]) -> S64
-    var count: S64 = 0
-    for at in marks
-        when try at.fetch()
-            is None => count += 1
-            else => nothing
-    return count
+routine Quiet.destruct()
+    quiet_ends += 1
+    return
 
 routine start()
     show("Dict.remove")
     var boxes: Dict[S64, Box] = {:}
-    var b = Box(n: 1)
-    var at: Stamped[Box] = b.stamp()
-    boxes[1] = steal b
+    boxes[1] = Box(n: 1)
     boxes[2] = Box(n: 2)
     drop boxes.remove(key: 1)
-    show(stale(at: at))
     show(boxes.count())
 
     show("Dict.clear")
@@ -72,22 +62,19 @@ routine start()
 
     show("SortedDict.remove, a tree of several levels")
     var many = SortedDict[S64, Quiet]()
-    var marks: List[Stamped[Quiet]] = []
     for i in 1 to 300
-        var q = Quiet(n: i)
-        marks.add_last(value: q.stamp())
-        many[i] = steal q
+        many[i] = Quiet(n: i)
     for i in 1 to 300
         if i % 10 == 0
             drop many.remove(key: i)
-    show(f"{many.count()} kept, {ended(marks: marks)} ended")
+    show(f"{many.count()} kept, {quiet_ends} ended")
     for i in 1 to 300
         if i % 3 == 0
             drop many.remove(key: i)
-    show(f"{many.count()} kept, {ended(marks: marks)} ended")
+    show(f"{many.count()} kept, {quiet_ends} ended")
     for i in 1 to 300
         drop many.remove(key: i)
-    show(f"{many.count()} kept, {ended(marks: marks)} ended")
+    show(f"{many.count()} kept, {quiet_ends} ended")
 
     show("SortedDict.remove")
     var sorted = SortedDict[S64, Box]()

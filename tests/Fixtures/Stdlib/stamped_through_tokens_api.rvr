@@ -3,7 +3,7 @@ module Tests/Stdlib/StampedThroughTokensApi
 import IO/Console
 # Stamps reached through tokens: `fetch()` through a read token on a list of stamps, a field write through the
 # token a `fetch()` gives (it has no source in the loop element), a loop element handed where a `Stamped[T]?` is
-# wanted, and stamps whose type is inferred (`var at = b.stamp()`, `[c.stamp()]`), which give the type its slot.
+# wanted, and stamps whose type is inferred (`var at = PoolManager.add(...)`, `[...]`).
 
 entity Creature
     x: S64
@@ -37,24 +37,24 @@ entity Pin
     n: S64
 
 routine start()
-    var a = Creature(x: 1, y: 1, parent: none)
-    var b = Creature(x: 3, y: 1, parent: none)
-    var stamps = [a.stamp(), b.stamp()]
+    var pool = PoolManager.set_up()
+    var a = PoolManager.add(value: Creature(x: 1, y: 1, parent: none))
+    var b = PoolManager.add(value: Creature(x: 3, y: 1, parent: none))
+    var stamps = [a, b]
     show(total(stamps: stamps))
     nudge(stamps: stamps)
-    show(f"{a.x} {a.y} {b.x}")
+    show(f"{a.fetch().x} {a.fetch().y} {b.fetch().x}")
     var kids = List[Creature]()
     for at in stamps
         kids.add_last(value: Creature(x: 0, y: 0, parent: at))
     for kid in kids
         show(parent_x(c: kid))
-    var pin = Pin(n: 9)
-    var at = pin.stamp()
-    var more = [pin.stamp()]
+    var at = PoolManager.add(value: Pin(n: 9))
+    var more = [at]
     when try at.fetch()
         is None => show("stale")
         else as live => show(f"live {live.n}")
-    drop pin
+    PoolManager.remove(at)
     when try more[0].fetch()
         is None => show("stale")
         else as live => show(f"live {live.n}")

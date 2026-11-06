@@ -2,29 +2,41 @@ module System/Memory
 
 import BuilderQuery
 
-### A link to an entity that a member variable, a global or a collection can keep, and that doesn't keep the entity
-### alive: the entity's slot in the runtime's stamp table and the slot's generation when the stamp was taken. Made with
-### `e.stamp()`, read with `fetch()`, which gives a `Modifying[T]` while the entity lives and fails with
-### `StaleStampError` once it has ended. A record of 8 bytes, copied with `=`. Two stamps compare with `===` / `!==`
-### (the same entity), never `==`, and a stamp is not a `Set` or `Dict` key: group by "same entity" with a number the
-### program gives each entity.
+### A link to an entity in the `PoolManager` that a member variable, a global or a collection can keep, and that doesn't
+### keep the entity alive: the entity's slot in the pool and the slot's generation. Made by `PoolManager.add`, read with
+### `fetch()`, which gives a `Modifying[T]` while the entity is there and fails with `StaleStampError` once it was
+### removed or the pool ended. A value of 8 bytes, copied with `=`. Two stamps compare with `===` / `!==` (the same
+### entity), never `==`, and a stamp is not a `Set` or `Dict` key: group by "same entity" with a number the program
+### gives each entity.
 ###
-### A stamp always points at an entity that existed: there is no empty stamp, and `fetch()` fails only once the entity
-### has ended. A link that may be missing is a `Stamped[T]?`, taken with `try link.fetch()`.
-###
-### The builder gives an entity type of the program eight bytes for its slot and the slot's generation only when the
-### program stamps it (its source writes `Stamped[T]` with that type, or calls `stamp()` on one): every other entity
-### keeps its layout. The slot ends in the entity's `destruct`, so a stamp taken before
-### fails from then on, and a slot that is free again goes to the next entity with a higher generation.
+### A stamp always names an entity that was added: there is no empty stamp, and `fetch()` fails only once the entity
+### is gone. A link that may be missing is a `Stamped[T]?`, taken with `try link.fetch()`. It is the 8-byte stamp itself,
+### the all-zero stamp standing for none, so it costs nothing over the stamp.
 ### :typeparam T: The entity's type.
+@llvm("i64")
+@none_is_zero
 record Stamped[T]
 needs EntityType T
-    ### The entity's slot in the stamp table.
-    secret slot: U32
-    ### The slot's generation when the stamp was taken.
-    secret generation: U32
+obeys Copyable
+    nothing
 
-### The entity of a stamp has ended: its slot has a newer generation now.
+### Returns a bitwise duplicate of this stamp. `Stamped[T]` is `@llvm("i64")`, so it does not auto-derive `Assignable`;
+### this trivial body lets `=` and `with` work. A stamp names an entity and doesn't keep it.
+### :returns: A duplicate of this stamp.
+@readonly
+@override
+secret infallible routine Stamped[T].share() -> Stamped[T]
+needs EntityType T
+    return me
+
+### Returns a bitwise duplicate of this stamp (Copyable).
+### :returns: A duplicate of this stamp.
+@readonly
+routine Stamped[T].duplicate() -> Stamped[T]
+needs EntityType T
+    return me
+
+### The entity of a stamp is gone: it was removed from the pool, or the pool ended.
 crashable StaleStampError
     nothing
 
@@ -33,35 +45,146 @@ crashable StaleStampError
 @readonly
 @override
 routine StaleStampError.crash_message() -> Text
-    return "The entity this stamp was taken of has ended."
+    return "The entity this stamp names was removed from the pool, or the pool has ended."
 
-### A stamp of this entity: its slot, taken on the first stamp and kept by the entity, and the slot's generation.
-### :returns: The stamp.
-### :throws: Crashes when `T` has no stamp slot (an entity type of the program that it stamps gets one) or the table
-###     has no memory for a new slot.
+### A `PoolManager` was set up while one lives.
+crashable PoolAlreadySetUpError
+    nothing
+
+### The message of a second set-up.
+### :returns: The message.
 @readonly
-routine T.stamp() -> Stamped[T]
-needs EntityType T
-    if not T.keeps_stamp()
-        throw VerificationFailedError()
+@override
+routine PoolAlreadySetUpError.crash_message() -> Text
+    return "A PoolManager lives already, and only one can at a time: let the scope that holds it end before setting up another."
+
+### The slots of earlier pools reached the last generation, so a new pool could not tell its stamps from theirs.
+crashable PoolGenerationsUsedUpError
+    nothing
+
+### The message of a set-up with no generations left.
+### :returns: The message.
+@readonly
+@override
+routine PoolGenerationsUsedUpError.crash_message() -> Text
+    return "The PoolManager's generations are used up: the slots of earlier pools reached the last generation, so another pool could not tell its stamps from theirs."
+
+### The pool of entities, one at a time. Entities of many types live in it, each in a slot of its own type, and a
+### `Stamped[E]` names one. The program that holds the pool ends it, which makes every stamp stale and then runs the
+### `destruct` of each entity that is left (each cleans up only its own entity). It is made with `PoolManager.set_up()`:
+### `var pool = PoolManager.set_up()` in `start`, and it ends at the end of the scope that holds it.
+###
+### `PoolManager.add(value: steal e)` hands an entity over and gives its stamp. The entity's bytes move into the
+### pool's slot and its block is given back, so the entity stays at one address from then on. `remove` takes effect at
+### once: every `fetch()` of the stamp fails. The entity is not destructed until `sweep()`, so a token fetched before
+### stays valid. `sweep()` runs the `destruct` of the removed entities and frees their slots for the next `add`, a freed
+### slot coming back with a higher generation. The pool belongs to one thread, like a global the program changes.
+entity PoolManager
+    ### Whether this value set the pool up and so ends it.
+    secret live: Bool
+
+### Sets the pool up. A program calls it once, in `start`, and holds the result until the pool ends.
+### :returns: The pool, which ends at the end of the scope that holds it.
+### :throws: {PoolAlreadySetUpError} A pool lives already.
+### :throws: {PoolGenerationsUsedUpError} The generations of earlier pools are used up.
+### :throws: {OutOfMemoryError} The pool's address space or tables can't be made.
+@uses_pool
+common routine PoolManager.set_up() -> PoolManager
+    var code: S32 = 0
     danger
-        # The entity keeps its slot and the slot's generation, a U32 each, from its first stamp on.
-        var kept = Hijacked[U32](from: me.get_address() +% ByteSize(bytes: LLVM::reinterpret_bits[S64, U64](
-            T.stamp_slot_offset())))
-        var slot = kept.peek()
-        if slot != 0
-            return Stamped[T](slot: slot, generation: kept.stride(count: 1).peek())
-        var bits: U64 = C::rf_stamp_take(at: me.get_address(), offset: T.stamp_slot_offset())
-        return Stamped[T](slot: LLVM::int_truncate[U64, U32](bits),
-            generation: LLVM::int_truncate[U64, U32](bits >>> 32))
+        code = C::rf_pool_set_up()
+    if code == 1
+        throw PoolAlreadySetUpError()
+    if code == 3
+        throw PoolGenerationsUsedUpError()
+    if code != 0
+        throw OutOfMemoryError(requested_bytes: 0)
+    return PoolManager(live: true)
 
-### Write access to the entity the stamp was taken of, while it lives.
-### :returns: A write token on the entity.
-### :throws: {StaleStampError} when the entity has ended.
+### Ends the pool: every stamp becomes stale first, then each entity left is destructed.
+@override
+@uses_pool
+routine PoolManager.destruct()
+    danger
+        if me.live
+            C::rf_pool_end()
+    return
+
+### Runs the `destruct` of the entity whose bytes are at `at` in a slot. The entity's block is the slot, so the
+### `rf_invalidate` that ends its destruct leaves it alone.
+### :param at: The address of the entity's bytes.
+secret routine end_pooled[T](at: Addr)
+needs EntityType T
+    danger
+        LLVM::reinterpret_bits[Addr, T](at).destruct()
+    return
+
+### Hands an entity to the pool: its bytes move into a slot of its type and its block is given back. The entity is
+### reached through its stamp from then on.
+### :param value: The entity, handed over with `steal`.
+### :returns: The entity's stamp.
+### :throws: {OutOfMemoryError} The pool is full, or its pages can't be committed.
+@uses_pool
+common routine PoolManager.add[T](value: T) -> Stamped[T]
+needs EntityType T
+    var bits: U64 = 0
+    danger
+        # The entity moves into a cell, which leaves its block to be copied and given back.
+        var cell = Hijacked[T](from: rf_allocate_dynamic(size: Addr.data_size()))
+        cell.poke(value)
+        var box: Addr = Hijacked[Addr](from: cell.get_address()).peek()
+        C::rf_invalidate(ptr: cell.get_address())
+        bits = C::rf_pool_add(box: box, size: LLVM::reinterpret_bits[S64, U64](T.block_size()),
+            id: LLVM::int_truncate[U64, U32](T.type_id()), destroy: x => end_pooled[T](at: x))
+    if bits == 0
+        throw OutOfMemoryError(requested_bytes: 0)
+    return LLVM::reinterpret_bits[U64, Stamped[T]](bits)
+
+### Removes the entity of a stamp at once: every `fetch()` of its stamps fails from now on. The entity is not destructed
+### until `sweep()`, so a token fetched before still points at it.
+### :param stamp: The entity's stamp.
+### :throws: {StaleStampError} The entity was removed already, or the pool ended.
+### :throws: {OutOfMemoryError} The list of removed entities can't grow.
+@uses_pool
+common routine PoolManager.remove[T](stamp: Stamped[T])
+needs EntityType T
+    var code: S32 = 0
+    danger
+        code = C::rf_pool_remove(slot: stamp.slot(), generation: stamp.generation())
+    if code == 1
+        throw StaleStampError()
+    if code != 0
+        throw OutOfMemoryError(requested_bytes: 0)
+    return
+
+### Runs the `destruct` of the entities removed so far and frees their slots for the next `add`. Call it where no token
+### fetched before the `remove` is still in use. The time is proportional to how many were removed.
+@uses_pool
+common routine PoolManager.sweep()
+    danger
+        C::rf_pool_sweep()
+    return
+
+### The slot of a stamp: its low 32 bits.
+### :returns: The slot.
 @readonly
+secret routine Stamped[T].slot() -> U32
+    return LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[Stamped[T], U64](me))
+
+### The generation of a stamp: its high 32 bits.
+### :returns: The generation.
+@readonly
+secret routine Stamped[T].generation() -> U32
+    return LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[Stamped[T], U64](me) >>> 32)
+
+### Write access to the entity of a stamp, while it is in the pool.
+### :returns: A write token on the entity.
+### :throws: {StaleStampError} The entity was removed, or the pool ended.
+@readonly
+@uses_pool
 routine Stamped[T].fetch() -> Modifying[T]
     danger
-        var at: Addr = C::rf_stamp_fetch(slot: me.slot, generation: me.generation)
+        var at: Addr = C::rf_pool_fetch(slot: me.slot(), generation: me.generation())
         if at.is_hollow()
             throw StaleStampError()
         return Modifying[T](Hijacked[T](from: at))
@@ -72,14 +195,14 @@ routine Stamped[T].fetch() -> Modifying[T]
 ### :returns: `true` for the same slot and generation.
 @readonly
 secret routine Stamped[T].same_entity(you: Stamped[T]) -> Bool
-    return me.slot == you.slot and me.generation == you.generation
+    return LLVM::reinterpret_bits[Stamped[T], U64](me) == LLVM::reinterpret_bits[Stamped[T], U64](you)
 
 ### Whether two stamps are of different entities: the slot or the generation differs. What `a !== b` runs.
 ### :param you: The other stamp.
 ### :returns: `true` when the slot or the generation differs.
 @readonly
 secret routine Stamped[T].other_entity(you: Stamped[T]) -> Bool
-    return me.slot != you.slot or me.generation != you.generation
+    return LLVM::reinterpret_bits[Stamped[T], U64](me) != LLVM::reinterpret_bits[Stamped[T], U64](you)
 
 ### Whether two links name the same entity, or are both none: what `a === b` runs on two `Stamped[T]?`
 ### (`other_entity` is `a !== b`).
@@ -101,12 +224,36 @@ secret routine Optional[Stamped[T]].other_entity(you: Stamped[T]?) -> Bool
 needs EntityType T
     return not me.same_entity(you: you)
 
-### Ends the stamp slot of an entity the program stamps: the builder calls it first thing in the entity's `destruct`,
-### so every stamp of it fails from then on.
-@untraced
-routine T.release_stamp()
+### Whether a link that may be missing names the entity of a stamp: what `a === b` runs with a `Stamped[T]?` on the left.
+### :param you: The stamp.
+### :returns: `true` when the link names the same entity.
+secret routine Optional[Stamped[T]].same_entity(you: Stamped[T]) -> Bool
 needs EntityType T
-    if T.keeps_stamp()
-        danger
-            C::rf_stamp_release(at: me.get_address(), offset: T.stamp_slot_offset())
-    return
+    if not me.is_present()
+        return false
+    return me.unwrap().same_entity(you: you)
+
+### Whether a link that may be missing differs from a stamp: what `a !== b` runs with a `Stamped[T]?` on the left.
+### :param you: The stamp.
+### :returns: `true` when the link is none or names another entity.
+secret routine Optional[Stamped[T]].other_entity(you: Stamped[T]) -> Bool
+needs EntityType T
+    return not me.same_entity(you: you)
+
+### Whether a stamp names the entity a link that may be missing names: what `a === b` runs with a `Stamped[T]?` on the right.
+### :param you: The link.
+### :returns: `true` when the link names the same entity.
+@readonly
+secret routine Stamped[T].same_entity(you: Stamped[T]?) -> Bool
+needs EntityType T
+    if not you.is_present()
+        return false
+    return me.same_entity(you: you.unwrap())
+
+### Whether a stamp differs from a link that may be missing: what `a !== b` runs with a `Stamped[T]?` on the right.
+### :param you: The link.
+### :returns: `true` when the link is none or names another entity.
+@readonly
+secret routine Stamped[T].other_entity(you: Stamped[T]?) -> Bool
+needs EntityType T
+    return not me.same_entity(you: you)

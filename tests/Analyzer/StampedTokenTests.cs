@@ -10,9 +10,8 @@ using static TestHelpers;
 /// table, so it has no source in the stamp, and a write through the fetched token ends nothing (RV-S643). Nothing that
 /// changes comes out of a `Viewing`: a `fetch()` through a read token gives a read token (a write through it is
 /// RV-S631), and a value that holds a way to change an entity (a stamp, a manager handle, a write token, a record or
-/// tuple or Optional holding one) is read in place from a view, never copied out of it (RV-S657). A `stamp()` gives
-/// an entity type of the program its slot whether the stamp's type is written or inferred (RV-S656 stays for a
-/// standard library entity).
+/// tuple or Optional holding one) is read in place from a view, never copied out of it (RV-S657). A stamp is made by
+/// `PoolManager.add`, which moves an entity into the pool, and a Work on another thread can't reach the pool (RV-S448).
 /// </summary>
 public class StampedTokenTests
 {
@@ -37,10 +36,11 @@ public class StampedTokenTests
                                       return
 
                                   routine start()
-                                      var a = Creature(x: 1, y: 1)
-                                      var stamps: List[Stamped[Creature]] = [a.stamp()]
+                                      var pool = PoolManager.set_up()
+                                      var a = PoolManager.add(value: Creature(x: 1, y: 1))
+                                      var stamps: List[Stamped[Creature]] = [a]
                                       nudge(stamps: stamps)
-                                      show(a.x)
+                                      show(a.fetch().x)
                                       return
                                   """;
 
@@ -58,8 +58,9 @@ public class StampedTokenTests
                                       return sum
 
                                   routine start()
-                                      var a = Creature(x: 4, y: 0)
-                                      var stamps: List[Stamped[Creature]] = [a.stamp()]
+                                      var pool = PoolManager.set_up()
+                                      var a = PoolManager.add(value: Creature(x: 4, y: 0))
+                                      var stamps: List[Stamped[Creature]] = [a]
                                       show(total(stamps: stamps))
                                       return
                                   """;
@@ -72,9 +73,9 @@ public class StampedTokenTests
     {
         string source = Prelude + """
                                   routine start()
-                                      var a = Creature(x: 4, y: 0)
-                                      var at = a.stamp()
-                                      var all = [a.stamp(), at]
+                                      var pool = PoolManager.set_up()
+                                      var at = PoolManager.add(value: Creature(x: 4, y: 0))
+                                      var all = [at, at]
                                       show(all.count())
                                       return
                                   """;
@@ -87,9 +88,9 @@ public class StampedTokenTests
     {
         string source = Prelude + """
                                   routine start()
-                                      var a = Creature(x: 4, y: 0)
-                                      var s = a.stamp()
-                                      var t = a.stamp()
+                                      var pool = PoolManager.set_up()
+                                      var s = PoolManager.add(value: Creature(x: 4, y: 0))
+                                      var t = s
                                       show(s === t)
                                       show(s !== t)
                                       return
@@ -103,9 +104,9 @@ public class StampedTokenTests
     {
         string source = Prelude + """
                                   routine start()
-                                      var a = Creature(x: 4, y: 0)
-                                      var s = a.stamp()
-                                      var t = a.stamp()
+                                      var pool = PoolManager.set_up()
+                                      var s = PoolManager.add(value: Creature(x: 4, y: 0))
+                                      var t = s
                                       show(s == t)
                                       return
                                   """;
@@ -118,31 +119,14 @@ public class StampedTokenTests
     {
         string source = Prelude + """
                                   routine start()
-                                      var a = Creature(x: 4, y: 0)
-                                      var s: Stamped[Creature]? = a.stamp()
-                                      var t: Stamped[Creature]? = a.stamp()
+                                      var pool = PoolManager.set_up()
+                                      var s: Stamped[Creature]? = PoolManager.add(value: Creature(x: 4, y: 0))
+                                      var t: Stamped[Creature]? = s
                                       show(s == t)
                                       return
                                   """;
 
         AssertHasErrorSa(source: source, expectedErrorSubstring: "a 'Stamped' names an entity");
-    }
-
-    [Fact]
-    public void Analyze_StampOfStandardLibraryEntity_Errors()
-    {
-        string source = Prelude + """
-                                  routine start()
-                                      var xs: List[S64] = []
-                                      var at = xs.stamp()
-                                      return
-                                  """;
-
-        // A program file (a source extension) is where a stamp needs its slot.
-        AnalysisResult result = AssertHasErrorSa(source: source, expectedErrorSubstring: "has no slot for stamps",
-            fileName: "stamp_of_stdlib_entity.rvr");
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.StampOfTypeWithoutSlot);
     }
 
     private const string LinkPrelude = Prelude + """
@@ -320,7 +304,7 @@ public class StampedTokenTests
         AssertAnalyzesSa(source: source);
     }
 
-    /// <summary>A stamp is never empty: its member variables are secret, so a program can't build one (RV-S403).</summary>
+    /// <summary>A stamp is never empty: it has no member variables to build one from, so only `add` makes one.</summary>
     [Fact]
     public void Analyze_StampBuiltFromItsMemberVariables_IsReported()
     {
@@ -330,7 +314,8 @@ public class StampedTokenTests
                                       return
                                   """;
 
-        AssertHasErrorSa(source: source, expectedErrorSubstring: "'slot' is secret");
+        AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "does not have a member variable named 'slot'");
     }
 
     /// <summary>A call on a Stamped[E]? under try is allowed (a none link is an AbsentValueError the keyword receives).</summary>
@@ -344,8 +329,8 @@ public class StampedTokenTests
                                           else as c => return c.x
 
                                   routine start()
-                                      var a = Creature(x: 1, y: 1)
-                                      show(x_of(link: a.stamp()))
+                                      var pool = PoolManager.set_up()
+                                      show(x_of(link: PoolManager.add(value: Creature(x: 1, y: 1))))
                                       return
                                   """;
 
@@ -376,6 +361,53 @@ public class StampedTokenTests
                                   routine start()
                                       var maybe: Creature? = none
                                       show(try maybe.bump())
+                                      return
+                                  """;
+
+        AssertAnalyzesSa(source: source);
+    }
+
+    /// <summary>A routine a Work runs on another thread, or one it calls, can't reach the pool (RV-S448).</summary>
+    [Fact]
+    public void Analyze_PoolReachedByWorkThroughACall_Errors()
+    {
+        string source = Prelude + """
+                                  routine read(s: Stamped[Creature]) -> S64
+                                      return s.fetch().x
+
+                                  routine job(s: Stamped[Creature]) -> S64
+                                      return read(s: s)
+
+                                  routine start()
+                                      var pool = PoolManager.set_up()
+                                      var at = PoolManager.add(value: Creature(x: 1, y: 1))
+                                      var w = job.to[Work](s: at)
+                                      w.start_apart()
+                                      show(w.retrieve())
+                                      return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "'read', which 'job' calls, uses the PoolManager");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.GlobalChangedAcrossThreads);
+    }
+
+    /// <summary>A Work on another thread that does not touch the pool analyzes clean next to a pool.</summary>
+    [Fact]
+    public void Analyze_WorkThatLeavesThePoolAlone_NoError()
+    {
+        string source = Prelude + """
+                                  routine job(n: S64) -> S64
+                                      return n + 1
+
+                                  routine start()
+                                      var pool = PoolManager.set_up()
+                                      var at = PoolManager.add(value: Creature(x: 1, y: 1))
+                                      var w = job.to[Work](n: 4)
+                                      w.start_apart()
+                                      show(w.retrieve())
+                                      show(at.fetch().x)
                                       return
                                   """;
 

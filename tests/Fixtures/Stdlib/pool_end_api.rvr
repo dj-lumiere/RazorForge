@@ -1,0 +1,46 @@
+module Tests/Stdlib/PoolEndApi
+
+import IO/Console
+# The pool ends at the end of the scope that holds it: every stamp fails first, then each entity left is destructed,
+# and each destruct cleans up only its own entity (a fetch of another pooled entity there is a stale stamp). Only one
+# pool lives at a time, and a stamp of an ended pool is stale in the next one.
+
+entity Friend
+    name: S64
+    friend: Stamped[Friend]?
+
+routine Friend.destruct()
+    when me.friend
+        is None => show(f"{me.name}: no friend")
+        else as at =>
+            when try at.fetch()
+                is None => show(f"{me.name}: friend already ended")
+                else => show(f"{me.name}: friend still there")
+    return
+
+routine run() -> Stamped[Friend]
+    var pool = PoolManager.set_up()
+    var one = PoolManager.add(value: Friend(name: 1, friend: none))
+    var two = PoolManager.add(value: Friend(name: 2, friend: one))
+    var three = PoolManager.add(value: Friend(name: 3, friend: two))
+    one.fetch().friend = three
+    # A second pool while one lives is refused.
+    when check PoolManager.set_up()
+        is PoolAlreadySetUpError => show("second pool: refused")
+        else => show("second pool: made")
+    return three
+
+routine start()
+    var left = run()
+    # The pool of run() ended with it: the stamp it handed out is stale, and so it is in a new pool.
+    when try left.fetch()
+        is None => show("after the end: stale")
+        else => show("after the end: alive")
+    var pool = PoolManager.set_up()
+    var fresh = PoolManager.add(value: Friend(name: 4, friend: none))
+    when try left.fetch()
+        is None => show("in a new pool: stale")
+        else => show("in a new pool: alive")
+    show(f"new entity: {fresh.fetch().name}")
+    show(left === fresh)
+    return

@@ -1,10 +1,11 @@
 module Tests/Stdlib/StampedApi
 
 import IO/Console
-# Stamped[E]: a link to an entity that a member variable or a list can keep. `fetch()` gives a write token
-# while the entity lives and fails with StaleStampError once its destruct ran (drop, the end of its scope, a written
-# destruct). Handing the entity over (into a list, a member variable, a Retained) keeps its stamps. A slot freed by
-# one entity goes to the next with a newer generation, so the old stamp still fails.
+# PoolManager and Stamped[E]: entities of many types live in the pool, and a stamp is a link a member variable or a list
+# can keep. `fetch()` gives a write token while the entity is in the pool and fails with StaleStampError once it was
+# removed. `remove` takes effect at once but runs no destruct, so a token fetched before still reads. `sweep` runs the
+# destructs and frees the slots, a freed slot coming back to the next entity with a newer generation, so the old stamp
+# still fails. The pool ends at the end of its scope: every stamp fails first, then each entity left is destructed.
 
 entity Node
     value: S64
@@ -30,56 +31,46 @@ routine parent_value(n: Modifying[Node]) -> S64
         is None => return -1
         else as p => return value_of(s: p)
 
-routine stamp_of_local() -> Stamped[Node]
-    var n = Node(value: 5, parent: none)
-    return n.stamp()
-
 routine start()
-    var a = Node(value: 1, parent: none)
-    var s = a.stamp()
-    var again = a.stamp()
+    var pool = PoolManager.set_up()
+    var s = PoolManager.add(value: Node(value: 1, parent: none))
+    var again = s
     show(f"fetch: {value_of(s: s)}, same: {s === again}")
     var m = s.fetch()
     m.value = 10
-    show(f"changed through the stamp: {a.value}")
+    show(f"changed through the stamp: {s.fetch().value}")
 
-    var child = Node(value: 2, parent: a.stamp())
-    show(f"parent: {parent_value(n: child)}")
+    var child = PoolManager.add(value: Node(value: 2, parent: s))
+    show(f"parent: {parent_value(n: child.fetch())}")
 
-    # Handed over into a list and a Retained: the stamps go on working.
-    var kept = List[Node]()
-    kept.add_last(value: steal a)
-    show(f"in a list: {value_of(s: s)}")
-    var shared = Retained(from: steal child)
-    var t = shared.stamp()
-    show(f"in a Retained: {value_of(s: t)}")
+    # A stamp is a value: a list keeps it, and it names the same entity wherever it is.
+    var kept = List[Stamped[Node]]()
+    kept.add_last(value: s)
+    show(f"in a list: {value_of(s: kept[0])}")
 
-    # The entity ends: its stamps fail.
-    kept.clear()
-    show(f"after it ended: {value_of(s: s)}")
-    show(f"a local at its scope's end: {value_of(s: stamp_of_local())}")
+    # The entity is removed: its stamps fail at once, and a token fetched before still reads.
+    PoolManager.remove(s)
+    show(f"after remove: {value_of(s: s)}, in the list: {value_of(s: kept[0])}, token: {m.value}")
+    show(f"the child's parent: {parent_value(n: child.fetch())}")
+    PoolManager.sweep()
 
-    # The freed slot goes to the next entity, a generation later.
-    var b = Node(value: 3, parent: none)
-    var u = b.stamp()
+    # The freed slot goes to the next entity of its type, a generation later.
+    var u = PoolManager.add(value: Node(value: 3, parent: none))
     show(f"new: {value_of(s: u)}, old: {value_of(s: s)}, different: {u !== s}")
 
-    # A written destruct ends the stamp first.
-    var c = Counted(hits: 0)
-    var w: Stamped[Counted] = c.stamp()
+    # A written destruct runs on sweep, once.
+    var w = PoolManager.add(value: Counted(hits: 0))
     w.fetch().hits = 4
-    drop c
+    PoolManager.remove(w)
+    show("counted removed")
+    PoolManager.sweep()
     when try w.fetch()
         is None => show("counted: stale")
         else => show("counted: alive")
 
-    # A generic entity the source writes as Stamped[Box[...]].
-    var box = Box[S64](item: 7)
-    var bs: Stamped[Box[S64]] = box.stamp()
+    # A generic entity, and a second Counted that the pool ends.
+    var bs = PoolManager.add(value: Box[S64](item: 7))
     show(f"box: {bs.fetch().item}")
-    drop box
-    when try bs.fetch()
-        is None => show("box: stale")
-        else => show("box: alive")
+    var last = PoolManager.add(value: Counted(hits: 9))
     show("DONE")
     return
