@@ -1048,9 +1048,10 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   destructed, and each `destruct` cleans up only its own entity (a `fetch()` of another pooled entity there is stale). Generations
   only go up across pools, so a stamp of an ended pool never matches a later pool's slot. The pool belongs to one thread, like a
   global the program changes: a routine that a Work runs on another thread, or one it calls, that sets it up, `add`s, `fetch`es,
-  `remove`s or `sweep`s is RV-S448 ("... uses the PoolManager ..."); a graph that threads share goes behind a `Guarded`. An
-  entity added while a Work holds an address into it (an `Unbroken` member lent to a Work) must wait for the Work, as it must before it
-  ends. Not in Mielia.
+  `remove`s or `sweep`s is RV-S448 ("... uses the PoolManager ..."); a graph that threads share goes behind a `Guarded`. `add`
+  moves the entity, so handing it over while a Work of the routine that the build sees was handed it or part of it (a token,
+  an `Unbroken` member) and isn't collected yet is RV-S632 ("'c' goes into the pool here, which moves it, while the Work 'w'
+  ..."): collect the Work first. Not in Mielia.
 - **`Hijacked[T]`** — a raw handle that manages nothing (no-op destruct); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
 - **`Addr`** — an address with no pointee type, LLVM `ptr` (C's `void*`): what the allocator and native code

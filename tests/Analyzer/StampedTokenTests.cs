@@ -413,4 +413,76 @@ public class StampedTokenTests
 
         AssertAnalyzesSa(source: source);
     }
+    /// <summary>An entity a Work still holds a token of can't go into the pool, which moves it (RV-S632).</summary>
+    [Fact]
+    public void Analyze_PoolAddWhileAWorkHoldsATokenOfIt_Errors()
+    {
+        string source = Prelude + """
+                                  routine touch(c: Modifying[Creature]) -> S64
+                                      c.x = c.x + 1
+                                      return c.x
+
+                                  routine start()
+                                      var pool = PoolManager.set_up()
+                                      var c = Creature(x: 1, y: 1)
+                                      var w = touch.to[Work](c: c.modify())
+                                      w.start_here()
+                                      var at = PoolManager.add(value: steal c)
+                                      show(w.retrieve())
+                                      show(at.fetch().x)
+                                      return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "'c' goes into the pool here, which moves it, while the Work 'w'");
+        Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.ThreadArgNotShareable);
+    }
+
+    /// <summary>A member a Work on another thread changes where it lies (an Unbroken) keeps its entity out of the
+    /// pool until the Work is collected (RV-S632).</summary>
+    [Fact]
+    public void Analyze_PoolAddWhileAWorkChangesAMemberOfIt_Errors()
+    {
+        string source = Prelude + """
+                                  entity Counter
+                                      hits: Unbroken[S64]
+
+                                  routine bump(h: Unbroken[S64]) -> S64
+                                      return h.fetch_add(delta: 1)
+
+                                  routine start()
+                                      var pool = PoolManager.set_up()
+                                      var k = Counter(hits: Unbroken[S64](0))
+                                      var w = bump.to[Work](h: k.hits)
+                                      w.start_now()
+                                      var at = PoolManager.add(value: steal k)
+                                      show(w.retrieve())
+                                      return
+                                  """;
+
+        AssertHasErrorSa(source: source, expectedErrorSubstring: "'k' goes into the pool here, which moves it");
+    }
+
+    /// <summary>Collecting the Work first lets the entity go into the pool.</summary>
+    [Fact]
+    public void Analyze_PoolAddAfterTheWorkIsCollected_NoError()
+    {
+        string source = Prelude + """
+                                  routine touch(c: Modifying[Creature]) -> S64
+                                      c.x = c.x + 1
+                                      return c.x
+
+                                  routine start()
+                                      var pool = PoolManager.set_up()
+                                      var c = Creature(x: 1, y: 1)
+                                      var w = touch.to[Work](c: c.modify())
+                                      w.start_here()
+                                      show(w.retrieve())
+                                      var at = PoolManager.add(value: steal c)
+                                      show(at.fetch().x)
+                                      return
+                                  """;
+
+        AssertAnalyzesSa(source: source);
+    }
 }
