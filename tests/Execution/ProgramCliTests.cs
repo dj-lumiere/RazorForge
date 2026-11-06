@@ -400,6 +400,33 @@ public sealed class ProgramCliTests : IDisposable
     }
 
     [Fact]
+    public void MigrateByteLiterals_RewritesEveryHole_PastQuoteCharacters()
+    {
+        string dir = OldProject(name: "bytes", oldManifest: false, files:
+        [
+            ("old.rvr",
+                "module Test/BytesBy\n" +
+                "routine start()\n" +
+                "    var c: Byte = b'A'\n" +
+                "    show(f\"{b'\"'} {b'}'} {b'{'} b'x'\")\n" +
+                "    show('b\"GET\"')  # b'C'\n" +
+                "    return\n")
+        ]);
+
+        (int code, string output) = RunMain("migrate", "--step", "byte-literals", dir);
+        Assert.Equal(expected: 0, actual: code);
+        Assert.Contains(expectedSubstring: "1 file(s) changed", actualString: output);
+        Assert.Equal(
+            expected: "module Test/BytesBy\n" +
+                      "routine start()\n" +
+                      "    var c: Byte = 'A'\n" +
+                      "    show(f\"{Byte('\"')} {Byte('}')} {Byte('{')} b'x'\")\n" +
+                      "    show('b\"GET\"')  # b'C'\n" +
+                      "    return\n",
+            actual: File.ReadAllText(path: Path.Combine(path1: dir, path2: "old.rvr")));
+    }
+
+    [Fact]
     public void MigrateNumbers_DecidesEachCallFromTheTypesAnalysisGave()
     {
         const string source = "    var a = U8(x)\n    var b = U8(200)\n    var c = B32(n * 2) + U8(7)\n    var d = Decimal(x)\n";
