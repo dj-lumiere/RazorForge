@@ -113,7 +113,8 @@ routine Addr.sub_wrap(you: Addr) -> ByteSize
 @readonly
 routine Addr.align_up[ALIGN]() -> Addr
 needs U64 ALIGN
-    return me.align_up(by: ByteSize(bytes: ALIGN))
+    var bytes: U64 = ALIGN
+    return aligned_up(at: me, by: ByteSize(bytes: bytes))
 
 ### The last address at or before this one that is a multiple of `ALIGN` bytes: `a.align_down[16]()`.
 ### :typeparam ALIGN: The alignment in bytes, a power of two.
@@ -122,7 +123,8 @@ needs U64 ALIGN
 @readonly
 routine Addr.align_down[ALIGN]() -> Addr
 needs U64 ALIGN
-    return me.align_down(by: ByteSize(bytes: ALIGN))
+    var bytes: U64 = ALIGN
+    return aligned_down(at: me, by: ByteSize(bytes: bytes))
 
 ### Whether this address is a multiple of `ALIGN` bytes: `a.is_aligned[16]()`.
 ### :typeparam ALIGN: The alignment in bytes, a power of two.
@@ -131,7 +133,8 @@ needs U64 ALIGN
 @readonly
 routine Addr.is_aligned[ALIGN]() -> Bool
 needs U64 ALIGN
-    return me.is_aligned(by: ByteSize(bytes: ALIGN))
+    var bytes: U64 = ALIGN
+    return has_alignment(at: me, by: ByteSize(bytes: bytes))
 
 ### The first address at or after this one that is a multiple of `by`, for an alignment known only while the program
 ### runs.
@@ -141,10 +144,7 @@ needs U64 ALIGN
 ###     past the end of the address space.
 @readonly
 routine Addr.align_up(by: ByteSize) -> Addr
-    var mask = alignment_mask(by: by)
-    var at = me.to[U64]()
-    var up = (at + mask) & mask.bitnot()
-    return me +% ByteSize(bytes: up - at)
+    return aligned_up(at: me, by: by)
 
 ### The last address at or before this one that is a multiple of `by`, for an alignment known only while the program
 ### runs.
@@ -153,8 +153,7 @@ routine Addr.align_up(by: ByteSize) -> Addr
 ### :throws: {NumericDomainError} when `by` is not a power of two.
 @readonly
 routine Addr.align_down(by: ByteSize) -> Addr
-    var mask = alignment_mask(by: by)
-    return me -% ByteSize(bytes: me.to[U64]() & mask)
+    return aligned_down(at: me, by: by)
 
 ### Whether this address is a multiple of `by`, for an alignment known only while the program runs.
 ### :param by: The alignment, a power of two.
@@ -162,8 +161,37 @@ routine Addr.align_down(by: ByteSize) -> Addr
 ### :throws: {NumericDomainError} when `by` is not a power of two.
 @readonly
 routine Addr.is_aligned(by: ByteSize) -> Bool
+    return has_alignment(at: me, by: by)
+
+### The first address at or after `at` that is a multiple of `by`.
+### :param at: The address.
+### :param by: The alignment, a power of two.
+### :returns: The aligned address.
+### :throws: {NumericDomainError} when `by` is not a power of two, {IntegerOverflowError} past the end of the address
+###     space.
+secret routine aligned_up(at: Addr, by: ByteSize) -> Addr
     var mask = alignment_mask(by: by)
-    return (me.to[U64]() & mask) == 0
+    var number = at.to[U64]()
+    var up = (number + mask) & mask.bitnot()
+    return at +% ByteSize(bytes: up - number)
+
+### The last address at or before `at` that is a multiple of `by`.
+### :param at: The address.
+### :param by: The alignment, a power of two.
+### :returns: The aligned address.
+### :throws: {NumericDomainError} when `by` is not a power of two.
+secret routine aligned_down(at: Addr, by: ByteSize) -> Addr
+    var mask = alignment_mask(by: by)
+    return at -% ByteSize(bytes: at.to[U64]() & mask)
+
+### Whether `at` is a multiple of `by`.
+### :param at: The address.
+### :param by: The alignment, a power of two.
+### :returns: `true` when the address is aligned.
+### :throws: {NumericDomainError} when `by` is not a power of two.
+secret routine has_alignment(at: Addr, by: ByteSize) -> Bool
+    var mask = alignment_mask(by: by)
+    return (at.to[U64]() & mask) == 0
 
 ### The low bits an address of alignment `by` has clear: `by` less one.
 ### :param by: The alignment.
