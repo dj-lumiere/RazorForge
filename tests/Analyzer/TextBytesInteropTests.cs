@@ -112,7 +112,7 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
-                                                      var bytes: Bytes = b"\x80ABC"
+                                                      var bytes: Bytes = "\x80ABC"
                                                       var text: Text = bytes.decode_as_utf8_lossy()
                                                       for ch in bytes.interpret_as_utf8_lossy()
                                                           var cp: U32 = ch.codepoint()
@@ -130,7 +130,7 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = AnalyzeSa(source: """
                                                   routine test()
-                                                      var bytes: Bytes = b"ABC"
+                                                      var bytes: Bytes = "ABC"
                                                       var text: Text = bytes.decode_as_utf8()
                                                       var view = bytes.interpret_as_utf8()
                                                       for ch in view

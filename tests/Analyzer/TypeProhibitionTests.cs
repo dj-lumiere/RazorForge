@@ -206,39 +206,64 @@ public class TypeProhibitionTests
 
     #endregion
 
-    #region Byte Literal ASCII Validation
+    #region Byte Literals
 
     /// <summary>
-    /// Verifies semantic analysis behavior for byte literal non ascii and reports the expected error.
+    /// A character with no ASCII form is more than one byte, so a Byte refuses it.
     /// </summary>
-    [Fact]
-    public void Analyze_ByteLiteralNonAscii_ReportsError()
+    [Theory]
+    [InlineData("var x: Byte = 'é'")]
+    [InlineData("var x = Byte('é')")]
+    public void Analyze_ByteLiteralNonAscii_ReportsError(string declaration)
     {
-        // Non-ASCII byte literals are rejected at the lexer level (RV-G005)
-        string source = """
-                        routine test()
-                            var x: Byte = b'é'
-                            return
-                        """;
-
-        Assert.ThrowsAny<GrammarException>(testCode: () => AnalyzeSa(source: source));
-    }
-    /// <summary>
-    /// Verifies semantic analysis behavior for byte literal ascii without grammar diagnostics.
-    /// </summary>
-    [Fact]
-    public void Analyze_ByteLiteralAscii_NoGrammarError()
-    {
-        // ASCII byte literals pass the lexer without throwing
-        string source = """
-                        routine test()
-                            var x: Byte = b'a'
-                            return
-                        """;
+        string source = $"routine test()\n    {declaration}\n    return\n";
 
         AnalysisResult result = AnalyzeSa(source: source);
-        // No GrammarException thrown -> lexer accepts ASCII byte literals
-        Assert.NotNull(@object: result);
+        Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.NonAsciiByte);
+    }
+
+    /// <summary>
+    /// A plain character is a Byte where a Byte goes, and so is a Byte('x') call or a hex escape.
+    /// </summary>
+    [Theory]
+    [InlineData("var x: Byte = 'a'")]
+    [InlineData("var x: Byte = '\\xE9'")]
+    [InlineData("var x = Byte('a')")]
+    [InlineData("var x = Byte('\\xFF')")]
+    public void Analyze_ByteLiteralAscii_NoErrors(string declaration)
+    {
+        string source = $"routine test()\n    {declaration}\n    return\n";
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>
+    /// Text becomes bytes where a Bytes goes: hex escapes and non-ASCII characters are fine there.
+    /// </summary>
+    [Fact]
+    public void Analyze_TextWhereBytesGo_NoErrors()
+    {
+        string source = "routine test()\n    var x: Bytes = \"a\\xFF한\"\n    return\n";
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>
+    /// Text and a Char have no hex escape: the error points to \u.
+    /// </summary>
+    [Theory]
+    [InlineData("var x = \"a\\xFF\"")]
+    [InlineData("var x: Text = \"\\x41\"")]
+    [InlineData("var x = '\\xE9'")]
+    [InlineData("var x: Char = '\\x41'")]
+    public void Analyze_HexEscapeInText_ReportsError(string declaration)
+    {
+        string source = $"routine test()\n    {declaration}\n    return\n";
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors, filter: e => e.Code == SemanticDiagnosticCode.HexEscapeInText);
     }
 
     #endregion

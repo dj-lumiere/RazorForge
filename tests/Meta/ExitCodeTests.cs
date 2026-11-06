@@ -22,7 +22,7 @@ public sealed class ExitCodeTests
 
         Assert.True(condition: exit == 0,
             userMessage: $"expected exit 0, got {exit}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
-        Assert.Contains(expectedSubstring: "Bytes(count: 2, b\"\\x61\\x62\")\ncd|\n",
+        Assert.Contains(expectedSubstring: "Bytes(count: 2, Bytes(\"\\x61\\x62\"))\ncd|\n",
             actualString: stderr.Replace(oldValue: "\r\n", newValue: "\n"));
         Assert.Contains(expectedSubstring: "done", actualString: stdout);
     }

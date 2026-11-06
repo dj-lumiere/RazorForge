@@ -1255,10 +1255,16 @@ inside the braces:
   `zero_pad(width)`, which keeps a leading `-`/`+` in front (`"-5".zero_pad(4)` is `-005`).
 
 `Text` is UTF-32, a record (value type). `Bytes` is a record for raw byte
-sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
-`Byte`; `b"..."` has type `Bytes`. In `b"..."`, `\x00`..`\xFF` are single bytes and a non-ASCII character is its UTF-8 bytes (`b"한국어"` is 9 bytes); `b'x'` holds one byte (ASCII or `\xHH`). Text (`"..."`, `'...'`, `f"..."`) has NO `\x` escape (a build error that points at `\u`), and a `\u` surrogate (D800..DFFF) or value above 10FFFF is a build error. A `Byte` shows (`represent` and `diagnose` alike, alone or in a
-`List[Byte]`) as the byte literal that makes it, always two uppercase hex digits: `b'\x4C'`, `b'\x0A'`, `b'\xFF'`.
-`Bytes` shows as the bytes literal that makes it, `\xHH` per byte: `b"\x47\x45\x54"`. `show`/`alert` print that form
+sequences with UTF-8 iteration helpers. The place a literal goes decides its type, like a bare number: `"..."` (and `r"..."`) is a `Bytes` where a `Bytes` goes
+(`var b: Bytes = "\x89PNG"`, an argument, a return, a comparison with a `Bytes`), and `'x'` is a `Byte` where a `Byte` goes
+(`var b: Byte = 'a'`). Elsewhere they are `Text` and `Char`. `Byte('x')` makes a byte in any place. There is no `b` prefix
+(`b"..."`, `b'x'`, `br"..."` are RV-G011, and `migrate --step byte-literals` rewrites them). Escapes follow the type the
+literal gets: in a `Bytes` place `\x00`..`\xFF` are single bytes and a non-ASCII character is its UTF-8 bytes (`"한국어"` is 9
+bytes there). In a `Byte` place `'x'` is ASCII or `'\xHH'`, and a non-ASCII character is RV-S022. In a `Text` or `Char` place
+`\x` is RV-S021 (it points at `\u`), and a `\u` surrogate (D800..DFFF) or value above 10FFFF is a build error (the `\x` escape stays
+in the token as the lone surrogate U+DC00 + HH until the place is known). A `Byte` shows (`represent` and `diagnose` alike, alone or in a
+`List[Byte]`) as the `Byte(...)` that makes it, always two uppercase hex digits: `Byte('\x4C')`, `Byte('\x0A')`, `Byte('\xFF')`.
+`Bytes` shows as the `Bytes(...)` that makes it, `\xHH` per byte: `Bytes("\x47\x45\x54")`. `show`/`alert` print that form
 too. Raw bytes go out through `stdout().push(data:)` / `stderr().push(data:)`.
 
 - **`Text` slicing** uses a range subscript: `text[a til b]` / `text[a to b]`
@@ -1290,7 +1296,7 @@ digit.repeat(4)), text("-"), capture("month", digit.repeat(2))])` (a `preset` pa
   (non-overlapping, `List[TextMatch]`), `p.replace(text: t, with: "#")`, `p.split(text)`. A `TextMatch` has `start()`,
   `end()` (character positions, `U64`), `text()`, `group("name")` (a `Text?`: `none` for a capture that took no part,
   `CaptureNameError` for an unknown name).
-- `BytesPattern` over `Bytes`: `byte(0x89)`, `bytes(b"PNG")`, `any_byte`, `byte_range(0x00 to 0x1F)`, `start_of_bytes`,
+- `BytesPattern` over `Bytes`: `byte(0x89)`, `bytes("PNG")`, `any_byte`, `byte_range(0x00 to 0x1F)`, `start_of_bytes`,
   `end_of_bytes`; `BytesMatch.bytes()`. Text and bytes pieces never mix (a type error).
 - Failable `TextPattern.from_regex(text)` / `BytesPattern.from_regex` read the usual regex syntax (unnamed groups
   capture as `"1"`, `"2"`, `|` is the longest alternative, `(?i)` `(?m)` `(?s)` at the start). Backreferences,
@@ -1627,6 +1633,7 @@ warning. A diagnostic in a Mielia file spells the same number with `ME-`
 | RV-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RV-S558      | `{}` (empty set) where a dict is expected | write `{:}`                                    |
 | RV-G010      | a number names its type (`5_u8`)      | `var x: U8 = 5`, or let the place it goes type it  |
+| RV-G011      | a `b` before a quote (`b".."`, `b'x'`) | plain `".."` in a `Bytes` place, `'x'` in a `Byte` place, or `Byte('x')` (`migrate --step byte-literals`) |
 | RV-W007      | ignored result                        | `drop expr`                                        |
 | RV-W008      | a Work nothing ever starts          | `start_now()` it, or `retrieve()`/`gather()` it    |
 | RV-W009      | a started Work nothing collects      | `retrieve()` it, or `drop job` to stop it          |

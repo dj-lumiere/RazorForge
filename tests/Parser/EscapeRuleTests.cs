@@ -6,19 +6,17 @@ namespace Revare.Tests.Parser;
 using static TestHelpers;
 
 /// <summary>
-/// The escapes by what the literal makes: text has no <c>\x</c> and takes only real code points in <c>\u</c>, a byte
-/// string takes <c>\x00</c> to <c>\xFF</c> as bytes and turns a non-ASCII character into its UTF-8 bytes.
+/// The escapes of plain literals: inserted text has no <c>\x</c>, a plain literal keeps it for the place to read, and
+/// <c>\u</c> takes only real code points. A <c>b</c> prefix is a grammar error.
 /// </summary>
 public class EscapeRuleTests
 {
     private static string Wrap(string literal) => "routine start()\n    var s = " + literal + "\n    return\n";
 
-    /// <summary>Text refuses every <c>\x</c>, whatever its value.</summary>
+    /// <summary>Inserted text refuses every <c>\x</c>, whatever its value.</summary>
     [Theory]
-    [InlineData("\"\\x41\"")]
-    [InlineData("\"\\xFF\"")]
     [InlineData("f\"a{1}\\x00\"")]
-    [InlineData("'\\x41'")]
+    [InlineData("f\"\\xFF\"")]
     public void Text_HasNoHexEscape(string literal)
     {
         GrammarException error = Assert.Throws<GrammarException>(() => Tokenize(source: Wrap(literal: literal)));
@@ -44,32 +42,45 @@ public class EscapeRuleTests
         Assert.Contains(collection: tokens, filter: t => t.Type == TokenType.TextLiteral);
     }
 
-    /// <summary>A byte string holds <c>\x00</c> to <c>\xFF</c> as single bytes.</summary>
-    [Fact]
-    public void Bytes_TakeHexEscapesAsBytes()
+    /// <summary>A <c>\x</c> in plain text or a character stays in the token for the place to read.</summary>
+    [Theory]
+    [InlineData("\"\\x41\"")]
+    [InlineData("\"\\xFF\"")]
+    [InlineData("'\\x41'")]
+    public void PlainLiteral_KeepsHexEscapeForThePlace(string literal)
     {
-        Token token = Tokenize(source: Wrap(literal: "b\"\\x00\\x80\\xFF\""))
-           .Single(predicate: t => t.Type == TokenType.BytesLiteral);
-        Assert.Equal(expected: "\u0000\u0080\u00FF", actual: token.Text);
+        Assert.Contains(collection: Tokenize(source: Wrap(literal: literal)),
+            filter: t => t.Type is TokenType.TextLiteral or TokenType.CharacterLiteral);
     }
 
-    /// <summary>A non-ASCII character in a byte string is its UTF-8 bytes.</summary>
+    /// <summary>A text literal's value holds each <c>\xHH</c> as the lone surrogate U+DC00 + HH.</summary>
     [Fact]
-    public void Bytes_TakeNonAsciiCharactersAsUtf8()
+    public void PlainText_HoldsHexEscapeAsLoneSurrogate()
     {
-        Token token = Tokenize(source: Wrap(literal: "b\"한국어\""))
-           .Single(predicate: t => t.Type == TokenType.BytesLiteral);
-        Assert.Equal(expected: 9, actual: token.Text.Length);
-        Assert.Equal(expected: System.Text.Encoding.UTF8.GetBytes(s: "한국어"),
-            actual: token.Text.Select(selector: c => (byte)c).ToArray());
+        Token token = Tokenize(source: Wrap(literal: "\"a\\x00\\x80\\xFF\""))
+           .Single(predicate: t => t.Type == TokenType.TextLiteral);
+        Assert.Equal(expected: "a\uDC00\uDC80\uDCFF", actual: token.Text);
     }
 
-    /// <summary>A byte character takes <c>\xFF</c>, and refuses a non-ASCII character.</summary>
+    /// <summary>Non-ASCII characters stay characters in the token (the place turns them into UTF-8).</summary>
     [Fact]
-    public void ByteCharacter_TakesHexEscape()
+    public void PlainText_KeepsNonAsciiCharacters()
     {
-        Assert.Contains(collection: Tokenize(source: Wrap(literal: "b'\\xFF'")),
-            filter: t => t.Type == TokenType.ByteLetterLiteral);
-        Assert.Throws<GrammarException>(() => Tokenize(source: Wrap(literal: "b'é'")));
+        Token token = Tokenize(source: Wrap(literal: "\"한국어\""))
+           .Single(predicate: t => t.Type == TokenType.TextLiteral);
+        Assert.Equal(expected: "한국어", actual: token.Text);
+    }
+
+    /// <summary>A literal with a <c>b</c> prefix is a grammar error that says what to write.</summary>
+    [Theory]
+    [InlineData("b\"hi\"")]
+    [InlineData("br\"hi\\n\"")]
+    [InlineData("b'a'")]
+    [InlineData("b'\\xFF'")]
+    public void BytePrefix_IsAGrammarError(string literal)
+    {
+        GrammarException error = Assert.Throws<GrammarException>(() => Tokenize(source: Wrap(literal: literal)));
+        Assert.Equal(expected: GrammarDiagnosticCode.ByteLiteralPrefix, actual: error.Code);
+        Assert.Contains(expectedSubstring: "Byte('x')", actualString: error.Message);
     }
 }

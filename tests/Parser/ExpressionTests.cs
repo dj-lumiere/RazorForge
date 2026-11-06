@@ -1177,115 +1177,60 @@ public class ExpressionTests
     #region Byte Literal Tests
 
     /// <summary>
-    /// Verifies that the parser accepts byte string literal.
+    /// Verifies that the parser accepts a text literal where a Bytes goes.
     /// </summary>
     [Fact]
-    public void Parse_ByteStringLiteral()
+    public void Parse_TextLiteralAsBytes()
     {
         string source = """
                         routine test()
-                            var data = b"hello"
+                            var data: Bytes = "hello"
                             return
                         """;
 
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts byte char literal.
+    /// Verifies that the parser accepts a byte written as a call of Byte.
     /// </summary>
     [Fact]
-    public void Parse_ByteCharLiteral()
+    public void Parse_ByteLetter()
     {
         string source = """
                         routine test()
-                            var ch = b'A'
+                            var ch = Byte('A')
                             return
                         """;
 
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts byte string hex escape.
+    /// Verifies that the parser accepts a hex escape in a text literal.
     /// </summary>
     [Fact]
-    public void Parse_ByteStringHexEscape()
+    public void Parse_TextHexEscape()
     {
         string source = """
                         routine test()
-                            var data = b"\x48\x65\x6C\x6C\x6F"
+                            var data: Bytes = "\x48\x65\x6C\x6C\x6F"
                             return
                         """;
 
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts byte raw string literal.
+    /// Verifies that the parser accepts a raw string literal.
     /// </summary>
     [Fact]
-    public void Parse_ByteRawStringLiteral()
+    public void Parse_RawStringLiteral()
     {
         string source = """
                         routine test()
-                            var data = br"no escapes here \n"
+                            var data: Bytes = r"no escapes here \n"
                             return
                         """;
 
         AssertParses(source: source);
-    }
-    /// <summary>
-    /// Verifies that the tokenizer handles byte string literal with the expected token type.
-    /// </summary>
-    [Fact]
-    public void Tokenize_ByteStringLiteral_CorrectTokenType()
-    {
-        string source = """b"hello" """;
-        List<Token> tokens = Tokenize(source: source);
-
-        Assert.Equal(expected: TokenType.BytesLiteral, actual: tokens[index: 0].Type);
-    }
-    /// <summary>
-    /// Verifies that the tokenizer handles byte char literal with the expected token type.
-    /// </summary>
-    [Fact]
-    public void Tokenize_ByteCharLiteral_CorrectTokenType()
-    {
-        string source = """b'A' """;
-        List<Token> tokens = Tokenize(source: source);
-
-        Assert.Equal(expected: TokenType.ByteLetterLiteral, actual: tokens[index: 0].Type);
-    }
-    /// <summary>
-    /// Verifies that a non-ASCII character in a byte string becomes its UTF-8 bytes.
-    /// </summary>
-    [Fact]
-    public void Tokenize_ByteStringNonAscii_IsUtf8Bytes()
-    {
-        string source = "b\"\uD55C\uAD6D\""; // b"한국"
-
-        Token token = Tokenize(source: source).Single(predicate: t => t.Type == TokenType.BytesLiteral);
-        Assert.Equal(expected: System.Text.Encoding.UTF8.GetBytes(s: "한국"),
-            actual: token.Text.Select(selector: c => (byte)c).ToArray());
-    }
-
-    /// <summary>
-    /// Verifies that the tokenizer handles byte string unicode escape and fails in the expected way.
-    /// </summary>
-    [Fact]
-    public void Tokenize_ByteStringUnicodeEscape_ThrowsError()
-    {
-        string source = """b"\u00E9" """;
-
-        Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
-    }
-    /// <summary>
-    /// Verifies that the tokenizer handles byte char non ascii and fails in the expected way.
-    /// </summary>
-    [Fact]
-    public void Tokenize_ByteCharNonAscii_ThrowsError()
-    {
-        string source = "b'\u00E9'"; // b'é' - non-ASCII
-
-        Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
     /// <summary>
     /// Verifies that the tokenizer handles unicode escape exactly6 digits.
