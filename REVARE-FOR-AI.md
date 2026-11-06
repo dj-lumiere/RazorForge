@@ -1590,6 +1590,10 @@ sa-timing = false           # optional: print semantic-analysis phase timings
 show-build-stages = false   # optional: print build/check stage banners
 ```
 
+A section or key `config.toml` does not read is a build error naming it (and the key meant: `module-paths` →
+"Did you mean module_paths?"); the multi-word keys are `module_paths`, `c_libraries`, `library_paths` and the hyphenated
+rest (`use-daemon`, `revare-version`, `dump-ir`).
+
 With no entry file argument, the CLI walks up from the cwd to find
 `config.toml` — `cd` into a project and `revare run` works.
 
