@@ -114,6 +114,21 @@ public class StampedTokenTests
     }
 
     [Fact]
+    public void Analyze_OptionalStampValueEquality_Errors()
+    {
+        string source = Prelude + """
+                                  routine start()
+                                      var a = Creature(x: 4, y: 0)
+                                      var s: Stamped[Creature]? = a.stamp()
+                                      var t: Stamped[Creature]? = a.stamp()
+                                      show(s == t)
+                                      return
+                                  """;
+
+        AssertHasErrorSa(source: source, expectedErrorSubstring: "a 'Stamped' names an entity");
+    }
+
+    [Fact]
     public void Analyze_StampOfStandardLibraryEntity_Errors()
     {
         string source = Prelude + """
