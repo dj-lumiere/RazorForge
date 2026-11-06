@@ -1055,7 +1055,10 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   points there), `Addr.hollow()` is the address 0 (`is_hollow()` / `is_not_hollow()`). It moves by a
   `ByteSize` with the wrapping operators only: `a +% 16b`, `a -% size`, and `b -% a` is the distance from `a` to
   `b` as a `ByteSize` (all three wrap around and check no bounds, obeying `WrappingOffsetAddable` /
-  `WrappingOffsetSubtractable`). Plain `+` / `-` on an `Addr` are errors that point to `+%` / `-%`, and it has no
+  `WrappingOffsetSubtractable`). `a.align_up[16]()` / `a.align_down[16]()` / `a.is_aligned[16]()` round to a power-of-two
+  alignment, `a.align_up(by: size)` and the others take a `ByteSize` known only at run time. An alignment that isn't a
+  power of two throws `NumericDomainError`, and `align_up` past the end of the address space `IntegerOverflowError`.
+  Plain `+` / `-` on an `Addr` are errors that point to `+%` / `-%`, and it has no
   ordering. `x.to[Addr]()` / `a.to[U64]()` convert, `Hijacked[T](from: a)` reads it as a `T`. `Address` and
   `CPtr` are both `Addr` now (`migrate --step addr` renames them, rewrites `==` / `!=` between known addresses to
   `===` / `!==`, rewrites `a.offset(bytes: 8)` on a known address to `a +% 8b`, and lists what it cannot type).
