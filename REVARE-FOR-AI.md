@@ -194,7 +194,7 @@ When unsure, consult ground truth in the repo/package:
    binding the routine owns (a local, an entity parameter handed over with `steal`) tears it down there and ends
    the name like `steal x` (RV-S615 after, RV-S616 on some paths only, tokens from it end, RV-S643); a member
    variable, a token, `me` or a global is RV-S421.
-   **Notes and fixes (RV and MI).** A NOTE is a likely slip that builds as written: `check`, `lint` (MI files) and
+   **Notes and fixes (RV and ME).** A NOTE is a likely slip that builds as written: `check`, `lint` (ME files) and
    the language server show it (`note[RV-W###]`), a build never does. `until false` gets RV-W304 with the fix
    "Write 'loop'". Doc comment notes (shown by `check`, `lint`, the language server and `validate-stdlib`): RV-W305 a routine
    with no `###` doc comment (every routine of a library or example file, the stdlib included), RV-W306 a parameter with
@@ -1072,7 +1072,7 @@ consume(r: steal b)   # handed to what keeps it now; using b afterwards = build 
   its own routine and is NOT dangerous. `is_hollow()` exists only on the nine handle types (`Retained`, `Tracked`,
   `Guarded`, `Witnessed`, `Roamed`, `Watched`, `Hijacked`, `Viewing`, `Modifying`) and `Addr`, never dangerous.
   Every `destruct` leaves a hollow value alone (an entity's `destruct` returns at once on a zero reference). The old
-  free `hollow[T]()` is `T.hollow()`. Not in Mielia (MI-S447). A program says "no link" with `?`
+  free `hollow[T]()` is `T.hollow()`. Not in Mielia (ME-S447). A program says "no link" with `?`
   (`Tracked[Node]?`, `Stamped[Node]?`) and takes it with `when` or `try`, never with a hollow handle: `is_hollow()` and
   `T.hollow()` belong to the stdlib's and the runtime's own zero handles (a `lateinit` binding starts as one).
 - Records never use tokens or `as_entity` — those are entity concepts.
@@ -1184,7 +1184,7 @@ empties it into them smallest first (`for (priority, element) in pq.drain()`). A
 `for x in steal slots` (and `(steal slots).emitter()`) takes it apart with `take_each()`: each element is handed over,
 and the ones a `break` leaves end with the walk. `Slots` has `==` and `<=>` when `T` obeys `Equatable` / `Comparable`,
 like `Items`.
-Mielia has no `Slots` (an MI entity is shared, so a record holding one copies the handle).
+Mielia has no `Slots` (an ME entity is shared, so a record holding one copies the handle).
 
 ## 8. Generics and protocols
 
@@ -1611,8 +1611,8 @@ literal may have counted down). Run the named steps after it and `--step suffix`
 
 Format: `error[RV-S###]: file:line:col: message` plus a source excerpt with a
 caret. Families: `RV-G###` grammar/parse, `RV-S###` semantic, `RV-W###`
-warning. A diagnostic in a Mielia file spells the same number with `MI-`
-(`MI-S436`). Frequent ones when porting habits from other languages:
+warning. A diagnostic in a Mielia file spells the same number with `ME-`
+(`ME-S436`). Frequent ones when porting habits from other languages:
 
 | Code         | Usual cause                           | Fix                                                |
 |--------------|---------------------------------------|----------------------------------------------------|
