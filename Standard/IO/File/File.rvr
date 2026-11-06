@@ -802,13 +802,22 @@ common routine FileManager.set_size(at: File, bytes: U64)
 # FileManager — whole-file reads and writes
 # ============================================================================
 
-### Reads a whole file as text (UTF-8, lossy). UNCOLORED, like `waitfor`: inside work a Work runs as a fiber
+### Reads a whole file as text (UTF-8). UNCOLORED, like `waitfor`: inside work a Work runs as a fiber
 ### (`start_now()`/`start_here()`) the fiber PARKS while a worker thread does the blocking read (its siblings keep
 ### progressing), anywhere else it reads inline. This is the way to read a whole file from such work.
 ### :param at: The file.
 ### :returns: Its contents as `Text`.
-### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be read.
+### :throws: {NotFoundError} when the file doesn't exist, {MalformedUtf8Error} (with the byte position) when it is not
+### well-formed UTF-8, or the crashable for why it can't be read.
 common routine FileManager.read_text(at: File) -> Text
+    return FileManager.read_bytes(at: at).decode_as_utf8()
+
+### Reads a whole file as text, replacing malformed UTF-8 with the replacement character U+FFFD. Otherwise it is
+### {FileManager.read_text}.
+### :param at: The file.
+### :returns: Its contents as `Text`.
+### :throws: {NotFoundError} when the file doesn't exist, or the crashable for why it can't be read.
+common routine FileManager.read_text_lossy(at: File) -> Text
     return FileManager.read_bytes(at: at).decode_as_utf8_lossy()
 
 ### Reads a whole file. UNCOLORED, like `read_text`.
@@ -1127,12 +1136,21 @@ routine FileStorage[T].destruct()
 routine FileSource.pull(max: U64) -> Bytes
     return taken_bytes(ptr: C::rf_file_read_bytes(me.fd, max))
 
-### Reads one line as text (UTF-8, lossy), without its line ending.
+### Reads one line as text (UTF-8), without its line ending.
 ### :returns: The line.
-### :throws: {EndOfInputError} when the file has ended before another line.
+### :throws: {EndOfInputError} when the file has ended before another line, {MalformedUtf8Error} when the line is not
+### well-formed UTF-8.
 routine FileSource.read_line() -> Text
     if C::rf_file_is_eof(me.fd)
         throw EndOfInputError(reader: "read_line")
+    return taken_bytes(ptr: C::rf_file_read_line(me.fd)).decode_as_utf8()
+
+### Reads one line as text, replacing malformed UTF-8 with U+FFFD, without its line ending.
+### :returns: The line.
+### :throws: {EndOfInputError} when the file has ended before another line.
+routine FileSource.read_line_lossy() -> Text
+    if C::rf_file_is_eof(me.fd)
+        throw EndOfInputError(reader: "read_line_lossy")
     return taken_bytes(ptr: C::rf_file_read_line(me.fd)).decode_as_utf8_lossy()
 
 ### Reads one line as a `T`: `var n: S64 = f.read()` (the type the value goes to), or `f.read[S64]()`. The line
@@ -1144,18 +1162,34 @@ routine FileSource.read_line() -> Text
 routine FileSource.read[T]() -> T
     return me.read_line().to[T]()
 
-### Reads one whitespace-delimited word as text (UTF-8, lossy).
+### Reads one whitespace-delimited word as text (UTF-8).
 ### :returns: The word.
-### :throws: {EndOfInputError} when the file has ended before another word.
+### :throws: {EndOfInputError} when the file has ended before another word, {MalformedUtf8Error} when the word is not
+### well-formed UTF-8.
 routine FileSource.read_word() -> Text
     var word = taken_bytes(ptr: C::rf_file_read_word(me.fd))
     if word.is_empty()
         throw EndOfInputError(reader: "read_word")
+    return word.decode_as_utf8()
+
+### Reads one whitespace-delimited word as text, replacing malformed UTF-8 with U+FFFD.
+### :returns: The word.
+### :throws: {EndOfInputError} when the file has ended before another word.
+routine FileSource.read_word_lossy() -> Text
+    var word = taken_bytes(ptr: C::rf_file_read_word(me.fd))
+    if word.is_empty()
+        throw EndOfInputError(reader: "read_word_lossy")
     return word.decode_as_utf8_lossy()
 
-### Reads the rest of the file as text (UTF-8, lossy).
+### Reads the rest of the file as text (UTF-8).
 ### :returns: The text, empty at the end of the file.
+### :throws: {MalformedUtf8Error} when the rest is not well-formed UTF-8.
 routine FileSource.read_all() -> Text
+    return me.read_raw().decode_as_utf8()
+
+### Reads the rest of the file as text, replacing malformed UTF-8 with U+FFFD.
+### :returns: The text, empty at the end of the file.
+routine FileSource.read_all_lossy() -> Text
     return me.read_raw().decode_as_utf8_lossy()
 
 ### Reads the rest of the file and splits it into lines, as {Text.lines} does: the line ending after the last line

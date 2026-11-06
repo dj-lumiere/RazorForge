@@ -76,17 +76,35 @@ routine alert[T](value: T, end: Text = "\n")
 ### Line termination is not included in the returned text, and a blank line is `""`. Right after {ask_word}, the line
 ### end that ended the word is not read as a blank line of its own.
 ### :returns: The resulting `Text` value.
-### :throws: {EndOfInputError} when the input has ended.
+### :throws: {EndOfInputError} when the input has ended, {MalformedUtf8Error} when the line is not well-formed UTF-8.
 routine ask_line() -> Text
     var ptr = C::rf_console_ask_line()
     if ptr.is_hollow()
         throw EndOfInputError(reader: "ask_line")
     return input_text(ptr: ptr)
 
+### Reads one line of text from standard input, replacing malformed UTF-8 with the replacement character U+FFFD.
+### Otherwise it is {ask_line}.
+### :returns: The resulting `Text` value.
+### :throws: {EndOfInputError} when the input has ended.
+routine ask_line_lossy() -> Text
+    var ptr = C::rf_console_ask_line()
+    if ptr.is_hollow()
+        throw EndOfInputError(reader: "ask_line_lossy")
+    return input_text_lossy(ptr: ptr)
+
 ### The bytes the runtime read from standard input as text, decoded once. The runtime's block is given back.
 ### :param ptr: The block the runtime handed over: the count of the bytes, a `U64`, then the bytes.
 ### :returns: The text.
+### :throws: {MalformedUtf8Error} when the bytes are not well-formed UTF-8.
 secret routine input_text(ptr: Hijacked[Byte]) -> Text
+    return input_bytes(ptr: ptr).decode_as_utf8()
+
+### The bytes the runtime read from standard input as text, decoded once, malformed UTF-8 replaced by U+FFFD.
+### The runtime's block is given back.
+### :param ptr: The block the runtime handed over: the count of the bytes, a `U64`, then the bytes.
+### :returns: The text.
+secret routine input_text_lossy(ptr: Hijacked[Byte]) -> Text
     danger
         var text = Text(from_utf8_lossy: ptr.stride(count: 8), count: input_count(ptr: ptr))
         C::rf_invalidate(ptr: ptr.address())
@@ -119,20 +137,39 @@ routine ask[T]() -> T
 
 ### Reads one whitespace-delimited word from standard input.
 ### :returns: The resulting `Text` value.
-### :throws: {EndOfInputError} when the input has ended before another word.
+### :throws: {EndOfInputError} when the input has ended before another word, {MalformedUtf8Error} when the word is not
+### well-formed UTF-8.
 routine ask_word() -> Text
     var ptr = C::rf_console_ask_word()
     if ptr.is_hollow()
         throw EndOfInputError(reader: "ask_word")
     return input_text(ptr: ptr)
 
+### Reads one whitespace-delimited word from standard input, replacing malformed UTF-8 with U+FFFD.
+### :returns: The resulting `Text` value.
+### :throws: {EndOfInputError} when the input has ended before another word.
+routine ask_word_lossy() -> Text
+    var ptr = C::rf_console_ask_word()
+    if ptr.is_hollow()
+        throw EndOfInputError(reader: "ask_word_lossy")
+    return input_text_lossy(ptr: ptr)
+
 ### Reads all remaining text from standard input.
 ### :returns: The resulting `Text` value.
+### :throws: {MalformedUtf8Error} when the input is not well-formed UTF-8.
 routine ask_all() -> Text
     var ptr = C::rf_console_ask_all()
     if ptr.is_hollow()
         return ""
     return input_text(ptr: ptr)
+
+### Reads all remaining text from standard input, replacing malformed UTF-8 with U+FFFD.
+### :returns: The resulting `Text` value.
+routine ask_all_lossy() -> Text
+    var ptr = C::rf_console_ask_all()
+    if ptr.is_hollow()
+        return ""
+    return input_text_lossy(ptr: ptr)
 
 ### Reads all remaining input and splits it into lines, as {Text.lines} does: the line ending after the last line
 ### starts no new one.

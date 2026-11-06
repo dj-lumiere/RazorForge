@@ -445,6 +445,12 @@ RV-S632). A module-level `var` is an error (RV-S435). Constants the build knows 
 - `ask_line()` gives a blank line as `""` and crashes with `EndOfInputError` (`IO/Errors`) at the end of the input, as
   does `ask_word()`: read until the end with `when check ask_line()` + `is EndOfInputError => break`. An `ask_line()`
   right after `ask_word()` skips the line end the word left.
+- **Malformed UTF-8 fails by default.** Reading text from outside (`ask_line`/`ask_word`/`ask_all`, `FileManager.read_text`,
+  a FileSource's `read_line`/`read_word`/`read_all`/`read_lines`, `Bytes.decode_as_utf8`) throws `MalformedUtf8Error`
+  (`System`) saying which byte ("Malformed UTF-8 at byte 3: invalid leading byte."). The replacement character U+FFFD
+  is asked for by name with the `_lossy` twin: `ask_line_lossy()`, `ask_word_lossy()`, `ask_all_lossy()`,
+  `FileManager.read_text_lossy(at:)`, `read_line_lossy()`, `read_word_lossy()`, `read_all_lossy()`,
+  `decode_as_utf8_lossy()`.
 - Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `RotatableList[T]`, `BitList`,
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
   fixed-size `Items[T, COUNT]`, `Bits[BITS]`. Searches return `U64?` (`none` where there is no match): `index_of`
