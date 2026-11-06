@@ -319,8 +319,8 @@ show(f"total = {total}")
 - Routines you define are still their own scopes and still end with `return`.
 
 `module <Path>` is optional. Without it the module path is derived from the file's
-location relative to `config.toml`: each folder and the file name are PascalCased and
-joined with `/` (`tools/text utils.rvr` → `Tools/TextUtils`). Declare `module` to
+location relative to `config.toml`: each folder and the file name are PascalCased (spaces, `_` and `-` dropped) and
+joined with `/` (`tools/text utils.rvr` → `Tools/TextUtils`, `my-lib/tax_rules.rvr` → `MyLib/TaxRules`). Declare `module` to
 override that. Imports use `/` separators.
 
 Files in one folder that declare the same `module` are one module and build together, with no
