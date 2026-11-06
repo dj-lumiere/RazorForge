@@ -20,7 +20,7 @@ internal sealed class RevareLanguageServer : LanguageServerProfile
     public override string CodeBlockLanguage => "revare";
 
     /// <inheritdoc/>
-    public override IReadOnlyList<string> Keywords => RevareLexer.KeywordSpellings;
+    public override IReadOnlyList<string> Keywords => RevareKeywords.KeywordSpellings;
 
     /// <inheritdoc/>
     /// <remarks>From the improvement plan: `until` loops, `becomes` in an expression `when`, `inject` after `steal … as`.</remarks>

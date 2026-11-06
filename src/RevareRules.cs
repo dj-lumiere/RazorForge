@@ -32,7 +32,7 @@ public sealed class RevareRules : LanguageRules
 
     public override List<Token> Tokenize(string source, string fileName)
     {
-        return new RevareLexer(source: source, fileName: fileName).Tokenize();
+        return new SourceLexer(source: source, fileName: fileName, language: Language.Revare, keywords: RevareKeywords.Table).Tokenize();
     }
 
     /// <inheritdoc/>
@@ -42,7 +42,7 @@ public sealed class RevareRules : LanguageRules
     public override (List<Token> Tokens, List<CommentTrivia> Comments) TokenizeWithComments(string source,
         string fileName)
     {
-        var lexer = new RevareLexer(source: source, fileName: fileName);
+        var lexer = new SourceLexer(source: source, fileName: fileName, language: Language.Revare, keywords: RevareKeywords.Table);
         return (lexer.Tokenize(), lexer.Comments);
     }
 

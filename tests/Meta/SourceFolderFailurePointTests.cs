@@ -24,9 +24,9 @@ public sealed partial class SourceFolderFailurePointTests
         // 3 declarations · 4 syntactic desugar · 5 verification · 6 type-aware lowering · 7 monomorphize ·
         // 8 demand collect · 9 LLVM IR. (4.Desugaring = syntactic/DesugaringPipeline; 6.Lowering =
         // type-aware/PostprocessingPipeline.)
-        // The lexer is Revare's own (Revare/src/Lexer), not the builder core's.
+        // The lexer both languages share lives in the builder core (1.Tokenizer/Lexer).
         {
-            "Lexer",
+            "1.Tokenizer",
             "source validation rejects ambiguous bytes and whitespace before scanning",
             [
                 "NormalizeAndValidateSource", "Source contains a null byte",
