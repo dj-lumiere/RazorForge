@@ -5,7 +5,7 @@ namespace Revare.Tests.Meta;
 
 /// <summary>
 /// End-to-end checks of a binding a loop moves out on an earlier pass. Builds and runs
-/// <c>tests/Fixtures/UseAfterSteal/*.rvr</c> through <c>buildandrun</c>.
+/// <c>tests/Fixtures/UseAfterSteal/*.rvr</c> through <c>run</c>.
 /// </summary>
 public sealed class UseAfterStealTests
 {
@@ -30,7 +30,7 @@ public sealed class UseAfterStealTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "buildandrun", rvPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "run", rvPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

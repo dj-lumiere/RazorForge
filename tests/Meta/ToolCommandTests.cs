@@ -54,7 +54,7 @@ public sealed class ToolCommandTests : IDisposable
                 return
             """);
 
-        (int exit, string stdout, string stderr) = Tool("buildandrun", program);
+        (int exit, string stdout, string stderr) = Tool("run", program);
 
         Assert.Equal(expected: 82, actual: exit);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
@@ -170,22 +170,27 @@ public sealed class ToolCommandTests : IDisposable
         Assert.Contains(expectedSubstring: "3 passed, 4 failed, 1 skipped", actualString: stdout);
     }
 
-    /// <summary><c>lint</c> reports a file that is not in the canonical layout and passes one that is.</summary>
+    /// <summary><c>check</c> given several files reads each for the canonical layout and fails on one that is not in
+    /// it. Given one program it checks the program and leaves the layout to the folder check.</summary>
     [Fact]
-    public void Lint_ReportsStyleErrors()
+    public void Check_ReportsStyleErrors()
     {
         string messy = Write(name: "messy.rvr",
             source: "module ToolMessy\n\nimport IO/Console\n\nroutine start()\n    show( \"hi\" )\n    return\n");
         string tidy = Write(name: "tidy.rvr",
             source: "module ToolTidy\n\nimport IO/Console\n\nroutine start()\n    show(\"hi\")\n    return\n");
 
-        (int messyExit, string messyOut, _) = Tool("lint", messy);
-        (int tidyExit, string tidyOut, _) = Tool("lint", tidy);
+        (int sourcesExit, string sourcesOut, _) = Tool("check", messy, tidy);
+        (int messyExit, string messyOut, _) = Tool("check", messy);
+        (int tidyExit, string tidyOut, _) = Tool("check", tidy);
 
-        Assert.Equal(expected: 1, actual: messyExit);
-        Assert.Contains(expectedSubstring: "error[style]", actualString: messyOut);
-        Assert.Contains(expectedSubstring: "show(\"hi\")", actualString: messyOut);
+        Assert.Equal(expected: 1, actual: sourcesExit);
+        Assert.Contains(expectedSubstring: "error[style]", actualString: sourcesOut);
+        Assert.Contains(expectedSubstring: "show(\"hi\")", actualString: sourcesOut);
+        Assert.True(condition: messyExit == 0, userMessage: messyOut);
+        Assert.DoesNotContain(expectedSubstring: "[style]", actualString: messyOut);
         Assert.True(condition: tidyExit == 0, userMessage: tidyOut);
+        Assert.DoesNotContain(expectedSubstring: "[style]", actualString: tidyOut);
     }
 
     /// <summary>
@@ -226,7 +231,7 @@ public sealed class ToolCommandTests : IDisposable
                 return
             """);
 
-        (int exit, string stdout, string stderr) = ToolWith(environment: [("RV_WORKERS", "1")], "buildandrun", program);
+        (int exit, string stdout, string stderr) = ToolWith(environment: [("RV_WORKERS", "1")], "run", program);
 
         Assert.True(condition: exit == 0, userMessage: stdout + stderr);
         Assert.Contains(expectedSubstring: "labs 42", actualString: stdout);
@@ -256,7 +261,7 @@ public sealed class ToolCommandTests : IDisposable
                 return
             """);
 
-        (int exit, string stdout, string stderr) = Tool("buildandrun", program);
+        (int exit, string stdout, string stderr) = Tool("run", program);
 
         Assert.Equal(expected: 82, actual: exit);
         // With a crash trace the sentence names the routine that called itself, without one it says the calls went

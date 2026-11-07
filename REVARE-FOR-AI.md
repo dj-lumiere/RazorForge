@@ -194,9 +194,9 @@ When unsure, consult ground truth in the repo/package:
    binding the routine owns (a local, an entity parameter handed over with `steal`) tears it down there and ends
    the name like `steal x` (RV-S615 after, RV-S616 on some paths only, tokens from it end, RV-S643); a member
    variable, a token, `me` or a global is RV-S421.
-   **Notes and fixes (RV and ME).** A NOTE is a likely slip that builds as written: `check`, `lint` (ME files) and
+   **Notes and fixes (RV and ME).** A NOTE is a likely slip that builds as written: `check` and
    the language server show it (`note[RV-W###]`), a build never does. `until false` gets RV-W304 with the fix
-   "Write 'loop'". Doc comment notes (shown by `check`, `lint`, the language server and `validate-stdlib`): RV-W305 a routine
+   "Write 'loop'". Doc comment notes (shown by `check`, the language server and `validate-stdlib`): RV-W305 a routine
    with no `###` doc comment (every routine of a library or example file, the stdlib included), RV-W306 a parameter with
    no `:param` line, RV-W307 a `:param` line naming no parameter, RV-W308 a routine that returns a value with no
    `:returns:` line. Files under a `tests`, `playground`, `scratch` or `generated` folder (below the project folder) are
@@ -227,7 +227,7 @@ When unsure, consult ground truth in the repo/package:
 
 Revare has its own idiom — do not import Rust/serde/C# vocabulary.
 
-- No kind or scope prefixes on names (`m_pos`, `_count`, `p_node`, `bDone`, `IComparable`): `lint` hints them.
+- No kind or scope prefixes on names (`m_pos`, `_count`, `p_node`, `bDone`, `IComparable`): `check <folder>` hints them.
 
 - function → **routine**; method → **member routine** (`Type.name()`).
 - struct/class → **record** (value) or **entity** (heap reference). Never
@@ -1584,18 +1584,20 @@ Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
 ```
 revare new [folder]             # start a project: config.toml, main.rvr, .gitignore, .vscode/ (keeps existing files)
 revare check [entry]            # check the program without building it
+revare check <folder>...        # check every source in the folders: canonical layout (style errors), hints, notes
 revare build [entry]            # build a native executable, don't run
-revare buildandrun [entry]      # build and run
+revare run [entry]              # build and run
 revare codegen [entry] [out.ll] # write the program's LLVM IR without building it
 revare test <dir-or-file>...    # run programs against <name>.expected / .exit / .error / .input
-revare fmt [--check] <paths>... # format in the canonical layout
-revare lint <paths>...          # report code not in the canonical layout (style errors)
+revare format [--check] <paths>... # format in the canonical layout
+revare docs <source-dir> <output-dir> # write the API reference pages of a library
+revare migrate [--check] <paths>... # move sources from the previous release to this one
 revare lsp                      # language server, for an editor
 revare help | version
 ```
 
 These are the same commands `mielia` and `lapila` have. A bare file is not a command
-(`revare hello.rvr` is an error that points to `revare buildandrun hello.rvr`). The builder's own
+(`revare hello.rvr` is an error that points to `revare run hello.rvr`). The builder's own
 inspection commands (`parse`, `tokenize`) still work but are not listed.
 
 **There are no build flags.** All configuration lives in `config.toml`:
@@ -1618,7 +1620,7 @@ A section or key `config.toml` does not read is a build error naming it (and the
 rest (`use-daemon`, `revare-version`, `dump-ir`).
 
 With no entry file argument, the CLI walks up from the cwd to find
-`config.toml` — `cd` into a project and `revare buildandrun` works.
+`config.toml` — `cd` into a project and `revare run` works.
 
 **Moving 0.4 code:** `revare migrate <folder>` first renames every `.rf` file to `.rvr` (`--step extensions` does
 only that: it also rewrites `RF::` to `RV::`, `@rf(` to `@rv(`, `RF-S###` codes in comments, and in `config.toml`

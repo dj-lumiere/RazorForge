@@ -19,6 +19,7 @@ file only once its other old spellings are gone.
 
 ### Breaking changes
 
+- `fmt` is `format`, and `lint` is `check` given folders.
 - The language is renamed: RazorForge is **Revare**. Sources end in `.rvr` (a `.rf` file given to the builder is a build error that names the new
   extension), diagnostic codes start with `RV-` (`RV-S625`), the command is `revare`, and the manifest key is
   `revare-version`. `revare migrate --step extensions <folder>` renames the files, rewrites the manifest's
@@ -31,8 +32,8 @@ file only once its other old spellings are gone.
 - The project manifest is `config.toml` (it was `razorforge.toml`). A `razorforge.toml` with no `config.toml` next
   to it is a build error, and default `migrate` renames the file. `RV_DEADLOCK_DETECT` is `deadlock-check` under
   `[debug]`: when the variable is still set, every command prints a warning that names the key.
-- The commands are `check`, `build`, `buildandrun`, `codegen`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`. A bare file
-  name is not a command: the error shows `revare buildandrun <file>`.
+- The commands are `check`, `build`, `run`, `codegen`, `test`, `lsp`, `format`, `docs`, `migrate`, `help`, `version` and `new`. A bare file
+  name is not a command: the error shows `revare run <file>`.
 - Every runtime crash exits with code 82.
 - x86-64 programs target x86-64-v3.
 
@@ -384,7 +385,7 @@ file only once its other old spellings are gone.
 **Tools**
 - A resident build daemon and a JIT mode for the edit loop: `[target] mode = "debug-jit"`, `use-daemon` and
   `incremental`.
-- `new`, `migrate`, `docs`, `fmt`, `lint`, `test`, `lsp` and `check --json`.
+- `new`, `migrate`, `docs`, `format`, `test`, `lsp`, `check --json` and `check <folder>` (canonical layout, hints and notes).
 - The language server: diagnostics, formatting, hover, go to definition, rename and quick fixes.
 - Rider plugin and VS Code extension. The color of a carrier or variant whose kind follows its members and is not
   decided yet is the semantic token `memberKindType`.

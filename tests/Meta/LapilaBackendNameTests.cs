@@ -63,7 +63,7 @@ public sealed class LapilaBackendNameTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "buildandrun", rvPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "run", rvPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

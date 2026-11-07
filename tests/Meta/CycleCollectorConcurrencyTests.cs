@@ -6,7 +6,7 @@ namespace Revare.Tests.Meta;
 
 /// <summary>
 /// End-to-end regressions for the Roamed cycle collector's concurrency + deep-graph fixes. Each compiles
-/// and runs a committed <c>tests/Fixtures/CycleCollector/*.rvr</c> fixture via <c>buildandrun</c> and
+/// and runs a committed <c>tests/Fixtures/CycleCollector/*.rvr</c> fixture via <c>run</c> and
 /// asserts a clean finish (exit 0, success marker on stdout, clean stderr):
 /// <list type="bullet">
 ///   <item><b>MultithreadedCollection_NoUseAfterFree</b> — concurrent collector and mutator OS threads
@@ -86,7 +86,7 @@ public sealed partial class CycleCollectorConcurrencyTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "buildandrun", rvPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "run", rvPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

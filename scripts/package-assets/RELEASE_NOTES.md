@@ -15,7 +15,7 @@ Single rewrites run as `revare migrate --step <name> <folder>`. Run `--step suff
 - The language is Revare. Sources end in `.rvr`, diagnostic codes start with `RV-`, the command is `revare`, and the manifest key is `revare-version`.
 - The project manifest is `config.toml`.
 - Indentation is a multiple of 4 spaces (`RV-G053` otherwise).
-- The commands are `check`, `build`, `buildandrun`, `codegen`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`.
+- The commands are `check`, `build`, `run`, `codegen`, `test`, `lsp`, `format`, `docs`, `migrate`, `help`, `version` and `new`.
 - Every runtime crash exits with code 82.
 
 ## Syntax
@@ -64,7 +64,7 @@ Single rewrites run as `revare migrate --step <name> <folder>`. Run `--step suff
 ## Tools
 
 - A resident build daemon and a JIT mode for the edit loop: `[target] mode = "debug-jit"`, `use-daemon` and `incremental`.
-- `new`, `migrate`, `docs`, `fmt`, `lint`, `test` and `lsp`, plus `check --json`.
+- `new`, `migrate`, `docs`, `format`, `test` and `lsp`, plus `check --json` and `check <folder>`.
 - `@test` routines with `@case`, `@skip`, `@time_limit` and `@memory_limit`.
 - A Rider plugin and a VS Code extension.
 - A crash trace lists your program's routines. `[debug] trace-stdlib = true` adds the library's frames.

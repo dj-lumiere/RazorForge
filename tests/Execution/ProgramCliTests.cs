@@ -10,7 +10,7 @@ namespace Revare.Tests.Execution;
 /// the non-spawning verbs — <c>version</c>, <c>help</c>, <c>tokenize</c>, <c>parse</c>, <c>codegen</c>,
 /// <c>check</c>, <c>validate-stdlib</c> — plus the arg-handling and error branches. These verbs run entirely
 /// in the test host (no clang/opt/link subprocess), so they are coverage-instrumented; <c>build</c> /
-/// <c>buildandrun</c> are intentionally excluded (they spawn a native toolchain in an uninstrumented child).
+/// <c>run</c> are intentionally excluded (they spawn a native toolchain in an uninstrumented child).
 ///
 /// All tests share one class (xUnit runs a class's tests sequentially) because <see cref="Program.Main"/>
 /// mutates process-global console encoding and the tests redirect <see cref="Console.Out"/>.

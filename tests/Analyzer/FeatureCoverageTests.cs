@@ -12,7 +12,7 @@ using static TestHelpers;
 /// <summary>
 /// Drives the full in-process compile pipeline (parse → semantic analysis + lowering + monomorphization
 /// → LLVM IR emission) over feature-rich Revare and Mielia programs. Unlike the spawned
-/// <c>buildandrun</c> stdlib harness (whose child process is not coverage-instrumented), these run the
+/// <c>run</c> stdlib harness (whose child process is not coverage-instrumented), these run the
 /// builder IN the test host, so they exercise — and count coverage for — the lowering/instantiation/
 /// codegen passes that only fire for constructs like pattern matching, lambdas, generics, error-handling
 /// variants, iterator inlining, and Mielia module globals.

@@ -68,7 +68,7 @@ routine start()
 Build and run it:
 
 ```bash
-revare buildandrun hello.rvr
+revare run hello.rvr
 ```
 
 ## 3. A real project
@@ -87,7 +87,7 @@ mode = "debug"           # debug | release | release-time | release-space
 Then from anywhere inside the project:
 
 ```bash
-revare buildandrun
+revare run
 ```
 
 ## Using an AI assistant?
@@ -101,13 +101,18 @@ in this folder first; it lists exactly where their assumptions break, plus the
 ## CLI reference
 
 ```
-revare parse <file>             Parse and show AST summary
-revare tokenize <file>          Show tokens
-revare codegen <file> [out.ll]  Emit LLVM IR for one file
-revare build [entry] [out.ll]   Build a multi-file project
-revare buildandrun [entry]      Build, link, and execute
-revare check [entry]            Type-check only
-revare version                  Show version
+revare new [folder]                       Start a project
+revare check [--json] [entry]             Check the program without building it
+revare check <folder>...                  Check every source in the folders
+revare build [entry]                      Build a native executable
+revare run [entry]                        Build the program and run it
+revare codegen [entry] [out.ll]           Write the program's LLVM IR
+revare test <dir-or-file>...              Run test programs
+revare format [--check] <file-or-dir>...  Format sources in place
+revare docs <source-dir> <output-dir>     Write API reference pages
+revare migrate [--check] <paths>...       Move sources to this release
+revare lsp                                Run the language server
+revare help | version
 ```
 
 Docs: https://revare.lumi-dev.xyz/ · Issues:

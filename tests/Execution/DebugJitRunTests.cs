@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace Revare.Tests.Execution;
 
 /// <summary>
-/// End-to-end runs of the <c>mode = "debug-jit"</c> dev loop through <c>buildandrun</c>: the builder compiles the
+/// End-to-end runs of the <c>mode = "debug-jit"</c> dev loop through <c>run</c>: the builder compiles the
 /// program and runs it in its own process through LLVM's ORC JIT instead of linking an executable. Each test writes a
 /// small project (a <c>config.toml</c> and one program) to a temporary folder and runs the toolchain on it as a child
 /// process, so a JIT'd program's runtime threads and exit never touch the test host. The three tests cover the three
@@ -167,7 +167,7 @@ public sealed partial class DebugJitRunTests
 
         public Run BuildAndRun()
         {
-            Run run = RunToolchain(verb: "buildandrun", withEntry: true);
+            Run run = RunToolchain(verb: "run", withEntry: true);
             foreach (Match m in SpawnedDaemonPidRegex().Matches(input: run.Stderr))
             {
                 _daemonPids.Add(item: int.Parse(s: m.Groups[groupnum: 1].Value));

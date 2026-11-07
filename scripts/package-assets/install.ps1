@@ -24,6 +24,6 @@ if ($entries -contains $dir) {
 Write-Host ''
 Write-Host 'Try it:'
 Write-Host '  revare version'
-Write-Host '  revare buildandrun hello.rvr      (rv works too)'
+Write-Host '  revare run hello.rvr      (rv works too)'
 Write-Host ''
 Write-Host 'See QUICKSTART.md for a hello-world walkthrough.'

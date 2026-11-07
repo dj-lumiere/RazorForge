@@ -55,7 +55,7 @@ public sealed class ImportOrderTests
     {
         RunOrders(imports: Imports,
             source: order => "module App\n\n" + string.Join(separator: "\n", values: order) + "\n\n" + ModuleBody + "\n",
-            verb: "buildandrun",
+            verb: "run",
             assertResult: (exit, text) =>
             {
                 Assert.True(condition: exit == 0, userMessage: text);
@@ -83,7 +83,7 @@ public sealed class ImportOrderTests
                 sb.Append(value: "var word = \"s\"\nshow(f\"{total} {A.pick(x: 1)} {B.pick(x: word)}\")\n");
                 return sb.ToString();
             },
-            verb: "buildandrun",
+            verb: "run",
             assertResult: (exit, text) =>
             {
                 Assert.True(condition: exit == 0, userMessage: text);
@@ -119,7 +119,7 @@ public sealed class ImportOrderTests
             source: order => "module App\n\n" + string.Join(separator: "\n", values: order) + "\n\n" +
                              "routine describe() -> S64\n    return 99\n\n" +
                              "routine start()\n    show(f\"{describe()} {c_twin()} {C.twin()}\")\n    return\n",
-            verb: "buildandrun",
+            verb: "run",
             assertResult: (exit, text) =>
             {
                 Assert.True(condition: exit == 0, userMessage: text);

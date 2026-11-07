@@ -106,7 +106,7 @@ for shared in libLLVM.so libLLVM.dylib libLLVMSharp.so libLLVMSharp.dylib lapila
 done
 
 echo "=== native runtime artifacts (installed layout) ==="
-# The installed layout — and the toolchain's own P/Invoke probing + buildandrun's prebuilt-layout
+# The installed layout — and the toolchain's own P/Invoke probing + run's prebuilt-layout
 # detection — expect them FLAT next to the executables, matching the dev bin/ output.
 for sub in Ingrid/native/build/bin Ingrid/native/build/lib; do
     if [ -d "$sub" ]; then
@@ -132,9 +132,9 @@ cp Revare/LICENSE Revare/README.md Revare/THIRD-PARTY-NOTICES.md "$OUT/"
 # Foundry's `forge`.)
 ln -sf Revare "$OUT/rv"
 
-# Mielia has its own command line; `mielia` and `mi` point at it.
+# Mielia has its own command line; `mielia` and `me` point at it.
 ln -sf Mielia "$OUT/mielia"
-ln -sf Mielia "$OUT/mi"
+ln -sf Mielia "$OUT/me"
 
 echo "=== bundle self-contained LLVM toolchain ==="
 # The builder resolves <package>/toolchain/bin before PATH (ResolveToolchainTool),
@@ -228,7 +228,7 @@ echo "=== add install script + quickstart + AI reference ==="
 cp Revare/scripts/package-assets/install.sh Revare/scripts/package-assets/QUICKSTART.md Revare/REVARE-FOR-AI.md "$OUT/"
 chmod +x "$OUT/install.sh"
 
-echo "=== smoke test: self-contained buildandrun (system toolchain hidden) ==="
+echo "=== smoke test: self-contained run (system toolchain hidden) ==="
 "$OUT/Revare" version
 RV_ABS="$(cd "$OUT" && pwd)/Revare"
 SMOKE_DIR=$(mktemp -d)
@@ -241,7 +241,7 @@ routine start()
     show("packaged revare works")
     return
 EOF
-# Stage a copy of the package OUTSIDE the repo (buildandrun's dev-checkout
+# Stage a copy of the package OUTSIDE the repo (run's dev-checkout
 # detection walks up from the exe and would find the repo's native/build tree
 # from dist/), then run from the smoke dir with a minimal PATH — the end-user
 # situation. The bundled toolchain must carry the build; only the OS linker
@@ -249,19 +249,19 @@ EOF
 STAGE_DIR=$(mktemp -d)
 cp -a "$OUT/." "$STAGE_DIR/"
 RV_ABS="$STAGE_DIR/Revare"
-SMOKE_OUT=$( cd "$SMOKE_DIR" && PATH="/usr/bin:/bin" "$RV_ABS" buildandrun smoke.rvr 2>&1 ) || {
+SMOKE_OUT=$( cd "$SMOKE_DIR" && PATH="/usr/bin:/bin" "$RV_ABS" run smoke.rvr 2>&1 ) || {
     echo "$SMOKE_OUT"
-    echo "self-contained buildandrun smoke failed"
+    echo "self-contained run smoke failed"
     rm -rf "$STAGE_DIR"
     exit 1
 }
 rm -rf "$STAGE_DIR"
 if ! grep -q "packaged revare works" <<< "$SMOKE_OUT"; then
     echo "$SMOKE_OUT"
-    echo "self-contained buildandrun smoke failed (wrong output)"
+    echo "self-contained run smoke failed (wrong output)"
     exit 1
 fi
-echo "self-contained buildandrun OK"
+echo "self-contained run OK"
 rm -rf "$SMOKE_DIR"
 
 echo "=== archive + checksum ==="

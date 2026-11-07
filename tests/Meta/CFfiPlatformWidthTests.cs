@@ -54,7 +54,7 @@ public sealed class CFfiPlatformWidthTests
         (int exitCode, string stdout, string stderr, bool timedOut) = RunProgram(source: source);
         Assert.True(condition: exitCode == 0 && !timedOut,
             userMessage:
-            $"buildandrun failed (exit={exitCode}, timedOut={timedOut}).\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+            $"run failed (exit={exitCode}, timedOut={timedOut}).\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
 
         string actual = KeepPrefixed(stdout: stdout,
             "CLong=",
@@ -106,7 +106,7 @@ public sealed class CFfiPlatformWidthTests
 
         (int exitCode, string stdout, string stderr, bool timedOut) = RunProgram(source: source);
         Assert.False(condition: timedOut,
-            userMessage: $"buildandrun timed out for {ctorType} boundary probe.");
+            userMessage: $"run timed out for {ctorType} boundary probe.");
 
         if (IsWindows)
         {
@@ -162,7 +162,7 @@ public sealed class CFfiPlatformWidthTests
 
         (int exitCode, string stdout, string stderr, bool timedOut) = RunProgram(source: source);
         Assert.False(condition: timedOut,
-            userMessage: "buildandrun timed out for the CWStrView supplementary probe.");
+            userMessage: "run timed out for the CWStrView supplementary probe.");
 
         if (IsWindows)
         {
@@ -189,11 +189,11 @@ public sealed class CFfiPlatformWidthTests
         ? "Windows (LLP64)"
         : "Unix (LP64)";
 
-    /// <summary>Writes <paramref name="source"/> to an isolated temp dir and runs it through buildandrun.</summary>
+    /// <summary>Writes <paramref name="source"/> to an isolated temp dir and runs it through run.</summary>
     private static (int ExitCode, string Stdout, string Stderr, bool TimedOut) RunProgram(
         string source)
     {
-        // Isolated dir: buildandrun compiles EVERY .rvr in the entry file's directory, so a shared temp
+        // Isolated dir: run compiles EVERY .rvr in the entry file's directory, so a shared temp
         // dir would pull sibling probes in and collide on `routine start` (RV-S406).
         string tempDir = Path.Combine(path1: Path.GetTempPath(),
             path2: "rf-cffi-" + Guid.NewGuid()
@@ -221,7 +221,7 @@ public sealed class CFfiPlatformWidthTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "buildandrun", rvPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "run", rvPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

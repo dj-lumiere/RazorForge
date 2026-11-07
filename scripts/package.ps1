@@ -47,7 +47,7 @@ foreach ($proj in 'Revare\Revare.csproj', 'Mielia\Mielia.csproj') {
 }
 
 Write-Host '=== native runtime artifacts (installed layout) ==='
-# The installed layout — and the toolchain's own P/Invoke probing + buildandrun's prebuilt-layout
+# The installed layout — and the toolchain's own P/Invoke probing + run's prebuilt-layout
 # detection — expect them FLAT next to the executables, matching the dev bin/ output.
 foreach ($sub in 'Ingrid\native\build\bin', 'Ingrid\native\build\lib') {
     if (Test-Path $sub) {
@@ -76,9 +76,9 @@ Copy-Item Revare\LICENSE, Revare\README.md, Revare\THIRD-PARTY-NOTICES.md $Out
 # is deliberately not shipped to avoid colliding with Foundry's `forge`.
 Copy-Item "$Out\Revare.exe" "$Out\ra.exe"
 
-# Mielia has its own command line; `mi` is its short alias (a copy of the apphost, which launches
+# Mielia has its own command line; `me` is its short alias (a copy of the apphost, which launches
 # Mielia.dll by name from its own directory).
-Copy-Item "$Out\Mielia.exe" "$Out\mi.exe"
+Copy-Item "$Out\Mielia.exe" "$Out\me.exe"
 
 Write-Host '=== bundle self-contained LLVM toolchain (llvm-mingw + opt) ==='
 # llvm-mingw gives a fully redistributable clang + ld.lld + mingw CRT/import libs,
@@ -120,7 +120,7 @@ if (-not (Test-Path $optExe) -or -not (Test-Path $llvmLinkExe)) {
     Remove-Item -Recurse -Force (Join-Path $CacheDir $llvmDir)
 }
 
-# Prune to the subset buildandrun needs: clang (driver) + ld.lld (linker) + the
+# Prune to the subset run needs: clang (driver) + ld.lld (linker) + the
 # shared LLVM DLLs they load, the compiler-rt builtins, and the x86_64 mingw
 # sysroot (CRT objects + import libraries + runtime DLLs). lldb, clangd, headers,
 # python, and the other target triples are dead weight.
@@ -147,7 +147,7 @@ Copy-Item "$PSScriptRoot\package-assets\install.cmd" $Out
 Copy-Item "$PSScriptRoot\package-assets\QUICKSTART.md" $Out
 Copy-Item "$PSScriptRoot\..\REVARE-FOR-AI.md" $Out
 
-Write-Host '=== smoke test: self-contained buildandrun (system toolchain hidden) ==='
+Write-Host '=== smoke test: self-contained run (system toolchain hidden) ==='
 & "$Out\Revare.exe" version
 if ($LASTEXITCODE -ne 0) { throw 'smoke version failed' }
 $smokeDir = Join-Path ([System.IO.Path]::GetTempPath()) "rf_pkg_smoke_$PID"
@@ -161,7 +161,7 @@ routine start()
     show("packaged revare works")
     return
 '@ | Set-Content -Path "$smokeDir\smoke.rvr" -Encoding utf8NoBOM
-# Stage a copy of the package OUTSIDE the repo (buildandrun's dev-checkout
+# Stage a copy of the package OUTSIDE the repo (run's dev-checkout
 # detection walks up from the exe and would find the repo's native/build tree
 # from dist\), strip PATH down to the OS so the bundled toolchain is the only
 # one visible, and run from the smoke directory — exactly an end user's setup.
@@ -173,7 +173,7 @@ $oldPath = $env:PATH
 Push-Location $smokeDir
 try {
     $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-    $smokeOut = & $rvExe buildandrun smoke.rvr 2>&1 | Out-String
+    $smokeOut = & $rvExe run smoke.rvr 2>&1 | Out-String
 } finally {
     $env:PATH = $oldPath
     Pop-Location
@@ -181,9 +181,9 @@ try {
 }
 if ($smokeOut -notmatch 'packaged revare works') {
     Write-Host $smokeOut
-    throw 'self-contained buildandrun smoke failed'
+    throw 'self-contained run smoke failed'
 }
-Write-Host 'self-contained buildandrun OK'
+Write-Host 'self-contained run OK'
 Remove-Item -Recurse -Force $smokeDir
 
 Write-Host '=== archive + checksum ==='

@@ -6,7 +6,7 @@ namespace Revare.Tests.Meta;
 /// <summary>
 /// End-to-end check of <c>set_exit_code</c>: a program that returns from <c>start</c> normally ends with the status
 /// it set last, which the builder's <c>main</c> returns after <c>start</c>. Builds and runs
-/// <c>tests/Fixtures/ExitCode/set_exit_code.rvr</c> through <c>buildandrun</c>. Also holds the fixtures that must
+/// <c>tests/Fixtures/ExitCode/set_exit_code.rvr</c> through <c>run</c>. Also holds the fixtures that must
 /// crash (status 82), which the one-program stdlib harness cannot run.
 /// </summary>
 public sealed class ExitCodeTests
@@ -362,7 +362,7 @@ public sealed class ExitCodeTests
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "buildandrun", rvPath },
+            ArgumentList = { TestHelpers.ToolchainDll(sourcePath: rvPath), "run", rvPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,

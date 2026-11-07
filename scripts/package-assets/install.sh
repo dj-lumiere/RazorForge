@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Revare installer (Linux / macOS)
 #
-# Symlinks `revare`, `rv`, `mielia`, and `mi` into ~/.local/bin so they work from any
+# Symlinks `revare`, `rv`, `mielia`, and `me` into ~/.local/bin so they work from any
 # terminal. Everything runs from this folder — no root, no other downloads.
 #
 # Usage:  ./install.sh
@@ -43,8 +43,8 @@ mkdir -p "$BIN"
 ln -sf "$DIR/Revare" "$BIN/revare"
 ln -sf "$DIR/Revare" "$BIN/rv"
 ln -sf "$DIR/Mielia" "$BIN/mielia"
-ln -sf "$DIR/Mielia" "$BIN/mi"
-echo "Linked revare, rv, mielia, and mi into $BIN"
+ln -sf "$DIR/Mielia" "$BIN/me"
+echo "Linked revare, rv, mielia, and me into $BIN"
 
 case ":$PATH:" in
   *":$BIN:"*)

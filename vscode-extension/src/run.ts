@@ -21,7 +21,7 @@ export function registerRun(
 async function runFile(language: { id: string; name: string }, builder: () => string | undefined, uri?: vscode.Uri) {
     const file = await target(uri);
     if (!file) return;
-    await launch(language, builder, path.dirname(file), ["buildandrun", file]);
+    await launch(language, builder, path.dirname(file), ["run", file]);
 }
 
 async function runFolder(language: { id: string; name: string }, builder: () => string | undefined, uri?: vscode.Uri) {
@@ -29,7 +29,7 @@ async function runFolder(language: { id: string; name: string }, builder: () => 
     const start = file ? path.dirname(file) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!start) return;
     const root = solutionAbove(start) ?? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(start))?.uri.fsPath ?? start;
-    await launch(language, builder, root, ["buildandrun"]);
+    await launch(language, builder, root, ["run"]);
 }
 
 /** The file to run: the one the button was pressed on, else the active editor's. Unsaved changes are saved first. */
