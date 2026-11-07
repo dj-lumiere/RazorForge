@@ -1218,6 +1218,8 @@ entity List[T] obeys Emittable[T]
 relates ListEmitter[T] as Emitter     # associated type binding
 ```
 
+A member routine written outside a generic type names its parameters on the receiver: `routine Pair[TFirst, TSecond].swap()`. `routine Pair.swap()` is RV-S165.
+
 - Constraint syntax: `T obeys SomeProtocol`. `Me` is the self type.
 - A member routine of a generic type may be written for some of its instances only, with a kind on the type's
   parameter (`routine List[T].sorted_by(...)` with `needs RecordType T`: it copies the elements). Calling it on an
