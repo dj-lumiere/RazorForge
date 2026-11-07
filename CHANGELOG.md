@@ -37,24 +37,19 @@ file only once its other old spellings are gone.
 - x86-64 programs target x86-64-v3.
 
 **Failure and recovery**
-- A routine that can fail says so on its declaration: `failable routine parse(...)`. `routine parse!(...)` is
-  `RV-G222` (`migrate --step failable`). A call never writes `!`: `f!(x)` and `job.retrieve!()` are `RV-G211`.
+- Every routine passes its failures to its caller. Nothing marks a routine that can fail: `failable` written on a
+  routine is `RV-G230` and `routine parse!(...)` is `RV-G222` (`migrate --step failable` removes both). A call never
+  writes `!` (`RV-G211`). A failure nobody receives stops the program with its message where it happened.
 - Recovery is a keyword at the call: `try f(x)` gives a `T?` (`Optional[T]`), `check f(x)` gives a `Check[T]`. The generated
   `try_f` / `check_f` / `lookup_f` routines are gone. Default `migrate` writes `try f(x)` for `try_f(x)` (and
   `try r.f(x)` for `r.try_f(x)`) and `check f(x)` for `check_f(x)` and `lookup_f(x)`, and the build error on an old
   name names the keyword.
-- Failures rise only through failable routines. A `throw` in a routine that is not `failable` crashes there with the
-  crashable's message, so `pierce` is gone and is an ordinary name: `migrate --step pierce` writes `throw` for each
-  `pierce` in a routine that is not failable and lists the ones in failable routines, where a `throw` goes to the
-  caller instead.
-- A routine that is not failable is a wall: a failure inside it crashes there, even under a `try` or `check` above
-  its caller. Declare the routine `failable` to let its failures go up.
-- `try` or `check` in front of an expression that reaches no failable call is `RV-S760`. Remove the keyword, or
-  declare the routine `failable`.
-- A lambda that can fail, or a failable routine named as a value, goes only to a parameter or member variable of type
-  `failable Callable[...]`: handing one to a plain `Callable[...]` is `RV-S761`. The call that hands it over can fail
-  through it (`try xs.select(transform: x => 10 // x).to[List]()`). The standard library routines that take a
-  routine value (`select`, `where`, `any`, `all`, `sort_by`, `min_by`, ...) take it as `failable Callable[...]`.
+- `infallible routine` is the only wall: a failure inside it stops the program there, even under a `try` or `check`
+  above its caller. `destruct`, external routines and builder bodies are walls too.
+- `pierce` is gone and is an ordinary name. `migrate --step pierce` rewrites the old statement and lists the ones to
+  fix by hand.
+- A lambda that can fail goes to any `Callable[...]`, and the call that hands it over passes its failure on
+  (`try xs.select(transform: x => 10 // x).to[List]()`).
 - `Result[T]` is `Check[T]`. `Lookup[T]` is gone. The build errors say so.
 - `absent` is gone: a routine with nothing to give throws, `throw AbsentValueError()` (default `migrate`).
 - The `Crashable` protocol is the `Crashables` record. Every crashable writes its own `crash_message()` (`RV-S704`).
@@ -279,7 +274,8 @@ file only once its other old spellings are gone.
 - Script mode: the loose statements of the entry file are its `start()`. Loose statements in an imported file are
   `RV-S443`.
 - `global`: module-level state, initialized in order before `start()` runs and torn down at its end. A global
-  binding is read-only, so state that changes is an `Unbroken` or a `Guarded`. Globals of one name in two modules
+  is a place the program changes (`global count: S32 = 0`, `count += 1`). A routine a Work runs on another thread that
+  uses a plain global changed anywhere is `RV-S448`: state shared across threads is an `Unbroken` or a `Guarded`. Globals of one name in two modules
   stay apart.
 - Loops carry values: `until c with total: S64 = 0`, `continue with total: v`, and `then` sees them.
 - A `when` that gives a value ends a block arm with `becomes value`. One arm can match several values

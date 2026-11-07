@@ -1,145 +1,82 @@
-# Revare v0.4.0
+# Revare v0.5.0
 
-The realm release. v0.2.0 shipped the execution model, v0.3.0 the communication layer. v0.4.0 is a
-**language-maturity** release built around one idea that turned out to connect everything else:
-**realms**. A realm is the namespace a name lives in — `RV::` for Revare, `C::` for foreign C,
-`LLVM::` for intrinsics, and `MI::` for the new sister language **Mielia**. Foreign calls, builder
-intrinsics, and cross-language interop all became one mechanism instead of three ad-hoc ones.
+Revare 0.5.0 is the first release under the name Revare. It changes the language surface in many places: the file extension, the command, loops, failure handling, sharing and access, and much of the standard library. It also adds script mode, `global` state, a test runner, a formatter and linter, a language server, and a build daemon with a JIT mode for fast rebuilds.
 
-On top of that foundation this release lands a **reworked ownership & copy model**, a **buildtime
-reflection surface**, a matured **C FFI** (struct-by-value including float structs, platform-width C
-types, conditional compilation), and native **SIMD vectors**. Mielia ships as its own **v0.1 preview**
-release alongside this one — see the Mielia release notes.
+This page lists the changes you are most likely to meet. The complete list, with every diagnostic code, is in `CHANGELOG.md`.
 
-## 🌐 Realms
+## Moving from 0.4
 
-Foreign and intrinsic calls are now **realm-qualified** rather than string-tagged.
+Run `revare migrate <folder>` on your project first. It re-indents 0.4 sources to steps of 4 spaces, renames `razorforge.toml` to `config.toml`, and applies every default rewrite. `revare migrate --step extensions <folder>` renames `.rf` files to `.rvr`. It skips files whose `config.toml` already says `revare-version = "0.5.0"` and marks the manifest when it is done.
 
-- **`routine C::malloc(...)` / `routine LLVM::...`** replace the old `external("C"|"llvm")` form. A
-  realm is part of a name's identity, not a comment on it — so a foreign name resolves, mangles, and
-  type-checks like any other.
-- **Realm-qualified references in expression and type position** — `RV::Core.List`, `C::size_t` — so a
-  program can name a type or routine from a specific world when it matters (mixed RV/MI, FFI boundaries).
-- **Strict-realm checking at foreign call sites (RV-S460)**: crossing a realm boundary is deliberate,
-  never accidental.
-- Realms are the substrate the whole Mielia "world-line" model rides on: MI's `List` *is* `RV::Core.List`,
-  wrapped per-instance so it obeys Mielia's sharing semantics without forking the standard library.
+Single rewrites run as `revare migrate --step <name> <folder>`. Run `--step suffix` last, because it needs analysis and reads a file only after its other old spellings are gone. Where no step exists, the build error tells you what to write instead. Then read the Breaking changes section of `CHANGELOG.md`, because some changes (operator levels, `**` against a leading `-`, ranges that count down) are listed by `migrate` for a hand check.
 
-## 🔗 C FFI
+## Name, files and commands
 
-The FFI surface matured enough to bind real C libraries.
+- The language is Revare. Sources end in `.rvr`, diagnostic codes start with `RV-`, the command is `revare`, and the manifest key is `revare-version`.
+- The project manifest is `config.toml`.
+- Indentation is a multiple of 4 spaces (`RV-G053` otherwise).
+- The commands are `check`, `build`, `run`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`.
+- Every runtime crash exits with code 82.
 
-- **Struct-by-value, including float structs.** Aggregates pass and return by value following each
-  platform's ABI — per-eightbyte SSE/INTEGER classification (SysV x86-64), HFA (AArch64/AAPCS64), and
-  by-size GP-register packing (Windows x64). Struct *layout* matches the C default, so a `Hijacked[record]`
-  hits the right field offsets (flat and nested).
-- **Platform-width C types:** `CLong` / `CULong` / `CWChar` (per-target via `@target`) and `CWStr`
-  (`wchar_t*`), plus the existing `CStr` for `char*`.
-- **Conditional compilation:** `@target(os: "linux", "macos")` gates whole files and declarations
-  (Go-style build constraints), so per-platform bindings live side by side.
-- **Library linking from the manifest:** `[target] c_libraries` / `library_paths` (clang `-l`/`-L`), and a
-  `@link("lib")` annotation on `C::` externs, threaded into the link step.
-- Callbacks (bare routine name → C function pointer), opaque pointers, typed pointers (`Hijacked[T]`),
-  and `choice → int32` all work and are exercised end-to-end.
+## Syntax
 
-## 🧬 Ownership & copy model
+- Loops are `until c` and `loop`. `while` is gone. The loop over a range or a collection is `for x in xs`.
+- A line with no work is `nothing`. `pass` is gone.
+- `try f(x)` gives a `T?` and `check f(x)` gives a `Check[T]`. The generated `try_f` and `check_f` routines are gone.
+- Containment is a call on the container: `xs.has(x)`, `xs.lacks(x)`, `d.has_key(k)`.
+- A pattern binds with `as`: `is T as x`.
+- A number takes its type from where it goes or from its declaration (`var x: U8 = 5`). Type suffixes such as `0_s64` are gone. Convert with `x.to[T]()`.
+- A constructor is `routine T(...)`.
+- A member routine of a generic type that you write outside the type must name its parameters on the receiver: `routine Box[T].get()`. `routine Box.get()` is a build error (`RV-S165`).
+- Operators changed in precedence: `and` and `or` share one level, the bitwise operators share one, and `**` binds tighter than a leading `-`.
 
-The value/copy rules were reworked into one coherent model.
+## Sharing and access
 
-- **`Copyable` and `Storable` are orthogonal.** Being copyable (duplicable) and being storable (movable
-  into a slot) are separate capabilities on separate axes — `record` types auto-derive `Copyable` through
-  a `needs P everywhere` structural gate, while reference-counted handles are storable but *not* copyable
-  (a duplicate is an explicit `.share()`, never an implicit copy).
-- **Three-rules parameter model:** a `record` parameter borrows; a value moved to a destination
-  (constructor field, store primitive) transfers; the caller tears down rvalue arguments. Container and
-  aggregate element reads copy on keep (`var x = a[i]` copies), and taking a bare entity out of a
-  container without a copy is a build error rather than a silent alias/double-free.
-- **Construction verbs are gone.** The three entity→wrapper "constructors" that masqueraded as methods
-  (`.retain()`, `.share[P]()`, `.roam()`) are abolished — you write `Retained(from: steal n)` /
-  `Roamed(from: n)`, and the definition reads as the type.
-- **One canonical RC vocabulary:** `share` (mint a co-owner), `hold` / `unhold` (strong count),
-  `observe` / `unobserve` (weak count), `access` (read-only coercion), `control` (deref), `destroy`
-  (which now folds in the old `release`). Aggregate-steal holes (`steal l[i]`, `steal o.field`) are
-  rejected (RV-S622).
+- An entity has one original. Holding it under a second name without an access token or a manager is `RV-S413`. Hand it over with `steal`.
+- `Guarded` values are opened with `viewing g as v` to read and `modifying g as m` to write. Any type that has the `view_enter` / `modify_enter` pairs can be the target of such a block.
+- `Assignable`, `Accessing` and `Controlling` are gone. `=` copies a record, and copying a handle makes one more handle to the same entity.
+- The builder checks more cases where a container changes shape while a `for` loop or an element statement uses it (`RV-S625`, `RV-S639`, `RV-S640`).
+- Concurrency goes through `Work[T]`: `f.to[Work](args)`, then `start_now()`, `start_here()` or `start_apart()`. `Atomic[T]` is `Unbroken[T]`, channel ends are `Transmitter[T]`.
 
-## 🪞 Buildtime reflection
+## Numbers and text
 
-A first buildtime reflection surface, for serialization, FFI layout, and GPU-vertex-style codegen.
+- Binary floats are `B16` to `B128`. Float operations and math routines crash on an inf or NaN result, and the raw forms are `+! -! *! /! **!` and the `_unchecked` routines.
+- `Int` replaces `Integer`. An `Int` is 16 bytes, so `List[Int]` takes 16 bytes per element (40 before).
+- `Decimal` has one form per value, with 34 significant digits. Every rounding it does is half up. `D32`, `D64` and `D128` keep ties to even.
+- `rsqrt`, `powi`, `midpoint` and the complex functions round once from the exact value. A few results differ from 0.4 in the last digits.
+- `RoundingRule` selects the rule for `round` and `fixed`.
 
-- **Member listings:** `openmemvarof(T)` / `allmemvarof(T)` enumerate a type's members at build time.
-- **Metadata intrinsics:** `nameof` / `orderof` / `typeof` / `placeof` (offset) / `sizeof` / `valueof`
-  of a member, with full repr-C offset and size folding.
-- **The `$primary` splice** injects a reflected member as code (`me.$nameof(m)` → `me.x`), and `expand m
-  in openmemvarof(T)` unrolls a body per member at monomorphization.
-- **SoA collections:** `SplitList` / `SplitArray` store a record's fields as parallel arrays, gated on
-  `needs T is SplittableType`.
-- **Buildtime-value const generics** (`${...}`) for sizes and counts.
-- `represent` / `diagnose` / `serialize` are now **universal built-ins** (every type has them) rather
-  than opt-in protocols — the `Representable` / `Diagnosable` / `Serializable` protocols are removed.
+## Standard library
 
-## 🔢 Numerics & SIMD
+- The base module is `System`, and every file sees it and the modules under it without an import.
+- Conversions are `x.to[T]()`, and collecting is `xs.to[List]()`. What walks a value is an emitter: `Emittable[T]` and `Emitter[T]`. An emittable collects into any collection with `to[...]`.
+- `FileManager` does every file system task. `Environment` and `Entropy` replace the old directory, variable and random routines. `rng.next[T]()` replaces `next_u64()` and its relatives.
+- New: `TextPattern` and `BytesPattern`, `Math3D` matrices of size 2, 3 and 4 with `inverse()` and `solve(b:)`, `RotatableList`, `Items` and `Slots`, `Clock` and `CpuClock`.
 
-- **Native SIMD vectors:** `Vector2D` / `Vector3D` / `Vector4D` (`F32` lanes) with elementwise
-  arithmetic, reductions, and geometry helpers, lowered to hardware vector ops.
-- **Rational types `Q64` / `Q32`** for exact fractional arithmetic.
+## Added to the language
 
-## ✍️ Naming & ceremony
+- Script mode: the loose statements of the entry file are its `start()`.
+- `global` for module-level state, initialized in order before `start()` runs.
+- Loops that carry values (`until c with total: S64 = 0`), `becomes value` in a `when` arm, and several values in one arm.
+- Records and entities have `==` and `!=` without `obeys Equatable` when every member variable has `==`.
+- Backtick names, tuple swap, record patterns, inline variants `A | B`, `define` type aliases, `@infix` routines, and `@throws([...])`.
 
-Wide renames that make the surface read as intended. Same programs, clearer words.
+## Tools
 
-- **A generic parameter's identity is its slot, not its name.** A user type whose name collides with a
-  stdlib generic's parameter (`record T` vs `List[T]`) no longer breaks that generic — the whole
-  `record T` / `record N` / `record M` collision class is fixed.
-- **`@migratable` → `@reshaping`** (the container-mutation marker driving the for-loop reshaping ban).
-- **`Field` → `MemberVariable`, `Method` → `MemberRoutine`, `Copy` → `Store`, `Blank` → `None`.**
-- Routine names are canonically **bare**: failability (`!`) and type arguments (`[...]`) are structured
-  attributes, not part of the name string.
+- A resident build daemon and a JIT mode for the edit loop: `[target] mode = "debug-jit"`, `use-daemon` and `incremental`.
+- `new`, `migrate`, `docs`, `fmt`, `lint`, `test` and `lsp`, plus `check --json`.
+- `@test` routines with `@case`, `@skip`, `@time_limit` and `@memory_limit`.
+- A Rider plugin and a VS Code extension.
+- A crash trace lists your program's routines. `[debug] trace-stdlib = true` adds the library's frames.
 
-## 🧹 Under the hood
+## Fixed
 
-Internal-only, but load-bearing for correctness and future speed.
+Among the fixes: a write to a value element (`m[i][j] = v`) changed a temporary copy, a variant's payload was not zero-filled in optimized builds, the cycle collector skipped a written `destroy`, a list built by a failing `check` or `try` leaked, and a user type named `T` broke generics. `CHANGELOG.md` lists all of them.
 
-- **Carriers lowered to records.** `try_` / `check_` / `lookup_` results (`Maybe` / `Result` / `Lookup`)
-  are now ordinary record constructions produced by a lowering pass; the codegen special-cases for
-  carrier construction and payload layout are deleted (`#carrier` is 0 across the whole program). Wide
-  payloads (`U128` / `D128` / big records) are stored at full width instead of being pointer-truncated.
-- **Monomorphization completes before codegen.** Type substitution, RC retain bumps, Roamed locks, and
-  roam/free hook wiring all moved out of the code generator into explicit passes — codegen no longer
-  substitutes types or encroaches on stdlib layout, and errors instead of silently falling back.
-- **Scope teardown is emitted before the terminator** (spilling the returned value to a temp), fixing a
-  class of temporary-destroy leaks, and trivial destroys are skipped.
+## Known issues
 
-## ✅ Tests
-
-Full suite green — **1,511 unit + analyzer tests** and the single-build stdlib harness (**188
-fixtures**, including the C-FFI, ABI struct-by-value, buildtime-reflection, realm, and Mielia-equivalence
-fixtures). CI green on Linux, macOS, and Windows.
-
-## 🔮 Mielia arrives
-
-**Mielia** — the sharing-first sister language that hides Revare's memory-management surface behind a
-biased-refcount `Roamed` runtime — ships its **first preview** as a separate `sf-v0.1.0` release. The
-same builder binary runs it (`mielia hello.mie`, or any `.mie` file). See the Mielia v0.1.0 release notes
-for scope.
-
-## ⚠️ Not yet
-
-**Async networking** remains unimplemented (async file I/O and subprocess orchestration are the async
-I/O surface). Custom FFI calling conventions beyond `ccc`, `@repr(C)` / `@packed` / `@align`, and
-callback-in-struct-field are not yet supported. The persistent-daemon / JIT fast-rebuild path is in
-progress and not part of this release.
-
-## ⬆️ Upgrading from v0.3.0
-
-- **Foreign routines:** replace `external("C")` / `external("llvm")` with `routine C::name(...)` /
-  `routine LLVM::name(...)`.
-- **Construction:** replace `n.retain()` / `n.share[P]()` / `n.roam()` with `Retained(from: steal n)` /
-  `Shared[T, P](from: steal n)` / `Roamed(from: n)`.
-- **RC verbs:** `retain`/`release` → `hold`/`unhold`, weak `track`/`watch` → `observe`, the wrapper copy
-  verb → `share`, `refer()` → `access()`; a wrapper's `release()` is now just `destroy()`.
-- **Annotations & keywords:** `@migratable` → `@reshaping`; in your own builder-adjacent code/prose,
-  `Field`/`Method`/`Copy`/`Blank` → `MemberVariable`/`MemberRoutine`/`Store`/`None`.
-- **Protocols removed:** drop `obeys Representable` / `Diagnosable` / `Serializable` — `represent` /
-  `diagnose` / `serialize` are universal now.
-- **`FastSet` / `FastDict` are removed.** Use `Set` / `Dict` (secure-by-default hashing); they are the
-  only hash collections now.
+- Rebuilding after a one-file edit is slower than the 250 ms goal. On 2026-11-05 a 20-routine program rebuilt in about 600 ms with `debug-jit` and the daemon.
+- The Windows package is a ReadyToRun build that bundles the .NET runtime. It is not NativeAOT. Linux and macOS packages are NativeAOT, and the macOS package has not been verified yet.
+- `[target] backend = "lapila"` is experimental and does not translate every program. The Bool-returning forms of `try` and `check` give a build error there.
+- `Stamped` and `PoolManager` change shape in 0.6: you will add an entity with `pool.add(e)`, and the generic `stamp()` goes away.
+- A `T?` that holds an entity (`List[S64]?`) or a variant cannot be received by `try` or `check`. The builder reports a build error, because taking the entity out as a value would copy it and a changing call would then be silently wrong.
