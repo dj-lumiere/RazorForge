@@ -1,7 +1,8 @@
 module Tests/Stdlib/CstrDecodeApi
 
 import IO/Console
-# CStr.to[Text]() decodes UTF-8, and a malformed sequence becomes one U+FFFD per offending lead byte.
+# CStr.to[Text]() decodes UTF-8 and throws MalformedUtf8Error on a malformed sequence. CStr.decode_as_utf8_lossy()
+# puts one U+FFFD in place of each offending lead byte instead.
 routine codepoints(text: Text) -> Text
     var out = ""
     for c in text
@@ -9,7 +10,11 @@ routine codepoints(text: Text) -> Text
     return out
 
 routine decode(label: Text, bytes: List[Byte])
-    var text = Bytes(from_list: bytes.duplicate()).to[CStr]().to[Text]()
+    var cstr = Bytes(from_list: bytes.duplicate()).to[CStr]()
+    when check cstr.to[Text]()
+        is Text as strict => show(f"{label}: strict count {strict.count()}")
+        is MalformedUtf8Error as e => show(f"{label}: strict {e.crash_message()}")
+    var text = cstr.decode_as_utf8_lossy()
     show(f"{label}: count {text.count()}, code points{codepoints(text: text)}")
     return
 
