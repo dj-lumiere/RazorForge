@@ -728,6 +728,41 @@ routine U256.mul_clamp(you: U256) -> U256
         return U256_MAX
     return result
 
+### Returns the full product `me * you` as `(low, high)` halves.
+### Both halves are `U256` words, so the product is exact in 512 bits.
+### :param you: The right operand.
+### :returns: A tuple of `(low 256 bits, high 256 bits)`.
+routine U256.widening_mul(you: U256) -> (U256, U256)
+    var a_low = me.low128()
+    var a_high = me.high128()
+    var b_low = you.low128()
+    var b_high = you.high128()
+    var p00 = a_low.mul_wide(b_low)
+    var p01 = a_low.mul_wide(b_high)
+    var p10 = a_high.mul_wide(b_low)
+    var p11 = a_high.mul_wide(b_high)
+    var mask: U256 = U128_MAX.to[U256]()
+    var column1 = LLVM::shift_right_unsigned(p00, 128) + (p01 & mask) + (p10 & mask)
+    var column2 = LLVM::shift_right_unsigned(p01, 128) + LLVM::shift_right_unsigned(p10, 128) + (p11 & mask) + LLVM::shift_right_unsigned(column1, 128)
+    var column3 = LLVM::shift_right_unsigned(p11, 128) + LLVM::shift_right_unsigned(column2, 128)
+    var lo = (p00 & mask) | LLVM::shift_left(column1 & mask, 128)
+    var hi = (column2 & mask) | LLVM::shift_left(column3, 128)
+    return (lo, hi)
+
+### Returns `me * you + carry` as `(low, high)` halves.
+### Never overflows, because the largest result is below 2⁵¹². The `carry` accumulates the
+### high word carried out of the previous column of a schoolbook multiplication.
+### :param you: The right operand.
+### :param carry: The value to add to the product.
+### :returns: A tuple of `(low 256 bits, high 256 bits)`.
+routine U256.carrying_mul(you: U256, carry: U256) -> (U256, U256)
+    var parts = me.widening_mul(you: you)
+    var sum = parts.item0.add_with_overflow(carry)
+    var high = parts.item1
+    if sum.item1
+        high = high + 1
+    return (sum.item0, high)
+
 # ============================================================================
 # Power Operations (**)
 # ============================================================================

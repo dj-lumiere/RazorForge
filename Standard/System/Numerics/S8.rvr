@@ -459,6 +459,24 @@ routine S8.borrowing_sub(you: S8, borrow: Bool) -> (S8, Bool)
     var second = first.item0.sub_with_overflow(borrow_val)
     return (second.item0, not first.item1.eq(second.item1))
 
+### Returns the exact product `me * you` as one `S16` value.
+### It never overflows, because the product of two `S8` values fits in 16 bits.
+### :param you: The right operand.
+### :returns: The product as an `S16`.
+routine S8.mul_wide(you: S8) -> S16
+    return LLVM::mul(LLVM::sign_extend[S8, S16](me), LLVM::sign_extend[S8, S16](you))
+
+### Returns the full product `me * you` as `(low, high)` halves.
+### `low` is the lower 8 bits as a `U8`, `high` is the upper 8 bits as an `S8`
+### (the sign of the product is in `high`).
+### :param you: The right operand.
+### :returns: A tuple of `(low 8 bits, high 8 bits)`.
+routine S8.widening_mul(you: S8) -> (U8, S8)
+    var wide = LLVM::mul(LLVM::sign_extend[S8, S16](me), LLVM::sign_extend[S8, S16](you))
+    var lo = LLVM::int_truncate[S16, U8](wide)
+    var hi = LLVM::int_truncate[S16, S8](LLVM::shift_right_signed(wide, 8))
+    return (lo, hi)
+
 # ============================================================================
 # Power Operations (**)
 # ============================================================================

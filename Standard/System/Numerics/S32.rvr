@@ -449,6 +449,24 @@ routine S32.borrowing_sub(you: S32, borrow: Bool) -> (S32, Bool)
     var second = first.item0.sub_with_overflow(borrow_val)
     return (second.item0, not first.item1.eq(second.item1))
 
+### Returns the exact product `me * you` as one `S64` value.
+### It never overflows, because the product of two `S32` values fits in 64 bits.
+### :param you: The right operand.
+### :returns: The product as an `S64`.
+routine S32.mul_wide(you: S32) -> S64
+    return LLVM::mul(LLVM::sign_extend[S32, S64](me), LLVM::sign_extend[S32, S64](you))
+
+### Returns the full product `me * you` as `(low, high)` halves.
+### `low` is the lower 32 bits as a `U32`, `high` is the upper 32 bits as an `S32`
+### (the sign of the product is in `high`).
+### :param you: The right operand.
+### :returns: A tuple of `(low 32 bits, high 32 bits)`.
+routine S32.widening_mul(you: S32) -> (U32, S32)
+    var wide = LLVM::mul(LLVM::sign_extend[S32, S64](me), LLVM::sign_extend[S32, S64](you))
+    var lo = LLVM::int_truncate[S64, U32](wide)
+    var hi = LLVM::int_truncate[S64, S32](LLVM::shift_right_signed(wide, 32))
+    return (lo, hi)
+
 # ============================================================================
 # Power Operations (**)
 # ============================================================================

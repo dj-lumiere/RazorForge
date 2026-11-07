@@ -517,6 +517,9 @@ declare their own `i`.
 
 - Checked: `+ - *` (throw on overflow) · wrapping: `+% -% *%` · clamping: `+^ -^ *^`
   (floats: checked `+ - * / **` or raw IEEE `+! -! *! /! **!` with no `danger` needed)
+- Whole product: `a.mul_wide(you: b)` is one value of the next wider type (`U8`..`U128`, `S8`..`S128`),
+  `a.widening_mul(you: b)` is `(low, high)` on every width `U8`..`U256` and `S8`..`S256` (signed: `low` unsigned, `high`
+  signed), `a.carrying_mul(you: b, carry: c)` is `a * b + c` as `(low, high)` on every unsigned width.
 - Shifts: `<<` left, `>>` right filling with the sign bit, `>>>` right filling with
   zeros (the same as `>>` on unsigned types). There is no `<<<`. A shift amount may be
   any integer type (`x << n` with `n: S64`); a negative amount crashes. Shifting by the
