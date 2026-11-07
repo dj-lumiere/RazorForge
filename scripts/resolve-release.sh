@@ -5,7 +5,7 @@
 # Two tag families feed the same release workflow (Revare's .github/workflows/release.yaml, which the
 # Mielia repository calls for its tags). Runs from the workspace root that holds the projects side by side.
 #   v*      -> Revare release. Artifacts named for the tag version.
-#   mi-v*   -> Mielia release. The SAME builder artifacts (one binary runs both
+#   me-v*   -> Mielia release. The SAME builder artifacts (one binary runs both
 #              languages), named for the csproj builder version — NOT the mi tag,
 #              whose "0.1.0" would collide with the existing v0.1.0 release — and
 #              published with the Mielia notes and title.
@@ -17,9 +17,9 @@ csproj_version() {
 
 tag="${GITHUB_REF_NAME:?GITHUB_REF_NAME is not set}"
 
-if [[ "$tag" == mi-v* ]]; then
+if [[ "$tag" == me-v* ]]; then
   pkg_version="$(csproj_version)"                 # e.g. 0.4.0 — the builder that runs .mie
-  release_name="Mielia v${tag#mi-v}"              # e.g. Mielia v0.5.0
+  release_name="Mielia v${tag#me-v}"              # e.g. Mielia v0.5.0
   release_notes="Revare/scripts/package-assets/RELEASE_NOTES_MI.md"
 else
   pkg_version="${tag#v}"                          # e.g. 0.4.0
