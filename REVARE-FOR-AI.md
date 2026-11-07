@@ -451,6 +451,11 @@ RV-S632). A module-level `var` is an error (RV-S435). Constants the build knows 
   leading byte."). The replacement character U+FFFD is asked for by name with the `_lossy` twin of each:
   `ask_line_lossy()`, `ask_lines_lossy()`, `FileManager.read_text_lossy(at:)`, `read_words_lossy()`,
   `decode_as_utf8_lossy()` and so on.
+  The same holds for `Environment.arguments()`/`variable(name:)`/`to[Dict[Text, Text]]()` (twins `arguments_lossy()`,
+  `variable_lossy(name:)`, `variables_lossy()`), `ProcessResult.output()`/`errors()` (twins `output_lossy()`/
+  `errors_lossy()`, raw `output_bytes`/`errors_bytes` fields) and `CStrView.to[Text]()`/`CStr.to[Text]()` (twin
+  `decode_as_utf8_lossy()`). Paths have no lossy twin: a directory listing (`list`/`entries`/`walk`) or a path from
+  the OS that is not UTF-8 throws, since text with U+FFFD would name another file.
 - Collections: `List[T]`, `Dict[TKey, TValue]`, `Set[T]`, `RotatableList[T]`, `BitList`,
   `PriorityQueue[TPriority, TElement]`, `SortedDict[TKey, TValue]`, `SortedList[T]`, `SortedSet[T]`,
   fixed-size `Items[T, COUNT]`, `Bits[BITS]`. Searches return `U64?` (`none` where there is no match): `index_of`

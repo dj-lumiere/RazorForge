@@ -17,10 +17,32 @@ record ProcessResult
     ### The signal that killed the child (POSIX), or absent if it exited normally. Always absent on
     ### Windows, which has no signals.
     signal: S32?
-    ### The captured stdout ("show" stream), decoded as lossy UTF-8.
-    output: Text
-    ### The captured stderr ("alert" stream), decoded as lossy UTF-8.
-    errors: Text
+    ### The captured stdout ("show" stream) as the child wrote it. `output()` decodes it.
+    output_bytes: Bytes
+    ### The captured stderr ("alert" stream) as the child wrote it. `errors()` decodes it.
+    errors_bytes: Bytes
+
+### The captured stdout as UTF-8 text.
+### :returns: The text.
+### :throws: {MalformedUtf8Error} if the child wrote bytes that are not well-formed UTF-8.
+routine ProcessResult.output() -> Text
+    return me.output_bytes.decode_as_utf8()
+
+### The captured stdout as UTF-8 text, with U+FFFD in place of each malformed sequence.
+### :returns: The text.
+routine ProcessResult.output_lossy() -> Text
+    return me.output_bytes.decode_as_utf8_lossy()
+
+### The captured stderr as UTF-8 text.
+### :returns: The text.
+### :throws: {MalformedUtf8Error} if the child wrote bytes that are not well-formed UTF-8.
+routine ProcessResult.errors() -> Text
+    return me.errors_bytes.decode_as_utf8()
+
+### The captured stderr as UTF-8 text, with U+FFFD in place of each malformed sequence.
+### :returns: The text.
+routine ProcessResult.errors_lossy() -> Text
+    return me.errors_bytes.decode_as_utf8_lossy()
 
 ### Whether the command finished cleanly: exited normally (no signal) with exit code 0.
 ### :returns: true if not signalled and `exit_code == 0`.
@@ -41,10 +63,10 @@ routine term_signal_value(raw: S32) -> S32
 ### :param code: The child's exit code, as returned by the native run.
 ### :returns: The assembled `ProcessResult`.
 routine proc_result_of(code: S64) -> ProcessResult
-    var output = Bytes(ptr: C::rf_proc_output(), count: C::rf_proc_output_len()).decode_as_utf8_lossy()
-    var errors = Bytes(ptr: C::rf_proc_errors(), count: C::rf_proc_errors_len()).decode_as_utf8_lossy()
+    var output = Bytes(ptr: C::rf_proc_output(), count: C::rf_proc_output_len())
+    var errors = Bytes(ptr: C::rf_proc_errors(), count: C::rf_proc_errors_len())
     var signal = try term_signal_value(raw: C::rf_proc_term_signal())
-    return ProcessResult(exit_code: code, signal: signal, output: output, errors: errors)
+    return ProcessResult(exit_code: code, signal: signal, output_bytes: output, errors_bytes: errors)
 
 ### Runs `command` through the platform shell (`/bin/sh -c` on POSIX, `cmd /c` on Windows), capturing
 ### its stdout and stderr, and returns the result. The shell form is convenient for pipes and globs,

@@ -165,12 +165,14 @@ entity FileManager
 # Paths — pure, no OS calls
 # ============================================================================
 
-### A runtime byte buffer of `len` bytes as text.
+### A runtime byte buffer of `len` bytes as text. A path that is not UTF-8 fails here: text with U+FFFD in it would
+### name a different file.
 ### :param ptr: The buffer.
 ### :param len: Its length.
 ### :returns: The text.
+### :throws: {MalformedUtf8Error} if the bytes are not well-formed UTF-8.
 secret routine path_text(ptr: Hijacked[Byte], len: U64) -> Text
-    return Bytes(ptr: ptr, count: len).decode_as_utf8_lossy()
+    return Bytes(ptr: ptr, count: len).decode_as_utf8()
 
 ### Two path segments joined with the platform separator.
 ### :param a: The left segment.
@@ -1011,7 +1013,8 @@ routine FileStorage[T].modify_exit()
 ### `Directory.file(name:)` / `go_to(name:)` to turn one into a path.
 ### :param at: The directory.
 ### :returns: The entry names.
-### :throws: {NotFoundError} when the directory doesn't exist, or the crashable for why it cannot be listed.
+### :throws: {NotFoundError} when the directory doesn't exist, {MalformedUtf8Error} when an entry's name is not
+###   UTF-8, or the crashable for why it cannot be listed.
 common routine FileManager.list(at: Directory) -> List[Text]
     var cstr = at.at.to[CStr]()
     var ptr = C::rf_fs_list_dir(path: cstr, len: cstr.count().to[S32]())
@@ -1028,7 +1031,8 @@ common routine FileManager.list(at: Directory) -> List[Text]
 ### stat per entry for the mtime). `.` and `..` are left out.
 ### :param at: The directory.
 ### :returns: The entries.
-### :throws: {NotFoundError} when the directory doesn't exist, or the crashable for why it cannot be listed.
+### :throws: {NotFoundError} when the directory doesn't exist, {MalformedUtf8Error} when an entry's name is not
+###   UTF-8, or the crashable for why it cannot be listed.
 common routine FileManager.entries(at: Directory) -> List[DirEntry]
     var cstr = at.at.to[CStr]()
     var ptr = C::rf_fs_list_dir_typed(path: cstr, len: cstr.count().to[S32]())

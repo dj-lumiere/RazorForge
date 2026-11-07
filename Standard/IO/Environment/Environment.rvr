@@ -19,13 +19,24 @@ record Environment
 ### :param ptr: The buffer.
 ### :param len: Its length.
 ### :returns: The text.
+### :throws: {MalformedUtf8Error} if the bytes are not well-formed UTF-8.
 secret routine environment_text(ptr: Hijacked[Byte], len: U64) -> Text
+    if ptr.is_hollow() or len == 0
+        return ""
+    return Bytes(ptr: ptr, count: len).decode_as_utf8()
+
+### The runtime byte buffer of `len` bytes as text, with U+FFFD in place of each malformed sequence.
+### :param ptr: The buffer.
+### :param len: Its length.
+### :returns: The text.
+secret routine environment_text_lossy(ptr: Hijacked[Byte], len: U64) -> Text
     if ptr.is_hollow() or len == 0
         return ""
     return Bytes(ptr: ptr, count: len).decode_as_utf8_lossy()
 
 ### The arguments the program was started with, its own name left out.
 ### :returns: The arguments, in order.
+### :throws: {MalformedUtf8Error} when an argument is not UTF-8.
 common routine Environment.arguments() -> List[Text]
     var result = List[Text]()
     for i in 0 til C::rf_env_argument_count()
@@ -33,10 +44,21 @@ common routine Environment.arguments() -> List[Text]
         result.add_last(value: environment_text(ptr: ptr, len: C::rf_get_result_len()))
     return result
 
+### The arguments the program was started with, its own name left out, with U+FFFD in place of each malformed UTF-8
+### sequence.
+### :returns: The arguments, in order.
+common routine Environment.arguments_lossy() -> List[Text]
+    var result = List[Text]()
+    for i in 0 til C::rf_env_argument_count()
+        var ptr = C::rf_env_argument(index: i)
+        result.add_last(value: environment_text_lossy(ptr: ptr, len: C::rf_get_result_len()))
+    return result
+
 ### The value of the environment variable `name`, asked of the operating system now (on Windows the name's case
 ### doesn't matter).
 ### :param name: The variable's name.
 ### :returns: Its value, or `none` when it isn't set.
+### :throws: {MalformedUtf8Error} when the value is not UTF-8.
 common routine Environment.variable(name: Text) -> Text?
     var cstr = name.to[CStr]()
     var ptr = C::rf_env_variable(name: cstr, len: cstr.count().to[S32]())
@@ -44,27 +66,61 @@ common routine Environment.variable(name: Text) -> Text?
         return none
     return environment_text(ptr: ptr, len: C::rf_get_result_len())
 
-### Every environment variable as the operating system has them now: each name followed by its value.
-### :returns: The names and values, in pairs.
-secret routine environment_parts() -> List[Text]
+### The value of the environment variable `name`, with U+FFFD in place of each malformed UTF-8 sequence.
+### :param name: The variable's name.
+### :returns: Its value, or `none` when it isn't set.
+common routine Environment.variable_lossy(name: Text) -> Text?
+    var cstr = name.to[CStr]()
+    var ptr = C::rf_env_variable(name: cstr, len: cstr.count().to[S32]())
+    if ptr.is_hollow()
+        return none
+    return environment_text_lossy(ptr: ptr, len: C::rf_get_result_len())
+
+### Every environment variable as the operating system has them now, as one text: each name and value ends with a
+### NUL.
+### :param lossy: Whether a malformed UTF-8 sequence becomes U+FFFD instead of failing.
+### :returns: The text.
+### :throws: {MalformedUtf8Error} when a name or value is not UTF-8 and `lossy` is false.
+secret routine environment_snapshot(lossy: Bool) -> Text
     var ptr = C::rf_env_snapshot()
-    var parts = environment_text(ptr: ptr, len: C::rf_get_result_len()).split(separator: '\0')
+    var len = C::rf_get_result_len()
+    if lossy
+        return environment_text_lossy(ptr: ptr, len: len)
+    return environment_text(ptr: ptr, len: len)
+
+### Every environment variable as the operating system has them now: each name followed by its value.
+### :param lossy: Whether a malformed UTF-8 sequence becomes U+FFFD instead of failing.
+### :returns: The names and values, in pairs.
+### :throws: {MalformedUtf8Error} when a name or value is not UTF-8 and `lossy` is false.
+secret routine environment_parts(lossy: Bool) -> List[Text]
+    var parts = environment_snapshot(lossy: lossy).split(separator: '\0')
     # The last variable's value ends with a NUL too, which leaves one empty part after it.
     if parts.count() % 2 == 1
         drop parts.remove_last()
     return parts
 
-### Every environment variable with its value, as the operating system has them now: a copy, which changes nothing
-### when it changes.
+### The names and values in pairs as a dictionary.
+### :param parts: Each name followed by its value.
 ### :returns: The variables by name.
-common routine Environment.to[Dict[Text, Text]]() -> Dict[Text, Text]
-    var parts = environment_parts()
+secret routine environment_dict(parts: List[Text]) -> Dict[Text, Text]
     var result = Dict[Text, Text]()
     var i: U64 = 0
     until i + 1 >= parts.count()
         result[parts[i]] = parts[i + 1]
         i += 2
     return result
+
+### Every environment variable with its value, as the operating system has them now: a copy, which changes nothing
+### when it changes.
+### :returns: The variables by name.
+### :throws: {MalformedUtf8Error} when a name or value is not UTF-8.
+common routine Environment.to[Dict[Text, Text]]() -> Dict[Text, Text]
+    return environment_dict(parts: environment_parts(lossy: false))
+
+### Every environment variable with its value, with U+FFFD in place of each malformed UTF-8 sequence.
+### :returns: The variables by name.
+common routine Environment.variables_lossy() -> Dict[Text, Text]
+    return environment_dict(parts: environment_parts(lossy: true))
 
 ### The program's working directory, which relative paths start from.
 ### :returns: The resulting `Directory`.

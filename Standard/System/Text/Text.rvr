@@ -135,61 +135,20 @@ routine int_to_text(mag: U64, negative: Bool) -> Text
         )
 
 ### Decodes UTF-8 text from a null-terminated C string.
-### A malformed sequence (a missing or stray continuation byte, an overlong encoding, a surrogate, or a
-### code point past U+10FFFF) becomes one U+FFFD replacement character per offending lead byte, the same
-### rule `Bytes.decode_as_utf8_lossy` follows.
 ### :returns: The resulting `Text` value.
+### :throws: {MalformedUtf8Error} if the string is not well-formed UTF-8.
 routine CStrView.to[Text]() -> Text
     if me.is_null()
         return Text()
-    danger
-        var len = me.count()
-        if len == 0
-            return Text()
+    return Bytes(ptr: me).decode_as_utf8()
 
-        var list = List[Char]()
-        var i: U64 = 0
-        loop
-            if i >= len
-                break
-            var b0 = me[i].value().to[U32]()
-            # A malformed sequence leaves the replacement character and consumes only its lead byte.
-            var codepoint: U32 = 0xFFFD
-            var width: U64 = 1
-
-            if b0 <= 0x7F
-                codepoint = b0
-            elseif (b0 & 0xE0) == 0xC0 and i + 1 < len
-                var b1 = me[i + 1].value().to[U32]()
-                # C0 and C1 leads can only spell an overlong ASCII character.
-                if (b1 & 0xC0) == 0x80 and b0 >= 0xC2
-                    codepoint = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
-                    width = 2
-            elseif (b0 & 0xF0) == 0xE0 and i + 2 < len
-                var b1 = me[i + 1].value().to[U32]()
-                var b2 = me[i + 2].value().to[U32]()
-                if (b1 & 0xC0) == 0x80 and (b2 & 0xC0) == 0x80
-                    var candidate = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
-                    # Below U+0800 is overlong, and U+D800..U+DFFF are surrogates, never characters.
-                    if candidate >= 0x800 and (candidate < 0xD800 or candidate > 0xDFFF)
-                        codepoint = candidate
-                        width = 3
-            elseif (b0 & 0xF8) == 0xF0 and i + 3 < len
-                var b1 = me[i + 1].value().to[U32]()
-                var b2 = me[i + 2].value().to[U32]()
-                var b3 = me[i + 3].value().to[U32]()
-                if (b1 & 0xC0) == 0x80
-                    and (b2 & 0xC0) == 0x80
-                    and (b3 & 0xC0) == 0x80
-                    var candidate = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F)
-                    # Below U+10000 is overlong, and past U+10FFFF is outside Unicode.
-                    if 0x10000 <= candidate <= 0x10FFFF
-                        codepoint = candidate
-                        width = 4
-
-            list.add_last(Char(codepoint))
-            i = i + width
-        return Text(from_list: list)
+### Decodes UTF-8 text from a null-terminated C string, with U+FFFD in place of each malformed sequence (the rule
+### `Bytes.decode_as_utf8_lossy` follows).
+### :returns: The resulting `Text` value.
+routine CStrView.decode_as_utf8_lossy() -> Text
+    if me.is_null()
+        return Text()
+    return Bytes(ptr: me).decode_as_utf8_lossy()
 
 # Core operations
 
