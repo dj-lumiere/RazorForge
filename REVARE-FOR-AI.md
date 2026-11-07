@@ -1585,7 +1585,8 @@ Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
 revare new [folder]             # start a project: config.toml, main.rvr, .gitignore, .vscode/ (keeps existing files)
 revare check [entry]            # check the program without building it
 revare build [entry]            # build a native executable, don't run
-revare run [entry]              # build and run
+revare buildandrun [entry]      # build and run
+revare codegen [entry] [out.ll] # write the program's LLVM IR without building it
 revare test <dir-or-file>...    # run programs against <name>.expected / .exit / .error / .input
 revare fmt [--check] <paths>... # format in the canonical layout
 revare lint <paths>...          # report code not in the canonical layout (style errors)
@@ -1594,8 +1595,8 @@ revare help | version
 ```
 
 These are the same commands `mielia` and `lapila` have. A bare file is not a command
-(`revare hello.rvr` is an error that points to `revare run hello.rvr`). The builder's own
-inspection commands (`codegen [entry] [out.ll]`, `parse`, `tokenize`) still work but are not listed.
+(`revare hello.rvr` is an error that points to `revare buildandrun hello.rvr`). The builder's own
+inspection commands (`parse`, `tokenize`) still work but are not listed.
 
 **There are no build flags.** All configuration lives in `config.toml`:
 
@@ -1617,7 +1618,7 @@ A section or key `config.toml` does not read is a build error naming it (and the
 rest (`use-daemon`, `revare-version`, `dump-ir`).
 
 With no entry file argument, the CLI walks up from the cwd to find
-`config.toml` — `cd` into a project and `revare run` works.
+`config.toml` — `cd` into a project and `revare buildandrun` works.
 
 **Moving 0.4 code:** `revare migrate <folder>` first renames every `.rf` file to `.rvr` (`--step extensions` does
 only that: it also rewrites `RF::` to `RV::`, `@rf(` to `@rv(`, `RF-S###` codes in comments, and in `config.toml`

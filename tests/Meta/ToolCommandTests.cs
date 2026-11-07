@@ -54,7 +54,7 @@ public sealed class ToolCommandTests : IDisposable
                 return
             """);
 
-        (int exit, string stdout, string stderr) = Tool("run", program);
+        (int exit, string stdout, string stderr) = Tool("buildandrun", program);
 
         Assert.Equal(expected: 82, actual: exit);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
@@ -226,7 +226,7 @@ public sealed class ToolCommandTests : IDisposable
                 return
             """);
 
-        (int exit, string stdout, string stderr) = ToolWith(environment: [("RV_WORKERS", "1")], "run", program);
+        (int exit, string stdout, string stderr) = ToolWith(environment: [("RV_WORKERS", "1")], "buildandrun", program);
 
         Assert.True(condition: exit == 0, userMessage: stdout + stderr);
         Assert.Contains(expectedSubstring: "labs 42", actualString: stdout);
@@ -256,7 +256,7 @@ public sealed class ToolCommandTests : IDisposable
                 return
             """);
 
-        (int exit, string stdout, string stderr) = Tool("run", program);
+        (int exit, string stdout, string stderr) = Tool("buildandrun", program);
 
         Assert.Equal(expected: 82, actual: exit);
         // With a crash trace the sentence names the routine that called itself, without one it says the calls went

@@ -15,7 +15,7 @@ Single rewrites run as `revare migrate --step <name> <folder>`. Run `--step suff
 - The language is Revare. Sources end in `.rvr`, diagnostic codes start with `RV-`, the command is `revare`, and the manifest key is `revare-version`.
 - The project manifest is `config.toml`.
 - Indentation is a multiple of 4 spaces (`RV-G053` otherwise).
-- The commands are `check`, `build`, `run`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`.
+- The commands are `check`, `build`, `buildandrun`, `codegen`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`.
 - Every runtime crash exits with code 82.
 
 ## Syntax

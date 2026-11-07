@@ -158,10 +158,10 @@ routine start()
 ```
 
 ```bash
-revare run hello.rvr
+revare buildandrun hello.rvr
 ```
 
-`run` builds a native executable and runs it. `revare build hello.rvr` stops after
+`buildandrun` builds a native executable and runs it. `revare build hello.rvr` stops after
 building and leaves `hello.exe` next to the source.
 
 Every routine ends with an explicit `return`, because scope teardown is anchored there. A single-file
@@ -183,7 +183,8 @@ revare new [folder]                    Start a project (config.toml, main.rvr, e
 revare migrate [--check] <paths>...    Move sources from the previous release to this one
 revare check [--json] [entry-file]     Check the program without building it
 revare build [entry-file]              Build a native executable for this OS (no run)
-revare run [entry-file]                Build the program and run it
+revare buildandrun [entry-file]        Build the program and run it
+revare codegen [entry-file] [out.ll]   Write the program's LLVM IR without building it
 revare test <dir-or-file>...           Run test programs against their expected output
 revare fmt [--check] <file-or-dir>...  Format sources in place
 revare lint <file-or-dir>...           Report code that is not in the canonical style
@@ -206,7 +207,7 @@ mode = "debug"                     # debug -O0 | release -O2 | release-time -O3 
 ```
 
 With no entry file, the command looks for `config.toml` in the current directory and its parents,
-so `cd` into a solution and run `revare run`.
+so `cd` into a solution and run `revare buildandrun`.
 
 ## What works today
 

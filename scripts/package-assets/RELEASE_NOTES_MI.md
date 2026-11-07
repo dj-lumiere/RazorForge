@@ -15,7 +15,7 @@ Single rewrites run as `mielia migrate --step <name> <folder>`. Run `--step suff
 - The language is Mielia. Sources end in `.mie`, diagnostic codes start with `ME-`, the command is `mielia`, and the manifest key is `mielia-version`.
 - The project manifest is `config.toml`.
 - Indentation is a multiple of 4 spaces (`ME-G053` otherwise).
-- The commands are `check`, `build`, `run`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`.
+- The commands are `check`, `build`, `buildandrun`, `codegen`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`.
 - Every runtime crash exits with code 82.
 
 ## Syntax

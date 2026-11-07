@@ -31,8 +31,8 @@ file only once its other old spellings are gone.
 - The project manifest is `config.toml` (it was `razorforge.toml`). A `razorforge.toml` with no `config.toml` next
   to it is a build error, and default `migrate` renames the file. `RV_DEADLOCK_DETECT` is `deadlock-check` under
   `[debug]`: when the variable is still set, every command prints a warning that names the key.
-- The commands are `check`, `build`, `run`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`. A bare file
-  name is not a command: the error shows `revare run <file>`.
+- The commands are `check`, `build`, `buildandrun`, `codegen`, `test`, `fmt`, `lint`, `lsp`, `new`, `migrate` and `docs`. A bare file
+  name is not a command: the error shows `revare buildandrun <file>`.
 - Every runtime crash exits with code 82.
 - x86-64 programs target x86-64-v3.
 
