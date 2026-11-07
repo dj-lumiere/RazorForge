@@ -55,8 +55,8 @@ public class KeptEntityReadTests
                                                        """).Errors);
     }
 
-    /// <summary>A local entity that may be absent (<c>Node?</c>) handed to a constructor's <c>Node?</c> field is a
-    /// second name for the same original: RV-S413 asks for <c>steal</c>.</summary>
+    /// <summary>A local entity that may be absent (<c>Node?</c>) handed to a constructor's <c>Node?</c> field, with the
+    /// local still used afterwards, is a second name for the same original: RV-S413 asks for <c>steal</c>.</summary>
     [Fact]
     public void Analyze_OptionalEntityLocalIntoCreatorOptionalField_Errors()
     {
@@ -67,10 +67,27 @@ public class KeptEntityReadTests
 
                                                           routine make() -> Link
                                                               var tail: Link? = Link(value: 0, next: none)
-                                                              return Link(value: 1, next: tail)
+                                                              var head = Link(value: 1, next: tail)
+                                                              return head
                                                           """,
             expected: "tail");
         Assert.Contains(collection: errors, filter: IsKeptEntityError);
+    }
+
+    /// <summary>The same <c>Node?</c> local handed over inside the <c>return</c> ends there, so it moves without
+    /// <c>steal</c>.</summary>
+    [Fact]
+    public void Analyze_OptionalEntityLocalIntoCreatorInReturn_IsFine()
+    {
+        Assert.Empty(collection: AnalyzeSa(source: Prelude + """
+                                                       entity Link
+                                                           value: S64
+                                                           next: Link?
+
+                                                       routine make() -> Link
+                                                           var tail: Link? = Link(value: 0, next: none)
+                                                           return Link(value: 1, next: tail)
+                                                       """).Errors);
     }
 
     [Fact]
